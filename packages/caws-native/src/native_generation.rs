@@ -579,6 +579,285 @@ mod tests {
             "member lookup is outside this precisely named counter"
         );
     }
+    fn member_parent_metadata(path: &Path, directory: bool) -> MemberMetadata {
+        let mut cancel = || Ok(());
+        MemberMetadata::read(
+            path,
+            directory,
+            &mut Verification::new(expires(), &mut cancel),
+        )
+        .unwrap()
+    }
+    fn member_parent_metadata_json(value: &MemberMetadata) -> serde_json::Value {
+        serde_json::json!({"dev":value.dev,"ino":value.ino,"size":value.size,"mode":value.mode,
+            "mtime":value.mtime,"mtimeNs":value.mtime_nsec,"ctime":value.ctime,"ctimeNs":value.ctime_nsec})
+    }
+    fn member_parent_fd_closed(verify: &Verification<'_>) {
+        let fd = verify
+            .last_parent_fd
+            .expect("the actual parent group must have opened");
+        assert_eq!(unsafe { libc::fcntl(fd, libc::F_GETFD) }, -1);
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EBADF),
+            "the original group FD must be closed, not merely unreachable from a path"
+        );
+    }
+    #[test]
+    fn member_parent_standalone_selection_hashes_every_byte_and_reuses_only_storage() {
+        let bytes = vec![b'x'; 2 * 65536 + 17];
+        let f = Fixture::with_engine(&bytes);
+        let diagnostics = VerificationDiagnostics::default();
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        assert_eq!(verify.scratch_address(), None);
+        let selection = verify
+            .diagnosed(&diagnostics, |verify| {
+                Selection::read_generation(&f.home, &f.config.digest, verify)
+            })
+            .unwrap();
+        assert_eq!(selection.inspected_digest, f.config.digest);
+        assert!(selection.native_entry().is_some());
+        assert_eq!(
+            verify.scratch_allocations, 1,
+            "one real allocation across manifest, member and parser reads"
+        );
+        let address = verify.scratch_address().unwrap();
+        member_parent_fd_closed(&verify);
+        let phases = diagnostics.snapshot();
+        assert_eq!(phases.member_hashing.count, 1);
+        assert_eq!(phases.member_hashing.failures, 0);
+        assert_eq!(phases.inventory_modes.count, 1);
+        assert_eq!(phases.inventory_modes.failures, 0);
+        let expected = selection
+            .members()
+            .keys()
+            .map(|name| fs::metadata(f.root.join(name)).unwrap().len())
+            .sum::<u64>()
+            + fs::metadata(f.root.join("native-modes.json"))
+                .unwrap()
+                .len()
+            + fs::metadata(f.root.join("native-entry.json"))
+                .unwrap()
+                .len();
+        assert_eq!(phases.bytes_hashed, expected);
+        assert_eq!(phases.hash_calls, selection.members().len() as u64 + 2);
+        let large = crate::installed_generation::read_metadata(
+            &f.root,
+            "engine.js",
+            bytes.len() as u64,
+            &mut verify,
+        )
+        .unwrap();
+        assert_eq!(large, bytes);
+        let small =
+            crate::installed_generation::read_metadata(&f.root, "describe.js", 1024, &mut verify)
+                .unwrap();
+        assert_eq!(
+            small, b"describe\n",
+            "reused storage must not append the previous large file's tail"
+        );
+        assert_eq!(verify.scratch_address(), Some(address));
+        assert_eq!(verify.scratch_allocations, 1);
+        f.record("member-parent-standalone", serde_json::json!({"phases":phases,"expectedHashedBytes":expected,
+            "scratchAllocations":verify.scratch_allocations,"parentFdClosed":true,"generationReceiptUsed":false,"syntheticGeneration":true}));
+    }
+    #[test]
+    fn member_parent_final_group_refuses_replaced_then_restored_ancestor_without_receipt() {
+        let f = Fixture::new();
+        let target = f.root.join("native/node");
+        let held = f.home.join("held-root");
+        let leaf_before = member_parent_metadata(&target, false);
+        let directory_before = member_parent_metadata(&f.root, true);
+        let changed = Cell::new(false);
+        let diagnostics = VerificationDiagnostics::default();
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        verify.on_chunk = Some(Box::new(|path, _| {
+            if path == target && !changed.replace(true) {
+                fs::rename(&f.root, &held).unwrap();
+                fs::create_dir(&f.root).unwrap();
+                fs::remove_dir(&f.root).unwrap();
+                fs::rename(&held, &f.root).unwrap();
+                assert_eq!(
+                    member_parent_metadata(&target, false),
+                    leaf_before,
+                    "the leaf identity check alone must not distinguish this attack"
+                );
+                assert_ne!(
+                    member_parent_metadata(&f.root, true),
+                    directory_before,
+                    "the filesystem must retain an observable traversal mutation"
+                );
+            }
+        }));
+        let error = verify
+            .diagnosed(&diagnostics, |verify| {
+                Selection::read_generation(&f.home, &f.config.digest, verify)
+            })
+            .unwrap_err();
+        assert!(
+            changed.get(),
+            "mutation must execute inside the final group"
+        );
+        assert_eq!(
+            error,
+            "Runtime hashing traversal changed before group closed"
+        );
+        let phases = diagnostics.snapshot();
+        assert_eq!(phases.member_hashing.failures, 1);
+        assert_eq!(
+            phases.inventory_modes.count, 0,
+            "no successful group may escape to inventory"
+        );
+        let manifest: BTreeMap<String, String> =
+            serde_json::from_slice(&fs::read(f.root.join("manifest.json")).unwrap()).unwrap();
+        assert_eq!(
+            phases.hash_calls,
+            manifest.len() as u64,
+            "even the final member completed hashing before closing refusal"
+        );
+        assert_eq!(
+            phases.bytes_hashed,
+            manifest
+                .keys()
+                .map(|name| fs::metadata(f.root.join(name)).unwrap().len())
+                .sum::<u64>()
+        );
+        member_parent_fd_closed(&verify);
+        f.record("member-parent-final-restored-ancestor", serde_json::json!({"error":error,"phases":phases,
+            "directoryBefore":member_parent_metadata_json(&directory_before),"directoryAfter":member_parent_metadata_json(&member_parent_metadata(&f.root,true)),
+            "sameLeafIdentity":member_parent_metadata_json(&leaf_before),"generationReceiptUsed":false,"parentFdClosed":true,"syntheticGeneration":true}));
+    }
+    #[test]
+    fn member_parent_transition_refuses_restored_traversal_before_next_group() {
+        let f = Fixture::new();
+        let held = f.home.join("held-root");
+        let target = f.root.join("engine.js");
+        let changed = Cell::new(false);
+        let next_group_read = Cell::new(false);
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        verify.on_chunk = Some(Box::new(|path, _| {
+            if path.starts_with(f.root.join("native")) {
+                next_group_read.set(true);
+            }
+            if path == target && !changed.replace(true) {
+                let before = member_parent_metadata(&f.root, true);
+                fs::rename(&f.root, &held).unwrap();
+                fs::create_dir(&f.root).unwrap();
+                fs::remove_dir(&f.root).unwrap();
+                fs::rename(&held, &f.root).unwrap();
+                assert_ne!(member_parent_metadata(&f.root, true), before);
+            }
+        }));
+        let error = Selection::read_generation(&f.home, &f.config.digest, &mut verify).unwrap_err();
+        assert!(changed.get());
+        assert_eq!(
+            error,
+            "Runtime hashing directory changed before group closed"
+        );
+        assert!(
+            !next_group_read.get(),
+            "the changed old group must close before the next parent can be opened/read"
+        );
+        member_parent_fd_closed(&verify);
+        f.record("member-parent-transition", serde_json::json!({"error":error,"nextGroupRead":next_group_read.get(),"parentFdClosed":true,"generationReceiptUsed":false,"syntheticGeneration":true}));
+    }
+    #[test]
+    fn member_parent_refuses_parent_symlink_and_type_change_during_group() {
+        for mutation in ["symlink", "file"] {
+            let f = Fixture::new();
+            let parent = f.root.join("native");
+            let held = f.home.join("held-native");
+            let target = parent.join("node");
+            let changed = Cell::new(false);
+            let diagnostics = VerificationDiagnostics::default();
+            let mut cancel = || Ok(());
+            let mut verify = Verification::new(expires(), &mut cancel);
+            verify.on_chunk = Some(Box::new(|path, _| {
+                if path == target && !changed.replace(true) {
+                    fs::rename(&parent, &held).unwrap();
+                    if mutation == "symlink" {
+                        symlink(&held, &parent).unwrap();
+                    } else {
+                        fs::write(&parent, b"not a directory").unwrap();
+                    }
+                }
+            }));
+            let error = verify
+                .diagnosed(&diagnostics, |verify| {
+                    Selection::read_generation(&f.home, &f.config.digest, verify)
+                })
+                .unwrap_err();
+            assert!(changed.get());
+            if mutation == "symlink" {
+                assert!(
+                    error == "Runtime hashing directory changed before group closed"
+                        || error == "Runtime hashing traversal changed before group closed"
+                        || error.starts_with("Refusing symlink:"),
+                    "{error}"
+                );
+            } else {
+                assert!(error.starts_with("Generation path unavailable"), "{error}");
+            }
+            let phases = diagnostics.snapshot();
+            assert_eq!(phases.member_hashing.failures, 1);
+            assert_eq!(
+                phases.inventory_modes.count, 0,
+                "refusal must occur in the group, not be rescued by later inventory"
+            );
+            member_parent_fd_closed(&verify);
+            f.record("member-parent-kind-change",serde_json::json!({"mutation":mutation,"error":error,"phases":phases,"parentFdClosed":true,"generationReceiptUsed":false,"syntheticGeneration":true}));
+        }
+    }
+    #[test]
+    fn member_parent_mid_group_cancellation_and_original_expiry_close_the_fd() {
+        for kind in ["cancel", "expiry"] {
+            let f = Fixture::new();
+            let target = f.root.join("native/caws-hook-native");
+            let entered = Cell::new(false);
+            let stop = Cell::new(false);
+            let original_expiry = Instant::now() + Duration::from_secs(1);
+            let mut cancel = || {
+                if stop.get() {
+                    Err("original mid-group cancellation".into())
+                } else {
+                    Ok(())
+                }
+            };
+            let mut verify = Verification::new(original_expiry, &mut cancel);
+            verify.on_chunk = Some(Box::new(|path, _| {
+                if path == target {
+                    entered.set(true);
+                    if kind == "cancel" {
+                        stop.set(true);
+                    } else {
+                        while Instant::now() < original_expiry {
+                            std::thread::sleep(Duration::from_millis(1));
+                        }
+                    }
+                }
+            }));
+            let error =
+                Selection::read_generation(&f.home, &f.config.digest, &mut verify).unwrap_err();
+            assert!(
+                entered.get(),
+                "must refuse after the real native parent was opened/read"
+            );
+            assert_eq!(verify.expires(), original_expiry);
+            assert_eq!(
+                error,
+                if kind == "cancel" {
+                    "original mid-group cancellation"
+                } else {
+                    "Runtime verification deadline expired"
+                }
+            );
+            member_parent_fd_closed(&verify);
+            f.record("member-parent-mid-group-refusal",serde_json::json!({"kind":kind,"error":error,"parentFdClosed":true,"enteredGroup":entered.get(),"originalExpiryUnchanged":true,"syntheticGeneration":true}));
+        }
+    }
     fn full_verification_hash_bytes(f: &Fixture, receipt: &GenerationReceipt) -> u64 {
         // Manifest bytes, every member, and the separately authenticated mode
         // parser input are all actually hashed once in a successful full pass.
@@ -617,8 +896,8 @@ mod tests {
         assert_eq!(first.bytes_hashed, expected_bytes);
         assert_eq!(
             first.fd_metadata_operations,
-            2 * expected_hashes,
-            "each authenticated read checks the opened FD and the post-read FD"
+            2 * expected_hashes + 4,
+            "each authenticated read checks both FD endpoints; the fixture's root/native parent groups each check their held FD twice"
         );
         assert!(first.path_metadata_operations > first.fd_metadata_operations);
         receipt

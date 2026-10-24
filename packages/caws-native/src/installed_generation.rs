@@ -6,8 +6,11 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
+use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
@@ -143,6 +146,12 @@ pub(crate) struct Verification<'a> {
     expires: Instant,
     cancel: &'a mut dyn FnMut() -> Result<(), String>,
     diagnostics: Option<VerificationDiagnostics>,
+    // Storage only; every consumed byte is overwritten by the current read.
+    scratch: Option<Box<[u8; 65536]>>,
+    #[cfg(test)]
+    pub(crate) last_parent_fd: Option<i32>,
+    #[cfg(test)]
+    pub(crate) scratch_allocations: u64,
     #[cfg(test)]
     pub(crate) on_chunk: Option<Box<dyn FnMut(&Path, u64) + 'a>>,
 }
@@ -152,6 +161,11 @@ impl<'a> Verification<'a> {
             expires,
             cancel,
             diagnostics: None,
+            scratch: None,
+            #[cfg(test)]
+            last_parent_fd: None,
+            #[cfg(test)]
+            scratch_allocations: 0,
             #[cfg(test)]
             on_chunk: None,
         }
@@ -187,6 +201,14 @@ impl<'a> Verification<'a> {
     }
     pub(crate) fn expires(&self) -> Instant {
         self.expires
+    }
+    #[cfg(test)]
+    pub(crate) fn scratch_address(&self) -> Option<usize> {
+        self.scratch.as_ref().map(|buffer| buffer.as_ptr() as usize)
+    }
+    #[cfg(test)]
+    fn allocated_scratch(&mut self) {
+        self.scratch_allocations += 1;
     }
     pub(crate) fn checkpoint(&mut self) -> Result<(), String> {
         (self.cancel)()?;
@@ -296,16 +318,110 @@ fn confined(root: &Path, relative: &str, verify: &mut Verification<'_>) -> Resul
     }
     Ok(cursor)
 }
-fn open_regular(
+/// One parent capability for a consecutive native-manifest member group.
+/// Full named traversal stamps bracket its use; the held FD alone is not a
+/// freshness claim. Only one additional parent FD is live, not one per directory.
+struct MemberParent {
+    path: PathBuf,
+    directory: File,
+    anchors: Vec<(PathBuf, MemberMetadata)>,
+}
+fn hashing_directory_metadata(
     path: &Path,
     verify: &mut Verification<'_>,
+) -> Result<MemberMetadata, String> {
+    let metadata = path_metadata(path, verify)?;
+    if metadata.file_type().is_symlink() {
+        return Err(format!("Refusing symlink: {}", path.display()));
+    }
+    if !metadata.is_dir() {
+        return Err("Admitted generation path type changed".into());
+    }
+    Ok(MemberMetadata::of(&metadata))
+}
+impl MemberParent {
+    fn capture(root: &Path, parent: &Path, verify: &mut Verification<'_>) -> Result<Self, String> {
+        verify.checkpoint()?;
+        let mut path = root.to_path_buf();
+        let mut anchors = Vec::new();
+        for component in std::iter::once(None).chain(parent.components().map(Some)) {
+            if let Some(component) = component {
+                path.push(component.as_os_str());
+            }
+            let metadata = hashing_directory_metadata(&path, verify)?;
+            anchors.push((path.clone(), metadata));
+        }
+        verify.checkpoint()?;
+        let result = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
+            .open(&path);
+        #[cfg(test)]
+        if let Ok(file) = &result {
+            verify.last_parent_fd = Some(file.as_raw_fd());
+        }
+        verify.checkpoint()?;
+        let directory = result.map_err(|error| {
+            format!("Cannot open hashing directory {}: {error}", path.display())
+        })?;
+        let opened = file_metadata(&directory, verify)?;
+        if !opened.is_dir() || MemberMetadata::of(&opened) != anchors.last().unwrap().1 {
+            return Err("Runtime hashing directory changed at open".into());
+        }
+        Ok(Self {
+            path,
+            directory,
+            anchors,
+        })
+    }
+    fn finish(self, verify: &mut Verification<'_>) -> Result<(), String> {
+        verify.checkpoint()?;
+        let held = file_metadata(&self.directory, verify)?;
+        if !held.is_dir() || MemberMetadata::of(&held) != self.anchors.last().unwrap().1 {
+            return Err("Runtime hashing directory changed before group closed".into());
+        }
+        for (path, expected) in &self.anchors {
+            if hashing_directory_metadata(path, verify)? != *expected {
+                return Err("Runtime hashing traversal changed before group closed".into());
+            }
+        }
+        verify.checkpoint()
+    }
+}
+fn open_regular(
+    path: &Path,
+    parent: Option<&File>,
+    verify: &mut Verification<'_>,
 ) -> Result<(File, MemberMetadata), String> {
-    let before = MemberMetadata::read(path, false, verify)?;
+    // Also performs the no-follow leaf check formerly performed by confined().
+    // A held parent never replaces named-leaf/opened-FD identity comparison.
+    let named = path_metadata(path, verify)?;
+    if named.file_type().is_symlink() {
+        return Err(format!("Refusing symlink: {}", path.display()));
+    }
+    if !named.is_file() {
+        return Err("Admitted generation path type changed".into());
+    }
+    let before = MemberMetadata::of(&named);
     verify.checkpoint()?;
-    let result = OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
-        .open(path);
+    let flags = libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK;
+    let result = if let Some(parent) = parent {
+        let leaf = CString::new(
+            path.file_name()
+                .ok_or("Runtime member has no file name")?
+                .as_bytes(),
+        )
+        .map_err(|error| error.to_string())?;
+        let fd = unsafe { libc::openat(parent.as_raw_fd(), leaf.as_ptr(), libc::O_RDONLY | flags) };
+        if fd < 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            // Own the FD before checking cancellation so every refusal closes it.
+            Ok(unsafe { File::from_raw_fd(fd) })
+        }
+    } else {
+        OpenOptions::new().read(true).custom_flags(flags).open(path)
+    };
     verify.checkpoint()?;
     let file = result.map_err(|e| format!("Cannot open {}: {e}", path.display()))?;
     let opened = file_metadata(&file, verify)?;
@@ -319,20 +435,25 @@ fn open_regular(
 /// separate reviewed maximum; hashing keeps only one 64KiB chunk.
 fn read_regular(
     path: &Path,
+    parent: Option<&File>,
     maximum: Option<u64>,
     verify: &mut Verification<'_>,
     mut consume: impl FnMut(&[u8]),
 ) -> Result<(), String> {
-    let (mut file, before) = open_regular(path, verify)?;
+    let (mut file, before) = open_regular(path, parent, verify)?;
     if maximum.is_some_and(|maximum| before.size > maximum) {
         return Err(format!("File exceeds bound: {}", path.display()));
     }
     let mut count = 0u64;
-    let mut buffer = [0u8; 65536];
+    if before.size > 0 && verify.scratch.is_none() {
+        verify.scratch = Some(Box::new([0u8; 65536]));
+        #[cfg(test)]
+        verify.allocated_scratch();
+    }
     while count < before.size {
         verify.checkpoint()?;
-        let remaining = (before.size - count).min(buffer.len() as u64) as usize;
-        let result = file.read(&mut buffer[..remaining]);
+        let remaining = (before.size - count).min(65536) as usize;
+        let result = file.read(&mut verify.scratch.as_mut().unwrap()[..remaining]);
         verify.checkpoint()?;
         let length = result.map_err(|e| e.to_string())?;
         if length == 0 {
@@ -344,7 +465,7 @@ fn read_regular(
             hook(path, count);
         }
         verify.checkpoint()?;
-        consume(&buffer[..length]);
+        consume(&verify.scratch.as_ref().unwrap()[..length]);
         verify.checkpoint()?;
     }
     let after = file_metadata(&file, verify)?;
@@ -360,7 +481,7 @@ fn read_bounded(
     verify: &mut Verification<'_>,
 ) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
-    read_regular(path, Some(maximum), verify, |chunk| {
+    read_regular(path, None, Some(maximum), verify, |chunk| {
         bytes.extend_from_slice(chunk)
     })?;
     Ok(bytes)
@@ -403,12 +524,19 @@ fn read_manifest_metadata(
 }
 
 fn file_digest(path: &Path, verify: &mut Verification<'_>) -> Result<String, String> {
+    file_digest_at(path, None, verify)
+}
+fn file_digest_at(
+    path: &Path,
+    parent: Option<&File>,
+    verify: &mut Verification<'_>,
+) -> Result<String, String> {
     let mut hash = Sha256::new();
     let diagnostics = verify.diagnostics.clone();
     if let Some(diagnostics) = &diagnostics {
         diagnostics.hash_call();
     }
-    read_regular(path, None, verify, |chunk| {
+    read_regular(path, parent, None, verify, |chunk| {
         hash.update(chunk);
         if let Some(diagnostics) = &diagnostics {
             diagnostics.hashed(chunk.len());
@@ -449,15 +577,43 @@ fn verify_files(
         }
     }
     verify.phase(VerificationPhase::MemberHashing, |verify| {
+        let native = manifest.contains_key(METADATA);
+        let mut group: Option<MemberParent> = None;
         for (relative, expected) in manifest {
             verify.checkpoint()?;
             if !valid_digest(expected) {
                 return Err(format!("Invalid member digest: {relative}"));
             }
-            let file = confined(root, relative, verify)?;
-            if file_digest(&file, verify)? != *expected {
+            let digest = if native {
+                let suffix = relative_path(relative)?;
+                let parent = suffix.parent().ok_or("Runtime member has no parent")?;
+                let parent_path = root.join(parent);
+                if group
+                    .as_ref()
+                    .is_none_or(|current| current.path != parent_path)
+                {
+                    if let Some(previous) = group.take() {
+                        previous.finish(verify)?;
+                    }
+                    group = Some(MemberParent::capture(root, parent, verify)?);
+                }
+                file_digest_at(
+                    &root.join(suffix),
+                    Some(&group.as_ref().unwrap().directory),
+                    verify,
+                )?
+            } else {
+                // Legacy non-native images preserve their original traversal.
+                file_digest(&confined(root, relative, verify)?, verify)?
+            };
+            if digest != *expected {
                 return Err(format!("Runtime member integrity failure: {relative}"));
             }
+        }
+        // Standalone Selection has no outer receipt: closing the final group
+        // must precede success here, not depend on a later caller validation.
+        if let Some(last) = group {
+            last.finish(verify)?;
         }
         Ok(())
     })?;

@@ -9746,6 +9746,41 @@ Additional bounded evidence and unresolved dependencies:
   semantic regression; it supplies no acceptance. No production completion,
   native workload fairness, Python retirement or machine adoption is earned.
 
+- E362: Member verification shares one no-follow parent descriptor per
+  consecutive native-manifest parent group and one lazy64KiB read buffer. Exact
+  patch285ff438 applies to clean4b90c110. Every member retains full hashing,
+  named-before/opened-FD/post-read-FD/named-after comparisons and the original
+  deadline; each group closes with held-parent and complete root-to-parent
+  metadata comparisons before switching groups or returning success. Legacy
+  manifests retain their prior traversal. No persistent cache, omitted
+  inventory, expanded deadline or parent-descriptor array is introduced.
+
+  Pinned Cargo execution member-reader-native-01 exits0 in12.869s with36 native
+  generation checks. member-reader-consumers-01 exits0 in6.897s with180 binary
+  checks, including those36 and selection/Stop/SQLite admission consumers.
+  member-reader-feature-off-01 compiles without default features, exit0
+  in3.308s; it executes no tests. All three retain unchanged source/tool pins
+  and empty observed groups. Compiler warnings remain; these are not strict
+  Clippy results. Raw commands, logs and fixture trees live under
+  publication-integration with those labels. Standalone fixture77362-23 hashes
+  exactly131872 expected bytes across10 calls, allocates one scratch buffer and
+  closes the parent FD. Fixture18 completes all8 member hashes then rejects a
+  replaced/restored ancestor before inventory, with the leaf unchanged and no
+  outer GenerationReceipt. Fixture24 refuses before reading the next group;
+  fixtures19/20 retain cancellation and original-expiry refusals with closed
+  FDs; fixtures21/22 reject parent symlink and file replacement. These are
+  synthetic filesystem controls, not installed performance or publication proof.
+  The fresh07 inventory predicts38991 fewer metadata operations per successful
+  pass; elapsed benefit remains unmeasured.
+
+  The separate idle-retirement proposal remains unapplied: source review finds
+  repeated non-demand probes can reset the actor's relative idle wait and starve
+  warm-backend retirement. Root owns the correction, repeated-probe and
+  multi-actor-abort checks, committed-candidate review and fresh-image
+  execution. The baseline owner suite exits0 with27 checks in1.113s under
+  idle-retirement-owner-baseline-01; it does not exercise the proposed barrier.
+  Parent acceptance, production completion and machine selection are unchanged.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -9865,6 +9900,13 @@ member verification as the largest observed frontend phase and fails the
 original deadline. Root owns that cost repair and conservative idle retirement
 of resource-free durable Unknown. Preserve fenced uncertainty; automatic
 settlement of every Unknown is not a requirement.
+
+E362 implements bounded member traversal reuse with hostile filesystem and
+consumer checks. Root next reviews the committed candidate and measures the
+unchanged positive scenario through a fresh exact image. In parallel, the
+idle-retirement owner corrects probe-induced timer starvation before
+integration; resource-free Unknown must remain durable and fenced across natural
+owner exit.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
