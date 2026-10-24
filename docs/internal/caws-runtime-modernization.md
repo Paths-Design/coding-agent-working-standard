@@ -8282,6 +8282,40 @@ Additional bounded evidence and unresolved dependencies:
   landings remain incremental; none authorizes machine adoption or legacy
   retirement before that combined result.
 
+- E314: Combined source `c61ad087` executes a fresh matched native build and CLI
+  package build/pack in
+  `publication-integration/combined-native-coordinator-01`,
+  `combined-package-build-01` and `combined-package-01`. The native binary
+  SHA256 is `8619a3670ed611dd95c51b3d286031d7ca4f0510b9ff4fbfc86b51a996dd4793`;
+  the package tar SHA256 is
+  `c0bbdf4b1023163e68d201059f681350f377b84902ddcf2bf7505a78c95fdc2c`. Exact
+  descriptor preparation compares the package, installed prefix and staged
+  consumer documents; earlier prefix-identity and staging failures remain
+  retained. `combined-installed-image-01` contains the actual private install,
+  configure, project initialization, direct native invocation, corruption and
+  rollback cases. The native generation is
+  `c788f1722ce38d728da408888c3af1722e4f199234b760ade3345002c17ace93`.
+  `native-bash-read-01` exits0 and `native-bash-force-push-01` exits2 with the
+  specific command-safety block; their journals record native cache capture and
+  envelope publication, without compatibility-dispatch completion. These cases
+  use a clean child environment and exact generation executable aliases. Read
+  payload and ambient-environment attempts retain their compatibility evidence;
+  unsupported stock handlers continue using child execution. The inert
+  force-push payload does not execute a Git push. Journal delivery remains
+  `not_observed`: direct launcher execution does not prove editor enforcement.
+  `native-corrupt-01` exits2 with
+  `Runtime member integrity failure: native-entry.json`; the private fixture
+  restores the original metadata bytes. `rollback-apply` exits0 and restores
+  baseline digest
+  `0c5bf4bebaf720b6e48972bdec14cf277de51aaa0216094474781677c2795137`;
+  `rollback-read-01` invokes the same stable launcher and exits0. This proves
+  the private native-to-legacy recovery scenario, not active-owner native
+  upgrades. Each case retains command, exit, stdout/stderr and state snapshots;
+  invocation verification retains image/input hashes. No machine adoption,
+  ordinary SQL Stop, full in-process chain, no-Python execution, residency or
+  fairness is inferred. The later deadline candidate `3bc555cb` requires
+  separate integrated-image proof.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
