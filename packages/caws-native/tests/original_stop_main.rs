@@ -265,6 +265,14 @@ fn original_capture_is_before_node_and_success_replays_without_another_git_child
             .env("CAWS_GIT_BINARY", &f.git)
             .env("CAWS_MAIN_TEST_ROOT", &f.base)
             .env("CAWS_MAIN_TEST_CASE", case)
+            .env(
+                "CAWS_NATIVE_TRACE_PROGRESS",
+                if case == "selection-invalid-root" {
+                    "0"
+                } else {
+                    "1"
+                },
+            )
             .env("CAWS_MAIN_TEST_NODE", f.runtime.join("native/node"))
             .stdin(Stdio::piped())
             .stdout(stdout)
@@ -306,6 +314,33 @@ fn original_capture_is_before_node_and_success_replays_without_another_git_child
             "{case}: {}",
             String::from_utf8_lossy(&diagnostics)
         );
+        let diagnostics_text = String::from_utf8_lossy(&diagnostics);
+        let traces: Vec<_> = diagnostics_text
+            .lines()
+            .filter_map(|line| line.strip_prefix("CAWS native progress "))
+            .collect();
+        if case == "selection-invalid-root" {
+            assert!(traces.is_empty(), "disabled tracing must stay silent");
+        } else {
+            assert_eq!(traces.len(), 1);
+            let trace: Value = serde_json::from_str(traces[0]).unwrap();
+            assert_eq!(trace["phase"], "completed");
+            assert_eq!(trace["dispatchGrantWritten"], true);
+            let captured = case == "captured";
+            for field in [
+                "selectionAdvertised",
+                "selectionSealed",
+                "selectionPredispatchRevalidated",
+            ] {
+                assert_eq!(trace[field], captured, "{case}:{field}");
+            }
+            assert_eq!(
+                trace["completedSelectionSequence"],
+                if captured { 3 } else { 0 }
+            );
+            assert!(!trace.to_string().contains(f.root.to_str().unwrap()));
+            f.record("native-progress.json", trace);
+        }
         let observed: Value =
             serde_json::from_slice(&fs::read(f.base.join("context-observed.json")).unwrap())
                 .unwrap();
