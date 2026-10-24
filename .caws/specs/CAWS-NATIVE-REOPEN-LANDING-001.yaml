@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-REOPEN-LANDING-001
 title: 'Land refusal reopen test and retained reader evidence'
 mode: chore
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-reopen-landing
 created_at: '2026-10-24T20:08:25.487Z'
-updated_at: '2026-10-24T20:08:25.487Z'
+updated_at: '2026-10-24T20:08:26.884Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
