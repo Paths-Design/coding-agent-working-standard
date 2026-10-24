@@ -162,6 +162,12 @@ pub(crate) struct Verification<'a> {
     pub(crate) scratch_allocations: u64,
     #[cfg(test)]
     pub(crate) on_chunk: Option<Box<dyn FnMut(&Path, u64) + 'a>>,
+    #[cfg(test)]
+    pub(crate) on_phase: Option<Box<dyn FnMut(VerificationPhase) + 'a>>,
+    #[cfg(test)]
+    on_open_result: Option<Box<dyn FnMut(Option<i32>) + 'a>>,
+    #[cfg(test)]
+    on_read_result: Option<Box<dyn FnMut(&std::io::Result<usize>) + 'a>>,
 }
 impl<'a> Verification<'a> {
     pub(crate) fn new(expires: Instant, cancel: &'a mut dyn FnMut() -> Result<(), String>) -> Self {
@@ -176,6 +182,12 @@ impl<'a> Verification<'a> {
             scratch_allocations: 0,
             #[cfg(test)]
             on_chunk: None,
+            #[cfg(test)]
+            on_phase: None,
+            #[cfg(test)]
+            on_open_result: None,
+            #[cfg(test)]
+            on_read_result: None,
         }
     }
     /// Only the receipt revalidation scope attaches request diagnostics. Restore
@@ -201,6 +213,10 @@ impl<'a> Verification<'a> {
             .diagnostics
             .as_ref()
             .map(|value| (value.clone(), Instant::now()));
+        #[cfg(test)]
+        if let Some(hook) = self.on_phase.as_mut() {
+            hook(phase);
+        }
         let result = operation(self);
         if let Some((diagnostics, started)) = measurement {
             diagnostics.phase(phase, started.elapsed(), result.is_err());
@@ -430,8 +446,21 @@ fn open_regular(
     } else {
         OpenOptions::new().read(true).custom_flags(flags).open(path)
     };
-    verify.checkpoint()?;
-    let file = result.map_err(|e| format!("Cannot open {}: {e}", path.display()))?;
+    #[cfg(test)]
+    if let Some(hook) = verify.on_open_result.as_mut() {
+        hook(result.as_ref().ok().map(|file| file.as_raw_fd()));
+    }
+    let file = match result {
+        Ok(file) => file,
+        Err(error) => {
+            // Even a failed open must observe cancellation/expiry before its
+            // I/O error escapes. A successful File is already RAII-owned.
+            verify.checkpoint()?;
+            return Err(format!("Cannot open {}: {error}", path.display()));
+        }
+    };
+    // This entry checkpoint also closes the successful open's I/O bracket;
+    // only ownership transfer and pure control flow intervene.
     let opened = file_metadata(&file, verify)?;
     if !opened.is_file() || MemberMetadata::of(&opened) != before {
         return Err(format!("Runtime file identity changed: {}", path.display()));
@@ -462,6 +491,10 @@ fn read_regular(
         verify.checkpoint()?;
         let remaining = (before.size - count).min(65536) as usize;
         let result = file.read(&mut verify.scratch.as_mut().unwrap()[..remaining]);
+        #[cfg(test)]
+        if let Some(hook) = verify.on_read_result.as_mut() {
+            hook(&result);
+        }
         verify.checkpoint()?;
         let length = result.map_err(|e| e.to_string())?;
         if length == 0 {
@@ -474,7 +507,8 @@ fn read_regular(
         }
         verify.checkpoint()?;
         consume(&verify.scratch.as_ref().unwrap()[..length]);
-        verify.checkpoint()?;
+        // The next iteration's entry check, or file_metadata's entry check
+        // below, closes consumption before any further read/metadata I/O.
     }
     let after = file_metadata(&file, verify)?;
     let named = MemberMetadata::read(path, false, verify)?;
@@ -857,5 +891,240 @@ impl Selection {
             Route::Native(entry) => Some(entry),
             Route::Legacy => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod checkpoint_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    struct FileFixture {
+        directory: PathBuf,
+        path: PathBuf,
+    }
+    impl FileFixture {
+        fn new(bytes: &[u8]) -> Self {
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let directory = std::env::temp_dir().join(format!(
+                "caws-generation-checkpoint-{}-{}-{}",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::create_dir(&directory).unwrap();
+            let path = directory.join("member");
+            fs::write(&path, bytes).unwrap();
+            Self { directory, path }
+        }
+    }
+    impl Drop for FileFixture {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.directory).unwrap();
+        }
+    }
+    fn retain(name: &str, value: serde_json::Value) {
+        if let Some(root) = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT") {
+            let file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(PathBuf::from(root).join(format!("checkpoint-{name}.json")))
+                .unwrap();
+            serde_json::to_writer_pretty(file, &value).unwrap();
+        }
+    }
+
+    #[test]
+    fn completed_open_preserves_cancellation_error_precedence_and_fd_custody() {
+        let mut observations = Vec::new();
+        for successful in [false, true] {
+            for cancelled in [false, true] {
+                let fixture = FileFixture::new(b"current bytes");
+                // A real regular-file parent makes openat return ENOTDIR after
+                // the named leaf was successfully observed.
+                let parent = (!successful).then(|| File::open(&fixture.path).unwrap());
+                let armed = Cell::new(false);
+                let opened_fd = Cell::new(None);
+                let open_results = Cell::new(0usize);
+                let mut cancel = || {
+                    if armed.get() {
+                        Err("cancelled after actual open result".into())
+                    } else {
+                        Ok(())
+                    }
+                };
+                let expiry = Instant::now() + Duration::from_secs(5);
+                let mut verify = Verification::new(expiry, &mut cancel);
+                verify.on_open_result = Some(Box::new(|fd| {
+                    open_results.set(open_results.get() + 1);
+                    assert_eq!(fd.is_some(), successful);
+                    opened_fd.set(fd);
+                    armed.set(cancelled);
+                }));
+                let diagnostics = VerificationDiagnostics::default();
+                let result = verify.diagnosed(&diagnostics, |verify| {
+                    open_regular(&fixture.path, parent.as_ref(), verify)
+                });
+                assert_eq!(open_results.get(), 1, "the actual open was attempted");
+                let error = if cancelled {
+                    let error = result.unwrap_err();
+                    assert_eq!(error, "cancelled after actual open result");
+                    Some(error)
+                } else if successful {
+                    let (file, stamp) = result.unwrap();
+                    assert_eq!(stamp, MemberMetadata::of(&file.metadata().unwrap()));
+                    drop(file);
+                    None
+                } else {
+                    let error = result.unwrap_err();
+                    assert_eq!(
+                        error,
+                        format!(
+                            "Cannot open {}: {}",
+                            fixture.path.display(),
+                            std::io::Error::from_raw_os_error(libc::ENOTDIR)
+                        )
+                    );
+                    Some(error)
+                };
+                assert_eq!(opened_fd.get().is_some(), successful);
+                if let Some(fd) = opened_fd.get() {
+                    // SAFETY: F_GETFD observes this saved descriptor number;
+                    // it neither dereferences memory nor takes FD ownership.
+                    assert_eq!(unsafe { libc::fcntl(fd, libc::F_GETFD) }, -1);
+                    assert_eq!(
+                        std::io::Error::last_os_error().raw_os_error(),
+                        Some(libc::EBADF)
+                    );
+                }
+                let snapshot = diagnostics.snapshot();
+                assert_eq!(snapshot.path_metadata_operations, 1);
+                assert_eq!(
+                    snapshot.fd_metadata_operations,
+                    u64::from(successful && !cancelled)
+                );
+                assert_eq!(verify.expires(), expiry);
+                assert_eq!(fs::read(&fixture.path).unwrap(), b"current bytes");
+                observations.push(serde_json::json!({
+                    "successfulOpen":successful,"cancelled":cancelled,"error":error,
+                    "openResults":open_results.get(),"fdClosed":successful,
+                    "snapshot":snapshot,"expiryUnchanged":true
+                }));
+            }
+        }
+        retain("completed-open", serde_json::json!({"cases":observations}));
+    }
+
+    #[test]
+    fn post_consume_check_precedes_next_read_or_final_metadata_and_keeps_chunks() {
+        let mut observations = Vec::new();
+        for size in [0, 17, 2 * 65536 + 17] {
+            for cancelled in [false, true] {
+                let bytes = vec![b'x'; size];
+                let fixture = FileFixture::new(&bytes);
+                let armed = Cell::new(false);
+                let mut cancel = || {
+                    if armed.get() {
+                        Err("cancelled after chunk consumption".into())
+                    } else {
+                        Ok(())
+                    }
+                };
+                let expiry = Instant::now() + Duration::from_secs(5);
+                let mut read_results = Vec::new();
+                let mut read_totals = Vec::new();
+                let mut verify = Verification::new(expiry, &mut cancel);
+                verify.on_read_result = Some(Box::new(|result| {
+                    read_results.push(result.as_ref().ok().copied());
+                }));
+                verify.on_chunk = Some(Box::new(|path, total| {
+                    assert_eq!(path, fixture.path);
+                    read_totals.push(total);
+                }));
+                let mut consumed = Vec::new();
+                let mut chunks = Vec::new();
+                let diagnostics = VerificationDiagnostics::default();
+                let result = verify.diagnosed(&diagnostics, |verify| {
+                    read_regular(&fixture.path, None, None, verify, |chunk| {
+                        chunks.push(chunk.len());
+                        consumed.extend_from_slice(chunk);
+                        armed.set(cancelled);
+                    })
+                });
+                let snapshot = diagnostics.snapshot();
+                assert_eq!(verify.expires(), expiry);
+                drop(verify);
+                if cancelled && size > 0 {
+                    assert_eq!(result, Err("cancelled after chunk consumption".into()));
+                    assert_eq!(chunks, vec![size.min(65536)]);
+                    assert_eq!(read_results, vec![Some(size.min(65536))]);
+                    assert_eq!(read_totals, vec![size.min(65536) as u64]);
+                    assert_eq!(consumed, bytes[..size.min(65536)]);
+                    assert_eq!(snapshot.path_metadata_operations, 1);
+                    assert_eq!(snapshot.fd_metadata_operations, 1);
+                } else {
+                    assert_eq!(result, Ok(()));
+                    assert_eq!(consumed, bytes);
+                    assert_eq!(
+                        chunks,
+                        match size {
+                            0 => vec![],
+                            17 => vec![17],
+                            _ => vec![65536, 65536, 17],
+                        }
+                    );
+                    assert_eq!(read_totals.last().copied().unwrap_or(0), size as u64);
+                    assert_eq!(
+                        read_results,
+                        chunks.iter().copied().map(Some).collect::<Vec<_>>()
+                    );
+                    assert_eq!(snapshot.path_metadata_operations, 2);
+                    assert_eq!(snapshot.fd_metadata_operations, 2);
+                }
+                observations.push(serde_json::json!({
+                    "size":size,"cancelled":cancelled,"result":result,
+                    "actualReadResults":read_results,
+                    "readTotals":read_totals,"consumedChunks":chunks,
+                    "snapshot":snapshot,"expiryUnchanged":true
+                }));
+            }
+        }
+        retain("post-consume", serde_json::json!({"cases":observations}));
+    }
+
+    #[test]
+    fn post_consume_expiry_uses_original_clock_before_final_metadata() {
+        let fixture = FileFixture::new(b"last chunk");
+        let expiry = Instant::now() + Duration::from_millis(250);
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expiry, &mut cancel);
+        let diagnostics = VerificationDiagnostics::default();
+        let consumed = Cell::new(0usize);
+        let result = verify.diagnosed(&diagnostics, |verify| {
+            read_regular(&fixture.path, None, None, verify, |chunk| {
+                assert_eq!(chunk, b"last chunk");
+                consumed.set(consumed.get() + 1);
+                std::thread::sleep(
+                    expiry.saturating_duration_since(Instant::now()) + Duration::from_millis(1),
+                );
+            })
+        });
+        assert_eq!(result, Err("Runtime verification deadline expired".into()));
+        assert_eq!(consumed.get(), 1);
+        assert_eq!(verify.expires(), expiry);
+        let snapshot = diagnostics.snapshot();
+        assert_eq!(snapshot.path_metadata_operations, 1);
+        assert_eq!(snapshot.fd_metadata_operations, 1);
+        retain(
+            "post-consume-expiry",
+            serde_json::json!({
+                "result":result,"consumedChunks":consumed.get(),"snapshot":snapshot,
+                "expiryUnchanged":true
+            }),
+        );
     }
 }
