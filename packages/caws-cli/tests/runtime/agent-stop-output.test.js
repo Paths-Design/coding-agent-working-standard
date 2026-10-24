@@ -155,6 +155,8 @@ function fixture(label, { heartbeat = false, goal = false } = {}) {
       {
         env: { ...env, CLAUDE_CODE_SESSION_ID: sid, CAWS_HOOK_EXECUTION_FILE: execution },
         cwd: project,
+        // Observe each selected handler's share of the synchronous dispatch chain.
+        timeoutMs: 10000 * selection.handlers.length,
       }
     );
     const records = fs
