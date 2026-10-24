@@ -521,10 +521,9 @@ describe('mutation policy topology contract', () => {
 
     expect(result.status).toBe(0);
     // Counts are pinned on purpose: adding an inventoried source or a
-    // mutation target must reconcile policy AND this pin in the same change
-    // (6abff54f reconciled the policy for agents-conjoining.ts but not the
-    // pin — the pin is the forcing function, so bump it consciously).
-    expect(result.stdout).toMatch(/^PASS: 193 source files accounted for exactly once$/m);
+    // mutation target must reconcile policy AND this pin in the same change.
+    // The source inventory includes the behavioral renderer-calendar adapter.
+    expect(result.stdout).toMatch(/^PASS: 194 source files accounted for exactly once$/m);
     expect(result.stdout).toMatch(/^PASS: 21 mutation targets across 3 surfaces$/m);
   });
 
