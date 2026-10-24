@@ -132,3 +132,30 @@ test('HTML refusal must identify the shell row after the visible user row', () =
     assert.throws(()=>q.verifyFixedOutcome('renderer','html-literal4301',4300,{kind:'integer_limit'}),/wrong semantic/);
   `);
 });
+
+test('semantic wrapper evidence ignores nested key order but preserves bytes and array order', () => {
+  run(`
+    const reference={files:{'session-index.json':'AAE=','turn-001.json':'YWJj'},kind:'artifacts',metadata:{z:{b:2,a:1},a:[{y:'second',x:'first'},'tail']}};
+    const reordered={metadata:{a:[{x:'first',y:'second'},'tail'],z:{a:1,b:2}},kind:'artifacts',files:{'turn-001.json':'YWJj','session-index.json':'AAE='}};
+    const comparison=q.compareSemanticValues('renderer/0/reordered',reference,reordered);
+    assert.equal(comparison.result,'equal');
+    assert.match(comparison.referenceSha256,/^[a-f0-9]{64}$/);
+    assert.equal(comparison.referenceSha256,comparison.candidateSha256);
+    assert.equal(q.comparisonValueSha256(reference),q.comparisonValueSha256(reordered));
+    const payloadChanged={...reference,files:{...reference.files,'turn-001.json':'YWJk'}};
+    assert.notEqual(q.comparisonValueSha256(reference),q.comparisonValueSha256(payloadChanged));
+    assert.throws(()=>q.compareSemanticValues('renderer/0/changed-byte',reference,payloadChanged),error=>error.code==='ERR_ASSERTION'&&error.message.startsWith('semantic mismatch: renderer/0/changed-byte'));
+    const arrayChanged={...reference,metadata:{...reference.metadata,a:[...reference.metadata.a].reverse()}};
+    assert.notEqual(q.comparisonValueSha256(reference),q.comparisonValueSha256(arrayChanged));
+    assert.throws(()=>q.compareSemanticValues('renderer/0/changed-order',reference,arrayChanged),error=>error.code==='ERR_ASSERTION'&&error.message.startsWith('semantic mismatch: renderer/0/changed-order'));
+    const projection={base64:'YWJj',kind:'projection'};
+    const wrongKind={base64:'YWJj',kind:'integer_limit'};
+    assert.notEqual(q.comparisonValueSha256(projection),q.comparisonValueSha256(wrongKind));
+    assert.throws(()=>q.compareSemanticValues('sql/4300/wrong-kind',projection,wrongKind),/semantic mismatch/);
+    assert.throws(()=>q.comparisonValueSha256({missing:undefined}),/non-JSON/);
+    assert.throws(()=>q.comparisonValueSha256(Array(1)),/non-JSON/);
+    assert.throws(()=>q.comparisonValueSha256(Infinity),/non-finite/);
+    assert.notEqual(q.comparisonValueSha256(-0),q.comparisonValueSha256(0));
+    assert.throws(()=>q.compareSemanticValues('signed-zero',-0,0),/semantic mismatch/);
+  `);
+});

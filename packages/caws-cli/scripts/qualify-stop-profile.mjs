@@ -21,6 +21,43 @@ export const REVIEWED_REFERENCE_SHARED_INVENTORY_SHA256 =
 // Reviewed retained corpus identity; adding/replacing cases requires owned code review.
 export const SQL_CORPUS_SHA256 = 'e9d9303ec7ce77dc15260aceadfa8392c7b2dbd5b3c70803354cedec6e097d19';
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+// Evidence wrappers are JSON data. Object insertion order is not a semantic
+// difference; strings (including base64 file bytes) and array order remain exact.
+export function comparisonValueSha256(value) {
+  const encode = (item) => {
+    if (item === null || typeof item === 'string' || typeof item === 'boolean')
+      return JSON.stringify(item);
+    if (typeof item === 'number') {
+      assert(Number.isFinite(item), 'non-finite comparison number');
+      return Object.is(item, -0) ? '-0' : JSON.stringify(item);
+    }
+    assert(item && typeof item === 'object', 'non-JSON comparison value');
+    if (Array.isArray(item)) return '[' + Array.from(item, encode).join(',') + ']';
+    assert(
+      Object.getPrototypeOf(item) === Object.prototype || Object.getPrototypeOf(item) === null,
+      'non-JSON comparison object'
+    );
+    return (
+      '{' +
+      Object.keys(item)
+        .sort()
+        .map((key) => JSON.stringify(key) + ':' + encode(item[key]))
+        .join(',') +
+      '}'
+    );
+  };
+  return sha(Buffer.from(encode(value)));
+}
+// Pure equality/evidence construction. It does not mint semantic policy.
+export function compareSemanticValues(id, reference, candidate) {
+  assert.deepEqual(candidate, reference, `semantic mismatch: ${id}`);
+  return {
+    id,
+    result: 'equal',
+    referenceSha256: comparisonValueSha256(reference),
+    candidateSha256: comparisonValueSha256(candidate),
+  };
+}
 const read = (file) => fs.readFileSync(file);
 const save = (file, value) =>
   fs.writeFileSync(
@@ -515,13 +552,7 @@ export async function qualify(requestFile) {
         candidate,
         referenceIdentity,
       });
-      assert.deepEqual(candidate, reference, `semantic mismatch: ${id}`);
-      comparisons.push({
-        id,
-        result: 'equal',
-        referenceSha256: sha(Buffer.from(JSON.stringify(reference))),
-        candidateSha256: sha(Buffer.from(JSON.stringify(candidate))),
-      });
+      comparisons.push(compareSemanticValues(id, reference, candidate));
     };
     for (const limit of [4300, 0]) {
       const profile =
