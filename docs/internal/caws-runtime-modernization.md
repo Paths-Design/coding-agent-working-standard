@@ -8690,9 +8690,44 @@ Additional bounded evidence and unresolved dependencies:
   exact source restoration. Remaining session_cache_wire tests31, sqlite-store
   check and combined native-peer-candidate-05 tests5 exit0. Controlled OpenCode
   argv0 remains a test frontend, not a loaded vendor callback. Root retains
-  main-before-Node registration, native-selected profiles, ordinary SQL/render
+  main-before-Node capture, native-selected profiles, ordinary SQL/render
   publication, actual reader/release and residency workload. The library join
   earns no installed adoption or parent acceptance.
+- E330: The fixed OpenCode component comparator owns its corpus and oracle
+  identities; requests cannot substitute command recipes or case inventories. A
+  code-owned complete stock-tree inventory also rejects a caller-substituted
+  reference implementation; file pins alone did not establish that relation.
+  stop-profile-comparison-execution-05 exits0 in4.650s with30 equal comparisons
+  across explicit4300/unlimited profiles and31 child executions. The retained
+  component-comparison.json pins233 output artifacts, independently rehashed
+  without mismatch, plus loaded candidate modules and observed CPython files.
+  Earlier attempts fail on caller-supplied subagent layout and an incorrectly
+  modeled HTML fixture; corrected inputs follow render-reader's actual layout
+  and stock harness-claude's tagged shell-unescape behavior. Ordinary literal
+  HTML is a separate positive control; tagged4301-digit HTML refuses at its
+  actual second-row byte offset. The frozen Python reference is unchanged. This
+  compares controlled component behavior, not ambient Python startup, native
+  calendar observations, bundled dispatch, admission or other surfaces. The
+  component draft explicitly retains those joins and grants no authority.
+- E331: executeNativeStopPublication joins exhausted SQL projection, observed
+  Render preparation and the reopened current-generation consumer. It retains
+  separate numeric profiles, captured metadata, source-presence inputs and
+  original operation/cleanup errors. ordinary-stop-adapter-build-02 exits0;
+  ordinary-stop-adapter-tests-03 exits0 with52 cases across three suites.
+  Retained scenario.json and actual projection/turn/index/marker files show
+  original model/start/SHA and user text before consumption. Same-length user
+  substitution produces "Committed session artifact bytes differ" with no
+  outcome callback or acknowledgement; metadata substitution, callback failure
+  and paired acquisition/cleanup failures also retain explicit refusal state. A
+  forged turn with recomputed matching marker/hash passes reader integrity but
+  the adapter refuses "Committed Stop artifact differs from preparation",
+  retaining the forged file and an unacknowledged terminal outcome. SQL and
+  native observations are fixtures; these cases issue zero local-calendar
+  queries. The adapter is not routed by the ordinary engine. Root retains the
+  native-qualified receipt, authenticated acquire_store transfer before reserve,
+  original project/deadline reuse, actual publication/reader/release, residency
+  and installed cutover. Capture precedes Node; transfer can use the existing
+  store socket after prefix completion without a second registration service.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
