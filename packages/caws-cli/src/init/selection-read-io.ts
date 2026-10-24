@@ -41,6 +41,8 @@ export interface SelectionReadIo {
   /** Optional compact digest observation. Its coherence with byte reads is owned
    * by the native capture/admission boundary, not this data interface. */
   runtimeFileDigest?(file: string): string;
+  /** Verify the same runtime dependencies without requesting a mutable manifest copy. */
+  ensureRuntimeVerified?(home: string, digest: string, verify: SelectionRuntimeVerifier): void;
   verifyRuntime?(
     home: string,
     digest: string,

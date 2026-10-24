@@ -314,8 +314,12 @@ export class SelectionObservationSnapshot {
       },
       runtimeFileDigest: (file: string): string =>
         read({ kind: 'runtime-digest', path: file, singleLink: false }, 'runtime-digest').sha256,
-      verifyRuntime: (home: string, digest: string, verify: SelectionRuntimeVerifier) =>
-        this.verifyRuntime(home, digest, verify),
+      ensureRuntimeVerified: (home: string, digest: string, verify: SelectionRuntimeVerifier) => {
+        this.verifiedRuntime(home, digest, verify);
+      },
+      verifyRuntime: (home: string, digest: string, verify: SelectionRuntimeVerifier) => ({
+        ...this.verifiedRuntime(home, digest, verify).manifest,
+      }),
     });
     Object.freeze(this);
   }
@@ -382,11 +386,11 @@ export class SelectionObservationSnapshot {
       result.manifest
     );
   }
-  private verifyRuntime(
+  private verifiedRuntime(
     home: string,
     digest: string,
     verify: SelectionRuntimeVerifier
-  ): Record<string, string> {
+  ): VerifiedSelectionRuntimeSnapshot {
     // A caller-supplied verifier cannot seed the canonical owner's cache.
     const key = JSON.stringify([home, digest]),
       existing = this.#verified.get(verify)?.get(key);
@@ -397,7 +401,7 @@ export class SelectionObservationSnapshot {
           throw new Error('Runtime observation snapshot changed');
         this.#collecting?.set(operation, observation.operation);
       }
-      return { ...existing.manifest };
+      return existing;
     }
     const previous = this.#collecting,
       dependencies = new Map<string, SelectionReadOperation>();
@@ -426,7 +430,7 @@ export class SelectionObservationSnapshot {
       entries.set(key, complete);
       this.#verified.set(verify, entries);
       for (const [key, operation] of dependencies) previous?.set(key, operation);
-      return { ...complete.manifest };
+      return complete;
     } finally {
       this.#collecting = previous;
     }

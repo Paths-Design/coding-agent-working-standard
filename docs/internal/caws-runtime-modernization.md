@@ -10533,6 +10533,121 @@ Additional bounded evidence and unresolved dependencies:
   authenticated restart join and full workload remain owed before cutover
   acceptance.
 
+- **E382 — checkpoint landing and failed fresh-image builds retain their
+  limits.** Local main merge `54fd311c5bf8e3dc40efed4bc7ecde064547dfea` contains
+  the exact reviewed `69e48291748911dca12fd870736ba73b28d04de9` source and E381
+  tracker. `checkpoint-source-landing-01/postmerge.json` verifies all
+  packages/docs match, eleven preexisting lane registrations and non-main tips
+  are preserved, and the selected legacy408 pointer is unchanged. The bounded
+  landing spec records A1/A3/A2 in events13130/13131/13134 and closes in
+  event13135. Full parent and publication acceptance remain open.
+
+  Fresh13 exports1227 committed files but its native build exits1 after181.250s
+  at the180s internal build limit. Cargo runs152.172s and emits no completed
+  native-library artifact. The outer receipt observes compiler residue; a later
+  identity check finds the group empty without a root cleanup signal. The failed
+  root is retained and unqualified. Fresh14 preserves the same source inventory,
+  changes only the build allocation to300s internal/360s outer, and retains the
+  original30s runtime deadline. Its native build exits1 after303.200s; Cargo
+  runs254.932s and emits a completed `caws_native` library artifact but not the
+  full executable set. Captured compiler diagnostics contain warnings, not a
+  compiler error. Neither attempt reaches packaging or runtime invocation.
+
+  The external supervisor observes leader exit through Darwin NOTE_EXIT before
+  reap. Five controls retain clean/fast exits0, leader0/leader1 with writing
+  descendants as supervisor failures1, and timeout as original exit-9; signals
+  precede reap, final groups are empty and post-return heartbeat files stop
+  changing. `supervisor-reap-order-01/result-traceguard.json` retains these
+  controls. In the actual fresh14 failure, leader81238 remains zombie while
+  compiler2712 is settled; the trace records signal before reap and an empty
+  final group. Supervisor SHA256 is
+  `dfded294d3dc26cf59ee8f19230974e10b79e5669b1c04876084a7e82f0cd461`.
+  Trace-persistence failure handling is source-inspected, not fault-injected;
+  escaped groups and arbitrary same-UID interference are outside this check.
+
+  `fresh-stop-profile-production-14/host-load-during-native-build.json` records
+  one-minute host load107.8 during compilation. It is a point observation, not
+  causal attribution. Root owns a bounded instrumented build with explicit
+  resource allowance, then the complete positive/hostile installed-image pair.
+  Runtime deadline margin, authenticated restart, compatible rollback and the
+  thirteen-session/four-repository workload remain unverified for this
+  candidate.
+
+- **E383 — fresh package completion does not qualify the failed original Stop.**
+  Candidate `bb2b28ab55d068859776083299ace9dc58ef82f3` produces all eleven
+  fresh15 stages with exit0 and empty final supervised groups. The native build
+  completes in452.202s under600s internal/660s outer allocation; the runtime
+  limit remains30000ms. `build-progress-15-01/execution.json` retains every
+  command, exit and stage receipt. Its87 process samples span449s and observe
+  owned compiler progress and changing host load; they do not establish
+  continuous custody or the cause of runtime latency. The supervisor differs
+  from E382 only in its accepted outer build allocation; its SHA256 is
+  `419fcf8a04c20f6ad044e8e36756c76155c9c5d9fac73bcf024cec70087ccc18`.
+
+  `fresh-stop-profile-production-15/run/native-build/native-completed.json`
+  identifies the7584592-byte native binary, SHA256
+  `712a61f63538f76e156ef31ae3d796bcf85c3f2f37e73a8adaf83ff4687db672`.
+  The2710444-byte package tarball has SHA256
+  `8ea3ecd342ef3226808b1354114c486cfb2d4684d96817f92349c0aeeb8d5865`. Root
+  rehashes all eight build artifacts and233 component artifact pins; all30
+  SQL/renderer comparisons are equal. These comparisons explicitly leave
+  original admission, ordinary publication and supported-harness joins open.
+
+  `production-stop-15-paired-execution-01/execution.json` records exit1 after
+  90.518s, unchanged source and an empty final group. The exact executed probe
+  is retained in `production-stop-15-command-01/probe.cjs`, SHA256
+  `738d03f6032490defd96ceed154db96804ca886a497c630cca3969a890507c1f`. The
+  private runtime is
+  `05ecca44762d01d279561c28cffeb786a93a7ebdd84de01581cf2793ebca0263`. Its
+  positive original returns0 after30067.622ms but stderr reports
+  `request deadline expired`: selection discovery reaches sequence280 without
+  sealing or dispatch. Before discovery,12068ms elapse; the two generation
+  receipt revalidations consume7150601us. Exit0 is infrastructure-release
+  behavior, not completed checks. The session contains only its fixture
+  `.meta.json`: no hook journal, projection, turn, index or publication marker.
+  The negative scenario is not executed. Owner235 exits naturally0, its socket
+  is absent and no service signal is sent.
+  `build-progress-15-01/retained-readback.json` retains the independently
+  checked artifacts and limits.
+
+  The probe initially masks the native diagnostic with a missing-journal error.
+  `probe-diagnostics-15-01/result.json` records an offline correction that saves
+  native progress and rejects an incomplete phase before journal lookup. Both
+  the retained failed original and prior successful original exercise the
+  parser; no additional runtime invocation is inferred. The corrected probe has
+  SHA256 `2d379e967c30b37ac49d75b24f3554d88272736dac8d0b117afd6a279a494ca5`.
+  Root retains the failed candidate, full original deadline, authenticated
+  replay, usable rollback and concurrent workload obligations. The selected
+  machine pointer remains byte-identical to E382; no machine adoption or Python
+  retirement occurs.
+
+- **E384 — verification-only discovery preserves observations without discarded
+  copies.** `SelectionObservationSnapshot` shares its private verified record
+  between a verification-only call and the public manifest-copy API. Selection
+  uses the former; the latter retains independent mutable return values. Both
+  paths keep verifier/home/digest/snapshot separation and validate captured
+  dependency identities. Legacy custom IO retains its existing verifier callback
+  and the live implementation performs the complete verification.
+
+  Under the retained `publication-integration` artifact root,
+  `selection-copy-baseline-01` runs the two new discovery controls against the
+  original emitted implementation and exits1: ordinary discovery makes45
+  discarded copies and native-summary discovery makes54, while exact selection
+  and ordered observations agree. `selection-stop-build-01` runs
+  `node scripts/build-cli.js` and exits0. `selection-copy-focused-01` runs Jest
+  for `tests/runtime/selection-observation.test.js` and
+  `tests/init/selection-read-io.test.js`, exits0 with102 tests, and records
+  ordinary45→0 copies over67 observations and native-summary54→0 over56. Each
+  directory retains `execution.json`, `stdout.log` and `stderr.log`; supervisor
+  receipts record unchanged consumed inputs and no timeout. Changed-file, modes,
+  inventory, callback identity, cache separation, mutable return ownership,
+  nested dependency collection and malformed native replies remain exercised.
+  The shared build also contains the separately reviewed agent-stop draft; that
+  draft is not part of this selection-only source slice. These are fixture
+  operation counts, not an installed latency distribution. Independent committed
+  review, main landing and the original installed-image deadline check remain
+  separate obligations. E383 remains failed.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -10696,7 +10811,24 @@ rollback package and restored ordinary invocation remain required. E381 removes
 adjacent pure checkpoint redundancy and measures9.67% fewer callbacks with
 unchanged hash/metadata work. The full installed-image pair must establish
 useful deadline margin; no checkpoint throttling, filesystem observation cache
-or omitted effect boundary is authorized. Machine adoption remains owed.
+or omitted effect boundary is authorized. E383 completes the fresh package but
+its actual original expires before dispatch, so root owns the failed runtime
+join. The selection-copy worker owns a separately governed removal of discarded
+manifest copies while preserving verification and public copy semantics; this is
+not a measured deadline repair. E384 exercises the selection-copy source and
+hostile controls; root owns its committed review and coherent main landing. The
+agent-stop worker owns the typed stock lease transition, exact admission and
+override fallback. Root owns application of both workers' external patches in
+the publication lane after guarded child writes refused; their unstarted child
+lanes retain explicit disposition obligations. The agent-stop draft's
+same-package CLI predicate does not admit ordinary installed wiring: the global
+CLI and generation-embedded CLI have distinct paths. A synthetic matching
+symlink does not establish installation parity. Root retains a supported
+selected-CLI identity/wiring contract and an actual installed typed execution
+before counting that handler as replaced. The canonical push coordinator owns
+only the separate agent-stop test observer allocation repair. Root retains
+integration, raw-artifact adjudication and the complete parent outcome. Machine
+adoption remains owed.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                                                            |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

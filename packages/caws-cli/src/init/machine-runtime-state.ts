@@ -211,6 +211,19 @@ export function readRetainedNativeEntryIdentity(
   return { digest, sha256: entry.sha256, bytes: entry.bytes };
 }
 
+/** Verification-only callers need no returned manifest. Legacy/custom IO keeps
+ * its existing verifier hook; only an explicit verification-only hook avoids
+ * requesting the copy. Canonical verifier identity stays the same in both paths.
+ */
+export function ensureRuntimeVerified(
+  home: string,
+  digest: string,
+  io: SelectionReadIo = liveSelectionReadIo
+): void {
+  if (io.ensureRuntimeVerified) io.ensureRuntimeVerified(home, digest, verifyRuntimeUncached);
+  else verifyRuntime(home, digest, io);
+}
+
 export function verifyRuntime(
   home: string,
   digest: string,
