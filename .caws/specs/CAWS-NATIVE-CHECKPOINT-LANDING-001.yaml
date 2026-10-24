@@ -50,3 +50,8 @@ evidence:
     evidence_ref: "Five gates pass over three changed paths; doctor0 with0E4W5I; raw logs in checkpoint-source-landing-01. Independent read-only Sol review of69e482917 and raw evidence found no actionable defect. Root inspected installed_generation453-464 and491-513 plus native_generation435 and selection_observation442-452/835-861: shared checks precede I/O; full generation brackets and original expiry preserved. No review verdict used as proof. Fresh13 build separately failed at internal180s cargo timeout, outer181.25s exit1; observed child later gone without root signal, cleanup.json retained. No fresh13 package/runtime result; installed-image margin authenticated restart usable rollback load and cutover remain parent/publication obligations."
     recorded_at: "2026-10-24T21:00:25.871Z"
     commit_sha: "4ff7c0fee8ed65cf5391432db672b2344901ad5e"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Governed merge54fd311c lands exact reviewed69e482917 source and tracker on local main; all packages/docs equal. Root postmerge.json under publication-integration/checkpoint-source-landing-01 verifies all11 preexisting registry entries and every existing nonmain branch tip identical, disposable lane removed, foreign canonical untracked archive preserved. Actual selected pointer hash f8a3627299bc8c3d325eb42472f889b43e7c26c8a4e4c02996091867cb9f4f7e unchanged legacy408. No parent/publication closure or machine adoption."
+    recorded_at: "2026-10-24T21:04:41.663Z"
+    commit_sha: "54fd311c5bf8e3dc40efed4bc7ecde064547dfea"
