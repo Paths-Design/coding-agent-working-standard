@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-STOP-CATALOG-LANDING-001
 title: 'Land the native Stop source catalog and typed consumer'
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed exact reviewed E343 source catalog and typed consumer with retained runtime capture/replay evidence and postmerge identity checks. Full parent runtime, production activation, publication/release, Python retirement, fairness and local cutover remain owned and unfinished.'
 created_at: '2026-10-24T10:39:32.747Z'
-updated_at: '2026-10-24T10:39:46.513Z'
+updated_at: '2026-10-24T10:46:46.376Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
