@@ -9831,6 +9831,57 @@ Additional bounded evidence and unresolved dependencies:
   image execution and the original30s publication/ordinary-consumption/release
   chain. No parent criterion or production Python row is completed by E363.
 
+- E364: Fresh08 freezes clean106c94f9583317d652801c2e131fbc48a86ad041, including
+  E362 traversal reuse and E363 idle retirement. Independent read-only review
+  finds no demonstrated idle regression; root grounds listener admission,
+  connection-permit lifetime and one-way barrier decisions against source. Final
+  coordinator/warm/restored/store/host receipts match all112 crate files;
+  earlier regression receipts differ only in subsequent test changes. Gates pass
+  all five configured checks over151 branch/staged paths; doctor reports
+  0E/4W/5I. These do not supply parent acceptance.
+
+  fresh-stop-profile-production-08 retains1224 source blobs/modes, manifest
+  SHAbf6df2be52b86e3a0a5aaf774c051d6c755fa7552fbcfe4c5b5d550abd2bc4c8 and
+  archiveSHA25cb70fdff1bb5e80784525a16f5f96bcfe6a08ce616f7b2261e2fe727102da1.
+  All eleven stages exit0 with unchanged TypeScript/native pins and empty
+  observed groups. Native build takes121.611s. Qualification retains30 equal
+  reference/candidate comparisons and31 execution receipts with exit0. The final
+  profile-bearing
+  descriptorSHA98a9fe0a6afeaea9795ca6c338a902591d696cca2ac230ce235c212335ffe72c
+  retains timeout30000ms. A root receipt-printing attempt used the wrong
+  completion-reference key and failed before inspection; corrected read verifies
+  the actual path/size/SHA. No runtime retry follows that reporting error.
+
+  The unchanged probe02 positive scenario exits1 in43.230s under
+  production-stop-08-positive-execution-01. Actual native47657 exits2
+  in25154.698ms, without watchdog or signal, at
+  `Selection dependency changed: exists` for the fixture project/.caws. All29
+  frontend generation verifications complete; their aggregate time is16.432s,
+  member phase10.956s and path metadata count 1056615. These are one failed
+  run's overlapping phase observations, not a workload speedup distribution or
+  complete end-to-end result.
+
+  Owner47656 records postqueue validation23295ms, original reservation23308ms
+  and retained uncertainty25145ms. Writer bootstrap creates the zero-byte
+  .render-writer-provisioned marker and .render-writer-custody directory; their
+  timestamps coincide with changed .caws directory metadata. Native Exists
+  retains full leaf/followed stamps although the typed selector consumes boolean
+  presence plus separate confinement identity. Root owns a bounded
+  present-directory Exists projection repair and paired authority falsifiers;
+  explicit stat/list/content, absence and identity checks must remain strict.
+
+  The actual failure path naturally exits the owner at26188ms, exit0, with no
+  service signals; socket is absent, ps-p47656 returns1/no row and the custody
+  lock is acquirable. The accepted Unknown checksum verifies and remains fenced.
+  No turn-001.json or publication marker exists. Source database hash remains
+  eff667b1cbe750018030f79e81869928011a8265d26b65387eb78aa4d7f0749f; unchanged
+  bytes do not prove no reads, and no post-exit owner RPC counter was collected.
+  Root inspection is production-stop-08-positive-root-inspection-01.json,
+  SHAe6b0ebda97c4abf33ef5b5f0bf122929b6bbb51026519c586530999e9514a753. Preserve
+  this fixture's partial writer provisioning and Unknown; do not replay or reset
+  it. Successful publication, ordinary consumption, fairness and
+  selected-machine adoption remain open.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -9954,11 +10005,14 @@ settlement of every Unknown is not a requirement.
 E362 implements bounded member traversal reuse with hostile filesystem and
 consumer checks; committed-candidate review finds no demonstrated regression
 within that inspected scope. E363 integrates resource-free Unknown retirement
-and tests the probe-starvation defect with a failing mutation and restored
-positive control. Root next reviews the combined committed candidate and runs
-the unchanged positive scenario through fresh08. The exact production path must
-establish publication, ordinary consumption and release within30s; its failure
-path must preserve fenced Unknown through natural resource-free owner exit.
+and tests probe starvation with a failing mutation and restored positive
+control. E364's fresh08 producer reaches natural resource-free owner exit while
+preserving Unknown, but first writer provisioning invalidates the .caws
+directory Exists dependency before publication. Root owns an operation-specific
+native directory existence repair, strict authority falsifiers and a new
+exact-image replay. The successful path must establish publication, ordinary
+consumption and release within30s; neither natural failure cleanup nor
+build/profile success supplies it.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
