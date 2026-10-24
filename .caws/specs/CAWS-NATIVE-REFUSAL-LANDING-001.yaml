@@ -44,3 +44,9 @@ non_functional: {}
 contracts:
   - name: 'native-refusal-source'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/refusal-source-landing-01/postmerge.json: rederived all eight source/tracker blob IDs on main exactly equal reviewed5f3f09e2; composition8295d304 and landed mergeb701acc3; gates and worktree review cover both commits and all eight paths. --verify verifies commit reachability, not execution."
+    recorded_at: "2026-10-24T18:43:09.941Z"
+    commit_sha: b701acc311b715866a02e89a0167c75bbee3e2fa
