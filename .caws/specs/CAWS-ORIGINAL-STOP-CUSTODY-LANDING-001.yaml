@@ -56,3 +56,8 @@ evidence:
     evidence_ref: "E328-E329: inspected runtime03 frontend TERM/KILL and held-pipe receipts; integration01 actual /usr/bin/git output, original deadline/prefix bytes, pending retry/Drop retaining custody with no session effects; eight tests exit0 and typed-cause mutant exit101. 104 integration source pins match candidate and landing. Runtime03 production bytes equal candidate; later test-only receiver timeout removed as documented. No installed Stop or kernel-stall claim. Raw artifacts: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration"
     recorded_at: "2026-10-24T04:14:42.421Z"
     commit_sha: "5afe64be54e782500abfd6832a1ddcf83364791a"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "E327: inspected native-peer-candidate-05 five actual process cases exit0; peer-observation.json admits exact native host and rejects forged same-UID Node (zero callbacks), exited peer and same-byte member replacement. Executable/member/process mutants exit101 at behavioral assertions, source restored; combined 104 pins match. Synthetic generation only, no request authentication or production activation claim. Raw artifacts: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration"
+    recorded_at: "2026-10-24T04:14:43.539Z"
+    commit_sha: "5afe64be54e782500abfd6832a1ddcf83364791a"
