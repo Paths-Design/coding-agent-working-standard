@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-session-publication
 created_at: '2026-10-22T07:45:38.932Z'
-updated_at: '2026-10-24T04:22:57.820Z'
+updated_at: '2026-10-24T05:16:07.797Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -115,6 +115,7 @@ scope:
     - packages/caws-cli/tests/adapter/system-registration.test.js
     - packages/caws-cli/scripts/qualify-stop-profile.mjs
     - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
+    - packages/caws-native/src/selection_observation.rs
   out: []
   support:
     - .github/workflows/release-qualification.yml
