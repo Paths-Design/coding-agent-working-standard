@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-REOPEN-LANDING-001
 title: 'Land refusal reopen test and retained reader evidence'
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Exact reviewed test and E377-E380 ledger delivered to local main, focused and six-case refusal checks inspected, actual reader startup evidence retained. Existing lanes and selected runtime preserved. Full authenticated replay, usable rollback, load and cutover remain with active parent/publication work.'
 created_at: '2026-10-24T20:08:25.487Z'
-updated_at: '2026-10-24T20:08:26.884Z'
+updated_at: '2026-10-24T20:12:18.878Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
