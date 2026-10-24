@@ -1,0 +1,42 @@
+id: CAWS-NATIVE-PREGRANT-LANDING-001
+title: 'Land shared pure Stop admission verification with exact-owner checks'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-24T19:27:06.577Z'
+updated_at: '2026-10-24T19:27:06.577Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native Stop admission and effect-free validation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/main.rs'
+    - 'packages/caws-native/src/selection_observation.rs'
+    - 'packages/caws-native/src/stop_admission.rs'
+    - 'packages/caws-native/src/stop_execution.rs'
+    - 'packages/caws-native/tests/stock_stop_admission.rs'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Preserve fresh full generation brackets exact receipt owner original clock and every effect queue and service-offer boundary'
+acceptance:
+  - id: A1
+    given: 'the reviewed committed admission candidate'
+    when: 'focused controls and exact-image Stop execute'
+    then: 'pure phases share two full checks while wrong-owner invalidation and cancellation refuse and all four positive handlers complete within the unchanged 30 second deadline'
+  - id: A2
+    given: 'canonical main and existing dependent worktrees'
+    when: 'the bounded source is integrated'
+    then: 'exact reviewed source bytes land with scoped gates and existing branch registry spec and machine selection state preserved'
+  - id: A3
+    given: 'the retained failed paired attempts'
+    when: 'the landing is reported'
+    then: 'the tracker identifies unexecuted hostile restart rollback load and machine adoption obligations without claiming whole migration acceptance'
+observability:
+  - 'Pinned raw check outputs actual positive terminal session publication files and failed pair artifacts outside the worktree'
+rollback:
+  - 'Revert source through ordinary governed history without changing selected runtime or terminal custody'
+non_functional: {}
+contracts: []
