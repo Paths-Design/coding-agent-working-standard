@@ -59,3 +59,8 @@ evidence:
     evidence_ref: "Candidate6c3a71bf scoped eleven-path gates exit0 fivePASS and doctor0 0E4W5I retained in stop-source-catalog-landing-01. Matching source historical build0, package-scoped lint0, SQLite-feature check0; compilation is not SQL publication. Commit-hook TS lint ignored and is not lint evidence. Same-provider independent read-only composition review returns no actionable defect, grounded by root exact source/input correspondence, actual replay contents and production inertness: old main StoreAcquire::capture gives publication:false and no engine caller of executeNativeStopPublication. E343 tracker and this slice explicitly retain registration/profile/dispatch, full parent acceptance, all Python retirement and machine cutover. No selected state writes."
     recorded_at: "2026-10-24T10:44:40.532Z"
     commit_sha: "6c3a71bf26d647949a72eeeadba4242765a646b7"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Governed merge exit0 bbe4b3895c53348da4d2703a486b8cabe79cb7d8; root postmerge inspection verifies all ten main source/test blobs equal reviewed candidate, merge/candidate ancestry exit0, temporary lane removed. Parent CAWS-NATIVE-RUNTIME-001 and selected adapter-runtime.json exact hashes unchanged from before landing. Main dirty state only pre-existing foreign untracked .caws/messages.jsonl.archive preserved. First inspector exact-HEAD assertion fails because governed destroy adds a binding-only commit; source/ancestry inspection resolves it. Actual results retained publication-integration/stop-source-catalog-landing-01/{merge.json,postmerge.json}; no remote push or machine adoption claimed."
+    recorded_at: "2026-10-24T10:46:45.121Z"
+    commit_sha: bbe4b3895c53348da4d2703a486b8cabe79cb7d8
