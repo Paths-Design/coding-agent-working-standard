@@ -55,3 +55,8 @@ evidence:
     command: "Maintained image actual-main-selection.cjs; exact argv retained in maintained-stock-admission-execution-01/execution.json"
     exit_code: 0
     commit_sha: "5837aa104633640ce593a2ead8ea2198d46b7812"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Local main merge56f917d8af052dbc7f473a04c26a9080ff18c5eb contains reviewed5837aa10. Postmerge inspection in /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/stock-admission-landing-01/postmerge.json establishes exact five source/ledger path equality, candidate ancestry, removed temporary lane, unchanged parent spec hash0c11d997 and selected-machine hashf8a36272. gates.json exit0 evaluates five paths; doctor.json exit0 0E/4W/5I. Peer feedback independently inspected committed candidate; direct source and runtime artifacts support A1/A2; no parent completion or installation claim."
+    recorded_at: "2026-10-24T08:20:50.985Z"
+    commit_sha: "56f917d8af052dbc7f473a04c26a9080ff18c5eb"
