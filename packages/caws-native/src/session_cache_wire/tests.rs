@@ -203,10 +203,17 @@ struct Fixture {
     base: PathBuf,
     root: PathBuf,
     project: String,
+    retain: bool,
 }
 impl Fixture {
     fn new() -> Self {
-        let base = std::env::temp_dir().join(format!(
+        let retained = std::env::var_os("CAWS_TEST_ARTIFACT_DIR").map(PathBuf::from);
+        if let Some(parent) = &retained {
+            assert!(parent.is_absolute());
+            fs::create_dir_all(parent).unwrap();
+        }
+        let retain = retained.is_some();
+        let base = retained.unwrap_or_else(std::env::temp_dir).join(format!(
             "caws-cache-wire-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
@@ -220,6 +227,7 @@ impl Fixture {
             base,
             root,
             project,
+            retain,
         }
     }
     fn invocation<'a>(&'a self, payload: &'a RawValue) -> Invocation<'a> {
@@ -259,9 +267,29 @@ impl Fixture {
         fs::write(self.envelope(sid), old).unwrap();
     }
 }
+impl Fixture {
+    fn record(&self, name: &str, value: Value) {
+        if self.retain {
+            fs::write(
+                self.base.join(format!("{name}.json")),
+                serde_json::to_vec_pretty(&value).unwrap(),
+            )
+            .unwrap();
+        }
+    }
+}
 impl Drop for Fixture {
     fn drop(&mut self) {
-        fs::remove_dir_all(&self.base).unwrap();
+        if self.retain {
+            let result = json!({"syntheticOriginalProject":true,"root":self.root,"completedWithoutPanic":!std::thread::panicking()});
+            fs::write(
+                self.base.join("result.json"),
+                serde_json::to_vec_pretty(&result).unwrap(),
+            )
+            .unwrap();
+        } else {
+            fs::remove_dir_all(&self.base).unwrap();
+        }
     }
 }
 fn raw(text: &str) -> Box<RawValue> {
@@ -804,5 +832,418 @@ fn declared_wire_contract_matches_native_schemas_fields_limits_and_decline_varia
             CaptureOutcome::Declined(reason),
             CaptureOutcome::Declined(_)
         ));
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod stop_prefix {
+    use super::*;
+    use crate::{
+        agent_pid_cache::OriginalAncestry, invocation_project::*,
+        monotonic_deadline::MonotonicDeadline,
+    };
+    fn project(f: &Fixture) -> ObservedProject {
+        let clean = || QueryCleanup {
+            pid: Some(42),
+            exit_observed: true,
+            pipes: PipeObservation {
+                stdout_eof: true,
+                stderr_eof: true,
+                ..Default::default()
+            },
+            attempts: Vec::new(),
+            reaped: Some(ExitObservation {
+                success: true,
+                code: Some(0),
+                signal: None,
+                core_dumped: false,
+            }),
+            ownership_retained: false,
+        };
+        ObservedProject {
+            checkout: f.root.clone(),
+            canonical_root: f.root.clone(),
+            executable: SelectedExecutable {
+                path: PathBuf::from("/synthetic/git"),
+                physical_path: PathBuf::from("/synthetic/git"),
+                identity: ExecutableIdentity {
+                    device: 1,
+                    inode: 1,
+                    bytes: 1,
+                    mode: 0o755,
+                    modified_seconds: 0,
+                    modified_nanoseconds: 0,
+                    changed_seconds: 0,
+                    changed_nanoseconds: 0,
+                },
+                sha256: DIGEST.into(),
+            },
+            queries: [clean(), clean()],
+            query_bytes: std::array::from_fn(|_| QueryBytes {
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            }),
+        }
+    }
+    fn invocation<'a>(f: &'a Fixture, payload: &'a RawValue, surface: &'a str) -> Invocation<'a> {
+        let mut i = f.invocation(payload);
+        i.surface = surface;
+        i.event = "stop";
+        i.advertised_capability = Some(STOP_PREFIX_CAPABILITY);
+        i
+    }
+    fn request(f: &Fixture) -> Vec<u8> {
+        let mut v = f.request();
+        v["schema"] = json!(STOP_PREFIX_REQUEST_SCHEMA);
+        bytes(&v)
+    }
+    fn decision() -> Vec<u8> {
+        bytes(
+            &json!({"schema":STOP_PREFIX_DECISION_SCHEMA,"id":ID,"runtimeDigest":DIGEST,"token":TOKEN,
+            "action":"capture","createdUnits":[111,108,100]}),
+        )
+    }
+    fn admit<'a>(
+        f: &'a Fixture,
+        payload: &'a RawValue,
+        surface: &'a str,
+        original: &'a OriginalAncestry,
+        project: &'a ObservedProject,
+        deadline: &'a MonotonicDeadline,
+    ) -> StopPrefixAdmitted<'a> {
+        StopPrefixOwner::new(StopPrefixInvocation {
+            invocation: invocation(f, payload, surface),
+            original_ancestry: original,
+            original_project: project,
+            deadline,
+        })
+        .unwrap()
+        .admit(&request(f))
+        .unwrap()
+    }
+    fn frame(execution: &StopPrefixExecution<'_>) -> Value {
+        serde_json::from_slice(&execution.result.encode().unwrap()).unwrap()
+    }
+    fn wait_expired(deadline: &MonotonicDeadline) {
+        let stop = Instant::now() + Duration::from_secs(1);
+        while deadline.check().is_ok() && Instant::now() < stop {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(deadline.check().is_err(), "original expiry did not pass");
+    }
+    #[test]
+    fn stop_prefix_requires_original_project_settlement_ready_and_distinct_event() {
+        let f = Fixture::new();
+        let payload = raw(r#"{"session_id":"s"}"#);
+        let original = OriginalAncestry::fixture_not_found("opencode");
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        for case in [
+            "event",
+            "capability",
+            "surface",
+            "not-dispatched",
+            "root",
+            "custody",
+            "no-pid",
+            "second-no-pid",
+            "zero-pid",
+            "open-pipe",
+            "no-exit",
+            "no-reap",
+            "failed-exit",
+            "missing-eof",
+        ] {
+            let mut p = project(&f);
+            let mut i = invocation(&f, &payload, "opencode");
+            match case {
+                "event" => i.event = "session_end",
+                "capability" => i.advertised_capability = Some(PREFIX_CAPABILITY),
+                "surface" => i.surface = "codex",
+                "not-dispatched" => i.dispatched = false,
+                "root" => p.canonical_root = f.base.join("other"),
+                "no-pid" => p.queries[0].pid = None,
+                "second-no-pid" => p.queries[1].pid = None,
+                "zero-pid" => p.queries[0].pid = Some(0),
+                "open-pipe" => p.queries[0].pipes.stdout_open = true,
+                "no-exit" => p.queries[0].exit_observed = false,
+                "no-reap" => p.queries[0].reaped = None,
+                "failed-exit" => p.queries[0].reaped.as_mut().unwrap().success = false,
+                "missing-eof" => p.queries[0].pipes.stderr_eof = false,
+                _ => p.queries[0].ownership_retained = true,
+            }
+            let result = StopPrefixOwner::new(StopPrefixInvocation {
+                invocation: i,
+                original_ancestry: &original,
+                original_project: &p,
+                deadline: &deadline,
+            });
+            f.record(&format!("refusal-{case}"),json!({"case":case,"refused":result.is_err(),"sessionsExist":f.root.join(".caws/sessions").exists()}));
+            assert!(result.is_err(), "{case}");
+            assert!(!f.root.join(".caws/sessions").exists());
+        }
+        let mut i = f.invocation(&payload);
+        i.event = "stop";
+        i.advertised_capability = Some(STOP_PREFIX_CAPABILITY);
+        assert!(
+            PrefixOwner::new(PrefixInvocation {
+                invocation: i,
+                original_ancestry: &original
+            })
+            .is_err()
+        );
+    }
+    #[test]
+    fn stop_request_binding_refuses_consumes_attempt_and_cannot_use_session_end_schema() {
+        let f = Fixture::new();
+        let payload = raw(r#"{"session_id":"s"}"#);
+        let p = project(&f);
+        let original = OriginalAncestry::fixture_not_found("opencode");
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        for key in ["schema", "id", "canonicalRoot", "runtimeDigest", "token"] {
+            let mut owner = StopPrefixOwner::new(StopPrefixInvocation {
+                invocation: invocation(&f, &payload, "opencode"),
+                original_ancestry: &original,
+                original_project: &p,
+                deadline: &deadline,
+            })
+            .unwrap();
+            let mut v: Value = serde_json::from_slice(&request(&f)).unwrap();
+            v[key] = if key == "schema" {
+                json!(PREFIX_REQUEST_SCHEMA)
+            } else {
+                json!("other")
+            };
+            assert!(owner.admit(&bytes(&v)).is_err(), "{key}");
+            assert!(
+                owner.admit(&request(&f)).is_err(),
+                "invalid first attempt reopened"
+            );
+            assert!(!f.root.join(".caws/sessions").exists());
+        }
+    }
+    #[test]
+    fn real_stop_envelope_pointer_and_native_completion_bind_original_deadline() {
+        for surface in ["opencode", "zcode"] {
+            let f = Fixture::new();
+            let payload = raw(r#"{"session_id":"s"}"#);
+            let p = project(&f);
+            let original = OriginalAncestry::fixture_not_found(surface);
+            let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+            let execution = admit(&f, &payload, surface, &original, &p, &deadline).execute_checked(
+                || Ok(()),
+                |previous| {
+                    let previous: Value = serde_json::from_slice(previous).unwrap();
+                    assert_eq!(previous["schema"], STOP_PREFIX_PREVIOUS_SCHEMA);
+                    Ok(decision())
+                },
+            );
+            let value = frame(&execution);
+            f.record("complete",json!({"surface":surface,"result":value,"envelope":read(&f.envelope("s")),"pointer":read(&f.pointer()),"deadline":deadline.envelope(),"syntheticOriginalProject":true}));
+            assert_eq!(value["schema"], STOP_PREFIX_RESULT_SCHEMA);
+            assert_eq!(value["status"], "completed");
+            assert_eq!(value["agentPid"], "not_found");
+            assert_eq!(value["reap"], "not_run");
+            assert_eq!(read(&f.envelope("s"))["hook_event"], "Stop");
+            assert_eq!(read(&f.envelope("s"))["platform"], surface);
+            assert_eq!(read(&f.envelope("s"))["created_at"], "old");
+            let completed = match execution.into_completed() {
+                Ok(value) => value,
+                Err(_) => panic!("completed Stop evidence refused"),
+            };
+            assert_eq!(completed.correlation().id, ID);
+            assert_eq!(completed.canonical_root(), f.root.to_str().unwrap());
+            assert_eq!(completed.surface(), surface);
+            assert_eq!(completed.supplied_session_id(), "s");
+            assert_eq!(completed.deadline().envelope(), deadline.envelope());
+            assert!(completed.check().is_ok());
+        }
+    }
+    #[test]
+    fn pointer_io_failure_retains_partial_truth_and_completes_remaining_attempts() {
+        let f = Fixture::new();
+        let payload = raw(r#"{"session_id":"s"}"#);
+        let p = project(&f);
+        let original = OriginalAncestry::fixture_not_found("opencode");
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        fs::create_dir_all(f.pointer()).unwrap();
+        let execution = admit(&f, &payload, "opencode", &original, &p, &deadline)
+            .execute_checked(|| Ok(()), |_| Ok(decision()));
+        let value = frame(&execution);
+        f.record("partial-pointer",json!({"result":value,"envelope":read(&f.envelope("s")),"pointerIsDirectory":f.pointer().is_dir()}));
+        assert_eq!(value["status"], "unavailable");
+        assert_eq!(value["prefixComplete"], true);
+        assert_eq!(value["envelopePublished"], true);
+        assert_eq!(value["pointerPublished"], false);
+        assert_eq!(value["agentPid"], "not_found");
+        assert!(!execution.result.fallback_safe());
+        let completed = match execution.into_completed() {
+            Ok(value) => value,
+            Err(_) => panic!("advisory IO is a completed attempt, not replay permission"),
+        };
+        assert!(completed.result().prefix_complete());
+        assert!(!completed.result().fallback_safe());
+        let retained: Value =
+            serde_json::from_slice(&completed.result().encode().unwrap()).unwrap();
+        assert_eq!(retained["status"], "unavailable");
+        assert_eq!(retained["envelopePublished"], true);
+        assert_eq!(retained["pointerPublished"], false);
+    }
+    #[test]
+    fn cancellation_after_envelope_keeps_effects_and_cannot_complete_or_replay() {
+        let f = Fixture::new();
+        let payload = raw(r#"{"session_id":"s"}"#);
+        let p = project(&f);
+        let original = OriginalAncestry::fixture_not_found("opencode");
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        let execution = admit(&f, &payload, "opencode", &original, &p, &deadline).execute_checked(
+            || {
+                if f.envelope("s").is_file() {
+                    Err("caller stopped after envelope".into())
+                } else {
+                    Ok(())
+                }
+            },
+            |_| Ok(decision()),
+        );
+        let value = frame(&execution);
+        f.record("cancel-partial",json!({"result":value,"envelopeExists":f.envelope("s").is_file(),"pointerExists":f.pointer().exists(),"cancellation":execution.cancellation_error}));
+        assert_eq!(value["prefixComplete"], false);
+        assert_eq!(value["envelopePublished"], true);
+        assert_eq!(value["pointerPublished"], false);
+        assert!(execution.cancellation_error.is_some());
+        assert!(!execution.result.fallback_safe());
+        assert!(execution.into_completed().is_err());
+    }
+    #[test]
+    fn original_expiry_before_execution_and_during_decision_never_renews() {
+        for during_decision in [false, true] {
+            let f = Fixture::new();
+            let payload = raw(r#"{"session_id":"s"}"#);
+            let p = project(&f);
+            let original = OriginalAncestry::fixture_not_found("opencode");
+            let deadline = MonotonicDeadline::capture(Duration::from_millis(20)).unwrap();
+            let admitted = admit(&f, &payload, "opencode", &original, &p, &deadline);
+            if !during_decision {
+                wait_expired(&deadline);
+            }
+            let execution = admitted.execute_checked(
+                || Ok(()),
+                |_| {
+                    assert!(during_decision, "expired execution asked for a decision");
+                    wait_expired(&deadline);
+                    Ok(decision())
+                },
+            );
+            let value = frame(&execution);
+            f.record("expired",json!({"duringDecision":during_decision,"deadline":deadline.envelope(),"result":value,"sessionsExist":f.root.join(".caws/sessions").exists()}));
+            assert_eq!(value["prefixComplete"], false);
+            assert_eq!(value["envelopePublished"], false);
+            assert!(
+                execution
+                    .cancellation_error
+                    .as_deref()
+                    .is_some_and(|e| e.contains("Original monotonic deadline expired"))
+            );
+            assert!(!f.root.join(".caws/sessions").exists());
+            assert!(execution.into_completed().is_err());
+        }
+    }
+    #[test]
+    fn completion_consumption_and_retained_receipt_recheck_original_expiry() {
+        for delay_before_completion in [true, false] {
+            let f = Fixture::new();
+            let payload = raw(r#"{"session_id":"s"}"#);
+            let p = project(&f);
+            let original = OriginalAncestry::fixture_not_found("opencode");
+            let deadline = MonotonicDeadline::capture(Duration::from_millis(200)).unwrap();
+            let execution = admit(&f, &payload, "opencode", &original, &p, &deadline)
+                .execute_checked(|| Ok(()), |_| Ok(decision()));
+            let value = frame(&execution);
+            f.record("live-prefix",json!({"result":value,"deadline":deadline.envelope(),"delayBeforeCompletion":delay_before_completion,"live":deadline.check().is_ok()}));
+            assert!(
+                execution.result.prefix_complete(),
+                "must exercise completed work before delayed consumption"
+            );
+            assert!(
+                deadline.check().is_ok(),
+                "live setup expired before delayed consumption"
+            );
+            if delay_before_completion {
+                wait_expired(&deadline);
+                let result = execution.into_completed();
+                f.record("expired-completion",json!({"refused":result.is_err(),"deadline":deadline.envelope(),"originalResult":value}));
+                let refused = match result {
+                    Err(value) => value,
+                    Ok(_) => panic!("completion renewed expired original deadline"),
+                };
+                assert!(refused.result.prefix_complete());
+                assert_eq!(frame(&refused), value);
+            } else {
+                let completed = match execution.into_completed() {
+                    Ok(value) => value,
+                    Err(_) => panic!("live completion refused"),
+                };
+                wait_expired(&deadline);
+                let check = completed.check();
+                f.record("expired-retained-completion",json!({"checkError":check.as_ref().err(),"deadline":completed.deadline().envelope(),"result":serde_json::from_slice::<Value>(&completed.result().encode().unwrap()).unwrap()}));
+                assert!(
+                    check
+                        .as_ref()
+                        .is_err_and(|e| e.contains("Original monotonic deadline expired"))
+                );
+                assert_eq!(completed.deadline().envelope(), deadline.envelope());
+            }
+        }
+    }
+    #[test]
+    fn lost_or_wrong_event_decision_is_not_missing_or_fallback_safe() {
+        for wrong in [false, true] {
+            let f = Fixture::new();
+            let payload = raw(r#"{"session_id":"s"}"#);
+            let p = project(&f);
+            let original = OriginalAncestry::fixture_not_found("opencode");
+            let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+            let execution = admit(&f, &payload, "opencode", &original, &p, &deadline)
+                .execute_checked(
+                    || Ok(()),
+                    |_| {
+                        if wrong {
+                            let mut v: Value = serde_json::from_slice(&decision()).unwrap();
+                            v["schema"] = json!(PREFIX_DECISION_SCHEMA);
+                            Ok(bytes(&v))
+                        } else {
+                            Err(WireError("lost Stop decision"))
+                        }
+                    },
+                );
+            let value = frame(&execution);
+            f.record("decision-refused",json!({"wrongEvent":wrong,"result":value,"exchangeError":execution.exchange_error.as_ref().map(ToString::to_string)}));
+            assert!(execution.exchange_error.is_some());
+            assert!(!execution.result.prefix_complete());
+            assert!(!execution.result.fallback_safe());
+            assert!(execution.into_completed().is_err());
+            assert!(!f.root.join(".caws/sessions").exists());
+        }
+    }
+    #[test]
+    fn missing_original_id_cannot_borrow_fallback_session_or_complete() {
+        let f = Fixture::new();
+        let payload = raw("{}");
+        let p = project(&f);
+        let original = OriginalAncestry::fixture_not_found("opencode");
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        let execution = admit(&f, &payload, "opencode", &original, &p, &deadline).execute_checked(
+            || Ok(()),
+            |_| panic!("missing original id asked for decision"),
+        );
+        let value = frame(&execution);
+        f.record(
+            "missing-sid",
+            json!({"result":value,"sessionsExist":f.root.join(".caws/sessions").exists()}),
+        );
+        assert_eq!(value["status"], "declined");
+        assert!(execution.result.fallback_safe());
+        assert!(!f.root.join(".caws/sessions").exists());
+        assert!(execution.into_completed().is_err());
     }
 }

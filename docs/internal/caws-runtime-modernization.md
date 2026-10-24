@@ -8463,6 +8463,31 @@ Additional bounded evidence and unresolved dependencies:
   retirement, supported harness delivery and actual machine selection remain
   unqualified.
 
+- E320: Native Stop prefix preparation adds a distinct event/schema path while
+  preserving the SessionEnd wrapper. The owner retains original project/query
+  settlement, process ancestry and monotonic expiry; completion cannot renew the
+  deadline or erase partial effects. stop-prefix-wire-baseline-01 executes the
+  existing22 wire controls with exit0. stop-prefix-wire-candidate-01 exits0
+  with31 controls; retained actual envelopes carry hook_event Stop and exact
+  session/root pointers. Cancellation after the envelope leaves that file, no
+  pointer and an incomplete result; delayed consumption refuses a previously
+  completed result after its original expiry. These wire fixtures explicitly use
+  synthetic original-project witnesses and do not establish original Git
+  observation. stop-prefix-pid-candidate-01 exits0 with10 controls, including
+  six actual native subprocess cases for Codex, OpenCode and the four shipped
+  ZCode process names. Actual PID records preserve created_at and observed
+  birth, stale entries are removed according to the existing age/liveness rules,
+  and the second reap is rate-limited without replacing its marker. Process-name
+  correlation is not executable authenticity. Five stop-prefix-negative-\*-01
+  mutants each execute one selected control and exit101 for wrong envelope
+  event, renewed expiry, wrong original project, one unsettled query or absent
+  query PID. Restoration receipts verify exact candidate source bytes and no
+  owned process residue. Both positive receipts match all99 native source pins
+  after restoration. This implements a bounded library prerequisite; no
+  production Stop capability or caller is activated. Root retains QualifiedStop
+  admission and the ordinary producer/prefix/profile/SQL/render/consumer join
+  before any parity verdict.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

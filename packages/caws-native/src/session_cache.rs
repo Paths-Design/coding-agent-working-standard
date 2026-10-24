@@ -793,9 +793,39 @@ pub(crate) fn publish_json(
 
 /// Envelope and pointer are one ordered best-effort stage. PID refresh is a
 /// sibling operation and is attempted by the owner even after an I/O failure.
+#[derive(Clone, Copy)]
+pub(crate) enum PrefixEvent {
+    SessionEnd,
+    Stop,
+}
+impl PrefixEvent {
+    fn hook_event(self) -> &'static str {
+        match self {
+            Self::SessionEnd => "SessionEnd",
+            Self::Stop => "Stop",
+        }
+    }
+}
 pub(crate) fn commit_prefix(
     prepared: &mut PreparedPrefix,
     surface: &str,
+    created: Option<Vec<u16>>,
+    expires: Instant,
+    checkpoint: &mut impl FnMut() -> Result<(), String>,
+) -> Result<(), CaptureFailure> {
+    commit_prefix_for_event(
+        prepared,
+        surface,
+        PrefixEvent::SessionEnd,
+        created,
+        expires,
+        checkpoint,
+    )
+}
+pub(crate) fn commit_prefix_for_event(
+    prepared: &mut PreparedPrefix,
+    surface: &str,
+    event: PrefixEvent,
     created: Option<Vec<u16>>,
     expires: Instant,
     checkpoint: &mut impl FnMut() -> Result<(), String>,
@@ -820,7 +850,7 @@ pub(crate) fn commit_prefix(
         let now = timestamp().map_err(FailureKind::Io)?;
         let mut envelope = serde_json::to_vec(&json!({
             "session_id": prepared.sid, "repo_root": prepared.root,
-            "last_seen_at": now, "hook_event": "SessionEnd", "platform": surface,
+            "last_seen_at": now, "hook_event": event.hook_event(), "platform": surface,
         }))
         .map_err(|error| FailureKind::Io(io::Error::other(error)))?;
         envelope.pop();
