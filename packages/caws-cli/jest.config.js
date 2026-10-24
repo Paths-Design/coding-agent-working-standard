@@ -39,7 +39,7 @@ const mainProject = {
   // This project executes compiled code, including the kernel reached by
   // store/shell integration tests. The kernel project owns direct TS tests.
   coveragePathIgnorePatterns: ['/node_modules/', '/src/kernel/'],
-  transformIgnorePatterns: ['node_modules/(?!(inquirer)/)'],
+  transformIgnorePatterns: ['/node_modules/'],
   testEnvironmentOptions: {
     error: false,
   },
