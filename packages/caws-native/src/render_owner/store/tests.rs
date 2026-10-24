@@ -1809,6 +1809,9 @@ fn late_relay_acknowledgement_cannot_succeed_past_original_expiry() {
 // separate required trace, not inferred from these socket controls.
 fn native_transport_fixture(f: &Fixture, id: &str) -> StoreAcquire {
     let mut acquire = f.acquire(id);
+    acquire.original_payload =
+        RawValue::from_string(serde_json::json!({"session_id":"s", "cwd":f.root}).to_string())
+            .unwrap();
     acquire.schema = NATIVE_ACQUIRE_SCHEMA.into();
     acquire.publication = true;
     acquire.native_stop = Some(NativeStopBinding {
@@ -1987,8 +1990,7 @@ fn native_challenge_socket_rejects_foreign_identity_clock_phase_and_replay() {
     );
 }
 #[test]
-fn native_wire_requires_authentication_before_registry_and_never_uses_publication_boolean_as_grant()
-{
+fn native_wire_checks_generation_before_registry_and_never_uses_publication_boolean_as_grant() {
     // This incomplete-generation socket control pins admission ordering.
     // tests/native_peer.rs separately exercises actual native/Node process
     // identities against a complete synthetic installed generation.
@@ -1996,6 +1998,19 @@ fn native_wire_requires_authentication_before_registry_and_never_uses_publicatio
     let route = routing(&f);
     let registry = Arc::new(Mutex::new(StoreRegistry::new(1)));
     let acquire = native_transport_fixture(&f, "raw-native-wire");
+    acquire
+        .native_stop
+        .as_ref()
+        .unwrap()
+        .validate(&acquire, &acquire.request().unwrap())
+        .unwrap();
+    let generation = f
+        .config
+        .home
+        .join("lib/runtimes")
+        .join(&acquire.runtime_digest);
+    fs::create_dir_all(&generation).unwrap();
+    fs::write(generation.join("manifest.json"), b"{}").unwrap();
     let before = fixture_file_bytes(&f.root);
     let bytes = encoded(&acquire, f.config.limits.max_frame_bytes as usize).unwrap();
     let (mut owner, mut client) = UnixStream::pair().unwrap();
@@ -2029,7 +2044,10 @@ fn native_wire_requires_authentication_before_registry_and_never_uses_publicatio
         _ => panic!("raw same-UID socket peer reached registration before native admission"),
     };
     joined.join().unwrap();
-    assert!(completion.error.is_some());
+    assert_eq!(
+        completion.error.as_deref(),
+        Some("Runtime manifest integrity failure")
+    );
     assert!(completion.registration.is_none());
     assert!(!completion.original_project_bound);
     assert!(completion.acquisition.is_none());

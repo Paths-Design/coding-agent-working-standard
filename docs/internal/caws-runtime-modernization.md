@@ -9059,22 +9059,32 @@ Additional bounded evidence and unresolved dependencies:
   Its native-registration-phase-sequences.json records six cold-writer and five
   retained-writer checks with terminal replay refusal;
   native-registration-foreign-challenges.json retains all eight rejected wire
-  mutations. native-registration-unauthenticated.json retains the actual
-  refusal, zero actor/registry entries and equal before/after file hashes; this
-  incomplete-generation control does not count actual SQLite opens.
-  native-stop-registration-peer-01 exits0 in44.973s with six actual native/Node
-  peer controls, including original-clock ownership, process death, same-byte
-  executable replacement and expiry. native-stop-registration-original-01 exits0
-  in4.301s and retains actual original Git/prefix outputs plus matching
-  registration acceptance and foreign identity/root refusals. Artifacts reside
-  under the root session's publication-integration directory. The feature-off
-  compilation exits0 in15.648s; it does not execute native Stop. These separate
-  observations do not establish the combined authenticated queue/SQL/publication
-  path. Root owns the actual queued-selection-mutation falsifier with direct
-  SQL-open observation, semantic-profile/current-image qualification,
-  main/engine connection and ordinary reader/CONSUMED/release. No production
-  activation, complete Python retirement, fairness or machine adoption is
-  inferred.
+  mutations. native-registration-unauthenticated.json retains the actual binding
+  refusal, zero actor/registry entries and equal before/after file hashes.
+  Independent review exposes a missing payload cwd in that fixture: the test
+  refuses before authentication, so removing authentication could leave it
+  green. The repaired control supplies matching cwd, asserts binding validation
+  succeeds and selects an actual invalid generation manifest.
+  native-stop-registration-repair-01 exits0 but selects zero tests because the
+  exact filter omits the module path; it earns no behavioral evidence.
+  native-stop-registration-repair-02 executes the fully qualified test and
+  exits0 in0.294s. Its retained native-registration-unauthenticated.json records
+  Runtime manifest integrity failure, null registration/acquisition, zero
+  actors, an empty registry and24 unchanged file hashes. This establishes
+  generation refusal before reservation; it neither authenticates a valid native
+  caller nor counts actual SQLite opens. native-stop-registration-peer-01 exits0
+  in44.973s with six actual native/Node peer controls, including original-clock
+  ownership, process death, same-byte executable replacement and expiry.
+  native-stop-registration-original-01 exits0 in4.301s and retains actual
+  original Git/prefix outputs plus matching registration acceptance and foreign
+  identity/root refusals. Artifacts reside under the root session's
+  publication-integration directory. The feature-off compilation exits0
+  in15.648s; it does not execute native Stop. These separate observations do not
+  establish the combined authenticated queue/SQL/publication path. Root owns the
+  actual queued-selection-mutation falsifier with direct SQL-open observation,
+  semantic-profile/current-image qualification, main/engine connection and
+  ordinary reader/CONSUMED/release. No production activation, complete Python
+  retirement, fairness or machine adoption is inferred.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
