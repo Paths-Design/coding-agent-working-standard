@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-SELECTION-LANDING-001
 title: 'Land native selection transport and bounded generation discovery'
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded native selection transport landed on main267f8583 from reviewed candidate aab7c78a. A1-A3 recorded and read back against actual original-budget full-image selection/compatibility artifacts and hostile controls. Complete native admission, SQL/publication/ordinary reader/release, no-Python operation, residency and installed cutover remain root-owned under CAWS-NATIVE-SESSION-PUBLICATION-001 and CAWS-NATIVE-RUNTIME-001; this closure does not accept them.'
 created_at: '2026-10-24T07:05:21.463Z'
-updated_at: '2026-10-24T07:05:48.550Z'
+updated_at: '2026-10-24T07:28:56.459Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
