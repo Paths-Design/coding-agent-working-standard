@@ -49,3 +49,9 @@ non_functional: {}
 contracts:
   - name: 'stop-source-catalog'
     type: contract-test
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Candidate6c3a71bf ten source/test blobs exactly equal reviewed d66b99e5. Root verifies all436 TS and108 native check inputs against landing tree; source stable and residue empty in retained executed controls. stop-source-catalog-native-02 actual six capture/refusal controls exit0; wire-01 ten controls exit0; ts-01 187 controls exit0. cross-runtime-02 consumes five actual retained Rust captures in compiled TS: matching digests, tool-one maps agent-one.jsonl and agent_type review, both byte-bearing captures reject substitution; three absence-only captures do not claim byte substitution. Captured input hashes rechecked. Retained checks reused, not fresh execution. Artifacts in publication-integration/stop-source-catalog-{native-02,wire-01,ts-01,cross-runtime-02} and landing-01/input-correspondence.json. No SQL or installed production claim."
+    recorded_at: "2026-10-24T10:44:39.509Z"
+    commit_sha: "6c3a71bf26d647949a72eeeadba4242765a646b7"
