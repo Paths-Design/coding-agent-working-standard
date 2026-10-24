@@ -28,3 +28,12 @@ rollback:
   - 'Revert the isolated fixture publication commit through an owned lane if readiness or abort semantics differ'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed84578f925b2064e2b44f19cea45d6e4e8244e8d2 writes complete yes bytes to started.pending then publishes started by same-directory rename. Focused complete SQLite tooling suite passed55 cases exit0 in2.962s; raw /private/tmp/caws-sqlite-test-readiness-20261024.log. Exact yes, unchanged3s readiness deadline, SIGKILL, direct-child reaping, abort reason and exact started stdout assertions executed. Original empty-marker failure retained in /private/tmp/caws-origin-main-push-final-20261024-01a16c43.log. Independent review grounded readiness mechanism; no production or universal stdout-drain claim. Full integrated pre-push and remote synchronization remain parent work."
+    recorded_at: "2026-10-24T22:49:05.868Z"
+    test_nodeid: "packages/caws-cli/tests/tooling/sqlite-static-build.test.js::abort after observed start kills and reaps direct child, retaining prior output"
+    exit_code: 0
+    commit_sha: "84578f925b2064e2b44f19cea45d6e4e8244e8d2"
+    test_verified_at: "84578f925b2064e2b44f19cea45d6e4e8244e8d2"
