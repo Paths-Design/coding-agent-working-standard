@@ -109,7 +109,7 @@ impl Fixture {
             serde_json::to_vec(&json!({"version":1,"digest":digest})).unwrap(),
         )
         .unwrap();
-        let git = base.join("git-witness.sh");
+        let git = base.join("git");
         let leading = if case == "capture-refused" { "  " } else { "" };
         fs::write(&git,format!("#!/bin/sh\nprintf '%s|%s\\n' \"$PWD\" \"$*\" >> '{}'\ncase \"$*\" in\n'rev-parse --show-toplevel') printf '{leading}%s\\n' '{}' ;;\n'rev-parse --path-format=absolute --git-common-dir') printf '%s/.git\\n' '{}' ;;\n*) exit 91 ;;\nesac\n",base.join("git-queries").display(),root.display(),root.display())).unwrap();
         fs::set_permissions(&git, fs::Permissions::from_mode(0o755)).unwrap();
@@ -205,7 +205,10 @@ const send=row=>process.stdout.write(JSON.stringify(row)+'\n');
   fs.writeFileSync(base+'/selection-observed.json',JSON.stringify({advertised:capability,rows:selectionRows}));
  }
 
- if(request.stopPrefix!==undefined)throw Error('unqualified Stop capability advertised');
+ // Transport advertisement precedes selection; only the later dispatch grants
+ // native Stop effects. This sparse fixture must receive ordinary dispatch.
+ const expectedStopPrefix=process.env.CAWS_MAIN_TEST_SQLITE_STORE==='1'?'caws.runtime.stop-prefix.v1':undefined;
+ if(request.stopPrefix!==expectedStopPrefix)throw Error('Stop transport advertisement mismatch');
  let cwd=JSON.parse(request.inputJson).cwd;
  for(let ordinal=1;ordinal<=2;ordinal++){
   send({schema:'caws.runtime.context-git.request.v1',id:request.id,runtimeDigest:request.runtimeDigest,token,ordinal,operation:ordinal===1?'checkout':'commonDir',executable:process.env.CAWS_GIT_BINARY,cwd});
@@ -215,7 +218,7 @@ const send=row=>process.stdout.write(JSON.stringify(row)+'\n');
  }
  fs.writeFileSync(base+'/context-observed.json',JSON.stringify({initialQueries:initial,finalQueries:count(),rows}));
  send({schema:'caws.runtime.ready.v1',id:request.id,runtimeDigest:request.runtimeDigest,active:false,budgetHome:request.caller.environment.CAWS_HOME,projectDigest:null,sessionId:null});
- const dispatch=await receive();if(dispatch.schema!=='caws.runtime.dispatch.v1')throw Error('dispatch mismatch');
+ const dispatch=await receive();if(dispatch.schema!=='caws.runtime.dispatch.v1'||dispatch.nativeStop!==undefined)throw Error('dispatch mismatch');
  fs.writeFileSync(base+'/dispatch-observed.json',JSON.stringify(dispatch));
  if(mode==='selection-after-ready'){
   send(selectionRequest({kind:'exists',path:base+'/repo/absent-after-ready'}));await receive();throw Error('late selection received a result');
@@ -232,6 +235,7 @@ fn original_capture_is_before_node_and_success_replays_without_another_git_child
     let mut results = Vec::new();
     for (case, initial, final_count) in [
         ("captured", 2, 2),
+        ("render-captured", 2, 2),
         ("stock-selection-omitted", 2, 2),
         ("generation-refused", 0, 2),
         ("capture-refused", 1, 3),
@@ -256,7 +260,14 @@ fn original_capture_is_before_node_and_success_replays_without_another_git_child
             .args(["--timeout-ms", "30000", "--configuration", "system"])
             .current_dir(&f.root)
             .env_clear()
-            .env("PATH", "/usr/bin:/bin")
+            .env(
+                "PATH",
+                if case == "render-captured" {
+                    format!("{}:/usr/bin:/bin", f.base.display())
+                } else {
+                    "/usr/bin:/bin".into()
+                },
+            )
             .env(
                 "HOME",
                 if case == "selection-invalid-root" {
@@ -279,6 +290,14 @@ fn original_capture_is_before_node_and_success_replays_without_another_git_child
                 },
             )
             .env("CAWS_MAIN_TEST_NODE", f.runtime.join("native/node"))
+            .env(
+                "CAWS_MAIN_TEST_SQLITE_STORE",
+                if cfg!(feature = "sqlite-store") {
+                    "1"
+                } else {
+                    "0"
+                },
+            )
             .stdin(Stdio::piped())
             .stdout(stdout)
             .stderr(stderr)
@@ -331,7 +350,29 @@ fn original_capture_is_before_node_and_success_replays_without_another_git_child
             let trace: Value = serde_json::from_str(traces[0]).unwrap();
             assert_eq!(trace["phase"], "completed");
             assert_eq!(trace["dispatchGrantWritten"], true);
-            let captured = matches!(case, "captured" | "stock-selection-omitted");
+            // Literal PATH Git and original-project Git must agree before Node.
+            // The earlier captured case deliberately has a foreign override.
+            assert_eq!(trace["originalRenderCaptured"], case == "render-captured");
+            let marks = trace["marks"].as_array().unwrap();
+            if case == "render-captured" {
+                let render = marks
+                    .iter()
+                    .position(|mark| mark[0] == "original-render-capture")
+                    .unwrap();
+                let encode = marks
+                    .iter()
+                    .position(|mark| mark[0] == "request-encoding")
+                    .unwrap();
+                assert!(
+                    render < encode,
+                    "Render capture must precede Node request encoding"
+                );
+                assert_eq!(trace["nativeStop"], "unsupported");
+            }
+            let captured = matches!(
+                case,
+                "captured" | "render-captured" | "stock-selection-omitted"
+            );
             // Successful original capture and sealing are not stock selection.
             // Unsupported must retain the same predispatch freshness check and
             // ordinary dispatch, without advertising Stop capabilities.
@@ -352,7 +393,11 @@ fn original_capture_is_before_node_and_success_replays_without_another_git_child
             }
             assert_eq!(
                 trace["completedSelectionSequence"],
-                if case == "captured" { 3 } else { 0 }
+                if matches!(case, "captured" | "render-captured") {
+                    3
+                } else {
+                    0
+                }
             );
             assert!(!trace.to_string().contains(f.root.to_str().unwrap()));
             f.record("native-progress.json", trace);
@@ -368,7 +413,10 @@ fn original_capture_is_before_node_and_success_replays_without_another_git_child
                 assert_eq!(row["cleanup"][key], true, "{case}:{key}")
             }
         }
-        if matches!(case, "captured" | "stock-selection-omitted") {
+        if matches!(
+            case,
+            "captured" | "render-captured" | "stock-selection-omitted"
+        ) {
             let selection: Value =
                 serde_json::from_slice(&fs::read(f.base.join("selection-observed.json")).unwrap())
                     .unwrap();
@@ -460,6 +508,14 @@ fn native_selection_transport_refuses_invalid_overlapping_stale_and_late_request
             .env("CAWS_MAIN_TEST_ROOT", &f.base)
             .env("CAWS_MAIN_TEST_CASE", case)
             .env("CAWS_MAIN_TEST_NODE", f.runtime.join("native/node"))
+            .env(
+                "CAWS_MAIN_TEST_SQLITE_STORE",
+                if cfg!(feature = "sqlite-store") {
+                    "1"
+                } else {
+                    "0"
+                },
+            )
             .stdin(Stdio::piped())
             .stdout(fs::File::create(f.base.join("native.stdout")).unwrap())
             .stderr(fs::File::create(f.base.join("native.stderr")).unwrap())

@@ -102,6 +102,7 @@ fn execute<'deadline>(
         selection_revalidated: false,
         stock_selection: "not_attempted",
         native_stop: "not_attempted",
+        original_render_captured: false,
         dispatch_written: false,
     };
     progress.mark("payload");
@@ -140,6 +141,7 @@ struct InvocationProgress {
     // stock selection, not profile/prefix/store/publication authority.
     stock_selection: &'static str,
     native_stop: &'static str,
+    original_render_captured: bool,
     dispatch_written: bool,
 }
 impl InvocationProgress {
@@ -161,6 +163,7 @@ impl InvocationProgress {
             "selectionPredispatchRevalidated":self.selection_revalidated,
             "stockSelection":self.stock_selection,
             "nativeStop":self.native_stop,
+            "originalRenderCaptured":self.original_render_captured,
             "dispatchGrantWritten":self.dispatch_written})
     }
 }
@@ -183,6 +186,7 @@ fn execute_observed<'deadline>(
         runner::OriginalStopPreparation::capture(config, &request, original_deadline, |phase| {
             progress.mark(phase)
         });
+    progress.original_render_captured = original_stop.render.available();
     let outcome = (|| -> Result<u8, Failure<'deadline>> {
         progress.mark("selection-owner");
         let selection_limits = selection_observation::Limits::default();
@@ -343,9 +347,12 @@ fn execute_observed<'deadline>(
                     _ => None,
                 };
             progress.mark("stop-qualification");
-            let eligible_stop = match (stock_selection.as_ref(), original_stop.generation.as_ref())
-            {
-                (Some(selected), Some(generation)) => stop_execution::EligibleStop::admit(
+            let eligible_stop = match (
+                stock_selection.as_ref(),
+                original_stop.generation.as_ref(),
+                original_stop.render.available(),
+            ) {
+                (Some(selected), Some(generation), true) => stop_execution::EligibleStop::admit(
                     selected,
                     generation,
                     ready.as_ref().ok_or("missing Stop readiness")?,
@@ -437,14 +444,21 @@ fn execute_observed<'deadline>(
                                         original,
                                         completed,
                                     )?;
-                                caws_native::render_owner::acquire_native_stop_store(
-                                    &owner,
-                                    registration,
-                                    deadline,
-                                    || cancellation::check().is_err(),
-                                    |_| eligible.revalidate(cancellation::check),
+                                let cancelled = || cancellation::check().is_err();
+                                original_stop.render.with_transport(
                                     &mut session,
-                                )
+                                    &cancelled,
+                                    |transport| {
+                                        caws_native::render_owner::acquire_native_stop_store(
+                                            &owner,
+                                            registration,
+                                            deadline,
+                                            &cancelled,
+                                            |_| eligible.revalidate(cancellation::check),
+                                            transport,
+                                        )
+                                    },
+                                )?
                             }
                             Ok(owner) => caws_native::render_owner::acquire_store(
                                 &owner,
