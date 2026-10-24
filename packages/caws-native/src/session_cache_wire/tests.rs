@@ -281,7 +281,7 @@ impl Fixture {
 impl Drop for Fixture {
     fn drop(&mut self) {
         if self.retain {
-            let result = json!({"syntheticOriginalProject":true,"root":self.root,"completedWithoutPanic":!std::thread::panicking()});
+            let result = json!({"syntheticOriginalProject":true,"root":self.root,"test":std::thread::current().name(),"completedWithoutPanic":!std::thread::panicking()});
             fs::write(
                 self.base.join("result.json"),
                 serde_json::to_vec_pretty(&result).unwrap(),
@@ -1021,6 +1021,174 @@ mod stop_prefix {
             assert!(!f.root.join(".caws/sessions").exists());
         }
     }
+    #[test]
+    fn split_authority_waits_for_decision_and_does_not_repeat_on_preflight_reads() {
+        let f = Fixture::new();
+        let payload = raw(r#"{"session_id":"s"}"#);
+        let p = project(&f);
+        let original = OriginalAncestry::fixture_not_found("opencode");
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        let decided = std::cell::Cell::new(false);
+        let full = std::cell::Cell::new(0);
+        let cheap = std::cell::Cell::new(0);
+        let execution = admit(&f, &payload, "opencode", &original, &p, &deadline)
+            .execute_with_authority_checks(
+                || {
+                    cheap.set(cheap.get() + 1);
+                    Ok(())
+                },
+                || {
+                    assert!(
+                        decided.get(),
+                        "pure preflight must not request full authority"
+                    );
+                    full.set(full.get() + 1);
+                    Ok(())
+                },
+                |_| {
+                    decided.set(true);
+                    Ok(decision())
+                },
+            );
+        let value = frame(&execution);
+        assert_eq!(value["prefixComplete"], true);
+        assert_eq!(value["envelopePublished"], true);
+        assert_eq!(value["pointerPublished"], true);
+        assert_eq!(
+            full.get(),
+            7,
+            "one post-decision check, two directory creations, and two stage/publish pairs"
+        );
+        assert!(cheap.get() > full.get());
+        f.record(
+            "split-authority",
+            json!({"frame":value,"fullChecks":full.get(),"cheapChecks":cheap.get()}),
+        );
+        assert!(execution.into_completed().is_ok());
+    }
+    #[test]
+    fn split_authority_refuses_mutation_in_engine_decision_before_any_persistent_effect() {
+        let f = Fixture::new();
+        let payload = raw(r#"{"session_id":"s"}"#);
+        let p = project(&f);
+        let original = OriginalAncestry::fixture_not_found("opencode");
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        let changed = std::cell::Cell::new(false);
+        let full = std::cell::Cell::new(0);
+        let execution = admit(&f, &payload, "opencode", &original, &p, &deadline)
+            .execute_with_authority_checks(
+                || Ok(()),
+                || {
+                    full.set(full.get() + 1);
+                    assert!(changed.get());
+                    Err("changed during engine decision".into())
+                },
+                |_| {
+                    changed.set(true);
+                    Ok(decision())
+                },
+            );
+        assert_eq!(full.get(), 1);
+        assert_eq!(
+            execution.cancellation_error.as_deref(),
+            Some("changed during engine decision")
+        );
+        assert_eq!(frame(&execution)["envelopePublished"], false);
+        f.record("split-authority",json!({"frame":frame(&execution),"error":execution.cancellation_error,"fullChecks":full.get()}));
+        assert!(!f.root.join(".caws/sessions").exists());
+        assert!(execution.into_completed().is_err());
+    }
+    #[test]
+    fn split_authority_late_mutation_preserves_envelope_and_refuses_completion_or_replay() {
+        let f = Fixture::new();
+        let payload = raw(r#"{"session_id":"s"}"#);
+        let p = project(&f);
+        let original = OriginalAncestry::fixture_not_found("opencode");
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        let execution = admit(&f, &payload, "opencode", &original, &p, &deadline)
+            .execute_with_authority_checks(
+                || Ok(()),
+                || {
+                    if f.envelope("s").is_file() {
+                        Err("changed after envelope publication".into())
+                    } else {
+                        Ok(())
+                    }
+                },
+                |_| Ok(decision()),
+            );
+        let value = frame(&execution);
+        assert_eq!(value["prefixComplete"], false);
+        assert_eq!(value["envelopePublished"], true);
+        assert_eq!(value["pointerPublished"], false);
+        assert_eq!(
+            execution.cancellation_error.as_deref(),
+            Some("changed after envelope publication")
+        );
+        f.record("split-authority",json!({"frame":value,"error":execution.cancellation_error,"fallbackSafe":execution.result.fallback_safe()}));
+        assert!(!execution.result.fallback_safe());
+        assert!(execution.into_completed().is_err());
+        assert!(f.envelope("s").is_file());
+        assert!(!f.pointer().exists());
+    }
+    #[test]
+    fn split_authority_keeps_cheap_cancellation_before_preflight_and_full_checks() {
+        let f = Fixture::new();
+        let payload = raw(r#"{"session_id":"s"}"#);
+        let p = project(&f);
+        let original = OriginalAncestry::fixture_not_found("opencode");
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        let execution = admit(&f, &payload, "opencode", &original, &p, &deadline)
+            .execute_with_authority_checks(
+                || Err("original cancellation".into()),
+                || panic!("cancelled preflight must not execute full authority"),
+                |_| panic!("cancelled preflight must not exchange"),
+            );
+        assert_eq!(
+            execution.cancellation_error.as_deref(),
+            Some("original cancellation")
+        );
+        f.record(
+            "split-authority",
+            json!({"frame":frame(&execution),"error":execution.cancellation_error}),
+        );
+        assert!(!f.root.join(".caws/sessions").exists());
+        assert!(execution.into_completed().is_err());
+    }
+    #[test]
+    fn split_authority_original_expiry_during_full_check_never_creates_or_completes() {
+        let f = Fixture::new();
+        let payload = raw(r#"{"session_id":"s"}"#);
+        let p = project(&f);
+        let original = OriginalAncestry::fixture_not_found("opencode");
+        let deadline = MonotonicDeadline::capture(Duration::from_millis(100)).unwrap();
+        let entered = std::cell::Cell::new(false);
+        let execution = admit(&f, &payload, "opencode", &original, &p, &deadline)
+            .execute_with_authority_checks(
+                || Ok(()),
+                || {
+                    entered.set(true);
+                    wait_expired(&deadline);
+                    Ok(())
+                },
+                |_| Ok(decision()),
+            );
+        assert!(
+            entered.get(),
+            "the test must expire inside the full authority callback"
+        );
+        assert!(!f.root.join(".caws/sessions").exists());
+        assert_eq!(frame(&execution)["prefixComplete"], false);
+        assert!(
+            execution
+                .cancellation_error
+                .as_deref()
+                .is_some_and(|e| e.contains("Original monotonic deadline expired"))
+        );
+        f.record("split-authority",json!({"frame":frame(&execution),"error":execution.cancellation_error,"enteredAuthority":entered.get(),"deadline":deadline.envelope()}));
+        assert!(execution.into_completed().is_err());
+    }
+
     #[test]
     fn real_stop_envelope_pointer_and_native_completion_bind_original_deadline() {
         for surface in ["opencode", "zcode"] {

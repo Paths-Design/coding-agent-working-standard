@@ -12,6 +12,8 @@ mod render_bridge;
 mod runner;
 mod selection_observation;
 mod stop_admission;
+mod stop_execution;
+mod stop_profile;
 
 use caws_native::monotonic_deadline::MonotonicDeadline;
 use caws_native::stop_budget::{BudgetIdentity, Charge, StopBudget};
@@ -99,7 +101,11 @@ fn execute<'deadline>(
         selection_sealed: false,
         selection_revalidated: false,
         stock_selection: "not_attempted",
+        native_stop: "not_attempted",
+        original_render_captured: false,
         dispatch_written: false,
+        generation_receipt_revalidations: native_generation::CheckTimings::default(),
+        stop_prefix_authority_callbacks: native_generation::CheckTimings::default(),
     };
     progress.mark("payload");
     let outcome =
@@ -136,7 +142,11 @@ struct InvocationProgress {
     // refusal prose enter the bounded progress record. Admitted is necessary
     // stock selection, not profile/prefix/store/publication authority.
     stock_selection: &'static str,
+    native_stop: &'static str,
+    original_render_captured: bool,
     dispatch_written: bool,
+    generation_receipt_revalidations: native_generation::CheckTimings,
+    stop_prefix_authority_callbacks: native_generation::CheckTimings,
 }
 impl InvocationProgress {
     fn mark(&mut self, phase: &'static str) {
@@ -147,6 +157,9 @@ impl InvocationProgress {
             self.marks.push((phase, self.started.elapsed().as_millis()));
         }
     }
+    fn stop_prefix_authority_check<R>(&self, check: impl FnOnce() -> R) -> R {
+        self.stop_prefix_authority_callbacks.measure(check)
+    }
     fn snapshot(&self) -> serde_json::Value {
         serde_json::json!({"schema":"caws.native.invocation-progress.v1",
             "phase":self.phase,"elapsedLocalMs":self.started.elapsed().as_millis(),
@@ -156,7 +169,12 @@ impl InvocationProgress {
             "selectionSealed":self.selection_sealed,
             "selectionPredispatchRevalidated":self.selection_revalidated,
             "stockSelection":self.stock_selection,
-            "dispatchGrantWritten":self.dispatch_written})
+            "nativeStop":self.native_stop,
+            "originalRenderCaptured":self.original_render_captured,
+            "dispatchGrantWritten":self.dispatch_written,
+            "generationReceiptRevalidations":self.generation_receipt_revalidations.snapshot(),
+            "generationVerificationPhases":self.generation_receipt_revalidations.verification_snapshot(),
+            "stopPrefixAuthorityCallbacks":self.stop_prefix_authority_callbacks.snapshot()})
     }
 }
 
@@ -174,10 +192,15 @@ fn execute_observed<'deadline>(
         .map_err(Failure::configuration)?;
     // The optional candidate observes original inputs before Node. It neither
     // selects the native Stop route nor grants any prefix/publication effects.
-    let mut original_stop =
-        runner::OriginalStopPreparation::capture(config, &request, original_deadline, |phase| {
-            progress.mark(phase)
-        });
+    let generation_receipt_revalidations = progress.generation_receipt_revalidations.clone();
+    let mut original_stop = runner::OriginalStopPreparation::capture_with_diagnostics(
+        config,
+        &request,
+        original_deadline,
+        generation_receipt_revalidations,
+        |phase| progress.mark(phase),
+    );
+    progress.original_render_captured = original_stop.render.available();
     let outcome = (|| -> Result<u8, Failure<'deadline>> {
         progress.mark("selection-owner");
         let selection_limits = selection_observation::Limits::default();
@@ -337,6 +360,25 @@ fn execute_observed<'deadline>(
                     }
                     _ => None,
                 };
+            progress.mark("stop-qualification");
+            let eligible_stop = match (
+                stock_selection.as_ref(),
+                original_stop.generation.as_ref(),
+                original_stop.render.available(),
+            ) {
+                (Some(selected), Some(generation), true) => stop_execution::EligibleStop::admit(
+                    selected,
+                    generation,
+                    ready.as_ref().ok_or("missing Stop readiness")?,
+                    cancellation::check,
+                )?,
+                _ => None,
+            };
+            progress.native_stop = if eligible_stop.is_some() {
+                "qualified"
+            } else {
+                "unsupported"
+            };
             progress.mark("render-admission");
             let service_dispatch = session.admit_render_offer(
                 config,
@@ -349,7 +391,13 @@ fn execute_observed<'deadline>(
             // before the dispatch attempt, including inactive/custom selection.
             if let Some(receipt) = selection_receipt.as_ref() {
                 progress.mark("selection-predispatch-revalidation");
-                if let Some(selected) = stock_selection.as_ref() {
+                if let Some(eligible) = eligible_stop.as_ref() {
+                    // Eligibility owns this selection's readset and brackets
+                    // its profile checks with the same full freshness checks.
+                    // Validate once here; no exchange/effect occurs before the
+                    // pure dispatch encoding below.
+                    eligible.revalidate(cancellation::check)?;
+                } else if let Some(selected) = stock_selection.as_ref() {
                     selected
                         .revalidate(cancellation::check)
                         .map_err(|refusal| {
@@ -365,14 +413,17 @@ fn execute_observed<'deadline>(
             // BEFORE writing; creation of the engine alone is not dispatch.
             dispatched = ready.as_ref().is_some_and(|context| context.active);
             progress.mark("dispatch-grant");
-            session.send(
-                &service_dispatch.unwrap_or_else(|| protocol::dispatch(&request)),
-                deadline,
-            )?;
+            let dispatch = if let Some(eligible) = eligible_stop.as_ref() {
+                eligible.dispatch(&request)?
+            } else {
+                service_dispatch.unwrap_or_else(|| protocol::dispatch(&request))
+            };
+            session.send(&dispatch, deadline)?;
             progress.dispatch_written = true;
             let mut cache_attempted = false;
             let mut prefix_complete = false;
             let mut publication_attempted = false;
+            let mut completed_stop_prefix = None;
             #[cfg(feature = "sqlite-store")]
             let mut store_attempted = false;
             loop {
@@ -394,6 +445,40 @@ fn execute_observed<'deadline>(
                         let result = match render_bridge::captured_publication_owner_config(
                             config, &request, context,
                         ) {
+                            Ok(owner) if eligible_stop.is_some() => {
+                                let eligible = eligible_stop
+                                    .as_ref()
+                                    .ok_or("missing native Stop eligibility")?;
+                                let completed = completed_stop_prefix.as_ref().ok_or(
+                                    "native Stop store requires completed original prefix",
+                                )?;
+                                let original = original_stop
+                                    .original
+                                    .as_ref()
+                                    .ok_or("missing native Stop original")?;
+                                let registration =
+                                    caws_native::render_owner::NativeStopRegistration::capture(
+                                        &frame,
+                                        request.transcript_store_invocation(context, dispatched),
+                                        original,
+                                        completed,
+                                    )?;
+                                let cancelled = || cancellation::check().is_err();
+                                original_stop.render.with_transport(
+                                    &mut session,
+                                    &cancelled,
+                                    |transport| {
+                                        caws_native::render_owner::acquire_native_stop_store(
+                                            &owner,
+                                            registration,
+                                            deadline,
+                                            &cancelled,
+                                            |_| eligible.revalidate(cancellation::check),
+                                            transport,
+                                        )
+                                    },
+                                )?
+                            }
                             Ok(owner) => caws_native::render_owner::acquire_store(
                                 &owner,
                                 caws_native::render_owner::StoreAcquire::capture(
@@ -442,6 +527,91 @@ fn execute_observed<'deadline>(
                         let status = result.status();
                         session_settlement = Some(result);
                         status?;
+                    }
+                    protocol::EngineFrame::StopPrefixRequest(frame) => {
+                        if cache_attempted || publication_attempted {
+                            return Err(
+                                "Stop prefix exchange already attempted or publication started"
+                                    .into(),
+                            );
+                        }
+                        cache_attempted = true;
+                        let eligible = eligible_stop
+                            .as_ref()
+                            .ok_or("Stop prefix lacks native eligibility")?;
+                        eligible.revalidate(cancellation::check)?;
+                        let context = ready.as_ref().ok_or("missing Stop prefix readiness")?;
+                        let original = original_stop
+                            .original
+                            .as_ref()
+                            .ok_or("missing original Stop capture")?;
+                        let mut owner = original
+                            .prefix_owner(request.stop_prefix_invocation(context, dispatched))?;
+                        let admitted = owner.admit(&frame).map_err(|e| e.to_string())?;
+                        session.credit_session_cache_control(frame.len() + 1)?;
+                        let mut exchange_failure = None;
+                        let mut decision_bytes = None;
+                        let execution = admitted.execute_with_authority_checks(
+                            || {
+                                cancellation::check()?;
+                                original_deadline.check().map_err(|error| error.to_string())
+                            },
+                            || {
+                                progress.stop_prefix_authority_check(|| {
+                                    eligible.revalidate(cancellation::check)
+                                })
+                            },
+                            |previous| {
+                                let exchange = (|| {
+                                    session.send(previous, deadline)?;
+                                    let decision = session.frame(deadline)?;
+                                    decision_bytes = Some(decision.len() + 1);
+                                    Ok(decision)
+                                })();
+                                exchange.map_err(|error| {
+                                    exchange_failure = Some(error);
+                                    caws_native::session_cache_wire::WireError(
+                                        "Stop prefix transport failed",
+                                    )
+                                })
+                            },
+                        );
+                        let result = execution.result().encode().map_err(|e| e.to_string())?;
+                        if let Some(bytes) = decision_bytes {
+                            session.credit_session_cache_control(bytes)?;
+                        }
+                        let failure =
+                            execution
+                                .cancellation_error()
+                                .map(str::to_owned)
+                                .or_else(|| {
+                                    execution
+                                        .exchange_error()
+                                        .map(|e| exchange_failure.unwrap_or_else(|| e.to_string()))
+                                });
+                        if let Some(reason) = failure {
+                            return Err(format!(
+                                "{reason}; retained Stop prefix {}; no retry",
+                                String::from_utf8_lossy(&result)
+                            ));
+                        }
+                        // Deliver the actual observation before checking completion;
+                        // TS retains partial-effect results rather than inventing success.
+                        session.send(&result, deadline).map_err(|error| {
+                            format!(
+                                "{error}; retained Stop prefix {}; delivery uncertain; no retry",
+                                String::from_utf8_lossy(&result)
+                            )
+                        })?;
+                        completed_stop_prefix =
+                            Some(execution.into_completed().map_err(|execution| {
+                                format!(
+                                    "Stop prefix incomplete; retained result {}; no retry",
+                                    String::from_utf8_lossy(
+                                        &execution.result().encode().unwrap_or_default()
+                                    )
+                                )
+                            })?);
                     }
                     protocol::EngineFrame::SessionEndPrefixRequest(frame) => {
                         if cache_attempted || publication_attempted {
@@ -992,5 +1162,80 @@ mod store_settlement_tests {
             assert_eq!(failure.error.as_deref(), Some("sentinel"));
             assert_eq!(failure.original_project_bound, bound);
         }
+    }
+}
+
+#[cfg(test)]
+mod invocation_diagnostic_tests {
+    use super::*;
+    #[test]
+    fn stop_prefix_authority_diagnostics_count_refusals_and_keep_generation_counts_separate() {
+        let progress = InvocationProgress {
+            started: Instant::now(),
+            phase: "test",
+            marks: vec![],
+            selection: None,
+            completed_selection: 0,
+            selection_advertised: false,
+            selection_sealed: false,
+            selection_revalidated: false,
+            stock_selection: "not_attempted",
+            native_stop: "not_attempted",
+            original_render_captured: false,
+            dispatch_written: false,
+            generation_receipt_revalidations: native_generation::CheckTimings::default(),
+            stop_prefix_authority_callbacks: native_generation::CheckTimings::default(),
+        };
+        assert_eq!(
+            progress.stop_prefix_authority_check(|| Ok::<_, String>(7)),
+            Ok(7)
+        );
+        assert_eq!(
+            progress.stop_prefix_authority_check(|| Err::<(), _>("unchanged authority refusal")),
+            Err("unchanged authority refusal")
+        );
+        let snapshot = progress.snapshot();
+        assert_eq!(snapshot["stopPrefixAuthorityCallbacks"]["count"], 2);
+        assert!(snapshot["stopPrefixAuthorityCallbacks"]["elapsedMicros"].is_u64());
+        assert_eq!(snapshot["generationReceiptRevalidations"]["count"], 0);
+        assert_eq!(
+            snapshot["generationReceiptRevalidations"]["elapsedMicros"],
+            0
+        );
+        let phases = snapshot["generationVerificationPhases"]
+            .as_object()
+            .unwrap();
+        assert_eq!(
+            phases.len(),
+            9,
+            "fixed fields only, independent of image size"
+        );
+        for name in [
+            "identityBefore",
+            "selectionVerification",
+            "identityAfter",
+            "memberHashing",
+            "inventoryModes",
+        ] {
+            assert_eq!(phases[name]["count"], 0);
+            assert_eq!(phases[name]["failures"], 0);
+            assert_eq!(phases[name]["elapsedMicros"], 0);
+            assert_eq!(phases[name].as_object().unwrap().len(), 3);
+        }
+        for name in [
+            "pathMetadataOperations",
+            "fdMetadataOperations",
+            "hashCalls",
+            "bytesHashed",
+        ] {
+            assert_eq!(phases[name], 0);
+        }
+        assert!(
+            snapshot["stopPrefixAuthorityCallbacks"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .all(|key| matches!(key.as_str(), "count" | "elapsedMicros"))
+        );
     }
 }

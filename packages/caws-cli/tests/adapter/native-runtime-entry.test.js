@@ -731,6 +731,143 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     }
   });
 
+  function syntheticSemanticData(prepared) {
+    // Mechanical image inclusion only. These synthetic rows do not establish an
+    // executed comparison or create a native invocation receipt.
+    const sql = [
+      'message-int4300',
+      'message-int4301',
+      'message-negative4300',
+      'message-negative4301',
+      'part-int4301',
+      'message-string4301',
+      'message-float4301',
+    ];
+    const renderer = [
+      'plain',
+      'integer4300',
+      'integer4301',
+      'negative4301',
+      'string4301',
+      'float4301',
+      'html-literal4301',
+      'html-decimal4301',
+    ];
+    return {
+      schema: 'caws.runtime.stop-semantic-profile.v1',
+      surface: 'opencode',
+      event: 'stop',
+      scope: 'controlled-components',
+      implementation: Object.fromEntries(
+        [...prepared.files]
+          .filter(
+            ([name]) =>
+              name.startsWith('native/') ||
+              name.startsWith('native-prefix/') ||
+              ['native-entry.json', 'native-build-provenance.json'].includes(name)
+          )
+          .map(([name, bytes]) => [name, sha(bytes)])
+      ),
+      selectors: {
+        sql: [4300, 0].map((integerMaxDigits) => ({
+          id: `cpython-3.11.13-unicode14-int${integerMaxDigits}`,
+          integerMaxDigits,
+        })),
+        renderer: [4300, 0].map((integerMaxDigits) => ({
+          id: `cpython3.11-json/int-max-str-digits:${integerMaxDigits}`,
+          integerMaxDigits,
+        })),
+      },
+      sqliteIdentity: {
+        schema: 'caws.sqlite_build_identity.v1',
+        version: 'synthetic',
+        sourceId: 'synthetic',
+        threadSafe: 1,
+        compileOptions: ['A=1'],
+        compiledPrefixSha256: 'a'.repeat(64),
+      },
+      environment: { tz: 'UTC0', tzdir: 'absent', integerMaxDigits: [4300, 0] },
+      comparison: {
+        receiptSha256: 'b'.repeat(64),
+        driverSha256: 'c'.repeat(64),
+        comparisons: [4300, 0].flatMap((limit) => [
+          ...sql.map((name) => ({
+            id: `sql/${limit}/${name}`,
+            result: 'equal',
+            referenceSha256: 'd'.repeat(64),
+            candidateSha256: 'd'.repeat(64),
+          })),
+          ...renderer.map((name) => ({
+            id: `renderer/${limit}/${name}`,
+            result: 'equal',
+            referenceSha256: 'd'.repeat(64),
+            candidateSha256: 'd'.repeat(64),
+          })),
+        ]),
+      },
+      provenance: {
+        referenceMode: 'controlled-no-site-explicit-X',
+        referenceAdapterSha256: '074dcc4c9880758ea9bfc092612034bff7f78b7d07bed2b4331e02d5916171a9',
+        referenceSharedInventorySha256:
+          '9976411f31abc0c6249433c79a45e6e556901ebcc9ae948218416fc9a92eaad8',
+        corpusSha256: 'e9d9303ec7ce77dc15260aceadfa8392c7b2dbd5b3c70803354cedec6e097d19',
+      },
+      remainingJoins: [
+        'native-calendar-original-environment',
+        'bundled-engine-dispatch-equivalence',
+        'native-selection-prefix-and-queued-peer-admission',
+        'ordinary-publication-reopened-consumer-and-release',
+        'ambient-legacy-startup-equivalence',
+        'other-supported-surfaces',
+      ],
+    };
+  }
+  function selectSemanticData(value) {
+    const bytes = Buffer.from(JSON.stringify(value));
+    const source = path.join(root, 'synthetic-semantic-data.json');
+    fs.writeFileSync(source, bytes, { mode: 0o644 });
+    descriptor.stopProfile = { source, sha256: sha(bytes) };
+    return bytes;
+  }
+  test('v2 includes exact semantic data without a final generation digest cycle or activation', () => {
+    const before = prepareDescriptor();
+    const data = syntheticSemanticData(before),
+      bytes = selectSemanticData(data);
+    const prepared = prepareDescriptor();
+    expect(prepared.files.get('native-stop-profile.json')).toEqual(bytes);
+    expect(JSON.parse(prepared.files.get('native-modes.json'))['native-stop-profile.json']).toBe(
+      0o644
+    );
+    expect(prepared.files.get('native/caws-native')).toEqual(
+      before.files.get('native/caws-native')
+    );
+    expect(prepared.metadata).toEqual(before.metadata);
+    expect(data.implementation).not.toHaveProperty('native-stop-profile.json');
+    expect(data.implementation).not.toHaveProperty('native-modes.json');
+    expect(() =>
+      prepareNativeRuntimeEntry({ ...input, stopProfile: descriptor.stopProfile })
+    ).toThrow(/requires reviewed v2/);
+  });
+  test.each([
+    'old native',
+    'missing dist',
+    'omitted row',
+    'failed row',
+    'swapped selectors',
+    'erased joins',
+    'component draft',
+  ])('semantic data inclusion refuses %s before returning an image', (kind) => {
+    const data = syntheticSemanticData(prepareDescriptor());
+    if (kind === 'old native') data.implementation['native/caws-native'] = '0'.repeat(64);
+    if (kind === 'missing dist') delete data.implementation[`native-prefix/${cli}/dist/index.js`];
+    if (kind === 'omitted row') data.comparison.comparisons.pop();
+    if (kind === 'failed row') data.comparison.comparisons[0].result = 'failed';
+    if (kind === 'swapped selectors') data.selectors.sql = data.selectors.renderer;
+    if (kind === 'erased joins') data.remainingJoins = [];
+    if (kind === 'component draft') data.schema = 'caws.stop-profile.component-draft.v1';
+    selectSemanticData(data);
+    expect(() => prepareDescriptor()).toThrow(/Semantic|semantic/);
+  });
   test('maps one selected artifact pair into retained buffers and ordinary provenance', () => {
     const prepared = prepareDescriptor();
     expect(loader).toHaveBeenCalledTimes(1);

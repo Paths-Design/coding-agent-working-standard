@@ -19,6 +19,35 @@ const run = (body) =>
     { encoding: 'utf8', timeout: 5000 }
   );
 
+test('semantic image consistency refuses old executables, omitted dist and changed image bytes', () => {
+  run(`
+    // Synthetic consistency control, not an executed comparison receipt.
+    const {createHash}=await import('node:crypto');
+    const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+    const prefix='native-prefix/node_modules/@paths.design/caws-cli/dist/';
+    const files=new Map([
+      ['native/caws-native',Buffer.from('native')],['native/node',Buffer.from('node')],
+      ['native/caws-hook-native',Buffer.from('stable')],
+      ['native-entry.json',Buffer.from('{}')],['native-build-provenance.json',Buffer.from('{}')],
+      [prefix+'runtime/engine-entry.js',Buffer.from('engine')],[prefix+'transcripts/store-projection.js',Buffer.from('projection')],
+    ]);
+    const pins=Object.fromEntries([...files].map(([name,bytes])=>[name,hash(bytes)]));
+    const prepared={files,metadata:{nativeExecutable:'native/caws-native',nodeExecutable:'native/node',engineEntry:prefix+'runtime/engine-entry.js'}};
+    const candidate={native:{sha256:pins['native/caws-native']},node:{sha256:pins['native/node']},engine:{sha256:pins[prefix+'runtime/engine-entry.js']},distFiles:{'runtime/engine-entry.js':pins[prefix+'runtime/engine-entry.js'],'transcripts/store-projection.js':pins[prefix+'transcripts/store-projection.js']}};
+    assert.deepEqual(q.verifyPolicyImageBindings(candidate,prepared,pins),pins);
+    for(const field of ['native','node','engine']) {
+      assert.throws(()=>q.verifyPolicyImageBindings({...candidate,[field]:{sha256:'0'.repeat(64)}},prepared,pins),/not compared/);
+    }
+    const omitted={...candidate.distFiles};delete omitted['transcripts/store-projection.js'];
+    assert.throws(()=>q.verifyPolicyImageBindings({...candidate,distFiles:omitted},prepared,pins),/complete compared dist/);
+    assert.throws(()=>q.verifyPolicyImageBindings(candidate,prepared,{...pins,'native/node':'0'.repeat(64)}),/selected complete image/);
+    assert.throws(()=>q.verifyPolicyImageBindings(candidate,prepared,{...pins,'native-prefix/uncompared.js':'0'.repeat(64)}),/selected complete image/);
+    for(const name of ['native-stop-profile.json','manifest.json','native-modes.json']) assert.equal(q.isImplementationMember(name),false);
+    assert(q.PROFILE_REMAINING_JOINS.includes('native-calendar-original-environment'));
+    assert(q.PROFILE_REMAINING_JOINS.includes('bundled-engine-dispatch-equivalence'));
+  `);
+});
+
 test('fixed corpus refuses omitted, duplicate, failed, skipped and swapped-surface cases', () => {
   run(`
     const rows=[4300,0].flatMap(limit=>[...q.SQL_CASES.map(name=>({id:'sql/'+limit+'/'+name,result:'equal'})),...q.RENDER_CASES.map(name=>({id:'renderer/'+limit+'/'+name,result:'equal'}))]);
@@ -101,5 +130,32 @@ test('HTML refusal must identify the shell row after the visible user row', () =
     assert.throws(()=>q.normalizeRendererFailure(failure,'html-literal4301',4300,offset),/not expected/);
     q.verifyFixedOutcome('renderer','html-literal4301',4300,{kind:'artifacts'});
     assert.throws(()=>q.verifyFixedOutcome('renderer','html-literal4301',4300,{kind:'integer_limit'}),/wrong semantic/);
+  `);
+});
+
+test('semantic wrapper evidence ignores nested key order but preserves bytes and array order', () => {
+  run(`
+    const reference={files:{'session-index.json':'AAE=','turn-001.json':'YWJj'},kind:'artifacts',metadata:{z:{b:2,a:1},a:[{y:'second',x:'first'},'tail']}};
+    const reordered={metadata:{a:[{x:'first',y:'second'},'tail'],z:{a:1,b:2}},kind:'artifacts',files:{'turn-001.json':'YWJj','session-index.json':'AAE='}};
+    const comparison=q.compareSemanticValues('renderer/0/reordered',reference,reordered);
+    assert.equal(comparison.result,'equal');
+    assert.match(comparison.referenceSha256,/^[a-f0-9]{64}$/);
+    assert.equal(comparison.referenceSha256,comparison.candidateSha256);
+    assert.equal(q.comparisonValueSha256(reference),q.comparisonValueSha256(reordered));
+    const payloadChanged={...reference,files:{...reference.files,'turn-001.json':'YWJk'}};
+    assert.notEqual(q.comparisonValueSha256(reference),q.comparisonValueSha256(payloadChanged));
+    assert.throws(()=>q.compareSemanticValues('renderer/0/changed-byte',reference,payloadChanged),error=>error.code==='ERR_ASSERTION'&&error.message.startsWith('semantic mismatch: renderer/0/changed-byte'));
+    const arrayChanged={...reference,metadata:{...reference.metadata,a:[...reference.metadata.a].reverse()}};
+    assert.notEqual(q.comparisonValueSha256(reference),q.comparisonValueSha256(arrayChanged));
+    assert.throws(()=>q.compareSemanticValues('renderer/0/changed-order',reference,arrayChanged),error=>error.code==='ERR_ASSERTION'&&error.message.startsWith('semantic mismatch: renderer/0/changed-order'));
+    const projection={base64:'YWJj',kind:'projection'};
+    const wrongKind={base64:'YWJj',kind:'integer_limit'};
+    assert.notEqual(q.comparisonValueSha256(projection),q.comparisonValueSha256(wrongKind));
+    assert.throws(()=>q.compareSemanticValues('sql/4300/wrong-kind',projection,wrongKind),/semantic mismatch/);
+    assert.throws(()=>q.comparisonValueSha256({missing:undefined}),/non-JSON/);
+    assert.throws(()=>q.comparisonValueSha256(Array(1)),/non-JSON/);
+    assert.throws(()=>q.comparisonValueSha256(Infinity),/non-finite/);
+    assert.notEqual(q.comparisonValueSha256(-0),q.comparisonValueSha256(0));
+    assert.throws(()=>q.compareSemanticValues('signed-zero',-0,0),/semantic mismatch/);
   `);
 });

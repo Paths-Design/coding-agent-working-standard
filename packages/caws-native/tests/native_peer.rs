@@ -263,13 +263,23 @@ fn clock() -> MonotonicDeadline {
 fn actual_native_host_peer_is_admitted_from_exact_generation_and_revalidated() {
     let f = Fixture::new();
     let (_host, stream) = f.native_host();
-    let deadline = clock();
-    let peer = NativePeer::capture(&stream, &f.home, &f.generation, &deadline, || Ok(())).unwrap();
+    let deadline = std::sync::Arc::new(clock());
+    let peer = NativePeer::capture(
+        &stream,
+        &f.home,
+        &f.generation,
+        std::sync::Arc::clone(&deadline),
+        || Ok(()),
+    )
+    .unwrap();
+    let original_envelope = deadline.envelope();
+    drop(deadline); // Peer owns the same original clock after the local Arc is released.
     drop(stream); // Revalidation uses the retained connection, not the caller FD.
     peer.revalidate(|| Ok(())).unwrap();
     f.retain(
         serde_json::json!({"native":f.native,"generation":f.generation,
         "capture":"admitted","revalidation":"admitted","currentPointerIgnored":true,
+        "originalDeadline":original_envelope,"localDeadlineOwnerDropped":true,
         "scope":"actual renderer-host peer in synthetic generation; no Stop activation"}),
     );
 }
@@ -313,10 +323,16 @@ fn same_uid_node_with_forged_native_claim_is_refused_before_admission_callback()
             Err(error) => panic!("Node peer accept: {error}"),
         }
     };
-    let deadline = clock();
+    let deadline = std::sync::Arc::new(clock());
     let callbacks = Cell::new(0);
-    let result = NativePeer::capture(&stream, &f.home, &f.generation, &deadline, || Ok(()))
-        .map(|_| callbacks.set(callbacks.get() + 1));
+    let result = NativePeer::capture(
+        &stream,
+        &f.home,
+        &f.generation,
+        std::sync::Arc::clone(&deadline),
+        || Ok(()),
+    )
+    .map(|_| callbacks.set(callbacks.get() + 1));
     let error = result.unwrap_err();
     assert_eq!(
         error,
@@ -334,8 +350,15 @@ fn same_uid_node_with_forged_native_claim_is_refused_before_admission_callback()
 fn native_peer_process_exit_invalidates_retained_admission() {
     let f = Fixture::new();
     let (mut host, stream) = f.native_host();
-    let deadline = clock();
-    let peer = NativePeer::capture(&stream, &f.home, &f.generation, &deadline, || Ok(())).unwrap();
+    let deadline = std::sync::Arc::new(clock());
+    let peer = NativePeer::capture(
+        &stream,
+        &f.home,
+        &f.generation,
+        std::sync::Arc::clone(&deadline),
+        || Ok(()),
+    )
+    .unwrap();
     host.stop();
     let error = peer.revalidate(|| Ok(())).unwrap_err();
     assert!(
@@ -349,8 +372,15 @@ fn native_peer_process_exit_invalidates_retained_admission() {
 fn same_bytes_replacement_of_admitted_native_member_refuses_revalidation() {
     let f = Fixture::new();
     let (_host, stream) = f.native_host();
-    let deadline = clock();
-    let peer = NativePeer::capture(&stream, &f.home, &f.generation, &deadline, || Ok(())).unwrap();
+    let deadline = std::sync::Arc::new(clock());
+    let peer = NativePeer::capture(
+        &stream,
+        &f.home,
+        &f.generation,
+        std::sync::Arc::clone(&deadline),
+        || Ok(()),
+    )
+    .unwrap();
     let replacement = f.root.join("replacement-member");
     fs::copy(&f.native, &replacement).unwrap();
     fs::set_permissions(&replacement, fs::Permissions::from_mode(0o755)).unwrap();
@@ -367,17 +397,65 @@ fn same_bytes_replacement_of_admitted_native_member_refuses_revalidation() {
 fn cancelled_or_expired_original_cannot_admit_even_an_actual_native_peer() {
     let f = Fixture::new();
     let (_host, stream) = f.native_host();
-    let deadline = clock();
-    let cancelled = NativePeer::capture(&stream, &f.home, &f.generation, &deadline, || {
-        Err("original cancelled sentinel".into())
-    });
+    let deadline = std::sync::Arc::new(clock());
+    let cancelled = NativePeer::capture(
+        &stream,
+        &f.home,
+        &f.generation,
+        std::sync::Arc::clone(&deadline),
+        || Err("original cancelled sentinel".into()),
+    );
     let cancellation_error = cancelled.err().unwrap();
     assert_eq!(cancellation_error, "original cancelled sentinel");
-    let expired = MonotonicDeadline::capture(Duration::from_millis(1)).unwrap();
+    let expired =
+        std::sync::Arc::new(MonotonicDeadline::capture(Duration::from_millis(1)).unwrap());
     thread::sleep(Duration::from_millis(3));
-    let refused = NativePeer::capture(&stream, &f.home, &f.generation, &expired, || Ok(()));
+    let refused = NativePeer::capture(
+        &stream,
+        &f.home,
+        &f.generation,
+        std::sync::Arc::clone(&expired),
+        || Ok(()),
+    );
     let expiry_error = refused.err().unwrap();
     assert_eq!(expiry_error, "Original monotonic deadline expired");
     f.retain(serde_json::json!({"cancellationError": cancellation_error,
         "expiryError": expiry_error, "originalDeadline": expired.envelope()}));
+}
+
+#[test]
+fn shared_original_expiry_invalidates_the_actual_retained_native_socket() {
+    let f = Fixture::new();
+    let (_host, stream) = f.native_host();
+    let deadline = std::sync::Arc::new(MonotonicDeadline::capture(Duration::from_secs(2)).unwrap());
+    let peer = NativePeer::capture(
+        &stream,
+        &f.home,
+        &f.generation,
+        std::sync::Arc::clone(&deadline),
+        || Ok(()),
+    )
+    .unwrap();
+    let original = deadline.envelope();
+    let until = Instant::now() + Duration::from_secs(3);
+    while deadline.check().is_ok() && Instant::now() < until {
+        thread::sleep(Duration::from_millis(2));
+    }
+    assert!(
+        deadline.check().is_err(),
+        "original native peer clock did not expire"
+    );
+    drop(deadline);
+    assert_eq!(
+        peer.check_live(|| Ok(())).unwrap_err(),
+        "Original monotonic deadline expired"
+    );
+    assert_eq!(
+        peer.revalidate(|| Ok(())).unwrap_err(),
+        "Original monotonic deadline expired"
+    );
+    f.retain(
+        serde_json::json!({"originalDeadline":original,"afterQueue":"expired",
+        "scope":"actual retained native peer; no new deadline, registration or SQL grant"}),
+    );
 }

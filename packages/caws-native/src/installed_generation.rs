@@ -4,12 +4,17 @@
 //! stable transport and original invoke receipt each retain their own expiry.
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
+use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
-use std::time::Instant;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 const SCHEMA: &str = "caws.runtime.native-entry.v1";
 const METADATA: &str = "native-entry.json";
@@ -39,11 +44,114 @@ pub(crate) struct Selection {
     route: Route,
 }
 
+/// Fixed-size request-local observations, never consulted by verification.
+/// Phase times are inclusive: selection verification contains member hashing
+/// and inventory/modes. Failed phases and partially completed I/O count too.
+#[derive(Clone, Default)]
+pub(crate) struct VerificationDiagnostics(Rc<VerificationTotals>);
+#[derive(Clone, Copy, Default)]
+struct PhaseTotals {
+    count: u64,
+    failures: u64,
+    elapsed: Duration,
+}
+#[derive(Default)]
+struct VerificationTotals {
+    phases: [Cell<PhaseTotals>; 5],
+    path_metadata_operations: Cell<u64>,
+    fd_metadata_operations: Cell<u64>,
+    hash_calls: Cell<u64>,
+    bytes_hashed: Cell<u64>,
+}
+#[derive(Clone, Copy)]
+pub(crate) enum VerificationPhase {
+    IdentityBefore,
+    SelectionVerification,
+    IdentityAfter,
+    MemberHashing,
+    InventoryModes,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PhaseSnapshot {
+    pub count: u64,
+    pub failures: u64,
+    pub elapsed_micros: u64,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct VerificationSnapshot {
+    pub identity_before: PhaseSnapshot,
+    pub selection_verification: PhaseSnapshot,
+    pub identity_after: PhaseSnapshot,
+    pub member_hashing: PhaseSnapshot,
+    pub inventory_modes: PhaseSnapshot,
+    pub path_metadata_operations: u64,
+    pub fd_metadata_operations: u64,
+    pub hash_calls: u64,
+    pub bytes_hashed: u64,
+}
+impl VerificationDiagnostics {
+    fn phase(&self, phase: VerificationPhase, elapsed: Duration, failed: bool) {
+        let slot = &self.0.phases[phase as usize];
+        let previous = slot.get();
+        slot.set(PhaseTotals {
+            count: previous.count.saturating_add(1),
+            failures: previous.failures.saturating_add(u64::from(failed)),
+            elapsed: previous.elapsed.saturating_add(elapsed),
+        });
+    }
+    fn path_metadata(&self) {
+        let value = &self.0.path_metadata_operations;
+        value.set(value.get().saturating_add(1));
+    }
+    fn fd_metadata(&self) {
+        let value = &self.0.fd_metadata_operations;
+        value.set(value.get().saturating_add(1));
+    }
+    fn hash_call(&self) {
+        let value = &self.0.hash_calls;
+        value.set(value.get().saturating_add(1));
+    }
+    fn hashed(&self, bytes: usize) {
+        let value = &self.0.bytes_hashed;
+        value.set(value.get().saturating_add(bytes as u64));
+    }
+    pub(crate) fn snapshot(&self) -> VerificationSnapshot {
+        let phase = |kind: VerificationPhase| {
+            let entry = self.0.phases[kind as usize].get();
+            PhaseSnapshot {
+                count: entry.count,
+                failures: entry.failures,
+                elapsed_micros: entry.elapsed.as_micros().min(u64::MAX as u128) as u64,
+            }
+        };
+        VerificationSnapshot {
+            identity_before: phase(VerificationPhase::IdentityBefore),
+            selection_verification: phase(VerificationPhase::SelectionVerification),
+            identity_after: phase(VerificationPhase::IdentityAfter),
+            member_hashing: phase(VerificationPhase::MemberHashing),
+            inventory_modes: phase(VerificationPhase::InventoryModes),
+            path_metadata_operations: self.0.path_metadata_operations.get(),
+            fd_metadata_operations: self.0.fd_metadata_operations.get(),
+            hash_calls: self.0.hash_calls.get(),
+            bytes_hashed: self.0.bytes_hashed.get(),
+        }
+    }
+}
+
 /// One caller-owned expiry and cancellation callback for the complete operation.
 /// Checkpoints bracket bounded I/O; they cannot interrupt a stalled kernel syscall.
 pub(crate) struct Verification<'a> {
     expires: Instant,
     cancel: &'a mut dyn FnMut() -> Result<(), String>,
+    diagnostics: Option<VerificationDiagnostics>,
+    // Storage only; every consumed byte is overwritten by the current read.
+    scratch: Option<Box<[u8; 65536]>>,
+    #[cfg(test)]
+    pub(crate) last_parent_fd: Option<i32>,
+    #[cfg(test)]
+    pub(crate) scratch_allocations: u64,
     #[cfg(test)]
     pub(crate) on_chunk: Option<Box<dyn FnMut(&Path, u64) + 'a>>,
 }
@@ -52,12 +160,55 @@ impl<'a> Verification<'a> {
         Self {
             expires,
             cancel,
+            diagnostics: None,
+            scratch: None,
+            #[cfg(test)]
+            last_parent_fd: None,
+            #[cfg(test)]
+            scratch_allocations: 0,
             #[cfg(test)]
             on_chunk: None,
         }
     }
+    /// Only the receipt revalidation scope attaches request diagnostics. Restore
+    /// the previous handle even on refusal; no initial load/member lookup leaks
+    /// into the precisely named receipt counters when the verifier is reused.
+    pub(crate) fn diagnosed<R>(
+        &mut self,
+        diagnostics: &VerificationDiagnostics,
+        operation: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let previous = self.diagnostics.replace(diagnostics.clone());
+        let result = operation(self);
+        self.diagnostics = previous;
+        result
+    }
+    pub(crate) fn phase<R>(
+        &mut self,
+        phase: VerificationPhase,
+        operation: impl FnOnce(&mut Self) -> Result<R, String>,
+    ) -> Result<R, String> {
+        // No per-member or per-metadata timer: only fixed phase boundaries.
+        let measurement = self
+            .diagnostics
+            .as_ref()
+            .map(|value| (value.clone(), Instant::now()));
+        let result = operation(self);
+        if let Some((diagnostics, started)) = measurement {
+            diagnostics.phase(phase, started.elapsed(), result.is_err());
+        }
+        result
+    }
     pub(crate) fn expires(&self) -> Instant {
         self.expires
+    }
+    #[cfg(test)]
+    pub(crate) fn scratch_address(&self) -> Option<usize> {
+        self.scratch.as_ref().map(|buffer| buffer.as_ptr() as usize)
+    }
+    #[cfg(test)]
+    fn allocated_scratch(&mut self) {
+        self.scratch_allocations += 1;
     }
     pub(crate) fn checkpoint(&mut self) -> Result<(), String> {
         (self.cancel)()?;
@@ -113,12 +264,18 @@ impl MemberMetadata {
 }
 fn path_metadata(path: &Path, verify: &mut Verification<'_>) -> Result<fs::Metadata, String> {
     verify.checkpoint()?;
+    if let Some(diagnostics) = &verify.diagnostics {
+        diagnostics.path_metadata();
+    }
     let result = fs::symlink_metadata(path);
     verify.checkpoint()?;
     result.map_err(|e| format!("Generation path unavailable {}: {e}", path.display()))
 }
 fn file_metadata(file: &File, verify: &mut Verification<'_>) -> Result<fs::Metadata, String> {
     verify.checkpoint()?;
+    if let Some(diagnostics) = &verify.diagnostics {
+        diagnostics.fd_metadata();
+    }
     let result = file.metadata();
     verify.checkpoint()?;
     result.map_err(|e| e.to_string())
@@ -161,16 +318,110 @@ fn confined(root: &Path, relative: &str, verify: &mut Verification<'_>) -> Resul
     }
     Ok(cursor)
 }
-fn open_regular(
+/// One parent capability for a consecutive native-manifest member group.
+/// Full named traversal stamps bracket its use; the held FD alone is not a
+/// freshness claim. Only one additional parent FD is live, not one per directory.
+struct MemberParent {
+    path: PathBuf,
+    directory: File,
+    anchors: Vec<(PathBuf, MemberMetadata)>,
+}
+fn hashing_directory_metadata(
     path: &Path,
     verify: &mut Verification<'_>,
+) -> Result<MemberMetadata, String> {
+    let metadata = path_metadata(path, verify)?;
+    if metadata.file_type().is_symlink() {
+        return Err(format!("Refusing symlink: {}", path.display()));
+    }
+    if !metadata.is_dir() {
+        return Err("Admitted generation path type changed".into());
+    }
+    Ok(MemberMetadata::of(&metadata))
+}
+impl MemberParent {
+    fn capture(root: &Path, parent: &Path, verify: &mut Verification<'_>) -> Result<Self, String> {
+        verify.checkpoint()?;
+        let mut path = root.to_path_buf();
+        let mut anchors = Vec::new();
+        for component in std::iter::once(None).chain(parent.components().map(Some)) {
+            if let Some(component) = component {
+                path.push(component.as_os_str());
+            }
+            let metadata = hashing_directory_metadata(&path, verify)?;
+            anchors.push((path.clone(), metadata));
+        }
+        verify.checkpoint()?;
+        let result = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
+            .open(&path);
+        #[cfg(test)]
+        if let Ok(file) = &result {
+            verify.last_parent_fd = Some(file.as_raw_fd());
+        }
+        verify.checkpoint()?;
+        let directory = result.map_err(|error| {
+            format!("Cannot open hashing directory {}: {error}", path.display())
+        })?;
+        let opened = file_metadata(&directory, verify)?;
+        if !opened.is_dir() || MemberMetadata::of(&opened) != anchors.last().unwrap().1 {
+            return Err("Runtime hashing directory changed at open".into());
+        }
+        Ok(Self {
+            path,
+            directory,
+            anchors,
+        })
+    }
+    fn finish(self, verify: &mut Verification<'_>) -> Result<(), String> {
+        verify.checkpoint()?;
+        let held = file_metadata(&self.directory, verify)?;
+        if !held.is_dir() || MemberMetadata::of(&held) != self.anchors.last().unwrap().1 {
+            return Err("Runtime hashing directory changed before group closed".into());
+        }
+        for (path, expected) in &self.anchors {
+            if hashing_directory_metadata(path, verify)? != *expected {
+                return Err("Runtime hashing traversal changed before group closed".into());
+            }
+        }
+        verify.checkpoint()
+    }
+}
+fn open_regular(
+    path: &Path,
+    parent: Option<&File>,
+    verify: &mut Verification<'_>,
 ) -> Result<(File, MemberMetadata), String> {
-    let before = MemberMetadata::read(path, false, verify)?;
+    // Also performs the no-follow leaf check formerly performed by confined().
+    // A held parent never replaces named-leaf/opened-FD identity comparison.
+    let named = path_metadata(path, verify)?;
+    if named.file_type().is_symlink() {
+        return Err(format!("Refusing symlink: {}", path.display()));
+    }
+    if !named.is_file() {
+        return Err("Admitted generation path type changed".into());
+    }
+    let before = MemberMetadata::of(&named);
     verify.checkpoint()?;
-    let result = OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
-        .open(path);
+    let flags = libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK;
+    let result = if let Some(parent) = parent {
+        let leaf = CString::new(
+            path.file_name()
+                .ok_or("Runtime member has no file name")?
+                .as_bytes(),
+        )
+        .map_err(|error| error.to_string())?;
+        let fd = unsafe { libc::openat(parent.as_raw_fd(), leaf.as_ptr(), libc::O_RDONLY | flags) };
+        if fd < 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            // Own the FD before checking cancellation so every refusal closes it.
+            Ok(unsafe { File::from_raw_fd(fd) })
+        }
+    } else {
+        OpenOptions::new().read(true).custom_flags(flags).open(path)
+    };
     verify.checkpoint()?;
     let file = result.map_err(|e| format!("Cannot open {}: {e}", path.display()))?;
     let opened = file_metadata(&file, verify)?;
@@ -184,20 +435,25 @@ fn open_regular(
 /// separate reviewed maximum; hashing keeps only one 64KiB chunk.
 fn read_regular(
     path: &Path,
+    parent: Option<&File>,
     maximum: Option<u64>,
     verify: &mut Verification<'_>,
     mut consume: impl FnMut(&[u8]),
 ) -> Result<(), String> {
-    let (mut file, before) = open_regular(path, verify)?;
+    let (mut file, before) = open_regular(path, parent, verify)?;
     if maximum.is_some_and(|maximum| before.size > maximum) {
         return Err(format!("File exceeds bound: {}", path.display()));
     }
     let mut count = 0u64;
-    let mut buffer = [0u8; 65536];
+    if before.size > 0 && verify.scratch.is_none() {
+        verify.scratch = Some(Box::new([0u8; 65536]));
+        #[cfg(test)]
+        verify.allocated_scratch();
+    }
     while count < before.size {
         verify.checkpoint()?;
-        let remaining = (before.size - count).min(buffer.len() as u64) as usize;
-        let result = file.read(&mut buffer[..remaining]);
+        let remaining = (before.size - count).min(65536) as usize;
+        let result = file.read(&mut verify.scratch.as_mut().unwrap()[..remaining]);
         verify.checkpoint()?;
         let length = result.map_err(|e| e.to_string())?;
         if length == 0 {
@@ -209,7 +465,7 @@ fn read_regular(
             hook(path, count);
         }
         verify.checkpoint()?;
-        consume(&buffer[..length]);
+        consume(&verify.scratch.as_ref().unwrap()[..length]);
         verify.checkpoint()?;
     }
     let after = file_metadata(&file, verify)?;
@@ -225,7 +481,7 @@ fn read_bounded(
     verify: &mut Verification<'_>,
 ) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
-    read_regular(path, Some(maximum), verify, |chunk| {
+    read_regular(path, None, Some(maximum), verify, |chunk| {
         bytes.extend_from_slice(chunk)
     })?;
     Ok(bytes)
@@ -253,7 +509,14 @@ fn read_manifest_metadata(
         .ok_or_else(|| format!("Runtime metadata is not in manifest: {relative}"))?;
     let bytes = read_metadata(root, relative, maximum, verify)?;
     verify.checkpoint()?;
-    if format!("{:x}", Sha256::digest(&bytes)) != *expected {
+    if let Some(diagnostics) = &verify.diagnostics {
+        diagnostics.hash_call();
+    }
+    let digest = Sha256::digest(&bytes);
+    if let Some(diagnostics) = &verify.diagnostics {
+        diagnostics.hashed(bytes.len());
+    }
+    if format!("{digest:x}") != *expected {
         return Err(format!("Runtime member integrity failure: {relative}"));
     }
     verify.checkpoint()?;
@@ -261,15 +524,43 @@ fn read_manifest_metadata(
 }
 
 fn file_digest(path: &Path, verify: &mut Verification<'_>) -> Result<String, String> {
+    file_digest_at(path, None, verify)
+}
+fn file_digest_at(
+    path: &Path,
+    parent: Option<&File>,
+    verify: &mut Verification<'_>,
+) -> Result<String, String> {
     let mut hash = Sha256::new();
-    read_regular(path, None, verify, |chunk| hash.update(chunk))?;
+    let diagnostics = verify.diagnostics.clone();
+    if let Some(diagnostics) = &diagnostics {
+        diagnostics.hash_call();
+    }
+    read_regular(path, parent, None, verify, |chunk| {
+        hash.update(chunk);
+        if let Some(diagnostics) = &diagnostics {
+            diagnostics.hashed(chunk.len());
+        }
+    })?;
     Ok(format!("{:x}", hash.finalize()))
+}
+// Accounting is at the actual full hash/inventory implementation, on each test
+// thread independently. Production carries no counter or alternate verifier.
+#[cfg(test)]
+std::thread_local! {
+    static VERIFICATION_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+pub(crate) fn verification_count() -> usize {
+    VERIFICATION_COUNT.with(std::cell::Cell::get)
 }
 fn verify_files(
     root: &Path,
     manifest: &BTreeMap<String, String>,
     verify: &mut Verification<'_>,
 ) -> Result<(), String> {
+    #[cfg(test)]
+    VERIFICATION_COUNT.with(|count| count.set(count.get() + 1));
     // The already byte-bounded manifest determines every permitted directory.
     // Do not recurse into undeclared empty trees or invent a full-image byte cap.
     let mut directories = BTreeSet::new();
@@ -285,83 +576,118 @@ fn verify_files(
             parent = path.parent();
         }
     }
-    for (relative, expected) in manifest {
-        verify.checkpoint()?;
-        if !valid_digest(expected) {
-            return Err(format!("Invalid member digest: {relative}"));
-        }
-        let file = confined(root, relative, verify)?;
-        if file_digest(&file, verify)? != *expected {
-            return Err(format!("Runtime member integrity failure: {relative}"));
-        }
-    }
-    if manifest.contains_key(METADATA) {
-        let modes: BTreeMap<String, u32> = serde_json::from_slice(&read_manifest_metadata(
-            root,
-            "native-modes.json",
-            MAX_MANIFEST,
-            manifest,
-            verify,
-        )?)
-        .map_err(|e| format!("Malformed native mode inventory: {e}"))?;
-        verify.checkpoint()?;
-        if modes.keys().ne(manifest.keys()) || !manifest.contains_key("native/caws-hook-native") {
-            return Err(
-                "Native mode inventory differs from manifest or lacks entry identity".into(),
-            );
-        }
-        let mut pending = vec![root.to_path_buf()];
-        let mut actual = BTreeSet::new();
-        while let Some(current) = pending.pop() {
+    verify.phase(VerificationPhase::MemberHashing, |verify| {
+        let native = manifest.contains_key(METADATA);
+        let mut group: Option<MemberParent> = None;
+        for (relative, expected) in manifest {
             verify.checkpoint()?;
-            let result = fs::read_dir(&current);
-            verify.checkpoint()?;
-            let mut entries = result.map_err(|e| e.to_string())?;
-            loop {
-                verify.checkpoint()?;
-                let next = entries.next();
-                verify.checkpoint()?;
-                let Some(entry) = next else {
-                    break;
-                };
-                let path = entry.map_err(|e| e.to_string())?.path();
-                let relative = path
-                    .strip_prefix(root)
-                    .map_err(|e| e.to_string())?
-                    .to_str()
-                    .ok_or("Native image paths must be UTF-8")?
-                    .to_owned();
-                let stat = path_metadata(&path, verify)?;
-                if stat.is_dir() {
-                    if !directories.contains(Path::new(&relative)) {
-                        return Err(format!("Undeclared native runtime directory: {relative}"));
-                    }
-                    pending.push(path);
-                    continue;
-                }
-                if !stat.is_file() || stat.nlink() != 1 {
-                    return Err(format!("Unsupported native runtime member: {relative}"));
-                }
-                if relative == "manifest.json" {
-                    if stat.permissions().mode() & 0o7777 != 0o644 {
-                        return Err("Native manifest mode mismatch".into());
-                    }
-                    continue;
-                }
-                let expected = modes
-                    .get(&relative)
-                    .ok_or_else(|| format!("Undeclared native runtime member: {relative}"))?;
-                if ![0o644, 0o755].contains(expected)
-                    || stat.permissions().mode() & 0o7777 != *expected
+            if !valid_digest(expected) {
+                return Err(format!("Invalid member digest: {relative}"));
+            }
+            let digest = if native {
+                let suffix = relative_path(relative)?;
+                let parent = suffix.parent().ok_or("Runtime member has no parent")?;
+                let parent_path = root.join(parent);
+                if group
+                    .as_ref()
+                    .is_none_or(|current| current.path != parent_path)
                 {
-                    return Err(format!("Native runtime mode mismatch: {relative}"));
+                    if let Some(previous) = group.take() {
+                        previous.finish(verify)?;
+                    }
+                    group = Some(MemberParent::capture(root, parent, verify)?);
                 }
-                actual.insert(relative);
+                file_digest_at(
+                    &root.join(suffix),
+                    Some(&group.as_ref().unwrap().directory),
+                    verify,
+                )?
+            } else {
+                // Legacy non-native images preserve their original traversal.
+                file_digest(&confined(root, relative, verify)?, verify)?
+            };
+            if digest != *expected {
+                return Err(format!("Runtime member integrity failure: {relative}"));
             }
         }
-        if actual.iter().ne(manifest.keys()) {
-            return Err("Native runtime inventory differs from manifest".into());
+        // Standalone Selection has no outer receipt: closing the final group
+        // must precede success here, not depend on a later caller validation.
+        if let Some(last) = group {
+            last.finish(verify)?;
         }
+        Ok(())
+    })?;
+    if manifest.contains_key(METADATA) {
+        verify.phase(VerificationPhase::InventoryModes, |verify| {
+            let modes: BTreeMap<String, u32> = serde_json::from_slice(&read_manifest_metadata(
+                root,
+                "native-modes.json",
+                MAX_MANIFEST,
+                manifest,
+                verify,
+            )?)
+            .map_err(|e| format!("Malformed native mode inventory: {e}"))?;
+            verify.checkpoint()?;
+            if modes.keys().ne(manifest.keys()) || !manifest.contains_key("native/caws-hook-native")
+            {
+                return Err(
+                    "Native mode inventory differs from manifest or lacks entry identity".into(),
+                );
+            }
+            let mut pending = vec![root.to_path_buf()];
+            let mut actual = BTreeSet::new();
+            while let Some(current) = pending.pop() {
+                verify.checkpoint()?;
+                let result = fs::read_dir(&current);
+                verify.checkpoint()?;
+                let mut entries = result.map_err(|e| e.to_string())?;
+                loop {
+                    verify.checkpoint()?;
+                    let next = entries.next();
+                    verify.checkpoint()?;
+                    let Some(entry) = next else {
+                        break;
+                    };
+                    let path = entry.map_err(|e| e.to_string())?.path();
+                    let relative = path
+                        .strip_prefix(root)
+                        .map_err(|e| e.to_string())?
+                        .to_str()
+                        .ok_or("Native image paths must be UTF-8")?
+                        .to_owned();
+                    let stat = path_metadata(&path, verify)?;
+                    if stat.is_dir() {
+                        if !directories.contains(Path::new(&relative)) {
+                            return Err(format!("Undeclared native runtime directory: {relative}"));
+                        }
+                        pending.push(path);
+                        continue;
+                    }
+                    if !stat.is_file() || stat.nlink() != 1 {
+                        return Err(format!("Unsupported native runtime member: {relative}"));
+                    }
+                    if relative == "manifest.json" {
+                        if stat.permissions().mode() & 0o7777 != 0o644 {
+                            return Err("Native manifest mode mismatch".into());
+                        }
+                        continue;
+                    }
+                    let expected = modes
+                        .get(&relative)
+                        .ok_or_else(|| format!("Undeclared native runtime member: {relative}"))?;
+                    if ![0o644, 0o755].contains(expected)
+                        || stat.permissions().mode() & 0o7777 != *expected
+                    {
+                        return Err(format!("Native runtime mode mismatch: {relative}"));
+                    }
+                    actual.insert(relative);
+                }
+            }
+            if actual.iter().ne(manifest.keys()) {
+                return Err("Native runtime inventory differs from manifest".into());
+            }
+            Ok(())
+        })?;
     }
     verify.checkpoint()
 }

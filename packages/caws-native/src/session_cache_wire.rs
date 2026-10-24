@@ -173,6 +173,17 @@ pub struct Correlation {
     runtime_digest: String,
     token: String,
 }
+impl Correlation {
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+    pub fn runtime_digest(&self) -> &str {
+        &self.runtime_digest
+    }
+    pub fn token(&self) -> &str {
+        &self.token
+    }
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PreviousFrame<'a> {
@@ -982,10 +993,38 @@ pub struct StopPrefixExecution<'a> {
     deadline: &'a crate::monotonic_deadline::MonotonicDeadline,
 }
 impl<'a> StopPrefixAdmitted<'a> {
-    /// No caller budget/Instant can replace the retained original absolute expiry.
+    /// Compatibility entrypoint: the supplied checkpoint retains every original
+    /// invocation. Native main uses execute_with_authority_checks explicitly.
     pub fn execute_checked(
         self,
+        checkpoint: impl FnMut() -> std::result::Result<(), String>,
+        exchange: impl FnOnce(&[u8]) -> Result<Vec<u8>>,
+    ) -> StopPrefixExecution<'a> {
+        self.execute_with_checks(checkpoint, || Ok(()), exchange)
+    }
+    /// Keep cancellation/original-deadline checks at every read/preflight/write
+    /// checkpoint; require full authority separately at effects and decisions.
+    pub fn execute_with_authority_checks(
+        self,
+        checkpoint: impl FnMut() -> std::result::Result<(), String>,
+        mut authority: impl FnMut() -> std::result::Result<(), String>,
+        exchange: impl FnOnce(&[u8]) -> Result<Vec<u8>>,
+    ) -> StopPrefixExecution<'a> {
+        let deadline = self.deadline;
+        self.execute_with_checks(
+            checkpoint,
+            || {
+                deadline.check().map_err(|error| error.to_string())?;
+                authority()?;
+                deadline.check().map_err(|error| error.to_string())
+            },
+            exchange,
+        )
+    }
+    fn execute_with_checks(
+        self,
         mut checkpoint: impl FnMut() -> std::result::Result<(), String>,
+        authority: impl FnMut() -> std::result::Result<(), String>,
         exchange: impl FnOnce(&[u8]) -> Result<Vec<u8>>,
     ) -> StopPrefixExecution<'a> {
         let binding = StopPrefixBinding {
@@ -1002,13 +1041,14 @@ impl<'a> StopPrefixAdmitted<'a> {
             },
         };
         let deadline = self.deadline;
-        let execution = self.inner.execute_event(
+        let execution = self.inner.execute_event_with_authority(
             session_cache::PrefixEvent::Stop,
             deadline.expires(),
             || {
                 deadline.check().map_err(|e| e.to_string())?;
                 checkpoint()
             },
+            authority,
             exchange,
         );
         StopPrefixExecution {
@@ -1192,7 +1232,17 @@ impl PrefixAdmitted {
         self,
         event: session_cache::PrefixEvent,
         expires: Instant,
+        checkpoint: impl FnMut() -> std::result::Result<(), String>,
+        exchange: impl FnOnce(&[u8]) -> Result<Vec<u8>>,
+    ) -> PrefixExecution {
+        self.execute_event_with_authority(event, expires, checkpoint, || Ok(()), exchange)
+    }
+    fn execute_event_with_authority(
+        self,
+        event: session_cache::PrefixEvent,
+        expires: Instant,
         mut checkpoint: impl FnMut() -> std::result::Result<(), String>,
+        mut authority: impl FnMut() -> std::result::Result<(), String>,
         exchange: impl FnOnce(&[u8]) -> Result<Vec<u8>>,
     ) -> PrefixExecution {
         use crate::agent_pid_cache::{
@@ -1407,6 +1457,19 @@ impl PrefixAdmitted {
         if let Err(failure) = prefix_checkpoint(expires, &mut checkpoint) {
             return fatal(failure, false, false, Pid::NotRun, Reap::NotRun);
         }
+        if !envelope_unavailable {
+            // Revalidate after the engine exchange even when it declined or
+            // returned malformed data; that callback can change authority.
+            if let Err(error) = authority() {
+                return fatal(
+                    FailureKind::Cancelled(error),
+                    false,
+                    false,
+                    Pid::NotRun,
+                    Reap::NotRun,
+                );
+            }
+        }
         let created = match decided {
             Ok(CaptureDecision::Capture(created)) => created,
             Ok(CaptureDecision::Decline) => {
@@ -1437,23 +1500,15 @@ impl PrefixAdmitted {
         let (envelope, pointer) = if envelope_unavailable {
             (false, false)
         } else {
-            let committed = match event {
-                session_cache::PrefixEvent::SessionEnd => session_cache::commit_prefix(
-                    &mut prepared,
-                    &self.surface,
-                    created,
-                    expires,
-                    &mut checkpoint,
-                ),
-                session_cache::PrefixEvent::Stop => session_cache::commit_prefix_for_event(
-                    &mut prepared,
-                    &self.surface,
-                    event,
-                    created,
-                    expires,
-                    &mut checkpoint,
-                ),
-            };
+            let committed = session_cache::commit_prefix_for_event_with_authority(
+                &mut prepared,
+                &self.surface,
+                event,
+                created,
+                expires,
+                &mut checkpoint,
+                &mut authority,
+            );
             match committed {
                 Ok(()) => (true, true),
                 Err(error) => {
@@ -1474,12 +1529,13 @@ impl PrefixAdmitted {
         }
         let (agent_pid, reap) = match pid {
             Some(pid) => {
-                let outcome = pid.commit(
+                let outcome = pid.commit_with_authority(
                     &mut prepared,
                     sid,
                     &self.canonical_root,
                     expires,
                     &mut checkpoint,
+                    &mut authority,
                 );
                 if let Some(failure) = outcome.failure {
                     if matches!(failure, FailureKind::Cancelled(_) | FailureKind::Deadline) {

@@ -43,6 +43,8 @@ export interface NativeImageInput {
   readonly native: BinaryPin;
   readonly node: BinaryPin;
   readonly stableEntry: Pin;
+  /** Offline executed semantic evidence, not native selection/publication authority. */
+  readonly stopProfile?: Pin;
   readonly timeoutMs: number;
 }
 /** Select a reviewed build, never independent native/stable executable pins. */
@@ -193,6 +195,7 @@ function prepareNativeImage(
       'node',
       'stableEntry',
       'timeoutMs',
+      ...(Object.hasOwn(input, 'stopProfile') ? ['stopProfile'] : []),
     ],
     'native image'
   );
@@ -414,6 +417,10 @@ function prepareNativeImage(
   executablePaths.add('native/caws-hook-native');
   files.set('native-entry.json', Buffer.from(JSON.stringify(metadata)));
   if (build) files.set('native-build-provenance.json', Buffer.from(build.provenance));
+  if (Object.hasOwn(input, 'stopProfile')) {
+    if (!build) throw new Error('Semantic profile requires reviewed v2 build image');
+    files.set('native-stop-profile.json', captureStopProfile(input.stopProfile!, files));
+  }
   // Mode closure is ordinary hashed metadata; the writer checks actual published modes.
   files.set('native-modes.json', Buffer.alloc(0));
   files.set(
@@ -427,6 +434,188 @@ function prepareNativeImage(
     )
   );
   return { files, executablePaths, stableEntry, metadata };
+}
+
+/** The installer verifies exact selected implementation bytes. This file is
+ * evidence for a later native owner, never permission to enable a Stop route. */
+function captureStopProfile(pin: Pin, files: ReadonlyMap<string, Buffer>): Buffer {
+  keys(pin, ['source', 'sha256'], 'semantic profile pin');
+  if (!digest(pin.sha256)) throw new Error('Invalid semantic profile hash');
+  const size = fs.lstatSync(pin.source).size;
+  if (!Number.isSafeInteger(size) || size < 1 || size > 8 * 1024 * 1024)
+    throw new Error('Semantic profile size bound');
+  const observed = capture(pin.source, { path: pin.source, sha256: pin.sha256, sizeBytes: size });
+  if (observed.bytes.length > 8 * 1024 * 1024 || sha(observed.bytes) !== pin.sha256)
+    throw new Error('Semantic profile size or hash mismatch');
+  const profile: unknown = JSON.parse(observed.bytes.toString('utf8'));
+  keys(
+    profile,
+    [
+      'schema',
+      'surface',
+      'event',
+      'scope',
+      'implementation',
+      'selectors',
+      'sqliteIdentity',
+      'environment',
+      'comparison',
+      'provenance',
+      'remainingJoins',
+    ],
+    'semantic profile'
+  );
+  if (
+    profile.schema !== 'caws.runtime.stop-semantic-profile.v1' ||
+    profile.surface !== 'opencode' ||
+    profile.event !== 'stop' ||
+    profile.scope !== 'controlled-components' ||
+    !object(profile.implementation)
+  )
+    throw new Error('Unsupported semantic profile domain');
+  keys(profile.selectors, ['sql', 'renderer'], 'independent semantic selectors');
+  for (const category of ['sql', 'renderer'] as const) {
+    const selectors = profile.selectors[category];
+    if (!Array.isArray(selectors) || selectors.length !== 2)
+      throw new Error('Independent semantic selectors required');
+    for (const [index, limit] of [4300, 0].entries()) {
+      const selector: unknown = selectors[index];
+      keys(selector, ['id', 'integerMaxDigits'], 'semantic selector');
+      if (
+        selector.integerMaxDigits !== limit ||
+        selector.id !==
+          (category === 'sql'
+            ? `cpython-3.11.13-unicode14-int${limit}`
+            : `cpython3.11-json/int-max-str-digits:${limit}`)
+      )
+        throw new Error('Unsupported semantic selector');
+    }
+  }
+  keys(profile.environment, ['tz', 'tzdir', 'integerMaxDigits'], 'semantic environment');
+  if (
+    profile.environment.tz !== 'UTC0' ||
+    profile.environment.tzdir !== 'absent' ||
+    JSON.stringify(profile.environment.integerMaxDigits) !== '[4300,0]'
+  )
+    throw new Error('Unsupported semantic environment');
+  keys(profile.comparison, ['receiptSha256', 'driverSha256', 'comparisons'], 'semantic comparison');
+  if (
+    !digest(profile.comparison.receiptSha256) ||
+    !digest(profile.comparison.driverSha256) ||
+    !Array.isArray(profile.comparison.comparisons)
+  )
+    throw new Error('Invalid semantic comparison');
+  const sqlCases = [
+    'message-int4300',
+    'message-int4301',
+    'message-negative4300',
+    'message-negative4301',
+    'part-int4301',
+    'message-string4301',
+    'message-float4301',
+  ];
+  const rendererCases = [
+    'plain',
+    'integer4300',
+    'integer4301',
+    'negative4301',
+    'string4301',
+    'float4301',
+    'html-literal4301',
+    'html-decimal4301',
+  ];
+  const expectedCases = [4300, 0]
+    .flatMap((limit) => [
+      ...sqlCases.map((name) => `sql/${limit}/${name}`),
+      ...rendererCases.map((name) => `renderer/${limit}/${name}`),
+    ])
+    .sort();
+  const observedCases = profile.comparison.comparisons
+    .map((row: unknown) => {
+      keys(row, ['id', 'result', 'referenceSha256', 'candidateSha256'], 'semantic comparison row');
+      if (
+        typeof row.id !== 'string' ||
+        row.result !== 'equal' ||
+        !digest(row.referenceSha256) ||
+        row.candidateSha256 !== row.referenceSha256
+      )
+        throw new Error('Failed semantic comparison');
+      return row.id;
+    })
+    .sort();
+  if (JSON.stringify(observedCases) !== JSON.stringify(expectedCases))
+    throw new Error('Incomplete semantic comparison coverage');
+  keys(
+    profile.sqliteIdentity,
+    ['schema', 'version', 'sourceId', 'threadSafe', 'compileOptions', 'compiledPrefixSha256'],
+    'semantic SQLite identity'
+  );
+  if (
+    profile.sqliteIdentity.schema !== 'caws.sqlite_build_identity.v1' ||
+    typeof profile.sqliteIdentity.version !== 'string' ||
+    !profile.sqliteIdentity.version ||
+    typeof profile.sqliteIdentity.sourceId !== 'string' ||
+    !profile.sqliteIdentity.sourceId ||
+    ![0, 1, 2].includes(profile.sqliteIdentity.threadSafe as number) ||
+    !digest(profile.sqliteIdentity.compiledPrefixSha256) ||
+    !Array.isArray(profile.sqliteIdentity.compileOptions) ||
+    !profile.sqliteIdentity.compileOptions.length ||
+    profile.sqliteIdentity.compileOptions.some(
+      (v: unknown) => typeof v !== 'string' || !v || v.includes('\0')
+    )
+  )
+    throw new Error('Invalid semantic SQLite identity');
+  keys(
+    profile.provenance,
+    ['referenceMode', 'referenceAdapterSha256', 'referenceSharedInventorySha256', 'corpusSha256'],
+    'semantic provenance'
+  );
+  if (
+    profile.provenance.referenceMode !== 'controlled-no-site-explicit-X' ||
+    profile.provenance.referenceAdapterSha256 !==
+      '074dcc4c9880758ea9bfc092612034bff7f78b7d07bed2b4331e02d5916171a9' ||
+    profile.provenance.referenceSharedInventorySha256 !==
+      '9976411f31abc0c6249433c79a45e6e556901ebcc9ae948218416fc9a92eaad8' ||
+    profile.provenance.corpusSha256 !==
+      'e9d9303ec7ce77dc15260aceadfa8392c7b2dbd5b3c70803354cedec6e097d19'
+  )
+    throw new Error('Unsupported semantic provenance');
+  const remaining = [
+    'native-calendar-original-environment',
+    'bundled-engine-dispatch-equivalence',
+    'native-selection-prefix-and-queued-peer-admission',
+    'ordinary-publication-reopened-consumer-and-release',
+    'ambient-legacy-startup-equivalence',
+    'other-supported-surfaces',
+  ];
+  if (JSON.stringify(profile.remainingJoins) !== JSON.stringify(remaining))
+    throw new Error('Semantic evidence must preserve remaining joins');
+  const implementation = (relative: string): boolean =>
+    relative.startsWith('native-prefix/') ||
+    relative.startsWith('native/') ||
+    ['native-entry.json', 'native-build-provenance.json'].includes(relative);
+  const expected = Object.fromEntries(
+    [...files]
+      .filter(([name]) => implementation(name))
+      .map(([name, bytes]) => [name, sha(bytes)])
+      .sort(([a], [b]) => (a! < b! ? -1 : a! > b! ? 1 : 0))
+  );
+  const actual = Object.fromEntries(
+    Object.entries(profile.implementation)
+      .map(([name, hash]) => {
+        nativeRelative(name);
+        if (!digest(hash) || !implementation(name))
+          throw new Error('Invalid semantic implementation member');
+        return [name, hash];
+      })
+      .sort(([a], [b]) => (String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0))
+  );
+  if (JSON.stringify(actual) !== JSON.stringify(expected))
+    throw new Error('Semantic profile implementation differs from selected image');
+  // The native loader validates fixed coverage/selectors/SQLite/environment on
+  // the authenticated bytes. Installation never treats successful inclusion as
+  // earned end-to-end qualification, and never follows provenance paths.
+  return Buffer.from(observed.bytes);
 }
 
 function reviewedFile(value: unknown, label: string): asserts value is ReviewedFile {
@@ -465,6 +654,7 @@ export function prepareNativeRuntimeEntryFromBuild(
       'requestFile',
       'completionReceipt',
       'nativeNotices',
+      ...(Object.hasOwn(input, 'stopProfile') ? ['stopProfile'] : []),
     ],
     'native build image'
   );
@@ -504,6 +694,7 @@ export function prepareNativeRuntimeEntryFromBuild(
       node: input.node,
       stableEntry: { source: stableEntry.path, sha256: stableEntry.sha256 },
       timeoutMs: input.timeoutMs,
+      ...(Object.hasOwn(input, 'stopProfile') ? { stopProfile: input.stopProfile! } : {}),
     },
     { native, stableEntry, provenance }
   );

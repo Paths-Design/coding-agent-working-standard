@@ -43,7 +43,10 @@ parent spec and selected machine runtime remain unchanged. Local main merge
 admission and direct invalidation falsifier. The five landed paths equal
 reviewed candidate `5837aa104633640ce593a2ead8ea2198d46b7812`.
 `CAWS-NATIVE-STOCK-ADMISSION-LANDING-001` closes with A1–A3 recorded; its
-component acceptance does not qualify the production publication chain.
+component acceptance does not qualify the production publication chain. Local
+main merge `bbe4b3895c53348da4d2703a486b8cabe79cb7d8` contains the E343 source
+catalog and typed consumer. Its bounded landing spec closes with A1–A3 recorded;
+E348 retains the exact composition and postmerge observations.
 `native-runtime-modernization` remains the integration branch for owed work.
 Evidence entries identify their actual component branch or historical revision;
 ledger-only commits do not qualify different runtime bytes. The relative
@@ -8855,8 +8858,9 @@ Additional bounded evidence and unresolved dependencies:
 
 - E338: Path confinement uses an explicit path-identity observation rather than
   generic lstat. Native evidence retains kind/device/inode/mode/ownership and
-  traversal anchors; only this operation excludes contents, timestamps and link
-  count. Generic metadata, bytes and inventory operations retain their strict
+  traversal anchors; path identity excludes contents, timestamps and link count.
+  E365 applies the corresponding identity projection to present-directory
+  Exists. Generic metadata, bytes and inventory operations retain their strict
   dependencies. Stock selection requires the explicit observation without a
   missing-row fallback. path-identity-native-unit-01 exits0 with142 cases,
   including sibling-change acceptance and inode/mode/symlink/absence and
@@ -9033,12 +9037,969 @@ Additional bounded evidence and unresolved dependencies:
   SQLite publication branch. Artifacts reside under the root session's
   publication-integration directory. Relative CAWS_LOG_DIR explicitly refuses
   until the original render-cwd registration resolves it. Root owns that parity
-  repair, native entry integration and actual publication/release. Later
-  registration, profile and dispatch source remains in the owned publication
-  branch and requires its separate execution evidence. The bounded
+  repair, native entry integration and actual publication/release. The bounded
   CAWS-NATIVE-STOP-CATALOG-LANDING-001 delivery uses the ten source/test blobs
-  from d66b99e5; its store actor excludes later registration changes. No
+  from d66b99e5; its store actor excludes the registration changes described in
+  E344. E344-E366 carry the separate integration and execution evidence. No
   production activation, full Python retirement or cutover follows.
+
+- E344: The resident store has a distinct native Stop registration entry that
+  borrows the actual original capture and completed prefix. NativePeer retains
+  the same monotonic clock and kernel connection through queueing. Native-only
+  challenges correlate identity, generation, binding digest, registration,
+  deadline, sequence and phase; they never enter the Node relay. The actor
+  revalidates after its earlier cohort before durable original reservation,
+  before writer admission, after lock acquisition/retirement, before SQL and
+  before publication. The admitted SQL entry consumes the captured project
+  instead of running another Git observation; the development route retains its
+  independent observation. Relative audit roots resolve against the native
+  registration's original absolute render cwd. Relative payload cwd remains
+  outside this registration's qualified domain, not full parity. Root applied
+  the external proposal after the worker's model-capacity failure, added
+  retained challenge/phase/refusal artifacts and executed the checks serially.
+  native-stop-registration-check-01 exits0 in6.241s with sqlite-store
+  compilation. native-stop-registration-tests-01 exits0 in67.771s:22 store cases
+  execute and the prepared-image actor-ordering case remains explicitly ignored.
+  Its native-registration-phase-sequences.json records six cold-writer and five
+  retained-writer checks with terminal replay refusal;
+  native-registration-foreign-challenges.json retains all eight rejected wire
+  mutations. native-registration-unauthenticated.json retains the actual binding
+  refusal, zero actor/registry entries and equal before/after file hashes.
+  Independent review exposes a missing payload cwd in that fixture: the test
+  refuses before authentication, so removing authentication could leave it
+  green. The repaired control supplies matching cwd, asserts binding validation
+  succeeds and selects an actual invalid generation manifest.
+  native-stop-registration-repair-01 exits0 but selects zero tests because the
+  exact filter omits the module path; it earns no behavioral evidence.
+  native-stop-registration-repair-02 executes the fully qualified test and
+  exits0 in0.294s. Its retained native-registration-unauthenticated.json records
+  Runtime manifest integrity failure, null registration/acquisition, zero
+  actors, an empty registry and24 unchanged file hashes. This establishes
+  generation refusal before reservation; it neither authenticates a valid native
+  caller nor counts actual SQLite opens. native-stop-registration-peer-01 exits0
+  in44.973s with six actual native/Node peer controls, including original-clock
+  ownership, process death, same-byte executable replacement and expiry.
+  native-stop-registration-original-01 exits0 in4.301s and retains actual
+  original Git/prefix outputs plus matching registration acceptance and foreign
+  identity/root refusals. Artifacts reside under the root session's
+  publication-integration directory. The feature-off compilation exits0
+  in15.648s; it does not execute native Stop. These separate observations do not
+  establish the combined authenticated queue/SQL/publication path. Root owns the
+  actual queued-selection-mutation falsifier with direct SQL-open observation,
+  semantic-profile/current-image qualification, main/engine connection and
+  ordinary reader/CONSUMED/release. No production activation, complete Python
+  retirement, fairness or machine adoption is inferred.
+
+- E345: The maintained Stop qualifier can emit native-stop-profile.json after
+  its fixed30 SQL/renderer comparisons and exact pre-profile image checks.
+  Reviewed v2 image preparation binds that member to the native executables,
+  complete prefix and build provenance without a final-generation digest cycle.
+  The native StopProfileReceipt loader retains the original capture, deadline,
+  generation and independently selected SQL/renderer profiles. These are
+  implementation boundaries, not an executed fresh producer/consumer chain.
+  native-stop-profile-build-01 exits0 in6.308s; tooling-02 exits0 with six
+  qualifier refusal controls. The combined ts-01 attempt times out at110s and
+  adapter-02 at50s, with no terminal suite result. Retained fixture timestamps
+  show completed installation cases consuming the second budget; its CPU sample
+  is inside a case that subsequently completes, not evidence of an infinite
+  loop. semantic-03 exits0 in3.147s with eight new semantic-data controls and
+  the isolated existing symlink refusal. adapter-v2-03 executes the
+  complete38-case v2 group and exits0 in58.243s;50 other file cases are filtered
+  out. The retained fixture observations and prepared-image members use a mocked
+  build-receipt loader and fake executables; they do not execute a production
+  native image. native-stop-profile-rust-01 exits0 in23.323s with four synthetic
+  validation/environment/deadline controls. Feature-off check exits0 in7.882s
+  without runtime execution. Source/input pins remain unchanged during these
+  checks and observed process groups are empty afterward. Artifacts reside under
+  publication-integration in the root session directory. The native profile
+  domain requires original TZ=UTC0, absent TZDIR and the reviewed integer
+  limits; it does not establish other host environments. Root owns
+  fresh30-comparison profile emission against the exact candidate, actual native
+  receipt capture, original-calendar and engine equivalence, production
+  eligibility/main wiring and integrated publication/reader/release. Authentic
+  generation bytes cannot alone prove the historical comparisons executed. No
+  parent acceptance, selected-machine adoption or Python retirement follows from
+  these component checks. native-stop-profile-member-01 executes the existing
+  authenticated member-read control excluded by rust-01 and exits0 in0.237s,
+  retaining its generation fixture. Explicit package-cwd lint01 exits1 for a
+  bare AbortController reference also present in the prior qualifier. Naming
+  globalThis.AbortController preserves the Node runtime operation; four-path
+  lint02 exits0 and tooling03 repeats the six refusal controls exit0. The commit
+  hook ignored the TypeScript path because its invocation found no matching
+  configuration; that hook is not lint evidence.
+
+- E346: The source connects retained native Stop selection/profile owners to
+  dispatch.v3, the separate Stop prefix exchange and native resident
+  registration. The typed entry uses its existing framed transport and deadline;
+  the ordinary executor verifies the selected logger before replacing index2
+  with the existing store/publication consumer. Reprieve and ordered composition
+  remain ordinary decisions. Unsupported startup and skipped/unsafe supplied
+  identities are excluded before the grant; partial prefix effects, uncertain
+  delivery and post-grant failures cannot authorize compatibility replay.
+  Original selection and profile owners revalidate across the queued
+  registration checkpoints. These source connections await execution through a
+  fresh production image. native-stop-engine-join-build-02 exits0 in6.248s.
+  tests-01 exits1: one supplied test path does not exist and a routing oracle
+  compares two distinct fixture runtime digests. Each fixture home is embedded
+  in the OpenCode plugin and therefore changes its manifest digest. The repaired
+  oracle verifies each selected generation and exact reset-script member before
+  normalizing only that path. tests-02 exits0 in27.946s with244 checks across
+  six existing/new suites. Its14 retained fixtures include actual composer
+  journals; the positive trace is prefix/first/second/publication/last, the
+  reprieved logger has zero publication calls, and post-prefix logger mutation
+  has zero publication and compatibility calls. Native prefix/publication are
+  mocked in these new controls; they cannot prove SQL closure, filesystem
+  publication or consumption. Raw logs and fixtures live under
+  publication-integration/native-stop-engine-join-tests-02 in the root artifact
+  directory. lint01 exits1 for two bare AbortController references; explicit
+  globalThis preserves the runtime binding and lint02 exits0. Native
+  main-join-tests-01 executes the distinct operation/duplicate/size control
+  exit0; main-join-tests-02 executes startup and supplied-identity controls
+  exit0. open-observation-tests-01 and open-observation-status-01 execute one
+  control each, exit0: a saturating process counter at the actual
+  transcript-database open call and owner/count status across
+  missing/registered/released records. These units do not prove zero opens for
+  an actual queued invocation. The observation means transcript-database opens,
+  excluding profile identity's in-memory SQLite connection; saturation
+  invalidates a zero-delta claim. Source/input pins remain unchanged during
+  checks and observed child groups settle. Root owns the fresh-image recipe,
+  fixed30 comparison execution, actual original native invocation through
+  ordinary reader/CONSUMED/heavy release and the paired queued-mutation refusal
+  with zero database-open attempts on the same isolated owner. The finite
+  UTC0/OpenCode profile and resource ceilings do not establish
+  ambient/all-surface or above-limit legacy parity. Full Python retirement,
+  unchanged1000hotturns, thirteen-session/four-repository fairness, coherent
+  main delivery, installed execution and rollback remain open.
+
+- E347: Candidate3e99f570 commits the E346 connection with a clean owned lane.
+  Independent same-provider source review finds no actionable defect in its
+  inspected connection; root grounds the retained owner, completed-prefix,
+  handler-verification and observation-call coordinates directly. Review does
+  not establish integrated behavior. Explicit package lint02 exits0; the commit
+  hook ignores seven TypeScript files and supplies no substitute lint evidence.
+  Feature-off check02 exits0 in1.479s without executing the runtime. Doctor
+  exits0 with0E/4W/5I; policy gates pass over145 branch/staged paths without
+  parent AC writes. The fresh-stop-profile-production-01 preparation exports
+  this exact committed source, including110 native files, and exits0 in3.544s.
+  Its exported CLI build exits0 in7.351s. The native-build-01 outer supervisor
+  times out at120s, kills its group and observes no remaining group processes.
+  Cargo's retained step exits0 in98.565s; the actual new binary's SQLite
+  identity step exits0 and reports3.53.4, threadSafe1 and compiledPrefixSha256
+  7e9e3380222ac021ed815e49b2b0be31839af540a8954a80db00e523d08c5e98. nm-native
+  and otool-native also exit0. Neither native-completed.json nor a terminal
+  builder failure receipt exists: compiler/identity success cannot replace the
+  interrupted producer's remaining inspections/publication. Raw artifacts remain
+  under fresh-stop-profile-native-build-01 and
+  fresh-stop-profile-production-01/run/native-build in the root artifact
+  directory. Root owns a fresh attempt with outer supervision that permits
+  terminal receipt/settlement while retaining the builder's original deadline;
+  no success may be synthesized from this interrupted output. Fixed30 profile
+  execution, integrated native publication/refusal, coherent main delivery and
+  selected-machine cutover remain unverified. The selected runtime remains
+  408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0.
+
+- E348: Reorientation preserves the lead transfer and full local-cutover goal;
+  component verification does not discharge the three integrated outcomes. Local
+  main merge bbe4b3895c53348da4d2703a486b8cabe79cb7d8 lands E343's ten
+  source/test blobs from d66b99e5 through candidate6c3a71bf. Root checks all436
+  retained TypeScript inputs and108 native inputs against the extracted lane,
+  the five actual captured-input hashes, subagent mapping and both byte-bearing
+  substitution refusals. These are retained executed checks, not fresh tests.
+  Same-provider read-only composition review identifies no actionable defect;
+  source inspection confirms production Stop remains inactive in this slice.
+  Doctor exits0 with0E/4W/5I and scoped gates pass over11 paths. Commit-hook
+  TypeScript lint is ignored; matching package-scoped retained lint supplies
+  lint evidence. The first postmerge inspector wrongly requires HEAD to equal
+  the merge commit; governed teardown adds a binding-only commit. Corrected
+  ancestry and exact-blob checks establish the landing, removed temporary lane
+  and unchanged parent spec/selected runtime hashes. A1/A2/A3 evidence and
+  closure are read back through events12864/12865/12868/12869.
+  CAWS-NATIVE-STOP-CATALOG-LANDING-001 closes only this source increment;
+  publication-integration/stop-source-catalog-landing-01 retains raw governance,
+  composition and postmerge artifacts.
+
+  Fresh production-source attempt02 retains the original120000ms builder
+  deadline with a180s outer watchdog. Preparation and CLI build exit0; native
+  build exits1 in120.481s without outer timeout or group residue. Its genuine
+  native-failed.json names otool-stable-entry and Native build timeout; Cargo
+  exits0 in97.650s. Attempt03 keeps the runtime30s and comparison60s deadlines
+  but declares a180000ms development-build allowance with240s outer custody,
+  within the existing builder schema. Its exact exported candidate57f79fb9
+  includes110 native files. Preparation, CLI build, native build and normal
+  package creation exit0. Native build completes in119.218s with seven recorded
+  steps exit0, reaped children and no observed group residue. The maintained
+  native-completed.json remains NOT_ADOPTED, requestDigest
+  ce3a23cf6915aa04c038f8519690e35bf63a915f5a9fcf51c9813ef4c4516907. Actual
+  caws-native SHA256 is
+  a3534817ce4390af4593ede53d9b4f15a441d7d3cf8ef20ffdc30700082fded3; the
+  fresh2710444-byte tarball has1341 members and SHA256
+  8ea3ecd342ef3226808b1354114c486cfb2d4684d96817f92349c0aeeb8d5865.
+  prefix-install03 exits1 EINTEGRITY because inherited root/hidden lock data
+  associates the old same-version tarball checksum with the relocated new path.
+  The failed prefix is preserved. A new isolated recovery preparation exits0;
+  its normal explicit offline npm install exits1 ENOTCACHED for the locked
+  js-yaml4.3.2 archive. No network fallback or integrity relaxation occurs. Root
+  owns recovery and fixed30 comparisons; html_profile accepts bounded external
+  packaging/cache repair. Completed build artifacts are reused only with their
+  retained exact source/request identities, not inferred adoption.
+
+  Root observes TZ, TZDIR and PYTHONINTMAXSTRDIGITS absent in this session's
+  shell tool environment. stop_profile.rs requires original TZ=UTC0 and absent
+  TZDIR; stop_execution.rs returns compatibility for unsupported profiles only
+  after revalidation. This source/environment observation does not inspect an
+  actual vendor application's environment. A successful controlled UTC0 probe
+  cannot establish real launch-calendar parity; silently forcing UTC would
+  change the contract. The positive/queued-mutation external probe is authored
+  and passes Node syntax checking, but has not executed. Source inspection of
+  render_owner/store.rs's BeforeReservation/error paths and render_owner.rs's
+  idle predicate finds that a pre-reservation rejection retains its registry
+  record; indefinite retention is an inference awaiting the real negative
+  scenario. Root retains this residency obligation, with stop_engine_join
+  assigned a bounded rejection/replay/custody design investigation. Releasing a
+  record without a durable rejected-original outcome could erase no-replay
+  protection. No repair, actual queued zero-open result, SQL CLOSED/publication/
+  ordinary reader/CONSUMED/release result, thirteen-session/four-repository run,
+  Python retirement, machine adoption or rollback is claimed by this entry. Raw
+  attempts live under fresh-stop-profile-production-02/03,
+  fresh-stop-profile-prefix-recovery-01 and their corresponding supervisor
+  directories; reorientation-ambient-observation-01.json binds the shell-only
+  observation. Root owns the integrated execution and continuing cutover goal.
+
+- E349: Reorientation reads all164 available CAWS turn records for root session
+  01a164bc-7a2b-75e2-be81-5da9d0a29252. The user's lead transfer supersedes
+  coordination-only ownership; full parity and actual local cutover remain the
+  outcome. Main120cab3d contains the E348 catalog merge; the owned publication
+  lane17733de5 is clean before this documentation edit. Selected machine digest
+  remains408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0.
+
+  Recovery02 verifies and seeds64 lock-selected archive bodies into a private
+  offline npm cache. Preparation, normal offline installation, prefix
+  verification and maintained image preparation exit0 in2.917s/1.369s/1.602s/
+  3.860s. verified-prefix.json records5776 prefix members,64 third-party
+  packages, the exact fresh8ea3ecd3 tarball and unchanged failed03 prefix.
+  prepared-image.json records5854 prepared image members and state
+  prepared_not_compared. These artifacts reuse the genuine03 native completion
+  for exported candidate57f79fb9; neither live lane HEAD nor successful
+  packaging grants runtime acceptance. fresh-stop-profile-recovered-qualifier-02
+  exits1 in2.114s without timeout or observed group residue. Its stderr reports
+  an unqualified Python dependency for the exported session_log_renderer.py:
+  expected e45f7ec6, absent path key. The relocated sharedRoot retained
+  lane-absolute Python dependency keys. Root owns execution; html_profile
+  accepts a bounded fresh-request repair preserving reviewed dependency hashes,
+  failed output and all qualification checks.
+
+  Root grounds an integration defect beyond the absent-TZ domain: main.rs passes
+  the raw Session into acquire_native_stop_store, while the typed production
+  adapter requires renderObservations and session-publication-client waits for
+  openNativeRenderObservations immediately after Render INPUTS READY. Only
+  render_observation::ObservationTransport emits that original binding; source
+  search finds no production ObservationOwner construction. The missing producer
+  is established from source. A mutual wait until deadline is inferred, not an
+  executed timeout: the ordinary consumer waits for the binding while the raw
+  publication relay waits for its PREPARED frame. This affects controlled UTC
+  positive publication before any naive-calendar query. Component comparisons
+  cannot establish this connection. Root owns original-process Git/calendar
+  capture, transport connection, retained cleanup custody and the real positive
+  invocation; ambient_stop_domain accepts the bounded source-design question.
+
+  The following increment must establish original capture through completed
+  prefix, SQL CLOSED, Render binding, ordinary semantic consumption, durable
+  CONSUMED and release, then land that coherent owned slice. The absent-TZ host
+  calendar domain remains separate and required for actual local use. The
+  pre-reservation rejection design remains unimplemented: durable rejected-ID
+  history must precede heavy release; dispatch absence cannot establish safety,
+  and existing CancelledBeforeDispatch records do not reclaim persisted live
+  capacity. Root retains both obligations. No production positive/refusal run,
+  thirteen-session/four-repository workload, Python retirement, machine adoption
+  or rollback is established by this entry. Raw recovery and qualifier artifacts
+  remain under publication-integration/fresh-stop-profile-prefix-recovery-02 and
+  the corresponding supervisor directories.
+
+- E350: Reorientation reconciles all 168 available CAWS turn records with the
+  original Codex user messages, current source and retained runtime artifacts.
+  Lead ownership, full parity, incremental coherent landings and actual local
+  cutover remain required. Main 120cab3d contains catalog merge bbe4b389; the
+  selected machine digest remains
+  408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0.
+
+  Qualifier repair a6fd9b7c hashes independently canonicalized wrapper objects
+  after deep equality, preserving payload bytes, array order and negative zero;
+  unsupported values and sparse arrays refuse. The preceding relocated run
+  failed after all 30 parsed comparison values matched because wrapper key order
+  changed the hashes. That failure remains retained. Seven focused qualifier
+  checks and scoped lint exit 0. The maintained qualifier then exits0 in 6.371s;
+  its 31 child executions exit 0 and 30 comparisons produce profile aa600524.
+  Finalization exits0 in 6.907s, producing 5855 image members and descriptor
+  de51c847. Raw commands, outputs and result.json live under
+  publication-integration/ fresh-stop-profile-maintained-execution-01,
+  fresh-stop-profile-maintained-finalize-01 and
+  fresh-stop-profile-maintained-qualifier-01/run. The image contains frozen
+  candidate 57f79fb9, predating the original Render connection. Its result
+  records controlled-components and NOT_ADOPTED; it does not prove production
+  dispatch.
+
+  Candidate c1f20476 connects original-process Git/calendar capture to the late
+  Render transport and retains cleanup ownership outside the temporary wrapper.
+  Native Stop eligibility requires that owner. The four focused owner checks
+  exit 0 in 1.779s; real native-main positive and hostile protocol-fixture
+  checks exit 0 in 94.958s and 73.815s. Feature-disabled compilation exits0 in
+  1.340s. Each supervisor records unchanged source/input pins and no observed
+  group residue. The positive fixture emits original-context-complete, records
+  originalRenderCaptured=true before request encoding, and retains exactly two
+  original-context Git queries before and after Node execution. Its dispatch is
+  v1 with nativeStop unsupported: these artifacts establish early capture and
+  context replay, not SQL/publication. Hostile artifacts retain identity,
+  correlation, overlap, freshness and post-Ready refusals without retry. Earlier
+  LF-fixture and obsolete transport-advertisement assertion failures remain
+  retained; neither fix relaxes production validation. Raw artifacts live under
+  publication-integration/original-render-join-{unit-01,unit-02,main-01,
+  main-positive-02,main-hostile-02,feature-off-01}.
+
+  Root owns the fresh committed-image execution and coherent landing.
+  html_profile owns the external fresh04 recipe; ambient_stop_domain supplies
+  probe02 with explicit source-revision provenance and originalRenderCaptured
+  assertion. Neither recipe has executed the production scenario. The next
+  decisive check remains original capture through prefix, SQL CLOSED, Render
+  binding, semantic reader, durable CONSUMED and release, followed by queued
+  selection rejection. Ambient absent-TZ qualification, pre-reservation
+  rejection reclamation, actual cleanup/no-replay,
+  thirteen-session/four-repository load, Python retirement, supported harness
+  adoption and rollback remain open. No parent AC is advanced.
+
+- E351: Reorientation reads all 172 available CAWS turn records for the same
+  coordinator and verifies main 120cab3d, clean publication lane 91fc7de9 and
+  catalog-merge ancestry. The user's lead transfer supersedes coordination with
+  the previous lead; full parity, incremental landings and actual local cutover
+  remain the objective. Parent acceptance remains 0/8.
+
+  Fresh production04 exports candidate 91fc7de9 and completes all eleven
+  separately supervised preparation, build, package, private installation and
+  profile-image stages with exit 0, unchanged source pins and no observed group
+  residue. The native build takes 122.807s and produces executable SHA256
+  ad8066103e1eac65a0fbd4ee9ee5160ccfc5e00cf81b46fd5f3da81bfbeb679d. Controlled
+  qualification compares 30 semantic pairs; the final image contains 5855
+  members. Its result remains controlled-components and NOT_ADOPTED. Artifacts
+  live under publication-integration/fresh-stop-profile-production-04 and the
+  corresponding fresh-stop-profile-04-\*-01 execution directories.
+
+  The actual positive production Stop invocation then FAILS. Probe02 runs with
+  --source-revision 91fc7de97f02e820f0ea22b0b61a48f6b6e3e29d, the fresh private
+  CLI/image and --mode positive;
+  production-stop-04-positive-execution-01/execution.json retains its complete
+  argv, exit 1, 48.146s, unchanged source pins and empty observed group residue.
+  The native child exits 0 after 30030.857ms, but its output explicitly reports
+  Original monotonic deadline expired, prefixComplete=false,
+  envelopePublished=false, pointerPublished=false, agentPid=not_run and
+  reap=not_run. Exit 0 releases an infrastructure Stop; it is not successful
+  publication. The probe rejects that diagnostic. The session contains only
+  metadata and the invocation journal; no turn or publication marker exists.
+  Source database bytes remain unchanged. cleanup.json observes owner exit 0,
+  absent socket, no outstanding originals and no service signals. Raw failure,
+  native output and cleanup live in production-stop-04-positive-01; the retained
+  production-stop-04-positive-root-inspection-01.json joins these observations.
+
+  Progress records originalRenderCaptured=true, qualified native Stop and an
+  actual dispatch grant, but no completed prefix. The dispatch-grant mark at
+  20556ms precedes another eligibility validation; it is not the grant-write
+  timestamp. Source inspection finds nested full-generation validations in
+  selection, profile and SQLite identity checks, with the complete eligibility
+  check also used as a repeated prefix checkpoint. This is a source-grounded
+  performance hypothesis; individual validation timings remain unmeasured. Root
+  owns the next exact-image replay. ambient_stop_domain owns a bounded
+  diagnostic proposal; html_profile owns scoped verification consolidation;
+  stop_engine_join owns acknowledged cancellation/reclamation using the existing
+  journal encoding. These proposals are unexecuted and confer no acceptance.
+  Preserve the 30s deadline, full hashes/inventory, selected readsets,
+  effect-boundary and postqueue freshness checks. Disconnected negative
+  acknowledgements retain their cancellation fence and heavy record; recovery
+  remains an obligation.
+
+  The production consumer, queued mutation refusal, ambient environment,
+  residency/fairness, Python retirement, supported harnesses and rollback remain
+  unverified. The selected machine generation remains 408c06a7…77baa0. No parent
+  criterion advances from this failed scenario.
+
+- E352: Request-owned diagnostics count and time completed generation-receipt
+  revalidations and Stop-prefix authority callbacks, including refusals. The
+  original invocation owns the counters before capture, so a refused capture
+  does not discard its measurement. Existing progress emission carries count and
+  elapsedMicros only; no payload paths or authority state are added. The initial
+  generation load is excluded. Prefix time includes nested generation time, so
+  the totals must not be summed. Deadlines, verification predicates and effect
+  ordering are unchanged; the instrumentation is not an optimization.
+
+  The first diagnostic filter exits 0 but omits sqlite-store, exercising nine
+  selected checks without the production eligibility path. The corrected
+  --features sqlite-store diagnostic filter exits 0 in 4.649s with ten selected
+  checks, including the four new timing checks and actual linked SQLite
+  identity. The generation suite exits 0 in 0.584s with 28 checks covering
+  replacement, inventory, modes, original expiry and chunk cancellation.
+  Feature-disabled compilation exits 0 in 1.094s. Existing warnings remain in
+  stderr; these are not strict-Clippy observations. All supervisors retain
+  unchanged source/input pins and no observed group residue. Raw commands and
+  logs live under publication-integration/stop-validation-diagnostics-01,
+  stop-validation-diagnostics-sqlite-01, stop-validation-generation-01 and
+  stop-validation-feature-off-01.
+
+  The retained failed-capture fixture reports engineReads=2,
+  receiptRevalidations={count:1,elapsedMicros:186},
+  initialSelectionReadExcluded=true and the exact original error "capture
+  receipt revalidation refused". Its artifact is
+  stop-validation-diagnostics-sqlite-01/generation-artifacts/
+  caws-generation-receipt-26245-0/failed-capture-revalidation-diagnostics.json.
+  This demonstrates counter retention after a refused receipt in that fixture;
+  it does not measure production cost. Root owns a fresh committed-image replay
+  under the unchanged 30s deadline. No publication, speedup, residency or parent
+  acceptance follows from these diagnostics or checks.
+
+- E353: Fresh production05 builds committed diagnostic candidate 16869077. All
+  eleven stages exit 0 with unchanged source pins and no observed group residue;
+  native build takes 122.425s. The executable is 7461248 bytes with SHA256
+  1c6b80c96387a5af93f99071611100c4a060cc81fa9fe10c42cd2a2921488ce2. Component
+  comparison retains 30 equal rows and 31 child exits 0; the final descriptor
+  SHA256 is e646455dbf0b106c1bd19e3f1b9ff14b22105d6331b4082cd5619167bc647adc.
+  Recipe helpers, tool/reference pins and the positive fixture match
+  production04. Source provenance, candidate image and artifact locations
+  change; the native deadline remains 30000ms. Artifacts live under
+  publication-integration/fresh-stop-profile-production-05 and the eleven
+  fresh-stop-profile-05-\*-01 execution directories. This remains a private
+  image, not machine adoption.
+
+  The actual positive scenario exits 1 in 47.951s; the native child exits 0 in
+  30031.216ms with Original monotonic deadline expired. Its raw progress records
+  generationReceiptRevalidations={count:32,elapsedMicros:23325772} and
+  stopPrefixAuthorityCallbacks={count:0,elapsedMicros:0}. The generation counter
+  includes refused completed calls and excludes initial loading. It measures
+  23.326s of receipt revalidation in this invocation, not 32 successful full
+  passes or an independent timing distribution. The prefix callback is not
+  observed executing; its zero count cannot establish absence of a prefix
+  attempt because the wrapper checks the original deadline first. This run has
+  no retained prefix-result object. Original Render capture, native eligibility
+  and dispatch-written flags are true. The invocation journal contains only
+  invocation_started and dispatch_started; no turn or publication marker exists.
+  Database bytes remain unchanged. The owner exits 0 naturally, with absent
+  socket, empty outstanding originals and no service signals. The outer
+  supervisor observes no group residue and unchanged source pins.
+
+  Raw stdout/stderr, terminal and cleanup records live in
+  production-stop-05-positive-01; exact argv and exit evidence live in
+  production-stop-05-positive-execution-01/execution.json. Root inspection is
+  retained in production-stop-05-positive-root-inspection-01.json. The
+  production trace establishes generation-timer wiring and the immediate cost,
+  but not prefix-timer wiring or successful publication. The initial E352
+  nine-test run also predates the final capture-wrapper cleanup; only its
+  corrected three checks match all 110 crate source pins to 16869077. The
+  selected machine remains 408c06a7…77baa0; parent acceptance remains 0/8.
+
+- E354: Native validation scopes consolidate nested generation scans around
+  stock admission, eligibility construction and eligibility revalidation. Full
+  hashes, inventory and identity checks bracket two selected-readset sweeps and
+  actual profile/linked-SQLite checks. A private borrowed token binds the exact
+  generation and original clock; nested validation refuses. No result, including
+  Unsupported, returns before closing freshness checks. Standalone
+  profile/SQLite APIs preserve their prior full-check behavior. The production
+  verifier itself, deadlines, main dispatch checks and prefix effect APIs are
+  unchanged.
+
+  The sqlite-store coalesced\_ filter exits 0 in 7.367s with five controls.
+  Actual verify_files instrumentation records two full checks around one inner
+  call. Retained artifacts reject a late readset change, same-byte inode
+  replacement, foreign generation/clock, cancellation, nesting and a mismatched
+  expected SQLite sourceId; the linked SQLite observation is retained. Existing
+  selection, stock admission, eligibility, profile and SQLite suites exit 0 with
+  28/7/2/4/7 checks in 2.962/0.296/0.200/0.205/1.321s. Feature-disabled
+  compilation exits 0 in 2.266s. Each supervisor records unchanged source/input
+  pins and no observed group residue; compiler warnings remain explicit in
+  stderr. Logs and commands live under
+  publication-integration/stop-validation-coalesced-01 and
+  stop-validation-coalesced-{selection,admission,eligibility,profile,sqlite,
+  feature-off}-01. The five selection-coalesced-\*.json files under the first
+  run's generation-artifacts retain the actual count and refusal observations.
+
+  These synthetic-generation and linked-library checks do not establish a
+  production speedup, complete stock eligibility, late queued freshness or
+  publication. Root owns the combined exact-image replay. Prefix callback
+  separation must preserve checks before persistent/destructive effects and
+  post-engine decisions while keeping cheap cancellation throughout read/write
+  loops. Cancellation/reclamation, full residency/fairness, Python retirement,
+  harness adoption and rollback remain open. No parent criterion advances.
+
+- E355: Stop prefix execution separates cheap cancellation/original-clock
+  checkpoints from full eligible-generation checks. Native main selects the
+  explicit dual-callback API. Full authority runs after engine decisions and
+  before missing-directory creation, each staging creation, final publication
+  rename and each candidate quarantine creation/move/unlink. Held directories
+  and owned temporary-FD writes retain cheap checks. Destructive authority runs
+  before the existing moved-instance validation. Refusal permits owned temporary
+  cleanup, no-replace restoration and empty-quarantine removal; completed
+  effects remain facts and cannot authorize replay. Compatibility entrypoints
+  retain their original callback points.
+
+  The explicit sqlite-store split_authority run exits 0 in 12.563s with eleven
+  controls. Its retained test-artifacts under
+  publication-integration/stop-prefix-authority-split-01 include the old target
+  bytes after staging refusal, an old pointer beside a completed Stop envelope,
+  the restored original PID entry, and a newer shared PID entry beside its
+  quarantined original when restoration refuses. Wire split-authority.json
+  records show seven full checks and seventeen cheap checks with completed
+  envelope/pointer publication; after-envelope refusal reports
+  envelopePublished:true, pointerPublished:false, prefixComplete:false and
+  fallbackSafe:false. Expiry inside full authority reports the original deadline
+  error without creating session files. Fixture result.json identifies the test;
+  synthetic original/project authority remains explicit.
+
+  Existing wire/cache/PID filters exit 0 with 36/36/13 tests in
+  0.818/0.298/0.343s. Feature-disabled and sqlite-store compilation exit 0 in
+  1.626/2.904s. Raw commands, source/input pins, stdout/stderr and empty
+  observed group residue are retained in stop-prefix-authority-{wire,cache,pid,
+  feature-off,binary}-01. Compiler warnings remain in the raw logs. These checks
+  do not establish production callback execution, latency savings, real profile
+  admission, SQL acquisition or ordinary publication. Root owns the combined
+  exact-image positive and queued/profile mutation controls, followed by
+  coherent source landing. Cancellation reclamation, residency, Python
+  retirement, harness adoption and rollback remain parent obligations; no AC
+  advances.
+
+- E356: The coalesced validation expiry control reaches an inner Ok(None),
+  consumes the unchanged original one-second deadline, and observes the exact
+  Original monotonic deadline expired refusal instead of compatibility success.
+  A fresh control invocation confirms the thread-local guard releases. The
+  sqlite-store binary test exits 0 in 6.846s; the retained
+  selection-coalesced-expired-inner-none.json records innerCalls:2,
+  originalDeadlineUnchanged:true and actualEligibilityConstructed:false.
+  Command, raw logs, unchanged source/input pins and empty observed group
+  residue live under publication-integration/stop-validation-expired-inner-01.
+  This closes the generic scope-expiry question; actual profile/EligibleStop
+  construction and production effect timing require the root-owned exact image.
+
+- E357: Fresh production06 builds clean candidate aa2b32f0 with the E354/E355
+  optimizations and E356 test. All eleven stages exit 0 with unchanged source
+  pins and empty observed group residue; native build takes 121.229s under its
+  existing build allowance. The original invocation budget remains 30000ms.
+  Frozen manifest SHA256 is
+  28ca77f22b6011cb94dfe750b5a9d51ef8c8833549dba87725cac470bf79332d; the
+  1222-source pin document is
+  c84d1dda2a698957dcaf9f4cc2370c6476e04d3cc5731f62cd0b4977626fbae0. Native
+  executable SHA256 is
+  64d638e3d046e5f4c0baec61063027de598415423abf2b077454d8c664b3f5b0, completion
+  receipt is 7c548a05f356b5b6e869eecafd7c7d95b68aa67dec204623fee881b5e1e12aca,
+  profile is 01e259ef99c753dbbabcd6586e5f5fb71395bfb257833c348767ec644adca477,
+  and final descriptor is
+  afaa7f00fb13482c2b4961492a02b61b396f4b2f437d6b015523fddc0347f1ae. Root reads
+  thirty equal component comparisons and thirty-one terminal-zero executions,
+  without promoting component scope to whole-runtime acceptance.
+
+  The unchanged positive probe exits 1 in 47.908s. Its actual installed native
+  bytes match that build; native exits 2 at 30031.245ms with renderer owner
+  deadline expired. Generation receipt revalidation records 29 completed calls
+  taking 20972997us; five prefix authority callbacks take 7771723us. These
+  totals overlap. The invocation journal records completed prefix, envelope and
+  pointer, then completed goal-ac-gate and plan-transcript-finalize handlers;
+  session-log reports reconstruction/native-cleanup failure. Owner observations
+  record native_stop_postqueue_validated, publication_original_reserved and
+  publication_retained, without publication_writer_retained. Failure lies after
+  reservation and before writer acquisition returns; the observation cannot
+  distinguish immediate deadline refusal, BeforeWriter authority or incomplete
+  acquisition. No turn or publication marker exists. The source SQLite bytes
+  retain eff667b1cbe750018030f79e81869928011a8265d26b65387eb78aa4d7f0749f.
+
+  This run leaves owner87541 live and its socket present. A read-only correlated
+  status request returns transcriptDatabaseOpenAttempts:0, present:true,
+  phase:acquiring, retained:true and resident store relay reader closed. The
+  durable original operation is unknown after accepted reservation; this is not
+  the pre-reservation cancellation case. Root retains its recovery obligation
+  and has sent no service signal or journal mutation. Concrete artifacts live in
+  production-stop-06-positive-01, production-stop-06-positive-execution-01,
+  production-stop-06-retained-status-01.json and
+  production-stop-06-positive-root-inspection-01.json. The latter joins
+  installed bytes, original deadline, raw diagnostic, actual session files and
+  owner state. Prefix callback execution is observed for this exact private
+  image. Ordinary consumption, release, production deadline compliance and
+  machine adoption fail or remain unverified. Parent acceptance and selected
+  machine remain unchanged.
+
+- E358: Main consolidates adjacent predispatch selected-readset and eligible
+  checks. EligibleStop already owns that same immutable selected readset and
+  brackets profile validation with full generation/local-readset checks; pure
+  dispatch encoding follows without an intervening exchange or effect. The
+  unsupported stock and custom/inactive paths retain their standalone checks.
+  The first combined original_stop_main command exceeds its 110s supervisor
+  allowance after the six-case hostile test reports ok and during the positive
+  test. Preserve that exit -15, timeout and empty observed residue in
+  stop-predispatch-original-01. The separately selected positive test exits 0 in
+  94.044s, with six original-capture/compatibility cases, unchanged source/input
+  pins and empty observed residue, under stop-predispatch-original-positive-01.
+  These fixtures do not construct successful native Stop eligibility; they
+  establish the retained fallback behavior only. Root owns fresh exact-image
+  execution of the consolidated eligible branch and cannot claim a speedup from
+  these tests. Read-only verifier inspection finds hardware SHA256 already
+  selected in the fresh06 AArch64 binary; no compiler feature change is
+  justified by that evidence. Verification phase costs and retained-operation
+  recovery remain root-owned work before another cutover claim.
+
+- E359: Request-owned generation diagnostics separate opening identities, full
+  selection verification, closing identities, member hashing and
+  inventory/modes. Fixed-size counters retain completed and failed phase calls,
+  elapsed time, actual path/FD metadata attempts, hash attempts and bytes
+  supplied to SHA256. Initial generation loading, ordinary member lookups and
+  resident-owner NativePeer scans remain excluded: these are frontend receipt
+  totals. Phase times are inclusive; member hashing includes confinement and
+  authenticated reads, so it is not a measurement of compression alone. No
+  authority check, cancellation checkpoint, deadline, hash or inventory
+  requirement is removed.
+
+  Supervised verification-phase-native-01 executes all31 native_generation
+  tests, exit0 in11.321s. Actual success artifact records two passes,2566 hashed
+  bytes against1283 expected per pass,20 hash calls,162 path metadata calls
+  and40 FD metadata calls. The entry-refusal artifact records one failed opening
+  identity phase and unchanged later phases; its metadata control counts two
+  actual syscall attempts and excludes pre-call cancellation. The inventory
+  mutation records Native runtime mode mismatch: launcher.py after1283 newly
+  hashed bytes, with failed inventory and selection phases and no closing sweep.
+  Failed-capture diagnostics retain three hash attempts but only687 hashed
+  bytes, excluding the engine chunk refused before compression. These synthetic
+  artifacts are under verification-phase-native-01/generation-artifacts.
+  verification-phase-progress-01 executes the one bounded progress-output test,
+  exit0 in0.237s. verification-phase-feature-off-01 checks the feature-disabled
+  build, exit0 in3.454s. All source/tool pins remain unchanged and observed
+  groups are empty. verification-phase-installed-01 exits0 but selects zero
+  tests; it supplies no behavioral coverage. Compiler warnings remain visible in
+  raw logs.
+
+  The diagnostics do not establish production cost, a speedup, successful native
+  eligibility or publication. Fresh06's live retained owner and durable Unknown
+  remain root-owned; process containment must not be described as operation
+  recovery. Root must inspect real-image phase measurements before attributing
+  the remaining deadline failure and preserve the original30000ms request bound.
+
+- E360: Root contains the owned fresh06 fixture process without settling its
+  operation. Live libproc identity matches PID87541, UID501, original start
+  1792847592.342745 and the pinned private executable64d638e3; lsof names the
+  same executable, fixture outputs, socket and custody locks. A fresh process
+  tree/group observation contains only that owner. Root registers a kqueue exit
+  observation, rechecks identity and sends SIGTERM to that PID only. The bounded
+  script exits0 and observes NOTE_EXIT, absent process identity, no related
+  processes, socket connection refused errno61 and an acquirable owner lock.
+  Every retained custody file and source SQLite hash remains unchanged. The
+  socket pathname and fixture stay preserved; the operation remains accepted /
+  Unknown. No journal mutation, consumption acknowledgement or replay occurs.
+
+  production-stop-06-containment-01/execution.json retains before/after
+  identity, hashes and observations; before-lsof.txt retains descriptors.
+  attempt-01.json preserves the first script's exit1 before signaling: Python
+  kqueue lacks the attempted context-manager API. The corrected script closes
+  the queue explicitly. Rechecked process identity and kqueue observation bound
+  this owned cleanup; they are not an atomic PID-addressed signal primitive or
+  proof about arbitrary escaped processes. Process containment removes this
+  fixture's live-process hold, not the durable Unknown recovery obligation or
+  production failure. A fresh isolated scenario may exercise the changed
+  candidate; this retained operation must not be replayed. Root retains the
+  missing cooperative quiescence and applicable unknown-write recovery evidence
+  through cutover acceptance. E361 clarifies that durable fenced Unknown does
+  not require an invented terminal or automatic settlement.
+
+- E361: Fresh07 executes clean57ad2b70 with diagnostics820b8c8f and consolidated
+  predispatchb2128e50. Frozen manifest074e8aba and1222-source pins3bbb52f6
+  retain the same helpers, tools and unchanged probe02. All11 stages exit0 with
+  unchanged TypeScript/native pins and empty observed groups; native build takes
+  121.363s under its existing allowance. Native executable is7469328 bytes,
+  SHA25614b79473c2c049c7e6c1f69ec0a6fae9a63b1011eef2c281717fbbe463f5e5f0.
+  Completion receipt
+  isbf325bfa5d4011bf717c7f940721ab9585a3d67144c9b09f1aa5c829e4e1f836; descriptor
+  ise935e878b6953df005ef074bfe599928881f5992a3fbd12e7758c19bede16806. Root
+  checks30 equal component rows with matching hashes and31 executions with
+  exit0, null signal/error. These component observations remain controlled
+  scope.
+
+  The unchanged positive probe exits1 in48.459s; original native exits2 at
+  30034.183ms without signal/watchdog. Prefix, envelope and pointer complete;
+  reservation occurs at27949ms, versus29264ms in fresh06. Neither observation is
+  a latency distribution. No turn or publication marker exists. Frontend receipt
+  diagnostics record29 calls/20.785528s,29 opening identity phases/0.881139s, 28
+  closing phases/0.844515s,29 selection phases/19.059843s,29 member phases/
+  15.405265s and28 inventory phases/1.844702s. One member/selection phase fails.
+  There are2191685 path metadata attempts,343876 FD metadata attempts,171938
+  hash attempts and4566595342 hashed bytes. Times overlap; member time includes
+  confinement, metadata and reads, and owner scans are excluded. The result
+  prioritizes repeated member verification cost, not a proved SHA bottleneck.
+
+  Correlated status retains original80224-1792850127351838000, zero transcript
+  database open attempts, phaseacquiring and a relay/deadline error. Actual
+  durable operation01103126 remains accepted/unknown with a matching body
+  checksum. The source database remains
+  eff667b1cbe750018030f79e81869928011a8265d26b65387eb78aa4d7f0749f. Root
+  contains owner80220 using the E360 procedure: exact start1792850127.323678,
+  executable/home/descriptor checks, single-PID SIGTERM and kqueue exit; script
+  exits0, process/group absent, socket refused61, owner lock acquirable, custody
+  and database hashes unchanged. Socket pathname and durable Unknown remain.
+  Artifacts: fresh-stop-profile-production-07/root-stage-execution.json,
+  production-stop-07-positive-execution-01, production-stop-07-positive-01,
+  production-stop-07-retained-status-01.json, production-stop-07-containment-01
+  and production-stop-07-positive-root-inspection-01.json.
+
+  Architecture193–207 and277–288 permit durable fenced Unknown across idle exit
+  or crash; automatic settlement of every Unknown is not required. Quiescence
+  must preserve durable fences and lose no live work. Unknown partial-write
+  recovery requires its own evidence only where that recovery is claimed; do not
+  invent a terminal to release capacity. Root owns conservative idle retirement
+  of resource-free durable Unknown and a measured member-verification repair.
+  E359 review checks all110 crate pins and raw artifacts without demonstrating a
+  semantic regression; it supplies no acceptance. No production completion,
+  native workload fairness, Python retirement or machine adoption is earned.
+
+- E362: Member verification shares one no-follow parent descriptor per
+  consecutive native-manifest parent group and one lazy64KiB read buffer. Exact
+  patch285ff438 applies to clean4b90c110. Every member retains full hashing,
+  named-before/opened-FD/post-read-FD/named-after comparisons and the original
+  deadline; each group closes with held-parent and complete root-to-parent
+  metadata comparisons before switching groups or returning success. Legacy
+  manifests retain their prior traversal. No persistent cache, omitted
+  inventory, expanded deadline or parent-descriptor array is introduced.
+
+  Pinned Cargo execution member-reader-native-01 exits0 in12.869s with36 native
+  generation checks. member-reader-consumers-01 exits0 in6.897s with180 binary
+  checks, including those36 and selection/Stop/SQLite admission consumers.
+  member-reader-feature-off-01 compiles without default features, exit0
+  in3.308s; it executes no tests. All three retain unchanged source/tool pins
+  and empty observed groups. Compiler warnings remain; these are not strict
+  Clippy results. Raw commands, logs and fixture trees live under
+  publication-integration with those labels. Standalone fixture77362-23 hashes
+  exactly131872 expected bytes across10 calls, allocates one scratch buffer and
+  closes the parent FD. Fixture18 completes all8 member hashes then rejects a
+  replaced/restored ancestor before inventory, with the leaf unchanged and no
+  outer GenerationReceipt. Fixture24 refuses before reading the next group;
+  fixtures19/20 retain cancellation and original-expiry refusals with closed
+  FDs; fixtures21/22 reject parent symlink and file replacement. These are
+  synthetic filesystem controls, not installed performance or publication proof.
+  The fresh07 inventory predicts38991 fewer metadata operations per successful
+  pass; elapsed benefit remains unmeasured.
+
+  The separate idle-retirement proposal remains unapplied: source review finds
+  repeated non-demand probes can reset the actor's relative idle wait and starve
+  warm-backend retirement. Root owns the correction, repeated-probe and
+  multi-actor-abort checks, committed-candidate review and fresh-image
+  execution. The baseline owner suite exits0 with27 checks in1.113s under
+  idle-retirement-owner-baseline-01; it does not exercise the proposed barrier.
+  Parent acceptance, production completion and machine selection are unchanged.
+
+- E363: Resource-free idle retirement uses one serialized actor/registry
+  barrier. Actors refuse pending work, live backend/writer custody, queued
+  effects and any fence other than exact durable Unknown. Retained native
+  originals must match their anchored request bytes, identity and registration;
+  actor and registry record sets agree before commit. Committed actors exit
+  without settling Unknown; the listener drains finished actors before releasing
+  owner custody. Absolute actor idle expiry prevents non-demand probes from
+  postponing ordinary warm-backend cleanup. Unsupported retained SQL/project
+  resources remain quarantined; this change grants no automatic recovery.
+
+  Pinned Cargo idle-retirement-coordinator-01 exits0 in5.794s. Its actual
+  coordinator first refuses a held writer FD, then commits after the test
+  releases that resource. The actor drops its heavy record and shared operation
+  permit. unknown-before.json and unknown-after.json are byte-identical,
+  SHAb5adbeab2c544206056fca3b4329c72ee2820f4cf46df14507f75dc5cecf6069; source
+  database bytes are unchanged. coordinator-stages.jsonl records refusal, commit
+  and actor completion. This controlled native-shaped original does not execute
+  actual native admission or reproduce the production timeout producer.
+
+  idle-retirement-warm-native-01 explicitly runs the ignored warm control, exit0
+  in4.226s. A standalone Rust test child occupies the worker's existing
+  compatibility launch seam; .py-named files are inert markers, no interpreter
+  executes. Real worker34758/backend34759 produce cleanup with direct-child
+  reap, both output EOFs and worker exit0. Eleven probes include ten resource
+  refusals; budget0 and writer-lock reacquisition precede mailbox closure at
+  about1.09s. Temporary probe-triggered timer renewal makes the same check fail:
+  idle-retirement-warm-timer-mutant-01 Cargo101/10.028s retains38 refusals
+  through 4.04s and the specific starvation assertion, followed by owned
+  cleanup. Exact candidate bytes are restored; idle-retirement-warm-restored-01
+  exits0 in6.859s with worker44226/backend44227 cleanup and eleven probes. These
+  controls exercise lifecycle, not renderer semantics or full image admission.
+
+  idle-retirement-store-final-01 exits0 in5.440s with25 executed checks and two
+  ignored cases; the warm case's explicit executions above are separate.
+  idle-retirement-host-final-01 exits0 in4.266s and records two natural host
+  exits, unchanged Unknown and restart fencing. It seeds the journal without a
+  heavy StoreRecord and cannot alone qualify E361's failure path. Earlier
+  idle-retirement-owner-regression-01 and idle-retirement-journal-01 exit0 with
+  30 actor/coordinator and42 journal checks. Feature-off compilation exits0 in
+  idle-retirement-feature-off-01; compiler warnings remain. Retained execution
+  receipts and stdout/stderr under publication-integration establish commands,
+  before/after source/tool pins and empty observed groups for these runs.
+
+  The superseded Python-bearing warm command was refused before execution by the
+  installed foreign-repository write guard. No runtime/guard override or
+  alternate execution of that command occurred. The native-only fixture is a
+  changed test dependency. Root owns committed-candidate review, fresh08 exact
+  image execution and the original30s publication/ordinary-consumption/release
+  chain. No parent criterion or production Python row is completed by E363.
+
+- E364: Fresh08 freezes clean106c94f9583317d652801c2e131fbc48a86ad041, including
+  E362 traversal reuse and E363 idle retirement. Independent read-only review
+  finds no demonstrated idle regression; root grounds listener admission,
+  connection-permit lifetime and one-way barrier decisions against source. Final
+  coordinator/warm/restored/store/host receipts match all112 crate files;
+  earlier regression receipts differ only in subsequent test changes. Gates pass
+  all five configured checks over151 branch/staged paths; doctor reports
+  0E/4W/5I. These do not supply parent acceptance.
+
+  fresh-stop-profile-production-08 retains1224 source blobs/modes, manifest
+  SHAbf6df2be52b86e3a0a5aaf774c051d6c755fa7552fbcfe4c5b5d550abd2bc4c8 and
+  archiveSHA25cb70fdff1bb5e80784525a16f5f96bcfe6a08ce616f7b2261e2fe727102da1.
+  All eleven stages exit0 with unchanged TypeScript/native pins and empty
+  observed groups. Native build takes121.611s. Qualification retains30 equal
+  reference/candidate comparisons and31 execution receipts with exit0. The final
+  profile-bearing
+  descriptorSHA98a9fe0a6afeaea9795ca6c338a902591d696cca2ac230ce235c212335ffe72c
+  retains timeout30000ms. A root receipt-printing attempt used the wrong
+  completion-reference key and failed before inspection; corrected read verifies
+  the actual path/size/SHA. No runtime retry follows that reporting error.
+
+  The unchanged probe02 positive scenario exits1 in43.230s under
+  production-stop-08-positive-execution-01. Actual native47657 exits2
+  in25154.698ms, without watchdog or signal, at
+  `Selection dependency changed: exists` for the fixture project/.caws. All29
+  frontend generation verifications complete; their aggregate time is16.432s,
+  member phase10.956s and path metadata count 1056615. These are one failed
+  run's overlapping phase observations, not a workload speedup distribution or
+  complete end-to-end result.
+
+  Owner47656 records postqueue validation23295ms, original reservation23308ms
+  and retained uncertainty25145ms. Writer bootstrap creates the zero-byte
+  .render-writer-provisioned marker and .render-writer-custody directory; their
+  timestamps coincide with changed .caws directory metadata. Native Exists
+  retains full leaf/followed stamps although the typed selector consumes boolean
+  presence plus separate confinement identity. Root owns a bounded
+  present-directory Exists projection repair and paired authority falsifiers;
+  explicit stat/list/content, absence and identity checks must remain strict.
+
+  The actual failure path naturally exits the owner at26188ms, exit0, with no
+  service signals; socket is absent, ps-p47656 returns1/no row and the custody
+  lock is acquirable. The accepted Unknown checksum verifies and remains fenced.
+  No turn-001.json or publication marker exists. Source database hash remains
+  eff667b1cbe750018030f79e81869928011a8265d26b65387eb78aa4d7f0749f; unchanged
+  bytes do not prove no reads, and no post-exit owner RPC counter was collected.
+  Root inspection is production-stop-08-positive-root-inspection-01.json,
+  SHAe6b0ebda97c4abf33ef5b5f0bf122929b6bbb51026519c586530999e9514a753. Preserve
+  this fixture's partial writer provisioning and Unknown; do not replay or reset
+  it. Successful publication, ordinary consumption, fairness and
+  selected-machine adoption remain open.
+
+- E365: Present-directory Exists retains explicit native device/inode/type/mode/
+  uid/gid in both lexical and followed evidence. Directory child
+  size/timestamps/ link count are not existence dependencies. Symlink leaves
+  retain full stamps, followed directory identity and resolved/lexical anchors.
+  File Exists, absence/errors, explicit stat/lstat/list/read and generation
+  verification keep their prior dependencies. The wire reply remains boolean; no
+  receipt refresh, callback removal, deadline extension or path-specific
+  exception is introduced.
+
+  The tests-first exists-writer-baseline-01 command executes actual public
+  writer acquisition against the original native receipt and exits101 in5.806s:
+  `Selection dependency changed: exists`, effectCount0. Its retained
+  selection-exists-directory-writer-bootstrap.json shows identical parent
+  identity, changed full metadata and actual writer marker/custody files.
+  exists-directory-final-01 exits0 with33 selection cases in8.946s; fixture23's
+  artifact records sameParentIdentity:true, fullMetadataChanged:true,
+  error:null, effectCount1 and a caws.render.writer.provisioned.v1 marker.
+  Twelve hostile artifacts retain effectCount0 for replacement, disappearance,
+  POSIX mode, symlink/file substitution, absence appearance, strict
+  metadata/inventory, changed policy, negative child and regular-file Exists.
+  The symlink-target artifact retains one earlier child-churn effect and no
+  second effect after target replacement.
+
+  exists-directory-identity-mutant-01 replaces followed directory UID with0 and
+  exits101 in3.870s at the exact identity assertion (actual0, expected501), not
+  compilation. The original file
+  SHA6d54917f3932cb0d881607ae3089813f484b9c3058035c034c4f1d87e4bfa5b5 is
+  restored exactly. exists-directory-bin-restored-01 exits0 with184 binary cases
+  in8.302s; exists-directory-feature-off-01 exits0 in1.929s and executes no
+  tests. Both final receipts match all112 current crate files; every attempt
+  retains unchanged source/tool pins and empty observed process groups. Raw
+  execution.json, stdout/stderr and generation-artifacts remain under the named
+  publication-integration directories. Compiler dead-code warnings remain.
+
+  Public writer acquisition followed by original-receipt validation is a bounded
+  component seam, not the installed WriterLocked callback join. Fresh09 must
+  qualify the clean combined candidate and exercise the unchanged probe02 with
+  its original30000ms deadline in a new fixture. Preserve fresh08's partial
+  provisioning and fenced Unknown. Publication, ordinary consumption/release,
+  resident fairness and selected-machine adoption remain unverified; no parent
+  criterion or Python-retirement row is completed by this repair.
+
+- E366: Fresh09 freezes clean ec496156f2f93c4ee6be97d5fdbcb0b80e712fb5.
+  Same-provider committed review finds no demonstrated directory-identity
+  defect; root grounds the operation dispatch and consumer requirements.
+  Identity claims cover mode/uid/gid, not untested ACL behavior. The broader
+  exists-directory-landing-lib-01 run exits0 with443 cases and2 ignored
+  in55.840s; ignored cases require explicit warm-backend and prepared-image
+  environments. This is not an executed fairness or installed-upgrade check.
+
+  Manifest SHA78ff5d8298834ce02a0b004e919d45131ed1f67d8dcdb1ba1795a7da9544dcda
+  binds1224 source blobs/modes. All eleven image stages exit0 with unchanged
+  TypeScript/native pins and empty observed process groups. Native build takes
+  123.769s. Root compares all30 actual reference/candidate documents; the
+  profile remains controlled-components with explicit remaining joins.
+  Descriptor SHA59a6da2bef8ab3261ba2c6524f03b3979db119073cd4a5b5cbd0195e991629f6
+  retains timeout30000ms; build completion
+  SHAffcebf443d2d249339921d68ceec36596832000d54642553dcc7d644dcebf5de is
+  verified. No machine adoption follows these checks.
+
+  production-stop-09-positive-execution-01 exits1 in48.238s. Native12093 exits2
+  in30043.687ms at the original owner deadline, without watchdog or signal.
+  All36 frontend generation verifications complete in20.297s cumulatively and
+  hash5843839932 bytes. Member verification takes13.562s inclusively; it
+  includes confinement/metadata/reads and does not measure hashing alone.
+  Owner-side verification is outside these counters. No performance distribution
+  is claimed.
+
+  Actual owner12092 observes postqueue validation23396ms, original reservation
+  23409ms, writer retention27178ms and SQL CLOSED28480ms. Artifact writes
+  produce session-index.json, store-projection.jsonl and turn-001.json,
+  including the expected user/reply and original retained context. No
+  .session-publication.json exists; no marker-committed, consumed-durable or
+  heavy-release stage exists. These are uncertain partial outputs, not a
+  committed publication. The actual installed writer boundary passes E364's
+  self-invalidation point.
+
+  One bounded observational status request, with unchanged before/after process
+  identity, returns openAttempts1 from baseline0, two copied/delivered rows,
+  exhausted acquisition and successful unregister/finalize/rollback/close. It
+  retains the publication with Original monotonic deadline expired. The status
+  phase named settled refers to acquisition; it does not establish publication
+  release. The query briefly contributes active demand and is not polled.
+  production-stop-09-status-01.json retains the raw frame and response. Root
+  inspection production-stop-09-positive-root-inspection-01.json,
+  SHA889f9ea52560bbc3aa4023aeeba6803d364391500de376f51e108bdb88f4fb5c, confirms
+  both custody locks held and the accepted Unknown body checksum
+  2b8a6f0c4801b08828806d22c7805f666cb0b198660351c399fb699fd4d6179b. Database
+  bytes retain
+  SHAeff667b1cbe750018030f79e81869928011a8265d26b65387eb78aa4d7f0749f.
+
+  External exact-instance containment executes once in0.278s, exit0. libproc
+  captures birth1792857014.445430, uid501, pgid11544 and the exact image; lsof
+  verifies both held custody locks, and kqueue subscribes before the sole
+  SIGTERM to12092. The exit event, libproc absence, empty related census,
+  refused socket and reacquirable machine/writer locks are retained under
+  production-stop-09-containment-proposal-01/run. All31 inventory entries remain
+  equal, including both custody trees, partial session files, provisioning
+  marker, policy, config, pointer and database. Publication marker remains
+  absent; the stale refused socket path is preserved. Receipt
+  SHAaf4cad984a2e9d715ef0547fed794225e41682bbe6e304946b152667e3911f3e and fresh
+  ps exit1/no row corroborate absence. This is external containment, not
+  production cleanup, parent-wait reaping, recovery, settlement or replay proof.
+  A worker's shell authoring attempt was refused before execution because its
+  interpreter-path text was classified as a foreign-repository write. Root used
+  a direct file edit confined to the external artifact directory; no guard,
+  identity or interpreter file was changed. The rejected attempt is not a run.
+
+  Root owns the separate main-based native-stop-source-landing lane under
+  CAWS-NATIVE-STOP-SOURCE-LANDING-001. Its implementation matches reviewed
+  ec496156; source acceptance requires main blob identity and preservation of
+  existing lanes and the selected pointer. Direct teardown of
+  native-runtime-modernization would delete a base ref used by five foreign
+  lanes: --no-close preserves its spec, not its branch. Preserve those lanes,
+  source references and selected machine pointer. Source landing remains
+  separate from the failed production outcome and both active parent
+  obligations.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -9146,20 +10107,54 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                         | Next decisive check                                                                                                                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                            | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.                                                                                |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; root owns the separate registration/profile/dispatch integration and fresh-image execution | Connect separately qualified SQL/renderer profiles, original capture and completed prefix to the maintained store port; bind the source catalog to native captured inputs, preserve the original deadline and revalidate after queueing before reservation/writer/SQL through ordinary publication/reader/release |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                              | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                                             |
+E357 establishes actual prefix completion followed by expiry after original
+reservation. Root owns verification-cost reduction, the retained owner's
+recovery and another unchanged positive scenario before queued
+mutation/reclamation and residency work. E358 consolidates adjacent predispatch
+checks; E366 retains the later production execution and its failed deadline. The
+coherent source checkpoint can land with its hostile controls and explicit
+failed-runtime evidence. Build/profile success cannot qualify it as a usable
+runtime replacement. E359 supplies tested frontend phase instrumentation.
+E360/E361 contain both retained fixture processes while preserving Unknown.
+Fresh07 measures repeated member verification as the largest observed frontend
+phase and fails the original deadline. Root owns that cost repair and
+conservative idle retirement of resource-free durable Unknown. Preserve fenced
+uncertainty; automatic settlement of every Unknown is not a requirement.
+
+E362 implements bounded member traversal reuse with hostile filesystem and
+consumer checks; committed-candidate review finds no demonstrated regression
+within that inspected scope. E363 integrates resource-free Unknown retirement
+and tests probe starvation with a failing mutation and restored positive
+control. E364's fresh08 producer reaches natural resource-free owner exit while
+preserving Unknown, but first writer provisioning invalidates the .caws
+directory Exists dependency before publication. Root owns an operation-specific
+native directory existence repair, strict authority falsifiers and a new
+exact-image replay. E365 supplies the repair, failing baseline, ownership-loss
+mutation and restored controls. E366's fresh09 passes actual writer retention
+and SQL close but expires during publication with partial files and no marker.
+Its private owner is externally contained while uncertainty remains intact. Root
+owns coherent source landing and the deadline cost repair. Measure pure
+manifest-plan construction before choosing reuse of derived paths/directories;
+do not cache successful filesystem/hash observations or remove authority and
+durability checks. The successful path must establish publication, ordinary
+consumption and release within30s; neither natural failure cleanup nor
+build/profile success supplies it.
+
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                             | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.                  |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; E346 connects native and engine production sources; root owns fresh-image execution | Execute the fresh exact image through original capture, completed prefix, SQL CLOSED, publication, ordinary reader, CONSUMED and release; pair with queued selection mutation and zero transcript-database open attempts on the same isolated owner |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                               | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload               |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
 E280 bounded fifth warm probe completes, retaining earlier failed attempts and
 source-grounded oracle/input corrections. E282 demonstrates sequential
 reclamation across 258 originals on one owner; it does not establish concurrent
-admission or fairness. The SQL adapter is integrated into the source-landing
-candidate, while its production observation inputs and selector remain unwired.
-Candidate `29555bc8` builds successfully in
+admission or fairness. E346 connects the SQL adapter to native observation
+inputs and profile selectors in the owned source candidate. E366 records actual
+combined-image execution through partial publication, with successful ordinary
+consumption and release unverified. Candidate `29555bc8` builds successfully in
 `publication-integration/source-publication-build-01` (exit 0, 6.660s);
 `source-publication-tests-01` executes 113 checks across the publication
 adapter, store client, warm-owner qualifier and CI archive contract (exit 0,

@@ -525,10 +525,43 @@ test('the stock cache prefix is awaited before an early guard refusal; unavailab
       });
       const completed = await second.dispatch();
       expect(completed.nativeResult.exitCode).toBe(2);
-      // The guard's corrective instructions include the fixture's absolute paths.
-      expect(
-        Buffer.from(completed.nativeResult.stdout).toString().split(fresh.root).join('$FIXTURE')
-      ).toBe(Buffer.from(first.nativeResult.stdout).toString().split(f.root).join('$FIXTURE'));
+      // Each machine home is embedded in its OpenCode plugin, so independent
+      // fixtures have distinct content-addressed generations. Verify the exact
+      // selected reset script before comparing the complete refusal semantics.
+      const refusalFromSelectedGeneration = (fixture, ownRequest, result) => {
+        const selected = fixture.rows(ownRequest).find((row) => row.stage === 'invocation_started');
+        expect(ownRequest.runtimeDigest).toBe(fixture.digest);
+        expect(selected.runtime_digest).toBe(fixture.digest);
+        expect(fixture.runtime).toBe(path.join(fixture.home, 'lib/runtimes', fixture.digest));
+        expect(
+          selected.selected_handlers.find((handler) => handler.name === 'block-dangerous.sh').path
+        ).toBe(path.join(fixture.runtime, 'block-dangerous.sh'));
+        expect(
+          JSON.parse(fs.readFileSync(path.join(fixture.home, 'state/adapter-runtime.json'))).digest
+        ).toBe(fixture.digest);
+        const manifestBytes = fs.readFileSync(path.join(fixture.runtime, 'manifest.json'));
+        expect(crypto.createHash('sha256').update(manifestBytes).digest('hex')).toBe(
+          fixture.digest
+        );
+        const manifest = JSON.parse(manifestBytes);
+        const resetScript = path.join(fixture.runtime, 'reset-danger-latch.sh');
+        expect(crypto.createHash('sha256').update(fs.readFileSync(resetScript)).digest('hex')).toBe(
+          manifest['reset-danger-latch.sh']
+        );
+        const stdout = Buffer.from(result.stdout).toString();
+        expect(JSON.parse(stdout).reason).toContain(
+          'bash ' + resetScript + ' --session cache-fixture --reason '
+        );
+        expect(stdout.split(resetScript)).toHaveLength(2);
+        return stdout.replace(resetScript, '$RESET_SCRIPT').split(fixture.root).join('$FIXTURE');
+      };
+      const firstRefusal = refusalFromSelectedGeneration(f, request, first.nativeResult);
+      const secondRefusal = refusalFromSelectedGeneration(
+        fresh,
+        secondRequest,
+        completed.nativeResult
+      );
+      expect(secondRefusal).toBe(firstRefusal);
       expect(Buffer.from(completed.nativeResult.stderr).toString()).toContain(
         'fixture pointer publication unavailable'
       );

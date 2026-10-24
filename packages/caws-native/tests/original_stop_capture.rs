@@ -206,6 +206,28 @@ fn capture<'a>(
 ) -> OriginalStopCapture<'a> {
     OriginalStopCapture::capture(input(f, env, payload), &executor(), deadline, || Ok(())).unwrap()
 }
+#[cfg(feature = "sqlite-store")]
+fn native_store_invocation<'a>(
+    captured: &'a OriginalStopCapture<'_>,
+    project_digest: &'a str,
+) -> caws_native::transcript_store_wire::Invocation<'a> {
+    caws_native::transcript_store_wire::Invocation {
+        id: captured.id(),
+        runtime_digest: captured.runtime_digest(),
+        original_payload: captured.original_payload(),
+        surface: captured.surface(),
+        event: "stop",
+        configuration: "system",
+        ready_active: true,
+        ready_project_digest: Some(project_digest),
+        ready_session_id: Some("s"),
+        dispatched: true,
+        // Registration only: this inert path has no qualified-database claim.
+        database: Some("/fixture-only-native-source.sqlite"),
+        caller_cwd: captured.caller_cwd(),
+        caller_environment: captured.caller_environment(),
+    }
+}
 fn decision() -> Vec<u8> {
     bytes(
         &json!({"schema":STOP_PREFIX_DECISION_SCHEMA,"id":ID,"runtimeDigest":DIGEST,"token":TOKEN,"action":"capture","createdUnits":[111,108,100]}),
@@ -324,6 +346,57 @@ fn real_git_capture_and_prefix_use_original_payload_environment_project_and_cloc
             assert_eq!(completed.canonical_root(), f.root.to_str().unwrap());
             assert!(std::ptr::eq(completed.deadline(), &deadline));
             completed.check().unwrap();
+            assert_eq!(completed.correlation().id(), ID);
+            assert_eq!(completed.correlation().runtime_digest(), DIGEST);
+            assert_eq!(completed.correlation().token(), TOKEN);
+            #[cfg(feature = "sqlite-store")]
+            {
+                use caws_native::{
+                    render_owner::NativeStopRegistration, transcript_store_wire as store,
+                };
+                let request = serde_json::to_vec(&json!({"schema":store::REQUEST_SCHEMA,
+                    "id":ID,"runtimeDigest":DIGEST,"token":"independent-store-token",
+                    "canonicalRoot":f.root,"profile":store::PROFILE}))
+                .unwrap();
+                assert!(
+                    NativeStopRegistration::capture(
+                        &request,
+                        native_store_invocation(&captured, &project_digest),
+                        &captured,
+                        &completed
+                    )
+                    .is_ok()
+                );
+                let mut foreign = native_store_invocation(&captured, &project_digest);
+                foreign.id = "another-original";
+                let error =
+                    NativeStopRegistration::capture(&request, foreign, &captured, &completed)
+                        .err()
+                        .expect("foreign original id must refuse registration");
+                assert_eq!(
+                    error,
+                    "native Stop registration requires this original completed prefix"
+                );
+                let mut foreign_request: Value = serde_json::from_slice(&request).unwrap();
+                foreign_request["canonicalRoot"] = json!(f.base);
+                let error = NativeStopRegistration::capture(
+                    &serde_json::to_vec(&foreign_request).unwrap(),
+                    native_store_invocation(&captured, &project_digest),
+                    &captured,
+                    &completed,
+                )
+                .err()
+                .expect("foreign engine root must refuse registration");
+                assert_eq!(error, "store request binding mismatch");
+                f.record("native-registration", json!({
+                    "scope":"Actual original capture and completed prefix; registration constructor only, no SQL profile or native store activation",
+                    "id":captured.id(),"runtimeDigest":captured.runtime_digest(),
+                    "originalDeadline":deadline.envelope(),"canonicalRoot":completed.canonical_root(),
+                    "prefixToken":completed.correlation().token(),"matchingRegistration":"accepted",
+                    "foreignOriginal":"native Stop registration requires this original completed prefix",
+                    "foreignProjectError":error
+                }));
+            }
             assert!(
                 captured
                     .prefix_owner(f.invocation(&payload, &project_digest))

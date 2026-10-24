@@ -67,7 +67,7 @@ fn request() -> wire::RenderRequest {
     )
     .unwrap()
 }
-fn offered() -> Offer {
+pub(super) fn offered() -> Offer {
     let selection = serde_json::json!({"canonicalProject":"/project","surface":"codex","event":"Stop",
         "configuration":"full","runtimeDigest":"a".repeat(64),"selectedIndex":0,"handlers":[{
             "path":"/project/.caws/hooks/session-log.sh","sha256":"b".repeat(64),"entry":"session-log.sh",
@@ -1514,4 +1514,194 @@ fn stale_queue_and_source_retirement_never_turn_unattempted_effect_into_running_
     ));
     assert!(!journal.has_unknown(expires()).unwrap());
     assert!(journal.queued_request_ids(expires()).unwrap().is_empty());
+}
+
+#[test]
+fn idle_barrier_timeout_and_abort_cannot_be_committed_later() {
+    let timed = IdleBarrier::new(Instant::now());
+    assert!(!timed.parked());
+    assert!(!timed.finish(true));
+    let aborted = IdleBarrier::new(expires());
+    assert!(!aborted.finish(false));
+    assert!(!aborted.parked());
+    assert!(!aborted.finish(true));
+    let committed = IdleBarrier::new(expires());
+    assert!(committed.finish(true));
+    assert!(committed.parked());
+}
+
+#[test]
+fn idle_actor_barrier_aborts_without_changing_unknown_and_commits_without_retire() {
+    let scratch = Scratch::new();
+    let c = Arc::new(config(&scratch));
+    provision(&c, expires()).unwrap();
+    let custody = journal::Custody::acquire(&custody_path(&c), expires()).unwrap();
+    let key = "a".repeat(64);
+    let mut j = journal::Journal::open(Arc::clone(&custody), &key, 8, expires()).unwrap();
+    let identity = journal::Identity {
+        request_id: "b".repeat(64),
+        argument_digest: sha(b"request"),
+        project_service_key: key.clone(),
+        source_generation: "c".repeat(64),
+        execution_image_digest: "c".repeat(64),
+    };
+    j.admit(identity.clone(), b"request", expires()).unwrap();
+    let dispatch = j
+        .begin_next(
+            &identity.source_generation,
+            &identity.execution_image_digest,
+            expires(),
+        )
+        .unwrap()
+        .unwrap();
+    let unknown = j.unknown(&dispatch, expires()).unwrap();
+    let observations = Arc::new(ObservationLog::open(&c, Instant::now()).unwrap());
+    let mut routing = Routing {
+        actors: BTreeMap::new(),
+        joins: Vec::new(),
+        config: Arc::clone(&c),
+        custody: Arc::clone(&custody),
+        budget: Arc::new(Mutex::new(Budget {
+            used: 1,
+            maximum: 2,
+        })),
+        observations,
+    };
+    let route = routing.insert(key.clone(), j, true).unwrap();
+    let barrier = IdleBarrier::new(expires());
+    let (reply, receive) = mpsc::sync_channel(1);
+    route
+        .sender
+        .try_send(Mailbox::Idle(IdleProbe {
+            barrier: Arc::clone(&barrier),
+            reply,
+        }))
+        .unwrap_or_else(|_| panic!("idle probe send"));
+    assert!(
+        receive
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .is_ok()
+    );
+    assert!(
+        !routing.joins[0].is_finished(),
+        "ready actor must stay parked until host decision"
+    );
+    assert!(!barrier.finish(false));
+    let barrier = IdleBarrier::new(expires());
+    let (reply, receive) = mpsc::sync_channel(1);
+    route
+        .sender
+        .try_send(Mailbox::Idle(IdleProbe {
+            barrier: Arc::clone(&barrier),
+            reply,
+        }))
+        .unwrap_or_else(|_| panic!("second probe send"));
+    assert!(
+        receive
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .is_ok()
+    );
+    assert!(barrier.finish(true));
+    let until = expires();
+    while !routing.joins[0].is_finished() && Instant::now() < until {
+        thread::sleep(TICK);
+    }
+    assert!(routing.joins[0].is_finished());
+    routing.joins.pop().unwrap().join().unwrap();
+    let j = journal::Journal::open(custody, &key, 8, expires()).unwrap();
+    assert_eq!(
+        j.lookup(&identity.request_id, expires()).unwrap(),
+        Some(unknown)
+    );
+    assert!(j.has_unknown(expires()).unwrap());
+}
+
+#[test]
+fn idle_multi_actor_refusal_unparks_ready_actor_and_preserves_subsequent_mailbox_progress() {
+    let scratch = Scratch::new();
+    let c = Arc::new(config(&scratch));
+    provision(&c, expires()).unwrap();
+    let custody = journal::Custody::acquire(&custody_path(&c), expires()).unwrap();
+    let observations = Arc::new(ObservationLog::open(&c, Instant::now()).unwrap());
+    let mut routing = Routing {
+        actors: BTreeMap::new(),
+        joins: Vec::new(),
+        config: Arc::clone(&c),
+        custody: Arc::clone(&custody),
+        budget: Arc::new(Mutex::new(Budget {
+            used: 0,
+            maximum: 2,
+        })),
+        observations,
+    };
+    let first =
+        journal::Journal::open(Arc::clone(&custody), &"a".repeat(64), 8, expires()).unwrap();
+    let second = journal::Journal::open(custody, &"b".repeat(64), 8, expires()).unwrap();
+    let ready = routing.insert("a".repeat(64), first, false).unwrap();
+    // A volatile unknown flag without a durable fence must refuse retirement.
+    let refusing = routing.insert("b".repeat(64), second, true).unwrap();
+    let barrier = IdleBarrier::new(expires());
+    let (reply, receive) = mpsc::sync_channel(1);
+    ready
+        .sender
+        .try_send(Mailbox::Idle(IdleProbe {
+            barrier: Arc::clone(&barrier),
+            reply,
+        }))
+        .unwrap_or_else(|_| panic!("first probe send"));
+    assert!(
+        receive
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .is_ok()
+    );
+    assert!(
+        !routing.joins[0].is_finished(),
+        "ready actor must remain parked"
+    );
+    let (reply, receive) = mpsc::sync_channel(1);
+    refusing
+        .sender
+        .try_send(Mailbox::Idle(IdleProbe {
+            barrier: Arc::clone(&barrier),
+            reply,
+        }))
+        .unwrap_or_else(|_| panic!("refusing probe send"));
+    assert_eq!(
+        receive
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .err()
+            .as_deref(),
+        Some("idle retirement lacks exact durable Unknown")
+    );
+    assert!(
+        !barrier.finish(true),
+        "one refusal must make shared commit impossible"
+    );
+    let next = IdleBarrier::new(expires());
+    let (reply, receive) = mpsc::sync_channel(1);
+    ready
+        .sender
+        .try_send(Mailbox::Idle(IdleProbe {
+            barrier: Arc::clone(&next),
+            reply,
+        }))
+        .unwrap_or_else(|_| panic!("subsequent probe send"));
+    assert!(
+        receive
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .is_ok(),
+        "aborted ready actor must process subsequent mailbox work"
+    );
+    assert!(!next.finish(false));
+    drop(ready);
+    drop(refusing);
+    routing.actors.clear();
+    for join in routing.joins {
+        assert!(join.join().is_ok());
+    }
 }

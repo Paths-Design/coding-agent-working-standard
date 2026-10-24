@@ -1533,6 +1533,163 @@ mod tests {
     }
 }
 
+/// Original-frontend capabilities, captured before Node and activated only by
+/// the late Render phase. This owner remains outside each temporary transport
+/// wrapper so an interrupted Git query retains its actual cleanup custody.
+#[derive(Default)]
+pub(crate) struct OriginalRenderPreparation {
+    owner: Option<caws_native::render_observation::ObservationOwner>,
+    capture_failure: Option<Box<caws_native::render_observation::Failure>>,
+}
+impl OriginalRenderPreparation {
+    fn capture(
+        original: &caws_native::session_cache_wire::OriginalStopCapture<'_>,
+        executor: &caws_native::invocation_project::SelectedExecutable,
+    ) -> Self {
+        let cwd =
+            caws_native::invocation_project::payload_string(original.original_payload(), "cwd");
+        let result = (|| {
+            let cwd = cwd?
+                .filter(|value| !value.is_empty())
+                .ok_or("Original Render requires captured absolute payload cwd")?;
+            if !std::path::Path::new(&cwd).is_absolute()
+                || std::path::Path::new(&cwd) != original.query_cwds()[0]
+            {
+                return Err("Original Render cwd differs from original queried candidate".into());
+            }
+            Ok(cwd)
+        })();
+        match result {
+            Ok(cwd) => Self::capture_inputs(
+                original.id(),
+                original.runtime_digest(),
+                original.caller_cwd(),
+                &cwd,
+                original.caller_environment(),
+                &executor.path,
+                original.deadline().expires(),
+            ),
+            Err(diagnostic) => Self {
+                owner: None,
+                capture_failure: Some(Box::new(caws_native::render_observation::Failure {
+                    category: "capture",
+                    diagnostic,
+                    git: None,
+                    calendar: None,
+                })),
+            },
+        }
+    }
+    fn capture_inputs(
+        id: &str,
+        runtime_digest: &str,
+        caller_cwd: &str,
+        cwd: &str,
+        environment: &std::collections::BTreeMap<String, String>,
+        executor: &std::path::Path,
+        expires: Instant,
+    ) -> Self {
+        use caws_native::{
+            render_context as git, render_observation as observation, renderer_calendar as calendar,
+        };
+        let cancelled = || crate::cancellation::check().is_err();
+        let result = (|| {
+            let git = git::CapturedRenderContext::capture(
+                git::OriginalInvocation {
+                    id: id.into(),
+                    runtime_digest: runtime_digest.into(),
+                    caller_cwd: caller_cwd.into(),
+                    cwd: cwd.into(),
+                    environment: environment.clone(),
+                },
+                expires,
+                &cancelled,
+            )
+            .and_then(|captured| captured.custodied(executor, &cancelled))
+            .map_err(|failure| observation::Failure {
+                category: "capture",
+                diagnostic: failure.diagnostic.clone(),
+                git: Some(failure),
+                calendar: None,
+            })?;
+            let calendar = calendar::CapturedCalendar::capture(calendar::OriginalInvocation {
+                id: id.into(),
+                runtime_digest: runtime_digest.into(),
+                deadline: expires,
+                max_queries: calendar::MAX_TOTAL_QUERIES,
+            })
+            .map_err(|failure| observation::Failure {
+                category: "calendar",
+                diagnostic: failure.to_string(),
+                git: None,
+                calendar: Some(failure),
+            })?;
+            observation::ObservationOwner::new(git, calendar, expires)
+        })();
+        match result {
+            Ok(owner) => Self {
+                owner: Some(owner),
+                capture_failure: None,
+            },
+            Err(failure) => Self {
+                owner: None,
+                capture_failure: Some(Box::new(failure)),
+            },
+        }
+    }
+    pub(crate) fn available(&self) -> bool {
+        self.owner
+            .as_ref()
+            .is_some_and(|owner| owner.failure().is_none())
+            && self.capture_failure.is_none()
+    }
+    /// Missing original ownership cannot enter a native effect operation. The
+    /// returned error is terminal after dispatch; it never requests replay.
+    pub(crate) fn with_transport<T, R>(
+        &mut self,
+        inner: &mut T,
+        cancelled: &dyn Fn() -> bool,
+        operation: impl FnOnce(&mut caws_native::render_observation::ObservationTransport<'_, T>) -> R,
+    ) -> Result<R, String>
+    where
+        T: caws_native::session_publication::Transport,
+    {
+        if !self.available() {
+            return Err("Original Render ownership unavailable; native Stop cannot publish".into());
+        }
+        let owner = self
+            .owner
+            .as_mut()
+            .ok_or("Native Stop requires original Render observations")?;
+        Ok(operation(&mut owner.transport(inner, cancelled)))
+    }
+    fn cleanup_settled(&self) -> bool {
+        self.capture_failure
+            .as_ref()
+            .is_none_or(|failure| failure.cleanup_settled())
+            && self
+                .owner
+                .as_ref()
+                .is_none_or(|owner| owner.cleanup_settled())
+    }
+    fn retry_cleanup(&mut self) -> Result<(), String> {
+        // Evaluate both: the first failed cleanup must not strand another owner.
+        let capture = self
+            .capture_failure
+            .as_mut()
+            .map_or(Ok(()), |failure| failure.retry_cleanup());
+        let owner = self
+            .owner
+            .as_mut()
+            .map_or(Ok(()), |owner| owner.retry_cleanup());
+        match (capture, owner) {
+            (Err(first), Err(second)) => Err(format!("{first}; {second}")),
+            (Err(error), _) | (_, Err(error)) => Err(error),
+            _ => Ok(()),
+        }
+    }
+}
+
 /// Optional original observation, never publication eligibility. A failed
 /// preparation remains failed while the existing compatibility route may run.
 /// Keeping this owner through native output/fallback also keeps remote custody.
@@ -1541,6 +1698,7 @@ pub struct OriginalStopPreparation<'deadline> {
     pub original: Option<caws_native::session_cache_wire::OriginalStopCapture<'deadline>>,
     pub failure: Option<Box<caws_native::session_cache_wire::OriginalStopCaptureFailure>>,
     pub refusal: Option<String>,
+    pub(crate) render: OriginalRenderPreparation,
 }
 impl<'deadline> OriginalStopPreparation<'deadline> {
     pub fn candidate(config: &Config) -> bool {
@@ -1549,10 +1707,11 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
             && config.surface == "opencode"
             && config.event == "stop"
     }
-    pub fn capture(
+    pub(crate) fn capture_with_diagnostics(
         config: &Config,
         request: &crate::protocol::Request,
         deadline: &'deadline caws_native::monotonic_deadline::MonotonicDeadline,
+        generation_receipt_revalidations: crate::native_generation::CheckTimings,
         mut phase: impl FnMut(&'static str),
     ) -> Self {
         let mut prepared = Self {
@@ -1560,6 +1719,7 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
             original: None,
             failure: None,
             refusal: None,
+            render: OriginalRenderPreparation::default(),
         };
         if !Self::candidate(config) {
             return prepared;
@@ -1580,10 +1740,11 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
             return prepared;
         }
         phase("generation-capture");
-        let generation = match crate::native_generation::GenerationReceipt::capture(
+        let generation = match crate::native_generation::GenerationReceipt::capture_with_diagnostics(
             &home,
             config,
             deadline.expires(),
+            generation_receipt_revalidations,
             || {
                 crate::cancellation::check()?;
                 deadline.check().map_err(|e| e.to_string())
@@ -1616,7 +1777,11 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
         );
         prepared.generation = Some(generation);
         match result {
-            Ok(original) => prepared.original = Some(original),
+            Ok(original) => {
+                phase("original-render-capture");
+                prepared.render = OriginalRenderPreparation::capture(&original, &executor);
+                prepared.original = Some(original);
+            }
             Err(error) => {
                 prepared.refusal = Some(error.to_string());
                 prepared.failure = Some(Box::new(error));
@@ -1625,10 +1790,16 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
         prepared
     }
     pub fn cleanup_settled(&self) -> bool {
-        self.failure.as_ref().is_none_or(|e| e.cleanup_settled())
+        self.failure.as_ref().is_none_or(|e| e.cleanup_settled()) && self.render.cleanup_settled()
     }
     pub fn retry_cleanup(&mut self) -> Result<(), String> {
-        self.failure.as_mut().map_or(Ok(()), |e| e.retry_cleanup())
+        let original = self.failure.as_mut().map_or(Ok(()), |e| e.retry_cleanup());
+        let render = self.render.retry_cleanup();
+        match (original, render) {
+            (Err(first), Err(second)) => Err(format!("{first}; {second}")),
+            (Err(error), _) | (_, Err(error)) => Err(error),
+            _ => Ok(()),
+        }
     }
 }
 
@@ -1661,5 +1832,266 @@ mod original_stop_preparation_tests {
             config.configuration = configuration.into();
             assert!(!OriginalStopPreparation::candidate(&config));
         }
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod original_render_join_tests {
+    use super::*;
+    use caws_native::{
+        render_observation as observation, session_publication::Transport,
+        session_publication_wire as wire,
+    };
+    use serde_json::{Value, json};
+    use sha2::{Digest, Sha256};
+    use std::{
+        cell::Cell,
+        collections::{BTreeMap, VecDeque},
+    };
+
+    const ID: &str = "original-render-preparation";
+    fn digest(bytes: &[u8]) -> String {
+        format!("{:x}", Sha256::digest(bytes))
+    }
+    fn frame(value: Value) -> Vec<u8> {
+        let mut bytes = serde_json::to_vec(&value).unwrap();
+        bytes.push(b'\n');
+        bytes
+    }
+    #[derive(Default)]
+    struct Recording {
+        writes: Vec<Value>,
+        reads: VecDeque<Vec<u8>>,
+    }
+    impl Transport for Recording {
+        fn write(&mut self, bytes: &[u8], _: Instant) -> Result<(), String> {
+            self.writes.push(serde_json::from_slice(bytes).unwrap());
+            Ok(())
+        }
+        fn read(&mut self, _: Instant) -> Result<Vec<u8>, String> {
+            self.reads.pop_front().ok_or("test EOF".into())
+        }
+        fn credit(&mut self, _: usize) -> Result<(), String> {
+            Ok(())
+        }
+    }
+    fn capture(cwd: &str, expires: Instant) -> OriginalRenderPreparation {
+        // Pinning this executable launches no custodian. This test deliberately
+        // never requests Git; real native-custodian execution remains integration.
+        OriginalRenderPreparation::capture_inputs(
+            ID,
+            &"a".repeat(64),
+            "/tmp",
+            cwd,
+            &BTreeMap::from([("PATH".into(), "/usr/bin:/bin".into())]),
+            &std::env::current_exe().unwrap(),
+            expires,
+        )
+    }
+    fn preparation(render: OriginalRenderPreparation) -> OriginalStopPreparation<'static> {
+        OriginalStopPreparation {
+            generation: None,
+            original: None,
+            failure: None,
+            refusal: None,
+            render,
+        }
+    }
+    #[test]
+    fn missing_original_render_never_enters_native_exchange() {
+        let mut render = OriginalRenderPreparation::default();
+        let mut recording = Recording::default();
+        let effects = Cell::new(0);
+        assert!(!render.available());
+        let result = render.with_transport(&mut recording, &|| false, |_| effects.set(1));
+        assert!(result.unwrap_err().contains("ownership unavailable"));
+        assert_eq!(
+            effects.get(),
+            0,
+            "missing ownership must refuse before native effects"
+        );
+        assert!(recording.writes.is_empty());
+    }
+    #[test]
+    fn refused_original_render_retains_typed_capture_failure_and_disables_exchange() {
+        let mut render = capture(
+            "relative-render-cwd",
+            Instant::now() + Duration::from_secs(10),
+        );
+        assert!(!render.available());
+        let failure = render.capture_failure.as_ref().unwrap();
+        assert_eq!(failure.category, "capture");
+        assert_eq!(failure.git.as_ref().unwrap().category, "unsupported");
+        assert!(failure.diagnostic.contains("CWD"));
+        let diagnostic = failure.diagnostic.clone();
+        let mut recording = Recording::default();
+        assert!(
+            render
+                .with_transport(&mut recording, &|| false, |_| panic!(
+                    "effect after refusal"
+                ))
+                .is_err()
+        );
+        render.retry_cleanup().unwrap();
+        assert_eq!(
+            render.capture_failure.as_ref().unwrap().diagnostic,
+            diagnostic
+        );
+        assert!(render.cleanup_settled());
+    }
+    #[test]
+    fn preparation_wraps_late_stop_ready_and_keeps_terminal_phase_failure_after_wrapper_drop() {
+        let expires = Instant::now() + Duration::from_secs(10);
+        let mut prepared = preparation(capture("/tmp", expires));
+        assert!(prepared.render.available());
+        let token = "original-token";
+        let catalog = json!({"schema":"caws.runtime.stop-render-sources.v1",
+            "transcriptPath":"/repo/.caws/sessions/s/.transcript-projection.jsonl",
+            "audit":{"path":"/repo/.opencode/logs/audit.log","disposition":"absent"},
+            "hookOutcomes":{"path":"/repo/.caws/sessions/s/hook-events.jsonl","disposition":"absent"},
+            "subagents":{"claudeCandidate":{"path":"/repo/.caws/sessions/s/s/subagents","kind":"absent"},
+            "qwenCandidate":{"path":"/repo/.caws/sessions/subagents/s","kind":"absent"}}});
+        let input_digest =
+            digest(&serde_json::to_vec(&json!({"files":[],"sourceCatalog":catalog})).unwrap());
+        let tuple = |schema: &str| {
+            json!({"schema":schema,"id":ID,"runtimeDigest":"a".repeat(64),
+            "token":token,"attempt":"attempt","kind":"render","observationId":"b".repeat(64),
+            "inputDigest":input_digest})
+        };
+        let prepare = json!({"schema":caws_native::session_publication::STOP_PREPARE,
+            "id":ID,"runtimeDigest":"a".repeat(64),"token":token,"attempt":"attempt","kind":"render",
+            "snapshot":{"observationId":"b".repeat(64),"inputDigest":input_digest,
+            "sessionId":"s","reason":"exit","endedAt":"2026-10-23T00:00:00Z",
+            "files":[],"priorInventory":[],"sourceCatalog":catalog}});
+        let ready = json!({"schema":wire::READY,"id":ID,"runtimeDigest":"a".repeat(64),
+            "token":token,"attempt":"attempt","kind":"render","direction":"inputs"});
+        let mut early_prepared = tuple(wire::PREPARED);
+        early_prepared["disposition"] = "ready".into();
+        early_prepared["artifacts"] = json!([]);
+        early_prepared["removals"] = json!([]);
+        let mut recording = Recording {
+            reads: VecDeque::from([frame(early_prepared)]),
+            ..Default::default()
+        };
+        let error = prepared
+            .render
+            .with_transport(&mut recording, &|| false, |transport| {
+                transport.write(&frame(prepare), expires).unwrap();
+                transport.write(&frame(ready), expires).unwrap();
+                transport.read(expires).unwrap_err()
+            })
+            .unwrap();
+        assert!(error.contains("before Git completion"), "{error}");
+        assert_eq!(recording.writes.len(), 3);
+        let binding = &recording.writes[2];
+        assert_eq!(binding["schema"], observation::STOP_BINDING);
+        assert_eq!(binding["cwd"], "/tmp");
+        assert_eq!(
+            binding["calendarContext"]["originalPid"],
+            std::process::id()
+        );
+        for (name, field) in [("TZ", "tz"), ("TZDIR", "tzdir")] {
+            let expected = match std::env::var(name) {
+                Ok(value) => json!({"kind":"present","value":value}),
+                Err(_) => json!({"kind":"absent"}),
+            };
+            assert_eq!(binding["calendarContext"][field], expected);
+        }
+        assert_eq!(binding["sourceCatalog"], catalog);
+        assert!(
+            !prepared.render.available(),
+            "failed owner cannot authorize another exchange"
+        );
+        let first = prepared
+            .render
+            .owner
+            .as_ref()
+            .unwrap()
+            .failure()
+            .unwrap()
+            .diagnostic
+            .clone();
+        prepared.retry_cleanup().unwrap();
+        assert!(prepared.cleanup_settled());
+        assert_eq!(
+            prepared
+                .render
+                .owner
+                .as_ref()
+                .unwrap()
+                .failure()
+                .unwrap()
+                .diagnostic,
+            first
+        );
+        let effects = Cell::new(0);
+        assert!(
+            prepared
+                .render
+                .with_transport(&mut recording, &|| false, |_| effects.set(1))
+                .is_err()
+        );
+        assert_eq!(
+            effects.get(),
+            0,
+            "terminal owner must not re-enter native exchange"
+        );
+    }
+    #[test]
+    fn preparation_cleanup_never_treats_unsettled_render_receipt_as_success() {
+        use caws_native::{
+            invocation_project::{ProjectFailure, ProjectPhase, QueryCleanup},
+            render_context,
+        };
+        // An adversarial retained cleanup receipt, not an actual child. This
+        // asserts the enclosing owner's propagation; real custody has its own tests.
+        let git = render_context::Failure {
+            category: "query",
+            diagnostic: "retained-original".into(),
+            completed: vec![],
+            stdout: b"partial-original".to_vec(),
+            stderr: vec![],
+            remote: None,
+            cause: Some(ProjectFailure {
+                first_phase: ProjectPhase::Cleanup,
+                first_message: "retained-original".into(),
+                retained: None,
+                cleanup: Box::new(QueryCleanup {
+                    pid: Some(123),
+                    ..Default::default()
+                }),
+            }),
+        };
+        let mut prepared = preparation(OriginalRenderPreparation {
+            owner: None,
+            capture_failure: Some(Box::new(observation::Failure {
+                category: "capture",
+                diagnostic: "retained-original".into(),
+                git: Some(git),
+                calendar: None,
+            })),
+        });
+        assert!(!prepared.cleanup_settled());
+        assert!(
+            prepared
+                .retry_cleanup()
+                .unwrap_err()
+                .contains("cleanup remains uncertain")
+        );
+        assert!(!prepared.cleanup_settled());
+        let retained = prepared
+            .render
+            .capture_failure
+            .as_ref()
+            .unwrap()
+            .git
+            .as_ref()
+            .unwrap();
+        assert_eq!(retained.stdout, b"partial-original");
+        assert_eq!(
+            retained.cause.as_ref().unwrap().first_message,
+            "retained-original"
+        );
+        assert!(!prepared.render.available());
     }
 }
