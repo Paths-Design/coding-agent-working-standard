@@ -1,0 +1,40 @@
+id: CAWS-NATIVE-INGRESS-DEADLINE-LANDING-001
+title: 'Land bounded native deadline and OpenCode ingress corrections'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-24T01:52:01.740Z'
+updated_at: '2026-10-24T01:52:01.740Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'OpenCode callback identity and native store deadline propagation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Preserve original project/session identity and original native expiry through checked effects; retain partial publication uncertainty'
+  - 'Keep ordinary Stop, full lifecycle parity, production profile admission, Python retirement, residency and machine cutover owned by active parent/publication specs'
+acceptance:
+  - id: A1
+    given: 'committed publication candidate 2448b992 and current main'
+    when: 'an owned main-based lane integrates the candidate'
+    then: 'executable source matches the tested candidate and current canonical governance is preserved'
+  - id: A2
+    given: 'exact integrated source and retained positive and hostile execution artifacts'
+    when: 'identity routing, original-deadline propagation and partial publication results are inspected'
+    then: 'bounded corrections are supported by actual payloads and filesystem states with false-confidence limits retained'
+  - id: A3
+    given: 'committed integration and existing independent reviews'
+    when: 'full-basis gates, doctor and provenance review run'
+    then: 'the bounded source is landable and existing ledger preserves explicit owners and all unearned parent acceptance'
+observability:
+  - 'Retained execution receipts, source hashes, dispatched payloads, publication files, mutation failures and exact restoration'
+rollback:
+  - 'Normal corrective or revert commit; do not alter installed machine selection'
+non_functional: {}
+contracts:
+  - name: 'native-ingress-deadline'
+    type: behavior
