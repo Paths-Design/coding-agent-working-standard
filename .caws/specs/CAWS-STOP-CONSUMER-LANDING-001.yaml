@@ -1,0 +1,46 @@
+id: CAWS-STOP-CONSUMER-LANDING-001
+title: 'Land bounded Stop profile comparison and ordinary consumer adapter'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-24T05:06:03.309Z'
+updated_at: '2026-10-24T05:06:03.309Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Controlled Stop component comparison and publication consumption adapter'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/qualify-stop-profile.mjs'
+    - 'packages/caws-cli/tests/tooling/qualify-stop-profile.test.js'
+    - 'packages/caws-cli/src/runtime/session-store-publication.ts'
+    - 'packages/caws-cli/tests/runtime/ordinary-stop-publication.test.js'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Component comparison and fixture-backed consumer evidence confer no native admission or parent cutover acceptance'
+  - 'Prepared bytes are independently reopened and compared before acknowledgement; failures never cause replay'
+acceptance:
+  - id: A1
+    given: 'the fixed reviewed stock reference and corpus'
+    when: 'pinned controlled SQL and renderer comparisons execute'
+    then: 'all thirty required cases match and substituted oracle inventories and false failure dispositions refuse'
+  - id: A2
+    given: 'fixture SQL and native observations with actual renderer and filesystem reader'
+    when: 'the ordinary Stop adapter publishes or receives corrupt output'
+    then: 'original metadata and user text are consumed while incoherent and self-consistent substituted generations refuse acknowledgement with retained artifacts'
+  - id: A3
+    given: 'the independently reviewed committed candidate'
+    when: 'governed landing completes'
+    then: 'main contains the exact source candidate while selected runtime and parent acceptance remain unchanged'
+observability:
+  - 'Retained commands, exit statuses, exact source pins, scenario state, projections, turns, index and publication markers'
+rollback:
+  - 'Use a normal source revert; retain scenario evidence and the existing selected runtime'
+non_functional:
+  security:
+    - 'No profile authority from caller-supplied qualification JSON or a component comparison result'
+contracts:
+  - name: 'stop-consumer'
+    type: behavior
