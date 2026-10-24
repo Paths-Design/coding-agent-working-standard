@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-STOCK-ADMISSION-LANDING-001
 title: 'Land native stock Stop admission with retained freshness evidence'
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed exact reviewed stock Stop admission and direct freshness/cancellation falsifier on local main. A1/A2 runtime and A3 postmerge evidence inspected and recorded. Native prefix, qualified profiles, publication/consumer/release, residency, Python retirement and selected cutover remain owned by active parent/publication specs.'
 created_at: '2026-10-24T08:13:35.943Z'
-updated_at: '2026-10-24T08:13:37.143Z'
+updated_at: '2026-10-24T08:20:52.235Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
