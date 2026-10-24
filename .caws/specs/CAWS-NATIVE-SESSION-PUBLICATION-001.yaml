@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-session-publication
 created_at: '2026-10-22T07:45:38.932Z'
-updated_at: '2026-10-24T01:01:41.750Z'
+updated_at: '2026-10-24T01:05:43.379Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -117,6 +117,12 @@ scope:
     - packages/caws-cli/tests/transcripts/renderer-calendar.test.ts
     - packages/caws-native/src/invocation_project.rs
     - packages/caws-native/src/service_image/tests.rs
+    - packages/caws-cli/templates/hook-packs/shared/audit.sh
+    - packages/caws-cli/tests/hooks/bats/audit-jsonl.bats
+    - packages/caws-cli/tests/hooks/bats/guard-config.bats
+    - packages/caws-cli/tests/hooks/bats/handler-stdin-feed.bats
+    - packages/caws-cli/tests/hooks/bats/handler-stdin-stage-lifetime.bats
+    - packages/caws-native/src/service_image/prefix-profile.json
 invariants:
   - 'Only independently captured original invocation and native custody authorize destination effects; prepared bytes and correlation grant none'
   - 'No publication after stopped or unsettled acquisition; preserve truthful post-rename uncertainty and no unsafe replay'
