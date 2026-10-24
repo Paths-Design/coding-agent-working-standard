@@ -1,0 +1,42 @@
+id: CAWS-NATIVE-SELECTION-COPY-LANDING-001
+title: 'Land verification-only selection discovery without discarded manifest copies'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-24T22:49:46.033Z'
+updated_at: '2026-10-24T22:49:46.033Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Runtime selection observation and verification-only IO'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/machine-runtime-state.ts'
+    - 'packages/caws-cli/src/init/selection-read-io.ts'
+    - 'packages/caws-cli/src/runtime/selection-observation.ts'
+    - 'packages/caws-cli/src/runtime/selection.ts'
+    - 'packages/caws-cli/tests/runtime/selection-observation.test.js'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Preserve all captured dependency identity checks, verifier and snapshot separation, public mutable copy ownership, and the original invocation deadline.'
+acceptance:
+  - id: A1
+    given: 'repeated discovery over a verified runtime'
+    when: 'selection retries missing observations'
+    then: 'verification-only calls avoid discarded manifest copies with identical selection and ordered observations'
+  - id: A2
+    given: 'separate verifier identities snapshots roots digests or changed dependencies'
+    when: 'verification is reused'
+    then: 'caches remain separate and changed or incomplete observations are refused'
+  - id: A3
+    given: 'callers requesting manifests and legacy custom IO'
+    when: 'returned values are mutated or verification executes'
+    then: 'public results remain independent and canonical verifier callback and legacy fallback semantics remain intact'
+  - id: A4
+    given: 'the committed candidate and retained raw checks'
+    when: 'source is independently reviewed and landed'
+    then: 'target source matches the candidate and failed installed deadline full parity and machine cutover remain explicit parent obligations'
+non_functional: {}
+contracts: []
