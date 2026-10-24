@@ -5,7 +5,10 @@
 //! semantic SQL/renderer/calendar qualification and prefix completion are separate
 //! obligations of the enclosing native owner. No engine selection JSON, profile
 //! selector, test artifact, or caller assertion constructs this receipt.
-use crate::{cli::Config, selection_observation::SelectionObservationReceipt};
+use crate::{
+    cli::Config,
+    selection_observation::{GenerationValidationScope, SelectionObservationReceipt},
+};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use caws_native::{monotonic_deadline::MonotonicDeadline, session_cache_wire::OriginalStopCapture};
 use serde_json::{Value, json};
@@ -233,7 +236,18 @@ impl<'original, 'native> StockStopSelection<'original, 'native> {
         readset: &'original SelectionObservationReceipt<'native>,
         mut cancel: impl FnMut() -> Result<(), String>,
     ) -> Result<Self, Refusal> {
-        checkpoint(original.deadline(), &mut cancel)?;
+        readset.validate_with(&mut cancel, |scope, cancel| {
+            Self::admit_in_scope(original, config, readset, scope, cancel)
+        })
+    }
+    pub(crate) fn admit_in_scope(
+        original: &'original OriginalStopCapture<'native>,
+        config: &Config,
+        readset: &'original SelectionObservationReceipt<'native>,
+        scope: &GenerationValidationScope<'_, 'native>,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<Self, Refusal> {
+        checkpoint(original.deadline(), cancel)?;
         if config.surface != "opencode"
             || config.event != "stop"
             || config.configuration != "system"
@@ -253,7 +267,7 @@ impl<'original, 'native> StockStopSelection<'original, 'native> {
                 "Stock Stop generation differs from original machine home",
             ));
         }
-        readset.validate_with(&mut cancel, |_scope, cancel| {
+        readset.validate_in_scope(scope, cancel, |cancel| {
             let view = Readset::new(readset)?;
             let project = original.observed_project();
             let context = Context {
@@ -286,7 +300,7 @@ impl<'original, 'native> StockStopSelection<'original, 'native> {
     pub(crate) fn original(&self) -> &'original OriginalStopCapture<'native> {
         self.original
     }
-    pub(crate) fn readset(&self) -> &SelectionObservationReceipt<'native> {
+    pub(crate) fn readset(&self) -> &'original SelectionObservationReceipt<'native> {
         self.readset
     }
     pub(crate) fn home(&self) -> &Path {
@@ -1005,6 +1019,33 @@ mod tests {
             assert_eq!(untouched, Refusal::Unsupported(missing.clone()));
             receipt.revalidate(|| Ok(())).unwrap();
 
+            let ready = crate::protocol::Ready {
+                active: true,
+                budget_home: home.to_path_buf(),
+                project_digest: Some(hash(project.to_str().unwrap().as_bytes())),
+                session_id: Some("s".into()),
+                service_offer: None,
+            };
+            let scans_before = crate::installed_generation::verification_count();
+            let pregrant = crate::stop_execution::PregrantStop::admit(
+                &original,
+                &config,
+                &receipt,
+                generation,
+                &ready,
+                || Ok(()),
+            )
+            .unwrap();
+            assert!(
+                matches!(
+                    pregrant,
+                    crate::stop_execution::PregrantStop::Unsupported(None)
+                ),
+                "sparse readset cannot mint eligibility"
+            );
+            let combined_scans = crate::installed_generation::verification_count() - scans_before;
+            assert_eq!(combined_scans, 2);
+
             // A dependency changed after sealing is invalidated, even when
             // the retained selection would otherwise be unsupported.
             fs::write(&selected, b"changed after seal").unwrap();
@@ -1014,6 +1055,17 @@ mod tests {
             };
             let changed = format!("Selection dependency changed: read {}", selected.display());
             assert_eq!(stale, Refusal::Invalidated(changed.clone()));
+            let combined_stale = crate::stop_execution::PregrantStop::admit(
+                &original,
+                &config,
+                &receipt,
+                generation,
+                &ready,
+                || Ok(()),
+            )
+            .err()
+            .expect("stale combined admission must refuse");
+            assert_eq!(combined_stale, changed);
 
             let calls = Cell::new(0usize);
             let sentinel = "direct stock admission cancellation sentinel";
@@ -1030,11 +1082,24 @@ mod tests {
                 1,
                 "original callback was skipped, replaced or repeated"
             );
+            let combined_cancelled = crate::stop_execution::PregrantStop::admit(
+                &original,
+                &config,
+                &receipt,
+                generation,
+                &ready,
+                || Err(sentinel.into()),
+            )
+            .err()
+            .expect("cancelled combined admission must refuse");
+            assert_eq!(combined_cancelled, sentinel);
             clock.check().unwrap();
             assert!(!project.join(".caws/sessions").exists());
             if std::env::var_os("CAWS_NATIVE_GENERATION_TEST_ARTIFACTS").is_some() {
                 fs::write(home.join("direct-stock-admit.json"), serde_json::to_vec_pretty(&json!({
                     "scope":"actual OriginalStopCapture + native custodian + Git; synthetic verified generation, no stock-positive/publication grant",
+                    "combinedFullVerifications":combined_scans,"combinedUnsupported":true,
+                    "combinedStaleRefusal":combined_stale,"combinedCancellation":combined_cancelled,
                     "generation":generation.digest(),"root":root,"home":home,"project":project,
                     "originalDeadline":clock.envelope(),"custodianExecutable":executor.path,
                     "custodianPhysicalPath":executor.physical_path,"custodianSha256":executor.sha256,

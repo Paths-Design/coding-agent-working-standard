@@ -335,8 +335,60 @@ fn execute_observed<'deadline>(
             // Both owners remain external, including on Unsupported, so the
             // existing strict predispatch freshness check cannot disappear.
             progress.mark("stock-selection");
-            let stock_selection =
-                match (original_stop.original.as_ref(), selection_receipt.as_ref()) {
+            let combined = original_stop.original.is_some()
+                && selection_receipt.is_some()
+                && original_stop.generation.is_some()
+                && original_stop.render.available()
+                && ready
+                    .as_ref()
+                    .is_some_and(|context| context.service_offer.is_none());
+            // With no offer this only withdraws the owned descriptor bank.
+            // Keep even that operation outside the pure admission bracket.
+            if combined {
+                session.admit_render_offer(
+                    config,
+                    &request,
+                    ready.as_mut().ok_or("missing engine readiness")?,
+                    deadline,
+                )?;
+            }
+            let (stock_selection, eligible_stop) = if combined {
+                progress.mark("stop-qualification");
+                match stop_execution::PregrantStop::admit(
+                    original_stop
+                        .original
+                        .as_ref()
+                        .ok_or("missing original Stop")?,
+                    config,
+                    selection_receipt
+                        .as_ref()
+                        .ok_or("missing selection receipt")?,
+                    original_stop
+                        .generation
+                        .as_ref()
+                        .ok_or("missing original generation")?,
+                    ready.as_ref().ok_or("missing Stop readiness")?,
+                    cancellation::check,
+                )
+                .map_err(|reason| {
+                    progress.stock_selection = "invalidated";
+                    reason
+                })? {
+                    stop_execution::PregrantStop::Eligible(eligible) => {
+                        progress.stock_selection = "admitted";
+                        (None, Some(eligible))
+                    }
+                    stop_execution::PregrantStop::Unsupported(selected) => {
+                        progress.stock_selection = if selected.is_some() {
+                            "admitted"
+                        } else {
+                            "unsupported"
+                        };
+                        (selected, None)
+                    }
+                }
+            } else {
+                let selected = match (original_stop.original.as_ref(), selection_receipt.as_ref()) {
                     (Some(original), Some(receipt)) => {
                         match stop_admission::StockStopSelection::admit(
                             original,
@@ -360,19 +412,7 @@ fn execute_observed<'deadline>(
                     }
                     _ => None,
                 };
-            progress.mark("stop-qualification");
-            let eligible_stop = match (
-                stock_selection.as_ref(),
-                original_stop.generation.as_ref(),
-                original_stop.render.available(),
-            ) {
-                (Some(selected), Some(generation), true) => stop_execution::EligibleStop::admit(
-                    selected,
-                    generation,
-                    ready.as_ref().ok_or("missing Stop readiness")?,
-                    cancellation::check,
-                )?,
-                _ => None,
+                (selected, None)
             };
             progress.native_stop = if eligible_stop.is_some() {
                 "qualified"
@@ -380,23 +420,24 @@ fn execute_observed<'deadline>(
                 "unsupported"
             };
             progress.mark("render-admission");
-            let service_dispatch = session.admit_render_offer(
-                config,
-                &request,
-                ready.as_mut().ok_or("missing engine readiness")?,
-                deadline,
-            )?;
+            let service_dispatch = if combined {
+                None
+            } else {
+                session.admit_render_offer(
+                    config,
+                    &request,
+                    ready.as_mut().ok_or("missing engine readiness")?,
+                    deadline,
+                )?
+            };
             // A sealed readset is lifecycle evidence, never eligibility. Keep
             // the owner through this execution and refuse stale dependencies
             // before the dispatch attempt, including inactive/custom selection.
             if let Some(receipt) = selection_receipt.as_ref() {
                 progress.mark("selection-predispatch-revalidation");
-                if let Some(eligible) = eligible_stop.as_ref() {
-                    // Eligibility owns this selection's readset and brackets
-                    // its profile checks with the same full freshness checks.
-                    // Validate once here; no exchange/effect occurs before the
-                    // pure dispatch encoding below.
-                    eligible.revalidate(cancellation::check)?;
+                if eligible_stop.is_some() {
+                    // The combined admission already performed this phase and
+                    // closed its full bracket. No exchange/effect intervenes.
                 } else if let Some(selected) = stock_selection.as_ref() {
                     selected
                         .revalidate(cancellation::check)

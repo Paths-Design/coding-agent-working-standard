@@ -54,7 +54,10 @@ qualify the failed E366 production invocation. Local main merge
 `f66e60b9496bc3a1b7f492cb531d753b0df3d216` contains the E368/E369 immutable
 manifest-plan optimization and E370 evidence, with all four source/tracker blobs
 equal to candidate `4f3f6214`. E371 records its bounded landing; the selected
-machine generation and full parent acceptance remain unchanged.
+machine generation and full parent acceptance remain unchanged. Local main merge
+`b701acc311b715866a02e89a0167c75bbee3e2fa` contains the bounded pre-reservation
+refusal and reclamation source, E374. Its component acceptance does not
+establish authenticated restart or reader rollback.
 `native-runtime-modernization` remains the integration branch for owed work.
 Evidence entries identify their actual component branch or historical revision;
 ledger-only commits do not qualify different runtime bytes. The relative
@@ -10260,6 +10263,106 @@ Additional bounded evidence and unresolved dependencies:
   helper tests nor fresh10 qualify changed runtime bytes, fairness or
   selected-machine cutover.
 
+- **E373 — exact repaired image reaches publication but misses Stop
+  completion.** Fresh11 builds candidate5f3f09e2 into runtime
+  e03fc8e7a809091494451785f017bb88a2ab4f175e75f436eac595e2471a8932.
+  `publication-integration/production-stop-11-paired-execution-01/execution.json`
+  retains the exact pinned Node/driver/image command, outer exit1, unchanged
+  sources and no observed process-group residue. The positive native invocation
+  exits2 at30031.984458ms without a signal or watchdog. Its stderr reports36
+  generation revalidations,5846055732 bytes hashed and19770172 microseconds in
+  revalidation. The original30000ms deadline remains unchanged; the paired
+  negative never executes.
+
+  `production-stop-11-paired-01/retained-failure-readback.json` records
+  inspected output: exactly the selected user/reply at timestamps0/1000ms, no
+  distinct foreign-session contents, turn_count1, matching actual
+  marker/consumer file hashes and durable CONSUMED with an empty heavy request.
+  The journal records ordinary consumer completion and three completed handlers;
+  agent-stop starts without completing. An initial readback assertion
+  incorrectly expected only two completed handlers; inspecting the full journal
+  corrects that oracle, without changing the failed native outcome. Cleanup
+  records owner28927 exit0, absent socket, no outstanding originals and no
+  service signals. Publication files alone therefore cannot prove complete Stop
+  execution. Root owns safe verification-cost reduction and another exact-image
+  paired run; authenticated restart, rollback, fairness, application delivery
+  and machine adoption remain unverified.
+
+- **E374 — bounded refusal source delivered to main.** Merge
+  b701acc311b715866a02e89a0167c75bbee3e2fa contains all eight reviewed
+  candidate5f3f09e2 source/tracker blobs. The disposable landing's gates and
+  per-commit scope review pass. `refusal-source-landing-01/postmerge.json`
+  rederives equality and preserves all eleven prior branch tips, registry
+  entries, physical lanes, parent/publication spec bytes and selected runtime
+  pointer. CAWS-NATIVE-REFUSAL-LANDING-001 A1–A3 are recorded in
+  events13036–13038 and the bounded slice closes completed. This source landing
+  does not accept E373's failed runtime, publication parent criteria or machine
+  cutover.
+
+- **E375 — consolidate effect-free admission checks without cached
+  observations.** Native Stop stock admission, semantic qualification and final
+  predispatch checks share one fresh full-generation bracket. Each phase keeps
+  its local readset sweeps, exact owner/clock binding, member identity and
+  profile/linked SQLite checks. Eligibility owns stock evidence borrowing
+  external original inputs; no self-reference or serialized grant constructs
+  authority. A real service offer stays outside this path, and unsupported
+  selection keeps its independent post-offer check. Seal, prefix entry, every
+  prefix effect callback and every store-phase boundary remain unchanged. Source
+  predicts32 instead of36 full frontend scans; runtime savings are not
+  established by that count.
+
+  Under the retained pinned runner, `pregrant-bin-01` exits0 in77.013s
+  (188pass,1ignored). Actual `selection-pregrant-phases.json` records two full
+  verifications, three pure phases, zero foreign-owner callbacks and zero later
+  phase calls after dependency invalidation. `pregrant-original-01` exits0 in
+  102.838s: real native custodian/Git capture reaches the production combined
+  constructor, records two full checks for unsupported selection, distinguishes
+  changed-readset refusal and preserves the cancellation sentinel with no
+  sessions created. Its generation is synthetic and cannot earn positive stock
+  eligibility. Disabling the exact-owner guard makes the focused control fail
+  with Cargo101 in `pregrant-owner-mutation-01`; all native source bytes are
+  restored to the passing run's pins. `pregrant-feature-off-01` exits0 and only
+  establishes compilation. Existing closing-bracket expiry, inode replacement
+  and linked-SQLite controls execute in the binary suite. Full-image positive
+  eligibility, deadline completion and the paired hostile path remain owed.
+
+- **E376 — full positive Stop completes; paired qualification fails during
+  negative fixture preparation.** Fresh12 packages exact candidate
+  `3cd741fde60e9dd2256ef83049f9b6e11b83986c` as private runtime
+  `70b519f9a40e8c8d355aaaa2ff8aab9366a29e1542a43e52cb9281b61d7714da`. Every
+  build/package/profile stage exits0 with unchanged source pins and no observed
+  process-group residue. The unchanged paired probe exits1 in47.696s; this is
+  not a passing pair. Its positive native invocation exits0 in 27949.56925ms,
+  without signal or watchdog, under the original30000ms deadline. The actual
+  invocation journal records all four handlers completed with exit0. Full
+  generation checks fall from36 to32; the retained progress records 16.866s
+  verification and5,197,089,952 hashed bytes. One observed completion with2.05s
+  margin does not qualify load performance.
+
+  Under the root's external
+  `publication-integration/production-stop-12-paired-01/`,
+  `positive/terminal.json`, `positive-result.json` and the actual session files
+  establish the bounded result. `store-projection.jsonl` contains exactly the
+  selected user's and assistant's rows at0s and1s, excluding the distinct
+  foreign session. Its SHA256 is
+  `90e56c725f57cc7bdd368c99ac5746ca763aaa5f8b1b3a729bac471002256387`. The
+  ordinary consumer's turn and index hashes match the actual files and marker;
+  the durable operation is CONSUMED with empty heavy request and matching
+  terminal digest. Root rehashes every listed session artifact and that record.
+  Owner65393 exits0 naturally, socket absent, no outstanding originals and no
+  service signals, as retained in `cleanup.json`.
+
+  `failure.json` and outer stderr show `prepareHeldOffer` failing with
+  `unsupported ambient executable input` before the hostile invocation starts.
+  Repair the fixture against the supported image/offer contract, preserving the
+  failed attempt and the original native invocation environment. Do not weaken
+  the guard or image bounds to manufacture a queue. Queued dependency refusal,
+  zero extra database opens, durable refusal/reclamation, authenticated same-ID
+  restart, old-reader rollback, application delivery, the full workload and
+  selected machine cutover remain unverified. Independent source feedback is
+  grounded against the exact-owner and closing-bracket code, unchanged effect
+  checks and raw test pins; it is not acceptance evidence.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -10406,14 +10509,24 @@ claim. Same-home old-reader rollback remains unqualified. A read-only worker
 grounds the rejection lifecycle; an independent worker checks actual artifact
 correlations; root owns source changes, integration, landing and acceptance. Do
 not cache successful filesystem/hash observations or remove authority and
-durability checks. The next replay must establish semantic session isolation,
-rejection history, reclaimed capacity and natural cleanup; build/profile success
-cannot supply them.
+durability checks. E373 establishes selected-session output, ordinary
+consumption and natural cleanup, but the complete Stop expires during agent-stop
+after repeated generation hashing. E374 delivers the bounded refusal source to
+main. E375 preserves fresh full brackets and every effect/queue boundary while
+sharing pure admission checks. E376's full positive completes with2.05s margin;
+the pair fails before its negative invocation because its held-offer fixture
+violates the service-image environment contract. Root owns fixture repair,
+source landing and exact-image replay; html-profile investigates a supported
+queue barrier, pregrant-review investigates syscall overhead without weakening
+freshness, and ambient-stop-domain specifies isolated reader rollback. The next
+paired replay must establish refusal history, zero additional SQL opens,
+reclaimed capacity and natural cleanup. The thirteen-session/four-repository
+workload and machine adoption remain owed.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                   |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                             | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.    |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; E346 connects native and engine production sources; root owns fresh-image execution | E370 retains a positive chain; distinguish session rows, implement durable pre-reservation rejection/reclamation, then pair queued selection mutation with zero additional database opens, natural exit and restart rejection         |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; E346 connects native and engine production sources; root owns fresh-image execution | E376 completes the distinct-session positive; repair the held-offer fixture, then pair queued selection mutation with zero additional database opens, durable refusal, natural exit and restart rejection                             |
 | Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                               | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275

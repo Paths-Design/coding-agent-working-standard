@@ -7,6 +7,9 @@
 // Exercise private production constructors with their existing test fixture
 // helpers, without a public receipt constructor or production permission seam.
 #[allow(dead_code)]
+#[path = "../src/cancellation.rs"]
+mod cancellation;
+#[allow(dead_code)]
 #[path = "../src/cli.rs"]
 mod cli;
 #[allow(dead_code)]
@@ -16,11 +19,26 @@ mod installed_generation;
 #[path = "../src/native_generation.rs"]
 mod native_generation;
 #[allow(dead_code)]
+#[path = "../src/process_effect.rs"]
+mod process_effect;
+#[allow(dead_code)]
+#[path = "../src/protocol.rs"]
+mod protocol;
+#[allow(dead_code)]
 #[path = "../src/selection_observation.rs"]
 mod selection_observation;
 #[allow(dead_code)]
+#[path = "../src/sqlite_build_identity.rs"]
+mod sqlite_build_identity;
+#[allow(dead_code)]
 #[path = "../src/stop_admission.rs"]
 mod stop_admission;
+#[allow(dead_code)]
+#[path = "../src/stop_execution.rs"]
+mod stop_execution;
+#[allow(dead_code)]
+#[path = "../src/stop_profile.rs"]
+mod stop_profile;
 
 use caws_native::invocation_project::{ExecutableIdentity, SelectedExecutable};
 use sha2::{Digest, Sha256};

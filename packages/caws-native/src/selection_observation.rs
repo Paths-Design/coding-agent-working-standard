@@ -250,6 +250,7 @@ pub(crate) struct GenerationValidationScope<'scope, 'native> {
     generation: &'native GenerationReceipt,
     deadline: &'native MonotonicDeadline,
     active: &'scope Cell<bool>,
+    owner: &'scope SelectionObservationOwner<'native>,
 }
 impl GenerationValidationScope<'_, '_> {
     pub(crate) fn check_binding(
@@ -845,6 +846,7 @@ impl<'native> SelectionObservationReceipt<'native> {
                 generation: self.owner.generation,
                 deadline: self.owner.deadline,
                 active: guard.0,
+                owner: &self.owner,
             };
             let result = checks(&scope, &mut cancel);
             self.owner
@@ -859,6 +861,32 @@ impl<'native> SelectionObservationReceipt<'native> {
             checkpoint(self.owner.deadline, &mut cancel).map_err(E::from)?;
             result
         })
+    }
+    /// Keep each phase's readset sweeps inside one fresh generation bracket.
+    /// A token from another receipt cannot supply this owner's validation.
+    pub(crate) fn validate_in_scope<T, E, C>(
+        &self,
+        scope: &GenerationValidationScope<'_, 'native>,
+        cancel: &mut C,
+        checks: impl FnOnce(&mut C) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        C: FnMut() -> Result<(), String>,
+        E: From<String>,
+    {
+        if !std::ptr::eq(scope.owner, &self.owner) {
+            return Err(E::from("Scoped selection owner mismatch".into()));
+        }
+        scope
+            .check_binding(self.owner.generation, self.owner.deadline, cancel)
+            .map_err(E::from)?;
+        self.owner.revalidate_records(cancel).map_err(E::from)?;
+        let result = checks(cancel);
+        self.owner.revalidate_records(cancel).map_err(E::from)?;
+        scope
+            .check_binding(self.owner.generation, self.owner.deadline, cancel)
+            .map_err(E::from)?;
+        result
     }
     /// Native qualifier consumes these retained native-produced values. An
     /// engine echo of an equal JSON value cannot construct this borrowed owner.
@@ -1290,6 +1318,80 @@ mod tests {
             fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
             println!("selection observation artifact: {}", path.display());
         }
+    }
+
+    #[test]
+    fn scoped_phases_keep_local_sweeps_and_exact_owner_inside_two_full_checks() {
+        fixture(|generation, home, _root| {
+            let policy = home.join("phase-policy.json");
+            fs::write(&policy, b"original").unwrap();
+            let clock = deadline();
+            let mut observed = owner(generation, &clock, home);
+            capture(&mut observed, OperationKind::Read, &policy);
+            let receipt = observed.seal(|| Ok(())).unwrap();
+            let other = owner(generation, &clock, home).seal(|| Ok(())).unwrap();
+            let before = crate::installed_generation::verification_count();
+            let phases = Cell::new(0);
+            let wrong_owner_calls = Cell::new(0);
+            let result: Result<Vec<usize>, String> = receipt.validate_with(
+                || Ok(()),
+                |scope, cancel| {
+                    let wrong: Result<(), String> = other.validate_in_scope(scope, cancel, |_| {
+                        wrong_owner_calls.set(1);
+                        Ok(())
+                    });
+                    assert_eq!(wrong.unwrap_err(), "Scoped selection owner mismatch");
+                    (1..=3)
+                        .map(|phase| {
+                            receipt.validate_in_scope(scope, cancel, |_| {
+                                phases.set(phases.get() + 1);
+                                Ok(phase)
+                            })
+                        })
+                        .collect()
+                },
+            );
+            assert_eq!(result.unwrap(), vec![1, 2, 3]);
+            let scans = crate::installed_generation::verification_count() - before;
+            assert_eq!(scans, 2);
+            assert_eq!(phases.get(), 3);
+            assert_eq!(wrong_owner_calls.get(), 0);
+
+            let later_phase_calls = Cell::new(0);
+            let result: Result<(), String> = receipt.validate_with(
+                || Ok(()),
+                |scope, cancel| {
+                    let changed: Result<Option<()>, String> =
+                        receipt.validate_in_scope(scope, cancel, |_| {
+                            fs::write(&policy, b"changed during unsupported phase").unwrap();
+                            Ok(None)
+                        });
+                    // The phase's own closing sweep refuses before subsequent work,
+                    // even though the outer bracket would also reject this change.
+                    assert!(
+                        changed
+                            .as_ref()
+                            .unwrap_err()
+                            .contains("Selection dependency changed")
+                    );
+                    changed?;
+                    later_phase_calls.set(1);
+                    Ok(())
+                },
+            );
+            assert!(result.unwrap_err().contains("Selection dependency changed"));
+            assert_eq!(later_phase_calls.get(), 0);
+            retain(
+                home,
+                "pregrant-phases",
+                json!({
+                    "actualFullVerifications":scans,"purePhases":phases.get(),
+                    "foreignOwnerCalls":wrong_owner_calls.get(),
+                    "phasesAfterInvalidation":later_phase_calls.get(),
+                    "scope":"actual readset and generation checks; synthetic image, no EligibleStop or dispatch"
+                }),
+            );
+        });
     }
 
     #[test]

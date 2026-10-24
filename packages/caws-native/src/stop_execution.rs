@@ -3,16 +3,23 @@
 //! owner or a completed prefix. Unsupported domains retain compatibility only
 //! before any native Stop effects have been attempted.
 use crate::{
+    cli::Config,
     native_generation::GenerationReceipt,
     protocol::{Ready, Request},
-    stop_admission::StockStopSelection,
+    selection_observation::{GenerationValidationScope, SelectionObservationReceipt},
+    stop_admission::{Refusal, StockStopSelection},
     stop_profile::StopProfileReceipt,
 };
 use std::{collections::BTreeMap, path::Path};
 
-pub(crate) struct EligibleStop<'selection, 'owners, 'native> {
-    selection: &'selection StockStopSelection<'owners, 'native>,
-    profile: StopProfileReceipt<'selection>,
+pub(crate) struct EligibleStop<'owners, 'native> {
+    selection: StockStopSelection<'owners, 'native>,
+    profile: StopProfileReceipt<'owners>,
+}
+
+pub(crate) enum PregrantStop<'owners, 'native> {
+    Eligible(EligibleStop<'owners, 'native>),
+    Unsupported(Option<StockStopSelection<'owners, 'native>>),
 }
 
 /// Match the ordinary engine's inherited-startup calculation. The selected
@@ -39,18 +46,58 @@ fn supported_session_id(sid: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
 
-impl<'selection, 'owners: 'selection, 'native: 'selection>
-    EligibleStop<'selection, 'owners, 'native>
-{
+impl<'owners, 'native: 'owners> PregrantStop<'owners, 'native> {
+    /// No eligible result escapes before the fresh generation bracket closes.
+    /// Unsupported selection stays available for post-offer validation.
     pub(crate) fn admit(
-        selection: &'selection StockStopSelection<'owners, 'native>,
-        generation: &'selection GenerationReceipt,
+        original: &'owners caws_native::session_cache_wire::OriginalStopCapture<'native>,
+        config: &Config,
+        readset: &'owners SelectionObservationReceipt<'native>,
+        generation: &'owners GenerationReceipt,
         ready: &Ready,
         cancel: impl FnMut() -> Result<(), String>,
-    ) -> Result<Option<Self>, String> {
+    ) -> Result<Self, String> {
+        if ready.service_offer.is_some() {
+            return Err("Combined Stop admission cannot enclose a service offer".into());
+        }
+        readset.validate_with(cancel, |scope, cancel| {
+            let selected = match StockStopSelection::admit_in_scope(
+                original, config, readset, scope, cancel,
+            ) {
+                Ok(selected) => selected,
+                Err(Refusal::Unsupported(_)) => return Ok(Self::Unsupported(None)),
+                Err(Refusal::Invalidated(reason)) => return Err(reason),
+            };
+            let Some(profile) =
+                EligibleStop::profile_in_scope(&selected, generation, ready, scope, cancel)?
+            else {
+                return Ok(Self::Unsupported(Some(selected)));
+            };
+            let eligible = EligibleStop {
+                selection: selected,
+                profile,
+            };
+            // Keep the final predispatch readset/profile/SQLite checks; only
+            // the full generation brackets enclose all three pure phases.
+            readset.validate_in_scope(scope, cancel, |cancel| {
+                eligible.profile.revalidate_in_scope(scope, cancel)
+            })?;
+            Ok(Self::Eligible(eligible))
+        })
+    }
+}
+
+impl<'owners, 'native: 'owners> EligibleStop<'owners, 'native> {
+    fn profile_in_scope(
+        selection: &StockStopSelection<'owners, 'native>,
+        generation: &'owners GenerationReceipt,
+        ready: &Ready,
+        scope: &GenerationValidationScope<'_, 'native>,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<Option<StopProfileReceipt<'owners>>, String> {
         selection
             .readset()
-            .validate_with(cancel, |scope, mut cancel| {
+            .validate_in_scope(scope, cancel, |mut cancel| {
                 let original = selection.original();
                 scope.check_binding(generation, original.deadline(), &mut cancel)?;
                 let environment = original.caller_environment();
@@ -106,7 +153,7 @@ impl<'selection, 'owners: 'selection, 'native: 'selection>
                 // Preserve the post-capture member/selector and linked-SQLite checks;
                 // their full generation brackets are supplied by this one scope.
                 profile.revalidate_in_scope(scope, &mut cancel)?;
-                Ok(Some(Self { selection, profile }))
+                Ok(Some(profile))
             })
     }
 
