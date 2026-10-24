@@ -16,6 +16,7 @@ export const REQUEST_SCHEMA = 'caws.runtime.request.v1';
 export const RESPONSE_SCHEMA = 'caws.runtime.response.v1';
 export const SESSION_CACHE_CAPABILITY = 'caws.runtime.session-cache.v1';
 export const SESSION_END_PREFIX_CAPABILITY = 'caws.runtime.session-end-prefix.v1';
+export const STOP_PREFIX_CAPABILITY = 'caws.runtime.stop-prefix.v1';
 export const TRANSCRIPT_STORE_CAPABILITY = 'caws.runtime.transcript-store.v1';
 export const SESSION_PUBLICATION_CAPABILITY = 'caws.runtime.session-publication.v1';
 export const SELECTION_OBSERVATION_CAPABILITY = 'caws.runtime.selection-observation.v1';
@@ -71,7 +72,7 @@ export const MAX_INPUT_BYTES = 1024 * 1024;
 export const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 export const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 export const MAX_REQUEST_DURATION_MS = 300_000;
-const MAX_JSON_DEPTH = 128;
+export const MAX_JSON_DEPTH = 128;
 const MAX_JSON_NODES = 100_000;
 
 /** Audited runtime capability subset, not an alternative surface registry. */
@@ -98,6 +99,8 @@ export interface RuntimeRequest {
   readonly sessionCache?: typeof SESSION_CACHE_CAPABILITY;
   /** Complete native SessionEnd prefix; the older cache capability is insufficient. */
   readonly sessionEndPrefix?: typeof SESSION_END_PREFIX_CAPABILITY;
+  /** Complete native Stop prefix; SessionEnd is a different operation. */
+  readonly stopPrefix?: typeof STOP_PREFIX_CAPABILITY;
   /** Optional finite native query profile; this does not select a stock consumer. */
   readonly sessionStore?: typeof TRANSCRIPT_STORE_CAPABILITY;
   /** Native-owned publication exchange; prepared bytes confer no path authority. */
@@ -213,6 +216,7 @@ export function decodeRuntimeRequest(
       ...(Object.hasOwn(value, 'contextGit') ? ['contextGit'] : []),
       ...(Object.hasOwn(value, 'sessionCache') ? ['sessionCache'] : []),
       ...(Object.hasOwn(value, 'sessionEndPrefix') ? ['sessionEndPrefix'] : []),
+      ...(Object.hasOwn(value, 'stopPrefix') ? ['stopPrefix'] : []),
       ...(Object.hasOwn(value, 'sessionStore') ? ['sessionStore'] : []),
       ...(Object.hasOwn(value, 'sessionPublication') ? ['sessionPublication'] : []),
       ...(Object.hasOwn(value, 'selectionObservation') ? ['selectionObservation'] : []),
@@ -233,6 +237,8 @@ export function decodeRuntimeRequest(
     value.sessionEndPrefix !== SESSION_END_PREFIX_CAPABILITY
   )
     throw new RuntimeProtocolError('Unsupported SessionEnd prefix capability');
+  if (Object.hasOwn(value, 'stopPrefix') && value.stopPrefix !== STOP_PREFIX_CAPABILITY)
+    throw new RuntimeProtocolError('Unsupported Stop prefix capability');
   if (Object.hasOwn(value, 'sessionStore') && value.sessionStore !== TRANSCRIPT_STORE_CAPABILITY)
     throw new RuntimeProtocolError('Unsupported transcript store capability');
   if (
@@ -325,6 +331,7 @@ export function decodeRuntimeRequest(
     ...(value.sessionEndPrefix === SESSION_END_PREFIX_CAPABILITY
       ? { sessionEndPrefix: SESSION_END_PREFIX_CAPABILITY }
       : {}),
+    ...(value.stopPrefix === STOP_PREFIX_CAPABILITY ? { stopPrefix: STOP_PREFIX_CAPABILITY } : {}),
     ...(value.sessionStore === TRANSCRIPT_STORE_CAPABILITY
       ? { sessionStore: TRANSCRIPT_STORE_CAPABILITY }
       : {}),

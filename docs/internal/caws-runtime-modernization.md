@@ -9124,6 +9124,49 @@ Additional bounded evidence and unresolved dependencies:
   hook ignored the TypeScript path because its invocation found no matching
   configuration; that hook is not lint evidence.
 
+- E346: The source connects retained native Stop selection/profile owners to
+  dispatch.v3, the separate Stop prefix exchange and native resident
+  registration. The typed entry uses its existing framed transport and deadline;
+  the ordinary executor verifies the selected logger before replacing index2
+  with the existing store/publication consumer. Reprieve and ordered composition
+  remain ordinary decisions. Unsupported startup and skipped/unsafe supplied
+  identities are excluded before the grant; partial prefix effects, uncertain
+  delivery and post-grant failures cannot authorize compatibility replay.
+  Original selection and profile owners revalidate across the queued
+  registration checkpoints. These source connections await execution through a
+  fresh production image. native-stop-engine-join-build-02 exits0 in6.248s.
+  tests-01 exits1: one supplied test path does not exist and a routing oracle
+  compares two distinct fixture runtime digests. Each fixture home is embedded
+  in the OpenCode plugin and therefore changes its manifest digest. The repaired
+  oracle verifies each selected generation and exact reset-script member before
+  normalizing only that path. tests-02 exits0 in27.946s with244 checks across
+  six existing/new suites. Its14 retained fixtures include actual composer
+  journals; the positive trace is prefix/first/second/publication/last, the
+  reprieved logger has zero publication calls, and post-prefix logger mutation
+  has zero publication and compatibility calls. Native prefix/publication are
+  mocked in these new controls; they cannot prove SQL closure, filesystem
+  publication or consumption. Raw logs and fixtures live under
+  publication-integration/native-stop-engine-join-tests-02 in the root artifact
+  directory. lint01 exits1 for two bare AbortController references; explicit
+  globalThis preserves the runtime binding and lint02 exits0. Native
+  main-join-tests-01 executes the distinct operation/duplicate/size control
+  exit0; main-join-tests-02 executes startup and supplied-identity controls
+  exit0. open-observation-tests-01 and open-observation-status-01 execute one
+  control each, exit0: a saturating process counter at the actual
+  transcript-database open call and owner/count status across
+  missing/registered/released records. These units do not prove zero opens for
+  an actual queued invocation. The observation means transcript-database opens,
+  excluding profile identity's in-memory SQLite connection; saturation
+  invalidates a zero-delta claim. Source/input pins remain unchanged during
+  checks and observed child groups settle. Root owns the fresh-image recipe,
+  fixed30 comparison execution, actual original native invocation through
+  ordinary reader/CONSUMED/heavy release and the paired queued-mutation refusal
+  with zero database-open attempts on the same isolated owner. The finite
+  UTC0/OpenCode profile and resource ceilings do not establish
+  ambient/all-surface or above-limit legacy parity. Full Python retirement,
+  unchanged1000hotturns, thirteen-session/four-repository fairness, coherent
+  main delivery, installed execution and rollback remain open.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -9230,24 +9273,24 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                              | Next decisive check                                                                                                                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                 | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.                                                                                |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; root owns fresh qualification and both production joins | Connect separately qualified SQL/renderer profiles, original capture and completed prefix to the maintained store port; bind the source catalog to native captured inputs, preserve the original deadline and revalidate after queueing before reservation/writer/SQL through ordinary publication/reader/release |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                   | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                                             |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                             | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.                  |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; E346 connects native and engine production sources; root owns fresh-image execution | Execute the fresh exact image through original capture, completed prefix, SQL CLOSED, publication, ordinary reader, CONSUMED and release; pair with queued selection mutation and zero transcript-database open attempts on the same isolated owner |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                               | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload               |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
 E280 bounded fifth warm probe completes, retaining earlier failed attempts and
 source-grounded oracle/input corrections. E282 demonstrates sequential
 reclamation across 258 originals on one owner; it does not establish concurrent
-admission or fairness. The SQL adapter is integrated into the source-landing
-candidate, while its production observation inputs and selector remain unwired.
-Candidate `29555bc8` builds successfully in
-`publication-integration/source-publication-build-01` (exit 0, 6.660s);
-`source-publication-tests-01` executes 113 checks across the publication
-adapter, store client, warm-owner qualifier and CI archive contract (exit 0,
-3.789s). Raw logs and stable before/after source pins are retained;
+admission or fairness. E346 connects the SQL adapter to native observation
+inputs and profile selectors in the owned source candidate; actual
+combined-image execution remains unverified. Candidate `29555bc8` builds
+successfully in `publication-integration/source-publication-build-01` (exit 0,
+6.660s); `source-publication-tests-01` executes 113 checks across the
+publication adapter, store client, warm-owner qualifier and CI archive contract
+(exit 0, 3.789s). Raw logs and stable before/after source pins are retained;
 `source-publication-inputs-01/execution.json` additionally pins the fresh
 compiled distribution, workflow and archive test. These checks do not qualify a
 combined native image or deployed callbacks. Package adoption, Python retirement

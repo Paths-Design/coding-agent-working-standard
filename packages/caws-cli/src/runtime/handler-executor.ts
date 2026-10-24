@@ -47,6 +47,11 @@ export interface HandlerExecutorOptions {
   readonly nativeRenderAdmission?: NativeRenderAdmission;
   /** Supplied only after the actual native full-prefix terminal was accepted. */
   readonly nativeSessionSeal?: NativeSessionSealExecution;
+  /** Request-local execution, supplied only after native Stop prefix completion. */
+  readonly nativeStopPublication?: {
+    readonly loggerIndex: 2;
+    execute(): Promise<HandlerResult>;
+  };
 }
 export interface CompatibilityDispatchResult extends HandlerResult {
   readonly offerReceipts: Uint8Array;
@@ -466,6 +471,20 @@ export function createHandlerExecutor(
     if (Date.now() >= owned.request.deadlineEpochMs)
       throw new HandlerExecutionError('Handler deadline expired');
     verifyHandler(expected, owned.selection);
+    if (owned.nativeStopPublication && selectedIndex === owned.nativeStopPublication.loggerIndex) {
+      if (
+        owned.request.configuration !== 'system' ||
+        owned.request.surface !== 'opencode' ||
+        owned.request.event !== 'stop' ||
+        expected.kind !== 'stock' ||
+        expected.name !== 'session-log.sh' ||
+        expected.entry !== 'session-log.sh' ||
+        expected.args.length !== 0 ||
+        expected.path !== join(owned.selection.runtimeDirectory, 'session-log.sh')
+      )
+        throw new HandlerExecutionError('Native Stop logger differs from ordered selection');
+      return owned.nativeStopPublication.execute();
+    }
     const result = await tryExecuteStockHandler(expected, owned);
     return result ?? runChild({ path: expected.path, args: expected.args }, owned, false, expected);
   };

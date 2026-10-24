@@ -238,6 +238,51 @@ fn resident_write_waits_for_exact_actual_delivery_ack_and_preserves_failure() {
     }
 }
 #[test]
+fn resident_status_preserves_owner_open_observation_for_missing_and_released_records() {
+    let f = Fixture::new();
+    let mut registry = StoreRegistry::new(1);
+    let absent = StoreStatusQuery::new("absent".into(), "a".repeat(64), "0".repeat(64));
+    let initial = registry.status(&absent);
+    assert!(!initial.present);
+    assert_eq!(initial.owner_pid, std::process::id());
+
+    let record = registry.reserve(f.acquire("status-release")).unwrap();
+    let registration = record.lock().unwrap().registration.clone();
+    let query = StoreStatusQuery::new("status-release".into(), "a".repeat(64), registration);
+    let registered = registry.status(&query);
+    assert!(registered.present);
+    assert_eq!(registered.phase, "registered");
+    assert_eq!(registered.owner_pid, initial.owner_pid);
+    assert!(
+        registered.transcript_database_open_attempts >= initial.transcript_database_open_attempts
+    );
+    assert!(registry.release_consumed(&record).is_err());
+
+    // Set the existing registry's release prerequisite. This unit test does not
+    // establish durable consumption; the publication integration trace does.
+    record.lock().unwrap().consumed = true;
+    registry.release_consumed(&record).unwrap();
+    let released = registry.status(&query);
+    assert!(!released.present);
+    assert_eq!(released.phase, "missing");
+    assert!(released.completion.is_none());
+    assert_eq!(released.owner_pid, initial.owner_pid);
+    assert!(
+        released.transcript_database_open_attempts >= registered.transcript_database_open_attempts
+    );
+    assert!(registry.is_empty());
+
+    let encoded = serde_json::to_vec(&released).unwrap();
+    let decoded: StoreStatus = serde_json::from_slice(&encoded).unwrap();
+    assert_eq!(decoded.owner_pid, released.owner_pid);
+    assert_eq!(
+        decoded.transcript_database_open_attempts,
+        released.transcript_database_open_attempts
+    );
+    assert!(!decoded.present);
+}
+
+#[test]
 fn resident_registry_is_finite_no_replay_and_status_requires_actual_retained_record() {
     let f = Fixture::new();
     let mut registry = StoreRegistry::new(1);

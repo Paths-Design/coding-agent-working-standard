@@ -8,8 +8,24 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 use std::ptr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
+
+// Process-local diagnostic evidence only; never admission or authority.
+// Includes unsuccessful opens and excludes profile identity's in-memory database.
+static TRANSCRIPT_DATABASE_OPEN_ATTEMPTS: AtomicU64 = AtomicU64::new(0);
+
+fn record_database_open_attempt(counter: &AtomicU64) {
+    let _ = counter.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
+        Some(value.saturating_add(1))
+    });
+}
+
+/// Saturation means the count cannot establish an unchanged-open observation.
+pub(crate) fn transcript_database_open_attempts() -> u64 {
+    TRANSCRIPT_DATABASE_OPEN_ATTEMPTS.load(Ordering::SeqCst)
+}
 
 const QUERY: &str = "\
 SELECT m.id AS message_id, m.data AS message_data, \
@@ -650,6 +666,7 @@ where
     if let Err(error) = control.check() {
         return Acquisition::failed(error);
     }
+    record_database_open_attempt(&TRANSCRIPT_DATABASE_OPEN_ATTEMPTS);
     let connection = match Connection::open_with_flags(
         database,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -770,6 +787,21 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+    #[test]
+    fn database_open_attempt_counter_increments_and_saturates_without_wrapping() {
+        // A local counter gives exact assertions independent of parallel acquisitions.
+        let counter = AtomicU64::new(0);
+        record_database_open_attempt(&counter);
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+        record_database_open_attempt(&counter);
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
+        counter.store(u64::MAX - 1, Ordering::SeqCst);
+        record_database_open_attempt(&counter);
+        assert_eq!(counter.load(Ordering::SeqCst), u64::MAX);
+        record_database_open_attempt(&counter);
+        assert_eq!(counter.load(Ordering::SeqCst), u64::MAX);
+    }
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
     static BUSY_CANCEL: AtomicBool = AtomicBool::new(false);

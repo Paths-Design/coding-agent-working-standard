@@ -7,6 +7,7 @@ import {
   RuntimeProtocolError,
   SESSION_CACHE_CAPABILITY,
   SESSION_END_PREFIX_CAPABILITY,
+  STOP_PREFIX_CAPABILITY,
   type RuntimeRequest,
 } from './protocol';
 
@@ -52,7 +53,11 @@ export interface NativeSessionEndPrefixPort {
   capture(canonicalRoot: string): Promise<NativeSessionEndPrefixResult>;
 }
 
-function prefixTerminal(row: Record<string, unknown>, bytes: number): NativeSessionEndPrefixResult {
+function prefixTerminal(
+  row: Record<string, unknown>,
+  bytes: number,
+  schema: string = SESSION_END_PREFIX_RESULT_SCHEMA
+): NativeSessionEndPrefixResult {
   if (
     bytes > MAX_RESULT_FRAME ||
     !keys(row, [
@@ -68,7 +73,7 @@ function prefixTerminal(row: Record<string, unknown>, bytes: number): NativeSess
       'reap',
       'diagnostic',
     ]) ||
-    row.schema !== SESSION_END_PREFIX_RESULT_SCHEMA ||
+    row.schema !== schema ||
     !['completed', 'declined', 'unavailable'].includes(row.status as string) ||
     typeof row.prefixComplete !== 'boolean' ||
     typeof row.envelopePublished !== 'boolean' ||
@@ -208,6 +213,105 @@ export function createNativeSessionEndPrefixPort(
       if (decision.action === 'capture' && result.status === 'declined')
         throw new RuntimeProtocolError('Unexpected SessionEnd prefix decision result');
       if (signal.aborted) throw signal.reason;
+      return result;
+    },
+  });
+}
+
+export const STOP_PREFIX_REQUEST_SCHEMA = 'caws.runtime.stop-prefix.request.v1';
+export const STOP_PREFIX_PREVIOUS_SCHEMA = 'caws.runtime.stop-prefix.previous.v1';
+export const STOP_PREFIX_DECISION_SCHEMA = 'caws.runtime.stop-prefix.decision.v1';
+export const STOP_PREFIX_RESULT_SCHEMA = 'caws.runtime.stop-prefix.result.v1';
+export interface NativeStopPrefixPort {
+  /** A granted Stop never retries compatibility, including a no-effect decline. */
+  capture(canonicalRoot: string): Promise<NativeSessionEndPrefixResult>;
+}
+
+export function createNativeStopPrefixPort(
+  request: RuntimeRequest,
+  transport: SessionCacheTransport,
+  signal: AbortSignal
+): NativeStopPrefixPort {
+  let used = false;
+  return Object.freeze({
+    async capture(canonicalRoot: string): Promise<NativeSessionEndPrefixResult> {
+      if (used) throw new RuntimeProtocolError('Stop prefix operation is single-use');
+      used = true;
+      if (signal.aborted) throw signal.reason;
+      if (
+        !isAbsolute(canonicalRoot) ||
+        normalize(canonicalRoot) !== canonicalRoot ||
+        (canonicalRoot !== '/' && canonicalRoot.endsWith('/')) ||
+        Buffer.byteLength(canonicalRoot) > 4096 ||
+        /[\x00-\x1f\x7f-\x9f]/.test(canonicalRoot) ||
+        Buffer.from(canonicalRoot).toString('utf8') !== canonicalRoot
+      )
+        throw new RuntimeProtocolError('Invalid Stop prefix root');
+      if (
+        request.surface !== 'opencode' ||
+        request.event !== 'stop' ||
+        request.configuration !== 'system' ||
+        request.stopPrefix !== STOP_PREFIX_CAPABILITY
+      )
+        throw new RuntimeProtocolError('Unsupported Stop prefix invocation');
+      const supplied = request.payload.session_id;
+      if (
+        typeof supplied !== 'string' ||
+        !supplied ||
+        supplied === 'unknown' ||
+        supplied === '.' ||
+        supplied === '..' ||
+        Buffer.byteLength(supplied) > 128 ||
+        !/^[A-Za-z0-9_.@:-]+$/.test(supplied)
+      )
+        throw new RuntimeProtocolError('Stop prefix lacks safe original identity');
+      const identity = {
+        id: request.id,
+        runtimeDigest: request.runtimeDigest,
+        token: randomUUID(),
+      };
+      await transport.write(
+        { schema: STOP_PREFIX_REQUEST_SCHEMA, ...identity, canonicalRoot },
+        signal
+      );
+      const first = await transport.read(signal);
+      const row = decodeControl(first, request, identity.token);
+      if (row.schema === STOP_PREFIX_RESULT_SCHEMA) {
+        const result = prefixTerminal(row, first.byteLength, STOP_PREFIX_RESULT_SCHEMA);
+        if (result.status === 'completed' || result.envelopePublished || result.pointerPublished)
+          throw new RuntimeProtocolError('Stop prefix effects preceded interpretation');
+        return result;
+      }
+      if (
+        row.schema !== STOP_PREFIX_PREVIOUS_SCHEMA ||
+        !keys(row, ['schema', 'id', 'runtimeDigest', 'token', 'existingBase64']) ||
+        (row.existingBase64 !== null && typeof row.existingBase64 !== 'string')
+      )
+        throw new RuntimeProtocolError('Invalid previous Stop prefix frame');
+      let previous: Buffer | null = null;
+      if (typeof row.existingBase64 === 'string') {
+        previous = Buffer.from(row.existingBase64, 'base64');
+        if (
+          previous.byteLength > MAX_EXISTING_BYTES ||
+          previous.toString('base64') !== row.existingBase64
+        )
+          throw new RuntimeProtocolError('Invalid previous Stop prefix encoding');
+      }
+      const decision = decideSessionCacheCreation(previous, supplied);
+      await transport.write(
+        { schema: STOP_PREFIX_DECISION_SCHEMA, ...identity, ...decision },
+        signal
+      );
+      const last = await transport.read(signal);
+      const result = prefixTerminal(
+        decodeControl(last, request, identity.token),
+        last.byteLength,
+        STOP_PREFIX_RESULT_SCHEMA
+      );
+      if (decision.action === 'decline' && result.status !== 'declined')
+        throw new RuntimeProtocolError('Stop prefix decline was not confirmed');
+      if (decision.action === 'capture' && result.status === 'declined')
+        throw new RuntimeProtocolError('Unexpected Stop prefix decision result');
       return result;
     },
   });

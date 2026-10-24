@@ -627,6 +627,7 @@ impl StoreRegistry {
         Ok(())
     }
     fn status(&self, query: &StoreStatusQuery) -> StoreStatus {
+        let owner_pid = std::process::id();
         let record = self
             .records
             .get(&query.id)
@@ -638,12 +639,16 @@ impl StoreRegistry {
             Some(record) => {
                 let record = record.lock().unwrap_or_else(|e| e.into_inner());
                 StoreStatus {
+                    owner_pid,
+                    transcript_database_open_attempts: sql::transcript_database_open_attempts(),
                     present: true,
                     phase: record.phase.into(),
                     completion: Some(record.completion()),
                 }
             }
             None => StoreStatus {
+                owner_pid,
+                transcript_database_open_attempts: sql::transcript_database_open_attempts(),
                 present: false,
                 phase: "missing".into(),
                 completion: None,
@@ -684,6 +689,11 @@ impl StoreStatusQuery {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StoreStatus {
+    /// Process identity for an isolated, explicitly owned resident observation.
+    pub owner_pid: u32,
+    /// Process-wide transcript database open attempts, including failed opens.
+    /// Never authority; u64::MAX is saturated and cannot prove zero new opens.
+    pub transcript_database_open_attempts: u64,
     pub present: bool,
     pub phase: String,
     pub completion: Option<StoreCompletion>,
