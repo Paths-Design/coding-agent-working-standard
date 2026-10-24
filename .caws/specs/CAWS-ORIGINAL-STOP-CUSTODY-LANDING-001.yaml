@@ -60,3 +60,8 @@ evidence:
     evidence_ref: "E327: inspected native-peer-candidate-05 five actual process cases exit0; peer-observation.json admits exact native host and rejects forged same-UID Node (zero callbacks), exited peer and same-byte member replacement. Executable/member/process mutants exit101 at behavioral assertions, source restored; combined 104 pins match. Synthetic generation only, no request authentication or production activation claim. Raw artifacts: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration"
     recorded_at: "2026-10-24T04:14:43.539Z"
     commit_sha: "5afe64be54e782500abfd6832a1ddcf83364791a"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Governed merge a1c175707cb779fd7eee14c5cf3d8e2ceb7e8344 includes reviewed candidate 5afe64be54e782500abfd6832a1ddcf83364791a; git ancestor and package diff checks exit0 with empty diff. All four combined run source inventories (104 each) match. Machine adapter-runtime bytes equal retained before snapshot; parent CAWS-NATIVE-RUNTIME-001 spec diff empty. Doctor exit0 0E/4W/5I and five gates pass over 12 changed paths; independent committed-candidate peer feedback grounded against raw artifacts and source. /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/original-stop-custody-landing-01/landed-state.json. Source-only landing; no installed adoption, production Stop or parent acceptance."
+    recorded_at: "2026-10-24T04:15:27.071Z"
+    commit_sha: a1c175707cb779fd7eee14c5cf3d8e2ceb7e8344
