@@ -9264,6 +9264,56 @@ Additional bounded evidence and unresolved dependencies:
   directories; reorientation-ambient-observation-01.json binds the shell-only
   observation. Root owns the integrated execution and continuing cutover goal.
 
+- E349: Reorientation reads all164 available CAWS turn records for root session
+  01a164bc-7a2b-75e2-be81-5da9d0a29252. The user's lead transfer supersedes
+  coordination-only ownership; full parity and actual local cutover remain the
+  outcome. Main120cab3d contains the E348 catalog merge; the owned publication
+  lane17733de5 is clean before this documentation edit. Selected machine digest
+  remains408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0.
+
+  Recovery02 verifies and seeds64 lock-selected archive bodies into a private
+  offline npm cache. Preparation, normal offline installation, prefix
+  verification and maintained image preparation exit0 in2.917s/1.369s/1.602s/
+  3.860s. verified-prefix.json records5776 prefix members,64 third-party
+  packages, the exact fresh8ea3ecd3 tarball and unchanged failed03 prefix.
+  prepared-image.json records5854 prepared image members and state
+  prepared_not_compared. These artifacts reuse the genuine03 native completion
+  for exported candidate57f79fb9; neither live lane HEAD nor successful
+  packaging grants runtime acceptance. fresh-stop-profile-recovered-qualifier-02
+  exits1 in2.114s without timeout or observed group residue. Its stderr reports
+  an unqualified Python dependency for the exported session_log_renderer.py:
+  expected e45f7ec6, absent path key. The relocated sharedRoot retained
+  lane-absolute Python dependency keys. Root owns execution; html_profile
+  accepts a bounded fresh-request repair preserving reviewed dependency hashes,
+  failed output and all qualification checks.
+
+  Root grounds an integration defect beyond the absent-TZ domain: main.rs passes
+  the raw Session into acquire_native_stop_store, while the typed production
+  adapter requires renderObservations and session-publication-client waits for
+  openNativeRenderObservations immediately after Render INPUTS READY. Only
+  render_observation::ObservationTransport emits that original binding; source
+  search finds no production ObservationOwner construction. The missing producer
+  is established from source. A mutual wait until deadline is inferred, not an
+  executed timeout: the ordinary consumer waits for the binding while the raw
+  publication relay waits for its PREPARED frame. This affects controlled UTC
+  positive publication before any naive-calendar query. Component comparisons
+  cannot establish this connection. Root owns original-process Git/calendar
+  capture, transport connection, retained cleanup custody and the real positive
+  invocation; ambient_stop_domain accepts the bounded source-design question.
+
+  The following increment must establish original capture through completed
+  prefix, SQL CLOSED, Render binding, ordinary semantic consumption, durable
+  CONSUMED and release, then land that coherent owned slice. The absent-TZ host
+  calendar domain remains separate and required for actual local use. The
+  pre-reservation rejection design remains unimplemented: durable rejected-ID
+  history must precede heavy release; dispatch absence cannot establish safety,
+  and existing CancelledBeforeDispatch records do not reclaim persisted live
+  capacity. Root retains both obligations. No production positive/refusal run,
+  thirteen-session/four-repository workload, Python retirement, machine adoption
+  or rollback is established by this entry. Raw recovery and qualifier artifacts
+  remain under publication-integration/fresh-stop-profile-prefix-recovery-02 and
+  the corresponding supervisor directories.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
