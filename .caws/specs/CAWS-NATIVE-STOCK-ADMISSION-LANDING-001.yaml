@@ -49,3 +49,10 @@ evidence:
     command: "cargo test --release --locked --offline --no-default-features -j 2 --test stock_stop_admission direct_admit_rejects_stale_readset_and_preserves_cancellation -- --exact --nocapture --test-threads=1"
     exit_code: 0
     commit_sha: "5837aa104633640ce593a2ead8ea2198d46b7812"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/maintained-stock-admission-execution-01/execution.json outer exit0; /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/maintained-stock-admission-observation-01 native-terminal.json exit0 16267ms under original30000ms, native-progress.json stockSelection admitted,364 observations,sealed and predispatch true. Four compatibility handlers exit0; expected user/reply, index1 and byte-equal final snapshot retained. Native binary SHA704c474d46dedf1defa8bef79f3433af6a2925332dc9e13f09e88220c4e127cb matches fresh candidate. No native SQL/publication/Python retirement or selected-machine claim."
+    recorded_at: "2026-10-24T08:19:06.328Z"
+    command: "Maintained image actual-main-selection.cjs; exact argv retained in maintained-stock-admission-execution-01/execution.json"
+    exit_code: 0
+    commit_sha: "5837aa104633640ce593a2ead8ea2198d46b7812"
