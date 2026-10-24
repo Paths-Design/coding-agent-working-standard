@@ -50,3 +50,8 @@ evidence:
     evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/refusal-source-landing-01/postmerge.json: rederived all eight source/tracker blob IDs on main exactly equal reviewed5f3f09e2; composition8295d304 and landed mergeb701acc3; gates and worktree review cover both commits and all eight paths. --verify verifies commit reachability, not execution."
     recorded_at: "2026-10-24T18:43:09.941Z"
     commit_sha: b701acc311b715866a02e89a0167c75bbee3e2fa
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/pre-reservation-final-lib-01: inspected execution exit0,451pass2ignored; actual reclamation JSON has refused_before_reservation, no acquisition, record0/capacityfalse; changed-inode contention and sync failures retain record/capacity. Final-bin187pass1ignored and feature-off compile exit0. Current source reviewed at5f3f09e2. Native paired fresh11 FAILED positive deadline30.032s despite publication consumed; negative never ran. Authenticated restart, rollback and cutover remain unaccepted; helper tests do not prove them. Record-lock-specific contention test remains absent."
+    recorded_at: "2026-10-24T18:43:19.847Z"
+    commit_sha: b701acc311b715866a02e89a0167c75bbee3e2fa
