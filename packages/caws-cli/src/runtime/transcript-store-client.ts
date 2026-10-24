@@ -10,6 +10,11 @@ import {
   type StoreProjectionLimits,
 } from '../transcripts/store-projection';
 import type { StoreUtcCalendarResult } from '../transcripts/store-timestamp';
+import {
+  STORE_JSON_PROFILE,
+  snapshotStoreJsonProfile,
+  type StoreJsonProfile,
+} from '../transcripts/store-json';
 import { parseJsonSource } from './json-custody';
 import { RuntimeProtocolError, TRANSCRIPT_STORE_CAPABILITY, type RuntimeRequest } from './protocol';
 import {
@@ -44,6 +49,8 @@ export interface NativeTranscriptStorePublicationPort extends NativeTranscriptSt
   continuePublication(options: {
     readonly canonicalRoot: string;
     readonly sessionId: string;
+    /** Explicit selected-carrier opt-in; absence preserves the existing continuation. */
+    readonly renderObservations?: true;
     readonly prepare: (input: SessionPublicationInput) => Promise<SessionPublicationPreparation>;
     readonly consume: SessionPublicationConsumer;
   }): Promise<SessionPublicationReceipt>;
@@ -75,15 +82,19 @@ export async function reconstructNativeTranscriptStore(
   port: NativeTranscriptStorePort,
   canonicalRoot: string,
   surface: 'opencode' | 'zcode',
-  limits: StoreProjectionLimits
+  limits: StoreProjectionLimits,
+  requestedProfile: StoreJsonProfile = STORE_JSON_PROFILE
 ): Promise<StoreProjection> {
+  // Invalid qualification cannot begin an acquisition or pretend cleanup ran.
+  const profile = snapshotStoreJsonProfile(requestedProfile);
   let projection: StoreProjection;
   try {
     projection = await reconstructStoreProjection(
       port.rows(canonicalRoot),
       surface,
       (seconds) => port.calendar(seconds),
-      limits
+      limits,
+      profile
     );
   } catch (primary) {
     try {
@@ -434,6 +445,10 @@ export function createNativeTranscriptStorePort(
       options: Parameters<NativeTranscriptStorePublicationPort['continuePublication']>[0]
     ) {
       requireProtocol(
+        options.renderObservations === undefined || options.renderObservations === true,
+        'Invalid native store render observation option'
+      );
+      requireProtocol(
         publicationEligible &&
           !publicationAttempted &&
           phase === 'closed' &&
@@ -454,6 +469,7 @@ export function createNativeTranscriptStorePort(
         sessionId: options.sessionId,
         prepare: options.prepare,
         consume: options.consume,
+        ...(options.renderObservations === true ? { renderObservations: true } : {}),
       });
     },
     assertClosed(): void {

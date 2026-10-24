@@ -1,22 +1,18 @@
-//! Staged installed entry: one native generation selection, without consuming hook stdin.
+//! Stable installed-entry adapter: pointer selection, argv and launch policy.
 //!
-//! Legacy compatibility deliberately delegates selection to the unchanged legacy
-//! bootstrap. Its later pointer read, rather than this classification, determines
-//! the executed legacy generation. A failed native invocation never takes that route.
+//! Legacy compatibility delegates the later pointer read to its verified
+//! bootstrap. A failed native invocation never takes that route.
+use crate::installed_generation::{
+    self, MAX_METADATA, Selection as GenerationSelection, Verification,
+};
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::io::Write;
 use std::os::unix::process::CommandExt;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{Duration, Instant};
 
-const SCHEMA: &str = "caws.runtime.native-entry.v1";
-const METADATA: &str = "native-entry.json";
-const MAX_MANIFEST: u64 = 8 * 1024 * 1024;
-const MAX_METADATA: u64 = 64 * 1024;
 const SURFACES: &[&str] = &[
     "codex",
     "claude-code",
@@ -76,272 +72,75 @@ struct Pointer {
     version: u64,
     digest: String,
 }
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct NativeEntry {
-    schema: String,
-    native_executable: String,
-    node_executable: String,
-    engine_entry: String,
-    describe_entry: String,
-    timeout_ms: u64,
-}
-#[derive(Debug)]
-enum Route {
-    Native(NativeEntry),
-    /// This is a compatibility classification, not an executed-generation witness.
-    Legacy {
-        bootstrap: PathBuf,
-    },
-}
 #[derive(Debug)]
 pub struct Selection {
-    root: PathBuf,
+    generation: GenerationSelection,
+    // Compatibility projection for existing installed-entry callers. Launch
+    // arguments and revalidation use the private verified generation directly.
     pub inspected_digest: String,
-    manifest: BTreeMap<String, String>,
-    route: Route,
+    expires: Instant,
 }
-
-fn valid_digest(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-}
-fn confined(root: &Path, relative: &str) -> Result<PathBuf, String> {
-    if relative.is_empty()
-        || relative.contains(['\0', '\\'])
-        || relative
-            .split('/')
-            .any(|part| part.is_empty() || part == "." || part == "..")
-    {
-        return Err(format!("Invalid generation path: {relative:?}"));
-    }
-    let suffix = Path::new(relative);
-    if suffix
-        .components()
-        .any(|part| !matches!(part, Component::Normal(_)))
-    {
-        return Err(format!("Path escapes generation: {relative:?}"));
-    }
-    let mut cursor = root.to_path_buf();
-    for part in std::iter::once(None).chain(suffix.components().map(Some)) {
-        if let Some(part) = part {
-            cursor.push(part.as_os_str());
-        }
-        let metadata = fs::symlink_metadata(&cursor)
-            .map_err(|e| format!("Generation path unavailable {}: {e}", cursor.display()))?;
-        if metadata.file_type().is_symlink() {
-            return Err(format!("Refusing symlink: {}", cursor.display()));
-        }
-    }
-    Ok(cursor)
-}
-fn open_regular(path: &Path) -> Result<File, String> {
-    let file = OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
-        .open(path)
-        .map_err(|e| format!("Cannot open {}: {e}", path.display()))?;
-    if !file.metadata().map_err(|e| e.to_string())?.is_file() {
-        return Err(format!("Not a regular file: {}", path.display()));
-    }
-    Ok(file)
-}
-fn read_bounded(path: &Path, maximum: u64) -> Result<Vec<u8>, String> {
-    let mut bytes = Vec::new();
-    open_regular(path)?
-        .take(maximum + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|e| e.to_string())?;
-    if bytes.len() as u64 > maximum {
-        return Err(format!("File exceeds bound: {}", path.display()));
-    }
-    Ok(bytes)
-}
-fn file_digest(path: &Path) -> Result<String, String> {
-    let mut input = open_regular(path)?;
-    let mut hash = Sha256::new();
-    let mut buffer = [0u8; 65536];
-    loop {
-        let length = input.read(&mut buffer).map_err(|e| e.to_string())?;
-        if length == 0 {
-            break;
-        }
-        hash.update(&buffer[..length]);
-    }
-    Ok(format!("{:x}", hash.finalize()))
-}
-fn verify_files(root: &Path, manifest: &BTreeMap<String, String>) -> Result<(), String> {
-    for (relative, expected) in manifest {
-        if !valid_digest(expected) {
-            return Err(format!("Invalid member digest: {relative}"));
-        }
-        let file = confined(root, relative)?;
-        if file_digest(&file)? != *expected {
-            return Err(format!("Runtime member integrity failure: {relative}"));
-        }
-    }
-    if manifest.contains_key(METADATA) {
-        let modes: BTreeMap<String, u32> = serde_json::from_slice(&read_bounded(
-            &confined(root, "native-modes.json")?,
-            MAX_MANIFEST,
-        )?)
-        .map_err(|e| format!("Malformed native mode inventory: {e}"))?;
-        if modes.keys().ne(manifest.keys()) || !manifest.contains_key("native/caws-hook-native") {
-            return Err(
-                "Native mode inventory differs from manifest or lacks entry identity".into(),
-            );
-        }
-        fn visit(
-            root: &Path,
-            current: &Path,
-            actual: &mut Vec<String>,
-            modes: &BTreeMap<String, u32>,
-        ) -> Result<(), String> {
-            for entry in fs::read_dir(current).map_err(|e| e.to_string())? {
-                let path = entry.map_err(|e| e.to_string())?.path();
-                let stat = fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
-                if stat.is_dir() {
-                    visit(root, &path, actual, modes)?;
-                } else {
-                    let relative = path
-                        .strip_prefix(root)
-                        .map_err(|e| e.to_string())?
-                        .to_str()
-                        .ok_or("Native image paths must be UTF-8")?
-                        .to_owned();
-                    if !stat.is_file() || stat.nlink() != 1 {
-                        return Err(format!("Unsupported native runtime member: {relative}"));
-                    }
-                    if relative == "manifest.json" {
-                        if stat.permissions().mode() & 0o7777 != 0o644 {
-                            return Err("Native manifest mode mismatch".into());
-                        }
-                        continue;
-                    }
-                    let expected = modes
-                        .get(&relative)
-                        .ok_or_else(|| format!("Undeclared native runtime member: {relative}"))?;
-                    if ![0o644, 0o755].contains(expected)
-                        || stat.permissions().mode() & 0o7777 != *expected
-                    {
-                        return Err(format!("Native runtime mode mismatch: {relative}"));
-                    }
-                    actual.push(relative);
-                }
-            }
-            Ok(())
-        }
-        let mut actual = Vec::new();
-        visit(root, root, &mut actual, &modes)?;
-        actual.sort();
-        if actual.iter().ne(manifest.keys()) {
-            return Err("Native runtime inventory differs from manifest".into());
-        }
-    }
-    Ok(())
-}
-
 impl Selection {
     pub fn read(home: &Path) -> Result<Self, String> {
+        // The installed entry precedes Config. Reuse its existing maximum
+        // native timeout; command revalidation retains this original expiry.
+        let expires = Instant::now() + Duration::from_millis(120_000);
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires, &mut cancel);
+        verify.checkpoint()?;
         if !home.is_absolute() {
             return Err("CAWS_HOME must be absolute".into());
         }
-        let pointer_file = confined(home, "state/adapter-runtime.json")?;
-        let pointer: Pointer = serde_json::from_slice(&read_bounded(&pointer_file, MAX_METADATA)?)
-            .map_err(|e| format!("Malformed runtime pointer: {e}"))?;
-        if pointer.version != 1 || !valid_digest(&pointer.digest) {
+        let pointer: Pointer = serde_json::from_slice(&installed_generation::read_metadata(
+            home,
+            "state/adapter-runtime.json",
+            MAX_METADATA,
+            &mut verify,
+        )?)
+        .map_err(|e| format!("Malformed runtime pointer: {e}"))?;
+        if pointer.version != 1 || !installed_generation::valid_digest(&pointer.digest) {
             return Err("Malformed runtime pointer".into());
         }
-        let root = confined(home, &format!("lib/runtimes/{}", pointer.digest))?;
-        let manifest_file = confined(&root, "manifest.json")?;
-        let bytes = read_bounded(&manifest_file, MAX_MANIFEST)?;
-        if format!("{:x}", Sha256::digest(&bytes)) != pointer.digest {
-            return Err("Runtime manifest integrity failure".into());
-        }
-        let manifest: BTreeMap<String, String> = serde_json::from_slice(&bytes)
-            .map_err(|e| format!("Malformed runtime manifest: {e}"))?;
-        if !manifest
-            .get("launcher.py")
-            .is_some_and(|value| valid_digest(value))
-        {
-            return Err("Version-1 manifest lacks the legacy driver identity".into());
-        }
-        verify_files(&root, &manifest)?;
-        let route = if manifest.contains_key(METADATA) {
-            let entry: NativeEntry =
-                serde_json::from_slice(&read_bounded(&confined(&root, METADATA)?, MAX_METADATA)?)
-                    .map_err(|e| format!("Malformed native entry: {e}"))?;
-            if entry.schema != SCHEMA || !(1..=120_000).contains(&entry.timeout_ms) {
-                return Err("Unsupported native entry schema or timeout".into());
-            }
-            for name in [
-                &entry.native_executable,
-                &entry.node_executable,
-                &entry.engine_entry,
-                &entry.describe_entry,
-            ] {
-                if !manifest.contains_key(name) {
-                    return Err(format!("Native entry asset is not in manifest: {name}"));
-                }
-                confined(&root, name)?;
-            }
-            for name in [&entry.native_executable, &entry.node_executable] {
-                if fs::metadata(confined(&root, name)?)
-                    .map_err(|e| e.to_string())?
-                    .permissions()
-                    .mode()
-                    & 0o111
-                    == 0
-                {
-                    return Err(format!("Native entry asset is not executable: {name}"));
-                }
-            }
-            Route::Native(entry)
-        } else {
-            if fs::symlink_metadata(root.join(METADATA)).is_ok() {
-                return Err(
-                    "Untracked native entry metadata cannot select legacy compatibility".into(),
-                );
-            }
-            if !manifest.contains_key("bootstrap.py") {
-                return Err("Unrecognized legacy generation: no verified bootstrap".into());
-            }
-            Route::Legacy {
-                bootstrap: confined(&root, "bootstrap.py")?,
-            }
-        };
+        let generation = GenerationSelection::read_generation(home, &pointer.digest, &mut verify)?;
         Ok(Self {
-            root,
-            inspected_digest: pointer.digest,
-            manifest,
-            route,
+            inspected_digest: generation.inspected_digest.clone(),
+            generation,
+            expires,
         })
     }
 
     pub(crate) fn command(&self, invocation: &Invocation) -> Result<Command, String> {
         // Recheck the selected generation, never the pointer. This detects changes
         // before this launch attempt; it does not claim custody of future imports.
-        if file_digest(&confined(&self.root, "manifest.json")?)? != self.inspected_digest {
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(self.expires, &mut cancel);
+        self.generation.revalidate(&mut verify)?;
+        if self.inspected_digest != self.generation.inspected_digest {
             return Err("Selected manifest changed before launch".into());
         }
-        verify_files(&self.root, &self.manifest)?;
-        match &self.route {
-            Route::Legacy { bootstrap } => {
+        match self.generation.native_entry() {
+            None => {
                 let mut command = Command::new("python3");
-                command.arg(bootstrap).args(&invocation.original);
+                command
+                    .arg(self.generation.member_path("bootstrap.py", &mut verify)?)
+                    .args(&invocation.original);
                 Ok(command)
             }
-            Route::Native(entry) => {
+            Some(entry) => {
                 let configuration = if invocation.system {
                     "system"
                 } else {
                     "project"
                 };
                 let mut command = if invocation.describe {
-                    let mut command = Command::new(confined(&self.root, &entry.node_executable)?);
-                    command.arg(confined(&self.root, &entry.describe_entry)?);
+                    let mut command = Command::new(
+                        self.generation
+                            .member_path(&entry.node_executable, &mut verify)?,
+                    );
+                    command.arg(
+                        self.generation
+                            .member_path(&entry.describe_entry, &mut verify)?,
+                    );
                     // Transport original context as inert data before removing loader inputs.
                     // The entry overwrites any caller-supplied value of this private channel.
                     let environment = std::env::vars_os()
@@ -375,13 +174,22 @@ impl Selection {
                     command.env("CAWS_NATIVE_DESCRIBE_CONTEXT", context);
                     command
                 } else {
-                    let mut command = Command::new(confined(&self.root, &entry.native_executable)?);
+                    let mut command = Command::new(
+                        self.generation
+                            .member_path(&entry.native_executable, &mut verify)?,
+                    );
                     command
                         .arg("invoke")
                         .arg("--engine")
-                        .arg(confined(&self.root, &entry.engine_entry)?)
+                        .arg(
+                            self.generation
+                                .member_path(&entry.engine_entry, &mut verify)?,
+                        )
                         .arg("--node")
-                        .arg(confined(&self.root, &entry.node_executable)?)
+                        .arg(
+                            self.generation
+                                .member_path(&entry.node_executable, &mut verify)?,
+                        )
                         .arg("--timeout-ms")
                         .arg(entry.timeout_ms.to_string());
                     command

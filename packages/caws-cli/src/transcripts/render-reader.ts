@@ -42,13 +42,47 @@ export const RENDER_JSON_UNLIMITED: RenderNumericProfile = Object.freeze({
   id: 'cpython3.11-json/int-max-str-digits:0',
   integerMaxDigits: 0,
 });
-export interface RendererSourceObservation {
+export interface RendererPublicationBinding {
+  readonly id: string;
+  readonly runtimeDigest: string;
+  readonly token: string;
+  readonly attempt: string;
+  readonly observationId: string;
+  readonly inputDigest: string;
+}
+export interface RendererPublicationDescriptor {
+  readonly name: string;
+  readonly role: string;
+  readonly byteLength: number;
+  readonly sha256: string;
+}
+interface RendererPhysicalSource {
+  readonly kind?: 'file';
   readonly sourceId: string;
   readonly sourceGeneration: string;
   readonly inode: string;
   readonly size: bigint;
   readonly bytes: Uint8Array;
 }
+export interface RendererPublicationBufferSource {
+  readonly kind: 'publication-buffer';
+  readonly binding: RendererPublicationBinding;
+  readonly descriptor: RendererPublicationDescriptor;
+  readonly size: bigint;
+  readonly bytes: Uint8Array;
+}
+export type RendererSourceObservation = RendererPhysicalSource | RendererPublicationBufferSource;
+type RendererSourceCustody =
+  | { readonly kind?: 'file'; readonly inode: string }
+  | {
+      readonly kind: 'publication-buffer';
+      readonly binding: RendererPublicationBinding;
+      readonly descriptor: RendererPublicationDescriptor;
+    };
+type RendererSourceIdentity = RendererSourceCustody & {
+  readonly sourceId: string;
+  readonly sourceGeneration: string;
+};
 export interface RendererInterpretationContext {
   readonly profileId: 'renderer-reader/1';
   readonly numericProfile: RenderNumericProfile;
@@ -71,18 +105,15 @@ export interface PreparedRendererEvent {
   };
 }
 declare const checkpointBrand: unique symbol;
-export interface RenderReaderCheckpoint {
+export type RenderReaderCheckpoint = RendererSourceIdentity & {
   readonly [checkpointBrand]: true;
-  readonly sourceId: string;
-  readonly sourceGeneration: string;
-  readonly inode: string;
   readonly offset: bigint;
   readonly lineOrdinal: bigint;
   readonly prefixSha256: string;
   readonly observedSize: bigint;
   readonly context: RendererInterpretationContext;
   readonly events: readonly PreparedRendererEvent[];
-}
+};
 export interface RenderReaderInput {
   readonly source: RendererSourceObservation;
   readonly registry: TranscriptRegistry;
@@ -120,6 +151,141 @@ interface PrivateCheckpoint {
 }
 const checkpoints = new WeakMap<RenderReaderCheckpoint, PrivateCheckpoint>();
 const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+const observationObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+const exactObservation = (value: object, keys: readonly string[]): boolean =>
+  Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+const observationText = (value: unknown, maximum: number): value is string =>
+  typeof value === 'string' &&
+  value.length > 0 &&
+  !value.includes('\0') &&
+  Buffer.byteLength(value) <= maximum;
+const observationDigest = (value: unknown): value is string =>
+  typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+
+/** Own a complete observation; publication buffers describe bytes, never a physical inode. */
+export function snapshotRendererSource(
+  observed: RendererSourceObservation
+): RendererSourceObservation {
+  if (!observed)
+    throw new TypeError('Source observation requires exact owned bytes, size and identity');
+  const { kind, bytes: observedBytes, size } = observed;
+  if (
+    !(observedBytes instanceof Uint8Array) ||
+    typeof size !== 'bigint' ||
+    size !== BigInt(observedBytes.byteLength)
+  )
+    throw new TypeError('Source observation requires exact owned bytes, size and identity');
+  if (kind === 'publication-buffer') {
+    const { binding: observedBinding, descriptor: observedDescriptor } = observed;
+    if (
+      !exactObservation(observed, ['kind', 'binding', 'descriptor', 'size', 'bytes']) ||
+      !observationObject(observedBinding) ||
+      !observationObject(observedDescriptor)
+    )
+      throw new TypeError('Publication buffer requires exact binding and descriptor fields');
+    const binding = Object.freeze({ ...observedBinding });
+    const descriptor = Object.freeze({ ...observedDescriptor });
+    if (
+      !exactObservation(binding, [
+        'id',
+        'runtimeDigest',
+        'token',
+        'attempt',
+        'observationId',
+        'inputDigest',
+      ]) ||
+      !observationText(binding.id, 256) ||
+      !observationDigest(binding.runtimeDigest) ||
+      !observationText(binding.token, 128) ||
+      !observationText(binding.attempt, 128) ||
+      !observationText(binding.observationId, 128) ||
+      !observationDigest(binding.inputDigest)
+    )
+      throw new TypeError('Invalid publication buffer binding');
+    if (
+      !exactObservation(descriptor, ['name', 'role', 'byteLength', 'sha256']) ||
+      !observationText(descriptor.name, 255) ||
+      !/^[A-Za-z0-9_.@:-]+(?:\/[A-Za-z0-9_.@:-]+)*$/.test(descriptor.name) ||
+      descriptor.name.split('/').some((part) => part === '.' || part === '..') ||
+      !observationText(descriptor.role, 32) ||
+      !/^[a-z_]+$/.test(descriptor.role) ||
+      !Number.isSafeInteger(descriptor.byteLength) ||
+      descriptor.byteLength < 0 ||
+      BigInt(descriptor.byteLength) !== size ||
+      !observationDigest(descriptor.sha256)
+    )
+      throw new TypeError('Invalid publication buffer descriptor');
+    const bytes = Buffer.from(observedBytes);
+    if (BigInt(bytes.byteLength) !== size || bytes.byteLength !== descriptor.byteLength)
+      throw new TypeError('Publication buffer copied length differs from observed size');
+    if (hash(bytes) !== descriptor.sha256)
+      throw new TypeError('Publication buffer descriptor hash differs from owned bytes');
+    return Object.freeze({
+      kind: 'publication-buffer',
+      binding,
+      descriptor,
+      size,
+      bytes,
+    });
+  }
+  const { sourceId, sourceGeneration, inode } = observed;
+  if (
+    (kind !== undefined && kind !== 'file') ||
+    [sourceId, sourceGeneration, inode].some((value) => typeof value !== 'string' || !value)
+  )
+    throw new TypeError('Source observation requires exact owned bytes, size and identity');
+  const bytes = Buffer.from(observedBytes);
+  if (BigInt(bytes.byteLength) !== size)
+    throw new TypeError('Physical source copied length differs from observed size');
+  return Object.freeze({
+    ...(kind === 'file' ? { kind: 'file' as const } : {}),
+    sourceId,
+    sourceGeneration,
+    inode,
+    size,
+    bytes,
+  });
+}
+function sourceIdentity(source: RendererSourceObservation): RendererSourceIdentity {
+  if (source.kind !== 'publication-buffer')
+    return Object.freeze({
+      ...(source.kind === 'file' ? { kind: 'file' as const } : {}),
+      sourceId: source.sourceId,
+      sourceGeneration: source.sourceGeneration,
+      inode: source.inode,
+    });
+  const { binding, descriptor } = source;
+  const identity = [
+    binding.id,
+    binding.runtimeDigest,
+    binding.token,
+    binding.attempt,
+    binding.observationId,
+    binding.inputDigest,
+    descriptor.name,
+    descriptor.role,
+    descriptor.byteLength,
+    descriptor.sha256,
+  ];
+  return Object.freeze({
+    kind: 'publication-buffer',
+    binding,
+    descriptor,
+    sourceId: `publication-buffer:${hash(
+      Buffer.from(
+        JSON.stringify([
+          'caws.renderer.publication-buffer.source.v1',
+          descriptor.name,
+          descriptor.role,
+        ])
+      )
+    )}`,
+    sourceGeneration: hash(
+      Buffer.from(JSON.stringify(['caws.renderer.publication-buffer.generation.v1', ...identity]))
+    ),
+  });
+}
 function prepareEvent(envelope: EventEnvelope): PreparedRendererEvent {
   const event = envelope.event;
   const raw = event.ev === 'tool_use' ? getMember(event.input, 'raw') : undefined;
@@ -169,28 +335,14 @@ export function readRendererSource(input: RenderReaderInput): RenderReaderResult
     embeddedProfile.integerMaxDigits !== profile.integerMaxDigits
   )
     return failAdmission('profile', 'Registry and reader numeric profiles must agree exactly');
-  const observed = input.source;
-  if (
-    !observed ||
-    [observed.sourceId, observed.sourceGeneration, observed.inode].some(
-      (value) => typeof value !== 'string' || !value
-    ) ||
-    !(observed.bytes instanceof Uint8Array) ||
-    typeof observed.size !== 'bigint' ||
-    observed.size !== BigInt(observed.bytes.byteLength)
-  )
-    return failAdmission(
-      'input',
-      'Source observation requires exact owned bytes, size and identity'
-    );
-  // Own the entire read before hashing or issuing occurrences.
-  const source = Object.freeze({
-    sourceId: observed.sourceId,
-    sourceGeneration: observed.sourceGeneration,
-    inode: observed.inode,
-    size: observed.size,
-  });
-  const bytes = Buffer.from(observed.bytes);
+  let observed: RendererSourceObservation;
+  try {
+    observed = snapshotRendererSource(input.source);
+  } catch (error) {
+    return failAdmission('input', error instanceof Error ? error.message : String(error));
+  }
+  const source = sourceIdentity(observed);
+  const bytes = observed.bytes;
   const context: RendererInterpretationContext = Object.freeze({
     profileId: 'renderer-reader/1',
     numericProfile: Object.freeze({ ...profile }),
@@ -213,11 +365,13 @@ export function readRendererSource(input: RenderReaderInput): RenderReaderResult
   const reusedPrefix = !!(
     prior &&
     privatePrior &&
+    source.kind !== 'publication-buffer' &&
+    prior.kind !== 'publication-buffer' &&
     privatePrior.registry === input.registry &&
     prior.sourceId === source.sourceId &&
     prior.sourceGeneration === source.sourceGeneration &&
     prior.inode === source.inode &&
-    prior.offset <= source.size &&
+    prior.offset <= observed.size &&
     JSON.stringify(prior.context) === JSON.stringify(context) &&
     hash(bytes.subarray(0, Number(prior.offset))) === prior.prefixSha256
   );
@@ -229,13 +383,11 @@ export function readRendererSource(input: RenderReaderInput): RenderReaderResult
   const committedEvents = reusedPrefix ? [...prior!.events] : [];
   function issueCheckpoint(offset: number): RenderReaderCheckpoint {
     const checkpoint = Object.freeze({
-      sourceId: source.sourceId,
-      sourceGeneration: source.sourceGeneration,
-      inode: source.inode,
+      ...source,
       offset: BigInt(offset),
       lineOrdinal,
       prefixSha256: hash(bytes.subarray(0, offset)),
-      observedSize: source.size,
+      observedSize: observed.size,
       context,
       events: Object.freeze([...committedEvents]),
     }) as RenderReaderCheckpoint;
@@ -329,16 +481,13 @@ export type ObservedRendererFile =
 export type RendererFileIdentity =
   | { readonly path: string; readonly disposition: 'absent' }
   | { readonly path: string; readonly disposition: 'failed'; readonly error: string }
-  | {
+  | (RendererSourceIdentity & {
       readonly path: string;
       readonly disposition: 'read';
-      readonly sourceId: string;
-      readonly sourceGeneration: string;
-      readonly inode: string;
       readonly size: bigint;
       readonly sha256: string;
       readonly rawBase64: string;
-    };
+    });
 export type ObservedRendererDirectory =
   | { readonly path: string; readonly kind: 'absent' | 'not-directory' }
   | {
@@ -383,20 +532,9 @@ function ownFile(observed: ObservedRendererFile): OwnedFile {
       identity: Object.freeze({ path, disposition: 'failed', error: observed.error }),
       bytes: null,
     });
-  const source = observed.source;
-  if (
-    !(source.bytes instanceof Uint8Array) ||
-    typeof source.size !== 'bigint' ||
-    source.size !== BigInt(source.bytes.byteLength) ||
-    [source.sourceId, source.sourceGeneration, source.inode].some(
-      (value) => typeof value !== 'string' || !value
-    )
-  )
-    throw new TypeError('Read observation requires exact bytes, size and source identity');
+  const source = snapshotRendererSource(observed.source);
   const labels = {
-    sourceId: source.sourceId,
-    sourceGeneration: source.sourceGeneration,
-    inode: source.inode,
+    ...sourceIdentity(source),
     size: source.size,
   };
   const bytes = Buffer.from(source.bytes);

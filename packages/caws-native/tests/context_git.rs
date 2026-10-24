@@ -2,9 +2,6 @@
 //! Custodian component controls and native frame-pump controls use the actual
 //! binary. The scripted engine fixture does not establish installed TS routing.
 #![cfg(target_os = "macos")]
-use caws_native::owned_group;
-#[path = "../src/context_git.rs"]
-mod context_git;
 use serde_json::{Value, json};
 use std::{
     fs,

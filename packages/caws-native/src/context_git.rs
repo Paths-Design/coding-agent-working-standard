@@ -27,6 +27,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "context_git/render.rs"]
+pub mod render;
+
 pub const MAX_REQUEST: usize = 32 * 1024;
 pub const MAX_RESULT: usize = 2 * 1024 * 1024;
 pub const MAX_OUTPUT: usize = 1024 * 1024;
@@ -654,7 +657,7 @@ fn tick(fds: &mut [libc::pollfd]) {
         );
     }
 }
-fn observe_exit(child: &Child, row: &mut ResultFrame) -> bool {
+fn observe_exit(child: &Child, row: &mut QueryReceipt) -> bool {
     if row.exit_code.is_some() || row.signal.is_some() {
         return true;
     }
@@ -742,7 +745,7 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
     configure_signals().map_err(|e| e.to_string())?;
     let start = Instant::now();
     let mut bytes = Vec::new();
-    let (configuration, configuration_cancelled): (Configuration, bool) = loop {
+    let (configuration_bytes, configuration_cancelled): (Vec<u8>, bool) = loop {
         let mut part = [0u8; 8192];
         match stream.read(&mut part) {
             Ok(0) => return Ok(()),
@@ -763,9 +766,7 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
         if let Some(end) = bytes.iter().position(|&b| b == b'\n') {
             // A complete configuration plus a coalesced stop byte retains the
             // correlation needed for a truthful no-child cancellation result.
-            let configuration = serde_json::from_slice(&bytes[..end])
-                .map_err(|e| format!("context Git configuration: {e}"))?;
-            break (configuration, !bytes[end + 1..].is_empty());
+            break (bytes[..end].to_vec(), !bytes[end + 1..].is_empty());
         }
         if start.elapsed() >= Duration::from_secs(5) || SIGNAL.load(Ordering::Relaxed) != 0 {
             return Ok(());
@@ -776,16 +777,93 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
             revents: 0,
         }]);
     };
+    let envelope: serde_json::Value = serde_json::from_slice(&configuration_bytes)
+        .map_err(|e| format!("context Git configuration: {e}"))?;
+    if envelope.get("schema").is_some() {
+        return render::run_configuration(
+            &mut stream,
+            &configuration_bytes,
+            configuration_cancelled,
+        );
+    }
+    let configuration: Configuration = serde_json::from_slice(&configuration_bytes)
+        .map_err(|e| format!("context Git configuration: {e}"))?;
     let request = &configuration.request;
-    let mut row = result(request, "exited", "");
-    let before = match identity(&request.executable) {
+    run_owned_query(
+        &mut stream,
+        QuerySpec {
+            executable: &request.executable,
+            cwd: &request.cwd,
+            environment: &configuration.environment,
+            argv: request.operation.argv(),
+            expires_ns: configuration.expires_ns,
+        },
+        configuration_cancelled,
+        |stream, receipt| {
+            let mut row = result(request, &receipt.status, &receipt.diagnostic);
+            row.exit_code = receipt.exit_code;
+            row.signal = receipt.signal;
+            row.stdout = receipt.stdout.clone();
+            row.stderr = receipt.stderr.clone();
+            row.cleanup = receipt.cleanup.clone();
+            publish(stream, &row)
+        },
+    );
+    Ok(())
+}
+
+/// Data from the single shared actual-Child custody loop, not signal authority.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct QueryReceipt {
+    status: String,
+    pid: Option<u32>,
+    exit_code: Option<i32>,
+    signal: Option<i32>,
+    stdout: String,
+    stderr: String,
+    cleanup: Cleanup,
+    diagnostic: String,
+}
+impl QueryReceipt {
+    fn new(status: &str, diagnostic: &str) -> Self {
+        let mut end = diagnostic.len().min(1024);
+        while !diagnostic.is_char_boundary(end) {
+            end -= 1;
+        }
+        Self {
+            status: status.into(),
+            pid: None,
+            exit_code: None,
+            signal: None,
+            stdout: String::new(),
+            stderr: String::new(),
+            cleanup: Cleanup::default(),
+            diagnostic: diagnostic[..end].into(),
+        }
+    }
+}
+struct QuerySpec<'a> {
+    executable: &'a PathBuf,
+    cwd: &'a PathBuf,
+    environment: &'a [(Vec<u8>, Vec<u8>)],
+    argv: &'static [&'static str],
+    expires_ns: u64,
+}
+/// No fallible post-spawn return: even after an unsettled receipt, the original
+/// Child/group remain here until settlement, both pipe EOFs, and actual reap.
+fn run_owned_query(
+    mut stream: &mut UnixStream,
+    spec: QuerySpec<'_>,
+    configuration_cancelled: bool,
+    mut publish: impl FnMut(&mut UnixStream, &QueryReceipt) -> bool,
+) -> QueryReceipt {
+    let fd = stream.as_raw_fd();
+    let mut row = QueryReceipt::new("exited", "");
+    let before = match identity(spec.executable) {
         Ok(identity) => identity,
         Err(error) => {
-            row = result(
-                request,
-                "spawn_failed",
-                &format!("context Git executable: {error}"),
-            );
+            row = QueryReceipt::new("spawn_failed", &format!("context Git executable: {error}"));
             row.cleanup = Cleanup {
                 group_settled: true,
                 stdout_eof: true,
@@ -793,14 +871,14 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
                 reaped: true,
             };
             publish(&mut stream, &row);
-            return Ok(());
+            return row;
         }
     };
     let mut control = [0u8; 32];
     let live = matches!(stream.read(&mut control), Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted));
     if configuration_cancelled
         || !live
-        || monotonic_ns() >= configuration.expires_ns
+        || monotonic_ns() >= spec.expires_ns
         || SIGNAL.load(Ordering::Relaxed) != 0
     {
         row.status = if configuration_cancelled || !live || SIGNAL.load(Ordering::Relaxed) != 0 {
@@ -816,19 +894,23 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
             reaped: true,
         };
         publish(&mut stream, &row);
-        return Ok(());
+        return row;
     }
-    let mut command = Command::new(&request.executable);
+    let mut command = Command::new(spec.executable);
     command
-        .args(request.operation.argv())
-        .current_dir(&request.cwd)
+        .args(spec.argv)
+        .current_dir(spec.cwd)
         .env_clear()
         .envs(
-            configuration
-                .environment
-                .into_iter()
+            spec.environment
+                .iter()
                 .filter(|(key, _)| !key.starts_with(b"GIT_") && !key.starts_with(b"HOOK_"))
-                .map(|(key, value)| (OsString::from_vec(key), OsString::from_vec(value))),
+                .map(|(key, value)| {
+                    (
+                        OsString::from_vec(key.clone()),
+                        OsString::from_vec(value.clone()),
+                    )
+                }),
         )
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -847,11 +929,7 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
-            row = result(
-                request,
-                "spawn_failed",
-                &format!("context Git spawn: {error}"),
-            );
+            row = QueryReceipt::new("spawn_failed", &format!("context Git spawn: {error}"));
             row.cleanup = Cleanup {
                 group_settled: true,
                 stdout_eof: true,
@@ -859,9 +937,10 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
                 reaped: true,
             };
             publish(&mut stream, &row);
-            return Ok(());
+            return row;
         }
     };
+    row.pid = Some(child.id());
     // No fallible return or Drop-based cleanup beyond actual child creation.
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -924,7 +1003,7 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
         }
         if stopping.is_none()
             && !leader_exited
-            && (monotonic_ns() >= configuration.expires_ns || SIGNAL.load(Ordering::Relaxed) != 0)
+            && (monotonic_ns() >= spec.expires_ns || SIGNAL.load(Ordering::Relaxed) != 0)
         {
             row.status = if SIGNAL.load(Ordering::Relaxed) != 0 {
                 "cancelled"
@@ -977,7 +1056,7 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
         }
         if stopping.is_some() && last_stop.elapsed() >= TICK {
             if let Err(error) = stop_before_reap(&child) {
-                row.diagnostic = result(request, "", &error.to_string()).diagnostic;
+                row.diagnostic = QueryReceipt::new("", &error.to_string()).diagnostic;
             }
             last_stop = Instant::now();
         }
@@ -996,12 +1075,12 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
                 Ok(None) => (),
                 Err(error) => {
                     row.diagnostic =
-                        result(request, "", &format!("context Git reap: {error}")).diagnostic
+                        QueryReceipt::new("", &format!("context Git reap: {error}")).diagnostic
                 }
             }
         }
         if row.cleanup.reaped {
-            if identity(&request.executable).ok().as_ref() != Some(&before) {
+            if identity(spec.executable).ok().as_ref() != Some(&before) {
                 row.status = "identity_changed".into();
                 row.diagnostic = "selected context Git executable changed during execution".into();
             }
@@ -1010,7 +1089,7 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
             if !published && !disconnected {
                 publish(&mut stream, &row);
             }
-            return Ok(());
+            return row;
         }
         if stopping.is_some_and(|start| start.elapsed() >= CLEANUP) && !published {
             let mut pending = row.clone();

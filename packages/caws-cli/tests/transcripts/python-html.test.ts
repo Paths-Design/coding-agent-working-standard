@@ -202,6 +202,65 @@ test('counts every decimal digit including leading zeroes before interpreting a 
   assert.equal(pythonHtmlUnescape('&#x' + 'f'.repeat(10000) + ';'), '\ufffd');
 });
 
+test('selected finite profiles count decimal digits and report their actual limit', () => {
+  for (const limit of [640, 4300]) {
+    const numericProfile = { id: `html-${limit}`, integerMaxDigits: limit };
+    for (const terminator of [';', '']) {
+      assert.equal(
+        pythonHtmlUnescape('&#' + '0'.repeat(limit - 2) + '65' + terminator, numericProfile),
+        'A'
+      );
+      assert.equal(
+        pythonHtmlUnescape('&#' + '9'.repeat(limit) + terminator, numericProfile),
+        '\ufffd'
+      );
+      for (const body of ['0'.repeat(limit - 1) + '65', '9'.repeat(limit + 1)]) {
+        assert.throws(
+          () => pythonHtmlUnescape('before &#' + body + terminator, numericProfile),
+          (error: unknown) => {
+            assert.ok(error instanceof PythonHtmlDecimalDigitLimitError);
+            assert.equal(error.code, 'PYTHON_HTML_DECIMAL_DIGIT_LIMIT');
+            assert.equal(error.limit, limit);
+            assert.equal(error.digits, limit + 1);
+            assert.equal(
+              error.message,
+              `Exceeds the limit (${limit} digits) for integer string conversion: value has ${limit + 1} digits; use sys.set_int_max_str_digits() to increase the limit`
+            );
+            return true;
+          }
+        );
+      }
+    }
+    assert.equal(pythonHtmlUnescape('&#x' + '0'.repeat(10000) + '41;', numericProfile), 'A');
+    assert.equal(pythonHtmlUnescape('&#x' + 'f'.repeat(10000) + ';', numericProfile), '\ufffd');
+  }
+});
+
+test('selected zero profile permits decimal references beyond the historical limit', () => {
+  const numericProfile = { id: 'html-unlimited', integerMaxDigits: 0 };
+  for (const terminator of [';', '']) {
+    assert.equal(
+      pythonHtmlUnescape('&#' + '0'.repeat(10000) + '65' + terminator, numericProfile),
+      'A'
+    );
+    assert.equal(
+      pythonHtmlUnescape('&#' + '9'.repeat(10000) + terminator, numericProfile),
+      '\ufffd'
+    );
+  }
+  assert.equal(pythonHtmlUnescape('&amp;amp; &#x41;', numericProfile), '&amp; A');
+});
+
+test('explicit HTML numeric profiles use the shared validation even without references', () => {
+  for (const integerMaxDigits of [-1, 1, 639, 640.5, NaN, Infinity])
+    assert.throws(
+      () => pythonHtmlUnescape('plain', { id: 'invalid', integerMaxDigits }),
+      TypeError
+    );
+  for (const id of ['', ' '])
+    assert.throws(() => pythonHtmlUnescape('&amp;', { id, integerMaxDigits: 640 }), TypeError);
+});
+
 test('keeps owned HTML tables and provenance immutable at runtime', () => {
   const identity = PYTHON_HTML_PROFILE_ID;
   assert.equal(Object.isFrozen(HTML5_ENTITIES), true);

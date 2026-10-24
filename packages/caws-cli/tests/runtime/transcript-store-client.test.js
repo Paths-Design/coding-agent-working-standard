@@ -1,4 +1,7 @@
 const { AbortController } = globalThis;
+const { createHash } = require('node:crypto');
+const publicationWire = require('../../dist/runtime/session-publication-wire');
+const observationWire = require('../../dist/runtime/render-observation-wire');
 const {
   createNativeTranscriptStorePort,
   NativeStoreAcquisitionError,
@@ -146,6 +149,142 @@ function publicationState(responses) {
     deadlineEpochMs: Date.now() + 5000,
   });
 }
+test.each([undefined, true])(
+  'explicit observation opt-in %s reaches only the Render phase through the real continuation',
+  async (renderObservations) => {
+    const bytes = Buffer.from('projection fixture\n');
+    const descriptor = {
+      name: 'store-projection.jsonl',
+      role: 'projection',
+      byteLength: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    };
+    const attempt = 'native-publication-attempt',
+      observationId = 'native-render-snapshot',
+      inputDigest = 'd'.repeat(64);
+    const snapshot = (kind, files) => ({
+      schema: publicationWire.SESSION_PUBLICATION_PREPARE_SCHEMA,
+      attempt,
+      kind,
+      snapshot: {
+        observationId: kind === 'render' ? observationId : 'native-projection-snapshot',
+        inputDigest,
+        sessionId: 'original-session',
+        reason: '',
+        endedAt: '2026-10-23T00:00:00Z',
+        files,
+        priorInventory: [],
+      },
+    });
+    const ready = (kind) => ({
+      schema: publicationWire.SESSION_PUBLICATION_READY_SCHEMA,
+      attempt,
+      kind,
+      direction: 'inputs',
+    });
+    const responses = [
+      closed('exhausted', 0, 0),
+      snapshot('projection', []),
+      ready('projection'),
+      snapshot('render', [descriptor]),
+      {
+        schema: publicationWire.SESSION_PUBLICATION_INPUTS_SCHEMA,
+        attempt,
+        kind: 'render',
+        name: descriptor.name,
+        offset: 0,
+        base64: bytes.toString('base64'),
+      },
+      ready('render'),
+    ];
+    if (renderObservations)
+      responses.push({
+        schema: observationWire.RENDER_OBSERVATION_BINDING,
+        attempt,
+        observationId,
+        inputDigest,
+        cwd: root,
+        executable: { path: '/usr/bin/git', physicalPath: '/physical/git', sha256: 'e'.repeat(64) },
+        calendarContext: { originalPid: 12345, tz: { kind: 'absent' }, tzdir: { kind: 'absent' } },
+      });
+    responses.push((last) => ({
+      schema: publicationWire.SESSION_PUBLICATION_RESULT_SCHEMA,
+      attempt,
+      status: 'not_published',
+      terminalDigest: publicationWire.sessionPublicationTerminalDigest(
+        { id: last.id, runtimeDigest: last.runtimeDigest, token: last.token, attempt },
+        'not_published'
+      ),
+      artifacts: [],
+    }));
+    const state = publicationState(responses);
+    expect(await state.port.rows(root)[Symbol.asyncIterator]().next()).toEqual({
+      value: undefined,
+      done: true,
+    });
+    const consume = jest.fn();
+    let saved;
+    const receipt = await state.port.continuePublication(
+      publicationOptions({
+        renderObservations,
+        consume,
+        prepare: async (input) => {
+          if (input.kind === 'projection') {
+            expect(input.observations).toBeUndefined();
+            return {
+              disposition: 'ready',
+              artifacts: [{ name: descriptor.name, role: descriptor.role, bytes }],
+              removals: [],
+            };
+          }
+          expect(Buffer.from(input.bytes(descriptor.name))).toEqual(bytes);
+          if (renderObservations) {
+            expect(input.observations).toBeDefined();
+            saved = input.observations;
+          } else expect(input.observations).toBeUndefined();
+          return { disposition: 'aborted', diagnostic: 'forwarding control, no publication claim' };
+        },
+      })
+    );
+    expect(receipt.status).toBe('not_published');
+    expect(consume).toHaveBeenCalledTimes(1);
+    expect(consume.mock.calls[0][0].status).toBe('not_published');
+    expect(
+      state.writes.filter((frame) => frame.schema === observationWire.RENDER_OBSERVATION_REQUEST)
+    ).toEqual([]);
+    expect(
+      state.writes
+        .filter((frame) => frame.schema === publicationWire.SESSION_PUBLICATION_PREPARED_SCHEMA)
+        .map((frame) => [frame.kind, frame.disposition])
+    ).toEqual([
+      ['projection', 'ready'],
+      ['render', 'aborted'],
+    ]);
+    expect(state.writes.at(-1).schema).toBe(publicationWire.SESSION_PUBLICATION_CONSUMED_SCHEMA);
+    if (saved) await expect(saved.git()).rejects.toThrow('Render observation phase closed');
+    expect(state.reads).toBe(renderObservations ? 8 : 7);
+  }
+);
+test.each([false, 'true', 1, {}])(
+  'invalid observation opt-in %j cannot spend a closed store continuation',
+  async (renderObservations) => {
+    const state = publicationState([closed('exhausted', 0, 0)]);
+    await state.port.rows(root)[Symbol.asyncIterator]().next();
+    const options = publicationOptions({ renderObservations });
+    let error;
+    try {
+      await state.port.continuePublication(options);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(RuntimeProtocolError);
+    expect(error.message).toBe('Invalid native store render observation option');
+    expect(state.reads).toBe(1);
+    expect(state.writes).toHaveLength(1);
+    expect(options.prepare).not.toHaveBeenCalled();
+    expect(options.consume).not.toHaveBeenCalled();
+  }
+);
 test('publication before acquisition or while a row is outstanding cannot read or prepare', async () => {
   const state = publicationState([row(), closed('stopped')]);
   const options = publicationOptions();

@@ -672,7 +672,7 @@ fn select_executable(
     ))
 }
 
-fn pin_executable(
+pub(crate) fn pin_executable(
     path: &Path,
     expires: Instant,
     is_cancelled: &dyn Fn() -> bool,
@@ -779,7 +779,7 @@ fn pin_executable(
     })
 }
 
-fn verify_executable(
+pub(crate) fn verify_executable(
     selected: &SelectedExecutable,
     phase: ProjectPhase,
     expires: Instant,
@@ -1675,6 +1675,7 @@ mod tests {
         let same_child = owner.child.as_ref().map(Child::id);
         let allowance_elapsed = started.elapsed();
         let mut failure = crate::render_context::Failure {
+            remote: None,
             category: "query",
             diagnostic: "persistent-refusal-sentinel".into(),
             completed: Vec::new(),

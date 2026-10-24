@@ -15,12 +15,16 @@ import {
 import { createSessionLogPublicationConsumer } from './session-log';
 import { MAX_PUBLICATION_ARTIFACT_BYTES } from './session-publication-wire';
 import { RuntimeProtocolError } from './protocol';
+import { snapshotStoreJsonProfile, type StoreJsonProfile } from '../transcripts/store-json';
 
 export interface SessionStorePublicationOptions {
   readonly port: NativeTranscriptStorePublicationPort;
   readonly canonicalRoot: string;
   readonly sessionId: string;
   readonly limits: StoreProjectionLimits;
+  /** Caller must explicitly select a supported SQL profile. Selection alone
+   * does not establish production qualification; renderer selection is separate. */
+  readonly sqlProfile: StoreJsonProfile;
   readonly maximumProjectionBytes: number;
   /** Caller must supply admitted renderer context/calendar; no fixture defaults. */
   readonly prepareRender: (
@@ -35,6 +39,8 @@ export interface SessionStorePublicationOptions {
 export async function publishNativeTranscriptStore(
   options: SessionStorePublicationOptions
 ): Promise<SessionPublicationReceipt> {
+  // Refuse absent or unsupported selectors before observing the port or consumer.
+  const sqlProfile = snapshotStoreJsonProfile(options.sqlProfile);
   if (
     !Number.isSafeInteger(options.maximumProjectionBytes) ||
     options.maximumProjectionBytes < 0 ||
@@ -48,7 +54,8 @@ export async function publishNativeTranscriptStore(
     options.port,
     options.canonicalRoot,
     options.port.surface,
-    options.limits
+    options.limits,
+    sqlProfile
   );
   // Serialization follows actual exhausted acquisition; assertClosed alone
   // cannot authorize the handoff, which the same port independently enforces.

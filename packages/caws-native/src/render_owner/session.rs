@@ -504,7 +504,51 @@ impl Drop for SessionJob {
         let _ = self.transport.stream.shutdown(std::net::Shutdown::Both);
     }
 }
+/// Refusal before this original's journal admission. Registry freshness alone
+/// is not evidence: an accepted identity can survive the frontend/owner restart.
+enum SessionFenceRefusal {
+    KnownNotExecuted {
+        reason: String,
+        execution: journal::KnownNotExecuted,
+    },
+    Retained(String),
+}
 impl Actor {
+    fn session_unknown_fence(
+        &mut self,
+        invocation_id: &str,
+        request_id: &str,
+        expires: Instant,
+    ) -> std::result::Result<(), SessionFenceRefusal> {
+        if !self.unknown {
+            match self.journal.has_unknown(expires) {
+                Ok(false) => return Ok(()),
+                Ok(true) => self.unknown = true,
+                Err(error) => return Err(SessionFenceRefusal::Retained(err(error))),
+            }
+        }
+        // The fence is established independently of its diagnostic. Reuse the
+        // actual Actor observation; self.unknown makes this call I/O-free.
+        let reason = match self.check_unknown_fence(invocation_id, expires) {
+            Err(reason) => reason,
+            Ok(()) => {
+                return Err(SessionFenceRefusal::Retained(
+                    "verified unknown Actor fence changed before admission".into(),
+                ));
+            }
+        };
+        match self.journal.lookup(request_id, expires) {
+            Ok(None) => Err(SessionFenceRefusal::KnownNotExecuted {
+                reason,
+                execution: journal::KnownNotExecuted::Value,
+            }),
+            Ok(Some(_)) => Err(SessionFenceRefusal::Retained(reason)),
+            Err(error) => Err(SessionFenceRefusal::Retained(format!(
+                "{reason}; durable original identity unavailable: {}",
+                err(error)
+            ))),
+        }
+    }
     pub(super) fn acquire_session_job(&mut self, mut job: SessionJob) {
         let original = Arc::clone(
             &job.record
@@ -517,9 +561,16 @@ impl Actor {
         let mut rejected_execution = None;
         let result = (|| -> Result<()> {
             let request = original.request()?;
-            self.check_unknown_fence(&original.id, expires)?;
-            let verified = sha(&serde_json::to_vec(&*original).map_err(err)?);
             let id = publication::original_request_id(&original.id);
+            match self.session_unknown_fence(&original.id, &id, expires) {
+                Ok(()) => {}
+                Err(SessionFenceRefusal::KnownNotExecuted { reason, execution }) => {
+                    rejected_execution = Some(execution);
+                    return Err(reason);
+                }
+                Err(SessionFenceRefusal::Retained(reason)) => return Err(reason),
+            }
+            let verified = sha(&serde_json::to_vec(&*original).map_err(err)?);
             let key = wire::project_service_key(&request.canonical_root).map_err(err)?;
             match self
                 .journal

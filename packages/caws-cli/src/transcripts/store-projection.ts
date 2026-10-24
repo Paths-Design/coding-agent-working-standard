@@ -12,6 +12,8 @@ import { OPENCODE_TOOL_NAME_MAP } from './harness-opencode';
 import {
   parseStoreJson,
   STORE_JSON_PROFILE,
+  snapshotStoreJsonProfile,
+  type StoreJsonProfile,
   type StoreJsonLimits,
   type StoreJsonObject,
   type StoreJsonValue,
@@ -41,6 +43,8 @@ export interface StoreProjectionLimits {
   readonly maxCodepoints: number;
 }
 export interface StoreProjection {
+  /** Qualified SQL interpretation; independent of the renderer numeric profile. */
+  readonly sqlProfile: StoreJsonProfile;
   readonly events: readonly StoreJsonObject[];
   readonly sourceRows: readonly Readonly<{ messageId: StoreSqlCell; partId: StoreSqlCell }>[];
 }
@@ -185,12 +189,16 @@ function limitsSnapshot(value: StoreProjectionLimits): StoreProjectionLimits {
     maxCodepoints: limit(data, 'maxCodepoints'),
   });
 }
-const text = (value: string): CodepointText => codepointTextFromString(value, STORE_JSON_PROFILE);
-function object(entries: readonly (readonly [string, StoreJsonValue])[]): StoreJsonObject {
+const profileText = (value: string, profile: StoreJsonProfile): CodepointText =>
+  codepointTextFromString(value, profile);
+function profileObject(
+  entries: readonly (readonly [string, StoreJsonValue])[],
+  profile: StoreJsonProfile
+): StoreJsonObject {
   return Object.freeze({
     kind: 'object',
     entries: Object.freeze(
-      entries.map(([key, value]) => Object.freeze([text(key), value] as const))
+      entries.map(([key, value]) => Object.freeze([profileText(key, profile), value] as const))
     ),
   });
 }
@@ -222,7 +230,11 @@ const defaulted = (
   const result = member(value, key);
   return result === undefined ? fallback : result;
 };
-function parse(cell: StoreSqlCell, limits: StoreJsonLimits): StoreJsonValue {
+function parse(
+  cell: StoreSqlCell,
+  limits: StoreJsonLimits,
+  profile: StoreJsonProfile
+): StoreJsonValue {
   if (cell.storageClass !== 'text' && cell.storageClass !== 'blob') {
     const kind =
       cell.storageClass === 'null' ? 'NoneType' : cell.storageClass === 'integer' ? 'int' : 'float';
@@ -231,7 +243,7 @@ function parse(cell: StoreSqlCell, limits: StoreJsonLimits): StoreJsonValue {
   return parseStoreJson({
     storageClass: cell.storageClass,
     bytes: cell.bytes,
-    profile: STORE_JSON_PROFILE,
+    profile,
     limits,
   });
 }
@@ -289,25 +301,37 @@ const INPUT_FIELDS: Readonly<Record<string, readonly (readonly [string, string])
   });
 function mapTool(
   name: StoreJsonValue,
-  args: StoreJsonObject
+  args: StoreJsonObject,
+  profile: StoreJsonProfile
 ): readonly [StoreJsonValue, StoreJsonObject] {
   if (Array.isArray(name) || isObject(name))
     return reference('TypeError', `unhashable type: '${Array.isArray(name) ? 'list' : 'dict'}'`);
   const declared = Object.entries(INPUT_FIELDS).find(([key]) => equalAscii(name, key));
   const mapped = declared
-    ? object(
-        declared[1].map(([source, target]) => [target, defaulted(args, source, text(''))] as const)
+    ? profileObject(
+        declared[1].map(
+          ([source, target]) => [target, defaulted(args, source, profileText('', profile))] as const
+        ),
+        profile
       )
     : args;
   const renamed = Object.entries(OPENCODE_TOOL_NAME_MAP).find(([key]) => equalAscii(name, key));
-  return [renamed ? text(renamed[1]) : name, mapped];
+  return [renamed ? profileText(renamed[1], profile) : name, mapped];
 }
-function event(role: string, timestamp: StoreJsonValue, content: StoreJsonObject): StoreJsonObject {
-  return object([
-    ['type', text(role)],
-    ['timestamp', timestamp],
-    ['message', object([['content', Object.freeze([content])]])],
-  ]);
+function profileEvent(
+  role: string,
+  timestamp: StoreJsonValue,
+  content: StoreJsonObject,
+  profile: StoreJsonProfile
+): StoreJsonObject {
+  return profileObject(
+    [
+      ['type', profileText(role, profile)],
+      ['timestamp', timestamp],
+      ['message', profileObject([['content', Object.freeze([content])]], profile)],
+    ],
+    profile
+  );
 }
 function countCodepoints(value: StoreJsonValue): number {
   const pending: StoreJsonValue[] = [value];
@@ -334,9 +358,19 @@ export async function reconstructStoreProjection(
   rows: AsyncIterable<StoreAcquiredRow>,
   surface: 'opencode' | 'zcode',
   calendar: (seconds: bigint) => Promise<StoreUtcCalendarResult>,
-  requestedLimits: StoreProjectionLimits
+  requestedLimits: StoreProjectionLimits,
+  requestedProfile: StoreJsonProfile = STORE_JSON_PROFILE
 ): Promise<StoreProjection> {
   const limits = limitsSnapshot(requestedLimits);
+  const profile = snapshotStoreJsonProfile(requestedProfile);
+  const text = (value: string): CodepointText => profileText(value, profile);
+  const object = (entries: readonly (readonly [string, StoreJsonValue])[]): StoreJsonObject =>
+    profileObject(entries, profile);
+  const event = (
+    role: string,
+    timestamp: StoreJsonValue,
+    content: StoreJsonObject
+  ): StoreJsonObject => profileEvent(role, timestamp, content, profile);
   if (surface !== 'opencode' && surface !== 'zcode') return contract('surface');
   if (typeof calendar !== 'function') return contract('calendar');
   if (rows === null || rows === undefined || typeof rows[Symbol.asyncIterator] !== 'function')
@@ -360,8 +394,8 @@ export async function reconstructStoreProjection(
     const row = snapshotRow(acquired, ++ordinal);
     const [messageId, messageCell, partId, partCell, timeCell] = row.cells;
     if (messageId.storageClass === 'null') return contract('null_message_id');
-    const message = parse(messageCell, limits.json),
-      part = parse(partCell, limits.json);
+    const message = parse(messageCell, limits.json, profile),
+      part = parse(partCell, limits.json, profile);
     if (!isObject(message) || !isObject(part))
       return reference('ValueError', 'message and part data must be objects');
     sourceRows.push(Object.freeze({ messageId, partId }));
@@ -383,7 +417,7 @@ export async function reconstructStoreProjection(
         if (added > limits.maxCodepoints - codepoints) return resource('codepoints');
         previousText = codepointText(
           [...previousText.codepoints, 10, 10, ...prose.codepoints],
-          STORE_JSON_PROFILE
+          profile
         );
         const previous = events[events.length - 1]!;
         events[events.length - 1] = event(
@@ -419,7 +453,7 @@ export async function reconstructStoreProjection(
       const supplied = defaulted(state, 'input', object([]));
       if (!isObject(supplied)) return reference('ValueError', 'tool input is not an object');
       let args = supplied;
-      if (surface === 'opencode') [name, args] = mapTool(name, args);
+      if (surface === 'opencode') [name, args] = mapTool(name, args, profile);
       append(() =>
         event(
           'assistant',
@@ -449,6 +483,7 @@ export async function reconstructStoreProjection(
     }
   }
   const result = Object.freeze({
+    sqlProfile: profile,
     events: Object.freeze(events),
     sourceRows: Object.freeze(sourceRows),
   });
@@ -532,7 +567,7 @@ export function encodeStoreProjectionEvents(
     }
     emit(10);
   }
-  const encoded = encodeUtf8Strict(codepointText(points, STORE_JSON_PROFILE));
+  const encoded = encodeUtf8Strict(codepointText(points, projection.sqlProfile));
   if (!encoded.ok) throw new StoreProjectionEncodingError(encoded.index, encoded.codepoint);
   return encoded.value;
 }

@@ -1,7 +1,14 @@
 /** Source-to-artifact computation. Native admission, publication and current-use are separate. */
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
-import { isJsonNumber, isJsonObject, getMember, type JsonNumber } from './lossless-json';
+import {
+  isJsonNumber,
+  isJsonObject,
+  getMember,
+  jsonNumber,
+  type JsonNumber,
+} from './lossless-json';
+import { parseTimestamp } from './harness-common';
 import {
   parseTranscriptJson,
   snapshotTranscriptJsonProfile,
@@ -16,6 +23,7 @@ import {
 import { prepareRendererArtifacts, type PreparedSessionArtifact } from './render-artifacts';
 import {
   readRendererSource,
+  snapshotRendererSource,
   parseRendererAuxiliary,
   parseRendererSubagents,
   type ObservedRendererFile,
@@ -85,6 +93,12 @@ export interface PrepareSessionArtifactsInput {
   readonly limits: RendererPreparationLimits;
   readonly priorCheckpoint?: RenderReaderCheckpoint;
 }
+export interface RendererCalendarCatalog {
+  readonly timestamps: readonly (string | null)[];
+  /** Only actual auxiliary events cause the renderer to evaluate epoch sort keys. */
+  readonly sortEpochs: boolean;
+}
+export type PrepareSessionArtifactsCalendarInput = Omit<PrepareSessionArtifactsInput, 'calendar'>;
 export interface PreparedSessionGeneration {
   readonly schema: 'caws.prepared-session-artifacts.v1';
   /** Content identity, never a native publication or invocation token. */
@@ -141,13 +155,7 @@ function snapshotFile(file: ObservedRendererFile): ObservedRendererFile {
     ? Object.freeze({
         path: file.path,
         disposition: 'read',
-        source: Object.freeze({
-          sourceId: file.source.sourceId,
-          sourceGeneration: file.source.sourceGeneration,
-          inode: file.source.inode,
-          size: file.source.size,
-          bytes: Uint8Array.from(file.source.bytes),
-        }),
+        source: snapshotRendererSource(file.source),
       })
     : Object.freeze({ ...file });
 }
@@ -167,6 +175,41 @@ function snapshotDirectory(directory: ObservedRendererDirectory): ObservedRender
             ),
           }),
   });
+}
+function snapshotCalendar(calendar: RendererCalendarPort): RendererCalendarPort {
+  const { profileId, timezone, epochSeconds, secondsBetween } = calendar;
+  return Object.freeze({
+    profileId,
+    timezone,
+    epochSeconds: epochSeconds.bind(calendar),
+    secondsBetween: secondsBetween.bind(calendar),
+  });
+}
+function requireCalendar(calendar: RendererCalendarPort): void {
+  if (!calendar.profileId || typeof calendar.timezone !== 'string' || !calendar.timezone)
+    throw new TypeError('An explicit calendar/timezone profile is required');
+}
+function calendarCatalog(
+  transcript: readonly PreparedRendererEvent[],
+  auxiliary: readonly PreparedRendererEvent[]
+): RendererCalendarCatalog {
+  const sortEpochs = auxiliary.length > 0;
+  const timestamps = new Set<string | null>();
+  for (const prepared of [...transcript, ...auxiliary]) {
+    const ts = prepared.envelope.event.ts;
+    if (sortEpochs) {
+      // Keep merge's exact raw sort keys, including an empty string if a
+      // selected registry emits it; duration normalization can map it to null.
+      if (ts !== undefined && ts !== null && typeof ts !== 'string')
+        throw new TypeError('Merged timestamp must be normalized text');
+      timestamps.add(ts ?? null);
+    }
+    // The accumulator normalizes every event through this same function.
+    // Tool-use/result duration endpoints therefore remain catalogued even
+    // when no auxiliary source causes sorting.
+    timestamps.add(parseTimestamp(ts));
+  }
+  return Object.freeze({ timestamps: Object.freeze([...timestamps]), sortEpochs });
 }
 /** Auxiliary presence controls sorting; an absent auxiliary never reorders transcript events. */
 export function mergeRendererChronologicalEvents(
@@ -235,10 +278,13 @@ function lineage(file: ObservedRendererFile, numericProfile: RenderNumericProfil
   return null;
 }
 
-export function prepareSessionArtifacts(
-  input: PrepareSessionArtifactsInput
-): SessionArtifactPreparation {
-  let checkpoint: RenderReaderCheckpoint | null = input.priorCheckpoint ?? null;
+function* preparationStages(
+  input: PrepareSessionArtifactsCalendarInput,
+  suppliedCalendar?: () => RendererCalendarPort
+): Generator<RendererCalendarCatalog, SessionArtifactPreparation, RendererCalendarPort> {
+  // Adopt a prior physical transaction only after acquiring an owned source.
+  // Admission errors cannot expose a checkpoint selected by a live getter.
+  let checkpoint: RenderReaderCheckpoint | null = null;
   let phase = 'input';
   let diagnostics: PreparationBase['diagnostics'] = Object.freeze([]);
   const base = (): PreparationBase => ({ checkpoint, publication: 'not_attempted', diagnostics });
@@ -272,25 +318,40 @@ export function prepareSessionArtifacts(
       claudeCandidate: snapshotDirectory(input.subagents.claudeCandidate),
       qwenCandidate: snapshotDirectory(input.subagents.qwenCandidate),
     });
+    const priorCheckpoint = input.priorCheckpoint;
+    if (
+      !(transcript.disposition === 'read' && transcript.source.kind === 'publication-buffer') &&
+      priorCheckpoint?.kind !== 'publication-buffer'
+    )
+      checkpoint = priorCheckpoint ?? null;
     const registry = input.registry,
       numericProfile = snapshotTranscriptJsonProfile(input.numericProfile);
     const priorObservationId = input.priorInventory.observationId;
-    const calendar: RendererCalendarPort = Object.freeze({
-      profileId: input.calendar.profileId,
-      timezone: input.calendar.timezone,
-      epochSeconds: input.calendar.epochSeconds.bind(input.calendar),
-      secondsBetween: input.calendar.secondsBetween.bind(input.calendar),
-    });
-    const contextInput = Object.freeze({ ...input.context });
+    // Preserve synchronous calendar acquisition/validation ordering. The async
+    // path does not consult its resolver until the retained read stage is ready.
+    const selectedCalendar = suppliedCalendar ? snapshotCalendar(suppliedCalendar()) : null;
+    const observedContext = { ...input.context };
+    const observedDirty = observedContext.dirtyFiles;
+    const dirtySnapshot =
+      observedDirty !== null && typeof observedDirty === 'object' && !Array.isArray(observedDirty)
+        ? {
+            kind: observedDirty.kind,
+            lexeme: observedDirty.lexeme,
+            numberKind: observedDirty.numberKind,
+          }
+        : observedDirty;
     if (
-      !contextInput.sessionId ||
-      !contextInput.cwd ||
-      !isJsonNumber(contextInput.dirtyFiles) ||
-      contextInput.dirtyFiles.numberKind !== 'integer'
+      !observedContext.sessionId ||
+      !observedContext.cwd ||
+      !isJsonNumber(dirtySnapshot) ||
+      dirtySnapshot.numberKind !== 'integer'
     )
       throw new TypeError('Session context is incomplete');
-    if (!calendar.profileId || typeof calendar.timezone !== 'string' || !calendar.timezone)
-      throw new TypeError('An explicit calendar/timezone profile is required');
+    const contextInput = Object.freeze({
+      ...observedContext,
+      dirtyFiles: jsonNumber(dirtySnapshot.lexeme),
+    });
+    if (selectedCalendar) requireCalendar(selectedCalendar);
     if (input.selectedAdapterOverride !== undefined)
       throw new TypeError(
         'Selected adapter override is unsupported by preparation; fallback refused'
@@ -306,7 +367,8 @@ export function prepareSessionArtifacts(
       registry.context.numericProfile?.integerMaxDigits !== numericProfile.integerMaxDigits
     )
       throw new TypeError('Registry and preparation numeric profiles must agree exactly');
-    const prior = input.priorInventory.artifacts.map((item) => {
+    const prior = input.priorInventory.artifacts.map((observed) => {
+      const item = Object.freeze({ ...observed });
       if (
         !item.name ||
         path.basename(item.name) !== item.name ||
@@ -317,7 +379,7 @@ export function prepareSessionArtifacts(
         item.byteLength < 0
       )
         throw new TypeError('Invalid observed prior artifact');
-      return Object.freeze({ ...item });
+      return item;
     });
     if (!priorObservationId || new Set(prior.map((item) => item.name)).size !== prior.length)
       throw new TypeError('Prior inventory observation is missing or ambiguous');
@@ -370,10 +432,23 @@ export function prepareSessionArtifacts(
         disposition: 'failed',
         failure: Object.freeze({ phase, cause: auxiliary.failure }),
       });
+    if (!selectedCalendar && !events.length && !auxiliary.events.length)
+      return Object.freeze({ ...base(), disposition: 'empty' });
+    // The asynchronous path owns accumulation inputs before suspension.
+    // Synchronous callers retain merge-before-noise observation ordering.
+    let noisePrefixes: readonly string[] | undefined;
+    if (!selectedCalendar) {
+      phase = 'accumulation';
+      noisePrefixes = Object.freeze([...registry.noisePrefixes]);
+    }
+    phase = 'calendar';
+    const calendar =
+      selectedCalendar ?? snapshotCalendar(yield calendarCatalog(events, auxiliary.events));
+    requireCalendar(calendar);
     phase = 'accumulation';
     const merged = mergeRendererChronologicalEvents(events, auxiliary.events, calendar);
     const accumulated = accumulateRendererEvents(merged, contextInput.cwd, {
-      noisePrefixes: registry.noisePrefixes,
+      noisePrefixes: noisePrefixes ?? Object.freeze([...registry.noisePrefixes]),
       duration: calendar,
       numericProfile,
     });
@@ -459,9 +534,17 @@ export function prepareSessionArtifacts(
             ? {
                 path: transcript.path,
                 disposition: transcript.disposition,
-                sourceId: transcript.source.sourceId,
-                sourceGeneration: transcript.source.sourceGeneration,
-                inode: transcript.source.inode,
+                ...(transcript.source.kind === 'publication-buffer'
+                  ? {
+                      kind: transcript.source.kind,
+                      binding: transcript.source.binding,
+                      descriptor: transcript.source.descriptor,
+                    }
+                  : {
+                      sourceId: transcript.source.sourceId,
+                      sourceGeneration: transcript.source.sourceGeneration,
+                      inode: transcript.source.inode,
+                    }),
                 size: transcript.source.size,
                 sha256: createHash('sha256').update(transcript.source.bytes).digest('hex'),
               }
@@ -519,4 +602,37 @@ export function prepareSessionArtifacts(
       failure: Object.freeze({ phase, cause }),
     });
   }
+}
+
+function completedPreparation(
+  step: IteratorResult<RendererCalendarCatalog, SessionArtifactPreparation>
+): SessionArtifactPreparation {
+  if (!step.done) throw new Error('Preparation requested more than one calendar resolution');
+  return step.value;
+}
+
+/** Synchronous callers retain their explicit calendar and its validation ordering. */
+export function prepareSessionArtifacts(
+  input: PrepareSessionArtifactsInput
+): SessionArtifactPreparation {
+  return completedPreparation(preparationStages(input, () => input.calendar).next());
+}
+
+/** Resolve one calendar catalog after owned transcript/auxiliary parsing, then
+ * continue that same private stage. The resolver owns its cancellation/deadline
+ * contract; this pure computation grants no publication or native custody. */
+export async function prepareSessionArtifactsWithCalendar(
+  input: PrepareSessionArtifactsCalendarInput,
+  resolveCalendar: (catalog: RendererCalendarCatalog) => Promise<RendererCalendarPort>
+): Promise<SessionArtifactPreparation> {
+  const stages = preparationStages(input);
+  const step = stages.next();
+  if (step.done) return step.value;
+  let calendar: RendererCalendarPort;
+  try {
+    calendar = await resolveCalendar(step.value);
+  } catch (cause) {
+    return completedPreparation(stages.throw(cause));
+  }
+  return completedPreparation(stages.next(calendar));
 }

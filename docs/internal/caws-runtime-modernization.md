@@ -254,7 +254,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R06 | `shared/lib/guard-config.py`: consumer policy configuration                                                         | TS configuration module                                                    | selected-stock root integration and public-control repair exercised, E119                                                                                   | Fresh typed assignments reach four actual shell consumers; custom/parser compatibility remains. The original merge removed public NO_ASK and was unsafe; `900f0516` repairs it with retained negative and actual-guard controls. No Python retirement or harness refusal-propagation claim                                                                                                                                                                                                                                                                                |
 | R07 | `shared/lib/hook-utilities.py`: rg replacement, ignored staging, focused-test and document-metadata policies        | Typed TS guard utilities + bounded Git port                                | component and isolated native cwd repair exercised, E61; full consumer retirement open                                                                      | Actual shell consumer is `shared/hook-utilities.sh`; the typed bridge preserves supplied cwd, filesystem symlink/parent traversal and absent/empty fallback. Real Git index and heredoc/routing controls are separate from installed parity; lockfile restore belongs to the classifier                                                                                                                                                                                                                                                                                   |
 | R08 | `shared/advisory_truncate.py`: UTF-8 byte budget                                                                    | TS byte truncation module                                                  | stock Bash/image and actual local native UTF-8 boundary cases exercised, E124/E127                                                                          | E126 retains the failed producer/composition baseline; `39c76f51` repairs the stop receipt boundary. Native `43e4b131` delivers exact natural partial/complete bullet cuts and a complete required-goal refusal. The Stop extension emits a PreToolUse envelope, so local output does not establish platform consumption. Optional-tool absence, selected custom Python compatibility and retirement remain separate                                                                                                                                                      |
-| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | Bounded native acquisition/reconstruction E211/E212, original-invocation binding E216 and resident acquisition/settlement E240; production store unreplaced | E240 retains actual acquisition beyond frontend loss and exercises the real Actor mailbox across prepared renderer withdrawals. Root owns single-use publication under continuous writer custody, record release, receipt/delivery and ordinary renderer consumption. Complete path/calendar/profile/WAL/cleanup, sustained capacity and adoption remain open.                                                                                                                                                                                                            |
+| R09 | `shared/lib/transcript-store.py`: transcript/cache persistence                                                      | Native read-only SQLite acquisition + typed projection                     | Bounded native acquisition/reconstruction E211/E212, original-invocation binding E216 and resident acquisition/settlement E240; production store unreplaced | E240 retains actual acquisition beyond frontend loss and exercises the real Actor mailbox across prepared renderer withdrawals. E307/E310 establish finite SQL numeric-profile parity and explicit-selector refusal before adapter effects. Root owns native admission, single-use publication under continuous writer custody, record release, receipt/delivery and ordinary renderer consumption. Complete path/calendar/profile/WAL/cleanup, sustained capacity and adoption remain open.                                                                              |
 | R10 | `shared/lib/harness_common.py`: shared transcript normalization                                                     | TS normalization interfaces/common implementation                          | lossless/common foundation and ordered registry imported and exercised, E157/E192; production consumer unreplaced                                           | Occurrence custody, normalization and the pinned CPython3.11.13/Unicode14 profile have bounded evidence, E157/E163; complete historical projections and production renderer/cache integration remain open                                                                                                                                                                                                                                                                                                                                                                 |
 | R11 | `shared/lib/harness_claude.py`                                                                                      | TS Claude adapter                                                          | standalone component integrated, E168; production consumer unreplaced                                                                                       | Harness-specific transcript fixtures and installed render evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | R12 | `shared/lib/harness_codex.py` and `codex/hooks/lib/session-transcript.py`                                           | TS Codex adapter                                                           | bounded Codex occurrence adapter landed and integrated, E157; production consumer unreplaced                                                                | Explicit occurrence context, transaction refusal and CodepointText literal/index projections are exercised, E157/E163; complete compaction, native lifecycle, renderer/cache consumption and Python retirement remain open                                                                                                                                                                                                                                                                                                                                                |
@@ -7871,6 +7871,451 @@ Additional bounded evidence and unresolved dependencies:
   propagation assigned to the source worker. Native source capture, ordinary
   consumption, concurrent residency and local cutover remain unaccepted.
 
+- E295: Native custody repair `60810d47` commits the E294 classification and
+  process-observation controls. HTML profile propagation commits as `0006f5df`;
+  preparation observation-order and numeric-getter ownership repairs commit as
+  `59d24e6a`. The pre-commit `html-profile-test-02` execution exits 0 with 132
+  cases, including missing/empty history with poisoned noise declarations,
+  one-read numeric getter ownership and simultaneous calendar/noise failures.
+  `html-profile-semantic-02/results.json` retains twenty-four actual registry
+  records: eighteen exact `A` shell-field outputs and six decimal-limit refusals
+  with limit640/digits641. Unlimited decimal4301 and hexadecimal10002 controls
+  distinguish the selected profile from the qualified4300 default. Build03,
+  compile02 and explicit seven-file lint02 exit 0. Normal commit-hook formatting
+  changes six source/test hashes; these pre-commit receipts alone do not qualify
+  the committed bytes. Committed replay build04/compile03/
+  test03/lint03/semantic03 exits 0 at `59d24e6a`, with identical source pins
+  across all five commands, seven source/test blobs matching that commit and
+  fifty-eight stable emitted files. The132 cases and twenty-four semantic
+  records repeat on those bytes; `html-profile-semantic-03/results.json` has
+  SHA256 `4d7bec111c17b6509500293fac14fcee23585f42e3f24666c217123c87d57f44`.
+  Root independently joins the seven committed blobs and retains integration and
+  native admission obligations. These bounded propagation/preparation controls
+  are complete; ordinary publication and local cutover are not.
+
+  Adapter revision names the HTML reference separately from the selected numeric
+  policy. Registry checkpoints compare the full frozen normalization context,
+  including numeric profile id/limit, and private owner identity; renderer
+  prefix reuse additionally requires the same registry object and complete
+  interpretation context. An adapter revision alone is not a reusable
+  interpretation identity. Factory registries freeze their context and capture
+  it in normalization closures. Arbitrary replacement registry callbacks or
+  accessor wrappers are not authenticated by the preparation interface; native
+  integration must construct the trusted factory registry from admitted profile
+  observations rather than accept caller-supplied behavior. Existing context
+  spreading and string-field assumptions precede this candidate; native source
+  admission and ordinary construction remain root-owned, unaccepted work.
+
+- E296: Normal main publication attempt `main-push-10` completes all five
+  unchanged pre-push stages, including350 suites/6835 passed/14 skipped, but Git
+  terminates with signal13 after the remote closes the SSH connection. The
+  supervisor retains exit-13,392.637s, stable source pins, no cleanup signals
+  and no remaining process group. `git ls-remote` observes main at `5a95747f`,
+  so the gate success does not establish publication. Attempt09's license-marker
+  refusal and supported exact-byte recovery remain retained. Root owns a
+  normal-hook retry with SSH keepalives and fresh hosted evidence.
+
+- E297: `NATIVE-SELECTION-READ-IO-001` is bound to root-owned
+  `caws/native-selection-observations` from publication candidate `59d24e6a`.
+  The worker's CLI identity and inherited hook identity disagreed; supported
+  untracking released its clean original lane before root created the
+  replacement binding. The untracked original checkout retains no unique
+  authored changes. The slice preserves the existing TypeScript policy
+  interpreter while replacing ambient reads with live or immutable observed
+  reads. Root owns the ten declared source/test paths and integrates worker
+  proposals, ledger, native receipt, qualified profiles and ordinary consumer
+  integration. Missing-observation discovery must survive the retained-manifest
+  catch-all, and successful runtime verification may be memoized only against a
+  complete immutable runtime sub-snapshot. Positive bytes alone do not cover
+  higher-priority absence, directory inventory or ancestry changes. This
+  assignment grants no native admission or activation; its A1-A8 require
+  executed parity/refusal evidence.
+
+- E298: `main-push-11` publishes canonical `c62f5491` with the unchanged
+  pre-push hook and per-command SSH keepalives. The command exits 0 in 377.972
+  seconds; all five pre-push stages pass, including 350 suites, 6835 passing
+  checks and 14 skips. Before/after source pins agree and no process-group
+  residue remains. `git ls-remote origin refs/heads/main` returns the same full
+  revision. Hosted Release Qualification run `40018975364` completes
+  successfully on that SHA: candidate tests/contracts, six macOS/Linux
+  Node18/20/22 packaged-upgrade jobs, and macOS native Git custody. The raw
+  status is retained at
+  `~/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/hosted-main-c62f5491/status.json`.
+  The separate publication and selection branch commits are not qualified by
+  this hosted result; combined-image and installed-consumer proofs remain open.
+
+- E299: `publication-integration/command-environment-probe-01` confirms that
+  file payload transport leaves an unbounded command in the child environment. A
+  2000000-byte command parses in file mode with empty inline JSON, but the
+  subsequent `/usr/bin/true` exits126 with `Argument list too long`. Removing
+  only its export attribute in the isolated diagnostic permits exit0 while
+  preserving all command bytes, SHA256
+  `f95661673d1732b528bf6cc6575f3d25d37518d3ef15368ffd7239c0b9273ac4`. The
+  equally large response/short-command control launches successfully. Shared
+  parser238, Codex parser264 and native handler-executor208 retain the offending
+  export/construction on `c62f5491`. This is isolated launch evidence, not an
+  ordinary native guard/audit result. Root accepts the complete repair: exact
+  local materialization, inherited preloads, protective lost-carrier refusal,
+  streamed command-derived serialization and late-tail guard/audit controls. The
+  external13-file proposal has syntax checks only. Both parser paths overlap the
+  foreign `f1f2-ingress-custody` lane; the attempted owner message was
+  explicitly not sent because its heartbeat was stale. No ownership transfer or
+  write authority is inferred; root retains coordination and repair.
+
+- E300: Selection candidate `3c92f891` preserves the existing policy owner and
+  introduces live/captured reads with immutable observation records. The first
+  run retains22 failures caused by cross-realm filesystem errors escaping an
+  `instanceof Error` check; `util.types.isNativeError` restores error capture.
+  Two additional executed falsifiers expose writable snapshot IO/identity and
+  unrelated-verifier memo poisoning: the latter accepts a modified stock file.
+  JavaScript-private state, a frozen public snapshot and verifier-identity cache
+  ownership repair those mechanisms. `selection-committed-test-01` executes56
+  checks against clean `3c92f891`, exit0, with source and emitted-file pins and
+  no residue. Normal build, strict compilation and explicit ten-file lint pass.
+  The commit-hook ignored-file warnings do not supply that lint evidence.
+  `selection-scenario-02` retains65 before/66 after observations, seventeen
+  recorded absence errors, the changed user-adapter selection, original sealed
+  replay and exact `Machine runtime file modified: first.sh` refusal. Its first
+  attempt lacked fixture executable mode and correctly refused EACCES; retain
+  that failed attempt. The broader four-suite consumer batch reached its120s
+  aggregate deadline and was killed without residue. The native-image partition
+  executes three installer mode/refusal controls, exit0, retaining fixtures;
+  its77 filtered cases are not passing evidence. Independent committed review
+  exposes another cache defect: a verifier can swallow a missing-read signal and
+  return a partial result. The executed `selection-swallowed-falsifier-01` fails
+  for that reason. Commit `a0d30c27` tracks requested dependencies before
+  discovery and refuses incomplete verification. `selection-committed-test-02`
+  executes59 checks against that clean commit, exit0 in2.863s. Explicit scoped
+  lint exits0; `selection-scenario-03` exits0 in0.162s and retains the same
+  65/66-observation, adapter-selection, sealed-replay and fresh-refusal behavior
+  with source/emitted-file pins. This computation grants no atomic snapshot,
+  native admission or publication authority. `selection-consumer-partition-02`
+  executes all338 registration, session-origin and machine-recovery checks,
+  exit0 in17.229s, with unchanged source/emitted pins and no process residue.
+  Final five policy gates pass against all ten changed paths. The full80-case
+  native-image suite and component acceptance recording remain open. No
+  installed activation follows. Whole-file base64 observations would encode the
+  qualification Node binary as150652248 bytes before JSON overhead; native
+  capture must retain binary custody and supply authenticated bounded digests
+  without moving manifest interpretation out of TypeScript.
+
+- E301: Source inspection of publication candidate `59d24e6a` finds the ordinary
+  SQL Stop join disconnected: `engine-entry.ts:65-120` constructs no transcript
+  store port; `engine.ts:136-137` retains OpenCode/Zcode Stop compatibility;
+  `main.rs:185` calls `StoreAcquire::capture`, which sets `publication:false`.
+  `capture_publication` and `publishNativeTranscriptStore` have no production
+  callers. Enabling publication requires effective adapter/profile admission at
+  the native owner, not only changing that boolean. The next proof is one
+  packaged ordinary Stop invocation joining original identity, admitted profile,
+  exhausted SQL and confirmed CLOSED, committed projection/render generation,
+  expected ordinary-reader content and durable consumed acknowledgement. A
+  higher-priority adapter or queued policy change must refuse or reselect before
+  publication. The separate SessionEnd qualifier cannot establish this route.
+
+- E302: Selection component `a0d30c27` completes its bounded acceptance through
+  `caws specs evidence`, with A1-A8 and matching events read back. Governed
+  merge `10613615` integrates it into the publication lane and closes
+  `NATIVE-SELECTION-READ-IO-001`; it does not land the combined candidate on
+  main. `selection-native-image-v2-01` executes30 checks, exit0/66.196s, and
+  `selection-native-image-legacy-01` executes50 checks, exit0/70.232s. Their
+  complementary filters cover all80 cases against unchanged source/emitted pins.
+  These are component tests with synthetic executables and mocked receipt
+  loading: `native-runtime-entry.test.js:53-78` writes shell executables that
+  exit0. They do not qualify actual installed native-image execution. The
+  preceding full-suite120s timeout remains a failed execution, not a passing
+  batch. `selection-scenario-03/result.json` retains65/66 observations, changed
+  stock-to-user adapter paths/hashes, original-snapshot replay and fresh
+  runtime-mutation refusal. This completes the selection read abstraction only;
+  ordered observations confer no atomic capture, execution-time freshness,
+  native admission or production publication authority.
+
+- E303: The governed native build at publication source `4db63982` produces
+  `publication-integration/warm-render-native-build-03/native-completed.json`,
+  status `completed`, adoption `NOT_ADOPTED`. The loader verifies the request
+  and returns nativeSHA
+  `716d8b1473e0ed7f53357da856138c35a015f662eae0999705c2a004d4c4be46`,
+  observerSHA `105dcd51ded223ad8bde6e68dca1a9fca9ecf3542c05217194de11ee452d6933`
+  and stable-entrySHA
+  `f3adbdbcd3122c129e463d02802c8233cf5b196745c22b5232b9de8c1a78206b`.
+  Qualifier-only commits preserve that native source. Actual uncertain-progress
+  attempts01/02 exit1 before mutation because A is already consumed. Attempt03,
+  at `b98e507d`, applies the correlated same-byte/different-inode mutation and
+  retains A, but exits1 because its assertion reads forwarded stderr before
+  ancestor pipe settlement. Its retained stderr contains the exact native
+  generation-change refusal. Commit `e27421ab` waits for original ancestor and
+  pipe settlement, then compares stderr with the native terminal digest. No
+  native delay, fabricated result or repeated hostile action is introduced.
+
+- E304: `run-capacity-qualification.py --scenario uncertain-project-progress` at
+  clean `e27421ab`, exact E303 native image and pinned Node22.22.2 exits0 in
+  8.760s. Artifacts remain under
+  `publication-integration/uncertain-progress-actual-04/`: `execution.json`,
+  `fixture/result.json`, original invocation journals, `hostile-action.json`,
+  operation records, metadata/marker bytes, owner observations, writer probes,
+  retained-file identity witnesses and per-request custody/cleanup receipts. The
+  one owner has `maxRetainedRecords:2`. A's inode changes776637831→776637937
+  while SHA remains
+  `769204465ad96be1f4148c204362570a797562593f8b66f3783c336b7c755932`; native
+  exits2 with `published generation bytes or inventory changed`, its durable
+  operation remains `returned`, and its writer remains unavailable. A2 exits2
+  with `unknown_fence`, reaches `session_rejected_before_effects`, creates no
+  durable operation and never reserves an original. B exits0 in a distinct
+  project under the same owner, reaches durable `consumed`, then
+  `session_heavy_released`, and permits its writer probe. A's retained
+  operation, metadata, publication marker, policy and settings identities remain
+  unchanged after A2, B and writer probes. All three original requests have
+  `confirmed_settled` custody and `confirmed_inactive` cleanup with complete
+  witnessed coverage; the supervisor observes no remaining original processes.
+  This completes the bounded uncertain-project progress probe. It does not
+  establish arbitrary descendant cleanup, direct permit-count telemetry, general
+  fairness, mandatory-guard capacity, the thirteen-session/four-repository
+  workload, ordinary SQL Stop publication or installed adoption. Parent A3/A8
+  remain open. E305 records the qualifier review discharge; combined landing
+  remains a root-owned obligation.
+
+- E305: Qualifier candidate `d3e994f7` reports receipt-write failures through
+  IPC, independently checks the changed inode and unchanged bytes, and requires
+  native exit2 for the uncertain publication. Independent feedback on the
+  committed predecessor exposed the receipt-write gap; source inspection and the
+  following executions discharge that bounded finding. The E304 command, using
+  the unchanged E303 native image, exits0 in9.297s under
+  `publication-integration/uncertain-progress-actual-05/`. `execution.json`
+  retains exact argv; `fixture/result.json` identifies A=41449, A2=43900 and
+  B=44031, native exits2/2/0, and custody/cleanup receipts. Direct inspection of
+  their durable operations gives `returned`/absent/`consumed`. The retained
+  `hostile-action.json` records inode776650809→776650918 with identical E304
+  SHA; native stderr reports `published generation bytes or inventory changed`.
+  All three retained-A identity snapshots equal the before snapshot, including
+  the snapshot after B and writer probes. This supports the bounded E304 claim,
+  with the same nonclaims; it is not ordinary SQL Stop or installed-harness
+  proof. `hostile-watcher-controls-run-03` exits0 in1.301s: six synthetic
+  controls exercise one-shot mutation, consumed and mismatched-input refusal,
+  preexisting receipt failure delivery, early native exit and parent disconnect.
+  Its `fixtures/result.json` retains original-child exit, output EOF, pipe
+  closure, IPC disconnection and process absence. Failed runs01/02 remain
+  retained: their driver incorrectly required Node's `close` event after a
+  parent-initiated IPC disconnect. `node-disconnect-settlement-01` compares
+  parent/child disconnect on pinned Node22.22.2 and retains its embedded child
+  process source; parent disconnect produces exit/EOF/disconnection without
+  `close`. Only that synthetic control uses the explicit settlement
+  observations; production qualifier custody is unchanged. Synthetic executables
+  and fabricated journal rows establish watcher behavior only, not native
+  publication or fairness.
+
+- E306: SQL numeric-profile parity remains an activation dependency. In
+  publication candidate `d3e994f7`, `store-json.ts:6,346-347` declares and
+  enforces a 4300-digit integer limit; `store-projection.ts:231-234` always
+  supplies that profile. Stock `shared/session-log.sh:91-95` invokes ambient
+  `python3` for SQL projection, independently of its renderer invocation or
+  optional writer interpreter. `shared/lib/transcript-store.py:56-57` parses
+  entire message and part JSON, so oversized integers in otherwise ignored
+  members can affect the old result. The effective installed hook interpreter
+  and startup numeric limit have not been qualified. Renderer profile support
+  alone cannot establish SQL equivalence. Root owns capturing each stage's
+  executable/source identity, startup arguments and effective limit, then
+  carrying the qualified SQL profile through admission and projection. Boundary,
+  signed-integer, ignored-member, string and float controls must retain
+  projection bytes or failure stage and actual renderer artifacts;
+  changed-profile controls must reject or select a qualified alternative. No
+  global relaxation or ambient-interpreter assumption discharges this
+  requirement.
+
+- E307: SQL profile implementation `09a7ae8d` carries explicit finite
+  `cpython-3.11.13-unicode14-int4300` and `cpython-3.11.13-unicode14-int0`
+  selectors through parsing, projection, serialization and publication. Actual
+  stock `transcript-store.py` executions under the same CPython3.11.13 binary
+  with `-B -S -X int_max_str_digits=4300` and `=0` distinguish ignored message
+  and part integers, signed integers, strings and floats. The4300 profile
+  refuses4301-digit integers with exit1 and no projection; int0 produces the
+  visible `qualified-visible` event with exit0. Projection bytes have SHA
+  `0b3ab538fae18f30cd84072d408ccbe457181d39f9476c0f413bae55a35fc102`.
+  `sql-profile-qualification-01` retains23 stock cases and three interpreter
+  probes; `sql-profile-zcode-baseline-01` adds12 actual Zcode cases. Under the
+  root external `publication-integration/` artifact directory, each case
+  preserves SQLite inputs, argv, stdout/stderr, exit and projection/error state.
+  Pinned Node22.22.2 `replay-candidate.cjs` exits0 in0.486s under
+  `sql-profile-semantic-01`:28/28 same-surface/profile comparisons match,
+  comprising22 byte-equal projections and six integer-limit refusals. Copied
+  emitted-module controls that always choose4300 or always choose unlimited each
+  produce six mismatches. `semantic-summary.json`, per-case
+  `projection.jsonl`/`error.json`, source/dist pins and `execution.json` retain
+  the distinction. The five focused Jest suites exit0 with204 checks under
+  `sql-profile-tests-01`; build and explicit package-cwd lint exit0 under
+  `sql-profile-build-01` and `sql-profile-lint-01`. These establish finite SQL
+  reconstruction parity, not the effective installed interpreter profile, native
+  acquisition/calendar, ordinary Stop rendering or full mutation quality.
+  Explicit selector support alone does not establish production qualification.
+
+- E308: Native foundation `9272df9a` retains a private request-owned generation
+  receipt and bounded verification using the original expiry and cancellation
+  callback. Reads retain one64KiB chunk and stop at the observed original size;
+  pre/open/post descriptor and path metadata detect replacement, growth and
+  truncation. Manifest-derived directory traversal refuses undeclared trees
+  before descent. `native-generation-check-01` exits0 with17 selected tests;
+  `generation-installed-entry-01` exits0 with10 installed-entry controls.
+  Retained `chunk-cancellation.json` and `chunk-deadline.json` observe65536 of
+  131089 bytes; `during-read-refusal.json` records growth/same-byte replacement
+  refusal after at most131089 bytes and truncation after65536. The
+  `retained-expiry.json` control refuses lookup/revalidation despite a later
+  caller expiry. Root rehashes110 native inputs and1049 TypeScript/build inputs
+  against their execution receipts with no differences. The module split
+  `3612a2cd` places reusable verification in `installed_generation.rs` and keeps
+  pointer/argv/launch policy in `installed_entry.rs`.
+  `native-generation-split-01` and `generation-split-installed-entry-01` repeat
+  the17/10 selected controls with exit0 in3.883s/4.238s, unchanged source/tool
+  pins and empty observed groups. Fixture images and cooperative on-disk
+  identity checks do not seal running code, prove launcher provenance, prevent
+  mutation after the final observation or interrupt stalled kernel syscalls. The
+  receipt has no ordinary production caller; strict Clippy and complete
+  installed-image qualification remain open.
+
+- E309: Source inspection of `9272df9a` identifies the next activation boundary.
+  `main.rs:187` uses non-publication `StoreAcquire::capture`; the typed engine
+  entry injects no ordinary SQL port. `render_owner/store.rs:1006-1013` reserves
+  the journal and retains a writer before SQL, so selection revalidation after
+  queueing must precede reservation, not merely precede SQLite open. The
+  receiver's `received + remaining_budget_ms` at1234-1236 renews transit time;
+  the publication carrier must preserve the original native monotonic deadline.
+  Native constructs the carrier from retained observations, never from an
+  engine-supplied claim. The receiver independently validates generation,
+  positive/negative readset, roots, profiles and deadline before effects. Peer
+  admission authenticates UID, not executable identity; the cooperative runtime
+  TCB remains explicit. Root owns this join and the actual ordinary Stop proof.
+  Its decisive negative control creates a higher-priority adapter while queued
+  and must observe zero reservation/writer/SQLite-open/publication/compatibility
+  effects. Instrument the actual SQLite-open seam; unchanged database bytes
+  cannot prove no open. The valid control must retain rows, exhausted/CLOSED,
+  projection, real consumer result and resource release under one invocation.
+
+- E310: Publication boundary `b34f2992` requires an explicit supported SQL
+  profile and validates it before observing the port or consumer. Lower-level
+  reconstruction defaults remain separate from publication admission.
+  `sql-profile-required-build-01`, `sql-profile-required-tests-01` and
+  `sql-profile-required-lint-01` exit0; the five focused suites execute207
+  checks. The emitted-adapter observer `observe-sql-profile-refusal.cjs` exits0
+  in0.156s under `sql-profile-refusal-observation-01`. Its four case JSON files
+  retain actual absent/undefined/null/unsupported selectors, exact
+  `StoreJsonError` category `request`, code `unsupported_profile`, and message
+  `request:unsupported_profile at request 0`. Port/consumer getter counts and
+  renderer callback counts are all0. `fixtures/result.json` and `execution.json`
+  retain module/driver/source/dist identities, process exit0 and an empty
+  observed process group. This establishes early adapter refusal, not native SQL
+  no-effects: the observer deliberately supplies no native port. Earned profile
+  qualification, binding to native admission and the ordinary consumer join
+  remain root-owned under E309. Commit formatting collapses an import; it does
+  not change the exercised statements or emitted implementation.
+
+- E311: Independent Rust inspection of `3612a2cd` identifies a metadata
+  hash/parse gap: shared verification hashes native entry and mode files, then
+  parses later reads without binding those buffers to the manifest. Root applies
+  only the hostile tests first. `metadata-parse-baseline-01` exits101 with18
+  passing and two failing controls. Its retained `native-entry.json.json`
+  observes different first/second-read digests, `admitted:true`, selected
+  timeout1001 instead of1000, and `restoredRevalidationOk:true` after original
+  bytes are restored. `native-modes.json.json` likewise admits engine mode0755
+  instead of0644 and passes restored revalidation. The controls mutate a
+  different member through the existing test-only chunk observer; no timing loop
+  or timestamp spoof supplies the result. Repair `65b1b065` hashes the exact
+  bounded buffers passed to both parsers. `metadata-parse-repaired-01` exits0
+  with20 selected controls in1.757s; both hostile artifacts report
+  `admitted:false` and the member-specific `Runtime member integrity failure`.
+  The unchanged-metadata control retains successful admission/revalidation.
+  `metadata-parse-installed-entry-01` exits0 with10 controls in3.242s. Its
+  runner enables the suite's actual artifact variable; retained per-invocation
+  `result.json`, `stdout.bin` and `stderr.bin` include native exit37 with
+  `NATIVE_DISPATCHED` and no legacy retry, pointer advancement yielding
+  `SELECTED_A`, and engine corruption yielding exit2 with its specific integrity
+  refusal. Earlier installed-entry runs retained process logs but did not enable
+  these per-invocation files. All three runs retain unchanged source/tool pins
+  and empty observed groups. These are shared-verifier and fixture-entry
+  observations, not installed production admission. Metadata immutability,
+  largest-image verification cost, real current-executable path matching and
+  ordinary receipt enforcement remain explicit qualification obligations. Root
+  carries the same separate-read concern through the actual TypeScript
+  `verifyRuntime`/`verifyNativeLayout` consumer in E312.
+
+- E312: TypeScript repair `78b5475c`, integrated into source candidate
+  `95a15927`, binds the exact parsed metadata buffers to the manifest and
+  rejects undeclared directory trees before descent. The tests-only
+  `ts-metadata-baseline-01` exits1: both changed captures receive active
+  selections, and restoring the original bytes makes later verification pass.
+  `ts-directory-baseline-01` exits1 with an admitted three-level undeclared
+  tree. `ts-metadata-committed-selection-01` executes the emitted candidate at
+  `78b5475c`, exits0 in1.560s and retains26 controls. Its `fixtures/`
+  observation JSON records member-specific modification refusals, unchanged
+  live/snapshot admission, and `admitted:false, descended:[]` for the undeclared
+  tree. `ts-metadata-final-build-01` and `ts-metadata-final-lint-01` exit0.
+  Direct comparison against the committed candidate finds no mismatches among422
+  build source pins,1049 committed-selection source/dist pins or111 retained
+  native repair source pins. These establish candidate identity and bounded
+  behavior, not ordinary native admission. The combined three-suite attempt
+  times out after120s with empty output; a60s image-only attempt and30s
+  diagnostic attempt also time out. Their groups are killed and observed empty.
+  The diagnostic's `test-events.jsonl` shows completed rollback cases taking
+  several seconds. At the committed candidate,
+  `ts-metadata-registration-suite-01` exits0 with262 controls in7.440s. Three
+  disjoint image partitions (`ts-metadata-image-rollback-01`,
+  `ts-metadata-image-install-01`, `ts-metadata-image-remainder-01`) exit0 in
+  64.883s,1.683s and61.238s. Their event records account for all80 distinct
+  cases with no duplicated case names; the retained partition observation
+  records those exact selections. Fixture images retain pointers, manifests,
+  modes and per-case observations, including rollback to the legacy digest while
+  retaining a corrupt unused native generation. Their native executable is a
+  shell fixture; no real installed engine execution is inferred. Independent
+  feedback on the committed repair raises candidate/check identity and the
+  timeout; source-pin comparison, committed selector/registration runs and the
+  complete image partitions ground those questions. The peer's source inspection
+  is limited and supplies no acceptance verdict. No parent criterion changes.
+
+- E313: Reinspection of the combined source identifies absent production joins,
+  rather than merely missing tests: `engine-entry.ts:113` supplies no store
+  port; `engine.ts:245` uses live selection and its compatibility branch handles
+  ordinary SQL Stop; `publishNativeTranscriptStore` has no production caller.
+  `GenerationReceipt` has test callers only, and `capture_publication` accepts
+  no receipt. The actor's journal reservation and writer acquisition precede
+  SQL. Its receiver reconstructs expiry from receipt time plus remaining
+  milliseconds. Root owns the next coherent production slice: one ordinary
+  finite Stop through observed selection/profile qualification, native admission
+  and the original deadline, queue revalidation before effects, SQL exhaustion
+  and CLOSED, publication, actual consumer readback and release. Root retains
+  exact-image qualification and the dependent residency workload. Component
+  landings remain incremental; none authorizes machine adoption or legacy
+  retirement before that combined result.
+
+- E314: Combined source `c61ad087` executes a fresh matched native build and CLI
+  package build/pack in
+  `publication-integration/combined-native-coordinator-01`,
+  `combined-package-build-01` and `combined-package-01`. The native binary
+  SHA256 is `8619a3670ed611dd95c51b3d286031d7ca4f0510b9ff4fbfc86b51a996dd4793`;
+  the package tar SHA256 is
+  `c0bbdf4b1023163e68d201059f681350f377b84902ddcf2bf7505a78c95fdc2c`. Exact
+  descriptor preparation compares the package, installed prefix and staged
+  consumer documents; earlier prefix-identity and staging failures remain
+  retained. `combined-installed-image-01` contains the actual private install,
+  configure, project initialization, direct native invocation, corruption and
+  rollback cases. The native generation is
+  `c788f1722ce38d728da408888c3af1722e4f199234b760ade3345002c17ace93`.
+  `native-bash-read-01` exits0 and `native-bash-force-push-01` exits2 with the
+  specific command-safety block; their journals record native cache capture and
+  envelope publication, without compatibility-dispatch completion. These cases
+  use a clean child environment and exact generation executable aliases. Read
+  payload and ambient-environment attempts retain their compatibility evidence;
+  unsupported stock handlers continue using child execution. The inert
+  force-push payload does not execute a Git push. Journal delivery remains
+  `not_observed`: direct launcher execution does not prove editor enforcement.
+  `native-corrupt-01` exits2 with
+  `Runtime member integrity failure: native-entry.json`; the private fixture
+  restores the original metadata bytes. `rollback-apply` exits0 and restores
+  baseline digest
+  `0c5bf4bebaf720b6e48972bdec14cf277de51aaa0216094474781677c2795137`;
+  `rollback-read-01` invokes the same stable launcher and exits0. This proves
+  the private native-to-legacy recovery scenario, not active-owner native
+  upgrades. Each case retains command, exit, stdout/stderr and state snapshots;
+  invocation verification retains image/input hashes. No machine adoption,
+  ordinary SQL Stop, full in-process chain, no-Python execution, residency or
+  fairness is inferred. The later deadline candidate `3bc555cb` requires
+  separate integrated-image proof.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -7977,11 +8422,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                             | Next decisive check                                                                                                                                                                                                                                                         |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E285 publishes the adapter and Git context                                                                      | Hosted Linux admission, then fresh combined package/image identity and actual native refusal/rollback observations                                                                                                                                                          |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Source-progress owns the TS carrier and SQL continuation; publication-integration owns calendar falsification; root owns native carrier integration, captured-source contract and selection | Actual original-process Git/calendar observations consumed by SQL Render after exhausted CLOSED, with ordinary semantic consumption; present source descriptors must not fabricate missing auxiliary or subagent observations                                               |
-| Resident operation with fair, bounded capacity                                       | Native-context-git owns the fresh-request permit-refund repair; root owns integration and concurrent qualification; E282 establishes sequential reclamation                                 | Retained uncertain original A plus rejected fresh A2 must preserve A's custody and release only A2's unused capacity, allowing project B and mandatory guards to progress; then unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                           | Next decisive check                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                              | E314 completes bounded exact-image invocation/refusal and private rollback; land the qualified source slice, then qualify the next production-connected image and actual harness delivery                                                         |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; deadline candidate3bc555cb is committed in the publication lane; deep effect-boundary checks and combined-image integration remain owed | E309 ordinary SQL Stop proof: native-owned generation/selection, qualified SQL and renderer profiles, original deadline, and queue revalidation before reservation/writer/SQL; reconcile foreign parser ownership before command-transport writes |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload             |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The

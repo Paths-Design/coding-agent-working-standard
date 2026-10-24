@@ -15,6 +15,9 @@ struct Fixture {
 }
 impl Fixture {
     fn new() -> Self {
+        Self::with_capacity(1)
+    }
+    fn with_capacity(max_retained_records: u16) -> Self {
         let root = std::env::temp_dir()
             .canonicalize()
             .unwrap()
@@ -47,7 +50,7 @@ impl Fixture {
                 max_backends: 1,
                 max_queue_per_project: 2,
                 max_frame_bytes: 2_097_152,
-                max_retained_records: 1,
+                max_retained_records,
                 first_frame_ms: 1000,
                 request_ms: 10_000,
                 startup_ms: 1000,
@@ -84,14 +87,16 @@ impl Fixture {
         }
     }
     fn acquire(&self, id: &str) -> SessionAcquire {
-        let raw = RawValue::from_string(
-            serde_json::json!({"session_id":"s","cwd":self.root}).to_string(),
-        )
-        .unwrap();
+        self.acquire_in(id, &self.root)
+    }
+    fn acquire_in(&self, id: &str, project: &Path) -> SessionAcquire {
+        let raw =
+            RawValue::from_string(serde_json::json!({"session_id":"s","cwd":project}).to_string())
+                .unwrap();
         let runtime = "a".repeat(64);
-        let project_digest = sha(self.root.to_str().unwrap().as_bytes());
+        let project_digest = sha(project.to_str().unwrap().as_bytes());
         let environment = BTreeMap::from([("PATH".into(), "/usr/bin:/bin".into())]);
-        let request=serde_json::to_vec(&serde_json::json!({"schema":REQUEST_SCHEMA,"id":id,"runtimeDigest":runtime,"token":"token","canonicalRoot":self.root})).unwrap();
+        let request=serde_json::to_vec(&serde_json::json!({"schema":REQUEST_SCHEMA,"id":id,"runtimeDigest":runtime,"token":"token","canonicalRoot":project})).unwrap();
         SessionAcquire::capture(
             &request,
             &SessionInvocation {
@@ -105,7 +110,7 @@ impl Fixture {
                 ready_project_digest: Some(&project_digest),
                 ready_session_id: Some("s"),
                 dispatched: true,
-                caller_cwd: self.root.to_str().unwrap(),
+                caller_cwd: project.to_str().unwrap(),
                 caller_environment: &environment,
             },
             expires(),
@@ -182,6 +187,10 @@ fn run_captured(
         allowed: allow_engine_exchange,
     } = engine_expectation;
     let bytes = bytes.to_vec();
+    let acquired: SessionAcquire = serde_json::from_slice(&bytes).unwrap();
+    let session_path = PathBuf::from(acquired.request().unwrap().canonical_root)
+        .join(".caws/sessions")
+        .join(&acquired.session_id);
     let (mut client, mut server) = UnixStream::pair().unwrap();
     client.set_nonblocking(true).unwrap();
     server.set_nonblocking(true).unwrap();
@@ -260,16 +269,16 @@ fn run_captured(
                         }
                     );
                     if missing {
-                        assert!(!f.session().join(publication::MARKER_NAME).exists());
-                        assert!(!f.session().join(".meta.json").exists());
+                        assert!(!session_path.join(publication::MARKER_NAME).exists());
+                        assert!(!session_path.join(".meta.json").exists());
                     } else {
                         let marker: serde_json::Value = serde_json::from_slice(
-                            &fs::read(f.session().join(publication::MARKER_NAME)).unwrap(),
+                            &fs::read(session_path.join(publication::MARKER_NAME)).unwrap(),
                         )
                         .unwrap();
                         assert_eq!(marker["terminalDigest"], sent["terminalDigest"]);
                         assert_eq!(
-                            fs::read(f.session().join(".meta.json")).unwrap(),
+                            fs::read(session_path.join(".meta.json")).unwrap(),
                             prepared_metadata
                         );
                     }
@@ -535,6 +544,247 @@ fn wrong_consumed_keeps_actual_actor_original_and_shared_permit() {
             .unwrap_err()
             .contains("capacity exhausted")
     );
+}
+
+fn session_journal(f: &Fixture, project: &Path, id: &str) -> PathBuf {
+    f.root
+        .join("state/render-service/custody/operations/services")
+        .join(wire::project_service_key(project.to_str().unwrap()).unwrap())
+        .join(format!("{}.json", publication::original_request_id(id)))
+}
+fn file_receipt(path: &Path) -> (Vec<u8>, u64, u32, i64, i64) {
+    let stat = fs::symlink_metadata(path).unwrap();
+    assert!(stat.is_file() && !stat.file_type().is_symlink());
+    (
+        fs::read(path).unwrap(),
+        stat.ino(),
+        stat.mode(),
+        stat.mtime(),
+        stat.mtime_nsec(),
+    )
+}
+fn no_engine() -> EngineExpectation<'static> {
+    EngineExpectation {
+        metadata: b"{}",
+        frame_length: 0,
+        allowed: false,
+    }
+}
+
+#[test]
+fn fresh_original_at_unknown_fence_refunds_only_its_transient_slot_for_another_project() {
+    let f = Fixture::with_capacity(2);
+    let capacity = relay::OperationCapacity::new(2);
+    let registry = Arc::new(Mutex::new(SessionRegistry::new(Arc::clone(&capacity))));
+    fs::create_dir_all(f.session()).unwrap();
+    fs::write(f.session().join(".meta.json"), b"{}").unwrap();
+    let first = run(&f, Arc::clone(&registry), "retained-A", false, true);
+    assert!(first.status().is_err() && first.retained, "{first:?}");
+    let original = Arc::clone(&registry.lock().unwrap().records["retained-A"]);
+    let writer = Arc::clone(original.lock().unwrap().writer.as_ref().unwrap());
+    assert!(original.lock().unwrap().publication.is_some());
+    let a_record = session_journal(&f, &f.root, "retained-A");
+    let before = [
+        &a_record,
+        &f.session().join(".meta.json"),
+        &f.session().join(publication::MARKER_NAME),
+    ]
+    .into_iter()
+    .map(|p| (p.to_path_buf(), file_receipt(p)))
+    .collect::<BTreeMap<_, _>>();
+    let second_bytes = serde_json::to_vec(&f.acquire("fresh-A2")).unwrap();
+    let second = run_captured(
+        &f,
+        Arc::clone(&registry),
+        &second_bytes,
+        false,
+        false,
+        no_engine(),
+    );
+    assert!(
+        second.status().is_err(),
+        "fenced original executed: {second:?}"
+    );
+    assert!(second.original_project_bound);
+    assert!(
+        !second.retained,
+        "fresh non-executed original leaked capacity: {second:?}"
+    );
+    assert!(!session_journal(&f, &f.root, "fresh-A2").exists());
+    assert_eq!(
+        registry
+            .lock()
+            .unwrap()
+            .records
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        ["retained-A"]
+    );
+    // One actual shared permit remains held by A; precisely the other slot is
+    // available. Do not raise the configured frontier or evict the old record.
+    let available = capacity
+        .acquire()
+        .expect("fresh fence refusal must refund one slot");
+    assert!(capacity.acquire().is_err());
+    drop(available);
+
+    let b = f.root.join("project-b");
+    fs::create_dir(&b).unwrap();
+    assert!(
+        Command::new("/usr/bin/git")
+            .args(["init", "--quiet"])
+            .arg(&b)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let b_session = b.join(".caws/sessions/s");
+    fs::create_dir_all(&b_session).unwrap();
+    fs::write(b_session.join(".meta.json"), b"{}").unwrap();
+    let b_original = serde_json::to_vec(&f.acquire_in("fresh-B", &b)).unwrap();
+    let b_metadata = b"{\"ended\":{\"reason\":\"other\"},\"project\":\"B\"}";
+    let completed = run_captured(
+        &f,
+        Arc::clone(&registry),
+        &b_original,
+        false,
+        false,
+        EngineExpectation {
+            metadata: b_metadata,
+            frame_length: 0,
+            allowed: true,
+        },
+    );
+    assert!(
+        completed.status().is_ok() && !completed.retained,
+        "B blocked by unrelated A fence: {completed:?}"
+    );
+    let b_durable: serde_json::Value =
+        serde_json::from_slice(&fs::read(session_journal(&f, &b, "fresh-B")).unwrap()).unwrap();
+    assert_eq!(b_durable["body"]["outcome"]["execution"], "consumed");
+    assert_eq!(b_durable["body"]["verifiedRequestBase64"], "");
+    assert_eq!(fs::read(b_session.join(".meta.json")).unwrap(), b_metadata);
+    for (path, receipt) in before {
+        assert_eq!(
+            file_receipt(&path),
+            receipt,
+            "A changed while another original was refused/consumed"
+        );
+    }
+    assert!(Arc::ptr_eq(
+        original.lock().unwrap().writer.as_ref().unwrap(),
+        &writer
+    ));
+    assert!(original.lock().unwrap().publication.is_some());
+    assert!(original.lock().unwrap().completion.retained);
+    let available = capacity.acquire().unwrap();
+    assert!(capacity.acquire().is_err());
+    drop(available);
+}
+
+#[test]
+fn registry_absence_does_not_refund_a_prior_durable_identity_at_unknown_fence() {
+    let f = Fixture::with_capacity(2);
+    let capacity = relay::OperationCapacity::new(2);
+    let registry = Arc::new(Mutex::new(SessionRegistry::new(Arc::clone(&capacity))));
+    fs::create_dir_all(f.session()).unwrap();
+    fs::write(f.session().join(".meta.json"), b"{}").unwrap();
+    let captured = serde_json::to_vec(&f.acquire("accepted-A")).unwrap();
+    let first = run_captured(
+        &f,
+        Arc::clone(&registry),
+        &captured,
+        false,
+        true,
+        EngineExpectation {
+            metadata: b"{\"ended\":{\"reason\":\"other\"}}",
+            frame_length: 0,
+            allowed: true,
+        },
+    );
+    assert!(first.status().is_err() && first.retained);
+    let durable = session_journal(&f, &f.root, "accepted-A");
+    let before = file_receipt(&durable);
+    // Registry absence is the condition possible after restart. Preserve the
+    // actual original record outside the registry here; do not discard its
+    // writer/Publication merely to manufacture a free slot in this control.
+    let retained = registry
+        .lock()
+        .unwrap()
+        .records
+        .remove("accepted-A")
+        .unwrap();
+    let writer = Arc::clone(retained.lock().unwrap().writer.as_ref().unwrap());
+    let replay = run_captured(
+        &f,
+        Arc::clone(&registry),
+        &captured,
+        false,
+        false,
+        no_engine(),
+    );
+    assert!(
+        replay.status().is_err() && replay.retained,
+        "durable accepted ID incorrectly refunded: {replay:?}"
+    );
+    assert_eq!(file_receipt(&durable), before);
+    assert!(capacity.acquire().is_err());
+    assert!(registry.lock().unwrap().records.contains_key("accepted-A"));
+    assert!(Arc::ptr_eq(
+        retained.lock().unwrap().writer.as_ref().unwrap(),
+        &writer
+    ));
+    assert!(retained.lock().unwrap().publication.is_some());
+}
+
+#[test]
+fn unknown_fence_durable_lookup_error_retains_the_new_slot_and_old_custody() {
+    let f = Fixture::with_capacity(2);
+    let capacity = relay::OperationCapacity::new(2);
+    let registry = Arc::new(Mutex::new(SessionRegistry::new(Arc::clone(&capacity))));
+    fs::create_dir_all(f.session()).unwrap();
+    fs::write(f.session().join(".meta.json"), b"{}").unwrap();
+    let first = run(&f, Arc::clone(&registry), "uncertain-A", false, true);
+    assert!(first.status().is_err() && first.retained);
+    let original = Arc::clone(&registry.lock().unwrap().records["uncertain-A"]);
+    let writer = Arc::clone(original.lock().unwrap().writer.as_ref().unwrap());
+    let durable = session_journal(&f, &f.root, "uncertain-A");
+    let before = file_receipt(&durable);
+    // current() checks the complete directory name set while holding actual
+    // journal custody. An untracked file must fail lookup, never imply absence.
+    let foreign = durable.parent().unwrap().join("untracked.json");
+    fs::write(&foreign, b"{}").unwrap();
+    let captured = serde_json::to_vec(&f.acquire("lookup-error-A2")).unwrap();
+    let second = run_captured(
+        &f,
+        Arc::clone(&registry),
+        &captured,
+        false,
+        false,
+        no_engine(),
+    );
+    assert!(
+        second.status().is_err() && second.retained,
+        "lookup uncertainty refunded: {second:?}"
+    );
+    assert!(
+        second
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("durable original identity unavailable"),
+        "{second:?}"
+    );
+    assert_eq!(registry.lock().unwrap().records.len(), 2);
+    assert!(capacity.acquire().is_err());
+    assert!(!session_journal(&f, &f.root, "lookup-error-A2").exists());
+    assert_eq!(file_receipt(&durable), before);
+    assert!(Arc::ptr_eq(
+        original.lock().unwrap().writer.as_ref().unwrap(),
+        &writer
+    ));
+    assert!(original.lock().unwrap().publication.is_some());
 }
 
 #[test]
