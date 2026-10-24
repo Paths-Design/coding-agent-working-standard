@@ -61,7 +61,16 @@ export function exactKeys(value, keys) {
   );
 }
 export function validateRequest(request) {
-  exactKeys(request, ['schema', 'outputRoot', 'surface', 'candidate', 'reference', 'corpus']);
+  exactKeys(request, [
+    'schema',
+    'outputRoot',
+    'surface',
+    'candidate',
+    'reference',
+    'corpus',
+    ...(Object.hasOwn(request, 'nativePolicyImage') ? ['nativePolicyImage'] : []),
+  ]);
+  if (Object.hasOwn(request, 'nativePolicyImage')) validatePolicyImage(request.nativePolicyImage);
   assert.equal(request.schema, 'caws.qualify-stop-components.request.v1');
   assert.equal(request.surface, 'opencode');
   exactKeys(request.candidate, ['node', 'native', 'engine', 'distRoot', 'distFiles']);
@@ -120,6 +129,133 @@ export function validateRequest(request) {
     'unreviewed stock reference inventory'
   );
   return request;
+}
+export const SEMANTIC_PROFILE_SCHEMA = 'caws.runtime.stop-semantic-profile.v1';
+export const PROFILE_REMAINING_JOINS = Object.freeze([
+  'native-calendar-original-environment',
+  'bundled-engine-dispatch-equivalence',
+  'native-selection-prefix-and-queued-peer-admission',
+  'ordinary-publication-reopened-consumer-and-release',
+  'ambient-legacy-startup-equivalence',
+  'other-supported-surfaces',
+]);
+const cliDist = 'native-prefix/node_modules/@paths.design/caws-cli/dist/';
+export const isImplementationMember = (relative) =>
+  relative.startsWith('native-prefix/') ||
+  relative.startsWith('native/') ||
+  ['native-entry.json', 'native-build-provenance.json'].includes(relative);
+function validatePolicyImage(image) {
+  exactKeys(image, ['descriptor', 'root', 'files']);
+  exactKeys(image.descriptor, ['path', 'sha256']);
+  assert(path.isAbsolute(image.root) && path.isAbsolute(image.descriptor.path));
+  assert.match(image.descriptor.sha256, /^[a-f0-9]{64}$/);
+  assert(image.files && Object.keys(image.files).length > 0);
+  for (const [relative, digest] of Object.entries(image.files)) {
+    assert(
+      relative &&
+        !relative.includes('\\') &&
+        !path.isAbsolute(relative) &&
+        relative.split('/').every((part) => part && part !== '.' && part !== '..')
+    );
+    assert.match(digest, /^[a-f0-9]{64}$/);
+  }
+  assert(
+    !Object.hasOwn(image.files, 'native-stop-profile.json'),
+    'cannot repackage an existing profile'
+  );
+}
+// This checks actual prepared v2 bytes against the complete selected image. It
+// does not convert a historical component receipt or a caller boolean to policy.
+function capturePolicyImage(request, require) {
+  const image = request.nativePolicyImage;
+  validatePolicyImage(image);
+  pinFile(image.descriptor);
+  const input = JSON.parse(read(image.descriptor.path));
+  assert.equal(
+    input.schema,
+    'caws.runtime.native-image-input.v2',
+    'profile emission requires reviewed v2 build image'
+  );
+  assert(!Object.hasOwn(input, 'stopProfile'), 'qualify pre-profile image only');
+  const prepared = require('./init/native-runtime-entry.js').prepareNativeRuntimeEntryFromBuild(
+    input
+  );
+  pinTree(image.root, image.files);
+  return verifyPolicyImageBindings(request.candidate, prepared, image.files);
+}
+/** Pure data consistency only; production captures the v2 image before use. */
+export function verifyPolicyImageBindings(candidate, prepared, imageFiles) {
+  const actual = Object.fromEntries(
+    Object.entries(imageFiles)
+      .filter(([name]) => isImplementationMember(name))
+      .sort()
+  );
+  const expected = Object.fromEntries(
+    [...prepared.files]
+      .filter(([name]) => isImplementationMember(name))
+      .map(([name, bytes]) => [name, sha(bytes)])
+      .sort()
+  );
+  assert.deepEqual(
+    actual,
+    expected,
+    'prepared v2 implementation differs from selected complete image'
+  );
+  const entry = prepared.metadata;
+  assert.equal(
+    actual[entry.nativeExecutable],
+    candidate.native.sha256,
+    'native image not compared'
+  );
+  assert.equal(actual[entry.nodeExecutable], candidate.node.sha256, 'Node image not compared');
+  assert.equal(actual[entry.engineEntry], candidate.engine.sha256, 'engine image not compared');
+  const dist = Object.fromEntries(
+    Object.entries(actual)
+      .filter(([name]) => name.startsWith(cliDist))
+      .map(([name, digest]) => [name.slice(cliDist.length), digest])
+  );
+  assert.deepEqual(dist, candidate.distFiles, 'complete compared dist differs from image');
+  return actual;
+}
+// Data construction is private to a successful live comparison. The exported
+// validation helpers used by hostile tests cannot mint an invocation receipt.
+function semanticPolicy(receipt, componentReceiptSha256, implementation) {
+  verifyCoverage(receipt.comparisons);
+  for (const row of receipt.comparisons) {
+    assert.match(row.referenceSha256, /^[a-f0-9]{64}$/);
+    assert.equal(row.referenceSha256, row.candidateSha256);
+  }
+  return {
+    schema: SEMANTIC_PROFILE_SCHEMA,
+    surface: 'opencode',
+    event: 'stop',
+    scope: 'controlled-components',
+    implementation,
+    selectors: {
+      sql: [4300, 0].map((integerMaxDigits) => ({
+        id: `cpython-3.11.13-unicode14-int${integerMaxDigits}`,
+        integerMaxDigits,
+      })),
+      renderer: [4300, 0].map((integerMaxDigits) => ({
+        id: `cpython3.11-json/int-max-str-digits:${integerMaxDigits}`,
+        integerMaxDigits,
+      })),
+    },
+    sqliteIdentity: receipt.sqliteIdentity,
+    environment: { tz: 'UTC0', tzdir: 'absent', integerMaxDigits: [4300, 0] },
+    comparison: {
+      receiptSha256: componentReceiptSha256,
+      driverSha256: receipt.driverSha256,
+      comparisons: receipt.comparisons,
+    },
+    provenance: {
+      referenceMode: receipt.referenceMode,
+      referenceAdapterSha256: REVIEWED_REFERENCE_ADAPTER_SHA256,
+      referenceSharedInventorySha256: REVIEWED_REFERENCE_SHARED_INVENTORY_SHA256,
+      corpusSha256: SQL_CORPUS_SHA256,
+    },
+    remainingJoins: [...PROFILE_REMAINING_JOINS],
+  };
 }
 function pinFile(pin) {
   const before = fs.lstatSync(pin.path);
@@ -339,6 +475,9 @@ export async function qualify(requestFile) {
       fixturePins[fixture.database] = fixture.database_sha256;
     }
     const require = createRequire(path.join(request.candidate.distRoot, 'index.js'));
+    const implementation = request.nativePolicyImage
+      ? capturePolicyImage(request, require)
+      : undefined;
     const projection = require('./transcripts/store-projection.js');
     const { createDefaultTranscriptRegistry } = require('./transcripts/registry.js');
     const { prepareSessionArtifactsWithCalendar } = require('./transcripts/render-prepare.js');
@@ -680,6 +819,13 @@ export async function qualify(requestFile) {
       }
     }
     verifyCoverage(comparisons);
+    if (implementation) {
+      assert.deepEqual(
+        capturePolicyImage(request, require),
+        implementation,
+        'image changed during comparison'
+      );
+    }
     const candidateModulePins = verifyRequiredModuleClosure(
       require,
       request.candidate.distRoot,
@@ -750,6 +896,14 @@ export async function qualify(requestFile) {
     };
     const receiptFile = path.join(request.outputRoot, 'component-comparison.json');
     save(receiptFile, receipt);
+    if (implementation) {
+      // Emitted only after this invocation executed every fixed comparison and
+      // repeated exact tool/dist/image observations. No historical receipt input.
+      save(
+        path.join(request.outputRoot, 'native-stop-profile.json'),
+        semanticPolicy(receipt, sha(read(receiptFile)), implementation)
+      );
+    }
     save(path.join(request.outputRoot, 'stop-profile-component-draft.json'), {
       schema: 'caws.stop-profile.component-draft.v1',
       surface: 'opencode',

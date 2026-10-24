@@ -277,6 +277,40 @@ impl GenerationReceipt {
         })
     }
 
+    /// Bounded no-follow bytes from an already authenticated member. Reuses
+    /// installed metadata I/O and checks both retained identity and parsed-byte
+    /// digest, closing the manifest-hash-to-parse replacement window.
+    pub(crate) fn member_bytes(
+        &self,
+        relative: &str,
+        maximum: u64,
+        expires: Instant,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<Vec<u8>, String> {
+        use sha2::{Digest, Sha256};
+        let mut verify = Verification::new(expires.min(self.expires), &mut cancel);
+        let expected = self.member_digest_with(relative, &mut verify)?;
+        let bytes = crate::installed_generation::read_metadata(
+            self.root(),
+            relative,
+            maximum,
+            &mut verify,
+        )?;
+        let mut hash = Sha256::new();
+        for chunk in bytes.chunks(64 * 1024) {
+            verify.checkpoint()?;
+            hash.update(chunk);
+        }
+        if format!("{:x}", hash.finalize()) != expected.sha256 {
+            return Err("Authenticated runtime member bytes changed".into());
+        }
+        if self.member_digest_with(relative, &mut verify)? != expected {
+            return Err("Authenticated runtime member identity changed".into());
+        }
+        verify.checkpoint()?;
+        Ok(bytes)
+    }
+
     fn check_ancestors(&self, verify: &mut Verification<'_>) -> Result<(), String> {
         verify.checkpoint()?;
         for (path, expected) in &self.ancestors {
@@ -357,6 +391,59 @@ pub(crate) fn with_large_selection_generation_fixture<R>(
 mod tests {
     use super::*;
     use std::fs;
+    #[test]
+    fn authenticated_member_bytes_preserve_bound_identity_and_original_expiry() {
+        let fixture = Fixture::new();
+        let mut generation = fixture.capture().unwrap();
+        assert_eq!(
+            generation
+                .member_bytes("engine.js", 1024, expires(), || Ok(()))
+                .unwrap(),
+            b"engine\n"
+        );
+        assert!(
+            generation
+                .member_bytes("engine.js", 1, expires(), || Ok(()))
+                .unwrap_err()
+                .contains("bound")
+        );
+        assert!(
+            generation
+                .member_bytes("not-admitted.json", 1024, expires(), || Ok(()))
+                .is_err()
+        );
+        assert_eq!(
+            generation
+                .member_bytes("engine.js", 1024, expires(), || Err(
+                    "cancel exact member".into()
+                ))
+                .unwrap_err(),
+            "cancel exact member"
+        );
+        generation.expires = Instant::now() - Duration::from_secs(1);
+        assert!(
+            generation
+                .member_bytes(
+                    "engine.js",
+                    1024,
+                    Instant::now() + Duration::from_secs(3600),
+                    || Ok(())
+                )
+                .unwrap_err()
+                .contains("deadline")
+        );
+        let generation = fixture.capture().unwrap();
+        let retired = fixture.root.join("retired-engine");
+        fs::rename(fixture.root.join("engine.js"), &retired).unwrap();
+        fs::write(fixture.root.join("engine.js"), b"engine\n").unwrap();
+        assert!(
+            generation
+                .member_bytes("engine.js", 1024, expires(), || Ok(()))
+                .unwrap_err()
+                .contains("changed")
+        );
+        fixture.record("authenticated-member-refusals", serde_json::json!({"bound":1,"sameByteReplacementRefused":true,"originalExpiryRetained":true,"syntheticGeneration":true}));
+    }
     fn expires() -> Instant {
         Instant::now() + Duration::from_secs(10)
     }

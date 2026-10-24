@@ -19,6 +19,35 @@ const run = (body) =>
     { encoding: 'utf8', timeout: 5000 }
   );
 
+test('semantic image consistency refuses old executables, omitted dist and changed image bytes', () => {
+  run(`
+    // Synthetic consistency control, not an executed comparison receipt.
+    const {createHash}=await import('node:crypto');
+    const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+    const prefix='native-prefix/node_modules/@paths.design/caws-cli/dist/';
+    const files=new Map([
+      ['native/caws-native',Buffer.from('native')],['native/node',Buffer.from('node')],
+      ['native/caws-hook-native',Buffer.from('stable')],
+      ['native-entry.json',Buffer.from('{}')],['native-build-provenance.json',Buffer.from('{}')],
+      [prefix+'runtime/engine-entry.js',Buffer.from('engine')],[prefix+'transcripts/store-projection.js',Buffer.from('projection')],
+    ]);
+    const pins=Object.fromEntries([...files].map(([name,bytes])=>[name,hash(bytes)]));
+    const prepared={files,metadata:{nativeExecutable:'native/caws-native',nodeExecutable:'native/node',engineEntry:prefix+'runtime/engine-entry.js'}};
+    const candidate={native:{sha256:pins['native/caws-native']},node:{sha256:pins['native/node']},engine:{sha256:pins[prefix+'runtime/engine-entry.js']},distFiles:{'runtime/engine-entry.js':pins[prefix+'runtime/engine-entry.js'],'transcripts/store-projection.js':pins[prefix+'transcripts/store-projection.js']}};
+    assert.deepEqual(q.verifyPolicyImageBindings(candidate,prepared,pins),pins);
+    for(const field of ['native','node','engine']) {
+      assert.throws(()=>q.verifyPolicyImageBindings({...candidate,[field]:{sha256:'0'.repeat(64)}},prepared,pins),/not compared/);
+    }
+    const omitted={...candidate.distFiles};delete omitted['transcripts/store-projection.js'];
+    assert.throws(()=>q.verifyPolicyImageBindings({...candidate,distFiles:omitted},prepared,pins),/complete compared dist/);
+    assert.throws(()=>q.verifyPolicyImageBindings(candidate,prepared,{...pins,'native/node':'0'.repeat(64)}),/selected complete image/);
+    assert.throws(()=>q.verifyPolicyImageBindings(candidate,prepared,{...pins,'native-prefix/uncompared.js':'0'.repeat(64)}),/selected complete image/);
+    for(const name of ['native-stop-profile.json','manifest.json','native-modes.json']) assert.equal(q.isImplementationMember(name),false);
+    assert(q.PROFILE_REMAINING_JOINS.includes('native-calendar-original-environment'));
+    assert(q.PROFILE_REMAINING_JOINS.includes('bundled-engine-dispatch-equivalence'));
+  `);
+});
+
 test('fixed corpus refuses omitted, duplicate, failed, skipped and swapped-surface cases', () => {
   run(`
     const rows=[4300,0].flatMap(limit=>[...q.SQL_CASES.map(name=>({id:'sql/'+limit+'/'+name,result:'equal'})),...q.RENDER_CASES.map(name=>({id:'renderer/'+limit+'/'+name,result:'equal'}))]);

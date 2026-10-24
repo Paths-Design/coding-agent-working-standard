@@ -9086,6 +9086,37 @@ Additional bounded evidence and unresolved dependencies:
   ordinary reader/CONSUMED/release. No production activation, complete Python
   retirement, fairness or machine adoption is inferred.
 
+- E345: The maintained Stop qualifier can emit native-stop-profile.json after
+  its fixed30 SQL/renderer comparisons and exact pre-profile image checks.
+  Reviewed v2 image preparation binds that member to the native executables,
+  complete prefix and build provenance without a final-generation digest cycle.
+  The native StopProfileReceipt loader retains the original capture, deadline,
+  generation and independently selected SQL/renderer profiles. These are
+  implementation boundaries, not an executed fresh producer/consumer chain.
+  native-stop-profile-build-01 exits0 in6.308s; tooling-02 exits0 with six
+  qualifier refusal controls. The combined ts-01 attempt times out at110s and
+  adapter-02 at50s, with no terminal suite result. Retained fixture timestamps
+  show completed installation cases consuming the second budget; its CPU sample
+  is inside a case that subsequently completes, not evidence of an infinite
+  loop. semantic-03 exits0 in3.147s with eight new semantic-data controls and
+  the isolated existing symlink refusal. adapter-v2-03 executes the
+  complete38-case v2 group and exits0 in58.243s;50 other file cases are filtered
+  out. The retained fixture observations and prepared-image members use a mocked
+  build-receipt loader and fake executables; they do not execute a production
+  native image. native-stop-profile-rust-01 exits0 in23.323s with four synthetic
+  validation/environment/deadline controls. Feature-off check exits0 in7.882s
+  without runtime execution. Source/input pins remain unchanged during these
+  checks and observed process groups are empty afterward. Artifacts reside under
+  publication-integration in the root session directory. The native profile
+  domain requires original TZ=UTC0, absent TZDIR and the reviewed integer
+  limits; it does not establish other host environments. Root owns
+  fresh30-comparison profile emission against the exact candidate, actual native
+  receipt capture, original-calendar and engine equivalence, production
+  eligibility/main wiring and integrated publication/reader/release. Authentic
+  generation bytes cannot alone prove the historical comparisons executed. No
+  parent acceptance, selected-machine adoption or Python retirement follows from
+  these component checks.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

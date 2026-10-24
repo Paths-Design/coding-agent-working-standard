@@ -12,6 +12,7 @@ mod render_bridge;
 mod runner;
 mod selection_observation;
 mod stop_admission;
+mod stop_profile;
 
 use caws_native::monotonic_deadline::MonotonicDeadline;
 use caws_native::stop_budget::{BudgetIdentity, Charge, StopBudget};
