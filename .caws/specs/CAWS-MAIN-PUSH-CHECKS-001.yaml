@@ -47,3 +47,11 @@ evidence:
     exit_code: 0
     commit_sha: "7fd143e47555d04d31993f61a83b5272c771ffcb"
     test_verified_at: "7fd143e47555d04d31993f61a83b5272c771ffcb"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected hostile assertions executed in the 120-test focused pass: changed/omitted/extra reference pins refuse, corrupt transcript bytes or receipts refuse, and missing/duplicate source classification fails. Raw /private/tmp/caws-push-checks-targeted-20261024.log; subsequent directory-only predicate recheck /private/tmp/caws-push-checks-reference-20261024.log. Full pre-push and origin/main synchronization remain parent task obligations."
+    recorded_at: "2026-10-24T21:34:22.994Z"
+    test_nodeid: "packages/caws-cli/tests/tooling/transcript-runtime-floor.test.js::capture is private and immutable on retry, and verifier rejects spill corruption with rewritten receipt"
+    exit_code: 0
+    commit_sha: "7fd143e47555d04d31993f61a83b5272c771ffcb"
+    test_verified_at: "7fd143e47555d04d31993f61a83b5272c771ffcb"
