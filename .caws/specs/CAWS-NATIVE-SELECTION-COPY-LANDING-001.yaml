@@ -59,3 +59,9 @@ evidence:
     recorded_at: "2026-10-24T22:58:38.714Z"
     exit_code: 0
     commit_sha: "694f6212806a6bfa7832cc934c89c8d81a3c783e"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Merge 78a571c54d1286c41b2cd27d5aae01a0baee6c05 lands reviewed candidate694f6212. git diff --exit-code candidate main over all six owned paths and merge-base --is-ancestor both exit0, independently inspected. Review found mutable-copy oracle gap repaired by694f6212; raw selection-copy-mutable-02 shows102tests0. E383 failed installed deadline, full parity and machine cutover remain root-owned parent obligations. Commit verification is not test execution."
+    recorded_at: "2026-10-24T23:16:50.403Z"
+    exit_code: 0
+    commit_sha: "78a571c54d1286c41b2cd27d5aae01a0baee6c05"
