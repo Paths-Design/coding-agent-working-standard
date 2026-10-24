@@ -1,9 +1,10 @@
 id: CAWS-STOP-FIXTURE-OBSERVATION-001
 title: 'Preserve per-handler observation allowance for sequential Stop fixture dispatch'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: stop-fixture-observation
 created_at: '2026-10-24T22:00:01.924Z'
-updated_at: '2026-10-24T22:00:01.924Z'
+updated_at: '2026-10-24T22:00:15.677Z'
 created_by_session: '01a16c43-8af5-79e3-9535-9df94edfc037'
 blast_radius:
   modules:
