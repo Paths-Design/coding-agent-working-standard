@@ -57,13 +57,16 @@ equal to candidate `4f3f6214`. E371 records its bounded landing; the selected
 machine generation and full parent acceptance remain unchanged. Local main merge
 `b701acc311b715866a02e89a0167c75bbee3e2fa` contains the bounded pre-reservation
 refusal and reclamation source, E374. Its component acceptance does not
-establish authenticated restart or reader rollback.
-`native-runtime-modernization` remains the integration branch for owed work.
-Evidence entries identify their actual component branch or historical revision;
-ledger-only commits do not qualify different runtime bytes. The relative
-architecture link follows this document's branch. Source publication, fresh
-package qualification, actual native execution and cutover acceptance remain
-separate obligations; E262 records the landing and its bounded checks.
+establish authenticated restart or reader rollback. Local main merge
+`2272353010e9d5b9b6c006f2140fa7ca0518098d` contains the reviewed pure admission
+bracket and E376's bounded positive evidence. Its six source/tracker blobs match
+`4deb0537`; E377 retains the governed landing. `native-runtime-modernization`
+remains the integration branch for owed work. Evidence entries identify their
+actual component branch or historical revision; ledger-only commits do not
+qualify different runtime bytes. The relative architecture link follows this
+document's branch. Source publication, fresh package qualification, actual
+native execution and cutover acceptance remain separate obligations; E262
+records the landing and its bounded checks.
 
 The coverage measure is 33/37 rows with qualifying partial implementation
 (89.2%). It is not an overall completion percentage. Parent acceptance is 0/8;
@@ -10363,6 +10366,125 @@ Additional bounded evidence and unresolved dependencies:
   grounded against the exact-owner and closing-bracket code, unchanged effect
   checks and raw test pins; it is not acceptance evidence.
 
+- **E377 — admission source delivered without retiring dependent lanes.** Normal
+  merge `2272353010e9d5b9b6c006f2140fa7ca0518098d` delivers composition
+  `5d5ac7fe`, with all package/document bytes equal to `4deb0537` and native
+  source equal to reviewed `3cd741fd`. All six paths are admitted, five scoped
+  gates pass and doctor exits0. Bounded A1/A3/A2 records are
+  events13072/13073/13078; close13079 discharges only
+  `CAWS-NATIVE-PREGRANT-LANDING-001`. Root reads back spec and events.
+  `pregrant-source-landing-01/{before,composition,postmerge}.json` retains exact
+  blobs and unchanged eleven registry entries, branch tips, directories,
+  parent/publication spec bytes and selected machine pointer. Only the
+  disposable landing lane is removed. Blocked `git restore` changes nothing;
+  context-checked patch application integrates the clean lane.
+
+- **E378 — actual positive and queued refusal complete on one private owner.**
+  `production-stop-12-paired-execution-03/execution.json` exits0 in74.808s,
+  source pins unchanged, no outer timeout or observed group residue. It runs
+  exact native source `3cd741fd`, already landed through E377, under the
+  unchanged30000ms invocation deadline. Runtime
+  `b8fa9171b8c00f0bb4e3451a1a3795713f7864ebee819e6bec8c37494aaffd77` is
+  installed through the maintained private installer. The complete positive Stop
+  exits0 in29884.415ms; all four handlers complete, the exact selected 0s/1s
+  rows exclude the distinct foreign session, ordinary consumer hashes match
+  actual turn/index/projection and marker, and durable CONSUMED precedes heavy
+  release. The116ms margin is not load qualification.
+
+  A separately installed complete compatibility generation supplies a real
+  prepared cohort on the same project actor. After actual
+  `store_cohort_waiting`, the probe changes `.opencode/plugins/caws.ts` on the
+  same inode, then withdraws the held peer without dispatching its render grant.
+  Native Stop exits2 in 22608.447ms, naming that exact changed dependency before
+  its deadline. Actual stages are waiting → refused durable → refused released;
+  database-open attempts remain1→1 and the refused session has no marker,
+  projection, turn or index. The901-byte refusal record SHA256 is
+  `bcf499fdf8bfbe1124c5d507bf7ee9d0c75980203cf6092a2c9d675f4e2806fb`. It records
+  `refused_before_reservation`, retains64 digest bytes and survives owner97177's
+  natural exit0. Registry entry and socket are absent. Root's
+  `production-stop-12-paired-03/retained-readback.json` records independent
+  rehashes of actual session artifacts and both durable records. The harness
+  sends no service signals; native backend cleanup separately records its normal
+  verified SIGKILL/reap. Do not describe that as signal-free cleanup.
+
+  Earlier attempts remain evidence: paired01 fails unsupported held environment;
+  paired02 completes its positive in27890.102ms but native held-image admission
+  refuses group-writable `/opt/homebrew/Cellar`. The sealed stage is correct.
+  The corrected fixture keeps the actual Stop environment unchanged, uses a
+  separate supported held environment and compatibility generation, and pins
+  unchanged selected pointer/launcher/manifest bytes. Private tool copies keep
+  exact executable hashes; bounded Python/jq checks exit0, but Python and jq
+  retain external Homebrew framework/stdlib/dylib dependencies. No relocation,
+  hermeticity or Python retirement is inferred. Held01 fails an overly strict
+  test-only single-link source assertion; native `Access::Source` permits
+  hard-linked tools. Held02 matches that contract and records actual prepared,
+  withdrawal and natural owner exit before the full paired replay.
+
+  Independent harness review identifies a holder-expiry attribution gap in the
+  executed oracle. Root checks actual pair03 observations: prepared32579ms,
+  waiting54143ms, sole withdrawal54173ms with reason `peer_closed`, refusal
+  durable55169ms, released55176ms. `holder-causal-order.json` retains those raw
+  rows. The maintained harness adds that exact order/reason assertion; newer
+  harness bytes have not executed. The actual retained observations close this
+  attempt's attribution gap without a rerun-until-green substitution.
+
+  This bounded pair does not establish same-original-ID authenticated restart,
+  independent reconstruction of the original wire argument digest, old-reader
+  rollback, application delivery, thirteen-session/four-repository fairness,
+  complete no-Python packaging or machine cutover. Root owns those joins.
+
+- **E379 — real same-home reader restart preserves refusal custody; old-reader
+  rollback refuses.** `same-home-reader-restart-execution-01/execution.json`
+  records exit0 in1.463s for the bounded probe, without timeout or observed
+  group residue. It invokes the pinned fresh10 and fresh12 binaries sequentially
+  with `renderer-host --config` against E378's actual retained home. No
+  provisioning, custody copy, config replacement or request submission occurs.
+  Fresh10 exits2 in0.103s:
+  `CAWS renderer host refused: service journal unavailable: invalid closed operation record`.
+  Its event stream contains only `host_started`; sampled rendezvous observations
+  remain absent. Fresh12 exits0 in1.121s with `journal_recovered` reporting
+  `unknown:false`, followed by `host_idle_exit`. Both release the actual custody
+  lock; the socket is absent afterward. Recursive custody bytes, modes and inode
+  identities, including the901-byte E378 refusal, remain identical before and
+  after both readers. The config hash also remains identical.
+
+  `same-home-reader-restart-01/{before,old,new,result}.json`, separate raw
+  stderr and appended observation slices retain these results. No child is
+  sampled and no worker event appears; finite process sampling cannot exclude an
+  arbitrarily short-lived child. Source startup order recovers journals before
+  publishing rendezvous. This establishes safe old-reader rejection and
+  successful idle restart by the current reader, not a usable downgrade. A
+  rollback candidate must understand retained refusal records; deleting or
+  rewriting terminal history would destroy replay protection. Authenticated
+  same-ID replay, crash recovery, restored ordinary behavior after rollback,
+  load tolerance and machine adoption remain open.
+
+- **E380 — actor reopen rejects terminal originals and reclaims capacity.** The
+  focused release-profile library check
+  `render_owner::store::tests::refusal::native_refusal_replay_survives_same_home_owner_reopen_and_allows_new_id_past_replay_gate`
+  exits0, selects one test and finishes its body in0.08s. The bounded build/run
+  takes104.228s with unchanged source/tool pins and no observed residue;
+  `refusal-owner-reopen-01` retains command, raw logs and
+  `native-registration-refusal-owner-reopen.json`. The actual old Actor,
+  StoreRegistry and custody owners are dropped before reacquiring the same
+  fixture home. Same-generation and changed-generation retries both return
+  `original invocation already terminal; no replay across generations`.
+  Registry/record owners disappear, operation capacity is not retained and
+  project capacity returns to0. The existing terminal bytes remain unchanged. A
+  new ID passes the replay gate and is then separately settled as a no-effect
+  refusal; this is not a claim that its acquisition or publication succeeded.
+
+  The artifact retains the exact terminal UTF8 bytes and SHA256
+  `5186d5f2fae039271158026845c7d0dc4ae82280607aebd80980ae156e6c4d93`; root
+  independently checks the hash and decoded body. Fixture cleanup removes its
+  original temporary home, so the retained bytes are the durable evidence.
+  `refusal-owner-reopen-family-01` exits0 in0.705s and executes all six refusal
+  cases, including persistence failure, partial reservation and terminal inode
+  replacement under registry contention. The changed helper has those callers.
+  Synthetic native transport and direct Actor methods leave authenticated
+  installed-process replay unverified. E379 separately exercises real reader
+  process restart; the two checks do not imply the missing end-to-end join.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -10514,20 +10636,24 @@ consumption and natural cleanup, but the complete Stop expires during agent-stop
 after repeated generation hashing. E374 delivers the bounded refusal source to
 main. E375 preserves fresh full brackets and every effect/queue boundary while
 sharing pure admission checks. E376's full positive completes with2.05s margin;
-the pair fails before its negative invocation because its held-offer fixture
-violates the service-image environment contract. Root owns fixture repair,
-source landing and exact-image replay; html-profile investigates a supported
-queue barrier, pregrant-review investigates syscall overhead without weakening
-freshness, and ambient-stop-domain specifies isolated reader rollback. The next
-paired replay must establish refusal history, zero additional SQL opens,
-reclaimed capacity and natural cleanup. The thirteen-session/four-repository
-workload and machine adoption remain owed.
+the pair initially fails in held-offer preparation. E377 lands the source; E378
+establishes actual queued refusal, zero additional SQL opens, durable
+refusal/release and natural owner exit after supported fixture repairs. Root
+owns same-original-ID restart and compatible rollback checks, then measured
+deadline margin and the thirteen-session/four-repository workload. The third
+positive's116ms margin makes performance an unresolved cutover dependency. E379
+demonstrates that the older fresh10 reader refuses the retained refusal record
+without changing custody, while fresh12 reopens it and exits idle. A compatible
+rollback package and restored ordinary invocation remain required.
+Pregrant-review identifies adjacent pure checkpoint bookkeeping as a bounded
+optimization hypothesis; no checkpoint throttling, filesystem observation cache
+or omitted effect boundary is authorized. Machine adoption remains owed.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                   |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                             | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.    |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; E346 connects native and engine production sources; root owns fresh-image execution | E376 completes the distinct-session positive; repair the held-offer fixture, then pair queued selection mutation with zero additional database opens, durable refusal, natural exit and restart rejection                             |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                               | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                             | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.                                                             |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; E346 connects native and engine production sources; root owns fresh-image execution | E378 completes the distinct-session positive and queued mutation with zero extra database opens, durable refusal/release and natural owner exit; E379 verifies current-reader restart and old-reader refusal; next prove authenticated same-ID replay rejection and usable compatible rollback |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                               | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                          |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The

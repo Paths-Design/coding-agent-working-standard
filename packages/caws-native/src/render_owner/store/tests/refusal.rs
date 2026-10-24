@@ -8,6 +8,18 @@ fn refusal_job(
     registry: &Arc<Mutex<StoreRegistry>>,
     original: StoreAcquire,
 ) -> (StoreJob, UnixStream) {
+    let capacity = Arc::new(ProjectCapacity {
+        used: AtomicUsize::new(0),
+        maximum: 1,
+    });
+    refusal_job_with_capacity(registry, original, &capacity)
+}
+
+fn refusal_job_with_capacity(
+    registry: &Arc<Mutex<StoreRegistry>>,
+    original: StoreAcquire,
+    capacity: &Arc<ProjectCapacity>,
+) -> (StoreJob, UnixStream) {
     let record = registry.lock().unwrap().reserve(original).unwrap();
     {
         let mut held = record.lock().unwrap();
@@ -16,10 +28,6 @@ fn refusal_job(
     }
     let (transport, caller, _replies) = relay_pair();
     let transport = bind_deadline(transport, &record);
-    let capacity = Arc::new(ProjectCapacity {
-        used: AtomicUsize::new(0),
-        maximum: 1,
-    });
     (
         StoreJob {
             record,
@@ -30,6 +38,186 @@ fn refusal_job(
         },
         caller,
     )
+}
+
+#[test]
+fn native_refusal_replay_survives_same_home_owner_reopen_and_allows_new_id_past_replay_gate() {
+    let f = Fixture::new();
+    let original = native_transport_fixture(&f, "refusal-before-owner-reopen");
+    let id = publication::original_request_id(&original.id);
+    let project_capacity = Arc::new(ProjectCapacity {
+        used: AtomicUsize::new(0),
+        maximum: 1,
+    });
+    let terminal = {
+        let mut actor = f.actor();
+        let custody = Arc::downgrade(&actor.custody);
+        let registry = Arc::new(Mutex::new(StoreRegistry::new(1)));
+        let old_registry = Arc::downgrade(&registry);
+        let capacity = Arc::clone(&registry.lock().unwrap().capacity);
+        let (job, caller) = refusal_job_with_capacity(
+            &registry,
+            copy_refusal_original(&original),
+            &project_capacity,
+        );
+        let record = Arc::downgrade(&job.record);
+        actor.store_records.push(Arc::clone(&job.record));
+        assert_eq!(project_capacity.used.load(Ordering::Acquire), 1);
+        actor.persist_native_refusal(&job, &original).unwrap();
+        let terminal = actor.journal.lookup(&id, expires()).unwrap().unwrap();
+        assert!(matches!(
+            terminal.outcome(),
+            journal::AcceptedOutcome::RefusedBeforeReservation {
+                reason: journal::PreReservationRefusalReason::NativeQualificationRefused,
+                ..
+            }
+        ));
+        assert!(registry.lock().unwrap().is_empty());
+        assert!(actor.store_records.is_empty());
+        drop((job, caller));
+        assert!(record.upgrade().is_none());
+        assert!(!capacity.retained());
+        assert_eq!(project_capacity.used.load(Ordering::Acquire), 0);
+        assert!(actor.idle_proof(expires()).is_ok());
+        drop(registry);
+        assert!(old_registry.upgrade().is_none());
+        drop(actor);
+        assert!(
+            custody.upgrade().is_none(),
+            "all old custody owners dropped"
+        );
+        terminal
+    };
+    let before = fixture_file_bytes(&f.root);
+    let terminal_path = before
+        .keys()
+        .find(|path| path.file_name().unwrap() == format!("{id}.json").as_str())
+        .unwrap();
+    let terminal_bytes = &before[terminal_path];
+    let mut replays = Vec::new();
+    for changed_generation in [false, true] {
+        // Fixture::actor reacquires the existing machine custody and opens the
+        // same project journal; no old Actor or StoreRegistry survives here.
+        let mut actor = f.actor();
+        let custody = Arc::downgrade(&actor.custody);
+        let registry = Arc::new(Mutex::new(StoreRegistry::new(1)));
+        let old_registry = Arc::downgrade(&registry);
+        let capacity = Arc::clone(&registry.lock().unwrap().capacity);
+        assert_eq!(
+            actor.journal.lookup(&id, expires()).unwrap(),
+            Some(terminal.clone())
+        );
+        let mut replay = copy_refusal_original(&original);
+        if changed_generation {
+            replay.runtime_digest = "e".repeat(64);
+        }
+        let (job, caller) =
+            refusal_job_with_capacity(&registry, copy_refusal_original(&replay), &project_capacity);
+        let record = Arc::downgrade(&job.record);
+        actor.store_records.push(Arc::clone(&job.record));
+        assert!(capacity.retained());
+        assert_eq!(project_capacity.used.load(Ordering::Acquire), 1);
+        assert!(actor.reject_terminal_replay(&job, &replay).unwrap());
+        let completion = job.record.lock().unwrap().completion();
+        assert_eq!(
+            completion.error.as_deref(),
+            Some("original invocation already terminal; no replay across generations")
+        );
+        assert!(!completion.retained);
+        assert!(completion.acquisition.is_none());
+        assert!(registry.lock().unwrap().is_empty());
+        assert!(actor.store_records.is_empty());
+        assert!(actor.process.is_none());
+        assert!(actor.writer_custody.is_none());
+        assert!(actor.writer_intent.is_none());
+        assert!(!actor.reserved);
+        assert_eq!(actor.budget.lock().unwrap().used, 0);
+        drop((job, caller));
+        assert!(record.upgrade().is_none());
+        assert!(!capacity.retained());
+        assert_eq!(project_capacity.used.load(Ordering::Acquire), 0);
+        assert!(actor.idle_proof(expires()).is_ok());
+        drop(registry);
+        assert!(old_registry.upgrade().is_none());
+        drop(actor);
+        assert!(custody.upgrade().is_none());
+        assert_eq!(fixture_file_bytes(&f.root), before);
+        replays.push(serde_json::json!({
+            "changedGeneration":changed_generation,"completion":completion,
+            "oldCustodyDropped":true,"registryDropped":true,"recordDropped":true,
+            "operationCapacityRetained":capacity.retained(),
+            "projectCapacityUsed":project_capacity.used.load(Ordering::Acquire),
+            "filesUnchanged":true
+        }));
+    }
+
+    let mut actor = f.actor();
+    let registry = Arc::new(Mutex::new(StoreRegistry::new(1)));
+    let capacity = Arc::clone(&registry.lock().unwrap().capacity);
+    let fresh = native_transport_fixture(&f, "new-id-after-owner-reopen");
+    let fresh_id = publication::original_request_id(&fresh.id);
+    assert_eq!(actor.journal.lookup(&fresh_id, expires()).unwrap(), None);
+    let (job, caller) =
+        refusal_job_with_capacity(&registry, copy_refusal_original(&fresh), &project_capacity);
+    let record = Arc::downgrade(&job.record);
+    actor.store_records.push(Arc::clone(&job.record));
+    assert!(!actor.reject_terminal_replay(&job, &fresh).unwrap());
+    assert!(!registry.lock().unwrap().is_empty());
+    assert_eq!(actor.store_records.len(), 1);
+    assert!(capacity.retained());
+    assert_eq!(project_capacity.used.load(Ordering::Acquire), 1);
+    assert_eq!(fixture_file_bytes(&f.root), before);
+    // Settle the new-ID control as a distinct no-effect refusal, so the test
+    // leaves no live record while proving the old ID is not a blanket fence.
+    actor.persist_native_refusal(&job, &fresh).unwrap();
+    let fresh_terminal = actor.journal.lookup(&fresh_id, expires()).unwrap().unwrap();
+    assert_eq!(fresh_terminal.identity().request_id, fresh_id);
+    assert_eq!(
+        fresh_terminal.identity().source_generation,
+        fresh.runtime_digest
+    );
+    assert!(matches!(
+        fresh_terminal.outcome(),
+        journal::AcceptedOutcome::RefusedBeforeReservation {
+            reason: journal::PreReservationRefusalReason::NativeQualificationRefused,
+            ..
+        }
+    ));
+    assert_eq!(
+        actor.journal.lookup(&id, expires()).unwrap(),
+        Some(terminal.clone())
+    );
+    assert!(registry.lock().unwrap().is_empty());
+    assert!(actor.store_records.is_empty());
+    assert!(actor.process.is_none());
+    assert!(actor.writer_custody.is_none());
+    assert!(actor.writer_intent.is_none());
+    assert!(!actor.reserved);
+    assert_eq!(actor.budget.lock().unwrap().used, 0);
+    drop((job, caller));
+    assert!(record.upgrade().is_none());
+    assert!(!capacity.retained());
+    assert_eq!(project_capacity.used.load(Ordering::Acquire), 0);
+    assert!(actor.idle_proof(expires()).is_ok());
+    for (path, bytes) in &before {
+        assert_eq!(fs::read(path).unwrap(), *bytes);
+    }
+    assert_eq!(fs::read(terminal_path).unwrap(), *terminal_bytes);
+    assert!(!f.root.join(".caws/sessions").exists());
+    retain_registration_observation(
+        "refusal-owner-reopen",
+        serde_json::json!({
+            "terminal":terminal,"terminalPath":terminal_path,
+            "terminalSha256":sha(terminal_bytes),
+            "terminalUtf8":std::str::from_utf8(terminal_bytes).unwrap(),"replays":replays,
+            "newIdTerminal":fresh_terminal,
+            "newIdRejectedAsReplay":false,"newIdSettledWithoutEffects":true,
+            "registryEmpty":registry.lock().unwrap().is_empty(),
+            "operationCapacityRetained":capacity.retained(),
+            "projectCapacityUsed":project_capacity.used.load(Ordering::Acquire),
+            "scope":"real same-home Actor custody/Journal reopen and StoreRegistry release; synthetic native transport, no authenticated native process restart or backend/publication execution"
+        }),
+    );
 }
 
 #[test]
