@@ -9523,6 +9523,42 @@ Additional bounded evidence and unresolved dependencies:
   loops. Cancellation/reclamation, full residency/fairness, Python retirement,
   harness adoption and rollback remain open. No parent criterion advances.
 
+- E355: Stop prefix execution separates cheap cancellation/original-clock
+  checkpoints from full eligible-generation checks. Native main selects the
+  explicit dual-callback API. Full authority runs after engine decisions and
+  before missing-directory creation, each staging creation, final publication
+  rename and each candidate quarantine creation/move/unlink. Held directories
+  and owned temporary-FD writes retain cheap checks. Destructive authority runs
+  before the existing moved-instance validation. Refusal permits owned temporary
+  cleanup, no-replace restoration and empty-quarantine removal; completed
+  effects remain facts and cannot authorize replay. Compatibility entrypoints
+  retain their original callback points.
+
+  The explicit sqlite-store split_authority run exits 0 in 12.563s with eleven
+  controls. Its retained test-artifacts under
+  publication-integration/stop-prefix-authority-split-01 include the old target
+  bytes after staging refusal, an old pointer beside a completed Stop envelope,
+  the restored original PID entry, and a newer shared PID entry beside its
+  quarantined original when restoration refuses. Wire split-authority.json
+  records show seven full checks and seventeen cheap checks with completed
+  envelope/pointer publication; after-envelope refusal reports
+  envelopePublished:true, pointerPublished:false, prefixComplete:false and
+  fallbackSafe:false. Expiry inside full authority reports the original deadline
+  error without creating session files. Fixture result.json identifies the test;
+  synthetic original/project authority remains explicit.
+
+  Existing wire/cache/PID filters exit 0 with 36/36/13 tests in
+  0.818/0.298/0.343s. Feature-disabled and sqlite-store compilation exit 0 in
+  1.626/2.904s. Raw commands, source/input pins, stdout/stderr and empty
+  observed group residue are retained in stop-prefix-authority-{wire,cache,pid,
+  feature-off,binary}-01. Compiler warnings remain in the raw logs. These checks
+  do not establish production callback execution, latency savings, real profile
+  admission, SQL acquisition or ordinary publication. Root owns the combined
+  exact-image positive and queued/profile mutation controls, followed by
+  coherent source landing. Cancellation reclamation, residency, Python
+  retirement, harness adoption and rollback remain parent obligations; no AC
+  advances.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

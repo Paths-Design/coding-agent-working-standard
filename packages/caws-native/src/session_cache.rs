@@ -523,6 +523,27 @@ fn atomic_json(
     port: &mut impl Port,
     checkpoint: &mut impl FnMut() -> Result<(), String>,
 ) -> Result<(), FailureKind> {
+    atomic_json_with_authority(
+        parent,
+        target,
+        bytes,
+        expires,
+        point,
+        port,
+        checkpoint,
+        &mut || Ok(()),
+    )
+}
+fn atomic_json_with_authority(
+    parent: &File,
+    target: &CStr,
+    bytes: &[u8],
+    expires: Instant,
+    point: Point,
+    port: &mut impl Port,
+    checkpoint: &mut impl FnMut() -> Result<(), String>,
+    authority: &mut impl FnMut() -> Result<(), String>,
+) -> Result<(), FailureKind> {
     check(expires, checkpoint)?;
     let mut temporary = None;
     for _ in 0..16 {
@@ -540,6 +561,10 @@ fn atomic_json(
             TEMPORARY.fetch_add(1, Ordering::Relaxed)
         ))
         .map_err(FailureKind::Io)?;
+        // Authorize creation of this private staging instance. Writes to its
+        // owned FD retain the existing cheap checkpoints; publication has a
+        // separate authority boundary after staging completes.
+        authority().map_err(FailureKind::Cancelled)?;
         match opened(unsafe {
             libc::openat(
                 parent.as_raw_fd(),
@@ -576,6 +601,8 @@ fn atomic_json(
     }
     port.point(point).map_err(FailureKind::Io)?;
     check(expires, checkpoint)?;
+    // Never borrow staging authorization for a later shared-name publication.
+    authority().map_err(FailureKind::Cancelled)?;
     if unsafe {
         libc::renameat(
             parent.as_raw_fd(),
@@ -618,6 +645,15 @@ impl PreparedPrefix {
     }
     pub(crate) fn take_preflight_failure(&mut self) -> Option<CaptureFailure> {
         self.preflight_failure.take()
+    }
+    pub(crate) fn ensure_sessions_with_authority(
+        &mut self,
+        authority: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<&File, FailureKind> {
+        if self.sessions.is_none() {
+            authority().map_err(FailureKind::Cancelled)?;
+        }
+        self.ensure_sessions().map_err(FailureKind::Io)
     }
     pub(crate) fn ensure_sessions(&mut self) -> io::Result<&File> {
         if self.sessions.is_none() {
@@ -791,6 +827,26 @@ pub(crate) fn publish_json(
     )
 }
 
+pub(crate) fn publish_json_with_authority(
+    parent: &File,
+    target: &CStr,
+    bytes: &[u8],
+    expires: Instant,
+    checkpoint: &mut impl FnMut() -> Result<(), String>,
+    authority: &mut impl FnMut() -> Result<(), String>,
+) -> Result<(), FailureKind> {
+    atomic_json_with_authority(
+        parent,
+        target,
+        bytes,
+        expires,
+        Point::PointerStaged,
+        &mut NativePort,
+        checkpoint,
+        authority,
+    )
+}
+
 /// Envelope and pointer are one ordered best-effort stage. PID refresh is a
 /// sibling operation and is attempted by the owner even after an I/O failure.
 #[derive(Clone, Copy)]
@@ -830,13 +886,33 @@ pub(crate) fn commit_prefix_for_event(
     expires: Instant,
     checkpoint: &mut impl FnMut() -> Result<(), String>,
 ) -> Result<(), CaptureFailure> {
+    commit_prefix_for_event_with_authority(
+        prepared,
+        surface,
+        event,
+        created,
+        expires,
+        checkpoint,
+        &mut || Ok(()),
+    )
+}
+pub(crate) fn commit_prefix_for_event_with_authority(
+    prepared: &mut PreparedPrefix,
+    surface: &str,
+    event: PrefixEvent,
+    created: Option<Vec<u16>>,
+    expires: Instant,
+    checkpoint: &mut impl FnMut() -> Result<(), String>,
+    authority: &mut impl FnMut() -> Result<(), String>,
+) -> Result<(), CaptureFailure> {
     let mut stage = Stage::Sessions;
     let mut envelope_published = false;
     let result = (|| {
         check(expires, checkpoint)?;
-        prepared.ensure_sessions().map_err(FailureKind::Io)?;
+        prepared.ensure_sessions_with_authority(authority)?;
         stage = Stage::Session;
         if prepared.session.is_none() {
+            authority().map_err(FailureKind::Cancelled)?;
             prepared.session = Some(
                 directory_at(
                     prepared.sessions.as_ref().unwrap(),
@@ -865,12 +941,13 @@ pub(crate) fn commit_prefix_for_event(
         );
         envelope.extend_from_slice(b"}\n");
         stage = Stage::Envelope;
-        publish_json(
+        publish_json_with_authority(
             prepared.session.as_ref().unwrap(),
             ENVELOPE,
             &envelope,
             expires,
             checkpoint,
+            authority,
         )?;
         envelope_published = true;
         stage = Stage::Pointer;
@@ -879,12 +956,13 @@ pub(crate) fn commit_prefix_for_event(
         )
         .map_err(|error| FailureKind::Io(io::Error::other(error)))?;
         pointer.push(b'\n');
-        publish_json(
+        publish_json_with_authority(
             prepared.sessions.as_ref().unwrap(),
             POINTER,
             &pointer,
             expires,
             checkpoint,
+            authority,
         )
     })();
     result.map_err(|kind| CaptureFailure {

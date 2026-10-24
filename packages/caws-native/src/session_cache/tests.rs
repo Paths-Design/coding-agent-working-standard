@@ -83,10 +83,17 @@ fn admitted_prefix_preserves_creation_and_selected_claude_platform() {
 struct Fixture {
     base: PathBuf,
     root: PathBuf,
+    retain: bool,
 }
 impl Fixture {
     fn new() -> Self {
-        let base = std::env::temp_dir().join(format!(
+        let retained = std::env::var_os("CAWS_TEST_ARTIFACT_DIR").map(PathBuf::from);
+        if let Some(parent) = &retained {
+            assert!(parent.is_absolute());
+            fs::create_dir_all(parent).unwrap();
+        }
+        let retain = retained.is_some();
+        let base = retained.unwrap_or_else(std::env::temp_dir).join(format!(
             "caws-session-cache-draft-{}-{}",
             std::process::id(),
             TEMPORARY.fetch_add(1, Ordering::Relaxed)
@@ -95,7 +102,7 @@ impl Fixture {
         let base = fs::canonicalize(base).unwrap();
         let root = base.join("repo");
         fs::create_dir_all(root.join(".caws")).unwrap();
-        Self { base, root }
+        Self { base, root, retain }
     }
     fn session(&self, sid: &str) -> PathBuf {
         self.root.join(".caws/sessions").join(sid)
@@ -130,7 +137,13 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
-        fs::remove_dir_all(&self.base).unwrap();
+        if self.retain {
+            fs::write(self.base.join("result.json"), serde_json::to_vec_pretty(
+                &serde_json::json!({"root":self.root,"test":std::thread::current().name(),"completedWithoutPanic":!std::thread::panicking()})
+            ).unwrap()).unwrap();
+        } else {
+            fs::remove_dir_all(&self.base).unwrap();
+        }
     }
 }
 fn expires() -> Instant {
@@ -970,4 +983,150 @@ fn nonregular_envelope_declines_and_never_waits_for_fifo_writer() {
         assert!(!fs::metadata(f.envelope("s")).unwrap().is_file());
         no_temporaries(&f.session("s"));
     }
+}
+
+#[test]
+fn split_authority_rejects_final_rename_after_staging_and_removes_only_owned_temporary() {
+    let f = Fixture::new();
+    f.seed("s", b"old target bytes");
+    let directory = File::open(f.session("s")).unwrap();
+    let staged = std::cell::Cell::new(false);
+    let full = std::cell::Cell::new(0);
+    let cheap = std::cell::Cell::new(0);
+    let mut p = port(|point| {
+        if point == Point::EnvelopeStaged {
+            staged.set(true);
+        }
+        Ok(())
+    });
+    p.max_write = 3;
+    let failure = atomic_json_with_authority(
+        &directory,
+        ENVELOPE,
+        b"new staged bytes",
+        expires(),
+        Point::EnvelopeStaged,
+        &mut p,
+        &mut || {
+            cheap.set(cheap.get() + 1);
+            Ok(())
+        },
+        &mut || {
+            full.set(full.get() + 1);
+            if staged.get() {
+                Err("source changed after staging".into())
+            } else {
+                Ok(())
+            }
+        },
+    )
+    .unwrap_err();
+    assert!(
+        matches!(failure, FailureKind::Cancelled(ref reason) if reason == "source changed after staging")
+    );
+    assert_eq!(
+        full.get(),
+        2,
+        "separate staging and final-rename authority boundaries"
+    );
+    assert!(
+        cheap.get() > full.get(),
+        "short writes retain cheap checks without repeated full authority"
+    );
+    assert_eq!(fs::read(f.envelope("s")).unwrap(), b"old target bytes");
+    no_temporaries(&f.session("s"));
+}
+#[test]
+fn split_authority_refusal_after_envelope_preserves_partial_pair_truth() {
+    let f = Fixture::new();
+    f.seed("s", br#"{"created_at":"old"}"#);
+    fs::write(f.pointer(), b"old pointer").unwrap();
+    let mut prepared =
+        match prepare_prefix(&f.input(Some("s"), Some("Stop")), expires(), &mut || Ok(())).unwrap()
+        {
+            PrefixPreparation::Ready(value) => value,
+            _ => panic!("unexpected decline"),
+        };
+    let calls = std::cell::Cell::new(0);
+    let failure = commit_prefix_for_event_with_authority(
+        &mut prepared,
+        "opencode",
+        PrefixEvent::Stop,
+        None,
+        expires(),
+        &mut || Ok(()),
+        &mut || {
+            calls.set(calls.get() + 1);
+            if calls.get() == 3 {
+                Err("source changed after envelope publication".into())
+            } else {
+                Ok(())
+            }
+        },
+    )
+    .unwrap_err();
+    assert_eq!(failure.stage, Stage::Pointer);
+    assert!(failure.envelope_published);
+    assert!(
+        matches!(failure.kind, FailureKind::Cancelled(ref reason) if reason == "source changed after envelope publication")
+    );
+    assert_eq!(value(&f.envelope("s"))["hook_event"], "Stop");
+    assert_eq!(fs::read(f.pointer()).unwrap(), b"old pointer");
+    no_temporaries(&f.session("s"));
+    no_temporaries(&f.root.join(".caws/sessions"));
+}
+#[test]
+fn split_authority_keeps_legacy_atomic_checkpoint_sequence_and_skips_existing_directory_checks() {
+    let f = Fixture::new();
+    f.seed("s", b"old");
+    let directory = File::open(f.session("s")).unwrap();
+    let legacy = std::cell::Cell::new(0);
+    let split = std::cell::Cell::new(0);
+    let mut first = port(|_| Ok(()));
+    first.max_write = 2;
+    let mut second = port(|_| Ok(()));
+    second.max_write = 2;
+    atomic_json(
+        &directory,
+        c"legacy.json",
+        b"same staged bytes",
+        expires(),
+        Point::EnvelopeStaged,
+        &mut first,
+        &mut || {
+            legacy.set(legacy.get() + 1);
+            Ok(())
+        },
+    )
+    .unwrap();
+    atomic_json_with_authority(
+        &directory,
+        c"split.json",
+        b"same staged bytes",
+        expires(),
+        Point::EnvelopeStaged,
+        &mut second,
+        &mut || {
+            split.set(split.get() + 1);
+            Ok(())
+        },
+        &mut || Ok(()),
+    )
+    .unwrap();
+    assert_eq!(
+        legacy.get(),
+        split.get(),
+        "compatibility callback points must not multiply"
+    );
+    let mut prepared =
+        match prepare_prefix(&f.input(Some("s"), Some("Stop")), expires(), &mut || Ok(())).unwrap()
+        {
+            PrefixPreparation::Ready(value) => value,
+            _ => panic!("unexpected decline"),
+        };
+    prepared
+        .ensure_sessions_with_authority(&mut || {
+            panic!("existing held directory is not a creation effect")
+        })
+        .unwrap();
 }

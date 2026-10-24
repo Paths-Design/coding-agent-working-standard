@@ -545,7 +545,11 @@ fn execute_observed<'deadline>(
                         session.credit_session_cache_control(frame.len() + 1)?;
                         let mut exchange_failure = None;
                         let mut decision_bytes = None;
-                        let execution = admitted.execute_checked(
+                        let execution = admitted.execute_with_authority_checks(
+                            || {
+                                cancellation::check()?;
+                                original_deadline.check().map_err(|error| error.to_string())
+                            },
                             || {
                                 progress.stop_prefix_authority_check(|| {
                                     eligible.revalidate(cancellation::check)
