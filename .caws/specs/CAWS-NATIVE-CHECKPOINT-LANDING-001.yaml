@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-CHECKPOINT-LANDING-001
 title: 'Land adjacent verification checkpoint coalescing'
 mode: refactor
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded checkpoint optimization and hostile I/O regressions landed on local main with exact candidate blobs, raw positive and killed-mutation evidence, gates and grounded independent feedback. Existing lanes and selected runtime preserved. Full installed-image result authenticated restart rollback load and cutover remain with active parent/publication; failed fresh13 build retained and next build supervision repair owned by root.'
 created_at: '2026-10-24T20:52:07.275Z'
-updated_at: '2026-10-24T20:52:42.799Z'
+updated_at: '2026-10-24T21:05:36.834Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
