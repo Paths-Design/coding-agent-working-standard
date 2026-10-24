@@ -54,3 +54,19 @@ non_functional: {}
 contracts:
   - name: 'native-ingress-deadline'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Normal merges d97f33b3 and8cefd13b integrate2448b992 onto current main with no conflicts. source-evidence-binding.json retains git diff2448..HEAD packages exit0/empty and main..HEAD .caws exit0/empty, clean status, all99 native pins in six execution receipts and all395 final OpenCode pins equal. Canonical A7 and active landing governance preserved. This is source identity, not installed execution."
+    recorded_at: "2026-10-24T01:55:16.158Z"
+    commit_sha: "8cefd13b409c1b4eee38cf1af236dfa4aa13da7e"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Manually inspected raw publication-integration/effect-deadline-{writer,journal,publication,store}-host-clock-01 receipts exit0 plus native/feature-off checks0, with same source pins and no owned residue. Actual metadata old before refused rename; changed after rename with uncertain=true and absent marker; live positive retains matching marker digest. Eight effect-negative-*-02 controls exit101 for behavioral violations and exactRestore=true. opencode-corrective-final-01 exit0 retains host-only routing and session-a actual SDK arguments; unconditional fallback mutant exits1 in all3 controls. Initial weak ancestry fixture and failed metadata oracle attempts retained in E317/E318. Source exact8cefd13b. No installed callback, ordinary Stop, full lifecycle deadline, atomic syscall exclusion or cutover claim."
+    recorded_at: "2026-10-24T01:55:17.179Z"
+    commit_sha: "8cefd13b409c1b4eee38cf1af236dfa4aa13da7e"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Independent read-only GPT6.1Sol reviews of committed6064daa7 and2448b992 inspected original requirements, code and raw hostile/positive artifacts. Root grounded identity source and actual callback payloads, propagated original deadline at Store actor through writer/custody/journal/publication, and actual partial-effect metadata/marker states. Normal integration changes no executable bytes; source binding artifact verifies this. Doctor exit0 with0E4W5I retains installed hook drift; full branch gates at8cefd13b evaluate15files and5PASS; provenance review all imported paths admitted. Existing E317/E318 and three-outcome table retain root ownership of producer/prefix/profile/consumer integration, residency, Python retirement and machine adoption; parent0/8. --verify confirms commit existence only; external execution artifacts manually inspected."
+    recorded_at: "2026-10-24T01:55:18.191Z"
+    commit_sha: "8cefd13b409c1b4eee38cf1af236dfa4aa13da7e"
