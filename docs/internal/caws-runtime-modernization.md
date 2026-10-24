@@ -9901,7 +9901,7 @@ Additional bounded evidence and unresolved dependencies:
   artifact records sameParentIdentity:true, fullMetadataChanged:true,
   error:null, effectCount1 and a caws.render.writer.provisioned.v1 marker.
   Twelve hostile artifacts retain effectCount0 for replacement, disappearance,
-  permissions, symlink/file substitution, absence appearance, strict
+  POSIX mode, symlink/file substitution, absence appearance, strict
   metadata/inventory, changed policy, negative child and regular-file Exists.
   The symlink-target artifact retains one earlier child-churn effect and no
   second effect after target replacement.
@@ -9924,6 +9924,79 @@ Additional bounded evidence and unresolved dependencies:
   provisioning and fenced Unknown. Publication, ordinary consumption/release,
   resident fairness and selected-machine adoption remain unverified; no parent
   criterion or Python-retirement row is completed by this repair.
+
+- E366: Fresh09 freezes clean ec496156f2f93c4ee6be97d5fdbcb0b80e712fb5.
+  Same-provider committed review finds no demonstrated directory-identity
+  defect; root grounds the operation dispatch and consumer requirements.
+  Identity claims cover mode/uid/gid, not untested ACL behavior. The broader
+  exists-directory-landing-lib-01 run exits0 with443 cases and2 ignored
+  in55.840s; ignored cases require explicit warm-backend and prepared-image
+  environments. This is not an executed fairness or installed-upgrade check.
+
+  Manifest SHA78ff5d8298834ce02a0b004e919d45131ed1f67d8dcdb1ba1795a7da9544dcda
+  binds1224 source blobs/modes. All eleven image stages exit0 with unchanged
+  TypeScript/native pins and empty observed process groups. Native build takes
+  123.769s. Root compares all30 actual reference/candidate documents; the
+  profile remains controlled-components with explicit remaining joins.
+  Descriptor SHA59a6da2bef8ab3261ba2c6524f03b3979db119073cd4a5b5cbd0195e991629f6
+  retains timeout30000ms; build completion
+  SHAffcebf443d2d249339921d68ceec36596832000d54642553dcc7d644dcebf5de is
+  verified. No machine adoption follows these checks.
+
+  production-stop-09-positive-execution-01 exits1 in48.238s. Native12093 exits2
+  in30043.687ms at the original owner deadline, without watchdog or signal.
+  All36 frontend generation verifications complete in20.297s cumulatively and
+  hash5843839932 bytes. Member verification takes13.562s inclusively; it
+  includes confinement/metadata/reads and does not measure hashing alone.
+  Owner-side verification is outside these counters. No performance distribution
+  is claimed.
+
+  Actual owner12092 observes postqueue validation23396ms, original reservation
+  23409ms, writer retention27178ms and SQL CLOSED28480ms. Artifact writes
+  produce session-index.json, store-projection.jsonl and turn-001.json,
+  including the expected user/reply and original retained context. No
+  .session-publication.json exists; no marker-committed, consumed-durable or
+  heavy-release stage exists. These are uncertain partial outputs, not a
+  committed publication. The actual installed writer boundary passes E364's
+  self-invalidation point.
+
+  One bounded observational status request, with unchanged before/after process
+  identity, returns openAttempts1 from baseline0, two copied/delivered rows,
+  exhausted acquisition and successful unregister/finalize/rollback/close. It
+  retains the publication with Original monotonic deadline expired. The status
+  phase named settled refers to acquisition; it does not establish publication
+  release. The query briefly contributes active demand and is not polled.
+  production-stop-09-status-01.json retains the raw frame and response. Root
+  inspection production-stop-09-positive-root-inspection-01.json,
+  SHA889f9ea52560bbc3aa4023aeeba6803d364391500de376f51e108bdb88f4fb5c, confirms
+  both custody locks held and the accepted Unknown body checksum
+  2b8a6f0c4801b08828806d22c7805f666cb0b198660351c399fb699fd4d6179b. Database
+  bytes retain
+  SHAeff667b1cbe750018030f79e81869928011a8265d26b65387eb78aa4d7f0749f.
+
+  External exact-instance containment executes once in0.278s, exit0. libproc
+  captures birth1792857014.445430, uid501, pgid11544 and the exact image; lsof
+  verifies both held custody locks, and kqueue subscribes before the sole
+  SIGTERM to12092. The exit event, libproc absence, empty related census,
+  refused socket and reacquirable machine/writer locks are retained under
+  production-stop-09-containment-proposal-01/run. All31 inventory entries remain
+  equal, including both custody trees, partial session files, provisioning
+  marker, policy, config, pointer and database. Publication marker remains
+  absent; the stale refused socket path is preserved. Receipt
+  SHAaf4cad984a2e9d715ef0547fed794225e41682bbe6e304946b152667e3911f3e and fresh
+  ps exit1/no row corroborate absence. This is external containment, not
+  production cleanup, parent-wait reaping, recovery, settlement or replay proof.
+  A worker's shell authoring attempt was refused before execution because its
+  interpreter-path text was classified as a foreign-repository write. Root used
+  a direct file edit confined to the external artifact directory; no guard,
+  identity or interpreter file was changed. The rejected attempt is not a run.
+
+  Root prepares a separate main-based source-landing lane. Direct teardown of
+  native-runtime-modernization would delete a base ref used by five foreign
+  lanes: --no-close preserves its spec, not its branch. Preserve those lanes,
+  source references and selected machine pointer. Source landing remains
+  separate from the failed production outcome and both active parent
+  obligations.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -10054,10 +10127,15 @@ preserving Unknown, but first writer provisioning invalidates the .caws
 directory Exists dependency before publication. Root owns an operation-specific
 native directory existence repair, strict authority falsifiers and a new
 exact-image replay. E365 supplies the repair, failing baseline, ownership-loss
-mutation and restored controls. Root owns the clean-candidate installed replay;
-html_profile prepares its pinned fresh09 recipe. The successful path must
-establish publication, ordinary consumption and release within30s; neither
-natural failure cleanup nor build/profile success supplies it.
+mutation and restored controls. E366's fresh09 passes actual writer retention
+and SQL close but expires during publication with partial files and no marker.
+Its private owner is externally contained while uncertainty remains intact. Root
+owns coherent source landing and the deadline cost repair. Measure pure
+manifest-plan construction before choosing reuse of derived paths/directories;
+do not cache successful filesystem/hash observations or remove authority and
+durability checks. The successful path must establish publication, ordinary
+consumption and release within30s; neither natural failure cleanup nor
+build/profile success supplies it.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
