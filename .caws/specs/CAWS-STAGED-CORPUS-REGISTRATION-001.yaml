@@ -1,0 +1,30 @@
+id: CAWS-STAGED-CORPUS-REGISTRATION-001
+title: 'Run the staged-check corpus as individually bounded Jest cases'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-24T22:21:20.412Z'
+updated_at: '2026-10-24T22:21:20.412Z'
+created_by_session: '01a16c43-8af5-79e3-9535-9df94edfc037'
+blast_radius:
+  modules:
+    - 'Staged-check verification entry points'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/run-staged-checks.test.cjs'
+    - 'packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js'
+  out: []
+invariants:
+  - 'All standalone staged-runner cases retain their real formatter, Git, sparse-index, filename and failure assertions; per-operation timeout and production staged runner behavior remain unchanged'
+acceptance:
+  - id: A1
+    given: 'the existing seventeen staged-runner cases'
+    when: 'the standalone Node entry point and ordinary Jest entry point execute'
+    then: 'both execute the complete same corpus and reject sparse, formatter, Git, signal and filename counterexamples without an aggregate nested-process deadline'
+observability:
+  - 'Retain standalone TAP and Jest raw logs with executed test counts and exits'
+rollback:
+  - 'Revert the test registration adapter through an authorized lane if standalone or Jest semantics differ'
+non_functional: {}
+contracts: []
