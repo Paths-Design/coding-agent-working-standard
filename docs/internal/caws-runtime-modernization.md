@@ -8598,6 +8598,29 @@ Additional bounded evidence and unresolved dependencies:
   asserted project over the current public socket cannot satisfy that authority
   contract. No parent AC or retirement status changes.
 
+- E326: The bounded Stop prerequisite landing preserves candidate0bd415c5
+  package bytes: OpenCode transport and reviewed migration, original prefix
+  capture, and generation-bound SQLite identity. The separate
+  CAWS-NATIVE-STOP-PREREQUISITE-LANDING-001 lane permits source delivery without
+  destroying the active publication worktree. stop-prerequisite-build-01 exits0;
+  tests-01 exits1 because root supplied a nonexistent fingerprint-test path,
+  while its other five suites execute99 passing cases. The corrected tests-02
+  exits0 with113 cases across six suites. Source pins remain unchanged and
+  process-group residue is empty. The landing's package-source diff from the
+  candidate is empty; source-evidence.json compares all99 native source pins
+  against capture and both compile receipts without mismatches. Earlier SQLite
+  and PID receipts retain their exact unchanged implementation dependencies;
+  later additions to separate capture/identity code are listed rather than
+  represented as the earlier tested revision. Actual fixture outputs and
+  negative-control failures remain E320–E325. The source landing records only
+  its bounded criteria; parent acceptance, installed adoption and complete
+  Python retirement remain unchanged. Root retains the ordinary Stop join.
+  Custodian implementation owns actual Git through frontend loss; native-peer
+  admission owns kernel PID/birth and exact-generation executable checks before
+  private original transfer; profile qualification owns fixed reference and
+  candidate comparisons with observed dependency identities. Root integrates
+  these assignments before ordinary consumer and residency qualification.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
