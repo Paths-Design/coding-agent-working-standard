@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-SELECTION-COPY-001
 title: 'Avoid discarded runtime manifest copies during selection discovery'
 mode: refactor
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-selection-copy
 created_at: '2026-10-24T22:05:36.354Z'
-updated_at: '2026-10-24T22:05:36.354Z'
+updated_at: '2026-10-24T22:05:48.982Z'
 created_by_session: '01a16d92-e8a7-70d1-899f-40cd6fb48e61'
 blast_radius:
   modules:
