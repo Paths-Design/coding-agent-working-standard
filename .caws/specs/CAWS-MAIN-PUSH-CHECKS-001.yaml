@@ -1,10 +1,11 @@
 id: CAWS-MAIN-PUSH-CHECKS-001
 title: 'Repair required main push verification without weakening semantic checks'
 mode: fix
-lifecycle_state: active
-worktree: main-push-checks
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Repaired the four required push-check fixture contracts; 120 focused tests and the directory-only seven-test follow-up passed, gates passed, and independent committed-candidate feedback was grounded. Recorded A1/A2 with executed citations. Normal integrated pre-push and remote synchronization remain the parent task.'
 created_at: '2026-10-24T21:10:15.461Z'
-updated_at: '2026-10-24T21:10:41.128Z'
+updated_at: '2026-10-24T21:35:39.704Z'
 created_by_session: '01a16c43-8af5-79e3-9535-9df94edfc037'
 blast_radius:
   modules:
