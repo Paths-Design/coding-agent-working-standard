@@ -41,3 +41,9 @@ rollback:
   - 'Revert source through ordinary governed history without changing selected runtime or terminal custody'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Bounded source criterion only. All native/package source blobs equal reviewed 3cd741fd (tracker4deb0537); composition.json retains six exact blobs. Retained pregrant-bin-01 exit0:188pass1ignored; original production-constructor control exit0 with2fullchecks unsupported, stale refusal and cancellation; exact-owner mutation Cargo101 restored to115passing source pins; feature-off compile0. Exact fresh12 positive terminal0 at27949.56925ms, original30000ms, all4handlers0 and32fullchecks; actual turn/index/projection hashes, ordinary consumer, durable CONSUMED and natural owner exit inspected under publication-integration/production-stop-12-paired-01. Second positive0 at27890.102ms. Both outer paired attempts exit1 before hostile launch: unsupported environment, then tool source ancestor mode refusal. No hostile, load, restart, rollback, application or machine proof inferred. Verification establishes commit identity; raw artifacts independently inspected."
+    recorded_at: "2026-10-24T19:30:37.329Z"
+    commit_sha: "5d5ac7fe2fdbab9ec8bc7787f61f37b46ab0aadc"
