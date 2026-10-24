@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-CHECKPOINT-LANDING-001
 title: 'Land adjacent verification checkpoint coalescing'
 mode: refactor
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-checkpoint-landing
 created_at: '2026-10-24T20:52:07.275Z'
-updated_at: '2026-10-24T20:52:07.275Z'
+updated_at: '2026-10-24T20:52:42.799Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
