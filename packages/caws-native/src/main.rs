@@ -95,14 +95,31 @@ fn execute<'deadline>(
         marks: Vec::new(),
         selection: None,
         completed_selection: 0,
+        selection_advertised: false,
+        selection_sealed: false,
+        selection_revalidated: false,
+        dispatch_written: false,
     };
     progress.mark("payload");
-    execute_observed(config, original_deadline, &mut progress).map_err(|mut error| {
-        error
-            .message
-            .push_str(&format!("; native progress {}", progress.snapshot()));
-        error
-    })
+    let outcome =
+        execute_observed(config, original_deadline, &mut progress).map_err(|mut error| {
+            error
+                .message
+                .push_str(&format!("; native progress {}", progress.snapshot()));
+            error
+        });
+    if outcome.is_ok()
+        && std::env::var_os("CAWS_NATIVE_TRACE_PROGRESS").as_deref()
+            == Some(std::ffi::OsStr::new("1"))
+    {
+        // Opt-in evidence only. This cannot enable a capability or change the
+        // outcome; delivery is best effort under the existing diagnostic bound.
+        progress.mark("completed");
+        runner::write_diagnostic(
+            format!("CAWS native progress {}\n", progress.snapshot()).as_bytes(),
+        );
+    }
+    outcome
 }
 
 struct InvocationProgress {
@@ -111,6 +128,10 @@ struct InvocationProgress {
     marks: Vec<(&'static str, u128)>,
     selection: Option<(usize, selection_observation::OperationKind)>,
     completed_selection: usize,
+    selection_advertised: bool,
+    selection_sealed: bool,
+    selection_revalidated: bool,
+    dispatch_written: bool,
 }
 impl InvocationProgress {
     fn mark(&mut self, phase: &'static str) {
@@ -125,7 +146,11 @@ impl InvocationProgress {
         serde_json::json!({"schema":"caws.native.invocation-progress.v1",
             "phase":self.phase,"elapsedLocalMs":self.started.elapsed().as_millis(),
             "marks":self.marks,"lastSelection":self.selection,
-            "completedSelectionSequence":self.completed_selection})
+            "completedSelectionSequence":self.completed_selection,
+            "selectionAdvertised":self.selection_advertised,
+            "selectionSealed":self.selection_sealed,
+            "selectionPredispatchRevalidated":self.selection_revalidated,
+            "dispatchGrantWritten":self.dispatch_written})
     }
 }
 
@@ -173,6 +198,7 @@ fn execute_observed<'deadline>(
         };
         if let Some(owner) = selection_owner.as_ref() {
             request.advertise_selection_observation(owner.snapshot_id(), selection_limits);
+            progress.selection_advertised = true;
         }
         progress.mark("request-encoding");
         // Advertisement is native-derived and precedes the only encoded request.
@@ -264,6 +290,7 @@ fn execute_observed<'deadline>(
                             .take()
                             .map(|owner| owner.seal(cancellation::check))
                             .transpose()?;
+                        progress.selection_sealed = selection_receipt.is_some();
                         context_git.mark_ready()?;
                         if let Some(replay) = captured_context.as_mut() {
                             replay.mark_ready();
@@ -287,6 +314,7 @@ fn execute_observed<'deadline>(
             if let Some(receipt) = selection_receipt.as_ref() {
                 progress.mark("selection-predispatch-revalidation");
                 receipt.revalidate(cancellation::check)?;
+                progress.selection_revalidated = true;
             }
             // A failed write may deliver the complete grant. Record the attempt
             // BEFORE writing; creation of the engine alone is not dispatch.
@@ -296,6 +324,7 @@ fn execute_observed<'deadline>(
                 &service_dispatch.unwrap_or_else(|| protocol::dispatch(&request)),
                 deadline,
             )?;
+            progress.dispatch_written = true;
             let mut cache_attempted = false;
             let mut prefix_complete = false;
             let mut publication_attempted = false;
