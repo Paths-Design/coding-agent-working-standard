@@ -45,3 +45,11 @@ non_functional:
 contracts:
   - name: 'stop-consumer'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "c8b12630 source joined to stop-profile-comparison-execution-05 exit0 and exact current driver pin; fixed 30 comparisons all equal under controlled CPython 3.11.13 and Node22.22.2. Manually rehashed all233 artifactPins; zero mismatches. Code-owned complete75-file stock inventory digest9976411f31abc0c6249433c79a45e6e556901ebcc9ae948218416fc9a92eaad8 matches actual source and rejects substituted/deleted oracle files. tests-03 includes five structural controls with explicit tooling-test-pin-03 ff5c83ed9f9fa69bf95d390c82e1e53b35e9fa1aa83ea02d59ec5e7554ae4347. Independent review findings grounded and repaired. Artifact base /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration. --verify checks commit existence, not these executions. Controlled component comparison only; no native profile authority, ambient startup or bundled engine equivalence."
+    recorded_at: "2026-10-24T05:08:07.244Z"
+    command: "env -i PATH=/usr/bin:/bin LANG=C LC_ALL=C TZ=UTC0 pinned-node scripts/qualify-stop-profile.mjs stop-profile-components-controlled-05.request.json"
+    exit_code: 0
+    commit_sha: c8b1263084626734d630e18300ed77d7da708161
