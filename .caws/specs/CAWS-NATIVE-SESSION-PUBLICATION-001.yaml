@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-session-publication
 created_at: '2026-10-22T07:45:38.932Z'
-updated_at: '2026-10-24T00:14:31.951Z'
+updated_at: '2026-10-24T00:53:17.558Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -101,6 +101,8 @@ scope:
     - packages/caws-native/src/installed_entry_main.rs
     - packages/caws-native/tests/installed_entry.rs
     - packages/caws-native/src/monotonic_deadline.rs
+    - packages/caws-cli/templates/hook-packs/opencode/plugin.ts
+    - packages/caws-cli/tests/hooks/opencode-plugin-payload-cwd.test.js
   out: []
   support:
     - .github/workflows/release-qualification.yml
