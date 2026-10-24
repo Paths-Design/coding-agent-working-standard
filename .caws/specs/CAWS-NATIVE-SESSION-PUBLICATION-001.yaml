@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-session-publication
 created_at: '2026-10-22T07:45:38.932Z'
-updated_at: '2026-10-24T09:00:16.131Z'
+updated_at: '2026-10-24T09:12:11.302Z'
 created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
 blast_radius:
   modules:
@@ -118,6 +118,9 @@ scope:
     - packages/caws-native/src/selection_observation.rs
     - packages/caws-native/src/stop_admission.rs
     - packages/caws-native/src/transcript_store_wire.rs
+    - packages/caws-cli/src/init/native-runtime-entry.ts
+    - packages/caws-cli/tests/adapter/native-runtime-entry.test.js
+    - packages/caws-native/src/stop_profile.rs
   out: []
   support:
     - .github/workflows/release-qualification.yml
