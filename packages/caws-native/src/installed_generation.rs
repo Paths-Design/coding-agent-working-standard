@@ -4,12 +4,14 @@
 //! stable transport and original invoke receipt each retain their own expiry.
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
-use std::time::Instant;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 const SCHEMA: &str = "caws.runtime.native-entry.v1";
 const METADATA: &str = "native-entry.json";
@@ -39,11 +41,108 @@ pub(crate) struct Selection {
     route: Route,
 }
 
+/// Fixed-size request-local observations, never consulted by verification.
+/// Phase times are inclusive: selection verification contains member hashing
+/// and inventory/modes. Failed phases and partially completed I/O count too.
+#[derive(Clone, Default)]
+pub(crate) struct VerificationDiagnostics(Rc<VerificationTotals>);
+#[derive(Clone, Copy, Default)]
+struct PhaseTotals {
+    count: u64,
+    failures: u64,
+    elapsed: Duration,
+}
+#[derive(Default)]
+struct VerificationTotals {
+    phases: [Cell<PhaseTotals>; 5],
+    path_metadata_operations: Cell<u64>,
+    fd_metadata_operations: Cell<u64>,
+    hash_calls: Cell<u64>,
+    bytes_hashed: Cell<u64>,
+}
+#[derive(Clone, Copy)]
+pub(crate) enum VerificationPhase {
+    IdentityBefore,
+    SelectionVerification,
+    IdentityAfter,
+    MemberHashing,
+    InventoryModes,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PhaseSnapshot {
+    pub count: u64,
+    pub failures: u64,
+    pub elapsed_micros: u64,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct VerificationSnapshot {
+    pub identity_before: PhaseSnapshot,
+    pub selection_verification: PhaseSnapshot,
+    pub identity_after: PhaseSnapshot,
+    pub member_hashing: PhaseSnapshot,
+    pub inventory_modes: PhaseSnapshot,
+    pub path_metadata_operations: u64,
+    pub fd_metadata_operations: u64,
+    pub hash_calls: u64,
+    pub bytes_hashed: u64,
+}
+impl VerificationDiagnostics {
+    fn phase(&self, phase: VerificationPhase, elapsed: Duration, failed: bool) {
+        let slot = &self.0.phases[phase as usize];
+        let previous = slot.get();
+        slot.set(PhaseTotals {
+            count: previous.count.saturating_add(1),
+            failures: previous.failures.saturating_add(u64::from(failed)),
+            elapsed: previous.elapsed.saturating_add(elapsed),
+        });
+    }
+    fn path_metadata(&self) {
+        let value = &self.0.path_metadata_operations;
+        value.set(value.get().saturating_add(1));
+    }
+    fn fd_metadata(&self) {
+        let value = &self.0.fd_metadata_operations;
+        value.set(value.get().saturating_add(1));
+    }
+    fn hash_call(&self) {
+        let value = &self.0.hash_calls;
+        value.set(value.get().saturating_add(1));
+    }
+    fn hashed(&self, bytes: usize) {
+        let value = &self.0.bytes_hashed;
+        value.set(value.get().saturating_add(bytes as u64));
+    }
+    pub(crate) fn snapshot(&self) -> VerificationSnapshot {
+        let phase = |kind: VerificationPhase| {
+            let entry = self.0.phases[kind as usize].get();
+            PhaseSnapshot {
+                count: entry.count,
+                failures: entry.failures,
+                elapsed_micros: entry.elapsed.as_micros().min(u64::MAX as u128) as u64,
+            }
+        };
+        VerificationSnapshot {
+            identity_before: phase(VerificationPhase::IdentityBefore),
+            selection_verification: phase(VerificationPhase::SelectionVerification),
+            identity_after: phase(VerificationPhase::IdentityAfter),
+            member_hashing: phase(VerificationPhase::MemberHashing),
+            inventory_modes: phase(VerificationPhase::InventoryModes),
+            path_metadata_operations: self.0.path_metadata_operations.get(),
+            fd_metadata_operations: self.0.fd_metadata_operations.get(),
+            hash_calls: self.0.hash_calls.get(),
+            bytes_hashed: self.0.bytes_hashed.get(),
+        }
+    }
+}
+
 /// One caller-owned expiry and cancellation callback for the complete operation.
 /// Checkpoints bracket bounded I/O; they cannot interrupt a stalled kernel syscall.
 pub(crate) struct Verification<'a> {
     expires: Instant,
     cancel: &'a mut dyn FnMut() -> Result<(), String>,
+    diagnostics: Option<VerificationDiagnostics>,
     #[cfg(test)]
     pub(crate) on_chunk: Option<Box<dyn FnMut(&Path, u64) + 'a>>,
 }
@@ -52,9 +151,39 @@ impl<'a> Verification<'a> {
         Self {
             expires,
             cancel,
+            diagnostics: None,
             #[cfg(test)]
             on_chunk: None,
         }
+    }
+    /// Only the receipt revalidation scope attaches request diagnostics. Restore
+    /// the previous handle even on refusal; no initial load/member lookup leaks
+    /// into the precisely named receipt counters when the verifier is reused.
+    pub(crate) fn diagnosed<R>(
+        &mut self,
+        diagnostics: &VerificationDiagnostics,
+        operation: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let previous = self.diagnostics.replace(diagnostics.clone());
+        let result = operation(self);
+        self.diagnostics = previous;
+        result
+    }
+    pub(crate) fn phase<R>(
+        &mut self,
+        phase: VerificationPhase,
+        operation: impl FnOnce(&mut Self) -> Result<R, String>,
+    ) -> Result<R, String> {
+        // No per-member or per-metadata timer: only fixed phase boundaries.
+        let measurement = self
+            .diagnostics
+            .as_ref()
+            .map(|value| (value.clone(), Instant::now()));
+        let result = operation(self);
+        if let Some((diagnostics, started)) = measurement {
+            diagnostics.phase(phase, started.elapsed(), result.is_err());
+        }
+        result
     }
     pub(crate) fn expires(&self) -> Instant {
         self.expires
@@ -113,12 +242,18 @@ impl MemberMetadata {
 }
 fn path_metadata(path: &Path, verify: &mut Verification<'_>) -> Result<fs::Metadata, String> {
     verify.checkpoint()?;
+    if let Some(diagnostics) = &verify.diagnostics {
+        diagnostics.path_metadata();
+    }
     let result = fs::symlink_metadata(path);
     verify.checkpoint()?;
     result.map_err(|e| format!("Generation path unavailable {}: {e}", path.display()))
 }
 fn file_metadata(file: &File, verify: &mut Verification<'_>) -> Result<fs::Metadata, String> {
     verify.checkpoint()?;
+    if let Some(diagnostics) = &verify.diagnostics {
+        diagnostics.fd_metadata();
+    }
     let result = file.metadata();
     verify.checkpoint()?;
     result.map_err(|e| e.to_string())
@@ -253,7 +388,14 @@ fn read_manifest_metadata(
         .ok_or_else(|| format!("Runtime metadata is not in manifest: {relative}"))?;
     let bytes = read_metadata(root, relative, maximum, verify)?;
     verify.checkpoint()?;
-    if format!("{:x}", Sha256::digest(&bytes)) != *expected {
+    if let Some(diagnostics) = &verify.diagnostics {
+        diagnostics.hash_call();
+    }
+    let digest = Sha256::digest(&bytes);
+    if let Some(diagnostics) = &verify.diagnostics {
+        diagnostics.hashed(bytes.len());
+    }
+    if format!("{digest:x}") != *expected {
         return Err(format!("Runtime member integrity failure: {relative}"));
     }
     verify.checkpoint()?;
@@ -262,7 +404,16 @@ fn read_manifest_metadata(
 
 fn file_digest(path: &Path, verify: &mut Verification<'_>) -> Result<String, String> {
     let mut hash = Sha256::new();
-    read_regular(path, None, verify, |chunk| hash.update(chunk))?;
+    let diagnostics = verify.diagnostics.clone();
+    if let Some(diagnostics) = &diagnostics {
+        diagnostics.hash_call();
+    }
+    read_regular(path, None, verify, |chunk| {
+        hash.update(chunk);
+        if let Some(diagnostics) = &diagnostics {
+            diagnostics.hashed(chunk.len());
+        }
+    })?;
     Ok(format!("{:x}", hash.finalize()))
 }
 // Accounting is at the actual full hash/inventory implementation, on each test
@@ -297,83 +448,90 @@ fn verify_files(
             parent = path.parent();
         }
     }
-    for (relative, expected) in manifest {
-        verify.checkpoint()?;
-        if !valid_digest(expected) {
-            return Err(format!("Invalid member digest: {relative}"));
-        }
-        let file = confined(root, relative, verify)?;
-        if file_digest(&file, verify)? != *expected {
-            return Err(format!("Runtime member integrity failure: {relative}"));
-        }
-    }
-    if manifest.contains_key(METADATA) {
-        let modes: BTreeMap<String, u32> = serde_json::from_slice(&read_manifest_metadata(
-            root,
-            "native-modes.json",
-            MAX_MANIFEST,
-            manifest,
-            verify,
-        )?)
-        .map_err(|e| format!("Malformed native mode inventory: {e}"))?;
-        verify.checkpoint()?;
-        if modes.keys().ne(manifest.keys()) || !manifest.contains_key("native/caws-hook-native") {
-            return Err(
-                "Native mode inventory differs from manifest or lacks entry identity".into(),
-            );
-        }
-        let mut pending = vec![root.to_path_buf()];
-        let mut actual = BTreeSet::new();
-        while let Some(current) = pending.pop() {
+    verify.phase(VerificationPhase::MemberHashing, |verify| {
+        for (relative, expected) in manifest {
             verify.checkpoint()?;
-            let result = fs::read_dir(&current);
-            verify.checkpoint()?;
-            let mut entries = result.map_err(|e| e.to_string())?;
-            loop {
-                verify.checkpoint()?;
-                let next = entries.next();
-                verify.checkpoint()?;
-                let Some(entry) = next else {
-                    break;
-                };
-                let path = entry.map_err(|e| e.to_string())?.path();
-                let relative = path
-                    .strip_prefix(root)
-                    .map_err(|e| e.to_string())?
-                    .to_str()
-                    .ok_or("Native image paths must be UTF-8")?
-                    .to_owned();
-                let stat = path_metadata(&path, verify)?;
-                if stat.is_dir() {
-                    if !directories.contains(Path::new(&relative)) {
-                        return Err(format!("Undeclared native runtime directory: {relative}"));
-                    }
-                    pending.push(path);
-                    continue;
-                }
-                if !stat.is_file() || stat.nlink() != 1 {
-                    return Err(format!("Unsupported native runtime member: {relative}"));
-                }
-                if relative == "manifest.json" {
-                    if stat.permissions().mode() & 0o7777 != 0o644 {
-                        return Err("Native manifest mode mismatch".into());
-                    }
-                    continue;
-                }
-                let expected = modes
-                    .get(&relative)
-                    .ok_or_else(|| format!("Undeclared native runtime member: {relative}"))?;
-                if ![0o644, 0o755].contains(expected)
-                    || stat.permissions().mode() & 0o7777 != *expected
-                {
-                    return Err(format!("Native runtime mode mismatch: {relative}"));
-                }
-                actual.insert(relative);
+            if !valid_digest(expected) {
+                return Err(format!("Invalid member digest: {relative}"));
+            }
+            let file = confined(root, relative, verify)?;
+            if file_digest(&file, verify)? != *expected {
+                return Err(format!("Runtime member integrity failure: {relative}"));
             }
         }
-        if actual.iter().ne(manifest.keys()) {
-            return Err("Native runtime inventory differs from manifest".into());
-        }
+        Ok(())
+    })?;
+    if manifest.contains_key(METADATA) {
+        verify.phase(VerificationPhase::InventoryModes, |verify| {
+            let modes: BTreeMap<String, u32> = serde_json::from_slice(&read_manifest_metadata(
+                root,
+                "native-modes.json",
+                MAX_MANIFEST,
+                manifest,
+                verify,
+            )?)
+            .map_err(|e| format!("Malformed native mode inventory: {e}"))?;
+            verify.checkpoint()?;
+            if modes.keys().ne(manifest.keys()) || !manifest.contains_key("native/caws-hook-native")
+            {
+                return Err(
+                    "Native mode inventory differs from manifest or lacks entry identity".into(),
+                );
+            }
+            let mut pending = vec![root.to_path_buf()];
+            let mut actual = BTreeSet::new();
+            while let Some(current) = pending.pop() {
+                verify.checkpoint()?;
+                let result = fs::read_dir(&current);
+                verify.checkpoint()?;
+                let mut entries = result.map_err(|e| e.to_string())?;
+                loop {
+                    verify.checkpoint()?;
+                    let next = entries.next();
+                    verify.checkpoint()?;
+                    let Some(entry) = next else {
+                        break;
+                    };
+                    let path = entry.map_err(|e| e.to_string())?.path();
+                    let relative = path
+                        .strip_prefix(root)
+                        .map_err(|e| e.to_string())?
+                        .to_str()
+                        .ok_or("Native image paths must be UTF-8")?
+                        .to_owned();
+                    let stat = path_metadata(&path, verify)?;
+                    if stat.is_dir() {
+                        if !directories.contains(Path::new(&relative)) {
+                            return Err(format!("Undeclared native runtime directory: {relative}"));
+                        }
+                        pending.push(path);
+                        continue;
+                    }
+                    if !stat.is_file() || stat.nlink() != 1 {
+                        return Err(format!("Unsupported native runtime member: {relative}"));
+                    }
+                    if relative == "manifest.json" {
+                        if stat.permissions().mode() & 0o7777 != 0o644 {
+                            return Err("Native manifest mode mismatch".into());
+                        }
+                        continue;
+                    }
+                    let expected = modes
+                        .get(&relative)
+                        .ok_or_else(|| format!("Undeclared native runtime member: {relative}"))?;
+                    if ![0o644, 0o755].contains(expected)
+                        || stat.permissions().mode() & 0o7777 != *expected
+                    {
+                        return Err(format!("Native runtime mode mismatch: {relative}"));
+                    }
+                    actual.insert(relative);
+                }
+            }
+            if actual.iter().ne(manifest.keys()) {
+                return Err("Native runtime inventory differs from manifest".into());
+            }
+            Ok(())
+        })?;
     }
     verify.checkpoint()
 }

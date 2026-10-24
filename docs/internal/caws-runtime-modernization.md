@@ -9636,6 +9636,40 @@ Additional bounded evidence and unresolved dependencies:
   justified by that evidence. Verification phase costs and retained-operation
   recovery remain root-owned work before another cutover claim.
 
+- E359: Request-owned generation diagnostics separate opening identities, full
+  selection verification, closing identities, member hashing and
+  inventory/modes. Fixed-size counters retain completed and failed phase calls,
+  elapsed time, actual path/FD metadata attempts, hash attempts and bytes
+  supplied to SHA256. Initial generation loading and ordinary member lookups
+  remain excluded. Phase times are inclusive; member hashing includes
+  confinement and authenticated reads, so it is not a measurement of compression
+  alone. No authority check, cancellation checkpoint, deadline, hash or
+  inventory requirement is removed.
+
+  Supervised verification-phase-native-01 executes all31 native_generation
+  tests, exit0 in11.321s. Actual success artifact records two passes,2566 hashed
+  bytes against1283 expected per pass,20 hash calls,162 path metadata calls
+  and40 FD metadata calls. The entry-refusal artifact records one failed opening
+  identity phase and unchanged later phases; its metadata control counts two
+  actual syscall attempts and excludes pre-call cancellation. The inventory
+  mutation records Native runtime mode mismatch: launcher.py after1283 newly
+  hashed bytes, with failed inventory and selection phases and no closing sweep.
+  Failed-capture diagnostics retain three hash attempts but only687 hashed
+  bytes, excluding the engine chunk refused before compression. These synthetic
+  artifacts are under verification-phase-native-01/generation-artifacts.
+  verification-phase-progress-01 executes the one bounded progress-output test,
+  exit0 in0.237s. verification-phase-feature-off-01 checks the feature-disabled
+  build, exit0 in3.454s. All source/tool pins remain unchanged and observed
+  groups are empty. verification-phase-installed-01 exits0 but selects zero
+  tests; it supplies no behavioral coverage. Compiler warnings remain visible in
+  raw logs.
+
+  The diagnostics do not establish production cost, a speedup, successful native
+  eligibility or publication. Fresh06's live retained owner and durable Unknown
+  remain root-owned; process containment must not be described as operation
+  recovery. Root must inspect real-image phase measurements before attributing
+  the remaining deadline failure and preserve the original30000ms request bound.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -9749,6 +9783,11 @@ mutation/reclamation and residency work. E358 consolidates adjacent predispatch
 checks; its production effect is unverified. The next coherent source landing
 must carry the measured production-path repair and its hostile controls.
 Build/profile success alone cannot release it as a usable runtime replacement.
+E359 supplies tested phase instrumentation without a production timing claim.
+Resolve the retained scenario's process hold while preserving Unknown, then
+measure the exact combined image. Durable Unknown recovery remains an
+independent acceptance obligation even if controlled process containment
+succeeds.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

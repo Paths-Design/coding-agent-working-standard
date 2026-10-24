@@ -173,6 +173,7 @@ impl InvocationProgress {
             "originalRenderCaptured":self.original_render_captured,
             "dispatchGrantWritten":self.dispatch_written,
             "generationReceiptRevalidations":self.generation_receipt_revalidations.snapshot(),
+            "generationVerificationPhases":self.generation_receipt_revalidations.verification_snapshot(),
             "stopPrefixAuthorityCallbacks":self.stop_prefix_authority_callbacks.snapshot()})
     }
 }
@@ -1201,6 +1202,34 @@ mod invocation_diagnostic_tests {
             snapshot["generationReceiptRevalidations"]["elapsedMicros"],
             0
         );
+        let phases = snapshot["generationVerificationPhases"]
+            .as_object()
+            .unwrap();
+        assert_eq!(
+            phases.len(),
+            9,
+            "fixed fields only, independent of image size"
+        );
+        for name in [
+            "identityBefore",
+            "selectionVerification",
+            "identityAfter",
+            "memberHashing",
+            "inventoryModes",
+        ] {
+            assert_eq!(phases[name]["count"], 0);
+            assert_eq!(phases[name]["failures"], 0);
+            assert_eq!(phases[name]["elapsedMicros"], 0);
+            assert_eq!(phases[name].as_object().unwrap().len(), 3);
+        }
+        for name in [
+            "pathMetadataOperations",
+            "fdMetadataOperations",
+            "hashCalls",
+            "bytesHashed",
+        ] {
+            assert_eq!(phases[name], 0);
+        }
         assert!(
             snapshot["stopPrefixAuthorityCallbacks"]
                 .as_object()

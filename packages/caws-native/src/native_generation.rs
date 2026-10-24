@@ -7,7 +7,10 @@
 //! No policy decision, project authority, SQL capability, or frame is issued here.
 use crate::{
     cli::Config,
-    installed_generation::{MemberMetadata, Selection, Verification},
+    installed_generation::{
+        MemberMetadata, Selection, Verification, VerificationDiagnostics, VerificationPhase,
+        VerificationSnapshot,
+    },
 };
 use std::{
     cell::Cell,
@@ -21,7 +24,7 @@ use std::{
 /// authority. A shared handle preserves failed-capture measurements after the
 /// partial receipt is dropped; it is not a cache or a process-global counter.
 #[derive(Clone, Default)]
-pub(crate) struct CheckTimings(Rc<Cell<CheckTimingTotals>>);
+pub(crate) struct CheckTimings(Rc<Cell<CheckTimingTotals>>, VerificationDiagnostics);
 #[derive(Clone, Copy, Default)]
 struct CheckTimingTotals {
     count: u64,
@@ -34,6 +37,9 @@ pub(crate) struct CheckTimingSnapshot {
     pub elapsed_micros: u64,
 }
 impl CheckTimings {
+    pub(crate) fn verification_snapshot(&self) -> VerificationSnapshot {
+        self.1.snapshot()
+    }
     pub(crate) fn measure<R>(&self, operation: impl FnOnce() -> R) -> R {
         let started = Instant::now();
         let result = operation();
@@ -431,9 +437,17 @@ impl GenerationReceipt {
     }
     fn revalidate_with(&self, verify: &mut Verification<'_>) -> Result<(), String> {
         self.receipt_revalidation_timings.measure(|| {
-            self.check_identities(verify)?;
-            self.selection.revalidate(verify)?;
-            self.check_identities(verify)
+            verify.diagnosed(&self.receipt_revalidation_timings.1, |verify| {
+                verify.phase(VerificationPhase::IdentityBefore, |verify| {
+                    self.check_identities(verify)
+                })?;
+                verify.phase(VerificationPhase::SelectionVerification, |verify| {
+                    self.selection.revalidate(verify)
+                })?;
+                verify.phase(VerificationPhase::IdentityAfter, |verify| {
+                    self.check_identities(verify)
+                })
+            })
         })
     }
 }
@@ -565,6 +579,204 @@ mod tests {
             "member lookup is outside this precisely named counter"
         );
     }
+    fn full_verification_hash_bytes(f: &Fixture, receipt: &GenerationReceipt) -> u64 {
+        // Manifest bytes, every member, and the separately authenticated mode
+        // parser input are all actually hashed once in a successful full pass.
+        fs::metadata(f.root.join("manifest.json")).unwrap().len()
+            + receipt
+                .selection
+                .members()
+                .keys()
+                .map(|name| fs::metadata(f.root.join(name)).unwrap().len())
+                .sum::<u64>()
+            + fs::metadata(f.root.join("native-modes.json"))
+                .unwrap()
+                .len()
+    }
+    #[test]
+    fn verification_phase_diagnostics_count_hash_bytes_and_exclude_unscoped_work() {
+        let f = Fixture::new();
+        let receipt = f.capture().unwrap();
+        let first = receipt.receipt_revalidation_timings.verification_snapshot();
+        for phase in [
+            first.identity_before,
+            first.selection_verification,
+            first.identity_after,
+            first.member_hashing,
+            first.inventory_modes,
+        ] {
+            assert_eq!(
+                phase.count, 1,
+                "only capture's closing receipt verification counts"
+            );
+            assert_eq!(phase.failures, 0);
+        }
+        let expected_bytes = full_verification_hash_bytes(&f, &receipt);
+        let expected_hashes = receipt.selection.members().len() as u64 + 2;
+        assert_eq!(first.hash_calls, expected_hashes);
+        assert_eq!(first.bytes_hashed, expected_bytes);
+        assert_eq!(
+            first.fd_metadata_operations,
+            2 * expected_hashes,
+            "each authenticated read checks the opened FD and the post-read FD"
+        );
+        assert!(first.path_metadata_operations > first.fd_metadata_operations);
+        receipt
+            .member_digest("engine.js", expires(), || Ok(()))
+            .unwrap();
+        receipt
+            .member_bytes("engine.js", 1024, expires(), || Ok(()))
+            .unwrap();
+        assert_eq!(
+            receipt.receipt_revalidation_timings.verification_snapshot(),
+            first,
+            "ordinary lookups and authenticated byte reads are not full receipt checks"
+        );
+        receipt.revalidate(expires(), || Ok(())).unwrap();
+        let second = receipt.receipt_revalidation_timings.verification_snapshot();
+        assert_eq!(second.identity_before.count, 2);
+        assert_eq!(second.selection_verification.count, 2);
+        assert_eq!(second.identity_after.count, 2);
+        assert_eq!(second.member_hashing.count, 2);
+        assert_eq!(second.inventory_modes.count, 2);
+        assert_eq!(second.hash_calls, 2 * expected_hashes);
+        assert_eq!(second.bytes_hashed, 2 * expected_bytes);
+        assert_eq!(
+            second.path_metadata_operations,
+            2 * first.path_metadata_operations
+        );
+        assert_eq!(
+            second.fd_metadata_operations,
+            2 * first.fd_metadata_operations
+        );
+        f.record("verification-phase-success", serde_json::json!({"snapshot":second,"expectedBytesPerPass":expected_bytes,"initialLoadExcluded":true,"memberLookupsExcluded":true,"syntheticGeneration":true}));
+    }
+    #[test]
+    fn verification_phase_diagnostics_count_failed_entry_and_restore_the_scope() {
+        let f = Fixture::new();
+        let receipt = f.capture().unwrap();
+        let initial = receipt.receipt_revalidation_timings.verification_snapshot();
+        let cancelled = Cell::new(true);
+        let mut cancel = || {
+            if cancelled.get() {
+                Err("exact entry refusal".into())
+            } else {
+                Ok(())
+            }
+        };
+        let mut verify = Verification::new(expires(), &mut cancel);
+        assert_eq!(
+            receipt.revalidate_with(&mut verify),
+            Err("exact entry refusal".into())
+        );
+        let refused = receipt.receipt_revalidation_timings.verification_snapshot();
+        assert_eq!(
+            refused.identity_before.count,
+            initial.identity_before.count + 1
+        );
+        assert_eq!(refused.identity_before.failures, 1);
+        assert_eq!(
+            refused.selection_verification,
+            initial.selection_verification
+        );
+        assert_eq!(refused.identity_after, initial.identity_after);
+        assert_eq!(refused.member_hashing, initial.member_hashing);
+        assert_eq!(refused.inventory_modes, initial.inventory_modes);
+        assert_eq!(
+            refused.path_metadata_operations, initial.path_metadata_operations,
+            "pre-call cancellation performed no metadata syscall"
+        );
+        assert_eq!(
+            refused.fd_metadata_operations,
+            initial.fd_metadata_operations
+        );
+        assert_eq!(refused.bytes_hashed, initial.bytes_hashed);
+        cancelled.set(false);
+        MemberMetadata::read(&f.root, true, &mut verify).unwrap();
+        assert_eq!(
+            receipt.receipt_revalidation_timings.verification_snapshot(),
+            refused,
+            "refusal restores unscoped verifier state"
+        );
+        let io_diagnostics = VerificationDiagnostics::default();
+        verify.diagnosed(&io_diagnostics, |verify| {
+            MemberMetadata::read(&f.root, true, verify).unwrap();
+            assert!(
+                MemberMetadata::read(&f.root.join("missing"), false, verify)
+                    .unwrap_err()
+                    .contains("Generation path unavailable")
+            );
+            cancelled.set(true);
+            assert_eq!(
+                MemberMetadata::read(&f.root, true, verify),
+                Err("exact entry refusal".into())
+            );
+        });
+        let io = io_diagnostics.snapshot();
+        assert_eq!(
+            io.path_metadata_operations, 2,
+            "successful and failed syscalls count; pre-call cancellation does not"
+        );
+        assert_eq!(io.fd_metadata_operations, 0);
+        assert_eq!(io.hash_calls, 0);
+        assert_eq!(io.bytes_hashed, 0);
+        f.record("verification-phase-entry-refusal", serde_json::json!({"snapshot":refused,"metadataControl":io,"error":"exact entry refusal","scopeRestored":true,"syntheticGeneration":true}));
+    }
+    #[test]
+    fn verification_phase_diagnostics_count_inventory_refusal_after_complete_hashing() {
+        let f = Fixture::new();
+        let receipt = f.capture().unwrap();
+        let initial = receipt.receipt_revalidation_timings.verification_snapshot();
+        let expected_bytes = full_verification_hash_bytes(&f, &receipt);
+        let last_member = f.root.join("native/node");
+        assert_eq!(
+            receipt.selection.members().keys().next_back().unwrap(),
+            "native/node"
+        );
+        let changed = Cell::new(false);
+        let launcher = f.root.join("launcher.py");
+        let mut cancel = || Ok(());
+        let mut verify = Verification::new(expires(), &mut cancel);
+        verify.on_chunk = Some(Box::new(|path, _| {
+            if path == last_member {
+                fs::set_permissions(&launcher, fs::Permissions::from_mode(0o600)).unwrap();
+                changed.set(true);
+            }
+        }));
+        let error = receipt.revalidate_with(&mut verify).unwrap_err();
+        assert!(
+            changed.get(),
+            "mutation must happen after the opening identity sweep"
+        );
+        assert_eq!(error, "Native runtime mode mismatch: launcher.py");
+        let refused = receipt.receipt_revalidation_timings.verification_snapshot();
+        assert_eq!(
+            refused.identity_before.count,
+            initial.identity_before.count + 1
+        );
+        assert_eq!(refused.identity_before.failures, 0);
+        assert_eq!(
+            refused.selection_verification.count,
+            initial.selection_verification.count + 1
+        );
+        assert_eq!(refused.selection_verification.failures, 1);
+        assert_eq!(
+            refused.member_hashing.count,
+            initial.member_hashing.count + 1
+        );
+        assert_eq!(refused.member_hashing.failures, 0);
+        assert_eq!(
+            refused.inventory_modes.count,
+            initial.inventory_modes.count + 1
+        );
+        assert_eq!(refused.inventory_modes.failures, 1);
+        assert_eq!(
+            refused.identity_after, initial.identity_after,
+            "failed verification never reaches the closing identity sweep"
+        );
+        assert_eq!(refused.bytes_hashed - initial.bytes_hashed, expected_bytes);
+        f.record("verification-phase-inventory-refusal", serde_json::json!({"snapshot":refused,"error":error,"expectedHashedBytesBeforeRefusal":expected_bytes,"syntheticGeneration":true}));
+    }
     #[test]
     fn failed_capture_retains_its_receipt_revalidation_diagnostics_in_original_request() {
         let f = Fixture::new();
@@ -608,10 +820,33 @@ mod tests {
             1,
             "failed capture must not discard the request's measurement"
         );
-        f.record("failed-capture-revalidation-diagnostics", serde_json::json!({
-            "receiptRevalidations":timings.snapshot(), "engineReads":reads.get(), "error":failure,
-            "initialSelectionReadExcluded":true,
-        }));
+        let phases = timings.verification_snapshot();
+        assert_eq!(phases.identity_before.count, 1);
+        assert_eq!(phases.identity_before.failures, 0);
+        assert_eq!(phases.selection_verification.count, 1);
+        assert_eq!(phases.selection_verification.failures, 1);
+        assert_eq!(phases.member_hashing.count, 1);
+        assert_eq!(phases.member_hashing.failures, 1);
+        assert_eq!(phases.inventory_modes.count, 0);
+        assert_eq!(phases.identity_after.count, 0);
+        assert_eq!(
+            phases.hash_calls, 3,
+            "manifest and describe.js hashed; engine.js hash attempted but cancelled before compression"
+        );
+        assert_eq!(
+            phases.bytes_hashed,
+            fs::metadata(f.root.join("manifest.json")).unwrap().len()
+                + fs::metadata(f.root.join("describe.js")).unwrap().len(),
+            "bytes read into the refused chunk are not counted as hashed"
+        );
+        f.record(
+            "failed-capture-revalidation-diagnostics",
+            serde_json::json!({
+                "receiptRevalidations":timings.snapshot(), "verificationPhases":phases,
+                "engineReads":reads.get(), "error":failure,
+                "initialSelectionReadExcluded":true,
+            }),
+        );
     }
 
     fn expires() -> Instant {
