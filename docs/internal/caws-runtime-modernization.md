@@ -9365,6 +9365,59 @@ Additional bounded evidence and unresolved dependencies:
   thirteen-session/four-repository load, Python retirement, supported harness
   adoption and rollback remain open. No parent AC is advanced.
 
+- E351: Reorientation reads all 172 available CAWS turn records for the same
+  coordinator and verifies main 120cab3d, clean publication lane 91fc7de9 and
+  catalog-merge ancestry. The user's lead transfer supersedes coordination with
+  the previous lead; full parity, incremental landings and actual local cutover
+  remain the objective. Parent acceptance remains 0/8.
+
+  Fresh production04 exports candidate 91fc7de9 and completes all eleven
+  separately supervised preparation, build, package, private installation and
+  profile-image stages with exit 0, unchanged source pins and no observed group
+  residue. The native build takes 122.807s and produces executable SHA256
+  ad8066103e1eac65a0fbd4ee9ee5160ccfc5e00cf81b46fd5f3da81bfbeb679d. Controlled
+  qualification compares 30 semantic pairs; the final image contains 5855
+  members. Its result remains controlled-components and NOT_ADOPTED. Artifacts
+  live under publication-integration/fresh-stop-profile-production-04 and the
+  corresponding fresh-stop-profile-04-\*-01 execution directories.
+
+  The actual positive production Stop invocation then FAILS. Probe02 runs with
+  --source-revision 91fc7de97f02e820f0ea22b0b61a48f6b6e3e29d, the fresh private
+  CLI/image and --mode positive;
+  production-stop-04-positive-execution-01/execution.json retains its complete
+  argv, exit 1, 48.146s, unchanged source pins and empty observed group residue.
+  The native child exits 0 after 30030.857ms, but its output explicitly reports
+  Original monotonic deadline expired, prefixComplete=false,
+  envelopePublished=false, pointerPublished=false, agentPid=not_run and
+  reap=not_run. Exit 0 releases an infrastructure Stop; it is not successful
+  publication. The probe rejects that diagnostic. The session contains only
+  metadata and the invocation journal; no turn or publication marker exists.
+  Source database bytes remain unchanged. cleanup.json observes owner exit 0,
+  absent socket, no outstanding originals and no service signals. Raw failure,
+  native output and cleanup live in production-stop-04-positive-01; the retained
+  production-stop-04-positive-root-inspection-01.json joins these observations.
+
+  Progress records originalRenderCaptured=true, qualified native Stop and an
+  actual dispatch grant, but no completed prefix. The dispatch-grant mark at
+  20556ms precedes another eligibility validation; it is not the grant-write
+  timestamp. Source inspection finds nested full-generation validations in
+  selection, profile and SQLite identity checks, with the complete eligibility
+  check also used as a repeated prefix checkpoint. This is a source-grounded
+  performance hypothesis; individual validation timings remain unmeasured. Root
+  owns the next exact-image replay. ambient_stop_domain owns a bounded
+  diagnostic proposal; html_profile owns scoped verification consolidation;
+  stop_engine_join owns acknowledged cancellation/reclamation using the existing
+  journal encoding. These proposals are unexecuted and confer no acceptance.
+  Preserve the 30s deadline, full hashes/inventory, selected readsets,
+  effect-boundary and postqueue freshness checks. Disconnected negative
+  acknowledgements retain their cancellation fence and heavy record; recovery
+  remains an obligation.
+
+  The production consumer, queued mutation refusal, ambient environment,
+  residency/fairness, Python retirement, supported harnesses and rollback remain
+  unverified. The selected machine generation remains 408c06a7…77baa0. No parent
+  criterion advances from this failed scenario.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -9470,6 +9523,13 @@ progress and does not replace that transaction or its event readback.
 The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
+
+E351 makes the actual production deadline failure the immediate integration
+priority. Root integrates bounded timing diagnostics and scoped verification
+consolidation, then repeats the unchanged positive scenario before queued
+mutation/reclamation and residency work. The next coherent source landing must
+carry this production-path repair and its hostile controls. Build/profile
+success alone cannot release it as a usable runtime replacement.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
