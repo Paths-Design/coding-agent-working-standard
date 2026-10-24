@@ -10642,11 +10642,17 @@ Additional bounded evidence and unresolved dependencies:
   receipts record unchanged consumed inputs and no timeout. Changed-file, modes,
   inventory, callback identity, cache separation, mutable return ownership,
   nested dependency collection and malformed native replies remain exercised.
-  The shared build also contains the separately reviewed agent-stop draft; that
-  draft is not part of this selection-only source slice. These are fixture
+  The shared build also contains the separately integrated agent-stop draft;
+  that draft is not part of this selection-only source slice. These are fixture
   operation counts, not an installed latency distribution. Independent committed
-  review, main landing and the original installed-image deadline check remain
-  separate obligations. E383 remains failed.
+  review finds no demonstrated verification regression and identifies a
+  mutable-copy oracle gap: a frozen return could silently ignore assignment. The
+  strengthened control asserts successful assignment and distinct return
+  references. `selection-copy-mutable-02` repeats both suites, exits0 with102
+  tests and the same copy/observation counts, and retains exact source/dist
+  pins. The reviewed source and oracle correction qualify only the bounded
+  selection contract. Main landing and the original installed-image deadline
+  check remain separate obligations. E383 remains failed.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to

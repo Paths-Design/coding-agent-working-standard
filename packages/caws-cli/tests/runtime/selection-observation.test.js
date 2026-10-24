@@ -724,7 +724,10 @@ test('verification-only cache retains verifier/home/digest/snapshot separation a
   expect(first).toHaveBeenCalledTimes(1);
   const returned = a.io.verifyRuntime(home, digest, first);
   returned.member = 'caller mutation';
-  expect(a.io.verifyRuntime(home, digest, first)).toEqual({ member: 'original' });
+  expect(returned.member).toBe('caller mutation');
+  const next = a.io.verifyRuntime(home, digest, first);
+  expect(next).not.toBe(returned);
+  expect(next).toEqual({ member: 'original' });
   expect(first).toHaveBeenCalledTimes(1);
   a.io.ensureRuntimeVerified(home, digest, second);
   expect(second).toHaveBeenCalledTimes(1);
