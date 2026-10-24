@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-INGRESS-DEADLINE-LANDING-001
 title: 'Land bounded native deadline and OpenCode ingress corrections'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-ingress-deadline-landing
 created_at: '2026-10-24T01:52:01.740Z'
-updated_at: '2026-10-24T01:52:22.078Z'
+updated_at: '2026-10-24T01:52:33.673Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
