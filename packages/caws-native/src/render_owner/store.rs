@@ -1032,6 +1032,7 @@ impl Actor {
         &mut self,
         original: &StoreAcquire,
         expires: Instant,
+        effect_check: &crate::monotonic_deadline::EffectCheck<'_>,
     ) -> Result<journal::Dispatch> {
         self.check_unknown_fence(&original.id, expires)?;
         let original_bytes = serde_json::to_vec(original).map_err(err)?;
@@ -1042,7 +1043,7 @@ impl Actor {
         let request_id = publication::original_request_id(&original.id);
         match self
             .journal
-            .admit(
+            .admit_checked(
                 journal::Identity {
                     request_id: request_id.clone(),
                     argument_digest: verified.clone(),
@@ -1052,6 +1053,7 @@ impl Actor {
                 },
                 verified.as_bytes(),
                 expires,
+                effect_check,
             )
             .map_err(err)?
         {
@@ -1065,7 +1067,12 @@ impl Actor {
         }
         let dispatch = self
             .journal
-            .begin_next(&original.runtime_digest, &original.runtime_digest, expires)
+            .begin_next_checked(
+                &original.runtime_digest,
+                &original.runtime_digest,
+                expires,
+                effect_check,
+            )
             .map_err(err)?
             .ok_or("original dispatch unavailable")?;
         if dispatch.operation().identity().request_id != request_id {
@@ -1081,11 +1088,17 @@ impl Actor {
             let request = original.request()?;
             let root = store::correlation_root(&request, &original.invocation()).map_err(err)?;
             job.transport.check_deadline()?;
-            let reserved = self.reserve_original(&original, expires)?;
+            let effect_deadline = Arc::clone(&job.transport.deadline);
+            let effect_check = |_: &'static str| {
+                effect_deadline.check().map_err(err)?;
+                check(expires)
+            };
+            let reserved = self.reserve_original(&original, expires, &effect_check)?;
             self.stage("publication_original_reserved", &original.id);
             dispatch = Some(reserved);
             job.transport.check_deadline()?;
-            let writer = self.publication_writer(Path::new(&root), expires)?;
+            let writer =
+                self.publication_writer_checked(Path::new(&root), expires, &effect_check)?;
             job.record.lock().unwrap_or_else(|e| e.into_inner()).writer = Some(Arc::clone(&writer));
             self.stage("publication_writer_retained", &original.id);
             job.transport.check_deadline()?;
@@ -1162,7 +1175,7 @@ impl Actor {
                     Err(e) => return Err(err(e)),
                 }
             }
-            let mut publication = publication::Publication::capture(
+            let mut publication = publication::Publication::capture_checked(
                 publication::OriginalBinding {
                     project: PathBuf::from(root),
                     id: original.id.clone(),
@@ -1176,6 +1189,7 @@ impl Actor {
                 dispatch.as_ref().expect("original reserved"),
                 sources,
                 expires,
+                &effect_check,
             )?;
             let result = (|| -> Result<()> {
                 publication.exchange_phase(
@@ -1192,19 +1206,20 @@ impl Actor {
                 }
                 if !publication.aborted() {
                     job.transport.check_deadline()?;
-                    publication.publish(expires)?;
+                    publication.publish_checked(expires, &effect_check)?;
                 }
                 let terminal = publication.terminal_digest()?;
                 job.transport.check_deadline()?;
                 let returned = self
                     .journal
-                    .returned(
+                    .returned_checked(
                         dispatch.as_ref().expect("original reserved"),
                         journal::ReturnedResult::SessionPublication {
                             terminal_digest: terminal.clone(),
                         },
                         Some(terminal),
                         expires,
+                        &effect_check,
                     )
                     .map_err(err)?;
                 self.stage("publication_marker_committed", &original.id);
@@ -1213,7 +1228,7 @@ impl Actor {
                 let terminal =
                     publication.consume_receipt(&consumed, &mut job.transport, expires)?;
                 self.journal
-                    .consume(&returned, &terminal, expires)
+                    .consume_checked(&returned, &terminal, expires, &effect_check)
                     .map_err(err)?;
                 self.stage("publication_consumed_durable", &original.id);
                 Ok(())

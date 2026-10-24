@@ -8407,6 +8407,43 @@ Additional bounded evidence and unresolved dependencies:
   recording-dispatcher observations do not establish actual OpenCode activation,
   native Stop qualification, editor delivery or parent acceptance.
 
+- E318: The original native store deadline reaches writer provisioning, custody
+  initialization/acquisition, journal open/recovery and the store publication
+  admit/begin-next/returned/consume transitions, plus publication directory
+  creation, replacement, removal and synchronization. Request-scoped checked
+  APIs retain the original MonotonicDeadline and earlier local bound; legacy
+  callers preserve their existing Instant-only contracts. Cleanup and
+  uncertainty settlement do not renew invocation authority. The first new
+  publication controls fail before effects because metadata was incorrectly
+  prepared as Render output. The corrected tests use the existing Seal exchange
+  and assert its descriptor/bytes before injecting expiry or clock failure.
+  `effect-deadline-publication-repaired-01` retains that failed attempt. Final
+  `effect-deadline-{writer,journal,publication,store}-host-clock-01` executions
+  exit0 with13/43/12/18 exercised cases; the store suite retains its one
+  prepared-image case as ignored. Positive controls use the actual host
+  monotonic checker; hostile controls inject the native observation only at
+  selected deep stages while the captured local Instant remains live. Actual
+  fixture files, scenario/result JSON, journal records and raw
+  CAWS_DEADLINE_EFFECT rows are retained alongside source/tool pins and empty
+  owned process groups. Pre-rename failure retains old metadata and no terminal
+  marker; failure after actual rename retains changed metadata, absent marker
+  and uncertainty. Journal pre-rename failures leave prior bytes intact;
+  post-publication failures retain changed records,
+  publication-may-have-happened and poisoned handles without acknowledging a
+  transition in memory. The positive publication retains exact metadata and
+  .session-publication.json. Eight one-at-a-time `effect-negative-*-02` controls
+  remove custody, journal, capture, rename or transition propagation. Each
+  executes its selected test and exits101 for the missing behavior, including an
+  expired directory creation, changed metadata before permitted rename, and
+  falsely successful journal transitions. Restoration records verify exact
+  source bytes after every control. Native-enabled and feature-off compile
+  checks are retained separately; compilation does not establish installed
+  execution. These are cooperative logical-boundary guarantees, not atomic
+  exclusion of expiry between a check and syscall, syscall interruption,
+  ordinary Stop admission, full lifecycle deadline parity or machine cutover.
+  Root retains the native producer/prefix/profile/consumer join and final-image
+  qualification.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -8513,11 +8550,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                           | Next decisive check                                                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                              | E314 completes bounded exact-image invocation/refusal and private rollback; land the qualified source slice, then qualify the next production-connected image and actual harness delivery                                                         |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; deadline candidate3bc555cb is committed in the publication lane; deep effect-boundary checks and combined-image integration remain owed | E309 ordinary SQL Stop proof: native-owned generation/selection, qualified SQL and renderer profiles, original deadline, and queue revalidation before reservation/writer/SQL; reconcile foreign parser ownership before command-transport writes |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload             |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                              | Next decisive check                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | E316 lands the bounded source slice on main; qualify the next production-connected image and actual harness delivery after the ingress and deadline corrections                                                                                   |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; E317 repairs callback routing and E318 propagates the original deadline through deep effects; native Stop producer/prefix/profile integration remains owed | E309 ordinary SQL Stop proof: native-owned generation/selection, qualified SQL and renderer profiles, original deadline, and queue revalidation before reservation/writer/SQL; reconcile foreign parser ownership before command-transport writes |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                                   | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload             |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The

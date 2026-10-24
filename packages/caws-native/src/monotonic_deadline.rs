@@ -14,6 +14,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Request-scoped effect check. Stage names identify logical boundaries for
+/// diagnostics and tests; this callback grants no admission authority. Native
+/// store callers close over the already retained MonotonicDeadline. Legacy
+/// callers retain their existing Instant-only contract through checked wrappers.
+pub(crate) type EffectCheck<'a> = dyn Fn(&'static str) -> Result<(), String> + 'a;
+
 /// Existing native invocation maximum, not a new service-specific quota.
 pub const MAX_TIMEOUT: Duration = Duration::from_millis(120_000);
 const MAX_TIMEOUT_NS: u64 = 120_000 * 1_000_000;
@@ -180,6 +186,26 @@ impl MonotonicDeadline {
 
     pub fn check(&self) -> Result<(), DeadlineError> {
         self.check_with(&mut HostClock)
+    }
+    #[cfg(test)]
+    pub(crate) fn check_observed_for_test(
+        &self,
+        native: Result<u64, DeadlineError>,
+        local: Instant,
+    ) -> Result<(), DeadlineError> {
+        struct Observed {
+            native: Result<u64, DeadlineError>,
+            local: Instant,
+        }
+        impl Clock for Observed {
+            fn instant(&mut self) -> Instant {
+                self.local
+            }
+            fn monotonic_ns(&mut self) -> Result<u64, DeadlineError> {
+                self.native
+            }
+        }
+        self.check_with(&mut Observed { native, local })
     }
     fn check_with(&self, clock: &mut impl Clock) -> Result<(), DeadlineError> {
         let now_native = clock.monotonic_ns()?;
@@ -518,5 +544,52 @@ mod tests {
             DeadlineError::InvalidInterval
         );
         clock.done();
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod effect_test_support {
+    use super::*;
+    use std::cell::{Cell, RefCell};
+    pub(crate) struct NativeClock {
+        deadline: MonotonicDeadline,
+        trigger: &'static str,
+        failure: DeadlineError,
+        failed: Cell<bool>,
+        pub(crate) stages: RefCell<Vec<&'static str>>,
+    }
+    impl NativeClock {
+        pub(crate) fn new(trigger: &'static str, failure: DeadlineError) -> Self {
+            Self {
+                deadline: MonotonicDeadline::capture(Duration::from_secs(30)).unwrap(),
+                trigger,
+                failure,
+                failed: Cell::new(false),
+                stages: RefCell::new(vec![]),
+            }
+        }
+        pub(crate) fn expires(&self) -> Instant {
+            self.deadline.expires()
+        }
+        pub(crate) fn check(&self, stage: &'static str) -> Result<(), String> {
+            self.stages.borrow_mut().push(stage);
+            if stage == self.trigger {
+                self.failed.set(true);
+            }
+            if !self.failed.get() {
+                return self.deadline.check().map_err(|e| e.to_string());
+            }
+            let native = if self.failure == DeadlineError::Expired {
+                Ok(self.deadline.envelope().expires_ns)
+            } else {
+                Err(self.failure)
+            };
+            // The adversarial native observation changes while the same local
+            // Instant is demonstrably live; no host clock or global switch moves.
+            assert!(Instant::now() < self.deadline.expires());
+            self.deadline
+                .check_observed_for_test(native, Instant::now())
+                .map_err(|e| e.to_string())
+        }
     }
 }
