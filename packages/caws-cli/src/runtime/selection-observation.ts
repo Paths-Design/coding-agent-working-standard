@@ -396,6 +396,14 @@ export async function resolveObservedInvocationSelection(
     surface: options.surface,
     event: options.event,
     system: options.system,
+    ...(options.caller
+      ? {
+          caller: Object.freeze({
+            cwd: options.caller.cwd,
+            environment: Object.freeze({ ...options.caller.environment }),
+          }),
+        }
+      : {}),
   });
   const { snapshot, capture, maximumRequests, signal } = dependencies;
   if (!Number.isSafeInteger(maximumRequests) || maximumRequests < 1)

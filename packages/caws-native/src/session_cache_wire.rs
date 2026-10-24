@@ -20,6 +20,11 @@ use std::{
 
 pub const CAPABILITY: &str = "caws.runtime.session-cache.v1";
 pub const PREFIX_CAPABILITY: &str = "caws.runtime.session-end-prefix.v1";
+pub const STOP_PREFIX_CAPABILITY: &str = "caws.runtime.stop-prefix.v1";
+pub const STOP_PREFIX_REQUEST_SCHEMA: &str = "caws.runtime.stop-prefix.request.v1";
+pub const STOP_PREFIX_PREVIOUS_SCHEMA: &str = "caws.runtime.stop-prefix.previous.v1";
+pub const STOP_PREFIX_DECISION_SCHEMA: &str = "caws.runtime.stop-prefix.decision.v1";
+pub const STOP_PREFIX_RESULT_SCHEMA: &str = "caws.runtime.stop-prefix.result.v1";
 pub const PREFIX_REQUEST_SCHEMA: &str = "caws.runtime.session-end-prefix.request.v1";
 pub const PREFIX_PREVIOUS_SCHEMA: &str = "caws.runtime.session-end-prefix.previous.v1";
 pub const PREFIX_DECISION_SCHEMA: &str = "caws.runtime.session-end-prefix.decision.v1";
@@ -619,6 +624,434 @@ impl<'a> PrefixOwner<'a> {
         })
     }
 }
+/// Original native input, captured before starting the engine. These values are
+/// observations to make, not an asserted project, completed prefix or grant.
+pub struct OriginalStopCaptureInput<'a> {
+    pub id: &'a str,
+    pub runtime_digest: &'a str,
+    pub surface: &'a str,
+    pub caller_cwd: &'a str,
+    pub caller_environment: &'a std::collections::BTreeMap<String, String>,
+    pub original_payload: &'a RawValue,
+}
+
+/// Keep the owned query failure intact: its retained Child must reach the root's
+/// cleanup/custody owner. Display text is never a substitute for this value.
+#[derive(Debug)]
+pub enum OriginalStopCaptureFailure {
+    Invocation(String),
+    Interrupted(String),
+    Ancestry(String),
+    Project {
+        failure: Box<crate::invocation_project::ProjectFailure>,
+        interruption: Option<String>,
+    },
+}
+impl fmt::Display for OriginalStopCaptureFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Invocation(message) => write!(f, "original Stop invocation: {message}"),
+            Self::Interrupted(message) => write!(f, "original Stop interrupted: {message}"),
+            Self::Ancestry(message) => write!(f, "original Stop ancestry: {message}"),
+            Self::Project {
+                failure,
+                interruption,
+            } => {
+                write!(f, "original Stop {failure}")?;
+                if let Some(message) = interruption {
+                    write!(f, "; original interruption: {message}")?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+impl std::error::Error for OriginalStopCaptureFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Project { failure, .. } => Some(failure.as_ref()),
+            _ => None,
+        }
+    }
+}
+fn original_stop_checkpoint(
+    deadline: &crate::monotonic_deadline::MonotonicDeadline,
+    cancel: &mut impl FnMut() -> std::result::Result<(), String>,
+) -> std::result::Result<(), String> {
+    cancel()?;
+    deadline.check().map_err(|error| error.to_string())
+}
+
+/// Actual original-process capture. No Clone, Deserialize, asserted-project
+/// constructor or permission flag exists. This is an unactivated library
+/// prerequisite; it grants no stock selection, profile or publication authority.
+pub struct OriginalStopCapture<'deadline> {
+    id: String,
+    runtime_digest: String,
+    surface: String,
+    caller_cwd: String,
+    caller_environment: std::collections::BTreeMap<String, String>,
+    original_payload: Box<RawValue>,
+    project: crate::invocation_project::ObservedProject,
+    ancestry: crate::agent_pid_cache::OriginalAncestry,
+    deadline: &'deadline crate::monotonic_deadline::MonotonicDeadline,
+    original_pid: u32,
+    owner_attempted: std::cell::Cell<bool>,
+    _original_thread: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+impl<'deadline> OriginalStopCapture<'deadline> {
+    pub fn capture(
+        input: OriginalStopCaptureInput<'_>,
+        deadline: &'deadline crate::monotonic_deadline::MonotonicDeadline,
+        mut cancel: impl FnMut() -> std::result::Result<(), String>,
+    ) -> std::result::Result<Self, OriginalStopCaptureFailure> {
+        original_stop_checkpoint(deadline, &mut cancel)
+            .map_err(OriginalStopCaptureFailure::Interrupted)?;
+        if !cfg!(target_os = "macos")
+            || !matches!(input.surface, "opencode" | "zcode")
+            || input.id.is_empty()
+            || input.id.len() > 128
+            || input.id.contains('\0')
+            || !digest(input.runtime_digest)
+        {
+            return Err(OriginalStopCaptureFailure::Invocation(
+                "unsupported original identity, surface or platform".into(),
+            ));
+        }
+        // Capture ancestry first: no project Child exists on an ancestry error.
+        // This API already supplies String diagnostics; preserve that exact value.
+        let ancestry = crate::agent_pid_cache::OriginalAncestry::capture(
+            input.surface,
+            deadline.expires(),
+            || original_stop_checkpoint(deadline, &mut cancel),
+        )
+        .map_err(OriginalStopCaptureFailure::Ancestry)?;
+        original_stop_checkpoint(deadline, &mut cancel)
+            .map_err(OriginalStopCaptureFailure::Interrupted)?;
+        let interruption = std::cell::RefCell::new(None);
+        let project = {
+            let callback = std::cell::RefCell::new(&mut cancel);
+            crate::invocation_project::observe(
+                input.caller_cwd,
+                input.caller_environment,
+                input.original_payload,
+                deadline.expires(),
+                &|| match original_stop_checkpoint(deadline, &mut **callback.borrow_mut()) {
+                    Ok(()) => false,
+                    Err(message) => {
+                        interruption.borrow_mut().get_or_insert(message);
+                        true
+                    }
+                },
+            )
+        };
+        let project = project.map_err(|failure| OriginalStopCaptureFailure::Project {
+            failure: Box::new(failure),
+            interruption: interruption.into_inner(),
+        })?;
+        original_stop_checkpoint(deadline, &mut cancel)
+            .map_err(OriginalStopCaptureFailure::Interrupted)?;
+        Ok(Self {
+            id: input.id.into(),
+            runtime_digest: input.runtime_digest.into(),
+            surface: input.surface.into(),
+            caller_cwd: input.caller_cwd.into(),
+            caller_environment: input.caller_environment.clone(),
+            original_payload: input.original_payload.to_owned(),
+            project,
+            ancestry,
+            deadline,
+            original_pid: std::process::id(),
+            owner_attempted: std::cell::Cell::new(false),
+            _original_thread: std::marker::PhantomData,
+        })
+    }
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+    pub fn runtime_digest(&self) -> &str {
+        &self.runtime_digest
+    }
+    pub fn surface(&self) -> &str {
+        &self.surface
+    }
+    pub fn caller_cwd(&self) -> &str {
+        &self.caller_cwd
+    }
+    pub fn caller_environment(&self) -> &std::collections::BTreeMap<String, String> {
+        &self.caller_environment
+    }
+    pub fn original_payload(&self) -> &RawValue {
+        &self.original_payload
+    }
+    pub fn observed_project(&self) -> &crate::invocation_project::ObservedProject {
+        &self.project
+    }
+    pub fn deadline(&self) -> &crate::monotonic_deadline::MonotonicDeadline {
+        self.deadline
+    }
+
+    /// The first owner attempt is consumed even on a binding refusal. Consume
+    /// captured originals internally; only Ready/dispatch context comes later.
+    /// The returned prefix borrows this externally owned capture and its clock.
+    pub fn prefix_owner<'capture>(
+        &'capture self,
+        invocation: Invocation<'capture>,
+    ) -> std::result::Result<StopPrefixOwner<'capture>, String> {
+        if self.owner_attempted.replace(true) {
+            return Err("original Stop prefix owner already attempted".into());
+        }
+        if self.original_pid != std::process::id()
+            || invocation.id != self.id
+            || invocation.runtime_digest != self.runtime_digest
+            || invocation.surface != self.surface
+            || invocation.original_payload.get() != self.original_payload.get()
+        {
+            return Err("original Stop prefix invocation binding mismatch".into());
+        }
+        StopPrefixOwner::new(StopPrefixInvocation {
+            invocation: Invocation {
+                id: &self.id,
+                runtime_digest: &self.runtime_digest,
+                original_payload: &self.original_payload,
+                surface: &self.surface,
+                event: invocation.event,
+                configuration: invocation.configuration,
+                ready_active: invocation.ready_active,
+                ready_project_digest: invocation.ready_project_digest,
+                dispatched: invocation.dispatched,
+                advertised_capability: invocation.advertised_capability,
+            },
+            original_ancestry: &self.ancestry,
+            original_project: &self.project,
+            deadline: self.deadline,
+        })
+    }
+}
+
+/// Inputs retained by the trusted original native frontend. The supplied
+/// original_project must be the original invocation's independent observation,
+/// never a current-project recomputation or deserialized TS substitute. This
+/// prefix supplies no generation, selection, source-profile or publication grant.
+pub struct StopPrefixInvocation<'a> {
+    pub invocation: Invocation<'a>,
+    pub original_ancestry: &'a crate::agent_pid_cache::OriginalAncestry,
+    pub original_project: &'a crate::invocation_project::ObservedProject,
+    pub deadline: &'a crate::monotonic_deadline::MonotonicDeadline,
+}
+pub struct StopPrefixOwner<'a> {
+    invocation: Invocation<'a>,
+    original: &'a crate::agent_pid_cache::OriginalAncestry,
+    canonical_root: String,
+    deadline: &'a crate::monotonic_deadline::MonotonicDeadline,
+    attempted: bool,
+}
+impl<'a> StopPrefixOwner<'a> {
+    pub(crate) fn new(input: StopPrefixInvocation<'a>) -> std::result::Result<Self, String> {
+        input.deadline.check().map_err(|e| e.to_string())?;
+        let invocation = input.invocation;
+        let root = input
+            .original_project
+            .canonical_root
+            .to_str()
+            .ok_or("original Stop project is not native UTF-8")?;
+        let checkout = input
+            .original_project
+            .checkout
+            .to_str()
+            .ok_or("original Stop checkout is not native UTF-8")?;
+        // ObservedProject fixes both query slots at the type boundary. A real
+        // capture retains each launched PID even after reap; pid=None denotes
+        // an absent launch, not evidence that an invocation query completed.
+        let settled = input.original_project.queries.iter().all(|query| {
+            query.pid.is_some_and(|pid| pid > 0)
+                && query.settled()
+                && query.exit_observed
+                && !query.ownership_retained
+                && !query.pipes.stdout_open
+                && !query.pipes.stderr_open
+                && query.reaped.as_ref().is_some_and(|exit| exit.success)
+                && query.pipes.stdout_eof
+                && query.pipes.stderr_eof
+        });
+        if !cfg!(target_os = "macos")
+            || !invocation.ready_active
+            || !invocation.dispatched
+            || !matches!(invocation.surface, "opencode" | "zcode")
+            || invocation.event != "stop"
+            || invocation.configuration != "system"
+            || invocation.advertised_capability != Some(STOP_PREFIX_CAPABILITY)
+            || invocation.id.is_empty()
+            || invocation.id.len() > 128
+            || invocation.id.contains('\0')
+            || !digest(invocation.runtime_digest)
+            || !root_path(root)
+            || !root_path(checkout)
+            || invocation.ready_project_digest != Some(sha(root.as_bytes()).as_str())
+            || !settled
+        {
+            return Err("Stop prefix original project/Ready/custody or invocation mismatch".into());
+        }
+        Ok(Self {
+            invocation,
+            original: input.original_ancestry,
+            canonical_root: root.into(),
+            deadline: input.deadline,
+            attempted: false,
+        })
+    }
+    /// A first attempt is consumed even on malformed/binding refusal.
+    pub fn admit(&mut self, frame: &[u8]) -> Result<StopPrefixAdmitted<'a>> {
+        if self.attempted {
+            return Err(WireError("Stop prefix request already attempted"));
+        }
+        self.attempted = true;
+        self.deadline
+            .check()
+            .map_err(|_| WireError("original Stop prefix deadline unavailable"))?;
+        let wire: RequestFrame = decode(frame, MAX_REQUEST_BYTES)?;
+        if wire.schema != STOP_PREFIX_REQUEST_SCHEMA
+            || wire.id != self.invocation.id
+            || wire.runtime_digest != self.invocation.runtime_digest
+            || !uuid_v4(&wire.token)
+            || wire.canonical_root != self.canonical_root
+        {
+            return Err(WireError("Stop prefix request binding mismatch"));
+        }
+        Ok(StopPrefixAdmitted {
+            inner: PrefixAdmitted {
+                correlation: Correlation {
+                    id: wire.id,
+                    runtime_digest: wire.runtime_digest,
+                    token: wire.token,
+                },
+                canonical_root: self.canonical_root.clone(),
+                sid: raw_sid(self.invocation.original_payload),
+                surface: self.invocation.surface.into(),
+                original: self.original.clone(),
+            },
+            deadline: self.deadline,
+        })
+    }
+}
+pub struct StopPrefixAdmitted<'a> {
+    inner: PrefixAdmitted,
+    deadline: &'a crate::monotonic_deadline::MonotonicDeadline,
+}
+struct StopPrefixBinding {
+    correlation: Correlation,
+    canonical_root: String,
+    surface: String,
+    session_id: Option<String>,
+}
+pub struct StopPrefixExecution<'a> {
+    result: PrefixResultFrame,
+    exchange_error: Option<WireError>,
+    cancellation_error: Option<String>,
+    binding: StopPrefixBinding,
+    deadline: &'a crate::monotonic_deadline::MonotonicDeadline,
+}
+impl<'a> StopPrefixAdmitted<'a> {
+    /// No caller budget/Instant can replace the retained original absolute expiry.
+    pub fn execute_checked(
+        self,
+        mut checkpoint: impl FnMut() -> std::result::Result<(), String>,
+        exchange: impl FnOnce(&[u8]) -> Result<Vec<u8>>,
+    ) -> StopPrefixExecution<'a> {
+        let binding = StopPrefixBinding {
+            correlation: Correlation {
+                id: self.inner.correlation.id.clone(),
+                runtime_digest: self.inner.correlation.runtime_digest.clone(),
+                token: self.inner.correlation.token.clone(),
+            },
+            canonical_root: self.inner.canonical_root.clone(),
+            surface: self.inner.surface.clone(),
+            session_id: match &self.inner.sid {
+                RawSid::Safe(sid) => Some(sid.clone()),
+                _ => None,
+            },
+        };
+        let deadline = self.deadline;
+        let execution = self.inner.execute_event(
+            session_cache::PrefixEvent::Stop,
+            deadline.expires(),
+            || {
+                deadline.check().map_err(|e| e.to_string())?;
+                checkpoint()
+            },
+            exchange,
+        );
+        StopPrefixExecution {
+            result: execution.result,
+            exchange_error: execution.exchange_error,
+            cancellation_error: execution.cancellation_error,
+            binding,
+            deadline,
+        }
+    }
+}
+/// In-process completion evidence, not deserializable and not a publication
+/// grant. QualifiedStop must independently bind selection/source/profile and
+/// revalidate original deadline/readset before any subsequent effects.
+pub struct CompletedStopPrefix<'a> {
+    result: PrefixResultFrame,
+    binding: StopPrefixBinding,
+    deadline: &'a crate::monotonic_deadline::MonotonicDeadline,
+}
+impl<'a> StopPrefixExecution<'a> {
+    pub fn result(&self) -> &PrefixResultFrame {
+        &self.result
+    }
+    pub fn exchange_error(&self) -> Option<&WireError> {
+        self.exchange_error.as_ref()
+    }
+    pub fn cancellation_error(&self) -> Option<&str> {
+        self.cancellation_error.as_deref()
+    }
+    /// Refusal retains the actual execution and partial-effects/error receipt.
+    pub fn into_completed(self) -> std::result::Result<CompletedStopPrefix<'a>, Self> {
+        if !self.result.prefix_complete()
+            || self.exchange_error.is_some()
+            || self.cancellation_error.is_some()
+            || self.binding.session_id.is_none()
+            || self.deadline.check().is_err()
+        {
+            return Err(self);
+        }
+        Ok(CompletedStopPrefix {
+            result: self.result,
+            binding: self.binding,
+            deadline: self.deadline,
+        })
+    }
+}
+impl CompletedStopPrefix<'_> {
+    pub fn result(&self) -> &PrefixResultFrame {
+        &self.result
+    }
+    pub fn correlation(&self) -> &Correlation {
+        &self.binding.correlation
+    }
+    pub fn canonical_root(&self) -> &str {
+        &self.binding.canonical_root
+    }
+    pub fn surface(&self) -> &str {
+        &self.binding.surface
+    }
+    pub fn supplied_session_id(&self) -> &str {
+        self.binding
+            .session_id
+            .as_deref()
+            .expect("completed supplied id")
+    }
+    pub fn deadline(&self) -> &crate::monotonic_deadline::MonotonicDeadline {
+        self.deadline
+    }
+    pub fn check(&self) -> std::result::Result<(), String> {
+        self.deadline.check().map_err(|e| e.to_string())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PrefixStatus {
@@ -671,6 +1104,7 @@ pub struct PrefixExecution {
     pub cancellation_error: Option<String>,
 }
 fn prefix_result(
+    event: session_cache::PrefixEvent,
     c: &Correlation,
     status: PrefixStatus,
     complete: bool,
@@ -683,7 +1117,10 @@ fn prefix_result(
     // Reuse the bounded UTF-8 diagnostic normalization, not the v1 status schema.
     let diagnostic = make_result(c, Status::Unavailable, envelope, diagnostic).diagnostic;
     PrefixResultFrame {
-        schema: PREFIX_RESULT_SCHEMA,
+        schema: match event {
+            session_cache::PrefixEvent::SessionEnd => PREFIX_RESULT_SCHEMA,
+            session_cache::PrefixEvent::Stop => STOP_PREFIX_RESULT_SCHEMA,
+        },
         id: c.id.clone(),
         runtime_digest: c.runtime_digest.clone(),
         token: c.token.clone(),
@@ -711,6 +1148,20 @@ impl PrefixAdmitted {
     pub fn execute_checked(
         self,
         expires: Instant,
+        checkpoint: impl FnMut() -> std::result::Result<(), String>,
+        exchange: impl FnOnce(&[u8]) -> Result<Vec<u8>>,
+    ) -> PrefixExecution {
+        self.execute_event(
+            session_cache::PrefixEvent::SessionEnd,
+            expires,
+            checkpoint,
+            exchange,
+        )
+    }
+    fn execute_event(
+        self,
+        event: session_cache::PrefixEvent,
+        expires: Instant,
         mut checkpoint: impl FnMut() -> std::result::Result<(), String>,
         exchange: impl FnOnce(&[u8]) -> Result<Vec<u8>>,
     ) -> PrefixExecution {
@@ -721,6 +1172,7 @@ impl PrefixAdmitted {
         let terminal =
             |status, complete, envelope, pointer, pid, reap, diagnostic| PrefixExecution {
                 result: prefix_result(
+                    event,
                     &self.correlation,
                     status,
                     complete,
@@ -734,7 +1186,11 @@ impl PrefixAdmitted {
                 cancellation_error: None,
             };
         let fatal = |failure: FailureKind, envelope, pointer, pid, reap| {
-            let diagnostic = format!("SessionEnd prefix interrupted: {failure:?}");
+            let label = match event {
+                session_cache::PrefixEvent::SessionEnd => "SessionEnd",
+                session_cache::PrefixEvent::Stop => "Stop",
+            };
+            let diagnostic = format!("{label} prefix interrupted: {failure:?}");
             let mut execution = terminal(
                 PrefixStatus::Unavailable,
                 false,
@@ -773,14 +1229,27 @@ impl PrefixAdmitted {
                     false,
                     Pid::NotRun,
                     Reap::NotRun,
-                    Some("original SessionEnd session-id profile unsupported".into()),
+                    Some(
+                        match event {
+                            session_cache::PrefixEvent::SessionEnd => {
+                                "original SessionEnd session-id profile unsupported"
+                            }
+                            session_cache::PrefixEvent::Stop => {
+                                "original Stop session-id profile unsupported"
+                            }
+                        }
+                        .into(),
+                    ),
                 );
             }
         };
         let input = CaptureInput {
             canonical_root: Path::new(&self.canonical_root),
             supplied_session_id: Some(sid),
-            supplied_hook_event: Some("SessionEnd"),
+            supplied_hook_event: Some(match event {
+                session_cache::PrefixEvent::SessionEnd => "SessionEnd",
+                session_cache::PrefixEvent::Stop => "Stop",
+            }),
         };
         let mut diagnostics = Vec::new();
         let mut envelope_unavailable = false;
@@ -872,7 +1341,10 @@ impl PrefixAdmitted {
                 };
                 let frame = encode(
                     &PreviousFrame {
-                        schema: PREFIX_PREVIOUS_SCHEMA,
+                        schema: match event {
+                            session_cache::PrefixEvent::SessionEnd => PREFIX_PREVIOUS_SCHEMA,
+                            session_cache::PrefixEvent::Stop => STOP_PREFIX_PREVIOUS_SCHEMA,
+                        },
                         id: &self.correlation.id,
                         runtime_digest: &self.correlation.runtime_digest,
                         token: &self.correlation.token,
@@ -882,7 +1354,11 @@ impl PrefixAdmitted {
                 )?;
                 let response = exchange(&frame)?;
                 let decision: DecisionFrame = decode(&response, MAX_DECISION_BYTES)?;
-                if decision.schema != PREFIX_DECISION_SCHEMA
+                if decision.schema
+                    != match event {
+                        session_cache::PrefixEvent::SessionEnd => PREFIX_DECISION_SCHEMA,
+                        session_cache::PrefixEvent::Stop => STOP_PREFIX_DECISION_SCHEMA,
+                    }
                     || decision.id != self.correlation.id
                     || decision.runtime_digest != self.correlation.runtime_digest
                     || decision.token != self.correlation.token
@@ -931,13 +1407,24 @@ impl PrefixAdmitted {
         let (envelope, pointer) = if envelope_unavailable {
             (false, false)
         } else {
-            match session_cache::commit_prefix(
-                &mut prepared,
-                &self.surface,
-                created,
-                expires,
-                &mut checkpoint,
-            ) {
+            let committed = match event {
+                session_cache::PrefixEvent::SessionEnd => session_cache::commit_prefix(
+                    &mut prepared,
+                    &self.surface,
+                    created,
+                    expires,
+                    &mut checkpoint,
+                ),
+                session_cache::PrefixEvent::Stop => session_cache::commit_prefix_for_event(
+                    &mut prepared,
+                    &self.surface,
+                    event,
+                    created,
+                    expires,
+                    &mut checkpoint,
+                ),
+            };
+            match committed {
                 Ok(()) => (true, true),
                 Err(error) => {
                     let envelope = error.envelope_published;

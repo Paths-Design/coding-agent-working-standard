@@ -316,11 +316,9 @@ function snapshotTree(dir) {
 
 test('registration REFUSES surfaces with no verified harness adapter', () => {
   const before = snapshotTree(user);
-  // dsh is the adapter-wired harness (a cordis plugin, not native hook config);
-  // opencode and zcode have implemented PACKS but no verified native
-  // registration. All three must refuse, which is what proves the boundary is
-  // keyed to registration capability rather than special-casing dsh.
-  for (const surface of ['dsh', 'opencode', 'zcode']) {
+  // Pack availability does not confer machine registration capability.
+  // OpenCode has a separate explicit project-native Stop transport.
+  for (const surface of ['dsh', 'zcode']) {
     expect(() => configureSystemRuntime({ ...options, surface })).toThrow(
       /requires an adapter authored and verified in that harness/
     );
@@ -329,6 +327,13 @@ test('registration REFUSES surfaces with no verified harness adapter', () => {
       /codex, claude-code, qwen-code/
     );
   }
+  expect(() => configureSystemRuntime({ ...options, surface: 'opencode' })).toThrow(
+    'requires explicit --entry native'
+  );
+  // Explicit intent alone cannot admit the legacy runtime in this fixture.
+  expect(() =>
+    configureSystemRuntime({ ...options, surface: 'opencode', entry: 'native' })
+  ).toThrow('Install and verify an explicit --native-image');
   // Nothing was written. The refusal must precede any settings mutation, or a
   // half-registered surface could make init stop maintaining the real pack.
   expect(snapshotTree(user)).toEqual(before);

@@ -25,6 +25,11 @@ import { validateSystemPolicy, type SystemSurfacePolicy } from '../init/system-p
 import { readSystemSurfaceSettings } from '../init/system-surface-settings';
 import type { AgentSurface } from '../init/hook-packs/types';
 import type { HookEvent } from './types';
+import {
+  OPENCODE_PROJECT_TRANSPORT,
+  validateObservedOpenCodeNativeRegistration,
+  type OpenCodeRegistrationCaller,
+} from '../init/opencode-project-registration';
 
 export interface SelectionOptions {
   readonly io?: SelectionReadIo;
@@ -35,6 +40,8 @@ export interface SelectionOptions {
   readonly surface: AgentSurface;
   readonly event: HookEvent;
   readonly system: boolean;
+  /** Original native caller; never reconstructed from ambient engine roots. */
+  readonly caller?: OpenCodeRegistrationCaller;
 }
 type Tier = 'stock' | 'repo-policy' | 'machine-policy';
 export interface SelectedSource {
@@ -153,6 +160,33 @@ function verifiedProjectMachineEntry(command: string, options: SelectionOptions)
 function legacyRegistered(options: SelectionOptions): boolean {
   const io = options.io ?? liveSelectionReadIo;
   const { confined, isFile, readJson } = selectionReads(io);
+  if (options.surface === 'opencode') {
+    if (options.event !== 'stop')
+      throw new Error('OpenCode project-native transport supports only Stop');
+    if (!options.caller) throw new Error('OpenCode registration requires original native caller');
+    const settings = readSystemSurfaceSettings(options.home, 'opencode', io);
+    if (!settings?.enabled || settings.transport !== OPENCODE_PROJECT_TRANSPORT)
+      throw new Error('OpenCode project-native Stop is not explicitly configured');
+    const project = readJson(
+      confined(options.home, 'state/projects/' + sha(options.canonical) + '.json')
+    );
+    if (
+      !object(project) ||
+      project.version !== 1 ||
+      project.root !== options.canonical ||
+      !object(project.surfaces) ||
+      !object(project.surfaces.opencode)
+    )
+      throw new Error('OpenCode project requires explicit policy migration');
+    validateObservedOpenCodeNativeRegistration({
+      checkout: options.checkout,
+      caller: options.caller,
+      home: options.home,
+      runtimeDigest: options.runtimeDigest,
+      io,
+    });
+    return false;
+  }
   const vendors: Partial<Record<AgentSurface, string>> = {
     codex: '.codex',
     'claude-code': '.claude',
