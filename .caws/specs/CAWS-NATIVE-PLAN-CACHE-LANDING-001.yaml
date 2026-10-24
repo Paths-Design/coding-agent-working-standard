@@ -46,3 +46,8 @@ evidence:
     evidence_ref: "Main f66e60b9 contains exact4f3f6214 through reviewed composition456e4de2. Four source/tracker blobs match; all contributed paths admitted by full worktree review; all five gates and merge dry-run/apply exit0. Direct inspected composition/postmerge receipts: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/plan-cache-landing-01. --verify proves commit presence only; blob/provenance evidence inspected separately. Bounded source delivery only."
     recorded_at: "2026-10-24T17:45:55.613Z"
     commit_sha: f66e60b9496bc3a1b7f492cb531d753b0df3d216
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Exact2258630c source retained in landed implementation. Inspected actual-image03 three5973-hash/162328887-byte passes with zero reused planning, initial cancellation, changed manifest and empty-directory controls; empty-directory mutant Cargo101 with Ok versus expected refusal; restored bin187pass1ignored and lib443pass2ignored. E370 retains fresh10 native0/28737.663ms and actual marker/reader/consumed/cleanup, but identical-session oracle gap, pre-reservation capacity leak, deadline distribution and machine cutover remain open under parent/publication. Source review and artifacts support this bounded optimization, not full runtime acceptance."
+    recorded_at: "2026-10-24T17:46:04.977Z"
+    commit_sha: f66e60b9496bc3a1b7f492cb531d753b0df3d216
