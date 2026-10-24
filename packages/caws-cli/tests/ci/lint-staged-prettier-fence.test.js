@@ -30,23 +30,12 @@ const FORMATTED = '| a   | bb  |\n| --- | --- |\n| ccc | d   |\n';
 
 afterAll(() => cleanupAll());
 
-test('the staged runner rejects sparse, formatter, Git and filename counterexamples', () => {
-  const result = spawnSync(
-    process.execPath,
-    ['--test', path.join(REPO_ROOT, 'scripts/run-staged-checks.test.cjs')],
-    {
-      cwd: REPO_ROOT,
-      encoding: 'utf8',
-      timeout: 55000,
-    }
-  );
-  if (result.status !== 0) process.stderr.write(`${result.stdout || ''}\n${result.stderr || ''}`);
-  expect({ status: result.status, signal: result.signal, error: result.error?.message }).toEqual({
-    status: 0,
-    signal: null,
-    error: undefined,
+describe('staged runner counterexamples', () => {
+  require(path.join(REPO_ROOT, 'scripts/run-staged-checks.test.cjs')).registerTests({
+    test,
+    after: afterAll,
   });
-}, 60000);
+});
 
 function assertHookInvocation() {
   const hook = fs.readFileSync(path.join(REPO_ROOT, '.husky', 'pre-commit'), 'utf8');
