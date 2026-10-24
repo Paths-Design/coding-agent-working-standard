@@ -29,17 +29,13 @@ import { execFileSync } from 'child_process';
 import { adoptLegacyProject } from '../../store/legacy-adoption';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
-  installMachineRuntime,
-  rollbackMachineRuntime,
-  machineHome,
-} from '../../init/machine-adapters';
+import { installMachineRuntime, rollbackMachineRuntime } from '../../init/machine-adapters';
 import {
   configureSystemRuntime,
   migrateSystemProject,
   systemSurfaceEnabled,
   initializeOpenCodeSystemProject,
-  systemProjectPath,
+  assertOpenCodeInitMigration,
 } from '../../init/system-runtime';
 import { adoptMachineAdapter } from '../../init/machine-adapter-policy';
 import { resolveGitBinary } from '../../store/git-binary';
@@ -973,13 +969,8 @@ function runInitPlan(
   const detection = detectAgentHarness(repoRoot);
   const chosen = chooseSurface(opts.agentSurface, detection);
   const system = systemSurfaceEnabled(chosen.surface, opts.home);
-  if (
-    system &&
-    chosen.surface === 'opencode' &&
-    fs.existsSync(path.join(repoRoot, '.caws/hooks')) &&
-    !fs.existsSync(systemProjectPath(opts.home ?? machineHome(), repoRoot))
-  )
-    throw new Error('Legacy OpenCode hooks require reviewed adapters migrate --from policy');
+  if (system && chosen.surface === 'opencode')
+    assertOpenCodeInitMigration({ repo: repoRoot, ...(opts.home ? { home: opts.home } : {}) });
   const opencodeTransport =
     system && chosen.surface === 'opencode'
       ? initializeOpenCodeSystemProject({
@@ -1381,11 +1372,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   try {
     system = systemSurfaceEnabled(chosen.surface, opts.home);
     if (system && chosen.surface === 'opencode') {
-      if (
-        fs.existsSync(path.join(repoRoot, '.caws/hooks')) &&
-        !fs.existsSync(systemProjectPath(opts.home ?? machineHome(), repoRoot))
-      )
-        throw new Error('Legacy OpenCode hooks require reviewed adapters migrate --from policy');
+      assertOpenCodeInitMigration({ repo: repoRoot, ...(opts.home ? { home: opts.home } : {}) });
       const compatibility = planHookPackStep(repoRoot, 'opencode', opts, true);
       if (compatibility.actions.some((action) => action.action === 'refused'))
         throw new Error('OpenCode compatibility dispatchers require reconciliation');

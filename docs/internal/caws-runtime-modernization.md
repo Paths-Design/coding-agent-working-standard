@@ -8559,6 +8559,18 @@ Additional bounded evidence and unresolved dependencies:
   Root owns original native Stop joining and actual installed qualification; the
   worker's producer assignment is integrated, not parent-complete.
 
+- E324: Independent review of246254d7 identifies init's other-surface policy
+  bypass. Root reproduces it in opencode-other-surface-counterexample-01:
+  preview and apply both return0 for legacy OpenCode hooks with only a Codex
+  machine policy; both intended refusal assertions fail. Init preflight requires
+  and validates the existing OpenCode surface policy before either path can
+  proceed. opencode-other-surface-build-01 exits0; fixed-01 exits0 with32 cases,
+  including unchanged-tree refusals in both modes and successful repeat init
+  after reviewed OpenCode migration. Counterexample and corrected fixtures
+  retain status/output and plugin/policy bytes. The same-provider review's
+  remaining bounded source observations and transaction evidence are grounded;
+  no actual harness or parent acceptance is inferred.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.

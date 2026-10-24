@@ -510,3 +510,62 @@ test('ZCode system Stop remains refused rather than borrowing the OpenCode adapt
     'qualified JSON harness'
   );
 });
+
+test.each([true, false])(
+  'other-surface policy cannot bypass reviewed OpenCode migration in plan=%s',
+  (plan) => {
+    configure();
+    legacy();
+    write(systemProjectPath(home, repo), {
+      version: 1,
+      root: repo,
+      surfaces: { codex: { disabled: {}, extensions: {}, handlers: {}, libraries: {} } },
+    });
+    const before = tree(root),
+      out = [],
+      err = [];
+    const status = runInitCommand({
+      cwd: repo,
+      home,
+      agentSurface: 'opencode',
+      plan,
+      out: (line) => out.push(line),
+      err: (line) => err.push(line),
+    });
+    const after = tree(root);
+    if (artifactRoot)
+      write(path.join(root, 'other-surface-init-refusal.json'), {
+        plan,
+        status,
+        out,
+        err,
+        unchanged: JSON.stringify(after) === JSON.stringify(before),
+      });
+    expect(status).toBe(1);
+    expect(err.join('\n')).toContain(
+      'Legacy OpenCode hooks require reviewed adapters migrate --from policy'
+    );
+    expect(after).toEqual(before);
+  }
+);
+
+test('existing reviewed OpenCode policy permits repeated init without inferring another surface policy', () => {
+  configure();
+  legacy();
+  migrateSystemProject(reviewed());
+  const plugin = fs.readFileSync(path.join(repo, '.opencode/plugins/caws.ts'));
+  const policy = fs.readFileSync(systemProjectPath(home, repo));
+  const err = [];
+  expect(
+    runInitCommand({
+      cwd: repo,
+      home,
+      agentSurface: 'opencode',
+      out: () => {},
+      err: (line) => err.push(line),
+    })
+  ).toBe(0);
+  expect(err).toEqual([]);
+  expect(fs.readFileSync(path.join(repo, '.opencode/plugins/caws.ts'))).toEqual(plugin);
+  expect(fs.readFileSync(systemProjectPath(home, repo))).toEqual(policy);
+});

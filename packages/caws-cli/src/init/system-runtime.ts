@@ -98,6 +98,31 @@ export const systemProjectPath = (home: string, repo: string): string =>
     'state/projects',
     createHash('sha256').update(fs.realpathSync(repo)).digest('hex') + '.json'
   );
+/** Existing compatibility hooks need this surface's reviewed policy. A project
+ * record for another surface does not authorize inferring an OpenCode policy.
+ * Call before fresh init installs any compatibility files.
+ */
+export function assertOpenCodeInitMigration(options: Pick<SystemOptions, 'home' | 'repo'>): void {
+  const home = options.home ?? machineHome();
+  const repo = fs.realpathSync(options.repo ?? process.cwd());
+  if (!fs.existsSync(path.join(repo, '.caws/hooks'))) return;
+  const bytes = before(home, systemProjectPath(home, repo));
+  const project = bytes === null ? null : JSON.parse(bytes);
+  if (
+    project !== null &&
+    (project?.version !== 1 ||
+      project.root !== repo ||
+      !project.surfaces ||
+      typeof project.surfaces !== 'object' ||
+      Array.isArray(project.surfaces) ||
+      Object.keys(project).sort().join(',') !== 'root,surfaces,version')
+  )
+    throw new Error('Malformed system project settings');
+  if (project === null || !Object.hasOwn(project.surfaces, 'opencode'))
+    throw new Error('Legacy OpenCode hooks require reviewed adapters migrate --from policy');
+  validateSystemPolicy(repo, project.surfaces.opencode, requireRuntime(home));
+}
+
 function before(root: string, file: string): string | null {
   assertMachinePath(root, file);
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
