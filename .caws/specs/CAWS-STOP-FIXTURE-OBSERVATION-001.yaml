@@ -28,3 +28,12 @@ rollback:
   - 'Revert the isolated fixture budget commit through an owned governed lane if its contract is refuted'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "All four exact Stop component scenarios passed exit 0 in /private/tmp/caws-stop-output-repaired-20261024.log at committed 4ebb334aae0f06c206ed98842bef3b6e823fce11; retained mapping /private/tmp/caws-stop-output-repaired-20261024/executed-roots.jsonl. Inspected stop-advice root UlmU32: finite observer20000ms, status0/no signal/error, heartbeat and stop completed0, self stopped and peers active; stop-refusal root TwlSww: dispatch2 with only goal record and active self. Existing exact byte and peer-lease assertions passed. Original failed timeout and sandbox warning attempts preserved; no claim of full-suite timing, native execution or failed-attempt descendant cleanup."
+    recorded_at: "2026-10-24T22:06:05.588Z"
+    test_nodeid: "packages/caws-cli/tests/runtime/agent-stop-output.test.js::natural real-peer heartbeat advice survives the selected stock stop and native normalization exactly"
+    exit_code: 0
+    commit_sha: "4ebb334aae0f06c206ed98842bef3b6e823fce11"
+    test_verified_at: "4ebb334aae0f06c206ed98842bef3b6e823fce11"
