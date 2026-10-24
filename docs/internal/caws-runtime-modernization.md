@@ -43,7 +43,10 @@ parent spec and selected machine runtime remain unchanged. Local main merge
 admission and direct invalidation falsifier. The five landed paths equal
 reviewed candidate `5837aa104633640ce593a2ead8ea2198d46b7812`.
 `CAWS-NATIVE-STOCK-ADMISSION-LANDING-001` closes with A1–A3 recorded; its
-component acceptance does not qualify the production publication chain.
+component acceptance does not qualify the production publication chain. Local
+main merge `bbe4b3895c53348da4d2703a486b8cabe79cb7d8` contains the E343 source
+catalog and typed consumer. Its bounded landing spec closes with A1–A3 recorded;
+E348 retains the exact composition and postmerge observations.
 `native-runtime-modernization` remains the integration branch for owed work.
 Evidence entries identify their actual component branch or historical revision;
 ledger-only commits do not qualify different runtime bytes. The relative
@@ -9193,6 +9196,73 @@ Additional bounded evidence and unresolved dependencies:
   execution, integrated native publication/refusal, coherent main delivery and
   selected-machine cutover remain unverified. The selected runtime remains
   408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0.
+
+- E348: Reorientation preserves the lead transfer and full local-cutover goal;
+  component verification does not discharge the three integrated outcomes. Local
+  main merge bbe4b3895c53348da4d2703a486b8cabe79cb7d8 lands E343's ten
+  source/test blobs from d66b99e5 through candidate6c3a71bf. Root checks all436
+  retained TypeScript inputs and108 native inputs against the extracted lane,
+  the five actual captured-input hashes, subagent mapping and both byte-bearing
+  substitution refusals. These are retained executed checks, not fresh tests.
+  Same-provider read-only composition review identifies no actionable defect;
+  source inspection confirms production Stop remains inactive in this slice.
+  Doctor exits0 with0E/4W/5I and scoped gates pass over11 paths. Commit-hook
+  TypeScript lint is ignored; matching package-scoped retained lint supplies
+  lint evidence. The first postmerge inspector wrongly requires HEAD to equal
+  the merge commit; governed teardown adds a binding-only commit. Corrected
+  ancestry and exact-blob checks establish the landing, removed temporary lane
+  and unchanged parent spec/selected runtime hashes. A1/A2/A3 evidence and
+  closure are read back through events12864/12865/12868/12869.
+  CAWS-NATIVE-STOP-CATALOG-LANDING-001 closes only this source increment;
+  publication-integration/stop-source-catalog-landing-01 retains raw governance,
+  composition and postmerge artifacts.
+
+  Fresh production-source attempt02 retains the original120000ms builder
+  deadline with a180s outer watchdog. Preparation and CLI build exit0; native
+  build exits1 in120.481s without outer timeout or group residue. Its genuine
+  native-failed.json names otool-stable-entry and Native build timeout; Cargo
+  exits0 in97.650s. Attempt03 keeps the runtime30s and comparison60s deadlines
+  but declares a180000ms development-build allowance with240s outer custody,
+  within the existing builder schema. Its exact exported candidate57f79fb9
+  includes110 native files. Preparation, CLI build, native build and normal
+  package creation exit0. Native build completes in119.218s with seven recorded
+  steps exit0, reaped children and no observed group residue. The maintained
+  native-completed.json remains NOT_ADOPTED, requestDigest
+  ce3a23cf6915aa04c038f8519690e35bf63a915f5a9fcf51c9813ef4c4516907. Actual
+  caws-native SHA256 is
+  a3534817ce4390af4593ede53d9b4f15a441d7d3cf8ef20ffdc30700082fded3; the
+  fresh2710444-byte tarball has1341 members and SHA256
+  8ea3ecd342ef3226808b1354114c486cfb2d4684d96817f92349c0aeeb8d5865.
+  prefix-install03 exits1 EINTEGRITY because inherited root/hidden lock data
+  associates the old same-version tarball checksum with the relocated new path.
+  The failed prefix is preserved. A new isolated recovery preparation exits0;
+  its normal explicit offline npm install exits1 ENOTCACHED for the locked
+  js-yaml4.3.2 archive. No network fallback or integrity relaxation occurs. Root
+  owns recovery and fixed30 comparisons; html_profile accepts bounded external
+  packaging/cache repair. Completed build artifacts are reused only with their
+  retained exact source/request identities, not inferred adoption.
+
+  Root observes TZ, TZDIR and PYTHONINTMAXSTRDIGITS absent in this session's
+  shell tool environment. stop_profile.rs requires original TZ=UTC0 and absent
+  TZDIR; stop_execution.rs returns compatibility for unsupported profiles only
+  after revalidation. This source/environment observation does not inspect an
+  actual vendor application's environment. A successful controlled UTC0 probe
+  cannot establish real launch-calendar parity; silently forcing UTC would
+  change the contract. The positive/queued-mutation external probe is authored
+  and passes Node syntax checking, but has not executed. Source inspection of
+  render_owner/store.rs's BeforeReservation/error paths and render_owner.rs's
+  idle predicate finds that a pre-reservation rejection retains its registry
+  record; indefinite retention is an inference awaiting the real negative
+  scenario. Root retains this residency obligation, with stop_engine_join
+  assigned a bounded rejection/replay/custody design investigation. Releasing a
+  record without a durable rejected-original outcome could erase no-replay
+  protection. No repair, actual queued zero-open result, SQL CLOSED/publication/
+  ordinary reader/CONSUMED/release result, thirteen-session/four-repository run,
+  Python retirement, machine adoption or rollback is claimed by this entry. Raw
+  attempts live under fresh-stop-profile-production-02/03,
+  fresh-stop-profile-prefix-recovery-01 and their corresponding supervisor
+  directories; reorientation-ambient-observation-01.json binds the shell-only
+  observation. Root owns the integrated execution and continuing cutover goal.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
