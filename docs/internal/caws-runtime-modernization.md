@@ -9314,6 +9314,57 @@ Additional bounded evidence and unresolved dependencies:
   remain under publication-integration/fresh-stop-profile-prefix-recovery-02 and
   the corresponding supervisor directories.
 
+- E350: Reorientation reconciles all 168 available CAWS turn records with the
+  original Codex user messages, current source and retained runtime artifacts.
+  Lead ownership, full parity, incremental coherent landings and actual local
+  cutover remain required. Main 120cab3d contains catalog merge bbe4b389; the
+  selected machine digest remains
+  408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0.
+
+  Qualifier repair a6fd9b7c hashes independently canonicalized wrapper objects
+  after deep equality, preserving payload bytes, array order and negative zero;
+  unsupported values and sparse arrays refuse. The preceding relocated run
+  failed after all 30 parsed comparison values matched because wrapper key order
+  changed the hashes. That failure remains retained. Seven focused qualifier
+  checks and scoped lint exit 0. The maintained qualifier then exits0 in 6.371s;
+  its 31 child executions exit 0 and 30 comparisons produce profile aa600524.
+  Finalization exits0 in 6.907s, producing 5855 image members and descriptor
+  de51c847. Raw commands, outputs and result.json live under
+  publication-integration/ fresh-stop-profile-maintained-execution-01,
+  fresh-stop-profile-maintained-finalize-01 and
+  fresh-stop-profile-maintained-qualifier-01/run. The image contains frozen
+  candidate 57f79fb9, predating the original Render connection. Its result
+  records controlled-components and NOT_ADOPTED; it does not prove production
+  dispatch.
+
+  Candidate c1f20476 connects original-process Git/calendar capture to the late
+  Render transport and retains cleanup ownership outside the temporary wrapper.
+  Native Stop eligibility requires that owner. The four focused owner checks
+  exit 0 in 1.779s; real native-main positive and hostile protocol-fixture
+  checks exit 0 in 94.958s and 73.815s. Feature-disabled compilation exits0 in
+  1.340s. Each supervisor records unchanged source/input pins and no observed
+  group residue. The positive fixture emits original-context-complete, records
+  originalRenderCaptured=true before request encoding, and retains exactly two
+  original-context Git queries before and after Node execution. Its dispatch is
+  v1 with nativeStop unsupported: these artifacts establish early capture and
+  context replay, not SQL/publication. Hostile artifacts retain identity,
+  correlation, overlap, freshness and post-Ready refusals without retry. Earlier
+  LF-fixture and obsolete transport-advertisement assertion failures remain
+  retained; neither fix relaxes production validation. Raw artifacts live under
+  publication-integration/original-render-join-{unit-01,unit-02,main-01,
+  main-positive-02,main-hostile-02,feature-off-01}.
+
+  Root owns the fresh committed-image execution and coherent landing.
+  html_profile owns the external fresh04 recipe; ambient_stop_domain supplies
+  probe02 with explicit source-revision provenance and originalRenderCaptured
+  assertion. Neither recipe has executed the production scenario. The next
+  decisive check remains original capture through prefix, SQL CLOSED, Render
+  binding, semantic reader, durable CONSUMED and release, followed by queued
+  selection rejection. Ambient absent-TZ qualification, pre-reservation
+  rejection reclamation, actual cleanup/no-replay,
+  thirteen-session/four-repository load, Python retirement, supported harness
+  adoption and rollback remain open. No parent AC is advanced.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
