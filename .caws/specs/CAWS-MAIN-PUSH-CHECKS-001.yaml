@@ -1,9 +1,10 @@
 id: CAWS-MAIN-PUSH-CHECKS-001
 title: 'Repair required main push verification without weakening semantic checks'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: main-push-checks
 created_at: '2026-10-24T21:10:15.461Z'
-updated_at: '2026-10-24T21:10:15.461Z'
+updated_at: '2026-10-24T21:10:41.128Z'
 created_by_session: '01a16c43-8af5-79e3-9535-9df94edfc037'
 blast_radius:
   modules:
