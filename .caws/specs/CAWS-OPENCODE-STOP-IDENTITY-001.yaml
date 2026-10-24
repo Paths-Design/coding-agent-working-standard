@@ -17,8 +17,8 @@ scope:
     - 'packages/caws-cli/tests/hooks/opencode-plugin-payload-cwd.test.js'
   out: []
 invariants:
-  - 'A session.idle event dispatches Stop only for its own declared nonempty string properties.sessionID; missing identity never borrows prior state.'
   - 'Project root, session identity, missing-core notice and pending context are private to each plugin instance; dispatcher transport and other event contracts remain unchanged.'
+  - 'Created, idle and compacted lifecycle dispatches use only an unambiguous identity on their own event: created properties.info.id and idle/compacted properties.sessionID, retaining explicit session-named legacy aliases; missing invalid or conflicting identities never borrow prior state.'
 acceptance:
   - id: A1
     given: 'one plugin instance has observed two sessions'
