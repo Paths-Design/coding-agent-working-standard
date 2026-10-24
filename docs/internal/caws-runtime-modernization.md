@@ -38,7 +38,12 @@ remote publication, package qualification and runtime acceptance. Local main
 merge `267f85832ea64089adb51c6355a48cf920728608` contains the E334–E340 native
 selection transport, bounded generation discovery and explicit path identity
 slice. `CAWS-NATIVE-SELECTION-LANDING-001` closes with A1–A3 recorded; the full
-parent spec and selected machine runtime remain unchanged.
+parent spec and selected machine runtime remain unchanged. Local main merge
+`56f917d8af052dbc7f473a04c26a9080ff18c5eb` contains the E341/E342 stock
+admission and direct invalidation falsifier. The five landed paths equal
+reviewed candidate `5837aa104633640ce593a2ead8ea2198d46b7812`.
+`CAWS-NATIVE-STOCK-ADMISSION-LANDING-001` closes with A1–A3 recorded; its
+component acceptance does not qualify the production publication chain.
 `native-runtime-modernization` remains the integration branch for owed work.
 Evidence entries identify their actual component branch or historical revision;
 ledger-only commits do not qualify different runtime bytes. The relative
@@ -8996,7 +9001,12 @@ Additional bounded evidence and unresolved dependencies:
   compilation is not SQL execution. The direct constructor and one revalidation
   mutant are exercised, not a complete mutation score or deterministic
   main-level post-seal invalidation. The ordinary native publication chain
-  remains owed.
+  remains owed. Local main merge56f917d8 lands the reviewed five-path slice.
+  stock-admission-landing-01 retains scoped gates exit0, doctor exit0 with
+  0E/4W/5I, the merge and postmerge path/ancestry checks. A1/A2 recording is
+  read back in events12803/12804; A3 records the postmerge observation before
+  the bounded landing spec closes. Parent acceptance and selected-machine state
+  hashes remain unchanged; the temporary landing lane is removed.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -9106,7 +9116,7 @@ complete its parent outcome.
 
 | Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                               | Next decisive check                                                                                                                                                                                                                                                                                               |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                  | E334–E340 selection source is on local main267f8583. Next qualify the production-connected image, actual harness delivery and rollback; E340 establishes only native selection traversal plus compatibility completion.                                                                                           |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                  | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.                                                                                |
 | Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E341/E342 execute stock admission and its direct invalidation falsifier in the owned publication lane; html_profile owns the native source-catalog proposal, with root applying and verifying it | Connect separately qualified SQL/renderer profiles, original capture and completed prefix to the maintained store port; bind the source catalog to native captured inputs, preserve the original deadline and revalidate after queueing before reservation/writer/SQL through ordinary publication/reader/release |
 | Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                    | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                                             |
 
