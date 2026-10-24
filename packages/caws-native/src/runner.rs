@@ -334,6 +334,7 @@ pub struct Session {
     cache_control_credit: usize,
     publication_control_credit: usize,
     context_git_control_credit: usize,
+    selection_control_credit: usize,
     #[cfg(feature = "sqlite-store")]
     store_control_credit: usize,
     out_done: bool,
@@ -502,6 +503,7 @@ impl Session {
             cache_control_credit: 0,
             publication_control_credit: 0,
             context_git_control_credit: 0,
+            selection_control_credit: 0,
             #[cfg(feature = "sqlite-store")]
             store_control_credit: 0,
             out_done: false,
@@ -757,6 +759,119 @@ impl Session {
         }
     }
 
+    /// Respond using the actual pre-Node query observations. This path has no
+    /// process-spawn operation and cannot upgrade a failed optional candidate.
+    pub fn replay_context_git(
+        &mut self,
+        replay: &mut crate::protocol::CapturedContext,
+        frame: &[u8],
+        deadline: Instant,
+    ) -> Result<(), String> {
+        crate::cancellation::check()?;
+        let credit = self
+            .context_git_control_credit
+            .checked_add(frame.len() + 1)
+            .ok_or("context Git control credit overflow")?;
+        if credit > caws_native::context_git::MAX_EXTRA_ENGINE_STDOUT_BYTES {
+            return Err("context Git control credit exceeds two requests".into());
+        }
+        self.context_git_control_credit = credit;
+        if !self.buffered.is_empty() {
+            return Err("engine output overlapped captured context request".into());
+        }
+        let bytes = replay.response(frame)?;
+        self.pump_with_interests(None, deadline, &[], 0)?;
+        if !self.buffered.is_empty() || self.out_done {
+            return Err("engine output overlapped captured context request".into());
+        }
+        let mut offset = 0;
+        while offset < bytes.len() {
+            offset += self.pump(Some(&bytes[offset..]), deadline)?;
+            if offset < bytes.len() && (!self.buffered.is_empty() || self.out_done) {
+                return Err("engine output overlapped partial captured context result".into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Serial pre-Ready selection exchange on the existing sole reader. Only a
+    /// fully correlated and actually captured request receives bounded credit.
+    pub fn run_selection_observation(
+        &mut self,
+        owner: &mut crate::selection_observation::SelectionObservationOwner<'_>,
+        request: &crate::protocol::Request,
+        frame: &[u8],
+        deadline: Instant,
+    ) -> Result<(), String> {
+        crate::cancellation::check()?;
+        if !self.buffered.is_empty() {
+            return Err("engine output overlapped selection observation request".into());
+        }
+        let inner = request.selection_request(frame)?;
+        let sequence = inner.sequence;
+        let snapshot_id = inner.snapshot_id.clone();
+        let encoded = serde_json::to_vec(&serde_json::json!({"snapshotId":inner.snapshot_id,
+            "sequence":inner.sequence,"operation":inner.operation}))
+        .map_err(|e| e.to_string())?;
+        let mut reply = owner.capture_json(&encoded, crate::cancellation::check)?;
+        let credit = self
+            .selection_control_credit
+            .checked_add(frame.len() + 1)
+            .ok_or("selection control credit overflow")?;
+        if credit > request.selection_control_limit()? {
+            return Err("selection control credit exceeds native observation bound".into());
+        }
+        self.selection_control_credit = credit;
+        self.pump_with_interests(None, deadline, &[], 0)?;
+        if !self.buffered.is_empty() || self.out_done {
+            return Err("engine output overlapped selection observation request".into());
+        }
+        let byte_len = reply.byte_len();
+        let sha256 = reply.sha256(crate::cancellation::check)?;
+        let header = serde_json::json!({"schema":crate::protocol::SELECTION_OBSERVATION_RESULT,
+            "id":request.id,"runtimeDigest":request.runtime_digest,"snapshotId":snapshot_id,
+            "sequence":sequence,"byteLength":byte_len,"sha256":sha256});
+        self.send_selection_frame(&header, false, deadline)?;
+        let mut offset = 0usize;
+        while let Some(chunk) = reply.next_chunk(64 * 1024, crate::cancellation::check)? {
+            use base64::Engine as _;
+            let count = chunk.len();
+            let chunk_frame = serde_json::json!({"schema":crate::protocol::SELECTION_OBSERVATION_CHUNK,
+                "id":request.id,"runtimeDigest":request.runtime_digest,"snapshotId":snapshot_id,
+                "sequence":sequence,"offset":offset,
+                "base64":base64::engine::general_purpose::STANDARD.encode(chunk)});
+            offset = offset
+                .checked_add(count)
+                .ok_or("selection response offset overflow")?;
+            self.send_selection_frame(&chunk_frame, offset == byte_len, deadline)?;
+        }
+        if offset != byte_len {
+            return Err("selection response was not exhausted".into());
+        }
+        Ok(())
+    }
+    fn send_selection_frame(
+        &mut self,
+        frame: &serde_json::Value,
+        final_frame: bool,
+        deadline: Instant,
+    ) -> Result<(), String> {
+        let mut bytes = serde_json::to_vec(frame).map_err(|e| e.to_string())?;
+        bytes.push(b'\n');
+        let mut offset = 0;
+        while offset < bytes.len() {
+            offset += self.pump(Some(&bytes[offset..]), deadline)?;
+            // A legitimate next request may arrive after the last chunk's final
+            // write. Preserve that queued frame for the ordinary phase loop.
+            if (!final_frame || offset < bytes.len())
+                && (!self.buffered.is_empty() || self.out_done)
+            {
+                return Err("engine output overlapped partial selection observation result".into());
+            }
+        }
+        Ok(())
+    }
+
     /// Credit only exact, already validated one-shot cache control bytes.
     /// The ordinary proposal frame and unclassified output budgets do not grow.
     pub fn credit_session_cache_control(&mut self, bytes: usize) -> Result<(), String> {
@@ -776,6 +891,7 @@ impl Session {
         {
             self.cache_control_credit
                 + self.context_git_control_credit
+                + self.selection_control_credit
                 + self.publication_control_credit
                 + self.store_control_credit
         }
@@ -783,6 +899,7 @@ impl Session {
         {
             self.cache_control_credit
                 + self.context_git_control_credit
+                + self.selection_control_credit
                 + self.publication_control_credit
         }
     }
@@ -1413,5 +1530,136 @@ mod tests {
             "request deadline expired"
         );
         assert_eq!(session.examined_bytes, 0);
+    }
+}
+
+/// Optional original observation, never publication eligibility. A failed
+/// preparation remains failed while the existing compatibility route may run.
+/// Keeping this owner through native output/fallback also keeps remote custody.
+pub struct OriginalStopPreparation<'deadline> {
+    pub generation: Option<crate::native_generation::GenerationReceipt>,
+    pub original: Option<caws_native::session_cache_wire::OriginalStopCapture<'deadline>>,
+    pub failure: Option<Box<caws_native::session_cache_wire::OriginalStopCaptureFailure>>,
+    pub refusal: Option<String>,
+}
+impl<'deadline> OriginalStopPreparation<'deadline> {
+    pub fn candidate(config: &Config) -> bool {
+        cfg!(target_os = "macos")
+            && config.configuration == "system"
+            && config.surface == "opencode"
+            && config.event == "stop"
+    }
+    pub fn capture(
+        config: &Config,
+        request: &crate::protocol::Request,
+        deadline: &'deadline caws_native::monotonic_deadline::MonotonicDeadline,
+        mut phase: impl FnMut(&'static str),
+    ) -> Self {
+        let mut prepared = Self {
+            generation: None,
+            original: None,
+            failure: None,
+            refusal: None,
+        };
+        if !Self::candidate(config) {
+            return prepared;
+        }
+        let environment = request.caller_environment();
+        let home = match environment.get("CAWS_HOME").filter(|v| !v.is_empty()) {
+            Some(value) => std::path::PathBuf::from(value),
+            None => match environment.get("HOME") {
+                Some(value) if !value.is_empty() => std::path::PathBuf::from(value).join(".caws"),
+                _ => {
+                    prepared.refusal = Some("original machine home unavailable".into());
+                    return prepared;
+                }
+            },
+        };
+        if !home.is_absolute() {
+            prepared.refusal = Some("original machine home must be absolute".into());
+            return prepared;
+        }
+        phase("generation-capture");
+        let generation = match crate::native_generation::GenerationReceipt::capture(
+            &home,
+            config,
+            deadline.expires(),
+            || {
+                crate::cancellation::check()?;
+                deadline.check().map_err(|e| e.to_string())
+            },
+        ) {
+            Ok(value) => value,
+            Err(error) => {
+                prepared.refusal = Some(error);
+                return prepared;
+            }
+        };
+        phase("original-executor");
+        let executor = match generation.selected_native_executor(deadline.expires(), || {
+            crate::cancellation::check()?;
+            deadline.check().map_err(|e| e.to_string())
+        }) {
+            Ok(value) => value,
+            Err(error) => {
+                prepared.generation = Some(generation);
+                prepared.refusal = Some(error);
+                return prepared;
+            }
+        };
+        phase("original-context-capture");
+        let result = caws_native::session_cache_wire::OriginalStopCapture::capture(
+            request.original_stop_input(),
+            &executor,
+            deadline,
+            crate::cancellation::check,
+        );
+        prepared.generation = Some(generation);
+        match result {
+            Ok(original) => prepared.original = Some(original),
+            Err(error) => {
+                prepared.refusal = Some(error.to_string());
+                prepared.failure = Some(Box::new(error));
+            }
+        }
+        prepared
+    }
+    pub fn cleanup_settled(&self) -> bool {
+        self.failure.as_ref().is_none_or(|e| e.cleanup_settled())
+    }
+    pub fn retry_cleanup(&mut self) -> Result<(), String> {
+        self.failure.as_mut().map_or(Ok(()), |e| e.retry_cleanup())
+    }
+}
+
+#[cfg(test)]
+mod original_stop_preparation_tests {
+    use super::*;
+    #[test]
+    fn optional_candidate_domain_excludes_custom_project_and_unsupported_surfaces() {
+        let mut config = Config {
+            engine: "/engine".into(),
+            node: "/node".into(),
+            surface: "opencode".into(),
+            event: "stop".into(),
+            configuration: "system".into(),
+            digest: "a".repeat(64),
+            timeout: Duration::from_secs(10),
+        };
+        assert_eq!(
+            OriginalStopPreparation::candidate(&config),
+            cfg!(target_os = "macos")
+        );
+        for (surface, event, configuration) in [
+            ("zcode", "stop", "system"),
+            ("opencode", "session_start", "system"),
+            ("opencode", "stop", "project"),
+            ("codex", "stop", "system"),
+        ] {
+            config.surface = surface.into();
+            config.event = event.into();
+            config.configuration = configuration.into();
+            assert!(!OriginalStopPreparation::candidate(&config));
+        }
     }
 }

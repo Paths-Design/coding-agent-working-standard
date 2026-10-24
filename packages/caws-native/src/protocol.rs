@@ -42,6 +42,37 @@ impl Caller {
     }
 }
 
+pub const SELECTION_OBSERVATION_CAPABILITY: &str = "caws.runtime.selection-observation.v1";
+pub const SELECTION_OBSERVATION_REQUEST: &str = "caws.runtime.selection-observation.request.v1";
+pub const SELECTION_OBSERVATION_RESULT: &str = "caws.runtime.selection-observation.result.v1";
+pub const SELECTION_OBSERVATION_CHUNK: &str = "caws.runtime.selection-observation.chunk.v1";
+pub const MAX_SELECTION_REQUEST: usize = 16 * 1024 + 2048;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SelectionObservationLimits {
+    maximum_observations: usize,
+    maximum_bytes: usize,
+    maximum_path_bytes: usize,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SelectionObservationCapability {
+    schema: &'static str,
+    snapshot_id: String,
+    limits: SelectionObservationLimits,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SelectionObservationFrame {
+    schema: String,
+    id: String,
+    runtime_digest: String,
+    snapshot_id: String,
+    sequence: usize,
+    operation: crate::selection_observation::Operation,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Request {
@@ -52,6 +83,8 @@ pub struct Request {
     event: String,
     configuration: String,
     session_cache: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selection_observation: Option<SelectionObservationCapability>,
     #[cfg(target_os = "macos")]
     session_end_prefix: &'static str,
     #[cfg(target_os = "macos")]
@@ -67,6 +100,113 @@ pub struct Request {
 }
 
 impl Request {
+    /// This advertises observation transport only. The native caller supplies a
+    /// successfully constructed owner; no engine field grants this lifecycle.
+    pub fn advertise_selection_observation(
+        &mut self,
+        snapshot_id: &str,
+        limits: crate::selection_observation::Limits,
+    ) {
+        self.selection_observation = Some(SelectionObservationCapability {
+            schema: SELECTION_OBSERVATION_CAPABILITY,
+            snapshot_id: snapshot_id.into(),
+            limits: SelectionObservationLimits {
+                maximum_observations: limits.maximum_observations,
+                maximum_bytes: limits.maximum_bytes,
+                maximum_path_bytes: limits.maximum_path_bytes,
+            },
+        });
+    }
+    pub fn selection_request(
+        &self,
+        bytes: &[u8],
+    ) -> Result<crate::selection_observation::SelectionObservationRequest, String> {
+        let capability = self
+            .selection_observation
+            .as_ref()
+            .ok_or("selection observation was not advertised")?;
+        if bytes.len() > MAX_SELECTION_REQUEST {
+            return Err("selection request exceeds native frame bound".into());
+        }
+        let row: SelectionObservationFrame = serde_json::from_slice(bytes)
+            .map_err(|e| format!("invalid selection observation frame: {e}"))?;
+        identity(&row.id, &row.runtime_digest, self)?;
+        if row.schema != SELECTION_OBSERVATION_REQUEST
+            || row.snapshot_id != capability.snapshot_id
+            || row.sequence == 0
+            || row.sequence > capability.limits.maximum_observations
+        {
+            return Err("selection observation correlation mismatch".into());
+        }
+        Ok(crate::selection_observation::SelectionObservationRequest {
+            snapshot_id: row.snapshot_id,
+            sequence: row.sequence,
+            operation: row.operation,
+        })
+    }
+    pub fn selection_control_limit(&self) -> Result<usize, String> {
+        let capability = self
+            .selection_observation
+            .as_ref()
+            .ok_or("selection observation was not advertised")?;
+        capability
+            .limits
+            .maximum_observations
+            .checked_mul(MAX_SELECTION_REQUEST + 1)
+            .ok_or_else(|| "selection control byte bound overflow".into())
+    }
+    /// Native-original root inputs only. Empty optional XDG/OpenCode values
+    /// retain existing loader default semantics; malformed present roots cannot
+    /// expand observation access. No engine request contributes an allowed root.
+    pub fn original_selection_roots(
+        &self,
+        original: &caws_native::session_cache_wire::OriginalStopCapture<'_>,
+    ) -> Result<Vec<std::path::PathBuf>, String> {
+        use std::path::{Component, PathBuf};
+        if original.id() != self.id || original.runtime_digest() != self.runtime_digest {
+            return Err("original selection capture identity mismatch".into());
+        }
+        let environment = original.caller_environment();
+        let user = environment
+            .get("HOME")
+            .filter(|v| !v.is_empty())
+            .ok_or("original selection HOME unavailable")?;
+        let machine = environment
+            .get("CAWS_HOME")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(user).join(".caws"));
+        let project = original.observed_project();
+        let mut roots = vec![
+            machine,
+            project.checkout.clone(),
+            project.canonical_root.clone(),
+            PathBuf::from(user),
+        ];
+        for name in ["XDG_CONFIG_HOME", "OPENCODE_CONFIG_DIR"] {
+            if let Some(value) = environment.get(name).filter(|v| !v.is_empty()) {
+                roots.push(PathBuf::from(value));
+            }
+        }
+        for root in &roots {
+            let value = root
+                .to_str()
+                .ok_or("original selection root is not UTF-8")?;
+            if !root.is_absolute()
+                || value.len() > 16 * 1024
+                || value.contains('\0')
+                || root
+                    .components()
+                    .any(|part| matches!(part, Component::ParentDir | Component::CurDir))
+            {
+                return Err("original selection roots must be absolute and normalized".into());
+            }
+        }
+        roots.sort();
+        roots.dedup();
+        Ok(roots)
+    }
+
     pub fn session_invocation<'a>(
         &'a self,
         ready: &'a Ready,
@@ -187,6 +327,18 @@ impl Request {
         })
         .map_err(|error| error.to_string())
     }
+    pub fn original_stop_input(
+        &self,
+    ) -> caws_native::session_cache_wire::OriginalStopCaptureInput<'_> {
+        caws_native::session_cache_wire::OriginalStopCaptureInput {
+            id: &self.id,
+            runtime_digest: &self.runtime_digest,
+            surface: &self.surface,
+            caller_cwd: &self.caller.cwd,
+            caller_environment: &self.caller.environment,
+            original_payload: &self.payload,
+        }
+    }
     pub fn caller_environment(&self) -> &BTreeMap<String, String> {
         &self.caller.environment
     }
@@ -217,6 +369,7 @@ impl Request {
             event: config.event.clone(),
             configuration: config.configuration.clone(),
             session_cache: caws_native::session_cache_wire::CAPABILITY,
+            selection_observation: None,
             #[cfg(target_os = "macos")]
             session_end_prefix: caws_native::session_cache_wire::PREFIX_CAPABILITY,
             #[cfg(target_os = "macos")]
@@ -291,6 +444,7 @@ pub struct Ready {
 pub enum EngineFrame {
     Ready(Ready),
     ContextGitRequest(Vec<u8>),
+    SelectionObservationRequest(Vec<u8>),
     SessionCacheRequest(Vec<u8>),
     SessionEndPrefixRequest(Vec<u8>),
     SessionSealRequest(Vec<u8>),
@@ -398,6 +552,14 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
     }
     let header: Discriminator =
         serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
+    if header.schema == SELECTION_OBSERVATION_REQUEST {
+        // Classification grants no read or extra control credit. The advertised
+        // native owner validates identity, operation and sequence before either.
+        if bytes.len() > MAX_SELECTION_REQUEST {
+            return Err("selection request exceeds native frame bound".into());
+        }
+        return Ok(EngineFrame::SelectionObservationRequest(bytes.to_vec()));
+    }
     if header.schema == caws_native::session_cache_wire::PREFIX_REQUEST_SCHEMA {
         if bytes.len() > caws_native::session_cache_wire::MAX_REQUEST_BYTES {
             return Err("session prefix request exceeds frame budget".into());
@@ -603,6 +765,7 @@ mod tests {
             event: "pre_tool_use".into(),
             configuration: "system".into(),
             session_cache: caws_native::session_cache_wire::CAPABILITY,
+            selection_observation: None,
             #[cfg(target_os = "macos")]
             session_end_prefix: caws_native::session_cache_wire::PREFIX_CAPABILITY,
             #[cfg(target_os = "macos")]
@@ -619,6 +782,54 @@ mod tests {
             deadline_epoch_ms: 1,
             payload: RawValue::from_string("{}".into()).unwrap(),
             input_json: "{}".into(),
+        }
+    }
+    #[test]
+    fn selection_transport_is_optional_and_exactly_correlated() {
+        let mut request = fixture_request();
+        assert!(
+            serde_json::to_value(&request)
+                .unwrap()
+                .get("selectionObservation")
+                .is_none()
+        );
+        let frame = serde_json::json!({"schema":SELECTION_OBSERVATION_REQUEST,"id":request.id,
+            "runtimeDigest":request.runtime_digest,"snapshotId":"native-snapshot","sequence":1,
+            "operation":{"kind":"read","path":"/original/config.json"}});
+        let bytes = serde_json::to_vec(&frame).unwrap();
+        assert!(
+            request
+                .selection_request(&bytes)
+                .unwrap_err()
+                .contains("not advertised")
+        );
+        request.advertise_selection_observation(
+            "native-snapshot",
+            crate::selection_observation::Limits::default(),
+        );
+        let captured = request.selection_request(&bytes).unwrap();
+        assert_eq!(captured.snapshot_id, "native-snapshot");
+        assert_eq!(captured.sequence, 1);
+        assert_eq!(captured.operation.path, "/original/config.json");
+        match validate_frame(&bytes, &request).unwrap() {
+            EngineFrame::SelectionObservationRequest(retained) => assert_eq!(retained, bytes),
+            _ => panic!("selection frame not retained"),
+        }
+        for (name, value) in [
+            ("id", serde_json::json!("other")),
+            ("runtimeDigest", serde_json::json!("b".repeat(64))),
+            ("snapshotId", serde_json::json!("engine-selected")),
+            ("sequence", serde_json::json!(0)),
+            ("unknown", serde_json::json!(true)),
+        ] {
+            let mut wrong = frame.clone();
+            wrong[name] = value;
+            assert!(
+                request
+                    .selection_request(&serde_json::to_vec(&wrong).unwrap())
+                    .is_err(),
+                "{name}"
+            );
         }
     }
     #[test]
@@ -791,5 +1002,257 @@ mod tests {
         assert!(decode(&frame).is_err());
         frame.as_object_mut().unwrap().remove("serviceOffer");
         assert!(decode(&frame).is_err());
+    }
+}
+
+/// Nonspawning replay of the two actual original custodian query observations.
+/// This is context data for the maintained engine, never selection authority.
+/// No externally decoded result or caller-provided observation constructs it.
+pub struct CapturedContext {
+    id: String,
+    runtime_digest: String,
+    executable: std::path::PathBuf,
+    cwds: [std::path::PathBuf; 2],
+    bytes: [caws_native::invocation_project::QueryBytes; 2],
+    cleanup: [caws_native::invocation_project::QueryCleanup; 2],
+    token: Option<String>,
+    next: usize,
+    ready: bool,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CapturedContextRequest {
+    schema: String,
+    id: String,
+    runtime_digest: String,
+    token: String,
+    ordinal: u8,
+    operation: caws_native::context_git::Operation,
+    executable: std::path::PathBuf,
+    cwd: std::path::PathBuf,
+}
+impl CapturedContext {
+    pub fn new(original: &caws_native::session_cache_wire::OriginalStopCapture<'_>) -> Self {
+        let project = original.observed_project();
+        Self {
+            id: original.id().into(),
+            runtime_digest: original.runtime_digest().into(),
+            executable: project.executable.path.clone(),
+            cwds: original.query_cwds().clone(),
+            bytes: project.query_bytes.clone(),
+            cleanup: project.queries.clone(),
+            token: None,
+            next: 0,
+            ready: false,
+        }
+    }
+    pub fn mark_ready(&mut self) {
+        self.ready = true;
+    }
+    pub fn response(&mut self, frame: &[u8]) -> Result<Vec<u8>, String> {
+        let result = self.response_inner(frame);
+        if result.is_err() {
+            self.next = 2;
+        }
+        result
+    }
+    fn response_inner(&mut self, frame: &[u8]) -> Result<Vec<u8>, String> {
+        if self.ready || self.next >= 2 {
+            return Err("captured context replay after Ready or consumed".into());
+        }
+        // Consume failed attempts too: malformed context cannot reset the owner.
+        let index = self.next;
+        self.next += 1;
+        if frame.len() > caws_native::context_git::MAX_REQUEST {
+            return Err("captured context request exceeds bound".into());
+        }
+        let row: CapturedContextRequest =
+            serde_json::from_slice(frame).map_err(|e| format!("captured context request: {e}"))?;
+        let operation = if index == 0 {
+            caws_native::context_git::Operation::Checkout
+        } else {
+            caws_native::context_git::Operation::CommonDir
+        };
+        if row.schema != "caws.runtime.context-git.request.v1"
+            || row.id != self.id
+            || row.runtime_digest != self.runtime_digest
+            || !crate::cli::valid_digest(&row.token)
+            || row.ordinal != index as u8 + 1
+            || row.operation != operation
+            || row.executable != self.executable
+            || row.cwd != self.cwds[index]
+            || self.token.as_ref().is_some_and(|v| v != &row.token)
+        {
+            // A failed first request must not leave a valid second slot.
+            self.next = 2;
+            return Err("captured context request differs from original query".into());
+        }
+        self.token.get_or_insert_with(|| row.token.clone());
+        let cleanup = &self.cleanup[index];
+        let exit = cleanup.reaped.ok_or("captured context lacks actual reap")?;
+        if !cleanup.settled()
+            || !cleanup.exit_observed
+            || !exit.success
+            || exit.code != Some(0)
+            || exit.signal.is_some()
+            || !cleanup.pipes.stdout_eof
+            || !cleanup.pipes.stderr_eof
+            || cleanup.ownership_retained
+        {
+            self.next = 2;
+            return Err("captured context lacks settled actual query".into());
+        }
+        // CapturedProject is constructed only after original group settlement;
+        // query EOF/reap and bytes below are the actual retained observations.
+        let result = serde_json::json!({"schema":"caws.runtime.context-git.result.v1","id":self.id,"runtimeDigest":self.runtime_digest,"token":row.token,"ordinal":row.ordinal,"operation":row.operation,"status":"exited","exitCode":exit.code,"signal":exit.signal,"stdout":STANDARD.encode(&self.bytes[index].stdout),"stderr":STANDARD.encode(&self.bytes[index].stderr),"cleanup":{"groupSettled":true,"stdoutEof":cleanup.pipes.stdout_eof,"stderrEof":cleanup.pipes.stderr_eof,"reaped":cleanup.reaped.is_some()},"diagnostic":""});
+        let mut encoded = serde_json::to_vec(&result).map_err(|e| e.to_string())?;
+        if encoded.len() > caws_native::context_git::MAX_RESULT {
+            self.next = 2;
+            return Err("captured context result exceeds bound".into());
+        }
+        encoded.push(b'\n');
+        Ok(encoded)
+    }
+}
+
+#[cfg(test)]
+mod captured_context_tests {
+    use super::*;
+    use caws_native::invocation_project::{
+        ExitObservation, PipeObservation, QueryBytes, QueryCleanup,
+    };
+    fn fixture() -> CapturedContext {
+        let cleanup = QueryCleanup {
+            pid: Some(99),
+            exit_observed: true,
+            pipes: PipeObservation {
+                stdout_eof: true,
+                stderr_eof: true,
+                ..Default::default()
+            },
+            reaped: Some(ExitObservation {
+                success: true,
+                code: Some(0),
+                signal: None,
+                core_dumped: false,
+            }),
+            ..Default::default()
+        };
+        // Wire-state fixture only; no fake OriginalStopCapture is constructed.
+        CapturedContext {
+            id: "original".into(),
+            runtime_digest: "a".repeat(64),
+            executable: "/chosen/git".into(),
+            cwds: ["/caller/nested".into(), "/checkout-spelling".into()],
+            bytes: [
+                QueryBytes {
+                    stdout: b"/checkout-spelling\n".to_vec(),
+                    stderr: b"original warning\n".to_vec(),
+                },
+                QueryBytes {
+                    stdout: b"/canonical/.git\n".to_vec(),
+                    stderr: Vec::new(),
+                },
+            ],
+            cleanup: [cleanup.clone(), cleanup],
+            token: None,
+            next: 0,
+            ready: false,
+        }
+    }
+    fn request(index: usize) -> serde_json::Value {
+        serde_json::json!({"schema":"caws.runtime.context-git.request.v1","id":"original","runtimeDigest":"a".repeat(64),"token":"b".repeat(64),"ordinal":index+1,"operation":if index==0{"checkout"}else{"commonDir"},"executable":"/chosen/git","cwd":if index==0{"/caller/nested"}else{"/checkout-spelling"}})
+    }
+    fn encode(value: &serde_json::Value) -> Vec<u8> {
+        serde_json::to_vec(value).unwrap()
+    }
+    #[test]
+    fn cached_frames_preserve_actual_bytes_cwd_order_and_terminal_consumption() {
+        let mut replay = fixture();
+        for index in 0..2 {
+            let response = replay.response(&encode(&request(index))).unwrap();
+            assert_eq!(response.last(), Some(&b'\n'));
+            let response: serde_json::Value = serde_json::from_slice(&response).unwrap();
+            assert_eq!(response["ordinal"], index + 1);
+            assert_eq!(response["exitCode"], 0);
+            assert!(response["signal"].is_null());
+            assert_eq!(
+                STANDARD
+                    .decode(response["stdout"].as_str().unwrap())
+                    .unwrap(),
+                replay.bytes[index].stdout
+            );
+            assert_eq!(
+                STANDARD
+                    .decode(response["stderr"].as_str().unwrap())
+                    .unwrap(),
+                replay.bytes[index].stderr
+            );
+            for key in ["groupSettled", "stdoutEof", "stderrEof", "reaped"] {
+                assert_eq!(response["cleanup"][key], true)
+            }
+        }
+        assert!(replay.response(&encode(&request(0))).is_err());
+    }
+    #[test]
+    fn cached_context_rejects_identity_path_order_unknown_fields_and_consumes_failure() {
+        for (key, value) in [
+            ("id", serde_json::json!("other")),
+            ("runtimeDigest", serde_json::json!("c".repeat(64))),
+            ("token", serde_json::json!("invalid")),
+            ("cwd", serde_json::json!("/unrelated")),
+            ("executable", serde_json::json!("/other/git")),
+            ("ordinal", serde_json::json!(2)),
+            ("operation", serde_json::json!("commonDir")),
+            ("extra", serde_json::json!(true)),
+        ] {
+            let mut replay = fixture();
+            let mut frame = request(0);
+            frame[key] = value;
+            assert!(replay.response(&encode(&frame)).is_err(), "accepted {key}");
+            assert!(
+                replay.response(&encode(&request(1))).is_err(),
+                "failure did not consume {key}"
+            );
+        }
+        let mut replay = fixture();
+        assert!(replay.response(b"{").is_err());
+        assert!(replay.response(&encode(&request(1))).is_err());
+        let mut replay = fixture();
+        replay.response(&encode(&request(0))).unwrap();
+        let mut second = request(1);
+        second["token"] = serde_json::json!("c".repeat(64));
+        assert!(replay.response(&encode(&second)).is_err());
+        let mut replay = fixture();
+        replay.mark_ready();
+        assert!(replay.response(&encode(&request(0))).is_err());
+    }
+    #[test]
+    fn cached_context_cannot_fabricate_eof_exit_or_reap() {
+        for defect in [
+            "stdout-eof",
+            "stderr-eof",
+            "reap",
+            "retained",
+            "exit",
+            "exit-observed",
+        ] {
+            let mut replay = fixture();
+            let q = &mut replay.cleanup[0];
+            match defect {
+                "stdout-eof" => q.pipes.stdout_eof = false,
+                "stderr-eof" => q.pipes.stderr_eof = false,
+                "reap" => q.reaped = None,
+                "retained" => q.ownership_retained = true,
+                "exit" => q.reaped.as_mut().unwrap().success = false,
+                "exit-observed" => q.exit_observed = false,
+                _ => unreachable!(),
+            }
+            assert!(
+                replay.response(&encode(&request(0))).is_err(),
+                "accepted {defect}"
+            );
+            assert!(replay.response(&encode(&request(1))).is_err());
+        }
     }
 }

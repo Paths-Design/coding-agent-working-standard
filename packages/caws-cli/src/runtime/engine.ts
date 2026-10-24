@@ -23,7 +23,12 @@ import { clearGuardConfigurationTransport, invocationGuardConfiguration } from '
 import { InvocationJournal } from './journal';
 import { AdvisoryDedup } from './advisory-dedup';
 import { normalizeNativeResult } from './native-response';
-import { resolveInvocationSelection, type ActiveInvocationSelection } from './selection';
+import {
+  resolveInvocationSelection,
+  type ActiveInvocationSelection,
+  type InvocationSelection,
+  type SelectionOptions,
+} from './selection';
 import {
   encodeRuntimeResponse,
   SESSION_CACHE_CAPABILITY,
@@ -216,7 +221,8 @@ export async function prepareRuntimeInvocation(
   nativeSessionCache?: NativeSessionCachePort,
   contextGit?: ContextGitPort,
   nativeSessionSeal?: NativeSessionSealPort,
-  nativeSessionEndPrefix?: NativeSessionEndPrefixPort
+  nativeSessionEndPrefix?: NativeSessionEndPrefixPort,
+  selectionResolver?: (options: SelectionOptions) => Promise<InvocationSelection>
 ): Promise<PreparedRuntimeInvocation> {
   if (request.contextGit === CONTEXT_GIT_CAPABILITY && !contextGit)
     throw new Error('Native context Git capability requires its request-owned port');
@@ -244,7 +250,7 @@ export async function prepareRuntimeInvocation(
   );
   const selection =
     context.status === 'resolved'
-      ? resolveInvocationSelection({
+      ? await (selectionResolver ?? resolveInvocationSelection)({
           checkout: context.checkout,
           canonical: context.canonical,
           home,

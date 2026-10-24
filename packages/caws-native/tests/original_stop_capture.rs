@@ -254,6 +254,7 @@ fn real_git_capture_and_prefix_use_original_payload_environment_project_and_cloc
             let project = captured.observed_project();
             assert_eq!(project.checkout, f.root);
             assert_eq!(project.canonical_root, f.root);
+            assert_eq!(captured.query_cwds(), &[nested.clone(), f.root.clone()]);
             assert_eq!(
                 project.query_bytes[0].stdout,
                 format!("{}\n", f.root.display()).as_bytes()

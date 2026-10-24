@@ -809,6 +809,11 @@ impl<'deadline> OriginalStopCapture<'deadline> {
     pub fn original_payload(&self) -> &RawValue {
         &self.original_payload
     }
+    /// Actual cwd spellings used by the two original custodian queries. This
+    /// borrow supplies context replay data, not new selection or SQL authority.
+    pub fn query_cwds(&self) -> &[std::path::PathBuf; 2] {
+        self.project.query_cwds()
+    }
     pub fn observed_project(&self) -> &crate::invocation_project::ObservedProject {
         self.project.project()
     }

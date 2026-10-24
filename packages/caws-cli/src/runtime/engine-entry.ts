@@ -27,6 +27,7 @@ import {
 import { createNativeSessionSealPort } from './session-publication-client';
 import { createNativeContextGitPort } from './context-git-client';
 import { CONTEXT_GIT_CAPABILITY } from './context-git-wire';
+import { createNativeSelectionResolver } from './selection-observation';
 
 /** Private one-shot protocol entry. Installation and resident-host selection are separate contracts. */
 export async function runEngineEntry(): Promise<void> {
@@ -116,7 +117,17 @@ export async function runEngineEntry(): Promise<void> {
       sessionCache,
       contextGit,
       sessionSeal,
-      sessionEndPrefix
+      sessionEndPrefix,
+      request.selectionObservation
+        ? createNativeSelectionResolver(
+            request,
+            {
+              read: (signal) => reader.read(signal),
+              write: (frame, signal) => writeRuntimeFrame(process.stdout, frame, signal),
+            },
+            controller.signal
+          )
+        : undefined
     );
     await writeRuntimeFrame(
       process.stdout,

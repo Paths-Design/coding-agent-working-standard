@@ -15,7 +15,8 @@ export function assertMachinePath(
   for (const part of ['', ...relative.split(path.sep).filter(Boolean)]) {
     if (part) cursor = path.join(cursor, part);
     try {
-      if (io.lstat(cursor).kind === 'symlink') throw new Error(`Refusing symlink: ${cursor}`);
+      const identity = io.pathIdentity ? io.pathIdentity(cursor) : io.lstat(cursor);
+      if (identity.kind === 'symlink') throw new Error(`Refusing symlink: ${cursor}`);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
