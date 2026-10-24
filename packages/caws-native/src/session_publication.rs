@@ -2,6 +2,7 @@
 //! directory. The caller supplies original frontend observations and a durable
 //! running reservation, retains writer custody through consumption, and keeps
 //! this entire object on any uncertain/error path.
+use crate::monotonic_deadline::EffectCheck;
 use crate::{service_journal as journal, session_publication_wire as wire};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
@@ -111,7 +112,13 @@ struct Directory {
     session_id: String,
 }
 impl Directory {
-    fn open(project_path: &Path, session_id: &str, expires: Instant) -> Result<Self> {
+    fn open(
+        project_path: &Path,
+        session_id: &str,
+        expires: Instant,
+        effect: &EffectCheck<'_>,
+    ) -> Result<Self> {
+        effect("publication.directory")?;
         check(expires)?;
         if !project_path.is_absolute()
             || fs::canonicalize(project_path).map_err(err)? != project_path
@@ -127,7 +134,9 @@ impl Directory {
         let governance = openat(project.as_raw_fd(), ".caws", true)?;
         let child = |parent: &File, name: &str| -> Result<File> {
             let leaf = cstr(name)?;
+            effect("publication.mkdir")?;
             if unsafe { libc::mkdirat(parent.as_raw_fd(), leaf.as_ptr(), 0o700) } == 0 {
+                effect("publication.mkdir.sync")?;
                 parent.sync_all().map_err(err)?;
             } else if std::io::Error::last_os_error().kind() != std::io::ErrorKind::AlreadyExists {
                 return Err(err(std::io::Error::last_os_error()));
@@ -386,6 +395,17 @@ impl Publication {
         sources: Vec<SourceInput>,
         expires: Instant,
     ) -> Result<Self> {
+        Self::capture_checked(original, writer, reservation, sources, expires, &|_| Ok(()))
+    }
+    pub(crate) fn capture_checked(
+        original: OriginalBinding,
+        writer: Arc<journal::Custody>,
+        reservation: &journal::Dispatch,
+        sources: Vec<SourceInput>,
+        expires: Instant,
+        effect: &EffectCheck<'_>,
+    ) -> Result<Self> {
+        effect("publication.capture")?;
         if original.id.is_empty()
             || original.id.len() > 256
             || !wire::digest(&original.runtime_digest)
@@ -408,7 +428,7 @@ impl Publication {
         {
             return Err("publication original durable reservation mismatch".into());
         }
-        let directory = Directory::open(&original.project, &original.session_id, expires)?;
+        let directory = Directory::open(&original.project, &original.session_id, expires, effect)?;
         let prior = directory.inventory(expires)?;
         let prior_marker = directory.read(MARKER_NAME, expires)?;
         let correlation = wire::Correlation {
@@ -723,11 +743,19 @@ impl Publication {
         self.phases.push(kind);
         self.revalidate_inputs(expires)
     }
-    fn replace(&self, name: &str, bytes: &[u8], expires: Instant) -> Result<()> {
+    fn replace(
+        &self,
+        name: &str,
+        bytes: &[u8],
+        expires: Instant,
+        effect: &EffectCheck<'_>,
+    ) -> Result<()> {
         self.directory.revalidate(expires)?;
         let temporary = format!(".publication-{}.tmp", random()?);
         let temporary_name = cstr(&temporary)?;
         let target_name = cstr(name)?;
+        effect("publication.temporary")?;
+        check(expires)?;
         let raw = unsafe {
             libc::openat(
                 self.directory.session.as_raw_fd(),
@@ -742,12 +770,15 @@ impl Publication {
         let mut file = unsafe { File::from_raw_fd(raw) };
         let result = (|| {
             for chunk in bytes.chunks(wire::MAX_CHUNK_BYTES) {
+                effect("publication.write")?;
                 check(expires)?;
                 file.write_all(chunk).map_err(err)?;
             }
+            effect("publication.file.sync")?;
             file.sync_all().map_err(err)?;
             self.directory.revalidate(expires)?;
             named_identity(&self.directory.session, &temporary, &file, false)?;
+            effect("publication.rename")?;
             check(expires)?;
             if unsafe {
                 libc::renameat(
@@ -760,8 +791,10 @@ impl Publication {
             {
                 return Err(err(std::io::Error::last_os_error()));
             }
+            effect("publication.sync.after_rename")?;
             self.directory.session.sync_all().map_err(err)?;
             named_identity(&self.directory.session, name, &file, false)?;
+            effect("publication.replaced")?;
             self.directory.revalidate(expires)
         })();
         // A failed cleanup never changes the result or grants another attempt.
@@ -777,6 +810,14 @@ impl Publication {
     /// Returns a terminal selection only after every file and the last marker
     /// are synced. Any failure after effects begin permanently marks uncertainty.
     pub fn publish(&mut self, expires: Instant) -> Result<PublishedSelection> {
+        self.publish_checked(expires, &|_| Ok(()))
+    }
+    pub(crate) fn publish_checked(
+        &mut self,
+        expires: Instant,
+        effect: &EffectCheck<'_>,
+    ) -> Result<PublishedSelection> {
+        effect("publication.publish")?;
         if self.uncertain
             || self.aborted
             || self.published.is_some()
@@ -817,6 +858,8 @@ impl Publication {
             terminal_digest,
             artifacts,
         };
+        effect("publication.effects")?;
+        check(expires)?;
         self.uncertain = true;
         let mut expected = self.prior.clone();
         // Keep every intermediate named inventory within the admitted frontier:
@@ -826,10 +869,13 @@ impl Publication {
         for name in &self.removals {
             self.revalidate_snapshot(&expected, self.prior_marker.as_ref(), expires)?;
             let leaf = cstr(name)?;
+            effect("publication.unlink")?;
+            check(expires)?;
             if unsafe { libc::unlinkat(self.directory.session.as_raw_fd(), leaf.as_ptr(), 0) } != 0
             {
                 return Err(err(std::io::Error::last_os_error()));
             }
+            effect("publication.sync.after_unlink")?;
             self.directory.session.sync_all().map_err(err)?;
             expected.remove(name);
             #[cfg(test)]
@@ -845,7 +891,7 @@ impl Publication {
         });
         for (name, (_, bytes)) in writes {
             self.revalidate_snapshot(&expected, self.prior_marker.as_ref(), expires)?;
-            self.replace(name, bytes, expires)?;
+            self.replace(name, bytes, expires, effect)?;
             expected.insert(
                 name.clone(),
                 self.directory
@@ -854,7 +900,8 @@ impl Publication {
             );
         }
         self.revalidate_snapshot(&expected, self.prior_marker.as_ref(), expires)?;
-        self.replace(MARKER_NAME, &selected.marker_bytes()?, expires)?;
+        effect("publication.marker")?;
+        self.replace(MARKER_NAME, &selected.marker_bytes()?, expires, effect)?;
         self.published_marker = Some(
             self.directory
                 .read(MARKER_NAME, expires)?
@@ -867,6 +914,7 @@ impl Publication {
             .collect();
         self.published = Some(selected.clone());
         self.revalidate_current(&selected.terminal_digest, expires)?;
+        effect("publication.committed")?;
         self.uncertain = false;
         Ok(selected)
     }
@@ -985,13 +1033,37 @@ mod tests {
     }
     struct Fixture {
         root: PathBuf,
+        retain: bool,
         journal: journal::Journal,
         dispatch: journal::Dispatch,
         writer: Arc<journal::Custody>,
     }
     impl Fixture {
         fn new() -> Self {
-            let root = std::env::temp_dir()
+            Self::at(std::env::temp_dir(), false)
+        }
+        fn deadline_effect(scenario: &str) -> Self {
+            let parent = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT");
+            let retain = parent.is_some();
+            let fixture = Self::at(
+                parent.map(PathBuf::from).unwrap_or_else(std::env::temp_dir),
+                retain,
+            );
+            fixture.evidence(
+                "scenario",
+                &json!({"schema":"caws.deadline-effect.fixture.v1","scenario":scenario}),
+            );
+            fixture
+        }
+        fn evidence(&self, name: &str, row: &serde_json::Value) {
+            fs::write(
+                self.root.join(format!("{name}.json")),
+                serde_json::to_vec_pretty(row).unwrap(),
+            )
+            .unwrap();
+        }
+        fn at(parent: PathBuf, retain: bool) -> Self {
+            let root = parent
                 .canonicalize()
                 .unwrap()
                 .join(format!("caws-publication-{}", random().unwrap()));
@@ -1028,6 +1100,7 @@ mod tests {
             fs::write(root.join(".caws/sessions/s/.meta.json"), b"{\"old\":true}").unwrap();
             Self {
                 root,
+                retain,
                 journal,
                 dispatch,
                 writer,
@@ -1051,13 +1124,38 @@ mod tests {
             )
             .unwrap()
         }
+        fn capture_checked(&self, effect: &EffectCheck<'_>) -> Result<Publication> {
+            Publication::capture_checked(
+                OriginalBinding {
+                    project: self.root.clone(),
+                    id: "original".into(),
+                    runtime_digest: "a".repeat(64),
+                    token: "token".into(),
+                    session_id: "s".into(),
+                    reason: "exit".into(),
+                    ended_at: "2026-10-22T00:00:00Z".into(),
+                },
+                Arc::clone(&self.writer),
+                &self.dispatch,
+                vec![],
+                expires(),
+                effect,
+            )
+        }
         fn path(&self, name: &str) -> PathBuf {
             self.root.join(".caws/sessions/s").join(name)
         }
     }
     impl Drop for Fixture {
         fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
+            if self.retain {
+                eprintln!(
+                    "publication deadline fixture retained: {}",
+                    self.root.display()
+                );
+            } else {
+                let _ = fs::remove_dir_all(&self.root);
+            }
         }
     }
     struct Exchange {
@@ -1585,5 +1683,147 @@ mod tests {
             );
             assert!(Arc::ptr_eq(publication.writer(), &f.writer));
         }
+    }
+
+    #[test]
+    fn native_expiry_or_clock_failure_prevents_publication_directory_creation() {
+        use crate::monotonic_deadline::{DeadlineError, effect_test_support::NativeClock};
+        for failure in [DeadlineError::Expired, DeadlineError::Clock(libc::EIO)] {
+            let f = Fixture::deadline_effect(&format!("capture/{failure:?}"));
+            fs::remove_file(f.path(".meta.json")).unwrap();
+            fs::remove_dir(f.root.join(".caws/sessions/s")).unwrap();
+            fs::remove_dir(f.root.join(".caws/sessions")).unwrap();
+            let clock = NativeClock::new("publication.mkdir", failure);
+            let check = |at| clock.check(at);
+            check("outer").unwrap();
+            let error = f
+                .capture_checked(&check)
+                .err()
+                .expect("capture must refuse native clock failure");
+            f.evidence("result", &json!({"error":error,"stages":clock.stages.borrow().clone(),"sessionDirectoryExists":f.root.join(".caws/sessions").exists()}));
+            assert_eq!(error, failure.to_string());
+            assert!(
+                !f.root.join(".caws/sessions").exists(),
+                "expired capture created directories"
+            );
+            assert!(clock.stages.borrow().contains(&"publication.mkdir"));
+        }
+    }
+    #[test]
+    fn deep_native_check_prevents_rename_and_retains_uncertain_partial_effects() {
+        use crate::monotonic_deadline::{DeadlineError, effect_test_support::NativeClock};
+        for stage in [
+            "publication.effects",
+            "publication.rename",
+            "publication.sync.after_rename",
+            "publication.marker",
+        ] {
+            for failure in [DeadlineError::Expired, DeadlineError::Clock(libc::EIO)] {
+                let f = Fixture::deadline_effect(&format!("{stage}/{failure:?}"));
+                let mut publication = f.capture();
+                let before = fs::read(f.path(".meta.json")).unwrap();
+                let replacement = b"{\"ended\":true}".to_vec();
+                {
+                    let mut exchange = Exchange::new();
+                    exchange.output = replacement.clone();
+                    publication
+                        .exchange_phase(wire::Kind::Seal, &mut exchange, expires())
+                        .unwrap();
+                    assert_eq!(publication.phases, vec![wire::Kind::Seal]);
+                    assert_eq!(publication.prepared[".meta.json"].1, replacement);
+                }
+                let clock = NativeClock::new(stage, failure);
+                let check = |at| clock.check(at);
+                check("outer").unwrap();
+                assert_eq!(
+                    publication
+                        .publish_checked(clock.expires(), &check)
+                        .unwrap_err(),
+                    failure.to_string()
+                );
+                assert!(clock.stages.borrow().contains(&stage));
+                if matches!(
+                    stage,
+                    "publication.sync.after_rename" | "publication.marker"
+                ) {
+                    assert_eq!(
+                        fs::read(f.path(".meta.json")).unwrap(),
+                        replacement,
+                        "post-rename failure must follow an actual visible replacement"
+                    );
+                } else {
+                    assert_eq!(
+                        fs::read(f.path(".meta.json")).unwrap(),
+                        before,
+                        "native failure before rename must retain prior target bytes"
+                    );
+                }
+                assert_eq!(
+                    publication.uncertain(),
+                    stage != "publication.effects",
+                    "pre-effect refusal stays clean; partial effects retain uncertainty"
+                );
+                assert!(!f.path(MARKER_NAME).exists());
+                assert!(publication.published.is_none());
+                assert!(Arc::ptr_eq(publication.writer(), &f.writer));
+                let names: Vec<_> = fs::read_dir(f.path(".meta.json").parent().unwrap())
+                    .unwrap()
+                    .map(|entry| entry.unwrap().file_name())
+                    .collect();
+                assert_eq!(
+                    names,
+                    vec![std::ffi::OsString::from(".meta.json")],
+                    "temporary cleanup must not replace refusal or authorize retry"
+                );
+                let row = serde_json::json!({"operation":"publication","stage":stage,"failure":failure.to_string(),"stages":clock.stages.borrow().clone(),"metadataBytes":String::from_utf8(fs::read(f.path(".meta.json")).unwrap()).unwrap(),"markerExists":f.path(MARKER_NAME).exists(),"uncertain":publication.uncertain()});
+                f.evidence("result", &row);
+                eprintln!("CAWS_DEADLINE_EFFECT {}", row);
+            }
+        }
+    }
+    #[test]
+    fn live_native_checker_publishes_exact_artifacts_and_terminal_marker() {
+        use crate::monotonic_deadline::{DeadlineError, effect_test_support::NativeClock};
+        let f = Fixture::deadline_effect("live publication");
+        let mut publication = f.capture();
+        let replacement = b"{\"ended\":true}".to_vec();
+        {
+            let mut exchange = Exchange::new();
+            exchange.output = replacement.clone();
+            publication
+                .exchange_phase(wire::Kind::Seal, &mut exchange, expires())
+                .unwrap();
+            assert_eq!(publication.phases, vec![wire::Kind::Seal]);
+            assert_eq!(publication.prepared[".meta.json"].1, replacement);
+        }
+        let clock = NativeClock::new("never", DeadlineError::Expired);
+        let selected = publication
+            .publish_checked(clock.expires(), &|at| clock.check(at))
+            .unwrap();
+        assert_eq!(fs::read(f.path(".meta.json")).unwrap(), replacement);
+        assert_eq!(
+            fs::read(f.path(MARKER_NAME)).unwrap(),
+            selected.marker_bytes().unwrap()
+        );
+        assert!(!publication.uncertain());
+        assert_eq!(
+            publication.published.as_ref().unwrap().terminal_digest,
+            selected.terminal_digest
+        );
+        for stage in [
+            "publication.temporary",
+            "publication.write",
+            "publication.file.sync",
+            "publication.rename",
+            "publication.sync.after_rename",
+            "publication.committed",
+        ] {
+            assert!(
+                clock.stages.borrow().contains(&stage),
+                "positive control missed {stage}"
+            );
+        }
+        f.evidence("result", &json!({"operation":"live publication","terminalDigest":selected.terminal_digest,"stages":clock.stages.borrow().clone(),"uncertain":publication.uncertain()}));
+        assert!(Arc::ptr_eq(publication.writer(), &f.writer));
     }
 }

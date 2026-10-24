@@ -38,6 +38,7 @@
 //! bounded here, but their policy, argument count and argument digest are not
 //! re-derived by this component.
 
+use crate::monotonic_deadline::EffectCheck;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
@@ -132,6 +133,13 @@ impl std::error::Error for JournalError {
     }
 }
 type Result<T> = std::result::Result<T, JournalError>;
+fn original_check(check: &EffectCheck<'_>, stage: &'static str) -> Result<()> {
+    check(stage).map_err(|message| {
+        let mut error = JournalError::new(ErrorKind::Deadline, "original invocation deadline");
+        error.source = Some(io::Error::other(message));
+        error
+    })
+}
 fn check_deadline(expires: Instant) -> Result<()> {
     if Instant::now() >= expires {
         Err(JournalError::new(ErrorKind::Deadline, "deadline expired"))
@@ -635,13 +643,15 @@ fn private_directory(fd: RawFd) -> Result<()> {
         Ok(())
     }
 }
-fn sync_fd(fd: RawFd, expires: Instant) -> Result<()> {
+fn sync_fd_checked(fd: RawFd, expires: Instant, check: &EffectCheck<'_>) -> Result<()> {
     loop {
+        original_check(check, "journal.sync")?;
         check_deadline(expires)?;
         // SAFETY: fd is an owned, live regular-file or directory descriptor.
         if unsafe { libc::fsync(fd) } == 0 {
             #[cfg(test)]
             tests::after_direct_sync(fd, expires)?;
+            original_check(check, "journal.synced")?;
             return check_deadline(expires);
         }
         let error = io::Error::last_os_error();
@@ -651,11 +661,21 @@ fn sync_fd(fd: RawFd, expires: Instant) -> Result<()> {
     }
 }
 fn directory_at(parent: RawFd, name: &CStr, create: bool, expires: Instant) -> Result<OwnedFd> {
+    directory_at_checked(parent, name, create, expires, &|_| Ok(()))
+}
+fn directory_at_checked(
+    parent: RawFd,
+    name: &CStr,
+    create: bool,
+    expires: Instant,
+    check: &EffectCheck<'_>,
+) -> Result<OwnedFd> {
     check_deadline(expires)?;
     let flags = libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC;
     let mut raw = unsafe { libc::openat(parent, name.as_ptr(), flags) };
     let mut created = false;
     if raw < 0 && create && io::Error::last_os_error().raw_os_error() == Some(libc::ENOENT) {
+        original_check(check, "journal.mkdir")?;
         created = unsafe { libc::mkdirat(parent, name.as_ptr(), 0o700) } == 0;
         if !created && io::Error::last_os_error().raw_os_error() != Some(libc::EEXIST) {
             return Err(JournalError::io("mkdirat", io::Error::last_os_error()));
@@ -663,6 +683,9 @@ fn directory_at(parent: RawFd, name: &CStr, create: bool, expires: Instant) -> R
         raw = unsafe { libc::openat(parent, name.as_ptr(), flags) };
     }
     let value = owned_fd(raw, "open directory without symlinks")?;
+    if created {
+        original_check(check, "journal.directory_mode")?;
+    }
     if created && unsafe { libc::fchmod(value.as_raw_fd(), 0o700) } != 0 {
         return Err(JournalError::io(
             "private directory mode",
@@ -675,8 +698,8 @@ fn directory_at(parent: RawFd, name: &CStr, create: bool, expires: Instant) -> R
         // without its parent publication being synced. Re-anchor both inode
         // and parent name on every creation-enabled open, not only mkdir.
         // create=false is read-only traversal of unrelated root ancestors.
-        sync_fd(value.as_raw_fd(), expires)?;
-        sync_fd(parent, expires)?;
+        sync_fd_checked(value.as_raw_fd(), expires, check)?;
+        sync_fd_checked(parent, expires, check)?;
     }
     Ok(value)
 }
@@ -935,6 +958,22 @@ impl Journal {
         max_retained_records: u16,
         expires: Instant,
     ) -> Result<Self> {
+        Self::open_checked(
+            custody,
+            project_service_key,
+            max_retained_records,
+            expires,
+            &|_| Ok(()),
+        )
+    }
+    pub(crate) fn open_checked(
+        custody: Arc<Custody>,
+        project_service_key: &str,
+        max_retained_records: u16,
+        expires: Instant,
+        check: &EffectCheck<'_>,
+    ) -> Result<Self> {
+        original_check(check, "journal.open")?;
         check_deadline(expires)?;
         if !digest(project_service_key)
             || !(1..=MAX_RETAINED_RECORDS).contains(&max_retained_records)
@@ -945,12 +984,14 @@ impl Journal {
             ));
         }
         let root = custody.duplicate_root(expires)?;
-        let services = directory_at(root.as_raw_fd(), c"services", true, expires)?;
+        let services = directory_at_checked(root.as_raw_fd(), c"services", true, expires, check)?;
         private_directory(services.as_raw_fd())?;
         let key_name = CString::new(project_service_key).expect("validated ASCII key");
-        let directory = directory_at(services.as_raw_fd(), &key_name, true, expires)?;
+        let directory =
+            directory_at_checked(services.as_raw_fd(), &key_name, true, expires, check)?;
         private_directory(directory.as_raw_fd())?;
         let flags = libc::O_RDWR | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC;
+        original_check(check, "journal.lock_create")?;
         let mut raw = unsafe {
             libc::openat(
                 directory.as_raw_fd(),
@@ -964,6 +1005,9 @@ impl Journal {
             raw = unsafe { libc::openat(directory.as_raw_fd(), LOCK.as_ptr(), flags) };
         }
         let lock = File::from(owned_fd(raw, "open stable journal lock")?);
+        if created {
+            original_check(check, "journal.lock_mode")?;
+        }
         if created && unsafe { libc::fchmod(lock.as_raw_fd(), 0o600) } != 0 {
             return Err(JournalError::io(
                 "private lock mode",
@@ -977,6 +1021,7 @@ impl Journal {
             ));
         }
         loop {
+            original_check(check, "journal.lock")?;
             if Instant::now() >= expires {
                 return Err(JournalError::new(
                     ErrorKind::Busy,
@@ -997,6 +1042,7 @@ impl Journal {
                 Duration::from_millis(2).min(expires.saturating_duration_since(Instant::now())),
             );
         }
+        original_check(check, "journal.locked")?;
         if !same_name(directory.as_raw_fd(), LOCK, lock.as_raw_fd(), libc::S_IFREG) {
             return Err(JournalError::new(
                 ErrorKind::UnsafePath,
@@ -1004,8 +1050,8 @@ impl Journal {
             ));
         }
         if created {
-            sync_fd(lock.as_raw_fd(), expires)?;
-            sync_fd(directory.as_raw_fd(), expires)?;
+            sync_fd_checked(lock.as_raw_fd(), expires, check)?;
+            sync_fd_checked(directory.as_raw_fd(), expires, check)?;
         }
         let mut journal = Self {
             custody,
@@ -1024,7 +1070,7 @@ impl Journal {
             #[cfg(test)]
             fail_sync: None,
         };
-        journal.remove_abandoned_temporary(expires)?;
+        journal.remove_abandoned_temporary_checked(expires, check)?;
         let files = names(
             journal.directory.as_raw_fd(),
             usize::from(max_retained_records) + MAX_CONSUMED_RECORDS + 2,
@@ -1072,7 +1118,8 @@ impl Journal {
             };
             let bytes = serde_json::to_vec(&config)
                 .map_err(|_| JournalError::new(ErrorKind::Corrupt, "encode config"))?;
-            journal.config_stamp = Some(journal.atomic(CONFIG, &bytes, None, expires)?);
+            journal.config_stamp =
+                Some(journal.atomic_checked(CONFIG, &bytes, None, expires, check)?);
         }
         let mut sequences = BTreeSet::new();
         for name in files {
@@ -1123,7 +1170,7 @@ impl Journal {
             ) {
                 let mut operation = journal.entries[index].operation.clone();
                 operation.outcome = AcceptedOutcome::unknown();
-                journal.replace(index, operation, expires)?;
+                journal.replace_checked(index, operation, expires, check)?;
             }
         }
         Ok(journal)
@@ -1259,8 +1306,8 @@ impl Journal {
         }
         Ok(())
     }
-    fn sync(&mut self, fd: RawFd, expires: Instant) -> Result<()> {
-        sync_fd(fd, expires)?;
+    fn sync_checked(&mut self, fd: RawFd, expires: Instant, check: &EffectCheck<'_>) -> Result<()> {
+        sync_fd_checked(fd, expires, check)?;
         #[cfg(test)]
         {
             self.sync_count += 1;
@@ -1275,12 +1322,13 @@ impl Journal {
         }
         Ok(())
     }
-    fn atomic(
+    fn atomic_checked(
         &mut self,
         name: &CStr,
         bytes: &[u8],
         previous: Option<Stamp>,
         expires: Instant,
+        check: &EffectCheck<'_>,
     ) -> Result<Stamp> {
         self.poisoned = true;
         let mut published = false;
@@ -1292,6 +1340,7 @@ impl Journal {
                     "serialized record exceeds bound",
                 ));
             }
+            original_check(check, "journal.temporary")?;
             let file = File::from(owned_fd(
                 unsafe {
                     libc::openat(
@@ -1312,6 +1361,7 @@ impl Journal {
                 file,
                 renamed: false,
             };
+            original_check(check, "journal.temporary_mode")?;
             if unsafe { libc::fchmod(temporary.file.as_raw_fd(), 0o600) } != 0 {
                 return Err(JournalError::io(
                     "private temporary mode",
@@ -1320,6 +1370,7 @@ impl Journal {
             }
             let mut remaining = bytes;
             while !remaining.is_empty() {
+                original_check(check, "journal.write")?;
                 check_deadline(expires)?;
                 let written = temporary
                     .file
@@ -1333,7 +1384,7 @@ impl Journal {
                 }
                 remaining = &remaining[written..];
             }
-            self.sync(temporary.file.as_raw_fd(), expires)?;
+            self.sync_checked(temporary.file.as_raw_fd(), expires, check)?;
             let new_stamp = Stamp::of(&private_file(&temporary.file)?);
             if !same_name(
                 self.directory.as_raw_fd(),
@@ -1368,6 +1419,7 @@ impl Journal {
                         && previous.is_none() => {}
                 Err(error) => return Err(error),
             }
+            original_check(check, "journal.rename")?;
             check_deadline(expires)?;
             if unsafe {
                 libc::renameat(
@@ -1385,7 +1437,7 @@ impl Journal {
             }
             temporary.renamed = true;
             published = true;
-            self.sync(self.directory.as_raw_fd(), expires)?;
+            self.sync_checked(self.directory.as_raw_fd(), expires, check)?;
             if !same_name(
                 self.directory.as_raw_fd(),
                 name,
@@ -1397,6 +1449,7 @@ impl Journal {
                     "published name replaced",
                 ));
             }
+            original_check(check, "journal.committed")?;
             check_deadline(expires)?;
             Ok(new_stamp)
         })();
@@ -1411,7 +1464,11 @@ impl Journal {
             }
         }
     }
-    fn remove_abandoned_temporary(&self, expires: Instant) -> Result<()> {
+    fn remove_abandoned_temporary_checked(
+        &self,
+        expires: Instant,
+        check: &EffectCheck<'_>,
+    ) -> Result<()> {
         match open_file(self.directory.as_raw_fd(), TEMP) {
             Ok(file) => {
                 if private_file(&file)?.len() > MAX_RECORD_BYTES as u64
@@ -1427,13 +1484,14 @@ impl Journal {
                         "unsafe abandoned temporary",
                     ));
                 }
+                original_check(check, "journal.abandoned_unlink")?;
                 if unsafe { libc::unlinkat(self.directory.as_raw_fd(), TEMP.as_ptr(), 0) } != 0 {
                     return Err(JournalError::io(
                         "remove abandoned temporary",
                         io::Error::last_os_error(),
                     ));
                 }
-                sync_fd(self.directory.as_raw_fd(), expires)
+                sync_fd_checked(self.directory.as_raw_fd(), expires, check)
             }
             Err(error)
                 if error.source.as_ref().and_then(io::Error::raw_os_error)
@@ -1445,13 +1503,23 @@ impl Journal {
         }
     }
     fn replace(&mut self, index: usize, operation: Operation, expires: Instant) -> Result<()> {
+        self.replace_checked(index, operation, expires, &|_| Ok(()))
+    }
+    fn replace_checked(
+        &mut self,
+        index: usize,
+        operation: Operation,
+        expires: Instant,
+        check: &EffectCheck<'_>,
+    ) -> Result<()> {
         self.selected(index, expires)?;
         let bytes = encode(&operation)?;
-        let stamp = self.atomic(
+        let stamp = self.atomic_checked(
             &record_name(&operation.identity.request_id),
             &bytes,
             Some(self.entries[index].stamp),
             expires,
+            check,
         )?;
         self.entries[index] = Entry { operation, stamp };
         Ok(())
@@ -1478,6 +1546,16 @@ impl Journal {
         verified_request: &[u8],
         expires: Instant,
     ) -> Result<Admission> {
+        self.admit_checked(identity, verified_request, expires, &|_| Ok(()))
+    }
+    pub(crate) fn admit_checked(
+        &mut self,
+        identity: Identity,
+        verified_request: &[u8],
+        expires: Instant,
+        check: &EffectCheck<'_>,
+    ) -> Result<Admission> {
+        original_check(check, "journal.admit")?;
         self.current(expires)?;
         if !identity.valid()
             || identity.project_service_key != self.key
@@ -1531,11 +1609,12 @@ impl Journal {
             outcome: AcceptedOutcome::queued(),
         };
         let bytes = encode(&operation)?;
-        let stamp = self.atomic(
+        let stamp = self.atomic_checked(
             &record_name(&operation.identity.request_id),
             &bytes,
             None,
             expires,
+            check,
         )?;
         self.entries.push(Entry {
             operation: operation.clone(),
@@ -1602,6 +1681,18 @@ impl Journal {
         execution_image_digest: &str,
         expires: Instant,
     ) -> Result<Option<Dispatch>> {
+        self.begin_next_checked(source_generation, execution_image_digest, expires, &|_| {
+            Ok(())
+        })
+    }
+    pub(crate) fn begin_next_checked(
+        &mut self,
+        source_generation: &str,
+        execution_image_digest: &str,
+        expires: Instant,
+        check: &EffectCheck<'_>,
+    ) -> Result<Option<Dispatch>> {
+        original_check(check, "journal.begin_next")?;
         self.current(expires)?;
         if !digest(source_generation) || !digest(execution_image_digest) {
             return Err(JournalError::new(
@@ -1636,7 +1727,7 @@ impl Journal {
             ));
         }
         operation.outcome = AcceptedOutcome::running();
-        self.replace(index, operation.clone(), expires)?;
+        self.replace_checked(index, operation.clone(), expires, check)?;
         Ok(Some(Dispatch {
             operation,
             custody: Arc::clone(&self.custody),
@@ -1672,6 +1763,19 @@ impl Journal {
         artifact_manifest_digest: Option<String>,
         expires: Instant,
     ) -> Result<Operation> {
+        self.returned_checked(dispatch, result, artifact_manifest_digest, expires, &|_| {
+            Ok(())
+        })
+    }
+    pub(crate) fn returned_checked(
+        &mut self,
+        dispatch: &Dispatch,
+        result: ReturnedResult,
+        artifact_manifest_digest: Option<String>,
+        expires: Instant,
+        check: &EffectCheck<'_>,
+    ) -> Result<Operation> {
+        original_check(check, "journal.returned")?;
         let index = self.transition_index(dispatch, expires)?;
         if !result.valid()
             || artifact_manifest_digest
@@ -1691,7 +1795,7 @@ impl Journal {
             result,
             artifact_manifest_digest,
         };
-        self.replace(index, operation.clone(), expires)?;
+        self.replace_checked(index, operation.clone(), expires, check)?;
         Ok(operation)
     }
     pub fn unknown(&mut self, dispatch: &Dispatch, expires: Instant) -> Result<Operation> {
@@ -1738,6 +1842,16 @@ impl Journal {
         terminal_digest: &str,
         expires: Instant,
     ) -> Result<Operation> {
+        self.consume_checked(returned, terminal_digest, expires, &|_| Ok(()))
+    }
+    pub(crate) fn consume_checked(
+        &mut self,
+        returned: &Operation,
+        terminal_digest: &str,
+        expires: Instant,
+        check: &EffectCheck<'_>,
+    ) -> Result<Operation> {
+        original_check(check, "journal.consume")?;
         self.current(expires)?;
         if !digest(terminal_digest) || returned.consumption_digest()? != terminal_digest {
             return Err(JournalError::new(
@@ -1794,7 +1908,7 @@ impl Journal {
                 "consumed history exhausted; heavy operation retained",
             ));
         }
-        self.replace(index, consumed.clone(), expires)?;
+        self.replace_checked(index, consumed.clone(), expires, check)?;
         Ok(consumed)
     }
 }
@@ -1820,3 +1934,270 @@ fn encode(operation: &Operation) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod effect_deadline_tests {
+    use super::*;
+    use crate::monotonic_deadline::{DeadlineError, effect_test_support::NativeClock};
+    use std::{
+        collections::BTreeMap,
+        fs,
+        os::unix::fs::PermissionsExt,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+    struct Fixture {
+        root: PathBuf,
+        retain: bool,
+        journal: Journal,
+        identity: Identity,
+    }
+    impl Fixture {
+        fn new() -> Self {
+            let parent = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT");
+            let retain = parent.is_some();
+            let root = parent
+                .map(PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir)
+                .canonicalize()
+                .unwrap()
+                .join(format!(
+                    "caws-effect-journal-{}-{}",
+                    std::process::id(),
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos()
+                ));
+            fs::create_dir(&root).unwrap();
+            fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+            let expires = Instant::now() + Duration::from_secs(30);
+            let custody = Custody::initialize(&root, expires).unwrap();
+            let key = "a".repeat(64);
+            let journal = Journal::open(custody, &key, 16, expires).unwrap();
+            let identity = Identity {
+                request_id: "b".repeat(64),
+                argument_digest: hash(b"request"),
+                project_service_key: key,
+                source_generation: "c".repeat(64),
+                execution_image_digest: "c".repeat(64),
+            };
+            Self {
+                root,
+                retain,
+                journal,
+                identity,
+            }
+        }
+        fn bytes(&self) -> BTreeMap<PathBuf, Vec<u8>> {
+            fn visit(path: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) {
+                for entry in fs::read_dir(path).unwrap() {
+                    let path = entry.unwrap().path();
+                    if path.is_dir() {
+                        visit(&path, out)
+                    } else {
+                        out.insert(path.clone(), fs::read(&path).unwrap());
+                    }
+                }
+            }
+            let mut result = BTreeMap::new();
+            visit(&self.root, &mut result);
+            result
+        }
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            if self.retain {
+                eprintln!("journal deadline fixture retained: {}", self.root.display());
+            } else {
+                let _ = fs::remove_dir_all(&self.root);
+            }
+        }
+    }
+    #[test]
+    fn store_journal_effects_keep_original_native_deadline_and_publication_uncertainty() {
+        for operation in ["admit", "begin_next", "returned", "consume"] {
+            for stage in ["journal.rename", "journal.committed"] {
+                for failure in [DeadlineError::Expired, DeadlineError::Clock(libc::EIO)] {
+                    let mut f = Fixture::new();
+                    let clock = NativeClock::new(stage, failure);
+                    let mut dispatch = None;
+                    let mut returned = None;
+                    if operation != "admit" {
+                        f.journal
+                            .admit(f.identity.clone(), b"request", clock.expires())
+                            .unwrap();
+                    }
+                    if matches!(operation, "returned" | "consume") {
+                        dispatch = f
+                            .journal
+                            .begin_next(&"c".repeat(64), &"c".repeat(64), clock.expires())
+                            .unwrap();
+                    }
+                    if operation == "consume" {
+                        returned = Some(
+                            f.journal
+                                .returned(
+                                    dispatch.as_ref().unwrap(),
+                                    ReturnedResult::SessionPublication {
+                                        terminal_digest: "d".repeat(64),
+                                    },
+                                    Some("d".repeat(64)),
+                                    clock.expires(),
+                                )
+                                .unwrap(),
+                        );
+                    }
+                    if f.retain {
+                        fs::write(f.root.with_extension("scenario.json"),serde_json::to_vec_pretty(&serde_json::json!({"schema":"caws.deadline-effect.fixture.v1","operation":operation,"stage":stage,"failure":failure.to_string(),"root":f.root})).unwrap()).unwrap();
+                    }
+                    let before = f.bytes();
+                    let entries: Vec<_> = f
+                        .journal
+                        .entries
+                        .iter()
+                        .map(|entry| encode(&entry.operation).unwrap())
+                        .collect();
+                    let check = |at| clock.check(at);
+                    check("outer").unwrap();
+                    let result: Result<()> = match operation {
+                        "admit" => f
+                            .journal
+                            .admit_checked(f.identity.clone(), b"request", clock.expires(), &check)
+                            .map(|_| ()),
+                        "begin_next" => f
+                            .journal
+                            .begin_next_checked(
+                                &"c".repeat(64),
+                                &"c".repeat(64),
+                                clock.expires(),
+                                &check,
+                            )
+                            .map(|_| ()),
+                        "returned" => f
+                            .journal
+                            .returned_checked(
+                                dispatch.as_ref().unwrap(),
+                                ReturnedResult::SessionPublication {
+                                    terminal_digest: "d".repeat(64),
+                                },
+                                Some("d".repeat(64)),
+                                clock.expires(),
+                                &check,
+                            )
+                            .map(|_| ()),
+                        "consume" => f
+                            .journal
+                            .consume_checked(
+                                returned.as_ref().unwrap(),
+                                &"d".repeat(64),
+                                clock.expires(),
+                                &check,
+                            )
+                            .map(|_| ()),
+                        _ => unreachable!(),
+                    };
+                    let error = result.unwrap_err();
+                    assert!(
+                        error.to_string().ends_with(&failure.to_string()),
+                        "{operation}/{stage}: {error}"
+                    );
+                    assert_eq!(error.kind, ErrorKind::Deadline);
+                    assert!(
+                        clock.stages.borrow().contains(&stage),
+                        "missing deep journal check"
+                    );
+                    assert!(
+                        f.journal.poisoned,
+                        "failure cannot expose a reusable journal handle"
+                    );
+                    assert_eq!(
+                        f.journal
+                            .entries
+                            .iter()
+                            .map(|entry| encode(&entry.operation).unwrap())
+                            .collect::<Vec<_>>(),
+                        entries,
+                        "failed transition changed in-memory acceptance"
+                    );
+                    let after = f.bytes();
+                    assert_eq!(
+                        error.publication_may_have_happened,
+                        stage == "journal.committed"
+                    );
+                    if stage == "journal.rename" {
+                        assert_eq!(
+                            after, before,
+                            "pre-rename failure changed prior registry bytes"
+                        );
+                    } else {
+                        assert_ne!(
+                            after, before,
+                            "post-publication failure must follow real replacement"
+                        );
+                    }
+                    eprintln!(
+                        "CAWS_DEADLINE_EFFECT {}",
+                        serde_json::json!({"operation":operation,"stage":stage,"failure":failure.to_string(),"stages":clock.stages.borrow().clone(),"registryBytesUnchanged":after==before,"publicationMayHaveHappened":error.publication_may_have_happened,"poisoned":f.journal.poisoned})
+                    );
+                }
+            }
+        }
+    }
+    #[test]
+    fn live_native_checker_completes_exact_store_journal_lifecycle() {
+        let mut f = Fixture::new();
+        let clock = NativeClock::new("never", DeadlineError::Expired);
+        let check = |at| clock.check(at);
+        let admitted = f
+            .journal
+            .admit_checked(f.identity.clone(), b"request", clock.expires(), &check)
+            .unwrap();
+        assert!(matches!(
+            admitted,
+            Admission::Accepted {
+                duplicate: false,
+                ..
+            }
+        ));
+        let dispatch = f
+            .journal
+            .begin_next_checked(&"c".repeat(64), &"c".repeat(64), clock.expires(), &check)
+            .unwrap()
+            .unwrap();
+        let returned = f
+            .journal
+            .returned_checked(
+                &dispatch,
+                ReturnedResult::SessionPublication {
+                    terminal_digest: "d".repeat(64),
+                },
+                Some("d".repeat(64)),
+                clock.expires(),
+                &check,
+            )
+            .unwrap();
+        let consumed = f
+            .journal
+            .consume_checked(&returned, &"d".repeat(64), clock.expires(), &check)
+            .unwrap();
+        assert!(matches!(consumed.outcome, AcceptedOutcome::Consumed { .. }));
+        assert!(consumed.verified_request_base64.is_empty());
+        assert!(!f.journal.poisoned);
+        assert_eq!(
+            f.journal
+                .lookup(&f.identity.request_id, clock.expires())
+                .unwrap()
+                .unwrap(),
+            consumed
+        );
+        for stage in [
+            "journal.admit",
+            "journal.begin_next",
+            "journal.returned",
+            "journal.consume",
+        ] {
+            assert!(clock.stages.borrow().contains(&stage));
+        }
+    }
+}

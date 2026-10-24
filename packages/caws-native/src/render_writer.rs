@@ -1,6 +1,7 @@
 //! Cooperative, cross-generation renderer exclusion. This cannot fence an
 //! unmodified foreign renderer which never acquires it. Adopting all launch
 //! paths and draining prior writers remains a separate migration prerequisite.
+use crate::monotonic_deadline::EffectCheck;
 use crate::{
     owned_group,
     service_journal::{
@@ -123,6 +124,15 @@ fn registration(file: &File, named: &Path, project: &Path, directory: &Path) -> 
 /// changes. Session never alters this project-wide lock, matching the current
 /// backend's project serialization. Home is only a private receipt destination.
 pub fn acquire(home: &Path, project: &Path, expires: Instant) -> Result<Arc<Custody>, String> {
+    acquire_checked(home, project, expires, &|_| Ok(()))
+}
+pub(crate) fn acquire_checked(
+    home: &Path,
+    project: &Path,
+    expires: Instant,
+    check: &EffectCheck<'_>,
+) -> Result<Arc<Custody>, String> {
+    check("writer.acquire")?;
     private(home)?;
     let key = project_key(project)?;
     let governance = project.join(".caws");
@@ -134,6 +144,7 @@ pub fn acquire(home: &Path, project: &Path, expires: Instant) -> Result<Arc<Cust
     let directory = governance.join(".render-writer-custody");
     let marker = governance.join(".render-writer-provisioned");
     let flags = libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC;
+    check("writer.marker.open")?;
     let (mut provisioned, created) = match OpenOptions::new()
         .read(true)
         .write(true)
@@ -157,18 +168,24 @@ pub fn acquire(home: &Path, project: &Path, expires: Instant) -> Result<Arc<Cust
         // Persist the no-reset tombstone BEFORE creating custody. A crash at
         // any intermediate step leaves partial provisioning, never permission
         // to initialize a new owner domain over an old writer's state.
+        check("writer.marker.sync")?;
         provisioned.sync_all().map_err(|e| e.to_string())?;
+        check("writer.governance.sync")?;
         File::open(&governance)
             .and_then(|f| f.sync_all())
             .map_err(|e| e.to_string())?;
+        check("writer.custody.mkdir")?;
         if !mkdir(&directory)? {
             return Err("unregistered renderer custody already exists".into());
         }
+        check("writer.governance.sync")?;
         File::open(&governance)
             .and_then(|f| f.sync_all())
             .map_err(|e| e.to_string())?;
-        let custody = Custody::initialize(&directory, expires).map_err(|e| e.to_string())?;
+        let custody =
+            Custody::initialize_checked(&directory, expires, check).map_err(|e| e.to_string())?;
         let leaf = fs::symlink_metadata(&directory).map_err(|e| e.to_string())?;
+        check("writer.marker.write")?;
         serde_json::to_writer(
             &mut provisioned,
             &Provisioned {
@@ -179,19 +196,27 @@ pub fn acquire(home: &Path, project: &Path, expires: Instant) -> Result<Arc<Cust
             },
         )
         .map_err(|e| e.to_string())?;
+        check("writer.marker.sync")?;
         provisioned.sync_all().map_err(|e| e.to_string())?;
+        check("writer.governance.sync")?;
         File::open(&governance)
             .and_then(|f| f.sync_all())
             .map_err(|e| e.to_string())?;
         custody
     } else {
         registration(&provisioned, &marker, project, &directory)?;
-        Custody::acquire(&directory, expires).map_err(|e| e.to_string())?
+        Custody::acquire_checked(&directory, expires, check).map_err(|e| e.to_string())?
     };
     provisioned.rewind().map_err(|e| e.to_string())?;
     registration(&provisioned, &marker, project, &directory)?;
-    let journal = Journal::open(Arc::clone(&custody), &key, MAX_RETAINED_RECORDS, expires)
-        .map_err(|e| e.to_string())?;
+    let journal = Journal::open_checked(
+        Arc::clone(&custody),
+        &key,
+        MAX_RETAINED_RECORDS,
+        expires,
+        check,
+    )
+    .map_err(|e| e.to_string())?;
     if journal.has_unknown(expires).map_err(|e| e.to_string())?
         || !journal
             .queued_request_ids(expires)
@@ -203,6 +228,7 @@ pub fn acquire(home: &Path, project: &Path, expires: Instant) -> Result<Arc<Cust
         );
     }
     drop(journal);
+    check("writer.acquired")?;
     Ok(custody)
 }
 
@@ -601,6 +627,7 @@ mod tests {
 
     struct Fixture {
         root: PathBuf,
+        retain: bool,
         home: PathBuf,
         project: PathBuf,
         output: PathBuf,
@@ -608,6 +635,22 @@ mod tests {
     impl Fixture {
         fn new() -> Self {
             Self::at(std::env::temp_dir())
+        }
+        fn deadline_effect(scenario: &str) -> Self {
+            let parent = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT");
+            let retain = parent.is_some();
+            let mut fixture =
+                Self::at(parent.map(PathBuf::from).unwrap_or_else(std::env::temp_dir));
+            fixture.retain = retain;
+            fs::write(
+                fixture.root.join("scenario.json"),
+                serde_json::to_vec_pretty(
+                    &json!({"schema":"caws.deadline-effect.fixture.v1","scenario":scenario}),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            fixture
         }
         fn at(parent: PathBuf) -> Self {
             let nonce = SystemTime::now()
@@ -627,6 +670,7 @@ mod tests {
             fs::create_dir_all(&output).unwrap();
             Self {
                 root,
+                retain: false,
                 home,
                 project,
                 output,
@@ -656,7 +700,11 @@ mod tests {
     }
     impl Drop for Fixture {
         fn drop(&mut self) {
-            fs::remove_dir_all(&self.root).unwrap();
+            if self.retain {
+                eprintln!("writer deadline fixture retained: {}", self.root.display());
+            } else {
+                fs::remove_dir_all(&self.root).unwrap();
+            }
         }
     }
 
@@ -1448,5 +1496,114 @@ mod tests {
         );
         assert_eq!(run(&fixture.args()).unwrap(), 0);
         assert_eq!(fs::metadata(anchor).unwrap().ino(), inode);
+    }
+
+    #[test]
+    fn original_native_deadline_reaches_writer_custody_and_journal_effects() {
+        use crate::monotonic_deadline::{DeadlineError, effect_test_support::NativeClock};
+        for stage in [
+            "writer.marker.open",
+            "custody.owner_lock",
+            "custody.registry.link",
+            "custody.registry.linked",
+            "journal.lock",
+            "journal.rename",
+        ] {
+            for failure in [DeadlineError::Expired, DeadlineError::Clock(libc::EIO)] {
+                let f = Fixture::deadline_effect(&format!("{stage}/{failure:?}"));
+                let clock = NativeClock::new(stage, failure);
+                let check = |at| clock.check(at);
+                check("outer").unwrap();
+                let result = acquire_checked(&f.home, &f.project, clock.expires(), &check);
+                let error = result.unwrap_err();
+                assert!(error.ends_with(&failure.to_string()), "{stage}: {error}");
+                assert!(
+                    clock.stages.borrow().contains(&stage),
+                    "missing deep boundary {stage}"
+                );
+                let marker = f.project.join(".caws/.render-writer-provisioned");
+                let anchor = f.project.join(".caws/.render-writer-custody");
+                if stage == "writer.marker.open" {
+                    assert!(
+                        !marker.exists(),
+                        "expired first mutation created a tombstone"
+                    );
+                    assert!(
+                        !anchor.exists(),
+                        "expired first mutation provisioned custody"
+                    );
+                } else {
+                    assert!(
+                        marker.exists(),
+                        "partial provisioning must retain its tombstone"
+                    );
+                    if stage.starts_with("custody.") {
+                        assert_eq!(fs::read(&marker).unwrap(), b"");
+                        assert!(
+                            acquire(&f.home, &f.project, clock.expires()).is_err(),
+                            "partial provisioning must not reset its owner domain"
+                        );
+                    }
+                    if stage == "custody.registry.linked" {
+                        assert!(
+                            anchor.join(".service-root.json").exists(),
+                            "fault must follow actual registry publication"
+                        );
+                        assert!(
+                            anchor.join(".service-root.tmp").exists(),
+                            "ambiguous linked temporary must remain"
+                        );
+                    }
+                    if stage == "journal.rename" {
+                        let key = project_key(&f.project).unwrap();
+                        let path = anchor.join("operations/services").join(key);
+                        assert!(
+                            !path.join(".journal.json").exists(),
+                            "expired native clock published journal configuration"
+                        );
+                        assert!(
+                            !path.join(".operation.tmp").exists(),
+                            "ordinary temporary cleanup must remain allowed"
+                        );
+                    }
+                }
+                eprintln!(
+                    "CAWS_DEADLINE_EFFECT {}",
+                    serde_json::json!({"operation":"writer","stage":stage,"failure":failure.to_string(),"stages":clock.stages.borrow().clone(),"markerExists":marker.exists(),"custodyExists":anchor.exists()})
+                );
+            }
+        }
+    }
+    #[test]
+    fn live_original_native_deadline_provisions_writer_through_deep_boundaries() {
+        use crate::monotonic_deadline::{DeadlineError, effect_test_support::NativeClock};
+        let f = Fixture::deadline_effect("live writer");
+        let clock = NativeClock::new("never", DeadlineError::Expired);
+        let custody =
+            acquire_checked(&f.home, &f.project, clock.expires(), &|at| clock.check(at)).unwrap();
+        for stage in [
+            "writer.marker.open",
+            "custody.owner_lock",
+            "custody.registry.link",
+            "journal.lock",
+            "journal.rename",
+            "writer.acquired",
+        ] {
+            assert!(
+                clock.stages.borrow().contains(&stage),
+                "positive control missed {stage}"
+            );
+        }
+        let marker: serde_json::Value = serde_json::from_slice(
+            &fs::read(f.project.join(".caws/.render-writer-provisioned")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(marker["schema"], "caws.render.writer.provisioned.v1");
+        assert_eq!(marker["canonicalProject"], f.project.to_str().unwrap());
+        drop(custody);
+        assert!(
+            acquire(&f.home, &f.project, clock.expires()).is_ok(),
+            "legacy API must reopen the same completed domain"
+        );
     }
 }
