@@ -34,7 +34,11 @@ The matched native runtime source includes main merge
 `c9b919e64f9149a09e2e9fff62f40cfdf141d1a8`, shared pack v105 and F3 cleanup.
 Local main merge `6defc8aa44d296cda598a97cd7eee2f16a8a54d2` adds the native
 SessionEnd publication chain. E270/E271 distinguish that source landing from
-remote publication, package qualification and runtime acceptance.
+remote publication, package qualification and runtime acceptance. Local main
+merge `267f85832ea64089adb51c6355a48cf920728608` contains the E334–E340 native
+selection transport, bounded generation discovery and explicit path identity
+slice. `CAWS-NATIVE-SELECTION-LANDING-001` closes with A1–A3 recorded; the full
+parent spec and selected machine runtime remain unchanged.
 `native-runtime-modernization` remains the integration branch for owed work.
 Evidence entries identify their actual component branch or historical revision;
 ledger-only commits do not qualify different runtime bytes. The relative
@@ -8927,7 +8931,15 @@ Additional bounded evidence and unresolved dependencies:
   native stock admission, SQL/publication/reader/release integration, Python
   retirement, vendor delivery, latency distributions, residency or cutover. The
   journal retains delivery:not_observed; E338's debug deadline failure remains
-  evidence, and further admission must fit the same original budget.
+  evidence, and further admission must fit the same original budget. Reviewed
+  source candidate aab7c78a24cb3efc9930399f6755104de91688b0 lands on local main
+  through267f85832ea64089adb51c6355a48cf920728608. Root verifies ancestry and
+  exact packages/docs equality; events12776/12777/12781 record bounded A1/A2/A3
+  evidence and event12782 closes the temporary selection spec. Parent spec
+  SHA256 0c11d997c2dfbc9187a21c19d85267525b7632dc344d77269e6ecf7cb51f719f and
+  selected machine pointer SHA256
+  f8a3627299bc8c3d325eb42472f889b43e7c26c8a4e4c02996091867cb9f4f7e remain
+  unchanged across landing. No remote push or machine installation is claimed.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -9035,11 +9047,11 @@ The lead integrates three outcomes. The immediate assignments below precede the
 detailed retained dependency list; completing a bounded assignment does not
 complete its parent outcome.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                              | Next decisive check                                                                                                                                                                                                                                                                  |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | Land the E334–E340 selection slice after committed review; E340 distinguishes native selection traversal from compatibility fallback. Production-connected image, actual harness delivery and rollback remain owed.                                                                  |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; E317 repairs callback routing and E318 propagates the original deadline through deep effects; native Stop producer/prefix/profile integration remains owed | After the E340 selection landing, connect native stock admission to separately qualified SQL/renderer profiles without invocation-time Python discovery; preserve original deadline and queue revalidation before reservation/writer/SQL through ordinary publication/reader/release |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                                   | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                              | Next decisive check                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                                 | E334–E340 selection source is on local main267f8583. Next qualify the production-connected image, actual harness delivery and rollback; E340 establishes only native selection traversal plus compatibility completion.                                                                  |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns the E313 ordinary Stop integration and acceptance; E310–E312 retain the completed bounded profile/metadata assignments; E317 repairs callback routing and E318 propagates the original deadline through deep effects; native Stop producer/prefix/profile integration remains owed | Connect the landed E340 selection receipt to native stock admission and separately qualified SQL/renderer profiles without invocation-time Python discovery; preserve original deadline and queue revalidation before reservation/writer/SQL through ordinary publication/reader/release |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                                   | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                    |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
