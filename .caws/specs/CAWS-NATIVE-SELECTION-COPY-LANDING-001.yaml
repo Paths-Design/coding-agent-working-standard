@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-SELECTION-COPY-LANDING-001
 title: 'Land verification-only selection discovery without discarded manifest copies'
 mode: refactor
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-selection-copy-landing
 created_at: '2026-10-24T22:49:46.033Z'
-updated_at: '2026-10-24T22:49:46.033Z'
+updated_at: '2026-10-24T22:49:47.940Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
