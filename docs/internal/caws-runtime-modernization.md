@@ -10121,6 +10121,57 @@ Additional bounded evidence and unresolved dependencies:
   package execution through publication, ordinary CONSUMED and heavy release. No
   parent criterion or production Python row is completed.
 
+- E370: Reorientation reads all available turn records for root session
+  01a164bc-7a2b-75e2-be81-5da9d0a29252 and reconciles the original three
+  integrated outcomes with the later lead transfer and full local-cutover goal.
+  Main c93082eeb includes the E367 source landing; publication candidate
+  2258630ce38a144f2fafa7d75215a84124864a62 additionally contains E368/E369. The
+  selected machine digest remains
+  408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0. Root retains
+  all three outcomes and parent acceptance remains0/8.
+
+  Retained evidence under
+  /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/
+  includes fresh-stop-profile-production-10 and production-stop-10-positive-01.
+  The exact image digest is
+  5e6c4d5d307f265340976bf78026cba27eb27258dba45bdbf8c6061130b1eb0a.
+  production-stop-10-positive-execution-01/execution.json records exit0, 46.977s
+  including setup/cleanup, unchanged source and an empty observed process group.
+  The original native invocation66758-1792862528277789000 records exit0
+  in28737.663ms, no signal, watchdog or spawn error, under the unchanged30000ms
+  deadline. Actual turn-001.json contains the fixture user and reply,
+  session-index.json contains turn_count1, and the committed publication marker
+  hashes match the ordinary reader's turn/index/projection observations. The
+  durable operation is consumed with an empty heavy request. Native stages order
+  SQL CLOSED, marker commit, durable consumption and heavy release; cleanup.json
+  records owner66757 exit0, socket absent and no service signals. SQL CLOSED is
+  source-grounded native instrumentation, not independent SQLite handle tracing.
+  These are retained-run observations re-read during reorientation, not another
+  runtime execution or actual editor delivery.
+
+  The successful fixture has a decisive oracle limitation: create-database.py
+  seeds both session IDs with identical user/reply text and timestamps. The
+  unchanged probe02 assertions therefore cannot distinguish selection of the
+  other session's rows. Consistent operation/session/hash correlation does not
+  close this semantic gap. Root must give the sessions distinct content and
+  timestamps and verify exclusion of the foreign rows through the real reader;
+  preserve the existing positive artifact and identify the changed probe.
+
+  Source inspection also establishes that postqueue selection refusal before
+  reservation retains a StoreRecord/permit without a durable original fence:
+  store.rs acquire_publication_job fails BeforeReservation before
+  reserve_original, and its error branch writes Unknown only when dispatch
+  exists. Actor::idle_proof requires a fence for every retained store record.
+  E363's resource-free Unknown retirement does not cover this path. Probe02's
+  predicted cleanup consequence therefore remains applicable; the paired
+  negative has not executed. Root owns a distinct durable pre-reservation
+  rejection and reclamation contract. Exact rejected-ID history must survive
+  restart before heavy state is released; persistence failure must retain it.
+  Then prove genuine queue wait, changed-selection refusal, zero additional
+  database opens, no publication, record/permit release, natural owner exit and
+  same-home replay rejection. No generic dropping of unreserved records or
+  automatic settlement of uncertain post-effect operations is licensed.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -10256,17 +10307,22 @@ Its private owner is externally contained while uncertainty remains intact. Root
 owns the deadline cost repair; E367 lands the coherent source checkpoint. E368
 measures manifest-plan construction with the production callback chain, and E369
 reuses only immutable manifest-derived directories with direct hostile controls.
-Root owns final review and fresh10 exact-image execution; do not cache
+E370 retains fresh10 publication, ordinary consumption and release within30s,
+with only1.262s deadline margin and no load distribution. Root owns the distinct
+pre-reservation rejection/reclamation repair and the session-distinguishing
+fixture correction before the paired replay. A read-only worker grounds the
+rejection lifecycle; an independent worker checks actual artifact correlations;
+root owns source changes, integration, landing and acceptance. Do not cache
 successful filesystem/hash observations or remove authority and durability
-checks. The successful path must establish publication, ordinary consumption and
-release within30s; neither natural failure cleanup nor build/profile success
-supplies it.
+checks. The next replay must establish semantic session isolation, rejection
+history, reclaimed capacity and natural cleanup; build/profile success cannot
+supply them.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                 |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                             | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.                  |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; E346 connects native and engine production sources; root owns fresh-image execution | Execute the fresh exact image through original capture, completed prefix, SQL CLOSED, publication, ordinary reader, CONSUMED and release; pair with queued selection mutation and zero transcript-database open attempts on the same isolated owner |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                               | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload               |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                             | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.    |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; E346 connects native and engine production sources; root owns fresh-image execution | E370 retains a positive chain; distinguish session rows, implement durable pre-reservation rejection/reclamation, then pair queued selection mutation with zero additional database opens, natural exit and restart rejection         |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                               | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The
@@ -10275,8 +10331,9 @@ source-grounded oracle/input corrections. E282 demonstrates sequential
 reclamation across 258 originals on one owner; it does not establish concurrent
 admission or fairness. E346 connects the SQL adapter to native observation
 inputs and profile selectors in the owned source candidate. E366 records actual
-combined-image execution through partial publication, with successful ordinary
-consumption and release unverified. Candidate `29555bc8` builds successfully in
+combined-image execution through partial publication; E370 supplies later
+bounded ordinary consumption and release with an open session-selection oracle
+gap. Candidate `29555bc8` builds successfully in
 `publication-integration/source-publication-build-01` (exit 0, 6.660s);
 `source-publication-tests-01` executes 113 checks across the publication
 adapter, store client, warm-owner qualifier and CI archive contract (exit 0,
