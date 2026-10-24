@@ -46,13 +46,17 @@ reviewed candidate `5837aa104633640ce593a2ead8ea2198d46b7812`.
 component acceptance does not qualify the production publication chain. Local
 main merge `bbe4b3895c53348da4d2703a486b8cabe79cb7d8` contains the E343 source
 catalog and typed consumer. Its bounded landing spec closes with A1–A3 recorded;
-E348 retains the exact composition and postmerge observations.
-`native-runtime-modernization` remains the integration branch for owed work.
-Evidence entries identify their actual component branch or historical revision;
-ledger-only commits do not qualify different runtime bytes. The relative
-architecture link follows this document's branch. Source publication, fresh
-package qualification, actual native execution and cutover acceptance remain
-separate obligations; E262 records the landing and its bounded checks.
+E348 retains the exact composition and postmerge observations. Local main merge
+`89946c2d8d71f00d35828a91c620a3ec9d78e130` contains the reviewed Stop
+integration checkpoint with implementation bytes equal to `ec496156`; E367
+records its bounded acceptance and preserved dependent lanes. It does not
+qualify the failed E366 production invocation. `native-runtime-modernization`
+remains the integration branch for owed work. Evidence entries identify their
+actual component branch or historical revision; ledger-only commits do not
+qualify different runtime bytes. The relative architecture link follows this
+document's branch. Source publication, fresh package qualification, actual
+native execution and cutover acceptance remain separate obligations; E262
+records the landing and its bounded checks.
 
 The coverage measure is 33/37 rows with qualifying partial implementation
 (89.2%). It is not an overall completion percentage. Parent acceptance is 0/8;
@@ -9991,15 +9995,89 @@ Additional bounded evidence and unresolved dependencies:
   a direct file edit confined to the external artifact directory; no guard,
   identity or interpreter file was changed. The rejected attempt is not a run.
 
-  Root owns the separate main-based native-stop-source-landing lane under
-  CAWS-NATIVE-STOP-SOURCE-LANDING-001. Its implementation matches reviewed
-  ec496156; source acceptance requires main blob identity and preservation of
-  existing lanes and the selected pointer. Direct teardown of
+  The bounded source delivery uses a separate main-based lane under
+  CAWS-NATIVE-STOP-SOURCE-LANDING-001. Direct teardown of
   native-runtime-modernization would delete a base ref used by five foreign
-  lanes: --no-close preserves its spec, not its branch. Preserve those lanes,
-  source references and selected machine pointer. Source landing remains
-  separate from the failed production outcome and both active parent
-  obligations.
+  lanes: --no-close preserves its spec, not its branch. E367 records the
+  separate landing while preserving those lanes, source references and selected
+  machine pointer. Source acceptance does not satisfy the failed production
+  outcome or either active parent obligation.
+
+- E367: Local main merge89946c2d lands reviewed source checkpoint4909cdc4.
+  Direct Git comparison establishes identical implementation/test blobs to
+  ec496156/c04dee5b; only governance and the reconciled tracker differ. All112
+  native source pins match the retained bin184pass/lib443pass2ignored and
+  feature-off compilation receipts. Of1224 packaged source pins, only the
+  tracker differs. These are exact-source retained checks, not fresh execution
+  on main. Fresh09 remains failed with partial publication and no marker.
+  source-landing-composition-01 retains the full30-commit, nontruncated scope
+  review, dry-run, actual merge, identity comparisons and postmerge state.
+  Scoped gates pass allfive checks over46paths; doctor exits0 with0E/4W/5I. The
+  commit hook ignores TypeScript ESLint for lack of matching configuration; its
+  successful exit is not lint proof. Same-provider committed composition review
+  finds no demonstrated implementation divergence within its read-only scope.
+  Root verifies the original effect deadline/cancellation handles before relying
+  on that observation.
+
+  Postmerge comparison retains all11 pre-existing registry entries, physical
+  lanes and their branch tips; non-main dependent base refs, parent/publication
+  spec bytes and selected machine pointer remain unchanged. Only the disposable
+  landing lane is removed. A1-A3 are recorded and read back in
+  events12982-12984; event12985 closes only CAWS-NATIVE-STOP-SOURCE-LANDING-001
+  and12986 releases its temporary bridge. The first absolute artifact-path
+  citation is refused without a write. Supported citations verify commit
+  reachability and explicitly retain direct inspection of external artifacts;
+  CLI verification does not execute the cited historical tests. Canonical
+  closure commitc93082ee is integrated into the continuing root-owned
+  publication lane by fast-forward. Full publication, consumption/release,
+  residency, first-party Python retirement, harness adoption and rollback remain
+  open.
+
+- E368: Two fixed diagnostic phases distinguish manifest authentication from
+  allowed-directory derivation in installed-generation verification. Phase
+  wrappers preserve the existing verification call order and checkpoints; their
+  counters do not authorize effects. manifest-plan-phases-01 exits0 after a
+  fresh130.365s release build and executes three focused controls. Actual
+  synthetic artifacts record270 checkpoints with and without diagnostics,
+  authentication cancellation before any hashed bytes, and plan cancellation
+  after three plan checkpoints with678 manifest bytes hashed and no member or
+  inventory phase entered. Initial-load and member-lookup accounting remains
+  excluded from receipt revalidation diagnostics.
+
+  manifest-plan-actual-image-01 exits0 and reads the actual5971-member fresh09
+  image; three passes each perform5973 hashes over162328887 bytes. Its no-op
+  callback and regular stdout omit production's original-clock, parent and
+  pipe-liveness checks, so its15.894-16.285ms plan measurements cannot choose a
+  production optimization. The raw deficient probe and exact supervisor source
+  remain retained. Source inspection identifies the actual callback sequence:
+  original monotonic deadline check, cancellation signal/parent/stdout check,
+  original deadline check, followed by the verifier's local expiry check.
+
+  manifest-plan-actual-image-02 installs the actual cancellation handlers in an
+  isolated ignored test, requires pipe stdout and uses that callback sequence
+  under one captured30s original deadline for the initial load and three passes.
+  It exits0 in58.564s including incremental release compilation. Per-pass total
+  Selection times are556328/559120/558215us; directory derivation is
+  71791/72846/72573us, manifest authentication628/565/594us, member verification
+  411473/412425/411758us and inventory72414/73258/73265us. Every pass retains
+  5973hashes/162328887bytes and the same original expiry. Before/after full
+  image hashes/modes, native source and pinned build inputs agree; the
+  supervisor reports no remaining process group members. Its artifacts are
+  actual-image-plan-initial.json, three pass JSONs, summary and execution
+  receipt in the root's publication-integration directory.
+
+  These warmed, standalone Selection samples include libtest representation and
+  a source-matched callback chain. They do not measure receipt identity sweeps,
+  owner-side scans, complete publication latency or a cold/concurrent
+  distribution. Root owns a bounded reuse of immutable manifest-derived
+  directory data, contingent on preserving fresh manifest authentication, all
+  member hashes/identity checks and complete live inventory/mode verification.
+  No successful filesystem observation becomes cached authority; no runtime
+  speedup or production completion is claimed by the probe. The complete native
+  binary suite in manifest-plan-bin-01 exits0 in5.705s with187pass/1ignored; the
+  ignored actual-image probe has its separate explicit execution above. This
+  includes the fixed diagnostic serialization and existing integrity/refusal
+  controls, not library/integration suites or an installed invocation.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to

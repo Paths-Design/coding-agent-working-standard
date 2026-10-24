@@ -57,7 +57,7 @@ struct PhaseTotals {
 }
 #[derive(Default)]
 struct VerificationTotals {
-    phases: [Cell<PhaseTotals>; 5],
+    phases: [Cell<PhaseTotals>; 7],
     path_metadata_operations: Cell<u64>,
     fd_metadata_operations: Cell<u64>,
     hash_calls: Cell<u64>,
@@ -70,6 +70,8 @@ pub(crate) enum VerificationPhase {
     IdentityAfter,
     MemberHashing,
     InventoryModes,
+    ManifestDirectoryPlan,
+    ManifestAuthentication,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -86,6 +88,8 @@ pub(crate) struct VerificationSnapshot {
     pub identity_after: PhaseSnapshot,
     pub member_hashing: PhaseSnapshot,
     pub inventory_modes: PhaseSnapshot,
+    pub manifest_directory_plan: PhaseSnapshot,
+    pub manifest_authentication: PhaseSnapshot,
     pub path_metadata_operations: u64,
     pub fd_metadata_operations: u64,
     pub hash_calls: u64,
@@ -132,6 +136,8 @@ impl VerificationDiagnostics {
             identity_after: phase(VerificationPhase::IdentityAfter),
             member_hashing: phase(VerificationPhase::MemberHashing),
             inventory_modes: phase(VerificationPhase::InventoryModes),
+            manifest_directory_plan: phase(VerificationPhase::ManifestDirectoryPlan),
+            manifest_authentication: phase(VerificationPhase::ManifestAuthentication),
             path_metadata_operations: self.0.path_metadata_operations.get(),
             fd_metadata_operations: self.0.fd_metadata_operations.get(),
             hash_calls: self.0.hash_calls.get(),
@@ -563,19 +569,22 @@ fn verify_files(
     VERIFICATION_COUNT.with(|count| count.set(count.get() + 1));
     // The already byte-bounded manifest determines every permitted directory.
     // Do not recurse into undeclared empty trees or invent a full-image byte cap.
-    let mut directories = BTreeSet::new();
-    for relative in manifest.keys() {
-        verify.checkpoint()?;
-        let mut parent = relative_path(relative)?.parent();
-        while let Some(path) = parent {
+    let directories = verify.phase(VerificationPhase::ManifestDirectoryPlan, |verify| {
+        let mut directories = BTreeSet::new();
+        for relative in manifest.keys() {
             verify.checkpoint()?;
-            if path.as_os_str().is_empty() {
-                break;
+            let mut parent = relative_path(relative)?.parent();
+            while let Some(path) = parent {
+                verify.checkpoint()?;
+                if path.as_os_str().is_empty() {
+                    break;
+                }
+                directories.insert(path.to_path_buf());
+                parent = path.parent();
             }
-            directories.insert(path.to_path_buf());
-            parent = path.parent();
         }
-    }
+        Ok(directories)
+    })?;
     verify.phase(VerificationPhase::MemberHashing, |verify| {
         let native = manifest.contains_key(METADATA);
         let mut group: Option<MemberParent> = None;
@@ -813,11 +822,14 @@ impl Selection {
 
     pub(crate) fn revalidate(&self, verify: &mut Verification<'_>) -> Result<(), String> {
         verify.checkpoint()?;
-        if file_digest(&confined(&self.root, "manifest.json", verify)?, verify)?
-            != self.inspected_digest
-        {
-            return Err("Selected manifest changed before launch".into());
-        }
+        verify.phase(VerificationPhase::ManifestAuthentication, |verify| {
+            if file_digest(&confined(&self.root, "manifest.json", verify)?, verify)?
+                != self.inspected_digest
+            {
+                return Err("Selected manifest changed before launch".into());
+            }
+            Ok(())
+        })?;
         verify_files(&self.root, &self.manifest, verify)
     }
 
