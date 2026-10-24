@@ -1,0 +1,61 @@
+id: CAWS-NATIVE-STOP-PREREQUISITE-LANDING-001
+title: 'Land reviewed OpenCode transport and original Stop capture prerequisites'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-24T03:10:15.575Z'
+updated_at: '2026-10-24T03:10:15.575Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'OpenCode machine transport, native original Stop capture and SQLite identity receipts'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/architecture/caws-native-runtime.md'
+    - 'docs/internal/caws-runtime-modernization.md'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-opencode.ts'
+    - 'packages/caws-cli/src/init/machine-adapters.ts'
+    - 'packages/caws-cli/src/init/opencode-native-plugin.ts'
+    - 'packages/caws-cli/src/init/opencode-project-registration.ts'
+    - 'packages/caws-cli/src/init/system-runtime.ts'
+    - 'packages/caws-cli/src/init/system-surface-settings.ts'
+    - 'packages/caws-cli/src/runtime/engine.ts'
+    - 'packages/caws-cli/src/runtime/selection-observation.ts'
+    - 'packages/caws-cli/src/runtime/selection.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/templates/hook-packs/opencode/plugin.ts'
+    - 'packages/caws-cli/tests/adapter/opencode-native-plugin.test.js'
+    - 'packages/caws-cli/tests/adapter/opencode-project-registration.test.js'
+    - 'packages/caws-cli/tests/adapter/system-registration.test.js'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-native/src/agent_pid_cache.rs'
+    - 'packages/caws-native/src/agent_pid_cache/tests.rs'
+    - 'packages/caws-native/src/native_generation.rs'
+    - 'packages/caws-native/src/session_cache.rs'
+    - 'packages/caws-native/src/session_cache_wire.rs'
+    - 'packages/caws-native/src/session_cache_wire/tests.rs'
+    - 'packages/caws-native/src/sqlite_build_identity.rs'
+  out: []
+invariants:
+  - 'This bounded source delivery does not activate ordinary Stop, retire production Python or satisfy parent cutover acceptance'
+  - 'Delivered package source is identical to the inspected candidate and existing reviewed migration policy cannot be inferred from another surface'
+acceptance:
+  - id: A1
+    given: 'exact OpenCode producer and migration candidate'
+    when: 'existing retained executable fixtures and hostile controls are inspected against committed bytes'
+    then: 'original caller context and selected producer identity are retained and unreviewed or custom migration is refused with unchanged fixture state'
+  - id: A2
+    given: 'committed native prefix capture and SQLite identity prerequisites'
+    when: 'actual Git and cache effects, expiry, failure, identity mismatch and behavioral negative controls are inspected'
+    then: 'the bounded library contracts hold while ordinary activation and durable frontend-death custody remain explicitly owed'
+  - id: A3
+    given: 'the reviewed bounded candidate and open parent'
+    when: 'source gates, build and landing execute'
+    then: 'main contains the exact candidate package bytes, the ledger preserves nonclaims, and no machine installation or parent closure is inferred'
+observability:
+  - 'Retained executable fixture outputs, original Git and cache files, mutation failures, exact source pins and governed landing events'
+rollback:
+  - 'Revert the bounded source merge through normal history; preserve selected machine runtime and parent worktree'
+non_functional: {}
+contracts: []
