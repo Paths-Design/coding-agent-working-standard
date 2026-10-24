@@ -98,6 +98,7 @@ fn execute<'deadline>(
         selection_advertised: false,
         selection_sealed: false,
         selection_revalidated: false,
+        stock_selection: "not_attempted",
         dispatch_written: false,
     };
     progress.mark("payload");
@@ -131,6 +132,10 @@ struct InvocationProgress {
     selection_advertised: bool,
     selection_sealed: bool,
     selection_revalidated: bool,
+    // Native-authored finite outcome only: no paths, payloads, engine claims or
+    // refusal prose enter the bounded progress record. Admitted is necessary
+    // stock selection, not profile/prefix/store/publication authority.
+    stock_selection: &'static str,
     dispatch_written: bool,
 }
 impl InvocationProgress {
@@ -150,6 +155,7 @@ impl InvocationProgress {
             "selectionAdvertised":self.selection_advertised,
             "selectionSealed":self.selection_sealed,
             "selectionPredispatchRevalidated":self.selection_revalidated,
+            "stockSelection":self.stock_selection,
             "dispatchGrantWritten":self.dispatch_written})
     }
 }
@@ -301,6 +307,36 @@ fn execute_observed<'deadline>(
                     _ => return Err("engine proposal before dispatch grant".into()),
                 }
             });
+            // Ready ends discovery but grants no native Stop effects. Admit
+            // exactly once using native original inputs and the sealed readset.
+            // Both owners remain external, including on Unsupported, so the
+            // existing strict predispatch freshness check cannot disappear.
+            progress.mark("stock-selection");
+            let stock_selection =
+                match (original_stop.original.as_ref(), selection_receipt.as_ref()) {
+                    (Some(original), Some(receipt)) => {
+                        match stop_admission::StockStopSelection::admit(
+                            original,
+                            config,
+                            receipt,
+                            cancellation::check,
+                        ) {
+                            Ok(selected) => {
+                                progress.stock_selection = "admitted";
+                                Some(selected)
+                            }
+                            Err(stop_admission::Refusal::Unsupported(_)) => {
+                                progress.stock_selection = "unsupported";
+                                None
+                            }
+                            Err(stop_admission::Refusal::Invalidated(reason)) => {
+                                progress.stock_selection = "invalidated";
+                                return Err(reason);
+                            }
+                        }
+                    }
+                    _ => None,
+                };
             progress.mark("render-admission");
             let service_dispatch = session.admit_render_offer(
                 config,
@@ -313,7 +349,16 @@ fn execute_observed<'deadline>(
             // before the dispatch attempt, including inactive/custom selection.
             if let Some(receipt) = selection_receipt.as_ref() {
                 progress.mark("selection-predispatch-revalidation");
-                receipt.revalidate(cancellation::check)?;
+                if let Some(selected) = stock_selection.as_ref() {
+                    selected
+                        .revalidate(cancellation::check)
+                        .map_err(|refusal| {
+                            progress.stock_selection = "invalidated";
+                            refusal.to_string()
+                        })?;
+                } else {
+                    receipt.revalidate(cancellation::check)?;
+                }
                 progress.selection_revalidated = true;
             }
             // A failed write may deliver the complete grant. Record the attempt

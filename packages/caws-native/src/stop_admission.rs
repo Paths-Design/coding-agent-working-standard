@@ -212,18 +212,20 @@ fn unsupported(message: impl Into<String>) -> Refusal {
 }
 
 /// Necessary source-selection evidence; no Clone, Deserialize, publication
-/// method, or semantic-profile constructor. The complete original is retained
-/// externally so prefix completion never creates a self-referential owner.
+/// method, or semantic-profile constructor. Original capture and sealed readset
+/// remain externally owned. An unsupported attempt cannot consume the readset
+/// needed by compatibility's strict predispatch revalidation; successful
+/// selection borrows the same owners without a self-reference.
 pub(crate) struct StockStopSelection<'original, 'native> {
     original: &'original OriginalStopCapture<'native>,
-    readset: SelectionObservationReceipt<'native>,
+    readset: &'original SelectionObservationReceipt<'native>,
     home: PathBuf,
 }
 impl<'original, 'native> StockStopSelection<'original, 'native> {
     pub(crate) fn admit(
         original: &'original OriginalStopCapture<'native>,
         config: &Config,
-        readset: SelectionObservationReceipt<'native>,
+        readset: &'original SelectionObservationReceipt<'native>,
         mut cancel: impl FnMut() -> Result<(), String>,
     ) -> Result<Self, Refusal> {
         checkpoint(original.deadline(), &mut cancel)?;
@@ -249,7 +251,7 @@ impl<'original, 'native> StockStopSelection<'original, 'native> {
         readset
             .revalidate(&mut cancel)
             .map_err(Refusal::Invalidated)?;
-        let view = Readset::new(&readset)?;
+        let view = Readset::new(readset)?;
         let project = original.observed_project();
         let context = Context {
             home: &home,
@@ -269,7 +271,7 @@ impl<'original, 'native> StockStopSelection<'original, 'native> {
                 return Err(unsupported(format!("Unreviewed stock source: {relative}")));
             }
         }
-        validate_producer_identity(&view, &context, &readset, &mut cancel)?;
+        validate_producer_identity(&view, &context, readset, &mut cancel)?;
         readset
             .revalidate(&mut cancel)
             .map_err(Refusal::Invalidated)?;
@@ -284,7 +286,7 @@ impl<'original, 'native> StockStopSelection<'original, 'native> {
         self.original
     }
     pub(crate) fn readset(&self) -> &SelectionObservationReceipt<'native> {
-        &self.readset
+        self.readset
     }
     pub(crate) fn home(&self) -> &Path {
         &self.home
@@ -865,6 +867,18 @@ fn hash(bytes: &[u8]) -> String {
         .collect()
 }
 
+/// Integration-only bridge to the private assertions below. Cargo's real
+/// binary is supplied by the integration target, which can use
+/// CARGO_BIN_EXE_caws-native without changing ordinary binary-unit-test setup.
+/// This constructs no authority and is absent from production builds.
+#[cfg(all(test, target_os = "macos"))]
+#[allow(dead_code)]
+pub(crate) fn assert_admit_invalidation_with_real_custodian(
+    executor: &caws_native::invocation_project::SelectedExecutable,
+) {
+    tests::admit_invalidation_with_real_custodian(executor)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -884,6 +898,155 @@ mod tests {
     fn fixture(action: impl FnOnce(&GenerationReceipt, &Path, &Path)) {
         crate::native_generation::with_selection_generation_fixture(action)
     }
+    /// The integration wrapper supplies Cargo's actual native executable and
+    /// an understood argv0 solely for the ancestry fixture. This helper calls
+    /// the production OriginalStopCapture/custodian and StockStopSelection
+    /// constructors; no OriginalStopCapture fields or stock grant are forged.
+    /// Generation inventory remains explicitly synthetic: its inert native/Node
+    /// members are not claimed to execute or establish installed admission.
+    #[cfg(target_os = "macos")]
+    pub(super) fn admit_invalidation_with_real_custodian(
+        executor: &caws_native::invocation_project::SelectedExecutable,
+    ) {
+        use caws_native::session_cache_wire::OriginalStopCaptureInput;
+        use serde_json::value::RawValue;
+        use std::process::Command;
+
+        fixture(|generation, home, root| {
+            let project = home.join("actual-original-project");
+            fs::create_dir_all(project.join(".caws")).unwrap();
+            // macOS temporary roots may have a /var -> /private/var alias.
+            // Use the actual Git checkout spelling for original caller inputs.
+            let project = fs::canonicalize(project).unwrap();
+            let mut environment = environment(home);
+            for (key, value) in [
+                ("PATH", "/usr/bin:/bin"),
+                ("LANG", "C"),
+                ("LC_ALL", "C"),
+                ("CAWS_GIT_BINARY", "/usr/bin/git"),
+            ] {
+                environment.insert(key.into(), value.into());
+            }
+            environment.insert("CAWS_PROJECT_DIR".into(), project.to_str().unwrap().into());
+            let initialized = Command::new("/usr/bin/git")
+                .args(["init", "--quiet"])
+                .arg(&project)
+                .env_clear()
+                .envs(&environment)
+                .output()
+                .unwrap();
+            assert!(
+                initialized.status.success(),
+                "{}",
+                String::from_utf8_lossy(&initialized.stderr)
+            );
+            let payload =
+                RawValue::from_string(json!({"session_id":"s","cwd":project}).to_string()).unwrap();
+            let clock = clock();
+            let original = OriginalStopCapture::capture(
+                OriginalStopCaptureInput {
+                    id: "direct-stock-admit",
+                    runtime_digest: generation.digest(),
+                    surface: "opencode",
+                    caller_cwd: project.to_str().unwrap(),
+                    caller_environment: &environment,
+                    original_payload: &payload,
+                },
+                executor,
+                &clock,
+                || Ok(()),
+            )
+            .unwrap();
+            assert_eq!(original.observed_project().checkout, project);
+            assert_eq!(original.observed_project().canonical_root, project);
+            assert_eq!(original.observed_project().queries.len(), 2);
+            for query in &original.observed_project().queries {
+                assert!(query.pid.is_some_and(|pid| pid > 0));
+                assert!(query.settled());
+                assert!(query.exit_observed && !query.ownership_retained);
+                assert!(query.pipes.stdout_eof && query.pipes.stderr_eof);
+                assert!(!query.pipes.stdout_open && !query.pipes.stderr_open);
+                assert!(query.reaped.as_ref().is_some_and(|exit| exit.success));
+            }
+            let config = Config {
+                engine: root.join("engine.js"),
+                node: root.join("native/node"),
+                surface: "opencode".into(),
+                event: "stop".into(),
+                configuration: "system".into(),
+                digest: generation.digest().into(),
+                timeout: Duration::from_secs(30),
+            };
+            let selected = home.join("observed-before-admit");
+            fs::write(&selected, b"original observed bytes").unwrap();
+            let mut recorder = Recorder::new(generation, &clock, home);
+            recorder.read(OperationKind::Read, &selected);
+            let receipt = recorder.owner.seal(|| Ok(())).unwrap();
+            assert!(std::ptr::eq(receipt.deadline(), original.deadline()));
+            assert_eq!(receipt.runtime_digest(), original.runtime_digest());
+            assert_eq!(receipt.generation_root(), root);
+            assert_eq!(
+                original.caller_environment()["CAWS_HOME"],
+                home.to_str().unwrap()
+            );
+
+            // The fresh sparse readset passes freshness then refuses missing
+            // policy/path observations. That refusal must leave it available.
+            let untouched = match StockStopSelection::admit(&original, &config, &receipt, || Ok(()))
+            {
+                Err(refusal) => refusal,
+                Ok(_) => panic!("sparse readset minted stock selection"),
+            };
+            let missing = format!(
+                "Missing native selection observation: path-identity {}",
+                home.display()
+            );
+            assert_eq!(untouched, Refusal::Unsupported(missing.clone()));
+            receipt.revalidate(|| Ok(())).unwrap();
+
+            // A dependency changed after sealing is invalidated, even when
+            // the retained selection would otherwise be unsupported.
+            fs::write(&selected, b"changed after seal").unwrap();
+            let stale = match StockStopSelection::admit(&original, &config, &receipt, || Ok(())) {
+                Err(refusal) => refusal,
+                Ok(_) => panic!("stale readset minted stock selection"),
+            };
+            let changed = format!("Selection dependency changed: read {}", selected.display());
+            assert_eq!(stale, Refusal::Invalidated(changed.clone()));
+
+            let calls = Cell::new(0usize);
+            let sentinel = "direct stock admission cancellation sentinel";
+            let cancelled = match StockStopSelection::admit(&original, &config, &receipt, || {
+                calls.set(calls.get() + 1);
+                Err(sentinel.into())
+            }) {
+                Err(refusal) => refusal,
+                Ok(_) => panic!("cancelled readset minted stock selection"),
+            };
+            assert_eq!(cancelled, Refusal::Invalidated(sentinel.into()));
+            assert_eq!(
+                calls.get(),
+                1,
+                "original callback was skipped, replaced or repeated"
+            );
+            clock.check().unwrap();
+            assert!(!project.join(".caws/sessions").exists());
+            if std::env::var_os("CAWS_NATIVE_GENERATION_TEST_ARTIFACTS").is_some() {
+                fs::write(home.join("direct-stock-admit.json"), serde_json::to_vec_pretty(&json!({
+                    "scope":"actual OriginalStopCapture + native custodian + Git; synthetic verified generation, no stock-positive/publication grant",
+                    "generation":generation.digest(),"root":root,"home":home,"project":project,
+                    "originalDeadline":clock.envelope(),"custodianExecutable":executor.path,
+                    "custodianPhysicalPath":executor.physical_path,"custodianSha256":executor.sha256,
+                    "queryPids":original.observed_project().queries.iter().map(|q|q.pid).collect::<Vec<_>>(),
+                    "untouched":{"kind":"Unsupported","message":missing},
+                    "stale":{"kind":"Invalidated","message":changed},
+                    "cancelled":{"kind":"Invalidated","message":sentinel,"callbackCalls":calls.get()},
+                    "sessionsExist":false
+                })).unwrap()).unwrap();
+            }
+        });
+    }
+
     struct Recorder<'a> {
         owner: SelectionObservationOwner<'a>,
         seen: BTreeSet<(OperationKind, PathBuf)>,
