@@ -294,7 +294,7 @@ describe('SQLite tooling direct-child observation boundary', () => {
     const controller = new globalThis.AbortController();
     options.signal = controller.signal;
     options.args = script(
-      "require('fs').writeSync(1, 'started\\n'); require('fs').writeFileSync('started', 'yes'); setInterval(() => {}, 1000)"
+      "require('fs').writeSync(1, 'started\\n'); require('fs').writeFileSync('started.pending', 'yes'); require('fs').renameSync('started.pending', 'started'); setInterval(() => {}, 1000)"
     );
     const pending = runSqliteBuildStep(options);
     const until = Date.now() + 3000;
