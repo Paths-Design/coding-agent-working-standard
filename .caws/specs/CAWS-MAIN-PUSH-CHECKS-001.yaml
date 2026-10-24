@@ -38,3 +38,12 @@ rollback:
   - 'Revert the repair commit through an authorized CAWS lane if its contract is refuted'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Five focused suites passed 120 tests exit 0; raw /private/tmp/caws-push-checks-targeted-20261024.log. Directory-only inventory tightening then passed seven tests exit 0 in /private/tmp/caws-push-checks-reference-20261024.log. Fixed artifact hashes and semantic hostile controls preserved; committed candidate 7fd143e47555d04d31993f61a83b5272c771ffcb."
+    recorded_at: "2026-10-24T21:33:50.017Z"
+    test_nodeid: "packages/caws-cli/tests/tooling/qualify-stop-profile.test.js::request cannot replace fixed oracle with echo recipes or change reviewed corpus"
+    exit_code: 0
+    commit_sha: "7fd143e47555d04d31993f61a83b5272c771ffcb"
+    test_verified_at: "7fd143e47555d04d31993f61a83b5272c771ffcb"
