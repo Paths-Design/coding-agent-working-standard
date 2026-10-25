@@ -87,9 +87,10 @@ test('two same-priority advisory handlers survive as one bounded adapter result'
 test('unresolvable project context fails open loudly instead of blocking the session', () => {
   const home = path.join(root, 'home');
   installMachineRuntime({ home, templatesRoot });
-  // Shape 1: a .caws ancestor without any git repository (proving-grounds).
+  // Shape 1: project governance without a resolvable Git repository warns.
   const cawsAncestor = path.join(root, 'bench');
   fs.mkdirSync(path.join(cawsAncestor, '.caws'), { recursive: true });
+  fs.writeFileSync(path.join(cawsAncestor, '.caws/policy.yaml'), 'version: 1\n');
   fs.mkdirSync(path.join(cawsAncestor, 'subject'), { recursive: true });
   const cawsResult = invoke(home, path.join(cawsAncestor, 'subject'));
   expect(cawsResult.status).toBe(0);
@@ -107,6 +108,13 @@ test('unresolvable project context fails open loudly instead of blocking the ses
   const quiet = invoke(home, plain);
   expect(quiet.status).toBe(0);
   expect(quiet.stderr).not.toContain('CAWS machine adapter');
+  // A session cache alone does not opt an ordinary directory into governance.
+  const cache = path.join(root, 'cache-only');
+  fs.mkdirSync(path.join(cache, '.caws/sessions'), { recursive: true });
+  const cacheOnly = invoke(home, cache);
+  expect(cacheOnly.status).toBe(0);
+  expect(cacheOnly.stdout).toBe('');
+  expect(cacheOnly.stderr).toBe('');
 });
 
 test('malformed and over-budget optional advisories are omitted without acquiring denial authority', () => {

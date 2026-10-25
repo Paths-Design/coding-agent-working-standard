@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { assertMachinePath } from '../init/machine-paths';
+import { resolveExecutionWorkdir } from './execution-workdir';
 import type { RuntimeRequest } from './protocol';
 import type { ActiveInvocationSelection } from './selection';
 
@@ -12,7 +13,7 @@ const PREFIX: Readonly<Record<string, string>> = {
   'runtime-paths.sh': 'c2cc098b08c110723c2d1805170ba2d73a855f0864e5792bb7a88a2c3def7f08',
   'lib/agent-surface.sh': '9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32',
   'surfaces/codex/lib/parse-input.sh':
-    '04a21ee0cd24d917bbee4c63f9285a2a867f2f9a08a9cdf2f9a78d3400a73c61',
+    'c33d320efef119f826de58b145344288264b985f10d911b435645f6d851444fc',
   'lib/session-cache.sh': 'eea9bb74ec74d07931eb13ac45e6822a348ce7fb49e4a7baa9d590e321e093cb',
   'lib/session-id.sh': 'cf662f10e6d3477cecbf5deabd8d2b63284f6f4ac14fa7070725ff8502515c53',
   'surfaces/codex/lib/emit.sh': '7719c904cce6073598717e6a90d82e1c88e99482f79afbfd12b35d23f6d7e86e',
@@ -330,6 +331,13 @@ export function qualifiesForNativeSessionCache(context: {
     if (cwd !== undefined && cwd !== null && cwd !== '') {
       if (typeof cwd !== 'string' || !directory(cwd)) return false;
       const relative = path.relative(selection.checkout, cwd);
+      if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative))
+        return false;
+    }
+    const execution = resolveExecutionWorkdir(request.payload, request.event);
+    if (execution.status === 'resolved') {
+      if (!directory(execution.path)) return false;
+      const relative = path.relative(selection.checkout, execution.path);
       if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative))
         return false;
     }
