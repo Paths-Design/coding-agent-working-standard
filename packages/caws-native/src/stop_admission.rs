@@ -28,8 +28,9 @@ const LOGGER_INDEX: usize = 2;
 const PRODUCER: &str = "surfaces/opencode/native-plugin.ts";
 
 // Reviewed local source identities from component-comparison controlled-05's
-// reference.sharedFiles and baseline2188b06e runtime templates. These pins prove
-// stock source identity only, never the remaining semantic/profile joins.
+// reference.sharedFiles and baseline2188b06e runtime templates, with the
+// reviewed R06 guard-config shell/CJS cohort. These pins prove stock source
+// identity only, never the remaining semantic/profile joins.
 
 const STOCK: &[(&str, &str)] = &[
     (
@@ -77,12 +78,12 @@ const STOCK: &[(&str, &str)] = &[
         "32bd200bf9160dffc5d349a7e13341bbcf6644ab9c47ad3f491f68d3ba77bcf4",
     ),
     (
-        "lib/guard-config.py",
-        "55496bed9393fd458c3fda326973067dffa309553eb915018cc462ce963ba7e0",
+        "lib/guard-config.cjs",
+        "4065e9febf662dd9a3933b65926e913ecd50b3bca73a4192e44f1097cc982b11",
     ),
     (
         "lib/guard-config.sh",
-        "934d60a8a56068caf2129a5705f207bf4b1203f2164dd385a057e510505cbd55",
+        "c3d9d5b0f6ffb4eb6add5a3f27b2d3d2bf7f46d86b39614c351e8b5bba06c73c",
     ),
     (
         "lib/guard-message.sh",
@@ -535,6 +536,17 @@ fn empty_surface(value: &Value) -> bool {
             .all(|value| value.as_object().is_some_and(|object| object.is_empty()))
 }
 fn validate_selection(view: &Readset<'_>, context: &Context<'_>) -> Result<(), Refusal> {
+    // The reviewed shell defaults to its pinned CJS sibling. An explicit
+    // Python parser selects executable bytes outside this stock source cohort.
+    if context
+        .environment
+        .get("CAWS_GUARD_CONFIG_PY")
+        .is_some_and(|v| !v.is_empty())
+    {
+        return Err(unsupported(
+            "Custom guard configuration parser requires compatibility",
+        ));
+    }
     for root in [
         context.home,
         context.root,
@@ -1226,6 +1238,120 @@ mod tests {
         validate_adapter_absence(&Readset::new(receipt)?, context, names)?;
         effects.set(effects.get() + 1);
         Ok(())
+    }
+    // The ordinary shared manifest installs every library in this template
+    // directory except the service-image-only client (manifest-shared.ts).
+    // Read actual repository bytes rather than generating files from STOCK pins.
+    fn repository_libraries(target: &Path) {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../caws-cli/templates/hook-packs/shared/lib");
+        fs::create_dir_all(target.join("lib")).unwrap();
+        for entry in fs::read_dir(source).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_name() == "session-render-service-client.sh" {
+                continue;
+            }
+            assert!(entry.file_type().unwrap().is_file());
+            fs::copy(entry.path(), target.join("lib").join(entry.file_name())).unwrap();
+        }
+    }
+    fn library_admission(
+        generation: &GenerationReceipt,
+        home: &Path,
+        root: &Path,
+    ) -> Result<(), Refusal> {
+        let clock = clock();
+        let env = environment(home);
+        let context = context(home, root, &env);
+        let mut recorder = Recorder::new(generation, &clock, home);
+        let directory = root.join("lib");
+        recorder.confined(root, &directory);
+        recorder.read(OperationKind::Exists, &directory);
+        recorder.read(OperationKind::List, &directory);
+        let names = STOCK
+            .iter()
+            .filter_map(|(name, _)| name.strip_prefix("lib/").map(String::from))
+            .collect();
+        recorder.adapter_dependencies(home, root, &names, None);
+        for entry in fs::read_dir(&directory).unwrap() {
+            let file = entry.unwrap().path();
+            recorder.confined(root, &file);
+            recorder.read(OperationKind::Stat, &file);
+            if fs::symlink_metadata(&file).unwrap().is_file() {
+                recorder.read(OperationKind::Read, &file);
+            }
+        }
+        let receipt = recorder.owner.seal(|| Ok(())).unwrap();
+        receipt
+            .revalidate(|| Ok(()))
+            .map_err(Refusal::Invalidated)?;
+        validate_libraries(&Readset::new(&receipt)?, &context)
+    }
+    #[test]
+    fn repository_stock_libraries_admit_reviewed_guard_config_cohort() {
+        fixture(|generation, home, _| {
+            let root = home.join("repository-stock");
+            repository_libraries(&root);
+            assert!(!root.join("lib/guard-config.py").exists());
+            assert!(root.join("lib/guard-config.cjs").is_file());
+            library_admission(generation, home, &root).unwrap();
+        });
+    }
+    #[test]
+    fn guard_config_dependencies_and_unknown_inventory_refuse_before_effects() {
+        fixture(|generation, home, _| {
+            let root = home.join("repository-stock");
+            repository_libraries(&root);
+            library_admission(generation, home, &root).unwrap();
+            for name in ["guard-config.cjs", "guard-config.sh"] {
+                let file = root.join("lib").join(name);
+                let original = fs::read(&file).unwrap();
+                fs::remove_file(&file).unwrap();
+                assert!(matches!(library_admission(generation, home, &root),
+                    Err(Refusal::Unsupported(message)) if message == "Stock shared-library inventory differs"));
+                fs::write(&file, b"unreviewed dependency").unwrap();
+                assert!(matches!(library_admission(generation, home, &root),
+                    Err(Refusal::Unsupported(message)) if message == format!("Selected stock library differs: {name}")));
+                fs::remove_file(&file).unwrap();
+                std::os::unix::fs::symlink(root.join("lib/session-id.sh"), &file).unwrap();
+                assert!(matches!(library_admission(generation, home, &root),
+                    Err(Refusal::Unsupported(message)) if message.contains("Redirected or unavailable")));
+                fs::remove_file(&file).unwrap();
+                fs::write(&file, original).unwrap();
+                library_admission(generation, home, &root).unwrap();
+                let override_file = home.join("surfaces/opencode/lib").join(name);
+                fs::create_dir_all(override_file.parent().unwrap()).unwrap();
+                fs::write(&override_file, b"higher priority custom dependency").unwrap();
+                assert!(matches!(library_admission(generation, home, &root),
+                    Err(Refusal::Unsupported(message)) if message == "Custom adapter inventory requires compatibility"));
+                fs::remove_file(override_file).unwrap();
+            }
+            fs::write(root.join("lib/unknown.cjs"), b"unreviewed").unwrap();
+            assert!(matches!(library_admission(generation, home, &root),
+                Err(Refusal::Unsupported(message)) if message == "Stock shared-library inventory differs"));
+        });
+    }
+    #[test]
+    fn custom_guard_config_selector_refuses_before_policy_or_effects() {
+        fixture(|generation, home, root| {
+            let clock = clock();
+            let recorder = Recorder::new(generation, &clock, home);
+            let receipt = recorder.owner.seal(|| Ok(())).unwrap();
+            let mut env = environment(home);
+            let custom = home.join("custom.py");
+            let witness = b"raise Exception('must not execute')\n";
+            fs::write(&custom, witness).unwrap();
+            env.insert(
+                "CAWS_GUARD_CONFIG_PY".into(),
+                custom.to_str().unwrap().into(),
+            );
+            let result =
+                validate_selection(&Readset::new(&receipt).unwrap(), &context(home, root, &env));
+            assert!(matches!(result, Err(Refusal::Unsupported(message))
+                if message == "Custom guard configuration parser requires compatibility"));
+            assert_eq!(fs::read(&custom).unwrap(), witness);
+            assert!(!home.join(".caws/sessions").exists());
+        });
     }
     #[test]
     fn confinement_requires_explicit_path_identity_without_lstat_fallback() {

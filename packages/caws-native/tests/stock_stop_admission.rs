@@ -27,6 +27,7 @@ mod protocol;
 #[allow(dead_code)]
 #[path = "../src/selection_observation.rs"]
 mod selection_observation;
+#[cfg(feature = "sqlite-store")]
 #[allow(dead_code)]
 #[path = "../src/sqlite_build_identity.rs"]
 mod sqlite_build_identity;

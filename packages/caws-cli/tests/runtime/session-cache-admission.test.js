@@ -182,6 +182,7 @@ function sessionEnd(surface = 'codex') {
     'run-handlers.sh',
     'reprieve.sh',
     'guard-config.sh',
+    'guard-config.cjs',
   ]) {
     const kind =
       surface === 'codex' && ['parse-input.sh', 'emit.sh', 'run-handlers.sh'].includes(name)
@@ -234,6 +235,7 @@ test.each([
   'lib/run-handlers.sh',
   'lib/reprieve.sh',
   'lib/guard-config.sh',
+  'lib/guard-config.cjs',
   'lib/session-id.sh',
   'surfaces/codex/lib/parse-input.sh',
   'surfaces/codex/lib/emit.sh',
@@ -244,6 +246,49 @@ test.each([
   fs.appendFileSync(path.join(runtime, relative), '\n# unreviewed source\n');
   expect(qualifyEnd()).toBe(false);
 });
+
+test.each(['codex', 'claude-code'])(
+  'SessionEnd requires actual selected guard-config helper and refuses custom parser for %s',
+  (surface) => {
+    sessionEnd(surface);
+    expect(fs.existsSync(path.join(runtime, 'lib/guard-config.py'))).toBe(false);
+    expect(qualifyEnd()).toBe(true);
+    for (const name of ['guard-config.cjs', 'guard-config.sh']) {
+      const file = path.join(runtime, 'lib', name);
+      const original = fs.readFileSync(file);
+      const selected = selection.libraries[name];
+      delete selection.libraries[name];
+      expect(qualifyEnd()).toBe(false);
+      selection.libraries[name] = selected;
+      fs.rmSync(file);
+      expect(qualifyEnd()).toBe(false);
+      fs.symlinkSync(path.join(runtime, 'lib/session-id.sh'), file);
+      expect(qualifyEnd()).toBe(false);
+      fs.rmSync(file);
+      fs.writeFileSync(file, original);
+      expect(qualifyEnd()).toBe(true);
+      for (const base of [home, runtime]) {
+        const override = path.join(base, 'surfaces', surface, 'lib', name);
+        fs.mkdirSync(path.dirname(override), { recursive: true });
+        fs.writeFileSync(override, original);
+        expect(qualifyEnd()).toBe(false);
+        fs.rmSync(override);
+        expect(qualifyEnd()).toBe(true);
+      }
+    }
+    const custom = path.join(root, 'custom.py');
+    fs.writeFileSync(custom, "raise Exception('must not execute')\n");
+    for (const selectedEnvironment of [request.caller.environment, environment]) {
+      selectedEnvironment.CAWS_GUARD_CONFIG_PY = custom;
+      const before = snapshot(root);
+      expect(qualifyEnd()).toBe(false);
+      expect(snapshot(root)).toEqual(before);
+      delete selectedEnvironment.CAWS_GUARD_CONFIG_PY;
+      expect(qualifyEnd()).toBe(true);
+    }
+    expect(fs.existsSync(path.join(checkout, '.caws/sessions'))).toBe(false);
+  }
+);
 
 test.each(['foreign', null, '', 'unknown', '../escape'])(
   'independent SessionEnd identity must match original %#',

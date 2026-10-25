@@ -623,7 +623,8 @@ import { isAdapterCoveredSurface } from './types';
 // v108: audit tool-use fields travel over stdin, preserving large payloads
 // under Linux's per-argument exec limit.
 // v109: stock guard configuration uses a standalone typed Node loader.
-export const SHARED_PACK_VERSION = 109;
+// v110: generated guard configuration preserves separator semantics with lint-safe predicates.
+export const SHARED_PACK_VERSION = 110;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
