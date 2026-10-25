@@ -50,3 +50,9 @@ evidence:
     recorded_at: "2026-10-25T00:13:43.825Z"
     exit_code: 0
     commit_sha: a6ec3b05a84eb69bff0226ae58f4e114751628c1
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Committed candidate a6ec3b05 independently reviewed against actual consumer/lock coordinates and raw checks; ledger4518a423 preserves failed attempts and bounded pair18. Governed merge44b5d017 landed. git diff --exit-code 4518a423 main -- package-lock.json packages/caws-cli/package.json packages/caws-cli/jest.config.js docs/internal/caws-runtime-modernization.md exited0; git merge-base --is-ancestor 4518a423 main exited0. Four source blobs match checked candidate. Pair18 actual positive15563ms and hostile9993ms retained externally; full typed route, replay, usable rollback, harness delivery, residency, Python retirement and machine cutover remain root-owned parent obligations; parent0/8 unchanged."
+    recorded_at: "2026-10-25T00:18:12.594Z"
+    exit_code: 0
+    commit_sha: "44b5d017cf8f7c5866fe1b999148fee4c25553f0"
