@@ -628,7 +628,7 @@ import { isAdapterCoveredSurface } from './types';
 // require validated host command-directory context; missing context retains
 // unavailable-native-context instead of an inferred ownership decision.
 // v112: the stock reprieve consult uses a generated standalone typed reader.
-export const SHARED_PACK_VERSION = 112;
+export const SHARED_PACK_VERSION = 113;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
