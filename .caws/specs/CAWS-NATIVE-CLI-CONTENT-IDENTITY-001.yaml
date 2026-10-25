@@ -63,3 +63,10 @@ evidence:
     command: python3 /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/supervise-component.py
     exit_code: 0
     commit_sha: f4764277d056a32bc3c2aa360d704e77a612280f
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Independently inspected /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-budget-tests.log and .json:46controls passed; original30s unchanged,outerJest35s; exact receipt/request/signal,forged/copied,changed generation,cancellation,retained deadline,backward-clock exercised. /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/qualification-component/result.json also shows natural30s expiry and7distinct authentication rejections. Monotonic protection starts at first component observation; pre-comparison admission elapsed time belongs to exact native-owner signal and remains parent integration. Source unchanged6db; timeout delta f476. CLI verify checks commit existence only; external artifacts manually adjudicated."
+    recorded_at: "2026-10-25T08:03:13.864Z"
+    command: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath tests/runtime/cli-identity.test.js
+    exit_code: 0
+    commit_sha: f4764277d056a32bc3c2aa360d704e77a612280f
