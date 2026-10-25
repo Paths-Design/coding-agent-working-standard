@@ -1,0 +1,37 @@
+id: CAWS-NATIVE-CLI-CONTENT-IDENTITY-001
+title: 'Compare separate CLI installs against a reviewed native content closure'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-25T01:46:04.895Z'
+updated_at: '2026-10-25T01:46:04.895Z'
+created_by_session: '01a170a2-efe6-7bd2-a9ac-7cdcc3b070f7'
+blast_radius:
+  modules:
+    - 'runtime CLI content identity component'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/cli-identity.ts'
+    - 'packages/caws-cli/tests/runtime/cli-identity.test.js'
+  out: []
+invariants:
+  - 'Unknown custom routing and unsupported Node resolution decline without execution or mutation'
+  - 'A matched receipt remains request-local and requires revalidation before use'
+acceptance:
+  - id: A1
+    given: 'a reviewed complete production CLI prefix and separately installed matching CLI'
+    when: 'bounded content and resolution capture completes under the original deadline'
+    then: 'distinct paths match by pinned contents including Node and dependencies'
+  - id: A2
+    given: 'custom routing or changed application dependency boundary or source during capture'
+    when: 'identity capture or retained receipt revalidation runs'
+    then: 'the component declines with no CLI execution or state mutation'
+observability:
+  - 'Retain real standalone installer fixtures and raw focused controls outside tracked source'
+rollback:
+  - 'Revert the isolated component commit before any consumer integration'
+non_functional:
+  security:
+    - 'No capability string or mutable external manifest establishes identity'
+contracts: []
