@@ -34,3 +34,9 @@ rollback:
   - 'Revert only the bounded documentation changes through governed history.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Exactly two operating guides imported from older lane with unsupported shell-analysis opening claims excluded. Direct source grounding: worktree.ts815/893 dry-run/apply mutual exclusion and compose; worktrees-writer.ts2730 noClose,2955teardown,2971partialfailure,2998safe branchdelete; machine-adapters.ts157-239 retained identity/recognized mode repair and entrybeforepointer; machine-runtime-state.ts186-211 manifest metadata/hash/mode; system-runtime.ts221-222 observation refusal. Independent read-only committed review inspected same coordinates; diff --check0 and all5policygates pass. Documentation only, no new runtime test or native-adoption claim; commitverify checks existence."
+    recorded_at: "2026-10-25T01:19:00.201Z"
+    commit_sha: "052e2920"
