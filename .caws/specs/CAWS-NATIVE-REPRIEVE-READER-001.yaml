@@ -83,3 +83,9 @@ non_functional: {}
 contracts:
   - name: 'reprieve-reader-compatibility'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Consumed reader only: manually inspected reprieve-reader-01/bats-02.log13 actual private dispatcher controls and focused-03.log434pass1explicit supplied-native skip. Valid named guard skip/log/execution records, canonical worktree reach, missing asset/node, wrong session/repo, expiry/revoke presence, byte carrier and cleared globals verified by source/assertions. actual-output-comparison-01 retains6355 CPython3.11 expiry comparisons,97records through both actual entries,348 byte controls and30 entry controls; declared near-expiry/nonUTF8 compatibility exclusions preserved. No real session reprieve changed. Commit verification proves reachability, not execution of these external raw logs."
+    recorded_at: "2026-10-25T20:34:38.827Z"
+    commit_sha: ac1ea80d98595e1c62afce27388581522043572e
