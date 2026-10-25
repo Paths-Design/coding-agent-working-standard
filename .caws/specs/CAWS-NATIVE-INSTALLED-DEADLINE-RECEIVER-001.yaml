@@ -1,0 +1,41 @@
+id: CAWS-NATIVE-INSTALLED-DEADLINE-RECEIVER-001
+title: 'Retain a cooperative installed invocation deadline in the native frontend'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-25T17:10:29.562Z'
+updated_at: '2026-10-25T17:10:29.562Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Native installed-invocation parsing and existing frontend admission deadline'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/cli.rs'
+  out: []
+invariants:
+  - 'The installed deadline envelope grants time restriction and generation correlation only, never caller identity, receipt, eligibility or admission authority'
+  - 'Installed invocation never recaptures a missing, malformed, expired or mismatched clock; ordinary direct invoke retains its explicit timeout contract'
+  - 'Foreign installed entry, describe and legacy transport remain untouched and the original 30000ms cutover acceptance remains open until end-to-end proof'
+acceptance:
+  - id: A1
+    given: 'a complete versioned installed invocation and a live cooperative original monotonic envelope'
+    when: 'the native frontend parses and starts it'
+    then: 'one received deadline consumes transit time and is passed through existing native observation and admission without a fresh capture or manufactured original context'
+  - id: A2
+    given: 'incomplete, duplicated, invalid, expired, future, oversized or generation-mismatched installed deadline inputs'
+    when: 'the real frontend is invoked'
+    then: 'it refuses before payload or engine effects without recapture or retry, while ordinary invoke preserves its supported behavior'
+  - id: A3
+    given: 'the committed receiver candidate and unchanged foreign producer'
+    when: 'focused hostile tests, native compilation, policy gates and independent review complete'
+    then: 'retained raw results support only receiver behavior and explicitly leave genuine installed-entry deadline, describe, legacy and complete scenario acceptance open'
+observability:
+  - 'Raw native stdout, stderr, exit status, selected hostile test output, immutable source identities and absence of engine effects'
+rollback:
+  - 'Revert this receiver unit normally; no shared runtime installation, registration, trust or producer activation occurs'
+non_functional: {}
+contracts:
+  - name: 'installed-invocation-deadline-v1'
+    type: behavior
