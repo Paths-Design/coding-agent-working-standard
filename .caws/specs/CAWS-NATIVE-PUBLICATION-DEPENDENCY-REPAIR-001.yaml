@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-PUBLICATION-DEPENDENCY-REPAIR-001
 title: 'Repair audited publication dependency closure'
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Exact compatible lock-only patch landed; bounded audit and consumer/build/full-lint criteria passed against combined guard repair in isolated source99681f7a. Full publication, installed native rerun and parent acceptance remain open.'
 created_at: '2026-10-25T01:31:52.363Z'
-updated_at: '2026-10-25T01:31:53.867Z'
+updated_at: '2026-10-25T02:16:18.539Z'
 created_by_session: '01a170a2-efe6-7bd2-a9ac-7cdcc3b070f7'
 blast_radius:
   modules:
