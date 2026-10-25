@@ -26,6 +26,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { parseReprieveExpiry } from '../../runtime/reprieve-reader';
 import { machineHome, assertMachinePath, atomicMachineWrite } from '../../init/machine-adapters';
 import {
   SURFACE_ENV_VARS,
@@ -378,14 +379,15 @@ function parseRecord(file: string, sessionId: string, state: ReprieveState): Rep
 }
 
 function isActive(record: ReprieveRecord, now: Date): boolean {
-  // Legacy timezone-less ISO values use UTC, matching the shell reader.
-  const expires = /(?:Z|[+-]\d\d:\d\d)$/.test(record.expires_at)
-    ? record.expires_at
-    : `${record.expires_at}Z`;
+  const expires = parseReprieveExpiry(record.expires_at);
+  const nowMs = now.getTime();
   return (
     record.revoked_at === undefined &&
-    Number.isFinite(Date.parse(expires)) &&
-    Date.parse(expires) > now.getTime()
+    expires !== undefined &&
+    Number.isFinite(nowMs) &&
+    // Match the runtime reader's conservative millisecond decision: the
+    // current millisecond cannot establish a still-live submillisecond grant.
+    expires >= (BigInt(nowMs) + 1n) * 1000n
   );
 }
 
@@ -870,7 +872,7 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
       return 1;
     }
     expiresAt = new Date(RAW_EXPIRY);
-    if (!Number.isFinite(expiresAt.getTime())) {
+    if (!Number.isFinite(expiresAt.getTime()) || parseReprieveExpiry(RAW_EXPIRY) === undefined) {
       err(
         `caws reprieve grant: --expires-at "${RAW_EXPIRY}" is not a valid ISO-8601 timestamp. Expected YYYY-MM-DDTHH:MM:SSZ, e.g. ${new Date(now.getTime() + 30 * 60_000).toISOString()}. To avoid computing a timestamp, use --for 30m instead.`
       );

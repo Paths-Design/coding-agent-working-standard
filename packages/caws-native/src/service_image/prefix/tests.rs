@@ -53,6 +53,10 @@ fn fixture() -> (PreparedImageManifest, Originals) {
         "runtime-paths.sh",
         "lib/run-handlers.sh",
         "lib/session-cache.sh",
+        "lib/guard-config.sh",
+        "lib/guard-config.cjs",
+        "lib/reprieve.sh",
+        "lib/reprieve-reader.cjs",
         "lib/agent-surface.sh",
         "lib/session-id.sh",
         "surfaces/codex/lib/parse-input.sh",
@@ -66,12 +70,40 @@ fn fixture() -> (PreparedImageManifest, Originals) {
             native_prefix_source(relative).unwrap().to_vec(),
         );
     }
-    manifest.selection.libraries.push(Library {
-        name: "session-cache.sh".into(),
-        path: "/machine/runtime/lib/session-cache.sh".into(),
-        sha256: hash(&native_prefix_source("lib/session-cache.sh").unwrap()),
-        kind: "shared".into(),
-    });
+    // Mirror real stock selection's shared-then-surface precedence using the
+    // repository files, independently of the compiled reviewed hash table.
+    let templates = Path::new(env!("CARGO_MANIFEST_DIR")).join("../caws-cli/templates/hook-packs");
+    let mut libraries = BTreeMap::new();
+    for (kind, directory, prefix) in [
+        ("shared", "shared/lib", "lib"),
+        ("surface", "codex/hooks/lib", "surfaces/codex/lib"),
+    ] {
+        for entry in std::fs::read_dir(templates.join(directory)).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_file() {
+                let name = entry.file_name().into_string().unwrap();
+                assert!(!name.starts_with(".env"));
+                libraries.insert(name.clone(), (kind, format!("{prefix}/{name}")));
+            }
+        }
+    }
+    manifest.selection.libraries.clear();
+    for (name, (kind, relative)) in libraries {
+        let bytes = native_prefix_source(&relative).unwrap();
+        originals
+            .bytes
+            .insert(("runtime".into(), relative.clone()), bytes.clone());
+        manifest.selection.libraries.push(Library {
+            name,
+            path: format!("/machine/runtime/{relative}"),
+            sha256: hash(&bytes),
+            kind: kind.into(),
+        });
+    }
+    manifest
+        .selection
+        .libraries
+        .sort_by(|a, b| a.name.cmp(&b.name));
     (manifest, originals)
 }
 #[test]
@@ -202,4 +234,122 @@ fn unknown_library_tier_or_handler_order_never_earns_proof() {
         derive_prefix_concurrency(&changed, &originals),
         PrefixConcurrency::Serial(_)
     ));
+}
+
+#[test]
+fn reprieve_cohort_requires_selected_shared_routes_and_exact_sibling_bytes() {
+    let (manifest, originals) = fixture();
+    assert!(reviewed_shared_siblings(&manifest.selection, &originals));
+    for name in REVIEWED_SHARED_SIBLINGS {
+        for kind in ["surface", "project", "user", "unknown"] {
+            let mut changed = manifest.clone();
+            changed
+                .selection
+                .libraries
+                .iter_mut()
+                .find(|library| library.name == name)
+                .unwrap()
+                .kind = kind.into();
+            assert!(
+                !reviewed_shared_siblings(&changed.selection, &originals),
+                "{name}: {kind}"
+            );
+            assert!(matches!(
+                derive_prefix_concurrency(&changed, &originals),
+                PrefixConcurrency::Serial(_)
+            ));
+        }
+        let mut changed = manifest.clone();
+        changed
+            .selection
+            .libraries
+            .iter_mut()
+            .find(|library| library.name == name)
+            .unwrap()
+            .sha256 = "0".repeat(64);
+        assert!(
+            !reviewed_shared_siblings(&changed.selection, &originals),
+            "unbound digest: {name}"
+        );
+        assert!(matches!(
+            derive_prefix_concurrency(&changed, &originals),
+            PrefixConcurrency::Serial(_)
+        ));
+        let key = ("runtime".into(), format!("lib/{name}"));
+        let mut changed = Originals {
+            bytes: originals.bytes.clone(),
+            pins: vec![],
+            runtime_files: BTreeMap::new(),
+        };
+        let original = changed.bytes.remove(&key).unwrap();
+        assert!(
+            !reviewed_shared_siblings(&manifest.selection, &changed),
+            "missing sibling: {name}"
+        );
+        assert!(matches!(
+            derive_prefix_concurrency(&manifest, &changed),
+            PrefixConcurrency::Serial(_)
+        ));
+        changed.bytes.insert(
+            key,
+            [original.as_slice(), b"\n// unreviewed sibling\n"].concat(),
+        );
+        assert!(
+            !reviewed_shared_siblings(&manifest.selection, &changed),
+            "changed sibling: {name}"
+        );
+        assert!(matches!(
+            derive_prefix_concurrency(&manifest, &changed),
+            PrefixConcurrency::Serial(_)
+        ));
+    }
+}
+
+#[test]
+fn reprieve_cohort_omitted_metadata_cannot_hide_present_changed_or_missing_closure() {
+    let (manifest, originals) = fixture();
+    assert!(reviewed_shared_siblings(&manifest.selection, &originals));
+    for name in REVIEWED_SHARED_SIBLINGS {
+        let mut omitted = manifest.clone();
+        omitted
+            .selection
+            .libraries
+            .retain(|library| library.name != name);
+        assert!(
+            !reviewed_shared_siblings(&omitted.selection, &originals),
+            "omitted selected sibling: {name}"
+        );
+        assert!(matches!(
+            derive_prefix_concurrency(&omitted, &originals),
+            PrefixConcurrency::Serial(_)
+        ));
+        let key = ("runtime".into(), format!("lib/{name}"));
+        let mut changed = Originals {
+            bytes: originals.bytes.clone(),
+            pins: vec![],
+            runtime_files: BTreeMap::new(),
+        };
+        changed
+            .bytes
+            .get_mut(&key)
+            .unwrap()
+            .extend_from_slice(b"\n// omitted mutation\n");
+        assert!(
+            !reviewed_shared_siblings(&omitted.selection, &changed),
+            "omitted mutated closure: {name}"
+        );
+        assert!(matches!(
+            derive_prefix_concurrency(&omitted, &changed),
+            PrefixConcurrency::Serial(_)
+        ));
+        changed.bytes.remove(&key).unwrap();
+        assert!(
+            !reviewed_shared_siblings(&omitted.selection, &changed),
+            "omitted missing closure: {name}"
+        );
+        assert!(matches!(
+            derive_prefix_concurrency(&omitted, &changed),
+            PrefixConcurrency::Serial(_)
+        ));
+    }
 }

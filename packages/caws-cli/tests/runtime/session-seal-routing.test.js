@@ -247,6 +247,7 @@ test.each([
   'lost',
   'effectful-decline',
   'changed-source',
+  'changed-reader',
   'cancelled',
   'cancelled-unavailable',
 ])('prefix %s cannot replay compatibility or reach seal', async (kind) => {
@@ -265,8 +266,14 @@ test.each([
           };
     }
     if (kind === 'effectful-decline') return { ...declinedPrefix, envelopePublished: true };
-    if (kind === 'changed-source') {
-      fs.appendFileSync(path.join(runtime, 'lib/run-handlers.sh'), '\n# replaced after prefix\n');
+    if (kind === 'changed-source' || kind === 'changed-reader') {
+      fs.appendFileSync(
+        path.join(
+          runtime,
+          kind === 'changed-reader' ? 'lib/reprieve-reader.cjs' : 'lib/run-handlers.sh'
+        ),
+        kind === 'changed-reader' ? '\n// replaced after prefix\n' : '\n# replaced after prefix\n'
+      );
       return completedPrefix;
     }
     return { ...declinedPrefix, status: 'unavailable' };
@@ -277,6 +284,11 @@ test.each([
   await expect(state.prepared.dispatch()).rejects.toThrow();
   expect(fallback).not.toHaveBeenCalled();
   expect(owned.calls).toEqual([['prefix', project]]);
+  if (kind === 'changed-source' || kind === 'changed-reader') {
+    await expect(state.prepared.dispatch()).rejects.toThrow('single-use');
+    expect(owned.calls).toEqual([['prefix', project]]);
+    expect(fallback).not.toHaveBeenCalled();
+  }
   if (kind.startsWith('cancelled')) {
     const rows = fs
       .readFileSync(
@@ -641,5 +653,39 @@ test.each([
       if (!closed) child.kill('SIGKILL');
       await terminal;
     }
+  }
+);
+
+// Real private records and actual eligibility/composition; framed native ports
+// are boundary doubles, not installed publication/cleanup qualification.
+test.each([
+  ['ISO', '2099-01-01T00:00:00Z', 'fixture reason', true],
+  ['basic', '20990101T000000Z', 'fixture reason', true],
+  ['week', '2099-W01-1T00:00', 'fixture reason', true],
+  ['naive UTC', '2099-01-01T00:00:00', 'fixture reason', true],
+  ['invalid reason', '20990101T000000Z', '\ud800', false],
+  ['expired', '2000-01-01T00:00:00Z', 'fixture reason', false],
+])(
+  'actual SessionEnd reprieve %s leaves mandatory prefix and gates sealing',
+  async (_name, expires_at, reason, skipped) => {
+    put(path.join(home, 'state/sessions/original/guard-reprieve-original.json'), {
+      session_id: 'original',
+      created_at: 'fixture',
+      approved_by: 'fixture approver',
+      reason,
+      expires_at,
+      handlers: ['session-log.sh'],
+      repo_root: project,
+    });
+    const owned = ports(),
+      fallback = compatibilitySpy();
+    const { prepared } = await prepare(request(), owned);
+    expect((await prepared.dispatch()).nativeResult.exitCode).toBe(0);
+    expect(owned.calls).toEqual([
+      ['prefix', project],
+      ...(skipped ? [] : [['seal', project, 'original']]),
+    ]);
+    expect(fallback).not.toHaveBeenCalled();
+    await prepared.acknowledgeHandoff(true);
   }
 );

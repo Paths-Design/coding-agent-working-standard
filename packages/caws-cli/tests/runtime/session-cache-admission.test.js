@@ -181,6 +181,7 @@ function sessionEnd(surface = 'codex') {
     'emit.sh',
     'run-handlers.sh',
     'reprieve.sh',
+    'reprieve-reader.cjs',
     'guard-config.sh',
     'guard-config.cjs',
   ]) {
@@ -234,6 +235,7 @@ test.each([
   'lib/agent-pid.sh',
   'lib/run-handlers.sh',
   'lib/reprieve.sh',
+  'lib/reprieve-reader.cjs',
   'lib/guard-config.sh',
   'lib/guard-config.cjs',
   'lib/session-id.sh',
@@ -248,17 +250,27 @@ test.each([
 });
 
 test.each(['codex', 'claude-code'])(
-  'SessionEnd requires actual selected guard-config helper and refuses custom parser for %s',
+  'SessionEnd requires actual selected reprieve/config helpers and refuses custom parser for %s',
   (surface) => {
     sessionEnd(surface);
     expect(fs.existsSync(path.join(runtime, 'lib/guard-config.py'))).toBe(false);
     expect(qualifyEnd()).toBe(true);
-    for (const name of ['guard-config.cjs', 'guard-config.sh']) {
+    for (const name of ['guard-config.cjs', 'guard-config.sh', 'reprieve-reader.cjs']) {
       const file = path.join(runtime, 'lib', name);
       const original = fs.readFileSync(file);
       const selected = selection.libraries[name];
       delete selection.libraries[name];
       expect(qualifyEnd()).toBe(false);
+      selection.libraries[name] = selected;
+      for (const change of [
+        { kind: 'surface' },
+        { kind: 'project' },
+        { path: path.join(runtime, 'redirected', name) },
+        { sha256: '0'.repeat(64) },
+      ]) {
+        selection.libraries[name] = { ...selected, ...change };
+        expect(qualifyEnd()).toBe(false);
+      }
       selection.libraries[name] = selected;
       fs.rmSync(file);
       expect(qualifyEnd()).toBe(false);

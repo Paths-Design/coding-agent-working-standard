@@ -454,53 +454,7 @@ test.each(['structural', 'copied', 'request', 'signal'])(
 // Unit-domain connection: the prefix and native publication are boundary doubles;
 // the stock source checks, comparator receipt, late consumer and lease store are real.
 test('real CLI owner connects prefix, logger and late agent-stop lease application', async () => {
-  const templates = path.join(__dirname, '../../templates/hook-packs');
-  const runtime = selection.runtimeDirectory;
-  const copy = (relative, source) => {
-    const destination = path.join(runtime, relative);
-    fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.copyFileSync(path.join(templates, source), destination);
-    fs.chmodSync(destination, 0o755);
-    return destination;
-  };
-  selection.handlers = [
-    'goal-ac-gate.sh',
-    'plan-transcript-finalize.sh',
-    'session-log.sh',
-    'agent-stop.sh',
-  ].map((name) => {
-    const file = copy(name, 'shared/' + name);
-    return {
-      name,
-      path: file,
-      entry: name,
-      args: [],
-      kind: 'stock',
-      tier: 'repo-policy',
-      sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
-    };
-  });
-  for (const name of [
-    'agent-surface.sh',
-    'parse-input.sh',
-    'emit.sh',
-    'session-id.sh',
-    'caws-state.sh',
-    'guard-message.sh',
-    'agent-pid.sh',
-    'bash-mutation-targets.sh',
-    'heredoc.sh',
-  ]) {
-    const file = copy('lib/' + name, 'shared/lib/' + name);
-    selection.libraries[name] = {
-      kind: 'shared',
-      path: file,
-      sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
-    };
-  }
-  copy('handler-env.sh', 'runtime/handler-env.sh');
-  copy('runtime-paths.sh', 'shared/runtime-paths.sh');
-  copy('lib/session-cache.sh', 'shared/lib/session-cache.sh');
+  installRealStopSources();
   const seeded = heartbeatAgentActivity({
     cawsDir: path.join(root, '.caws'),
     identity: { session_id: 'supplied', platform: 'opencode' },
@@ -550,3 +504,145 @@ test('real CLI owner connects prefix, logger and late agent-stop lease applicati
   expect(stopped.stopped_at).toEqual(expect.any(String));
   expect(compatibility).not.toHaveBeenCalled();
 });
+
+function installRealStopSources() {
+  const templates = path.join(__dirname, '../../templates/hook-packs');
+  const runtime = selection.runtimeDirectory;
+  const copy = (relative, source) => {
+    const destination = path.join(runtime, relative);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(path.join(templates, source), destination);
+    fs.chmodSync(destination, 0o755);
+    return destination;
+  };
+  selection.handlers = [
+    'goal-ac-gate.sh',
+    'plan-transcript-finalize.sh',
+    'session-log.sh',
+    'agent-stop.sh',
+  ].map((name) => {
+    const file = copy(name, 'shared/' + name);
+    return {
+      name,
+      path: file,
+      entry: name,
+      args: [],
+      kind: 'stock',
+      tier: 'repo-policy',
+      sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
+    };
+  });
+  for (const name of [
+    'agent-surface.sh',
+    'parse-input.sh',
+    'emit.sh',
+    'session-id.sh',
+    'caws-state.sh',
+    'guard-message.sh',
+    'agent-pid.sh',
+    'bash-mutation-targets.sh',
+    'heredoc.sh',
+  ]) {
+    const file = copy('lib/' + name, 'shared/lib/' + name);
+    selection.libraries[name] = {
+      kind: 'shared',
+      path: file,
+      sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
+    };
+  }
+  copy('handler-env.sh', 'runtime/handler-env.sh');
+  copy('runtime-paths.sh', 'shared/runtime-paths.sh');
+  copy('lib/session-cache.sh', 'shared/lib/session-cache.sh');
+}
+
+// Native prefix/publication ports remain boundary doubles. Records, eligibility,
+// composition, CLI identity, late consumer and lease transitions are real.
+test.each([
+  ['unreprieved', [], '2099-01-01T00:00:00Z', 'fixture reason'],
+  ['logger only', ['session-log.sh'], '2099-01-01T00:00:00Z', 'fixture reason'],
+  ['agent only', ['agent-stop.sh'], '2099-01-01T00:00:00Z', 'fixture reason'],
+  ['both basic', ['session-log.sh', 'agent-stop.sh'], '20990101T000000Z', 'fixture reason'],
+  ['both week', ['session-log.sh', 'agent-stop.sh'], '2099-W01-1T00:00', 'fixture reason'],
+  ['both naive', ['session-log.sh', 'agent-stop.sh'], '2099-01-01T00:00:00', 'fixture reason'],
+  ['unemittable reason', ['session-log.sh', 'agent-stop.sh'], '20990101T000000Z', '\ud800'],
+])(
+  'actual Stop reprieve %s preserves prefix and gates publication and lease effects',
+  async (_name, handlers, expires_at, reason) => {
+    eligibility.handlerEligibility.mockRestore();
+    installRealStopSources();
+    const seeded = heartbeatAgentActivity({
+      cawsDir: path.join(root, '.caws'),
+      identity: { session_id: 'supplied', platform: 'opencode' },
+      now: () => new Date(),
+      reason: 'manual_register',
+      context: {
+        repo_root: root,
+        cwd: root,
+        git_common_dir: path.join(root, '.git'),
+        git_dir: path.join(root, '.git'),
+        hook_pid: process.pid,
+        hostname: 'unit-domain',
+      },
+    });
+    expect(seeded.ok).toBe(true);
+    const lease = path.join(root, '.caws/leases/supplied.json');
+    const before = fs.readFileSync(lease);
+    const reprieve = path.join(root, 'state/sessions/supplied/guard-reprieve-supplied.json');
+    fs.mkdirSync(path.dirname(reprieve), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(
+      reprieve,
+      JSON.stringify({
+        session_id: 'supplied',
+        created_at: 'fixture',
+        approved_by: 'fixture approver',
+        reason,
+        expires_at,
+        handlers,
+        repo_root: root,
+      }),
+      { mode: 0o600 }
+    );
+    lateGit.observe.mockImplementation(async () => {
+      trace.push('late-git');
+      expect(fs.readFileSync(lease)).toEqual(before);
+      return { status: 'resolved', commonDir: path.join(root, '.git') };
+    });
+    stock.tryExecuteStockHandler.mockImplementation(async (handler, options) => {
+      trace.push(handler.name);
+      return handler.name === 'agent-stop.sh'
+        ? realExecuteStockHandler(handler, options)
+        : completedHandler;
+    });
+    const prepared = await prepare();
+    expect((await prepared.dispatch(undefined, decode())).nativeResult.exitCode).toBe(0);
+    const skips = reason === '\ud800' ? [] : handlers;
+    expect(prefix.capture).toHaveBeenCalledTimes(1);
+    expect(nativePublication).toHaveBeenCalledTimes(skips.includes('session-log.sh') ? 0 : 1);
+    expect(lateGit.observe).toHaveBeenCalledTimes(skips.includes('agent-stop.sh') ? 0 : 1);
+    expect(trace).toEqual([
+      'prefix',
+      'goal-ac-gate.sh',
+      'plan-transcript-finalize.sh',
+      ...(skips.includes('session-log.sh') ? [] : ['publication']),
+      ...(skips.includes('agent-stop.sh') ? [] : ['agent-stop.sh', 'late-git']),
+    ]);
+    if (skips.includes('agent-stop.sh')) expect(fs.readFileSync(lease)).toEqual(before);
+    else
+      expect(JSON.parse(fs.readFileSync(lease))).toMatchObject({
+        status: 'stopped',
+        last_seen_reason: 'session_stop',
+      });
+    expect(compatibility).not.toHaveBeenCalled();
+    const journal = fs
+      .readFileSync(
+        path.join(root, '.caws/sessions/supplied/hook-invocations/stop-connection.jsonl'),
+        'utf8'
+      )
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(
+      journal.filter((row) => row.stage === 'handler_skipped').map((row) => row.handler)
+    ).toEqual(skips);
+  }
+);

@@ -12,6 +12,8 @@ const sources = [
   'src/runtime/guard-config-loader.ts',
   'src/init/repo-hook-policy.ts',
   'src/runtime/json-custody.ts',
+  'src/runtime/reprieve-entry.ts',
+  'src/runtime/reprieve-reader.ts',
 ];
 function fixture(copyProjection = false) {
   const root = temporaryRoot();
@@ -28,7 +30,11 @@ function fixture(copyProjection = false) {
   );
   const output = path.join(root, projection);
   if (copyProjection) {
-    for (const relative of [projection, 'templates/hook-packs/shared/lib/guard-config.cjs']) {
+    for (const relative of [
+      projection,
+      'templates/hook-packs/shared/lib/guard-config.cjs',
+      'templates/hook-packs/shared/lib/reprieve-reader.cjs',
+    ]) {
       const destination = path.join(root, relative);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.copyFileSync(path.join(packageRoot, relative), destination);
