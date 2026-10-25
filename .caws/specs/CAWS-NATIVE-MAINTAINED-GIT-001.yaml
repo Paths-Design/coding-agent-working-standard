@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-maintained-git
 created_at: '2026-10-25T01:52:24.272Z'
-updated_at: '2026-10-25T08:14:34.349Z'
+updated_at: '2026-10-25T08:29:40.140Z'
 created_by_session: '01a170be-3812-7123-ab00-736f9bc2eeb9'
 blast_radius:
   modules:
@@ -40,6 +40,7 @@ scope:
     - packages/caws-cli/tests/runtime/agent-stop-late-context.test.js
     - packages/caws-cli/src/runtime/cli-identity-loader.ts
     - packages/caws-cli/tests/runtime/cli-identity-loader.test.js
+    - packages/caws-cli/tests/helpers/cli-identity-unit-domain.js
   out: []
   support:
     - packages/caws-native/src/stop_admission.rs
