@@ -45,7 +45,7 @@ invariants:
   - 'No actual reprieve grant, revoke, global runtime installation, registration or trust change occurs'
   - 'Malformed, unavailable, expired, revoked or mismatched reprieve data leaves guards executing and cannot create authority'
   - 'Session, handler, canonical repo reach, global shadowing, symlink refusal and compatible human-approved expiry behavior follow the inspected writer and legacy reader contracts'
-  - 'Existing native admission pins, original30000ms deadline and full parent acceptance are not broadened or inferred from reader replacement'
+  - 'Reviewed source cohort updates preserve literal admission identities, override refusal and dependency closure; the original30000ms deadline and full parent acceptance are not weakened or inferred from reader replacement'
 acceptance:
   - id: A1
     given: 'legitimate private reprieve records and hostile session/handler/repo/expiry/revocation/filesystem controls'
