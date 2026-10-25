@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-REPRIEVE-READER-001
 title: 'Replace the embedded reprieve reader with a consumed typed runtime asset'
 mode: refactor
-lifecycle_state: active
-worktree: native-reprieve-reader
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Final reader source58ed781a8 repairs generated lint failure through authoritative TS/catch regeneration, shared113 and literal6f source identities. A1-A5 manual spec/event readback13784-13788 complete; full lint/build/typecheck/doctor/gates,424focused checks,13actual dispatcher cases, six actual final packed/Python-free shell cases and fresh native10Stop8prefix controls pass. Independent committed-candidate feedback grounded; earlier short-year grant finding repaired. Push09full370suites7679pass14skip is retained as failed publication due lint, not relabeled success; normal publication rerun remains required. Parent0/8A2fail, original30000ms, held native prep/foreign installed producer/fullscenario/replay/rollback/Python/workload/cutover unchanged; no global runtime/trust/registration or reprieve changes.'
 created_at: '2026-10-25T18:44:20.579Z'
-updated_at: '2026-10-25T20:43:19.690Z'
+updated_at: '2026-10-25T20:57:19.556Z'
 created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
 blast_radius:
   modules:
