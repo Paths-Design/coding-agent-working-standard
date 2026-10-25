@@ -1,10 +1,9 @@
 id: CAWS-NATIVE-ROLLBACK-QUALIFICATION-001
 title: 'Qualify isolated native installation and usable legacy rollback'
 mode: chore
-lifecycle_state: active
-worktree: native-rollback-qualification
+lifecycle_state: draft
 created_at: '2026-10-25T06:21:45.197Z'
-updated_at: '2026-10-25T06:21:46.518Z'
+updated_at: '2026-10-25T06:27:04.873Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
