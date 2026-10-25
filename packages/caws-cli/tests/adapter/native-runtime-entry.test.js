@@ -903,7 +903,14 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     data.gitDistribution = syntheticGitObservation(sha(before.files.get('native/caws-native')));
     const bytes = selectSemanticData(data);
     expect(prepareDescriptor().files.get('native-stop-profile.json')).toEqual(bytes);
-    for (const inode of [Number('1152921500312571562'), '01', '+1', '-1', '18446744073709551616']) {
+    for (const inode of [
+      Number('1152921500312571562'),
+      '01',
+      '+1',
+      '-1',
+      '18446744073709551616',
+      ...[10, 13, 8232, 8233].map((code) => '1' + String.fromCharCode(code)),
+    ]) {
       const bad = JSON.parse(JSON.stringify(data));
       bad.gitDistribution.callerGit.inode = inode;
       selectSemanticData(bad);

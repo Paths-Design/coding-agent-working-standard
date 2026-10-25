@@ -483,7 +483,8 @@ function validateStopGitDistribution(value: unknown, nativeSha256: string): void
         if (
           typeof text !== 'string' ||
           !/^(0|[1-9][0-9]{0,19})$/.test(text) ||
-          BigInt(text) > 18446744073709551615n
+          BigInt(text) > 18446744073709551615n ||
+          BigInt(text).toString() !== text
         )
           throw new Error('Git filesystem identity must be canonical u64 decimal');
       } else if (!Number.isSafeInteger(p[k]))

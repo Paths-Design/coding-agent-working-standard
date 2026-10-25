@@ -310,6 +310,11 @@ export function validateGitDistribution(value, nativeSha256) {
           'Git filesystem identity must be canonical decimal'
         );
         assert(BigInt(v[k]) <= 18446744073709551615n, 'Git filesystem identity exceeds u64');
+        assert.equal(
+          BigInt(v[k]).toString(),
+          v[k],
+          'Git filesystem identity must be canonical decimal'
+        );
       } else
         assert(
           Number.isSafeInteger(v[k]),
