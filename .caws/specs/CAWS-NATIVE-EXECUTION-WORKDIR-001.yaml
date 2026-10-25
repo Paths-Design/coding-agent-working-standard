@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: native-execution-workdir
 created_at: '2026-10-25T08:16:54.609Z'
-updated_at: '2026-10-25T08:22:24.395Z'
+updated_at: '2026-10-25T08:22:46.366Z'
 created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
 blast_radius:
   modules:
@@ -25,6 +25,7 @@ scope:
     - packages/caws-cli/src/runtime/engine.ts
     - packages/caws-native/src/protocol.rs
     - packages/caws-native/src/main.rs
+    - packages/caws-cli/src/runtime/stock-handlers.ts
 invariants:
   - 'Session cwd and original tool/session/turn identifiers are preserved; only explicit host-resolved execution_workdir selects command directory and never grants ownership or scope'
   - 'Malformed, conflicting, missing-target and foreign authority coordinates fail closed; absent unsupported native transport is distinct from resolved context'
