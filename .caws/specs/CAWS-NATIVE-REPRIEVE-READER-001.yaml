@@ -95,10 +95,10 @@ evidence:
     recorded_at: "2026-10-25T20:56:43.880Z"
     commit_sha: "58ed781a854b1fd8fe42592d7f765441b672aa2c"
   - criterion_id: A3
-    status: fail
-    evidence_ref: "Normal push09 full lint reached generated reprieve-reader.cjs and found no-empty at205,327; scoped source lint did not exercise generated asset. Publication not qualified; running fullsuite retained. Reopened same unit to repair authoritative TypeScript catches and regenerate, qualify changed literal hashes/pack fingerprint, rerun full lint and normal publication. Earlier raw semantic/peer evidence remains bounded to checked ac1 source; no full parent/globalcutover claim. Optional denied collector remains unexecuted."
-    recorded_at: "2026-10-25T20:42:26.492Z"
-    commit_sha: ac1ea80d98595e1c62afce27388581522043572e
+    status: pass
+    evidence_ref: "Reopened unit resolves actual push09 generated no-empty errors through authoritative TS explicit equivalent assignments and regeneration, no asset hand-edit. Complete npm run lint exit0 at lint-full-02; build05/typecheck02/doctor03/gates04exit0; focused04424pass, bats0313pass, native-stop0210pass/native-prefix038pass inspected. Independent peer inspected committed58ed9filefix and actual regenerated source/header/3literalpins; direct diff/tests establish preservation. Prior independent grant finding repaired/reproduced at ac1. Prior push09full370suites7679pass14skip633.122s remains failed publicationexit1 due lint, not relabeled success; next normal publication pending. Manual session/revoke/expiry/UTF8 mutants retained. Optional comparator/readback collectors denied by deployed guard remain unexecuted, no retries/bypass. Parent0/8/fullcutover holds remain. CLIverify establishes commit reachability only."
+    recorded_at: "2026-10-25T20:56:44.897Z"
+    commit_sha: "58ed781a854b1fd8fe42592d7f765441b672aa2c"
   - criterion_id: A4
     status: pass
     evidence_ref: "Writer/status scope: inspected reprieve-relative-expiry source and actual grant-instant-red.log, which demonstrates0049 normalized2049 reporting grant success while consumed expiry is year0049. Committed fix compares consumed exact microseconds against same conservative millisecond boundary as reader; Date remains public format check.0049/0048 regressions require refusal before machine-home creation. grant-instant-green-02.log185pass across4suites includes legacy basic/week/naive/comma/offset show/list interpretations, invalid calendar/lowercase/rollover writer refusals, equal/submillisecond expiry and positive controls. Initial0030 invalid-node assumption retained and replaced using direct0048 probe. No real grant/revoke. CLI verify is commit reachability, not external execution."
