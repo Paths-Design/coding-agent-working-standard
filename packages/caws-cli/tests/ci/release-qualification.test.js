@@ -36,6 +36,9 @@ test('prerelease routing and fixture isolation contracts execute under Node', ()
     process.execPath,
     [
       '--test',
+      ...(process.allowedNodeEnvironmentFlags.has('--test-reporter')
+        ? ['--test-reporter=tap']
+        : []),
       'scripts/release-tag-publish.test.mjs',
       'scripts/ci-governance-artifacts.test.mjs',
       'scripts/ci-matrix-version.test.mjs',
