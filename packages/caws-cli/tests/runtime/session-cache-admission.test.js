@@ -832,3 +832,155 @@ test('qualification does not mutate frozen inputs, write cache state or spawn a 
     sessionsDirectoryExists: false,
   };
 });
+
+test('only the reviewed host-workdir Codex parser identity qualifies', () => {
+  const parser = selection.libraries['parse-input.sh'];
+  expect(sha(fs.readFileSync(parser.path))).toBe(
+    'c33d320efef119f826de58b145344288264b985f10d911b435645f6d851444fc'
+  );
+  expect(qualify()).toBe(true);
+  parser.sha256 = '04a21ee0cd24d917bbee4c63f9285a2a867f2f9a08a9cdf2f9a78d3400a73c61';
+  expect(qualify()).toBe(false);
+});
+test('validated nested host context qualifies without changing raw session coordinates or identity', () => {
+  const nested = path.join(checkout, 'host nested');
+  fs.mkdirSync(nested);
+  payload({
+    tool_name: 'Bash',
+    cwd: checkout,
+    execution_workdir: nested,
+    session_id: 'original',
+    tool_use_id: 'original-tool',
+    turn_id: 'original-turn',
+    tool_input: { command: 'echo unchanged', cwd: nested, workdir: nested },
+  });
+  const input = request.inputJson;
+  const before = snapshot(root);
+  expect(qualify()).toBe(true);
+  expect(request.inputJson).toBe(input);
+  expect(request.payload.cwd).toBe(checkout);
+  expect(snapshot(root)).toEqual(before);
+});
+test('a real linked checkout permits nested host context only with raw cwd inside that checkout', () => {
+  const git = (args, cwd = checkout) => {
+    const result = childProcess.spawnSync('/usr/bin/git', args, {
+      cwd,
+      env: request.caller.environment,
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(0);
+  };
+  git(['init', '-q']);
+  git([
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '--allow-empty',
+    '-qm',
+    'fixture',
+  ]);
+  const linked = path.join(root, 'linked-checkout');
+  git(['worktree', 'add', '-q', '-b', 'cache-linked', linked]);
+  const nested = path.join(linked, 'nested');
+  fs.mkdirSync(nested);
+  selection.checkout = linked;
+  request.caller.cwd = linked;
+  payload({
+    tool_name: 'Bash',
+    cwd: linked,
+    execution_workdir: nested,
+    tool_input: { command: 'echo unchanged' },
+  });
+  expect(selection.canonical).toBe(checkout);
+  expect(qualify()).toBe(true);
+  payload({ ...request.payload, cwd: checkout });
+  expect(qualify()).toBe(false);
+});
+test.each([null, '', false, 0, {}, [], 'relative', '/missing-host-context', 'bad\0host'])(
+  'present invalid host execution directory declines native cache: %p',
+  (execution_workdir) => {
+    payload({
+      tool_name: 'Bash',
+      cwd: checkout,
+      execution_workdir,
+      tool_input: { command: 'echo unchanged' },
+    });
+    expect(qualify()).toBe(false);
+  }
+);
+test('stale, symlinked, nonphysical, outside and nondirectory host contexts decline', () => {
+  const nested = path.join(checkout, 'nested');
+  fs.mkdirSync(nested);
+  const stale = path.join(checkout, 'stale');
+  fs.mkdirSync(stale);
+  fs.rmdirSync(stale);
+  const link = path.join(checkout, 'host-link');
+  fs.symlinkSync(nested, link);
+  const file = path.join(checkout, 'file');
+  fs.writeFileSync(file, 'fixture');
+  for (const execution_workdir of [stale, link, nested + '/.', nested + '/', root, file]) {
+    payload({
+      tool_name: 'Bash',
+      cwd: checkout,
+      execution_workdir,
+      tool_input: { command: 'echo unchanged' },
+    });
+    expect(qualify()).toBe(false);
+  }
+});
+test.each(['workdir', 'cwd'])(
+  'host context requires valid agreeing explicit tool_input.%s',
+  (alias) => {
+    const nested = path.join(checkout, 'nested');
+    fs.mkdirSync(nested);
+    const link = path.join(checkout, 'alias');
+    fs.symlinkSync(nested, link);
+    payload({
+      tool_name: 'Bash',
+      cwd: checkout,
+      execution_workdir: nested,
+      tool_input: { command: 'echo unchanged', [alias]: link },
+    });
+    expect(qualify()).toBe(true);
+    for (const value of [checkout, null, 'relative', path.join(checkout, 'missing')]) {
+      payload({ ...request.payload, tool_input: { command: 'echo unchanged', [alias]: value } });
+      expect(qualify()).toBe(false);
+    }
+  }
+);
+test('absent host field retains old raw-cwd semantics without promoting diagnostic aliases', () => {
+  payload({
+    tool_name: 'Bash',
+    cwd: checkout,
+    tool_input: { command: 'echo unchanged', workdir: root, cwd: null },
+  });
+  expect(qualify()).toBe(true);
+  payload({ ...request.payload, cwd: root });
+  expect(qualify()).toBe(false);
+});
+test('a validated host inside checkout never relaxes the existing outside raw-cwd restriction', () => {
+  const nested = path.join(checkout, 'nested');
+  fs.mkdirSync(nested);
+  payload({
+    tool_name: 'Bash',
+    cwd: root,
+    execution_workdir: nested,
+    tool_input: { command: 'echo unchanged' },
+  });
+  expect(qualify()).toBe(false);
+});
+test.each([null, 'relative', '/missing-unused-host'])(
+  'SessionEnd ignores unused host context and aliases (%p)',
+  (execution_workdir) => {
+    sessionEnd('codex');
+    payload({
+      ...request.payload,
+      tool_name: 'Bash',
+      execution_workdir,
+      tool_input: { workdir: null, cwd: 'relative' },
+    });
+    expect(qualifyEnd()).toBe(true);
+  }
+);

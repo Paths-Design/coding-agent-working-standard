@@ -217,6 +217,17 @@ function cacheFixture(handlers = ['block-dangerous.sh']) {
 const capturedCache = () => ({ status: 'captured', envelopePublished: true, diagnostic: null });
 const turn = () => new Promise((accept) => setImmediate(accept));
 
+// Only the observed UTC last-seen timestamp is dynamic in cache parity checks.
+function normalizedCacheObservation(value, earliest) {
+  expect(value.last_seen_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+  const observed = Date.parse(value.last_seen_at);
+  expect(Number.isFinite(observed)).toBe(true);
+  expect(new Date(observed).toISOString()).toBe(value.last_seen_at.replace('Z', '.000Z'));
+  expect(observed).toBeGreaterThanOrEqual(Math.floor(earliest / 1000) * 1000);
+  expect(observed).toBeLessThanOrEqual(Date.now());
+  return { ...value, last_seen_at: '<observed UTC>' };
+}
+
 test.each([
   'empty-chain',
   'early-refusal',
@@ -224,6 +235,10 @@ test.each([
   'missing-sid',
   'pointer-failure',
   'overwritten-input-numeric',
+  'host-nested',
+  'host-linked-nested',
+  'host-cross-worktree-raw',
+  'host-nongit-origin',
 ])(
   'actual native exchange publishes only the supplied session prefix: %s',
   (scenario) => {
@@ -239,6 +254,49 @@ test.each([
         tool_input: { command: refusing ? 'rm -rf /' : 'echo safe' },
         hook_event_name: 'forged event',
       };
+      const hostScenario = scenario.startsWith('host-');
+      const compatibilityOnly = [
+        'overwritten-input-numeric',
+        'host-cross-worktree-raw',
+        'host-nongit-origin',
+      ].includes(scenario);
+      const createdSeed = '2000-01-02T03:04:05Z';
+      if (['host-linked-nested', 'host-cross-worktree-raw'].includes(scenario)) {
+        const git = (args) => {
+          const observed = cp.spawnSync('/usr/bin/git', args, {
+            cwd: f.repo,
+            env: f.environment,
+            encoding: 'utf8',
+          });
+          expect(observed.status).toBe(0);
+        };
+        f.put(path.join(f.repo, 'cache-worktree-seed.txt'), 'fixture\n');
+        git(['add', 'cache-worktree-seed.txt']);
+        git([
+          '-c',
+          'user.name=Fixture',
+          '-c',
+          'user.email=fixture@example.invalid',
+          'commit',
+          '-qm',
+          'fixture',
+        ]);
+        const linked = path.join(f.root, 'linked-checkout');
+        git(['worktree', 'add', '-q', '-b', 'cache-linked', linked]);
+        const nested = path.join(linked, 'nested');
+        fs.mkdirSync(nested);
+        payload.cwd = scenario === 'host-cross-worktree-raw' ? f.repo : linked;
+        payload.execution_workdir = nested;
+      } else if (hostScenario) {
+        const nested = path.join(f.repo, 'nested');
+        fs.mkdirSync(nested);
+        payload.execution_workdir = nested;
+        if (scenario === 'host-nongit-origin') {
+          const origin = path.join(f.root, 'nongit-session');
+          fs.mkdirSync(origin);
+          payload.cwd = origin;
+        }
+      }
       const envelope = path.join(f.repo, '.caws/sessions/cache-fixture/.session-envelope.json');
       const pointer = path.join(f.repo, '.caws/sessions/.caller-session.json');
       if (scenario === 'old-envelope-decline')
@@ -246,6 +304,15 @@ test.each([
           session_id: 'cache-fixture',
           created_at: '2000-01-02T03:04:05Z',
           unused: 1,
+        });
+      if (hostScenario)
+        f.put(envelope, {
+          session_id: 'cache-fixture',
+          repo_root: f.repo,
+          created_at: createdSeed,
+          last_seen_at: createdSeed,
+          hook_event: 'PreToolUse',
+          platform: 'codex',
         });
       if (scenario === 'pointer-failure') fs.mkdirSync(pointer, { recursive: true });
       if (scenario === 'missing-sid') delete payload.session_id;
@@ -272,6 +339,7 @@ test.each([
         scenario === 'overwritten-input-numeric'
           ? JSON.stringify(payload).replace(/}$/, ',"unused":1,"unused":"last"}')
           : JSON.stringify(payload);
+      const invocationStarted = Date.now();
       const result = cp.spawnSync(native, args, {
         cwd: f.repo,
         input,
@@ -325,8 +393,17 @@ test.each([
             session_id: 'cache-fixture',
             repo_root: f.repo,
           });
-        if (scenario === 'old-envelope-decline')
-          expect(actual.created_at).toBe('2000-01-02T03:04:05Z');
+        if (scenario === 'old-envelope-decline' || hostScenario)
+          expect(actual.created_at).toBe(createdSeed);
+        if (hostScenario) {
+          normalizedCacheObservation(actual, invocationStarted);
+          const actualPointer = JSON.parse(fs.readFileSync(pointer));
+          expect(actualPointer).toEqual({
+            session_id: 'cache-fixture',
+            repo_root: f.repo,
+            last_seen_at: actual.last_seen_at,
+          });
+        }
         const journals = path.join(f.repo, '.caws/sessions/cache-fixture/hook-invocations');
         const rows = fs
           .readdirSync(journals)
@@ -334,7 +411,7 @@ test.each([
             fs.readFileSync(path.join(journals, name), 'utf8').trim().split('\n').map(JSON.parse)
           );
         const stages = rows.map((row) => row.stage);
-        if (scenario === 'overwritten-input-numeric') {
+        if (compatibilityOnly) {
           expect(stages).not.toContain('session_cache_completed');
           expect(
             stages.filter((stage) => stage === 'compatibility_dispatch_completed')
@@ -345,13 +422,76 @@ test.each([
             'declined'
           );
           expect(stages).toContain('compatibility_dispatch_completed');
-        } else if (scenario !== 'overwritten-input-numeric')
+        } else if (!compatibilityOnly)
           expect(stages).not.toContain('compatibility_dispatch_completed');
         if (refusing) {
           expect(JSON.parse(result.stdout.toString()).decision).toBe('block');
           expect(stages.indexOf('session_cache_completed')).toBeLessThan(
             stages.indexOf('handler_started')
           );
+        }
+        if (['host-nested', 'host-linked-nested'].includes(scenario)) {
+          const nativeEnvelope = normalizedCacheObservation(actual, invocationStarted);
+          const nativePointer = normalizedCacheObservation(
+            JSON.parse(fs.readFileSync(pointer)),
+            invocationStarted
+          );
+          const before = new Set(fs.readdirSync(journals));
+          // This existing unsupported raw-number profile forces complete parser
+          // compatibility without changing the supplied command or identities.
+          const compatibilityInput = JSON.stringify(payload).replace(
+            /}$/,
+            ',"unused":1,"unused":"last"}'
+          );
+          const compatibilityStarted = Date.now();
+          const compared = cp.spawnSync(native, args, {
+            cwd: f.repo,
+            input: compatibilityInput,
+            env: {
+              ...f.environment,
+              TMPDIR: temporary,
+              CODEX_THREAD_ID: 'foreign-cache',
+              CAWS_SESSION_ID: 'foreign-cache',
+            },
+            timeout: 20000,
+            maxBuffer: 4 * 1024 * 1024,
+          });
+          f.put(path.join(f.root, 'comparison-compat.stdout'), compared.stdout.toString());
+          f.put(path.join(f.root, 'comparison-compat.stderr'), compared.stderr.toString());
+          f.put(path.join(f.root, 'comparison-compat-input.json'), compatibilityInput);
+          expect(compared.error).toBeUndefined();
+          expect(compared.signal).toBeNull();
+          expect(compared.status).toBe(0);
+          const added = fs.readdirSync(journals).filter((name) => !before.has(name));
+          expect(added).toHaveLength(1);
+          const comparedRows = fs
+            .readFileSync(path.join(journals, added[0]), 'utf8')
+            .trim()
+            .split('\n')
+            .map(JSON.parse);
+          const comparedStages = comparedRows.map((row) => row.stage);
+          expect(comparedStages).not.toContain('session_cache_completed');
+          expect(
+            comparedStages.filter((stage) => stage === 'compatibility_dispatch_completed')
+          ).toHaveLength(1);
+          const shellEnvelope = JSON.parse(fs.readFileSync(envelope));
+          const shellPointer = JSON.parse(fs.readFileSync(pointer));
+          expect(shellPointer.last_seen_at).toBe(shellEnvelope.last_seen_at);
+          expect(normalizedCacheObservation(shellEnvelope, compatibilityStarted)).toEqual(
+            nativeEnvelope
+          );
+          expect(normalizedCacheObservation(shellPointer, compatibilityStarted)).toEqual(
+            nativePointer
+          );
+          f.put(path.join(f.root, 'actual-cache-parity.json'), {
+            nativeEnvelope: actual,
+            shellEnvelope,
+            shellPointer,
+            normalizedEnvelope: nativeEnvelope,
+            normalizedPointer: nativePointer,
+            comparisonStatus: compared.status,
+            comparisonSignal: compared.signal,
+          });
         }
         if (scenario === 'empty-chain') {
           f.put(path.join(f.root, 'native-cache-observation.json'), {
