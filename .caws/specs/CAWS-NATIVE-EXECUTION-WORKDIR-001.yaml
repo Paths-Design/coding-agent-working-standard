@@ -82,7 +82,6 @@ contracts: []
 evidence:
   - criterion_id: A3
     status: unchecked
-    evidence_ref: "Source fbc6503db and focused 287 JavaScript plus 21 bootstrap controls pass, but the actual producer under ordinary installed native hooks has not been qualified. Shared activation is held for paired producer restart coordination; synthetic bootstrap context is not A3 proof."
-    recorded_at: "2026-10-25T11:50:18.413Z"
-    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/execution-workdir-consumer/governance-presence/root-python.log"
+    evidence_ref: "Source fbc6503db and focused 287 JavaScript plus 21 bootstrap controls pass; actual producer under ordinary installed native hooks remains unqualified. Shared activation waits for paired producer restart coordination. External raw logs in Root artifact execution-workdir-consumer/governance-presence were inspected manually; --verify checks commit reachability only. Events 13655/13656 retain the unsupported absolute artifact citation attempts; no acceptance pass is inferred."
+    recorded_at: "2026-10-25T11:51:35.919Z"
     commit_sha: fbc6503dbac26fede1db89653f71f392447a5f43
