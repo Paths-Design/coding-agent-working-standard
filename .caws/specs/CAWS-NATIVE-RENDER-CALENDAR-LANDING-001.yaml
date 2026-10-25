@@ -58,3 +58,8 @@ evidence:
     evidence_ref: "Inspected /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/calendar-landing/mutation-policy.log194sources22targets; repaired/mutation.json exit0 unchanged source pins; repaired/score.json unchanged80floor:1197detected/1393valid=85.929648percent,179survived17uncovered. Calendar-only mutation run; other store targets unexecuted. CLI verify checks commit existence only; raw reports were independently inspected."
     recorded_at: "2026-10-25T01:11:25.349Z"
     commit_sha: e5af425ad32d5accea34411b89bb09378959e996
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Inspected /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/calendar-landing/landed-target-validation.json: all seven main Git blobs and checkout SHA256 digests equal checked e5af425a; candidate is an ancestor of main; child directory and registry binding absent after merge416c82f6. Exact source landing only; no target test rerun, production selection, deployment, or native cutover. CLI verify checks cited merge existence only; target comparison was independently executed."
+    recorded_at: "2026-10-25T01:12:46.444Z"
+    commit_sha: "416c82f61627f90c44b24764e00568bb139d2af2"
