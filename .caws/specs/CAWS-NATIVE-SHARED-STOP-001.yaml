@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-SHARED-STOP-001
 title: 'Land the shared CLI lease-stop application transaction'
 mode: refactor
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed the reviewed shared CLI lease-stop transaction and direct filesystem tests with unchanged CLI contract. Recorded A1/A2 and exact main source equality; typed substitution remains unlanded and explicitly accepted by incoming lead under the failed typed child and full parent.'
 created_at: '2026-10-25T01:01:48.393Z'
-updated_at: '2026-10-25T01:01:57.941Z'
+updated_at: '2026-10-25T01:14:16.977Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
