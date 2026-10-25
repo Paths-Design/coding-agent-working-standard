@@ -393,9 +393,23 @@ export function rendererSecondsBetween(
   return renderFloat(roundTwo(binary64Ratio(difference, SECOND)));
 }
 type Row = Record<string, unknown>;
+function calendarArray(value: unknown, category: 'request' | 'reply'): value is readonly unknown[] {
+  try {
+    return Array.isArray(value);
+  } catch {
+    throw new RendererCalendarContractError(category, 'Unreadable calendar array');
+  }
+}
 function record(value: unknown, keys: readonly string[], category: 'request' | 'reply'): Row {
-  if (!value || typeof value !== 'object' || Array.isArray(value))
+  if (!value || typeof value !== 'object')
     throw new RendererCalendarContractError(category, 'Calendar record required');
+  let array: boolean;
+  try {
+    array = Array.isArray(value);
+  } catch {
+    throw new RendererCalendarContractError(category, 'Unreadable calendar record');
+  }
+  if (array) throw new RendererCalendarContractError(category, 'Calendar record required');
   let descriptors: PropertyDescriptorMap;
   try {
     descriptors = Object.getOwnPropertyDescriptors(value);
@@ -604,7 +618,7 @@ export async function resolveRendererCalendar(
     !Number.isSafeInteger(options.maximumTimestampBytes) ||
     options.maximumTimestampBytes < 0 ||
     !Number.isSafeInteger(deadlineEpochMs) ||
-    !Array.isArray(options.timestamps) ||
+    !calendarArray(options.timestamps, 'request') ||
     typeof options.port?.observe !== 'function'
   )
     throw new RendererCalendarContractError('request', 'Invalid calendar resolution input');
@@ -703,7 +717,7 @@ export async function resolveRendererCalendar(
         reply.token !== token ||
         reply.sequence !== sequence ||
         JSON.stringify(context(reply.context, 'reply')) !== JSON.stringify(original) ||
-        !Array.isArray(reply.results) ||
+        !calendarArray(reply.results, 'reply') ||
         reply.results.length !== seconds.length
       )
         throw new RendererCalendarContractError(

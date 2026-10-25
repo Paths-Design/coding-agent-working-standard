@@ -202,6 +202,12 @@ impl CapturedCalendar {
             _original_thread: PhantomData,
         };
         captured.checkpoint(&mut || Ok(()))?;
+        // Original frontend capture precedes Node/runner admission. Match the
+        // time-module startup initialization without deferring avoidable libc
+        // cache initialization into the later observation exchange. This does
+        // not grant the unbound capture authority to query calendar fields.
+        initialize_timezone();
+        captured.checkpoint(&mut || Ok(()))?;
         Ok(captured)
     }
 
@@ -237,7 +243,6 @@ impl CapturedCalendar {
             token,
             next_sequence: 1,
             queries: 0,
-            initialized: false,
             terminal: false,
         })
     }
@@ -275,7 +280,6 @@ pub struct OriginalCalendar {
     token: String,
     next_sequence: u32,
     queries: usize,
-    initialized: bool,
     terminal: bool,
 }
 impl OriginalCalendar {
@@ -397,14 +401,6 @@ impl OriginalCalendar {
             }
             seconds.push(value);
         }
-        if !self.initialized {
-            // POSIX localtime_r need not initialize timezone state itself.
-            // Read the existing environment; never set, unset, or replace it.
-            self.checkpoint(cancel)?;
-            initialize_timezone();
-            self.initialized = true;
-            self.checkpoint(cancel)?;
-        }
         let mut results = Vec::with_capacity(seconds.len());
         for (text, seconds) in request.seconds.iter().zip(seconds) {
             self.checkpoint(cancel)?;
@@ -482,7 +478,8 @@ fn initialize_timezone() {
     unsafe extern "C" {
         fn tzset();
     }
-    // No environment mutation, and no shared-owner execution is selected here.
+    // This initializes libc timezone state, using the original environment.
+    // No environment mutation or shared-owner execution is selected here.
     unsafe { tzset() }
 }
 #[cfg(not(all(
@@ -508,7 +505,7 @@ fn local_calendar(seconds: i64, text: &str) -> LocalObservation {
         // Match _PyTime_localtime in the declared CPython profile: libc
         // failure without errno becomes the platform's EINVAL, not a date.
         let number = unsafe { *errno };
-        os_error(text, if number == 0 { libc::EINVAL } else { number })
+        os_error(text, localtime_error_number(number))
     } else {
         let value = unsafe { calendar.assume_init() };
         LocalObservation::LocalCalendar {
@@ -521,6 +518,13 @@ fn local_calendar(seconds: i64, text: &str) -> LocalObservation {
             tm_sec: value.tm_sec,
         }
     }
+}
+#[cfg(all(
+    any(target_os = "macos", target_os = "linux"),
+    target_pointer_width = "64"
+))]
+fn localtime_error_number(errno: i32) -> i32 {
+    if errno == 0 { libc::EINVAL } else { errno }
 }
 #[cfg(all(
     any(target_os = "macos", target_os = "linux"),
@@ -558,6 +562,14 @@ fn local_calendar(_: i64, text: &str) -> LocalObservation {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn null_localtime_error_maps_only_unset_errno_to_einval() {
+        assert_eq!(localtime_error_number(0), libc::EINVAL);
+        assert_eq!(localtime_error_number(libc::EILSEQ), libc::EILSEQ);
+        assert_eq!(localtime_error_number(libc::EOVERFLOW), libc::EOVERFLOW);
+        assert_eq!(localtime_error_number(libc::EINVAL), libc::EINVAL);
+    }
 
     fn captured() -> CapturedCalendar {
         CapturedCalendar::capture(OriginalInvocation {
