@@ -1,0 +1,35 @@
+id: CAWS-NATIVE-LEAD-HANDOFF-DOCS-001
+title: 'Land supported operating guidance and document lead transfer'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-25T00:53:05.111Z'
+updated_at: '2026-10-25T00:53:05.111Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Source-grounded merge and rollback guidance and modernization handoff'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/guides/worktree-isolation.md'
+    - 'docs/guides/hook-packs.md'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Document actual main behavior; do not claim the absent shell-analysis backend or full native cutover.'
+acceptance:
+  - id: A1
+    given: 'main worktree merge and retained-entry rollback implementation'
+    when: 'the ready documentation subset is reconciled'
+    then: 'application preview closure teardown partial failure and retained-entry custody descriptions match inspected executable source'
+  - id: A2
+    given: 'source landings and accepted incoming lead'
+    when: 'handoff documentation and bindings are reconciled'
+    then: 'canonical tracker records candidate and target identities concrete evidence limits all remaining owned obligations and audited recipient ownership without declaring parent completion'
+observability:
+  - 'Retain exact source coordinates validation command outputs candidate identity and handoff acceptance.'
+rollback:
+  - 'Revert only the bounded documentation changes through governed history.'
+non_functional: {}
+contracts: []
