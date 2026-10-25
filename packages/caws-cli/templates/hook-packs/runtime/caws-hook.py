@@ -574,13 +574,36 @@ def project_requires_resolved_authority(candidate, home, resolved_canonical=Fals
         probe = Path(candidate).resolve(strict=True)
     except (OSError, ValueError, RuntimeError):
         return True
+    try:
+        projects = confined(home, 'state/projects')
+    except (ValueError, OSError):
+        return True
     def adopted(root):
-        return entry_requires_resolution(home / 'state/projects' / (digest(str(root).encode()) + '.json'))
+        return entry_requires_resolution(projects / (digest(str(root).encode()) + '.json'))
     if resolved_canonical and Path(candidate) != probe and adopted(Path(candidate)):
         return True
     roots = [probe] if resolved_canonical else [probe, *probe.parents]
     return any((not resolved_canonical and entry_requires_resolution(p / '.git')) or
                governance_requires_resolution(p / '.caws') or adopted(p) for p in roots)
+
+
+def require_project_governance_paths(canonical):
+    """Validate paths without promoting cache/legacy suppression to active policy."""
+    directory = confined(canonical, '.caws')
+    try:
+        if not stat.S_ISDIR(directory.lstat().st_mode):
+            raise ValueError('Project governance path must be a normal directory')
+    except OSError as error:
+        if error.errno == errno.ENOENT:
+            return
+        raise
+    for artifact in ('policy.yaml', 'specs', 'working-spec.yaml'):
+        target = confined(canonical, '.caws/' + artifact)
+        try:
+            target.lstat()
+        except OSError as error:
+            if error.errno != errno.ENOENT:
+                raise
 
 
 def execution_workdir(payload, event):
@@ -803,7 +826,21 @@ def main():
         canonical = common.parent
         if anchor_governed and canonical != anchor:
             raise ExecutionWorkdirError('Host execution directory belongs to a foreign canonical project')
-    known_project = confined(home, 'state/projects/' + digest(str(canonical).encode()) + '.json').exists()
+    try:
+        if execution['status'] == 'resolved':
+            require_project_governance_paths(canonical)
+        project_record = confined(home, 'state/projects/' + digest(str(canonical).encode()) + '.json')
+        try:
+            project_record.lstat()
+            known_project = True
+        except OSError as error:
+            if error.errno != errno.ENOENT:
+                raise
+            known_project = False
+    except (ValueError, OSError) as error:
+        if execution['status'] == 'resolved':
+            raise ExecutionWorkdirError('Host execution governance paths are unresolved: ' + str(error)) from None
+        raise
     if not (canonical / '.caws').exists():
         if known_project:
             raise ValueError('Adopted project governance is missing')

@@ -217,6 +217,28 @@ class HookExecutionDiagnostics(unittest.TestCase):
         self.assertFalse((self.repo / 'marker.log').exists())
         self.assertEqual(self.journals(), [])
 
+    def test_uncertain_adoption_namespace_refuses_both_tool_events(self):
+        projects = self.home / 'state/projects'
+        retained = self.root / 'retained-project-registrations'
+        projects.rename(retained)
+        projects.symlink_to(self.root / 'missing-project-registrations', target_is_directory=True)
+        scratch = self.root / 'ordinary-adoption-probe'
+        scratch.mkdir()
+        try:
+            for event in ('pre_tool_use', 'post_tool_use'):
+                self.event = event
+                with self.subTest(event=event):
+                    result = self.invoke('uncertain-adoption-' + event, self.payload(
+                        cwd=str(scratch), execution_workdir=str(scratch),
+                        tool_input={'command': 'echo unchanged'}))
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn(b'Host execution context requires a resolvable session project', result.stderr)
+            self.assertFalse((self.repo / 'marker.log').exists())
+            self.assertEqual(self.journals(), [])
+        finally:
+            projects.unlink()
+            retained.rename(projects)
+
     def test_runtime_home_and_cache_only_ancestors_do_not_opt_in_to_project_governance(self):
         user = self.root / 'user'
         user.mkdir()
@@ -305,6 +327,68 @@ class HookExecutionDiagnostics(unittest.TestCase):
                     cwd=str(origin), execution_workdir=str(self.repo), tool_input={'command': 'echo unchanged'}))
                 self.assertEqual(result.returncode, 2, result.stderr)
                 self.assertIn(b'foreign canonical project', result.stderr)
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
+    def test_resolved_host_adoption_namespace_file_is_not_missing_metadata(self):
+        target = self.root / 'resolved-adoption-namespace-target'
+        target.mkdir()
+        init = subprocess.run(['git', 'init', '-q', str(target)], env=self.env, capture_output=True)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        projects = self.home / 'state/projects'
+        retained = self.root / 'retained-adoption-namespace-directory'
+        projects.rename(retained)
+        projects.write_text('not a directory\n')
+        try:
+            for event in ('pre_tool_use', 'post_tool_use'):
+                self.event = event
+                result = self.invoke('resolved-adoption-namespace-file-' + event, self.payload(
+                    cwd=str(target), execution_workdir=str(target), tool_input={'command': 'echo unchanged'}))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(b'Host execution governance paths are unresolved', result.stderr)
+                self.assertIn(str(projects).encode(), result.stderr)
+            self.assertFalse((self.repo / 'marker.log').exists())
+            self.assertEqual(self.journals(), [])
+        finally:
+            projects.unlink()
+            retained.rename(projects)
+
+    def test_resolved_host_target_governance_links_refuse_before_inactive_return(self):
+        scratch = self.root / 'resolved-target-clean-origin'
+        scratch.mkdir()
+        for index, marker in enumerate(('.caws', '.caws/policy.yaml', '.caws/specs', '.caws/working-spec.yaml')):
+            target = self.root / ('resolved-link-target-' + str(index))
+            target.mkdir()
+            init = subprocess.run(['git', 'init', '-q', str(target)], env=self.env, capture_output=True)
+            self.assertEqual(init.returncode, 0, init.stderr)
+            path = target / marker
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.symlink_to(self.root / 'missing-governance-target')
+            for origin_name, origin in [('same-canonical', target), ('nongit', scratch)]:
+                for event in ('pre_tool_use', 'post_tool_use'):
+                    self.event = event
+                    with self.subTest(marker=marker, origin=origin_name, event=event):
+                        result = self.invoke('resolved-link-' + str(index) + origin_name + event,
+                            self.payload(cwd=str(origin), execution_workdir=str(target),
+                                         tool_input={'command': 'echo unchanged'}))
+                        self.assertEqual(result.returncode, 2, result.stderr)
+                        self.assertIn(b'Host execution governance paths are unresolved', result.stderr)
+                        self.assertIn(str(path).encode(), result.stderr)
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
+    def test_normal_legacy_suppression_remains_inactive_with_resolved_host_context(self):
+        target = self.root / 'legacy-target'
+        target.mkdir()
+        init = subprocess.run(['git', 'init', '-q', str(target)], env=self.env, capture_output=True)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        (target / '.caws').mkdir()
+        (target / '.caws/working-spec.yaml').write_text('legacy fixture\n')
+        for event in ('pre_tool_use', 'post_tool_use'):
+            self.event = event
+            result = self.invoke('normal-legacy-' + event, self.payload(cwd=str(target),
+                execution_workdir=str(target), tool_input={'command': 'echo unchanged'}))
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b'', b''))
         self.assertFalse((self.repo / 'marker.log').exists())
         self.assertEqual(self.journals(), [])
 

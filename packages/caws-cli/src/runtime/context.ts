@@ -6,6 +6,7 @@ import { TextDecoder } from 'node:util';
 import { resolveGitBinaryForEnvironment } from '../store/git-binary';
 import { repoRootFromGitCommonDir } from '../store/repo-root';
 import { isFatalContextGitError } from './context-git-wire';
+import { assertMachinePath } from '../init/machine-paths';
 
 export interface InvocationCaller {
   readonly cwd: string;
@@ -207,6 +208,11 @@ export function runtimeProjectRequiresResolvedAuthority(
   } catch {
     return true;
   }
+  try {
+    assertMachinePath(home, join(home, 'state/projects'));
+  } catch {
+    return true;
+  }
   const adopted = (root: string): boolean =>
     entryRequiresResolution(
       join(home, 'state/projects', createHash('sha256').update(root).digest('hex') + '.json')
@@ -226,6 +232,24 @@ export function runtimeProjectRequiresResolvedAuthority(
     if (parent === current) return false;
     current = parent;
   }
+}
+
+/** Resolved Git coordinates cannot suppress redirected or malformed governance paths.
+ * Missing artifacts and normal cache/legacy directories retain policy selection's
+ * existing inactive outcomes; this validates paths, never activation or authority. */
+export function requireRuntimeProjectGovernancePaths(canonical: string): void {
+  const directory = join(canonical, '.caws');
+  assertMachinePath(canonical, directory);
+  try {
+    if (!lstatSync(directory).isDirectory())
+      throw new Error('Project governance path must be a normal directory');
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')
+      return;
+    throw error;
+  }
+  for (const artifact of ['policy.yaml', 'specs', 'working-spec.yaml'])
+    assertMachinePath(canonical, join(directory, artifact));
 }
 
 /** Actual checkout and canonical authority are separate, using the store's root mapping. */

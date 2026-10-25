@@ -10,6 +10,7 @@ import {
   resolveRuntimeProject,
   runtimeProjectCandidate,
   runtimeProjectRequiresResolvedAuthority,
+  requireRuntimeProjectGovernancePaths,
   type ContextGitPort,
 } from './context';
 import {
@@ -391,8 +392,9 @@ export async function prepareRuntimeInvocation(
       }
     } else {
       const anchor = context;
+      const anchorWasActive = selection.status === 'active';
       const anchorGoverned =
-        selection.status === 'active' ||
+        anchorWasActive ||
         runtimeProjectRequiresResolvedAuthority(anchor.canonical, home, 'resolved-canonical');
       context = await resolveRuntimeProject(
         request.payload,
@@ -409,10 +411,12 @@ export async function prepareRuntimeInvocation(
       if (anchorGoverned && context.status === 'resolved' && context.canonical !== anchor.canonical)
         throw new Error('Host execution directory belongs to a foreign canonical project');
       selection = await select(context);
-      if (anchorGoverned && selection.status !== 'active')
+      if (anchorWasActive && selection.status !== 'active')
         throw new Error('Host execution directory cannot deactivate session governance');
     }
   }
+  if (executionWorkdir.status === 'resolved' && context.status === 'resolved')
+    requireRuntimeProjectGovernancePaths(context.canonical);
   if (signal.aborted) throw signal.reason;
   if (selection.status === 'inactive') {
     let used = false;

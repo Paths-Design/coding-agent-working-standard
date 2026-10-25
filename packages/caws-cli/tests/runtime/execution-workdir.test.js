@@ -302,6 +302,17 @@ function danglingMarker(directory, home, kind) {
     fs.symlinkSync(path.join(root, 'missing-adoption'), file);
   } else fs.symlinkSync(path.join(root, 'missing-marker'), path.join(directory, kind));
 }
+test.each(['state', 'state/projects'])(
+  'unresolved adoption namespace %s cannot establish absence',
+  (component) => {
+    const home = path.join(root, 'machine');
+    fs.mkdirSync(path.dirname(path.join(home, component)), { recursive: true });
+    fs.symlinkSync(path.join(root, 'missing-adoption-namespace'), path.join(home, component));
+    expect(runtimeProjectRequiresResolvedAuthority(session, home)).toBe(true);
+    expect(runtimeProjectRequiresResolvedAuthority(session, home, 'resolved-canonical')).toBe(true);
+  }
+);
+
 test('machine runtime and session-cache directories without project artifacts do not opt in', () => {
   const user = path.join(root, 'user');
   const home = path.join(user, '.caws');
@@ -421,5 +432,103 @@ test.each(['.caws', 'adoption'])(
     expect(git.run).toHaveBeenCalledTimes(4);
     expect(select).toHaveBeenCalledTimes(1);
     expect(select.mock.calls[0][0].canonical).toBe(session);
+  }
+);
+
+test.each(['.caws', '.caws/policy.yaml', '.caws/specs', '.caws/working-spec.yaml'])(
+  'resolved host target with dangling %s cannot become inactive',
+  async (marker) => {
+    const home = path.join(root, 'machine');
+    fs.mkdirSync(home);
+    fs.mkdirSync(path.dirname(path.join(command, marker)), { recursive: true });
+    fs.symlinkSync(path.join(root, 'missing-target-governance'), path.join(command, marker));
+    const request = predicateRequest(home);
+    const git = {
+      run: jest.fn(async (args, cwd) => {
+        if (cwd === session) throw new ContextGitError('git_exit', 'fixture no session Git');
+        return args.length === 2 ? command : path.join(command, '.git');
+      }),
+    };
+    const select = jest.fn(async () => ({
+      status: 'inactive',
+      reason: 'fixture no selected policy',
+    }));
+    await expect(
+      prepareRuntimeInvocation(
+        request,
+        new AbortController().signal,
+        undefined,
+        git,
+        undefined,
+        undefined,
+        select
+      )
+    ).rejects.toThrow('Refusing symlink: ' + path.join(command, marker));
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(select.mock.calls[0][0].canonical).toBe(command);
+  }
+);
+test.each(['.caws', '.caws/policy.yaml', '.caws/specs', '.caws/working-spec.yaml'])(
+  'same-canonical inactive host target cannot hide dangling %s',
+  async (marker) => {
+    const home = path.join(root, 'machine');
+    fs.mkdirSync(home);
+    fs.mkdirSync(path.dirname(path.join(command, marker)), { recursive: true });
+    fs.symlinkSync(path.join(root, 'missing-target-governance'), path.join(command, marker));
+    const request = predicateRequest(home);
+    request.payload.cwd = command;
+    request.caller.cwd = command;
+    request.inputJson = JSON.stringify(request.payload);
+    const git = {
+      run: jest.fn(async (args) => (args.length === 2 ? command : path.join(command, '.git'))),
+    };
+    const select = jest.fn(async () => ({
+      status: 'inactive',
+      reason: 'fixture legacy suppression',
+    }));
+    await expect(
+      prepareRuntimeInvocation(
+        request,
+        new AbortController().signal,
+        undefined,
+        git,
+        undefined,
+        undefined,
+        select
+      )
+    ).rejects.toThrow('Refusing symlink: ' + path.join(command, marker));
+    expect(select).toHaveBeenCalledTimes(2);
+  }
+);
+test.each(['cache', 'legacy'])(
+  'valid same-canonical %s suppression retains inactive selection',
+  async (kind) => {
+    const home = path.join(root, 'machine');
+    fs.mkdirSync(home);
+    fs.mkdirSync(path.join(command, '.caws/sessions'), { recursive: true });
+    if (kind === 'legacy')
+      fs.writeFileSync(path.join(command, '.caws/working-spec.yaml'), 'legacy fixture\n');
+    const request = predicateRequest(home);
+    request.payload.cwd = command;
+    request.caller.cwd = command;
+    request.inputJson = JSON.stringify(request.payload);
+    const git = {
+      run: jest.fn(async (args) => (args.length === 2 ? command : path.join(command, '.git'))),
+    };
+    const select = jest.fn(async () => ({
+      status: 'inactive',
+      reason: 'fixture existing suppression',
+    }));
+    const invocation = await prepareRuntimeInvocation(
+      request,
+      new AbortController().signal,
+      undefined,
+      git,
+      undefined,
+      undefined,
+      select
+    );
+    expect(invocation.active).toBe(false);
+    expect(select).toHaveBeenCalledTimes(2);
   }
 );
