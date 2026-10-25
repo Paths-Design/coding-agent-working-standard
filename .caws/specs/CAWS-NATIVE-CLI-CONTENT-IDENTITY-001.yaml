@@ -48,3 +48,11 @@ non_functional:
   security:
     - 'No capability string or mutable external manifest establishes identity'
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Two distinct maintained installer prefixes from source55080eb1 match across2056 regular files,21 packages,Node bytes and reviewed367-importer domain; compare+revalidate20.522s and restored8.646s within original30s. Exact domainSHA0e9cde8717ad8d13c0bfca1c5ccdebcad105af384dad69e46c23259a7bbbb246. Independently inspected external artifacts: /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/qualification-component/result.json, inputs.json and /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/execution-component-01/execution.json (exit0,inputs unchanged,source6db equals f476). CLI verify checks cited commit existence only; external artifact verification is manual because writer accepts repo-relative artifact paths only. No native admission/final joined-generation claim."
+    recorded_at: "2026-10-25T08:03:07.273Z"
+    command: python3 /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/supervise-component.py
+    exit_code: 0
+    commit_sha: f4764277d056a32bc3c2aa360d704e77a612280f
