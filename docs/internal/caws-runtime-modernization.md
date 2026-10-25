@@ -10654,6 +10654,96 @@ Additional bounded evidence and unresolved dependencies:
   selection contract. Main landing and the original installed-image deadline
   check remain separate obligations. E383 remains failed.
 
+- **E385 — typed lease-stop component and the unconnected installed route.** The
+  CLI and typed Stop adapter share the existing load/kernel/store transition.
+  The CLI retains raw environment identity normalization and load-error
+  precedence; the hook validates its explicit identity and checks the original
+  deadline before application. Exact stock-chain/source admission and explicit
+  CLI/Git overrides preserve fallback. The component does not select itself
+  through ordinary installed wiring: the global CLI and generation-embedded CLI
+  have different package roots, while admission requires the same executable
+  identity.
+
+  `publication-integration/agent-stop-typed-01` retains the actual command,
+  exit0 and59 focused tests; `agent-stop-related-01` retains124 existing checks
+  across stock routing, heartbeat application/runtime and Stop output, exit0.
+  Both consumed source/dist pins remain unchanged. Under the same external
+  session artifact root, `native-agent-stop/fixtures-01/agent-stop-typed-vKAnnJ`
+  retains stdout empty, stderr `stopped own-session`, zero observed
+  child-process API calls and the real own-lease active→stopped transition. Peer
+  bytes are exact. `agent-stop-typed-m8oVWb` retains distinct canonical/checkout
+  roots and unchanged same-ID decoy bytes; `agent-stop-typed-WbetwV` retains
+  prior refusal exit2 and unchanged leases. Expiry/cancellation during loading
+  retains zero apply calls. `agent-stop-typed-rgenkf` preserves
+  whitespace-bearing CLI identity receipts; `agent-stop-typed-m5R4ep` preserves
+  unreadable-directory exit2 before unsafe-ID store refusal exit1. Root decodes
+  and compares retained before/after bytes.
+
+  These controls use a synthetic native-prefix capability and selected-root
+  fixtures. They do not establish native admission, actual linked-Git discovery,
+  installed typed execution, syscall-level interruption or performance. A prior
+  draft moved raw identity validation before CLI load; source review found the
+  changed normalization/error precedence and the committed adapter separation
+  preserves the original order. Independent committed review identified
+  unnecessary source reads on already-disqualified fallback paths. The
+  tests-only `agent-stop-fallback-cost-baseline-01` exits1: missing native
+  prefix, custom CLI and explicit Git override each read13 handler/support
+  files. The repaired admission order rejects those cases before reads while
+  retaining exact source verification before typed execution.
+
+  `publication-integration/agent-stop-fallback-build-01` exits0;
+  `agent-stop-fallback-repaired-01` executes186 checks across five suites,
+  exits0 and retains unchanged source/dist pins. Its sibling
+  `agent-stop-fallback-repaired-fixtures-01` retains three
+  `fallback-read-cost.json` artifacts with empty paths, versus13 paths each in
+  `agent-stop-fallback-cost-baseline-fixtures-01`. This establishes reduced
+  component read count, not installed latency. Supported installed CLI selection
+  remains owed. No production Python row is retired.
+
+- **E386 — retained native origin, fresh package, failed original deadline.**
+  Candidate `8b82867d3aa46e56fed14ea4703fa6f6e9c7b924` produces a fresh CLI
+  tarball `8c93557685834ef6b0eeff0a593b7f0c86ad9b9336886455ee6ecae6990b565b`
+  through ten supervised stages, all exit0. The maintained native loader uses
+  E383's original request and completed build receipt; this is explicitly
+  retained native compilation, not another Rust build. Complete native and
+  embedded input equivalence precedes preparation. Under
+  `publication-integration/retained-native-recipe-16-preparation/run`, the fresh
+  component comparison records30 equal SQL/render controls. Root rehashes
+  all5863 image files and233 comparison artifacts; the supervision readback
+  retains their counts and the tarball identity.
+
+  `production-stop-16-paired-execution-01/execution.json` records the actual
+  installed paired probe, exit1 after63.427s, no outer timeout, stable source
+  pins and empty final process group. The positive original exits2 after
+  30039.944ms. Its stderr records `renderer owner deadline expired` during the
+  logger:24 generation revalidations consume19195391 microseconds and hash
+  3750974033 bytes. Native selection reaches dispatch grant at11458ms; the
+  journal records goal and plan completion, then logger start without
+  completion. This advances beyond E383's predispatch expiry but does not
+  establish reliable performance or a causal timing comparison between machine
+  conditions.
+
+  The strengthened external probe registers real own and peer leases through the
+  installed CLI before launch. Retained before bytes equal both active leases
+  after failure; the explicit CLI wrapper's NUL-delimited stop-argv trace is
+  empty. No publication marker, projection, turn or session index is present.
+  The durable operation
+  `c4a4122c9678e12c2ffd3f50ec41657808bfaf91f3c2b87cc8d71393277fca8e` retains
+  `unknown` execution and `accepted` admission. Owner79900 exits0 naturally; its
+  socket and outstanding originals are absent and no service signal is sent. The
+  queued negative never executes. Raw state lives in
+  `publication-integration/production-stop-16-paired-01` beneath the external
+  session artifact root. Both parent/publication A2 remain failed.
+
+  The probe keeps explicit CLI/Git overrides and therefore measures the
+  compatibility lease-stop route when reached. Thirteen offline oracle controls
+  reject missing stop effects, altered peer/own bytes and missing/wrong command
+  markers; they do not establish installed execution. Ordinary typed routing,
+  authenticated same-original restart, compatible rollback, supported harness
+  parity and thirteen-session/four-repository capacity remain open. The real
+  machine pointer remains `408c06a7…77baa0`, with unchanged SHA256
+  `f8a3627299bc8c3d325eb42472f889b43e7c26c8a4e4c02996091867cb9f4f7e`.
+
 - **E387 — complete production dependency reduction and actual Stop pair.**
   Candidate `a6ec3b05a84eb69bff0226ae58f4e114751628c1` removes the unused
   Inquirer production declaration, its type dependency and the obsolete Jest
@@ -10710,6 +10800,14 @@ Additional bounded evidence and unresolved dependencies:
   naturally, no socket, no outstanding originals and no service signals; the
   supervisor records unchanged source and no remaining process group.
 
+  The bounded dependency slice lands on main at `44b5d017`; its three acceptance
+  records and terminal lifecycle event are read back before bridge release.
+  Publication integration `1532ef6f` preserves that exact dependency graph and
+  the typed Stop component. `publication-integration/` retains
+  `integrated-dependency-build-01` (exit0) and
+  `integrated-dependency-stop-tests-01` (186 checks, five suites, exit0,
+  35.765s). This combined source has not earned a fresh installed-image result.
+
   This is a main-based package candidate with an explicit selected CLI
   compatibility route in a private configured fixture. It does not qualify the
   unlanded typed Stop route, actual harness delivery, original-ID authenticated
@@ -10717,6 +10815,72 @@ Additional bounded evidence and unresolved dependencies:
   machine adoption. The selected machine pointer remains byte-identical (SHA256
   `f8a3627299bc8c3d325eb42472f889b43e7c26c8a4e4c02996091867cb9f4f7e`). Root owns
   coherent landing, publication integration and these remaining joins.
+
+- **E388 — main-based lease-stop source candidate and lead transfer.** Source
+  candidate `527d26b8a7cf442011aa8bb5354ddc76e52cdee8` carries the five
+  application/runtime/CLI/test files from publication `2d9676d5` without copying
+  its older governance state. Under the external session artifact root,
+  `lease-stop-landing/build-01` records the pinned Node22 build, exit0 in7.169s;
+  `tests-01` records186 checks across five suites, exit0 in35.793s. Source pins
+  remain unchanged; compiled distribution pins remain unchanged during tests.
+  Both supervisors observe no remaining process-group members.
+
+  `fixtures-01/agent-stop-typed-M2bB37/{state,execution}.json` retains the
+  actual executor result: empty stdout, `stopped own-session` stderr, zero
+  observed child-process API calls, and only status/last_seen_reason/stopped_at
+  changed in the own lease. Peer bytes are exact. `agent-stop-typed-wI5PQF`
+  preserves the separate checkout's same-ID decoy; `agent-stop-typed-h3RSyf`
+  retains an earlier refusal, exit2, with both leases unchanged. The evidence
+  uses a synthetic native-prefix capability and matching CLI/Node symlinks. It
+  does not establish ordinary installed typed routing, authenticated restart,
+  syscall interruption, native harness delivery or machine cutover.
+
+  The incoming lead is session `01a17052-3ea7-79b1-86be-7296991f8fd0`, which
+  explicitly accepts full integration and cutover ownership. The outgoing lead
+  finishes bounded source landings and documentation before serialized binding
+  acquisition. The receiver owns the R06 standalone guard-config lane and the
+  remaining `session-cache-admission.ts` source-identity join, real installed
+  typed-CLI selection, combined package qualification, authenticated replay,
+  usable rollback, complete Python retirement and unchanged residency workload.
+  A generation-bound CLI launcher is an unchosen design: CLI/runtime pointer
+  mismatch and interrupted update recovery require a supported contract before
+  activation. Synthetic matching paths do not discharge that decision.
+
+  Older owned work remains explicit: guard-contract documentation depends on the
+  foreign shell-analysis implementation absent from main; only its
+  source-grounded merge/rollback guidance can land independently. Calendar
+  integration must preserve main's calendar accessors and current source-count
+  pin. The test-preparation source is already on main; its hosted macOS/Ubuntu
+  clean-checkout qualification and normal publication criterion remains open.
+  The historical modernization branch is an ancestor of main and a base for
+  other active lanes; do not delete it or equate source ancestry with parent
+  completion. Remaining bindings transfer only through audited acquisition.
+
+- **E389 — typed Git counterexample and bounded CLI extraction.** Independent
+  review traces arbitrary stable PATH Git through native executable capture
+  (`invocation_project.rs:629-715`), original-project identity reuse, native
+  Stop admission and engine publication-prefix completion. A wrapper may
+  delegate queries from the native custodian but refuse the later Node CLI
+  parent. Typed Stop skips that later lookup and can stop a lease that the
+  selected shell route leaves active. Executable identity alone does not prove
+  those consumer semantics equivalent.
+
+  `lease-stop-landing/git-counterexample-01` retains the exact one-case Jest
+  command, exit1 in1.902s, stable source/dist pins and no remaining process
+  group. The expected null fallback instead returns exit0 with
+  `stopped own-session`; the retained fixture records the changed own lease.
+  Candidate `e51d8e6a` commits this failing control without changing production
+  code. Native reachability is source-derived; this control supplies a synthetic
+  prefix and does not execute the full native/Node wrapper contrast. The
+  incoming lead accepts that additional decisive installed-path check and the
+  supported Git substitution contract. A machine-specific executable allowlist
+  and an unfenced duplicate Git process are not adopted as shortcuts.
+
+  `CAWS-NATIVE-LEASE-STOP-LANDING-001` records A1 fail and transfers unfinished;
+  its typed source stays off main. `CAWS-NATIVE-SHARED-STOP-001` carries the
+  independently supported shared CLI application extraction and direct real
+  lease/CLI tests from candidate `71e68b55`. It does not select the typed hook
+  adapter. Parent acceptance and the three integrated outcomes remain unchanged.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
@@ -10885,26 +11049,33 @@ or omitted effect boundary is authorized. E383 completes the fresh package but
 its actual original expires before dispatch, so root owns the failed runtime
 join. The selection-copy worker owns a separately governed removal of discarded
 manifest copies while preserving verification and public copy semantics; this is
-not a measured deadline repair. E384 exercises the selection-copy source and
-hostile controls; root owns its committed review and coherent main landing. The
-agent-stop worker owns the typed stock lease transition, exact admission and
-override fallback. Root owns application of both workers' external patches in
-the publication lane after guarded child writes refused; their unstarted child
-lanes retain explicit disposition obligations. The agent-stop draft's
-same-package CLI predicate does not admit ordinary installed wiring: the global
-CLI and generation-embedded CLI have distinct paths. A synthetic matching
-symlink does not establish installation parity. Root retains a supported
-selected-CLI identity/wiring contract and an actual installed typed execution
-before counting that handler as replaced. The canonical push coordinator owns
-only the separate agent-stop test observer allocation repair. Root retains
-integration, raw-artifact adjudication and the complete parent outcome. Machine
-adoption remains owed.
+not a measured deadline repair. E384's reviewed selection-copy slice lands on
+main at `78a571c54d1286c41b2cd27d5aae01a0baee6c05`; all six blobs match
+`694f6212`, and its four acceptance records are dual-read back before closure.
+Its original child is superseded and removed. E385's typed stock lease
+transition and fallback-cost repair are committed in the publication lane; root
+owns main landing, installed routing and the unstarted agent-stop child's
+truthful disposition. E386 retains another actual deadline failure during logger
+acquisition. E387 removes unused production dependencies while preserving every
+effect/queue boundary and the original deadline. The bounded installed pair
+completes positive publication in15.56s and queued hostile refusal in9.99s. Its
+reviewed source lands on main at `44b5d017`; root owns the combined publication
+package and ordinary installed routing, followed by replay, compatible rollback
+and the unchanged residency workload. The agent-stop component's same-package
+CLI predicate does not admit ordinary installed wiring: the global CLI and
+generation-embedded CLI have distinct paths. A synthetic matching symlink does
+not establish installation parity. Root retains a supported selected-CLI
+identity/wiring contract and an actual installed typed execution before counting
+that handler as replaced. The canonical push coordinator owns only the separate
+agent-stop test observer allocation repair. Root retains integration,
+raw-artifact adjudication and the complete parent outcome. Machine adoption
+remains owed.
 
-| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                                                            |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                             | E341/E342 stock admission is on local main56f917d8. Next qualify the production-connected image, actual harness delivery and rollback; the maintained entry observation establishes stock admission plus compatibility completion.                                                             |
-| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; E346 connects native and engine production sources; root owns fresh-image execution | E378 completes the distinct-session positive and queued mutation with zero extra database opens, durable refusal/release and natural owner exit; E379 verifies current-reader restart and old-reader refusal; next prove authenticated same-ID replay rejection and usable compatible rollback |
-| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                               | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                          |
+| Integrated outcome                                                                   | Execution owner                                                                                                                                                                                                                                                                          | Next decisive check                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coherent source and package delivery, isolated invocation and rollback               | Root owns combined landing, package qualification and installed-image join; E298 records hosted main success                                                                                                                                                                             | E387 dependency reduction lands on main44b5d017; its actual pair18 retains15.56s positive and9.99s hostile completion under30000ms. Next qualify ordinary installed typed routing and the combined publication package, then actual harness delivery and usable rollback.                             |
+| Native acquisition, continuous-custody publication, ordinary consumption and release | Root owns ordinary Stop integration and acceptance; E343 connects the native source catalog to its consumer; E344 adds original/queue registration; E345 adds the profile producer/loader component; E346 connects native and engine production sources; root owns fresh-image execution | E387 joins exact selected projection, original rendered context, own-only lease stop, queued refusal with no extra SQL opens and natural release. E379 retains reader restart limits. Next prove authenticated original-ID replay rejection and usable compatible rollback on the combined candidate. |
+| Resident operation with fair, bounded capacity                                       | Root owns integration and execution; html-profile's timing investigation feeds E304; uncertain-A/A2/B bounded progress is executed in the publication lane                                                                                                                               | Qualify the exact combined image and ordinary consumer; E305 retains bounded uncertain-A/A2/B evidence; then mandatory-guard capacity and unchanged thirteen-session/four-repository fairness, overload, restart and upgrade workload                                                                 |
 
 The E273 image and rejected-replay repairs have finite executed controls. E275
 publishes the coherent source slice; E276 repairs a hosted packaging defect. The

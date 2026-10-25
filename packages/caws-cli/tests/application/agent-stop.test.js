@@ -98,7 +98,20 @@ test('shared operation stops exactly its own lease and absent identity creates n
   expect(JSON.parse(captureLease('own-session')).stopped_at).toBe(fixed.toISOString());
   expect(stopAgentActivity(input('missing'))).toEqual({
     ok: true,
-    value: { session_id: 'missing', wrote: false, diagnostics: [] },
+    value: {
+      session_id: 'missing',
+      wrote: false,
+      diagnostics: [
+        {
+          authority: 'kernel/diagnostics',
+          rule: 'store.leases.stop_no_prior_lease',
+          severity: 'warning',
+          subject: leasePath('missing'),
+          data: { session_id: 'missing' },
+          message: 'mark_stopped: no existing lease for session "missing" — nothing to update.',
+        },
+      ],
+    },
   });
   expect(fs.existsSync(leasePath('missing'))).toBe(false);
 });
