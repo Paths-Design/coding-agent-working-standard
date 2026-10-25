@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { resolveExecutionWorkdir } from './execution-workdir';
 import { createHash } from 'node:crypto';
 import {
   constants,
@@ -174,6 +175,7 @@ function childEnvironment(
     : 131072;
   const inline = Buffer.byteLength(payload) < threshold;
   const startup = join(selection.runtimeDirectory, 'handler-env.sh');
+  const execution = resolveExecutionWorkdir(request.payload, request.event);
   Object.assign(env, {
     CAWS_PROJECT_DIR: selection.checkout,
     CAWS_MACHINE_POLICY_ROOT: selection.canonical,
@@ -211,7 +213,10 @@ function childEnvironment(
     HOOK_TOOL_NAME: scalar(request.payload.tool_name),
     HOOK_FILE_PATH: scalar(tool.file_path),
     HOOK_COMMAND: scalar(tool.command),
-    HOOK_CWD: scalar(request.payload.cwd),
+    HOOK_SESSION_CWD: scalar(request.payload.cwd),
+    HOOK_CWD: execution.status === 'resolved' ? execution.path : scalar(request.payload.cwd),
+    HOOK_EXECUTION_WORKDIR_STATUS: execution.status,
+    HOOK_EXECUTION_WORKDIR: execution.status === 'resolved' ? execution.path : '',
     HOOK_SESSION_ID: scalar(request.payload.session_id, 'unknown'),
     HOOK_TRANSCRIPT_PATH: scalar(request.payload.transcript_path),
     HOOK_EVENT_NAME: MACHINE_EVENTS[request.event],
@@ -255,6 +260,7 @@ async function runChild(
   serviceExecution?: AdmittedServiceExecution
 ): Promise<CompatibilityDispatchResult> {
   const { selection, request, signal } = options;
+  const execution = resolveExecutionWorkdir(request.payload, request.event);
   const temporaryRoot = options.environment.TMPDIR || '/tmp';
   if (!isAbsolute(temporaryRoot))
     throw new HandlerExecutionError('Handler temporary directory must be absolute');
@@ -303,7 +309,7 @@ async function runChild(
           command.path,
           [...command.args, ...(containment ? [CONTAINMENT_FD_ARGUMENT] : [])],
           {
-            cwd: selection.checkout,
+            cwd: execution.status === 'resolved' ? execution.path : selection.checkout,
             env,
             stdio: serviceExecution
               ? [inputFd!, 'pipe', 'pipe', ...serviceExecution.descriptors]

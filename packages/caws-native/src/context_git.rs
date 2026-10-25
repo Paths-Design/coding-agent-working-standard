@@ -37,7 +37,30 @@ pub const MAX_REQUEST: usize = 32 * 1024;
 pub const MAX_RESULT: usize = 2 * 1024 * 1024;
 pub const MAX_OUTPUT: usize = 1024 * 1024;
 pub const CAPABILITY: &str = "caws.runtime.context-git.v1";
+pub const EXECUTION_WORKDIR_CAPABILITY: &str = "caws.runtime.context-git.execution-workdir.v1";
 pub const MAX_EXTRA_ENGINE_STDOUT_BYTES: usize = 2 * (MAX_REQUEST + 1);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Profile {
+    Ordinary,
+    ExecutionWorkdir,
+}
+impl Profile {
+    pub const fn capability(self) -> &'static str {
+        match self {
+            Self::Ordinary => CAPABILITY,
+            Self::ExecutionWorkdir => EXECUTION_WORKDIR_CAPABILITY,
+        }
+    }
+    const fn requests(self) -> u8 {
+        match self {
+            Self::Ordinary => 2,
+            Self::ExecutionWorkdir => 4,
+        }
+    }
+    pub const fn control_credit_limit(self) -> usize {
+        self.requests() as usize * (MAX_REQUEST + 1)
+    }
+}
 // The owning invocation transport admits 8MiB. Byte-array JSON can encode an
 // inherited byte as four characters (255,); retain that full admitted domain.
 const MAX_CONFIGURATION: usize = 4 * 8 * 1024 * 1024 + MAX_REQUEST;
@@ -153,6 +176,7 @@ fn monotonic_ns() -> u64 {
 
 pub struct ContextGitOwner {
     invocation: Invocation,
+    profile: Profile,
     binding: Option<(String, PathBuf)>,
     next: u8,
     active: Arc<AtomicBool>,
@@ -160,6 +184,10 @@ pub struct ContextGitOwner {
 }
 impl ContextGitOwner {
     pub fn new(invocation: Invocation) -> Result<Self, String> {
+        Self::new_with_profile(invocation, Profile::Ordinary)
+    }
+    /// Profile is selected from the native Request, never a Git request frame.
+    pub fn new_with_profile(invocation: Invocation, profile: Profile) -> Result<Self, String> {
         if invocation.id.is_empty()
             || invocation.id.len() > 128
             || !lower_hex(&invocation.runtime_digest)
@@ -168,11 +196,15 @@ impl ContextGitOwner {
         }
         Ok(Self {
             invocation,
+            profile,
             binding: None,
             next: 1,
             active: Arc::new(AtomicBool::new(false)),
             ready: false,
         })
+    }
+    pub fn control_credit_limit(&self) -> usize {
+        self.profile.control_credit_limit()
     }
     pub fn mark_ready(&mut self) -> Result<(), String> {
         if self.active.load(Ordering::Acquire) {
@@ -182,7 +214,8 @@ impl ContextGitOwner {
         Ok(())
     }
     pub fn begin(&mut self, frame: &[u8]) -> Result<PendingGit, String> {
-        if self.ready || self.active.load(Ordering::Acquire) || self.next > 2 {
+        if self.ready || self.active.load(Ordering::Acquire) || self.next > self.profile.requests()
+        {
             return Err("context Git overlap, replay or request after Ready".into());
         }
         if frame.len() > MAX_REQUEST {
@@ -198,7 +231,7 @@ impl ContextGitOwner {
             || !request.executable.is_absolute()
             || !request.cwd.is_absolute()
             || request.operation
-                != if self.next == 1 {
+                != if self.next % 2 == 1 {
                     Operation::Checkout
                 } else {
                     Operation::CommonDir

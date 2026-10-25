@@ -146,7 +146,8 @@ export async function resolveRuntimeProject(
   payload: Readonly<Record<string, unknown>>,
   caller: InvocationCaller,
   deadlineEpochMs: number,
-  git: ContextGitPort = createContextGitPort(caller, deadlineEpochMs)
+  git: ContextGitPort = createContextGitPort(caller, deadlineEpochMs),
+  executionWorkdir?: string
 ): Promise<RuntimeProjectContext> {
   const supplied = payload.cwd;
   if (supplied !== undefined && supplied !== null && typeof supplied !== 'string') {
@@ -154,7 +155,7 @@ export async function resolveRuntimeProject(
   }
   const candidate = resolve(
     caller.cwd,
-    supplied || caller.environment.CAWS_PROJECT_DIR || caller.cwd
+    executionWorkdir ?? (supplied || caller.environment.CAWS_PROJECT_DIR || caller.cwd)
   );
   let checkout: string;
   try {

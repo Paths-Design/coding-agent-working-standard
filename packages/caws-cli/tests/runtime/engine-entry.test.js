@@ -376,6 +376,67 @@ test('actual entry serializes native selection reads on the existing reader befo
   );
 });
 
+test('actual entry uses four correlated exchanges only for execution-workdir capability', async () => {
+  const commandDir = path.join(root, 'command-directory');
+  fs.mkdirSync(commandDir);
+  const payload = {
+    cwd: root,
+    execution_workdir: commandDir,
+    tool_name: 'Bash',
+    session_id: 'original-session',
+    tool_use_id: 'original-call',
+    tool_input: { command: 'echo unchanged' },
+  };
+  await withEntry(
+    'caws.runtime.context-git.execution-workdir.v1',
+    async (peer) => {
+      const frames = [];
+      for (const [ordinal, operation, cwd] of [
+        [1, 'checkout', root],
+        [2, 'commonDir', root],
+        [3, 'checkout', commandDir],
+        [4, 'commonDir', root],
+      ]) {
+        const query = await peer.read();
+        frames.push(query);
+        expect(query).toMatchObject({
+          schema: 'caws.runtime.context-git.request.v1',
+          ordinal,
+          operation,
+          cwd,
+        });
+        await peer.write(result(query, operation === 'checkout' ? root : path.join(root, '.git')));
+      }
+      expect(new Set(frames.map((frame) => frame.token)).size).toBe(1);
+      await finishInactive(peer, await peer.read());
+      expect(peer.request.payload).toEqual(payload);
+      expect(fs.existsSync(peer.marker)).toBe(false);
+    },
+    { payload, inputJson: JSON.stringify(payload) }
+  );
+});
+test('actual entry refuses host directory on ordinary native profile before requesting Git', async () => {
+  const payload = {
+    cwd: root,
+    execution_workdir: root,
+    tool_name: 'Bash',
+    tool_input: { command: 'echo unchanged' },
+  };
+  await withEntry(
+    'caws.runtime.context-git.v1',
+    async (peer) => {
+      expect(await peer.read()).toMatchObject({
+        schema: 'caws.runtime.failure.v1',
+        ...identity,
+        message: expect.stringMatching(/does not support host execution-workdir/),
+      });
+      expect(await peer.terminal()).toEqual({ code: 1, signal: null, stderr: '' });
+      expect(fs.existsSync(peer.marker)).toBe(false);
+    },
+    { payload, inputJson: JSON.stringify(payload) }
+  );
+});
+
 test('actual entry malformed native selection chunk fails before Ready without live fallback', async () => {
   prepareNativeSelectionFixture();
   await withEntry(

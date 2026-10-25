@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { resolveExecutionWorkdir } from './execution-workdir';
 import { readdirSync } from 'node:fs';
 import type { RuntimeRequest } from './protocol';
 import { nativeInputDigest } from './protocol';
@@ -52,10 +53,13 @@ export class InvocationJournal {
         'hook-invocations',
         request.id + '.jsonl'
       );
+      const execution = resolveExecutionWorkdir(request.payload, request.event);
       this.append(
         'invocation_started',
         {
-          dispatch_cwd: selection.checkout,
+          dispatch_cwd: execution.status === 'resolved' ? execution.path : selection.checkout,
+          session_cwd: request.payload.cwd,
+          execution_workdir_resolution: execution,
           resolved_session_id: resolvedSessionId,
           selected_handlers: selection.handlers,
           configuration: selection.configuration,

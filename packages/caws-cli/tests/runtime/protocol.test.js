@@ -463,3 +463,15 @@ test('optional native selection advertisement preserves exact native limits with
     decodeRuntimeRequest(text.replace('"maximumBytes":', '"maximumBytes":1,"maximumBytes":'), now)
   ).toThrow('Duplicate');
 });
+
+test('native request preserves the exact execution-workdir Git profile without upgrading ordinary profile', () => {
+  expect(decode({ contextGit: 'caws.runtime.context-git.execution-workdir.v1' }).contextGit).toBe(
+    'caws.runtime.context-git.execution-workdir.v1'
+  );
+  expect(decode({ contextGit: 'caws.runtime.context-git.v1' }).contextGit).toBe(
+    'caws.runtime.context-git.v1'
+  );
+  expect(() => decode({ contextGit: 'caws.runtime.context-git.execution-workdir.v2' })).toThrow(
+    /context Git capability/
+  );
+});

@@ -701,8 +701,8 @@ impl Session {
                 .context_git_control_credit
                 .checked_add(frame.len() + 1)
                 .ok_or("context Git control credit overflow")?;
-            if credit > caws_native::context_git::MAX_EXTRA_ENGINE_STDOUT_BYTES {
-                return Err("context Git control credit exceeds two requests".into());
+            if credit > owner.control_credit_limit() {
+                return Err("context Git control credit exceeds selected fixed profile".into());
             }
             self.context_git_control_credit = credit;
             loop {

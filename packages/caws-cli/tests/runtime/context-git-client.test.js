@@ -458,3 +458,49 @@ test('caller-selected relative wrapper and symlink paths are retained without re
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('execution-workdir profile carries two fixed correlated project pairs and refuses a fifth', async () => {
+  const f = fixture(
+    (frame) =>
+      result(frame, {
+        stdout: Buffer.from(
+          frame.ordinal === 1
+            ? '/session-checkout\n'
+            : frame.ordinal === 3
+              ? '/command-checkout\n'
+              : '/canonical/.git\n'
+        ).toString('base64'),
+      }),
+    { contextGit: 'caws.runtime.context-git.execution-workdir.v1' }
+  );
+  await expect(f.port.run(checkoutArgs, '/session')).resolves.toBe('/session-checkout');
+  await expect(f.port.run(commonArgs, '/session-checkout')).resolves.toBe('/canonical/.git');
+  await expect(f.port.run(checkoutArgs, '/command')).resolves.toBe('/command-checkout');
+  await expect(f.port.run(commonArgs, '/command-checkout')).resolves.toBe('/canonical/.git');
+  expect(f.writes.map(({ ordinal, operation, cwd }) => ({ ordinal, operation, cwd }))).toEqual([
+    { ordinal: 1, operation: 'checkout', cwd: '/session' },
+    { ordinal: 2, operation: 'commonDir', cwd: '/session-checkout' },
+    { ordinal: 3, operation: 'checkout', cwd: '/command' },
+    { ordinal: 4, operation: 'commonDir', cwd: '/command-checkout' },
+  ]);
+  expect(new Set(f.writes.map((frame) => frame.token)).size).toBe(1);
+  await expect(f.port.run(checkoutArgs, '/extra')).rejects.toMatchObject({ category: 'protocol' });
+  expect(f.reads()).toBe(4);
+});
+test('execution-workdir profile binds the fourth cwd to the third output and retains first failure', async () => {
+  const f = fixture(
+    (frame) =>
+      result(frame, {
+        stdout: Buffer.from(frame.ordinal % 2 ? '/checkout\n' : '/canonical/.git\n').toString(
+          'base64'
+        ),
+      }),
+    { contextGit: 'caws.runtime.context-git.execution-workdir.v1' }
+  );
+  await f.port.run(checkoutArgs, '/session');
+  await f.port.run(commonArgs, '/checkout');
+  await f.port.run(checkoutArgs, '/command');
+  await expect(f.port.run(commonArgs, '/foreign')).rejects.toMatchObject({ category: 'protocol' });
+  await expect(f.port.run(commonArgs, '/checkout')).rejects.toMatchObject({ category: 'protocol' });
+  expect(f.reads()).toBe(3);
+});

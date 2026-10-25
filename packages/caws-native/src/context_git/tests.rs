@@ -12,8 +12,92 @@ fn owner(deadline: Instant) -> ContextGitOwner {
 }
 fn frame(ordinal: u8) -> Value {
     json!({ "schema": REQUEST_SCHEMA, "id": "invocation-1", "runtimeDigest": "a".repeat(64),
-        "token": "b".repeat(64), "ordinal": ordinal, "operation": if ordinal == 1 { "checkout" } else { "commonDir" },
+        "token": "b".repeat(64), "ordinal": ordinal, "operation": if ordinal % 2 == 1 { "checkout" } else { "commonDir" },
         "executable": "/usr/bin/git", "cwd": "/tmp" })
+}
+
+#[test]
+fn fixed_profiles_refuse_old_third_and_execution_fifth_without_renewing_deadline() {
+    for (profile, count) in [(Profile::Ordinary, 2), (Profile::ExecutionWorkdir, 4)] {
+        let deadline = Instant::now();
+        let mut owner = ContextGitOwner::new_with_profile(
+            Invocation {
+                id: "invocation-1".into(),
+                runtime_digest: "a".repeat(64),
+                deadline,
+                environment: vec![],
+            },
+            profile,
+        )
+        .unwrap();
+        assert_eq!(
+            owner.control_credit_limit(),
+            count as usize * (MAX_REQUEST + 1)
+        );
+        for ordinal in 1..=count {
+            let mut pending = begin(&mut owner, frame(ordinal)).unwrap();
+            assert!(
+                pending.child.is_none(),
+                "expired original clock created work"
+            );
+            let row: ResultFrame =
+                serde_json::from_slice(&pending.advance().unwrap().unwrap()).unwrap();
+            assert_eq!(row.ordinal, ordinal);
+            assert_eq!(row.status, "deadline");
+            assert_eq!(
+                row.operation,
+                if ordinal % 2 == 1 {
+                    Operation::Checkout
+                } else {
+                    Operation::CommonDir
+                }
+            );
+            assert!(row.cleanup.group_settled && row.cleanup.reaped);
+            assert_eq!(owner.invocation.deadline, deadline);
+        }
+        assert!(begin(&mut owner, frame(count + 1)).is_err());
+    }
+    assert_eq!(
+        Profile::Ordinary.control_credit_limit(),
+        MAX_EXTRA_ENGINE_STDOUT_BYTES
+    );
+    assert_eq!(
+        Profile::ExecutionWorkdir.capability(),
+        EXECUTION_WORKDIR_CAPABILITY
+    );
+}
+
+#[test]
+fn frame_fields_cannot_upgrade_an_ordinary_profile_or_change_fixed_order() {
+    let mut owner = owner(Instant::now());
+    for field in ["profile", "contextGit", "maximum", "execution_workdir"] {
+        let mut forged = frame(1);
+        forged[field] = json!(EXECUTION_WORKDIR_CAPABILITY);
+        assert!(begin(&mut owner, forged).is_err());
+        assert_eq!(owner.next, 1);
+    }
+    let mut execution = ContextGitOwner::new_with_profile(
+        Invocation {
+            id: "invocation-1".into(),
+            runtime_digest: "a".repeat(64),
+            deadline: Instant::now(),
+            environment: vec![],
+        },
+        Profile::ExecutionWorkdir,
+    )
+    .unwrap();
+    assert!(begin(&mut execution, frame(3)).is_err());
+    for ordinal in 1..=2 {
+        let mut pending = begin(&mut execution, frame(ordinal)).unwrap();
+        pending.advance().unwrap().unwrap();
+    }
+    let mut wrong = frame(3);
+    wrong["operation"] = json!("commonDir");
+    assert!(begin(&mut execution, wrong).is_err());
+    let mut wrong = frame(3);
+    wrong["token"] = json!("c".repeat(64));
+    assert!(begin(&mut execution, wrong).is_err());
+    assert_eq!(execution.next, 3);
 }
 fn begin(owner: &mut ContextGitOwner, frame: Value) -> Result<PendingGit, String> {
     owner.begin(&serde_json::to_vec(&frame).unwrap())

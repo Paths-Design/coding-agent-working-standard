@@ -258,8 +258,8 @@ fn execute_observed<'deadline>(
         })
         .transpose()
         .map_err(Failure::configuration)?;
-        let mut context_git =
-            caws_native::context_git::ContextGitOwner::new(caws_native::context_git::Invocation {
+        let mut context_git = caws_native::context_git::ContextGitOwner::new_with_profile(
+            caws_native::context_git::Invocation {
                 id: request.id.clone(),
                 runtime_digest: request.runtime_digest.clone(),
                 deadline,
@@ -268,8 +268,10 @@ fn execute_observed<'deadline>(
                     .iter()
                     .map(|(key, value)| (key.into(), value.into()))
                     .collect(),
-            })
-            .map_err(Failure::configuration)?;
+            },
+            request.context_git_profile(),
+        )
+        .map_err(Failure::configuration)?;
         progress.mark("engine-start");
         let mut session = runner::Session::start(config, &request.id, deadline)
             .map_err(Failure::configuration)?;
