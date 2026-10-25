@@ -2,7 +2,6 @@ id: CAWS-NATIVE-SHARED-STOP-001
 title: 'Land the shared CLI lease-stop application transaction'
 mode: refactor
 lifecycle_state: active
-worktree: native-shared-stop
 created_at: '2026-10-25T01:01:48.393Z'
 updated_at: '2026-10-25T01:01:57.941Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
