@@ -13,6 +13,7 @@ mod runner;
 mod selection_observation;
 mod stop_admission;
 mod stop_execution;
+mod stop_git;
 mod stop_profile;
 
 use caws_native::monotonic_deadline::MonotonicDeadline;
@@ -1028,6 +1029,17 @@ fn main() {
         })();
         if let Err(error) = result {
             eprintln!("CAWS context Git custodian refused: {error}");
+            std::process::exit(75);
+        }
+        return;
+    }
+    if args.first().is_some_and(|arg| arg == "--stop-git-inspect") {
+        if args.len() != 1 {
+            eprintln!("Stop Git inspection accepts no asserted inputs");
+            std::process::exit(75);
+        }
+        if let Err(error) = stop_git::inspect_command() {
+            eprintln!("CAWS Stop Git inspection refused: {error}");
             std::process::exit(75);
         }
         return;

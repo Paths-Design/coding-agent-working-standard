@@ -829,6 +829,100 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     descriptor.stopProfile = { source, sha256: sha(bytes) };
     return bytes;
   }
+
+  function syntheticGitObservation(nativeSha256) {
+    const hash = 'b'.repeat(64),
+      snapshot = {
+        path: '/usr/bin/git',
+        physicalPath: '/usr/bin/git',
+        sha256: hash,
+        device: 1,
+        inode: 2,
+        bytes: 3,
+        mode: 33261,
+        modifiedSeconds: 4,
+        modifiedNanoseconds: 0,
+        changedSeconds: 5,
+        changedNanoseconds: 0,
+      };
+    return {
+      schema: 'caws.runtime.stop-git-distribution.v1',
+      platform: 'macos',
+      os: { kernelRelease: 'synthetic', kernelVersion: 'synthetic', machine: 'arm64' },
+      inspectorNativeSha256: nativeSha256,
+      callerGit: snapshot,
+      resolver: { ...snapshot, path: '/usr/bin/xcrun' },
+      developerSelector: { ...snapshot, path: '/usr/bin/xcode-select' },
+      developerDirectory: '/Developer',
+      developerIdentity: {
+        physicalPath: '/Developer',
+        device: 1,
+        inode: 3,
+        mode: 16877,
+        modifiedSeconds: 4,
+        modifiedNanoseconds: 0,
+        changedSeconds: 5,
+        changedNanoseconds: 0,
+      },
+      implementation: snapshot,
+      provenance: {
+        authenticator:
+          'Security.framework/SecStaticCodeCheckValidity/all-architectures+strict/no-network',
+        requirements: [
+          'identifier "com.apple.git" and anchor apple',
+          'identifier "com.apple.dt.xcode_select.tool-shim-public" and anchor apple',
+          'identifier "com.apple.xcrun" and anchor apple',
+          'identifier "com.apple.xcode-select" and anchor apple',
+        ],
+        loaderTcb: [
+          'macos-platform-loader',
+          'apple-code-signing-trust-store',
+          'Security.framework',
+          'CoreFoundation.framework',
+          'CoreServices.framework',
+          'libSystem',
+          'libz',
+          'libiconv',
+        ],
+      },
+    };
+  }
+  test('v1 controlled data rejects an added Git observation even when null', () => {
+    const before = prepareDescriptor();
+    for (const observation of [null, syntheticGitObservation('a'.repeat(64))]) {
+      const data = syntheticSemanticData(before);
+      data.gitDistribution = observation;
+      selectSemanticData(data);
+      expect(() => prepareDescriptor()).toThrow(/semantic profile/);
+    }
+  });
+  test('v2 observed Git data is copied into hashed image only with exact independent native identity', () => {
+    const before = prepareDescriptor(),
+      data = syntheticSemanticData(before);
+    data.schema = 'caws.runtime.stop-semantic-profile.v2';
+    data.gitDistribution = syntheticGitObservation(sha(before.files.get('native/caws-native')));
+    const bytes = selectSemanticData(data);
+    expect(prepareDescriptor().files.get('native-stop-profile.json')).toEqual(bytes);
+    for (const kind of [
+      'missing',
+      'null',
+      'old image',
+      'unknown provenance',
+      'extra permission',
+      'unknown OS',
+    ]) {
+      const bad = JSON.parse(JSON.stringify(data));
+      if (kind === 'missing') delete bad.gitDistribution;
+      if (kind === 'null') bad.gitDistribution = null;
+      if (kind === 'old image') bad.gitDistribution.inspectorNativeSha256 = '0'.repeat(64);
+      if (kind === 'unknown provenance') bad.gitDistribution.provenance.requirements = [];
+      if (kind === 'extra permission') bad.gitDistribution.permission = true;
+      if (kind === 'unknown OS') bad.gitDistribution.platform = 'linux';
+      selectSemanticData(bad);
+      expect(() => prepareDescriptor()).toThrow();
+    }
+  });
+
   test('v2 includes exact semantic data without a final generation digest cycle or activation', () => {
     const before = prepareDescriptor();
     const data = syntheticSemanticData(before),

@@ -436,6 +436,122 @@ function prepareNativeImage(
   return { files, executablePaths, stableEntry, metadata };
 }
 
+function validateStopGitDistribution(value: unknown, nativeSha256: string): void {
+  keys(
+    value,
+    [
+      'schema',
+      'platform',
+      'os',
+      'inspectorNativeSha256',
+      'callerGit',
+      'resolver',
+      'developerSelector',
+      'developerDirectory',
+      'developerIdentity',
+      'implementation',
+      'provenance',
+    ],
+    'observed Git distribution'
+  );
+  if (
+    value.schema !== 'caws.runtime.stop-git-distribution.v1' ||
+    value.platform !== 'macos' ||
+    value.inspectorNativeSha256 !== nativeSha256 ||
+    !digest(nativeSha256)
+  )
+    throw new Error('Unsupported observed Git distribution/image');
+  const absolute = (p: unknown): p is string =>
+    typeof p === 'string' &&
+    path.isAbsolute(p) &&
+    Buffer.byteLength(p) <= 4096 &&
+    !p.includes('\0');
+  const integerKeys = [
+    'device',
+    'inode',
+    'bytes',
+    'mode',
+    'modifiedSeconds',
+    'modifiedNanoseconds',
+    'changedSeconds',
+    'changedNanoseconds',
+  ];
+  const numeric = (p: Record<string, unknown>, names: string[]): void => {
+    if (names.some((k) => !Number.isSafeInteger(p[k])))
+      throw new Error('Git observation identity outside finite integer domain');
+  };
+  for (const label of ['callerGit', 'resolver', 'developerSelector', 'implementation']) {
+    const p = value[label];
+    keys(p, ['path', 'physicalPath', 'sha256', ...integerKeys], 'Git executable observation');
+    if (!absolute(p.path) || !absolute(p.physicalPath) || !digest(p.sha256))
+      throw new Error('Invalid Git executable observation');
+    numeric(p, integerKeys);
+    if (
+      (p.device as number) < 0 ||
+      (p.inode as number) < 0 ||
+      (p.bytes as number) <= 0 ||
+      (p.mode as number) < 0 ||
+      (p.modifiedNanoseconds as number) < 0 ||
+      (p.modifiedNanoseconds as number) >= 1e9 ||
+      (p.changedNanoseconds as number) < 0 ||
+      (p.changedNanoseconds as number) >= 1e9
+    )
+      throw new Error('Invalid Git executable metadata');
+  }
+  const resolver = value.resolver as Record<string, unknown>,
+    selector = value.developerSelector as Record<string, unknown>;
+  if (
+    resolver.path !== '/usr/bin/xcrun' ||
+    selector.path !== '/usr/bin/xcode-select' ||
+    !absolute(value.developerDirectory)
+  )
+    throw new Error('Invalid fixed Git resolver route');
+  const directoryKeys = integerKeys.filter((k) => k !== 'bytes');
+  keys(
+    value.developerIdentity,
+    ['physicalPath', ...directoryKeys],
+    'Git developer directory identity'
+  );
+  if (!absolute(value.developerIdentity.physicalPath))
+    throw new Error('Invalid Git developer directory');
+  numeric(value.developerIdentity, directoryKeys);
+  keys(value.os, ['kernelRelease', 'kernelVersion', 'machine'], 'Git observed OS');
+  if (
+    Object.values(value.os).some(
+      (v) => typeof v !== 'string' || !v || v.length > 4096 || v.includes('\0')
+    )
+  )
+    throw new Error('Invalid Git observed OS');
+  keys(
+    value.provenance,
+    ['authenticator', 'requirements', 'loaderTcb'],
+    'Git authentication provenance'
+  );
+  if (
+    value.provenance.authenticator !==
+      'Security.framework/SecStaticCodeCheckValidity/all-architectures+strict/no-network' ||
+    JSON.stringify(value.provenance.requirements) !==
+      JSON.stringify([
+        'identifier "com.apple.git" and anchor apple',
+        'identifier "com.apple.dt.xcode_select.tool-shim-public" and anchor apple',
+        'identifier "com.apple.xcrun" and anchor apple',
+        'identifier "com.apple.xcode-select" and anchor apple',
+      ]) ||
+    JSON.stringify(value.provenance.loaderTcb) !==
+      JSON.stringify([
+        'macos-platform-loader',
+        'apple-code-signing-trust-store',
+        'Security.framework',
+        'CoreFoundation.framework',
+        'CoreServices.framework',
+        'libSystem',
+        'libz',
+        'libiconv',
+      ])
+  )
+    throw new Error('Unsupported Git authentication provenance');
+}
+
 /** The installer verifies exact selected implementation bytes. This file is
  * evidence for a later native owner, never permission to enable a Stop route. */
 function captureStopProfile(pin: Pin, files: ReadonlyMap<string, Buffer>): Buffer {
@@ -462,11 +578,16 @@ function captureStopProfile(pin: Pin, files: ReadonlyMap<string, Buffer>): Buffe
       'comparison',
       'provenance',
       'remainingJoins',
+      ...(object(profile) && profile.schema === 'caws.runtime.stop-semantic-profile.v2'
+        ? ['gitDistribution']
+        : []),
     ],
     'semantic profile'
   );
   if (
-    profile.schema !== 'caws.runtime.stop-semantic-profile.v1' ||
+    !['caws.runtime.stop-semantic-profile.v1', 'caws.runtime.stop-semantic-profile.v2'].includes(
+      profile.schema as string
+    ) ||
     profile.surface !== 'opencode' ||
     profile.event !== 'stop' ||
     profile.scope !== 'controlled-components' ||
@@ -612,6 +733,12 @@ function captureStopProfile(pin: Pin, files: ReadonlyMap<string, Buffer>): Buffe
   );
   if (JSON.stringify(actual) !== JSON.stringify(expected))
     throw new Error('Semantic profile implementation differs from selected image');
+  if (profile.schema === 'caws.runtime.stop-semantic-profile.v2') {
+    const nativeDigest = expected['native/caws-native'];
+    if (typeof nativeDigest !== 'string')
+      throw new Error('Git observation requires native implementation identity');
+    validateStopGitDistribution(profile.gitDistribution, nativeDigest);
+  }
   // The native loader validates fixed coverage/selectors/SQLite/environment on
   // the authenticated bytes. Installation never treats successful inclusion as
   // earned end-to-end qualification, and never follows provenance paths.
