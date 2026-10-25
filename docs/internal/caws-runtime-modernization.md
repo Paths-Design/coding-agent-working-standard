@@ -10891,6 +10891,58 @@ Additional bounded evidence and unresolved dependencies:
   warning and the corrected oracle preserves that behavior without production
   changes.
 
+- **E390 — landed source and explicit continuing lead.** Shared CLI stop lands
+  at `94bd30b23ead9c71cff7ae7a7209a9d87b399528`; its four target blobs match
+  candidate `6a70d6d6`, which retains checked production/tests `29cf0118`.
+  `CAWS-NATIVE-SHARED-STOP-001` is closed after A1/A2 dual readback and bridge
+  release. Typed hook routing is excluded from that landing.
+
+  Calendar source lands at `416c82f61627f90c44b24764e00568bb139d2af2`, with all
+  seven target blobs equal `e5af425ad32d5accea34411b89bb09378959e996`.
+  `calendar-landing/` retains strict compilation,28 calendar checks,108 Jest
+  controls, six native unit/six integration/two compile-fail doc checks and
+  current-candidate comparison against retained CPython references. Native
+  observations include UTC epoch0 as1970-01-01 00:00:00 and selected timezone
+  boundaries. Review's hostile array getter failure is repaired by checked
+  own-data snapshots; exceptions stay typed. The repaired per-file mutation
+  report detects1197/1393 mutants (85.93%, unchanged80% floor), with179
+  survivors and17 uncovered. The child is closed with three recorded criteria;
+  Linux, full timezone-resource closure and ordinary installed carrier
+  qualification remain outside this source landing.
+
+  The incoming lead's R06 source lands at
+  `d1f0871ba094ce8cbd145c24138ed0e9d153dec2`. All16 target paths, including
+  stock Python removal, match checked candidate
+  `4c72b3e93762d778246860c43954d7201b243d99`. Its evidence root is
+  `/Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/guard-config-retirement/committed-01`.
+  Shell identity is
+  `c3d9d5b0f6ffb4eb6add5a3f27b2d3d2bf7f46d86b39614c351e8b5bba06c73c`; standalone
+  CJS identity is
+  `bec57b8b08bcc69127da0dd81dfc956b50b79f923883c71504e1b197b6aa2f79`.
+  `session-cache-admission.ts` retains the older shell hash at its stock source
+  table. Reconcile that exact source closure and new standalone helper, then
+  qualify the combined installed image; a hash-table edit alone is insufficient.
+
+  Supported worktree merge/teardown and retained-entry rollback guidance lands
+  independently of the unfinished shell-analysis guide. The remaining guide's
+  active mutation-backend claims require the foreign shell-analysis source and
+  cannot be advertised as present main behavior.
+
+  Continuing lead `01a17052-3ea7-79b1-86be-7296991f8fd0` accepts the following
+  unfinished custody. Canonical registry and bridge readback confirm that owner;
+  `claim_taken_over` events13404-13408 retain prior owners and `claim_bridged`
+  event13409 records test-preparation acquisition after the outgoing release.
+  Source landing does not close these parent obligations:
+
+  | Preserved lane/spec                                                  | Candidate retained     | Remaining obligation                                                                                                                                                                    |
+  | -------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `native-session-publication` / `CAWS-NATIVE-SESSION-PUBLICATION-001` | `2d9676d5`             | Exact combined package, ordinary installed routing, custody/publication/reader join, authenticated replay and usable rollback                                                           |
+  | `native-runtime-modernization` / `CAWS-NATIVE-RUNTIME-001`           | `03997170`             | Full parity, first-party Python retirement, native harnesses, fair thirteen-session/four-repository/1000-hot-turn workload and machine adoption; preserve this base for dependent lanes |
+  | `native-lease-stop-landing` / `CAWS-NATIVE-LEASE-STOP-LANDING-001`   | `e51d8e6a`             | A1 fail; selected Git semantics and real native/Node wrapper falsifier before typed substitution                                                                                        |
+  | `guard-contract-docs` / `CAWS-GUARD-CONTRACT-DOCS-001`               | `c58d6f8f`             | Reconcile foreign shell-analysis source with remaining four-guide claims; A3 stays unchecked                                                                                            |
+  | `native-render-calendar` / `CAWS-NATIVE-RENDER-CALENDAR-001`         | `2f870ef7`             | Reconcile original broader criteria against landed component and ordinary carrier/timezone resource qualification                                                                       |
+  | `CAWS-NATIVE-TEST-PREPARATION-001` bridge                            | Source already on main | Hosted clean macOS/Ubuntu qualification and normal publication A3; retain uncertain license-marker mutation evidence                                                                    |
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
