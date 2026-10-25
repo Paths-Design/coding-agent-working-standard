@@ -121,6 +121,142 @@ scenario(
 );
 const deep = '['.repeat(140) + '0' + ']'.repeat(140);
 const threshold = (raw) => '{"god-object-check.sh":{"thresholds":{"loc":' + raw + '}}}';
+function prefixConfiguration(prefix, reason = 'Generated native sources') {
+  return JSON.stringify({
+    guards: { 'scope-guard.sh': { additional_allow_prefixes: [{ prefix, reason }] } },
+  });
+}
+function parsedPrefix(prefix, reason) {
+  return parseGuardConfiguration(prefixConfiguration(prefix, reason));
+}
+
+scenario(
+  'standalone projection retains exact separator rejection and reason-edge verdicts',
+  function () {
+    const root = temporaryRoot();
+    fs.mkdirSync(path.join(root, '.caws/hooks'), { recursive: true });
+    const policy = path.join(root, '.caws/hooks/hook-policy.json');
+    const helper = path.join(cli, 'templates/hook-packs/shared/lib/guard-config.cjs');
+    for (const code of [0, 28, 29, 30, 31, 133]) {
+      fs.writeFileSync(policy, prefixConfiguration('native' + String.fromCodePoint(code) + '/'));
+      const result = invoke(root, process.execPath, [helper, root]);
+      succeeds(result);
+      expect(result.stderr).toEqual(Buffer.alloc(0));
+      expect(result.stdout.toString()).toBe(
+        'CAWS_GUARD_ZONE_COUNT=0\nCAWS_GUARD_CONFIG_STATUS=invalid\n'
+      );
+    }
+    for (const [reason, status] of [
+      ['\u001c' + 'x'.repeat(11) + '\u0085', 'invalid'],
+      ['\u001c' + 'x'.repeat(12) + '\u0085', 'ok'],
+      ['\0' + 'x'.repeat(11), 'ok'],
+      ['🚀'.repeat(11), 'invalid'],
+      ['🚀'.repeat(12), 'ok'],
+    ]) {
+      fs.writeFileSync(policy, prefixConfiguration('native/', reason));
+      const result = invoke(root, process.execPath, [helper, root]);
+      succeeds(result);
+      expect(result.stderr).toEqual(Buffer.alloc(0));
+      expect(result.stdout.toString()).toBe(
+        'CAWS_GUARD_ZONE_COUNT=0\nCAWS_GUARD_CONFIG_STATUS=' +
+          status +
+          '\n' +
+          (status === 'ok'
+            ? 'CAWS_GUARD_PREFIX_COUNT_SCOPE_GUARD_SH=1\nCAWS_GUARD_PREFIX_SCOPE_GUARD_SH_0=native/\n'
+            : '')
+      );
+    }
+  }
+);
+
+test.each([0, 28, 29, 30, 31, 133])(
+  'every legacy transport separator rejects a whole prefix configuration: %i',
+  function (code) {
+    expect(parsedPrefix('native' + String.fromCodePoint(code) + '/')).toEqual({
+      status: 'invalid',
+      guards: {},
+    });
+  }
+);
+
+test.each([1, 27, 132, 134, 0x200b, 0x1f680])(
+  'adjacent codepoints and Unicode retain their exact accepted prefix bytes: %i',
+  function (code) {
+    const prefix = 'native' + String.fromCodePoint(code) + '/';
+    expect(parsedPrefix(prefix)).toEqual({
+      status: 'ok',
+      guards: {
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix, reason: 'Generated native sources' }],
+          thresholds: {},
+        },
+      },
+    });
+  }
+);
+
+test.each(['native /', 'native\ud800/', 'native\udfff/'])(
+  'whitespace or non-round-trippable Unicode remains invalid: %#',
+  function (prefix) {
+    expect(parsedPrefix(prefix)).toEqual({ status: 'invalid', guards: {} });
+  }
+);
+
+const reasonPadding = [
+  9,
+  10,
+  11,
+  12,
+  13,
+  28,
+  29,
+  30,
+  31,
+  32,
+  133,
+  160,
+  5760,
+  ...Array.from({ length: 11 }, function (_, index) {
+    return 8192 + index;
+  }),
+  8232,
+  8233,
+  8239,
+  8287,
+  12288,
+  65279,
+];
+test.each(reasonPadding)(
+  'reason length trims only edge padding and preserves the authored reason: %i',
+  function (code) {
+    const character = String.fromCodePoint(code);
+    expect(parsedPrefix('native/', character + 'x'.repeat(11) + character)).toEqual({
+      status: 'invalid',
+      guards: {},
+    });
+    const reason = character + 'x'.repeat(12) + character;
+    expect(parsedPrefix('native/', reason)).toEqual({
+      status: 'ok',
+      guards: {
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix: 'native/', reason }],
+          thresholds: {},
+        },
+      },
+    });
+    expect(parsedPrefix('native/', 'x'.repeat(5) + character + 'x'.repeat(6)).status).toBe('ok');
+  }
+);
+
+test.each([0, 27, 132, 134, 0x200b, 0x1f680])(
+  'reason edge neighbors including NUL remain counted codepoints: %i',
+  function (code) {
+    const character = String.fromCodePoint(code);
+    expect(parsedPrefix('native/', character + 'x'.repeat(10)).status).toBe('invalid');
+    expect(parsedPrefix('native/', character + 'x'.repeat(11)).status).toBe('ok');
+    expect(parsedPrefix('native/', 'x'.repeat(11) + character).status).toBe('ok');
+  }
+);
 
 test.each([
   {

@@ -73,6 +73,24 @@ function lastRootGuardSource(text: string): string | null {
   return selected;
 }
 
+// The legacy transport recognizes these separators beyond ECMAScript
+// whitespace. Keep the generated JavaScript's exact domain without control regexes.
+function legacySeparator(character: string): boolean {
+  const code = character.charCodeAt(0);
+  return (code >= 28 && code <= 31) || code === 133;
+}
+
+function legacyReasonLength(reason: string): number {
+  const characters = Array.from(reason);
+  const padding = (character: string): boolean =>
+    /\s/.test(character) || legacySeparator(character);
+  let start = 0;
+  let end = characters.length;
+  while (start < end && padding(characters[start]!)) start++;
+  while (end > start && padding(characters[end - 1]!)) end--;
+  return end - start;
+}
+
 /** Retains the optional guard loader's null-as-absent spelling, using the owning validator. */
 export function parseGuardConfiguration(text: string | null): GuardConfiguration {
   if (text === null) return { status: 'absent', guards: {} };
@@ -91,7 +109,8 @@ export function parseGuardConfiguration(text: string | null): GuardConfiguration
         if (
           object(prefix) &&
           typeof prefix.prefix === 'string' &&
-          (/[\0\u001c-\u001f\u0085]/.test(prefix.prefix) ||
+          (prefix.prefix.includes('\0') ||
+            Array.from(prefix.prefix).some(legacySeparator) ||
             Buffer.from(prefix.prefix, 'utf8').toString('utf8') !== prefix.prefix)
         )
           return { status: 'invalid', guards: {} };
@@ -108,15 +127,13 @@ export function parseGuardConfiguration(text: string | null): GuardConfiguration
         if (
           object(prefix) &&
           typeof prefix.prefix === 'string' &&
-          /[\u001c-\u001f\u0085]/.test(prefix.prefix)
+          Array.from(prefix.prefix).some(legacySeparator)
         )
           return { status: 'invalid', guards: {} };
         if (
           object(prefix) &&
           typeof prefix.reason === 'string' &&
-          Array.from(
-            prefix.reason.replace(/^[\s\u001c-\u001f\u0085]+|[\s\u001c-\u001f\u0085]+$/g, '')
-          ).length < 12
+          legacyReasonLength(prefix.reason) < 12
         )
           return { status: 'invalid', guards: {} };
       }

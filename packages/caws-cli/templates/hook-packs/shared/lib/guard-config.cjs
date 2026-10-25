@@ -9,7 +9,7 @@
 // source_sha256: scripts/generate-runtime-assets.mjs 890b0102cc7804b58c6b980d6ac2572b8d443606805941ac4ad2a6c1595761bd
 // source_sha256: src/init/repo-hook-policy.ts 62762afcc3c51bad0baed182fa187019f2350ca31337af26d096e7d8c9e12c5f
 // source_sha256: src/runtime/guard-config-entry.ts 6925e22465bd2f4d6ce23ff8a6b678d6c2ca68cef26ec4fbcb01940dd5d4d16a
-// source_sha256: src/runtime/guard-config-loader.ts d09908622d95477fa40da2aef67049a5bce7c25fc361f1ef698195cdda829900
+// source_sha256: src/runtime/guard-config-loader.ts 0d3c0a982ad87cc3da0b693c0629c7cfc41a72577a99d436c6d52db1f28f8dde
 // source_sha256: src/runtime/json-custody.ts 669059dfd5f6e22a922b898052090551f46c520a192c54d28280d293fbcd6d7f
 // src/runtime/guard-config-entry.ts
 var import_node_fs2 = require("node:fs");
@@ -578,6 +578,19 @@ function lastRootGuardSource(text) {
   }
   return selected;
 }
+function legacySeparator(character) {
+  const code = character.charCodeAt(0);
+  return code >= 28 && code <= 31 || code === 133;
+}
+function legacyReasonLength(reason) {
+  const characters = Array.from(reason);
+  const padding = (character) => /\s/.test(character) || legacySeparator(character);
+  let start = 0;
+  let end = characters.length;
+  while (start < end && padding(characters[start])) start++;
+  while (end > start && padding(characters[end - 1])) end--;
+  return end - start;
+}
 function parseGuardConfiguration(text) {
   if (text === null) return { status: "absent", guards: {} };
   let document;
@@ -590,7 +603,7 @@ function parseGuardConfiguration(text) {
     for (const entry of Object.values(document.guards)) {
       if (!object(entry) || !Array.isArray(entry.additional_allow_prefixes)) continue;
       for (const prefix of entry.additional_allow_prefixes) {
-        if (object(prefix) && typeof prefix.prefix === "string" && (/[\0\u001c-\u001f\u0085]/.test(prefix.prefix) || Buffer.from(prefix.prefix, "utf8").toString("utf8") !== prefix.prefix))
+        if (object(prefix) && typeof prefix.prefix === "string" && (prefix.prefix.includes("\0") || Array.from(prefix.prefix).some(legacySeparator) || Buffer.from(prefix.prefix, "utf8").toString("utf8") !== prefix.prefix))
           return { status: "invalid", guards: {} };
       }
     }
@@ -602,11 +615,9 @@ function parseGuardConfiguration(text) {
     for (const entry of Object.values(guards)) {
       if (!object(entry) || !Array.isArray(entry.additional_allow_prefixes)) continue;
       for (const prefix of entry.additional_allow_prefixes) {
-        if (object(prefix) && typeof prefix.prefix === "string" && /[\u001c-\u001f\u0085]/.test(prefix.prefix))
+        if (object(prefix) && typeof prefix.prefix === "string" && Array.from(prefix.prefix).some(legacySeparator))
           return { status: "invalid", guards: {} };
-        if (object(prefix) && typeof prefix.reason === "string" && Array.from(
-          prefix.reason.replace(/^[\s\u001c-\u001f\u0085]+|[\s\u001c-\u001f\u0085]+$/g, "")
-        ).length < 12)
+        if (object(prefix) && typeof prefix.reason === "string" && legacyReasonLength(prefix.reason) < 12)
           return { status: "invalid", guards: {} };
       }
     }

@@ -79,7 +79,7 @@ const STOCK: &[(&str, &str)] = &[
     ),
     (
         "lib/guard-config.cjs",
-        "bec57b8b08bcc69127da0dd81dfc956b50b79f923883c71504e1b197b6aa2f79",
+        "4065e9febf662dd9a3933b65926e913ecd50b3bca73a4192e44f1097cc982b11",
     ),
     (
         "lib/guard-config.sh",

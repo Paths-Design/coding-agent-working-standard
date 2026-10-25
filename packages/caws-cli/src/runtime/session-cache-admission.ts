@@ -99,7 +99,7 @@ const SESSION_END_SOURCES: Readonly<Record<string, string>> = {
     '8ebf6a8c131cc51e8f2ecd549db890340634d8fc1ebf38e5fc185a20e4532696',
   'lib/reprieve.sh': '4e6aa88e6021843fd41dedfe910e4e3c650695970c70a1a8c049cf2f6f8c6cff',
   'lib/guard-config.sh': 'c3d9d5b0f6ffb4eb6add5a3f27b2d3d2bf7f46d86b39614c351e8b5bba06c73c',
-  'lib/guard-config.cjs': 'bec57b8b08bcc69127da0dd81dfc956b50b79f923883c71504e1b197b6aa2f79',
+  'lib/guard-config.cjs': '4065e9febf662dd9a3933b65926e913ecd50b3bca73a4192e44f1097cc982b11',
 };
 
 /** Finite complete-prefix profile for the sole reviewed SessionEnd logger.
