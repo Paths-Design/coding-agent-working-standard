@@ -28,3 +28,9 @@ acceptance:
     then: 'parent acceptance stays 0/8 with actual installed and rollback gaps visible, and the tracker remains outside the consumer package input set'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Direct manual audit of committed tracker742972dea against live Root-owned registry, installed_entry.rs and installed_generation.rs, generated TypeScript guard-config sources, host workdir consumers and actual retained installation evidence. The targeted Cargo installed_entry suite exits0 with13 tests, retained under Root tracker-reconciliation/native-entry-tests.log and native-entry-observations; fixture assets do not prove genuine-image delivery. Rehashed pair-probe4eb38099 and descriptor/result pins plus three actual post-build04 receipts prove a bounded native-image installation; pair-probe496 calls public installMachineRuntime and192-194 directly executes the frontend, not the stable entry. The written standalone-component rule therefore supports35/37 partial rows, with parent0/8 and all complete retirement/adoption gaps preserved. Independent read-only peer742972 findings were grounded on these coordinates. The optional combined Node verifier was blocked by the deployed guard and did not execute; it is not used as proof. Commit verification establishes reachability only."
+    recorded_at: "2026-10-25T15:44:52.123Z"
+    commit_sha: "742972dea946ae637927c3531fd7aa6cade26260"
