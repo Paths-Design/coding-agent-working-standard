@@ -21,6 +21,7 @@ invariants:
   - 'A matched receipt remains request-local and requires revalidation before use'
   - 'The closed POSIX Node resolution profile pins every package file and module boundary; only npm metadata and package-bin-derived links are excluded from byte comparison'
   - 'Identity establishes observed content and resolution domain only; path-dependent semantics, selected Git behavior and production admission require separate qualification'
+  - 'Matched content receipts carry module-private runtime provenance and exact original request, signal, reviewed generation and unrenewed monotonic deadline ownership; they never confer native source-review authority.'
 acceptance:
   - id: A1
     given: 'a reviewed complete production CLI prefix and separately installed matching CLI'
@@ -30,6 +31,15 @@ acceptance:
     given: 'custom routing or changed application dependency boundary or source during capture'
     when: 'identity capture or retained receipt revalidation runs'
     then: 'the component declines with no CLI execution or state mutation'
+  - id: A3
+    given: >-
+      an authentic matched receipt, copied or forged receipt shapes, changed
+      original request or generation, cancellation and backward clock movement
+    when: 'consumer ownership assertions and freshness revalidation run before native effects'
+    then: >-
+      only the authentic receipt for the exact original request and original signal
+      remains usable within its original budget, and every invalid or expired
+      receipt throws without fallback permission
 observability:
   - 'Retain real standalone installer fixtures and raw focused controls outside tracked source'
 rollback:
