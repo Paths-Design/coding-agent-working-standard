@@ -4,7 +4,7 @@ mode: doc
 lifecycle_state: active
 worktree: native-lead-handoff-docs
 created_at: '2026-10-25T00:53:05.111Z'
-updated_at: '2026-10-25T00:53:54.272Z'
+updated_at: '2026-10-25T01:20:40.846Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
@@ -17,6 +17,33 @@ scope:
     - 'docs/guides/hook-packs.md'
     - 'docs/internal/caws-runtime-modernization.md'
   out: []
+  support:
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/scripts/generate-runtime-assets.mjs
+    - packages/caws-cli/src/application/agent-stop.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/src/runtime/guard-config-entry.ts
+    - packages/caws-cli/src/runtime/guard-config-loader.ts
+    - packages/caws-cli/src/runtime/guard-config.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/transcripts/renderer-calendar.ts
+    - packages/caws-cli/templates/hook-packs/shared/advisory_truncate.cjs
+    - packages/caws-cli/templates/hook-packs/shared/lib/guard-config.cjs
+    - packages/caws-cli/templates/hook-packs/shared/lib/guard-config.py
+    - packages/caws-cli/templates/hook-packs/shared/lib/guard-config.sh
+    - packages/caws-cli/tests/adapter/system-runtime.test.js
+    - packages/caws-cli/tests/application/agent-stop.test.js
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
+    - packages/caws-cli/tests/hooks/bats/guard-config.bats
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/runtime/generated-runtime-assets.test.js
+    - packages/caws-cli/tests/runtime/guard-config-integration.test.js
+    - packages/caws-cli/tests/runtime/guard-config-loader.test.js
+    - packages/caws-cli/tests/transcripts/renderer-calendar-mutation.test.js
+    - packages/caws-cli/tests/transcripts/renderer-calendar.test.ts
+    - packages/caws-native/src/renderer_calendar.rs
+    - packages/caws-native/tests/renderer_calendar.rs
 invariants:
   - 'Document actual main behavior; do not claim the absent shell-analysis backend or full native cutover.'
 acceptance:
