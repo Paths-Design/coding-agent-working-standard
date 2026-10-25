@@ -48,6 +48,13 @@ acceptance:
     given: 'committed source, retained legacy comparisons and raw component/dispatcher checks'
     when: 'policy checks, meaningful negative controls and independent peer review complete'
     then: 'earned reader evidence and remaining R19/parent/native-adoption obligations are recorded without claiming whole-dispatcher or Python retirement'
+  - id: A4
+    given: 'writer expiry spellings and legacy stored records with independently inspected reader semantics'
+    when: 'grant validation and show/list status interpret expiry'
+    then: >-
+      new grants cannot report success for consumed-reader-invalid expiry; existing
+      valid legacy formats retain their interpretation and conservative millisecond
+      comparison never grants after expiry
 observability:
   - 'Raw expiry/binding outcomes, installed dispatcher guard effects and execution records, generated-asset pins and retained failures'
 rollback:
