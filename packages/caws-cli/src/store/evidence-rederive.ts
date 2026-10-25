@@ -686,36 +686,81 @@ function jestCounts(
   };
 }
 
-/**
- * Does the TAP stream carry a result line for exactly `description`?
- *
- * This is the whole reason the node runner cannot read its exit code alone.
- * `node --test --test-name-pattern=<x>` where nothing matches exits 0 and
- * prints `# pass 1` — the PASS is the file, reported as its own subtest
- * (`ok 1 - tests/sample.test.js`) around an empty inner plan (`1..0`). The same
- * shape appears for a file containing no tests. Both would read as a verified
- * criterion, which is the "reports success while checking nothing" class this
- * module exists to prevent.
- *
- * TAP escapes `#` and `\` in descriptions, so a name containing either can fail
- * to match here and report `missing`. That direction is deliberate: an
- * unmatched name under-claims, and this function must never be the reason a
- * citation reads as verified.
- */
-function tapHasResultFor(output: string, description: string): boolean {
-  return new RegExp(`^\\s*(?:not )?ok \\d+ - ${escapeRegex(description)}\\s*(?:#.*)?$`, 'm').test(
-    output
-  );
+/** A Node TAP result; only per-result test identity can verify acceptance. */
+interface NodeTapResult {
+  readonly name: string;
+  readonly failed: boolean;
+  readonly deferred: boolean;
+  readonly type: 'test' | 'suite' | 'unknown';
 }
 
-/** Any TAP result line whose description is not the file itself. */
-function tapRanSomethingBesides(output: string, relFile: string): boolean {
+const NODE_TAP_DEFERRED_DIRECTIVES: ReadonlySet<string> = new Set(['SKIP', 'TODO']);
+
+function nodeTapResults(output: string): NodeTapResult[] {
+  const results: NodeTapResult[] = [];
   const lines = output.split('\n');
-  const result = /^\s*(?:not )?ok \d+ - (.*?)\s*(?:#.*)?$/;
-  return lines.some((line) => {
-    const m = result.exec(line);
-    return m !== null && m[1] !== undefined && m[1].trim() !== relFile;
-  });
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? '';
+    const match = /^ *(not )?ok \d+ - ((?:\\\\|\\#|[^\\#])*?)(?:\s+#\s*([A-Z]+)\b.*)?\s*$/.exec(
+      line
+    );
+    if (match === null || match[2] === undefined) continue;
+    const indent = /^ */.exec(line)?.[0] ?? '';
+    const detailsIndent = `${indent}  `;
+    let type: NodeTapResult['type'] = 'unknown';
+    if (lines[index + 1] === `${detailsIndent}---`) {
+      let count = 0;
+      let observed: NodeTapResult['type'] = 'unknown';
+      let closed = false;
+      let detail = index + 2;
+      for (; detail < lines.length; detail++) {
+        const value = lines[detail] ?? '';
+        if (value === `${detailsIndent}...`) {
+          closed = true;
+          break;
+        }
+        // Only this result's own YAML field can identify its type. Nested
+        // error payloads, duplicates and unknown spellings grant no identity.
+        if (value.startsWith(`${detailsIndent}type:`)) {
+          count++;
+          observed =
+            value === `${detailsIndent}type: 'test'`
+              ? 'test'
+              : value === `${detailsIndent}type: 'suite'`
+                ? 'suite'
+                : 'unknown';
+        }
+      }
+      if (closed && count === 1) type = observed;
+      // Do not parse result-looking text inside a YAML payload as another test.
+      index = closed ? detail : lines.length;
+    }
+    if (match[3] !== undefined && !NODE_TAP_DEFERRED_DIRECTIVES.has(match[3])) continue;
+    // TAP escapes # and backslashes in names. Keep exact matching conservative.
+    results.push({
+      name: match[2],
+      failed: match[1] !== undefined,
+      deferred: match[3] !== undefined,
+      type,
+    });
+  }
+  return results;
+}
+
+/** Exact Node TAP description encoding, used only to exclude the file wrapper.
+ * Keep named citation matching conservative rather than decoding ambiguous names.
+ */
+function nodeTapFileDescription(file: string): string {
+  return file
+    .replaceAll('\b', '\\b')
+    .replaceAll('\f', '\\f')
+    .replaceAll('\t', '\\t')
+    .replaceAll('\n', '\\n')
+    .replaceAll('\r', '\\r')
+    .replaceAll('\v', '\\v')
+    .replaceAll('\\', '\\\\')
+    .replaceAll('#', '\\#')
+    .trimEnd();
 }
 
 function nodeOutcome(
@@ -744,7 +789,12 @@ function nodeOutcome(
     return { ...base, outcome: 'not_run', detail: 'test file and name present; not executed' };
 
   const relFile = path.relative(ctx.cwd, absFile);
-  const args = ['--test'];
+  // Node before reporter selection wrote TAP directly. Newer runtimes must
+  // select it explicitly because result parsing cannot consume presentation text.
+  const reporter = process.allowedNodeEnvironmentFlags.has('--test-reporter')
+    ? ['--test-reporter=tap']
+    : [];
+  const args = ['--test', ...reporter];
   if (testName !== undefined) args.push(`--test-name-pattern=${escapeRegex(testName)}`);
   args.push(relFile);
   // process.execPath, not 'node': re-derivation must run under the same runtime
@@ -758,18 +808,43 @@ function nodeOutcome(
   if (run.kind === 'error') return { ...base, outcome: 'unavailable', detail: run.message };
 
   const out = run.kind === 'ok' ? run.stdout : `${run.stdout}\n${run.stderr}`;
-  if (testName !== undefined && !tapHasResultFor(out, testName)) {
+  const results = nodeTapResults(out);
+  const fileDescription = nodeTapFileDescription(relFile);
+  const completed = results.filter(
+    (result) => !result.deferred && result.name !== relFile && result.name !== fileDescription
+  );
+  const selected =
+    testName === undefined ? completed : completed.filter((result) => result.name === testName);
+  if (selected.some((result) => result.type === 'unknown')) {
     return {
       ...base,
-      outcome: 'missing',
-      detail: `node --test reported no result for ${JSON.stringify(testName)} in ${file}; a --test-name-pattern matching nothing still exits 0 with the file counted as the pass`,
+      outcome: 'unavailable',
+      detail: `node --test ${process.version} cannot distinguish tests from containers in ${file}; per-result type identity is absent or ambiguous`,
     };
   }
-  if (testName === undefined && !tapRanSomethingBesides(out, relFile)) {
+  const tests = selected.filter((result) => result.type === 'test');
+  if (
+    testName !== undefined &&
+    (tests.length === 0 || selected.some((result) => result.type === 'suite'))
+  ) {
     return {
       ...base,
       outcome: 'missing',
-      detail: `node --test ran no test in ${file}; the only TAP result was the file itself`,
+      detail: `node --test reported no completed result for ${JSON.stringify(testName)} in ${file}; absent, skipped and TODO results cannot verify a citation`,
+    };
+  }
+  if (testName === undefined && tests.length === 0) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `node --test ran no test in ${file} to completion; results were absent, skipped, TODO or the file itself`,
+    };
+  }
+  if (run.kind === 'ok' && completed.some((result) => result.failed)) {
+    return {
+      ...base,
+      outcome: 'failed',
+      detail: `node --test reported a failed result: ${tail(out)}`,
     };
   }
   return run.kind === 'ok'

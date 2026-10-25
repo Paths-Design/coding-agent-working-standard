@@ -1,0 +1,57 @@
+id: CAWS-NATIVE-EXECUTION-WORKDIR-001
+title: 'Preserve host-resolved Bash command directory through CAWS policy selection'
+mode: fix
+lifecycle_state: active
+worktree: native-execution-workdir
+created_at: '2026-10-25T08:16:54.609Z'
+updated_at: '2026-10-25T08:27:25.277Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Host-owned native Bash execution directory, legacy launcher and typed runtime policy routing'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/runtime/caws-hook.py'
+    - 'packages/caws-cli/templates/hook-packs/codex/hooks/lib/parse-input.sh'
+    - 'packages/caws-cli/src/runtime/execution-workdir.ts'
+    - 'packages/caws-cli/tests/runtime/execution-workdir.test.js'
+    - 'packages/caws-cli/tests/hooks/pytest/test_hook_execution_diagnostics.py'
+    - packages/caws-native/src/invocation_project.rs
+  out: []
+  support:
+    - packages/caws-cli/src/runtime/handler-executor.ts
+    - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-native/src/protocol.rs
+    - packages/caws-native/src/main.rs
+    - packages/caws-cli/src/runtime/stock-handlers.ts
+    - packages/caws-cli/src/runtime/context.ts
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/context_git/original_project.rs
+invariants:
+  - 'Session cwd and original tool/session/turn identifiers are preserved; only explicit host-resolved execution_workdir selects command directory and never grants ownership or scope'
+  - 'Malformed, conflicting, missing-target and foreign authority coordinates fail closed; absent unsupported native transport is distinct from resolved context'
+acceptance:
+  - id: A1
+    given: 'native Bash events with session cwd and host execution_workdir'
+    when: 'CAWS resolves policy and relative target context'
+    then: >-
+      the actual physical command directory is selected with raw session identifiers
+      preserved, and lifecycle or non-Bash coordinates remain unchanged
+  - id: A2
+    given: >-
+      null, non-string, empty, relative, NUL, nonexistent, non-directory or
+      conflicting explicit directories and foreign worktrees
+    when: 'native Bash context is consumed'
+    then: >-
+      invalid supplied context refuses and owner, canonical, foreign-worktree and
+      cross-repository checks retain their authority boundaries
+  - id: A3
+    given: 'the actual current native producer and authored upstream command-directory transport repair'
+    when: 'ordinary native calls are exercised after coordinated installation'
+    then: >-
+      real emitted execution_workdir agrees with actual command cwd and CAWS policy
+      decisions; synthetic fixtures alone cannot establish installed completion
+non_functional: {}
+contracts: []

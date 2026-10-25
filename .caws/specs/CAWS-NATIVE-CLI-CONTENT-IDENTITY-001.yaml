@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-CLI-CONTENT-IDENTITY-001
 title: 'Compare separate CLI installs against a reviewed native content closure'
 mode: feature
-lifecycle_state: active
-worktree: native-cli-content-identity
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded CLI content identity component complete at f4764277d056a32bc3c2aa360d704e77a612280f: full reviewed package/Node/domain observation, runtime-private receipt provenance, exact original request/signal and nonrenewing first-observation deadline. A1-A3 evidence recorded and read back at events13591-13593;46 focused controls, two genuine maintained installations and25 retained real observations, strict build/lint/gates/doctor inspected. External artifacts retained under /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae. Independent committed-candidate review grounded. Component closure does not establish native admission, held execution custody, final joined closure, harness trust, Python retirement, publication or machine cutover. Migration lead01a17052 retains generation-owned loader/final domain review, exact original native timer through delayed first comparison/backward-clock control, prefix/beforeApply integration, installed native/rollback validation and sole global activation.'
 created_at: '2026-10-25T01:46:04.895Z'
-updated_at: '2026-10-25T01:46:06.123Z'
+updated_at: '2026-10-25T08:22:43.273Z'
 created_by_session: '01a170a2-efe6-7bd2-a9ac-7cdcc3b070f7'
 blast_radius:
   modules:
@@ -21,6 +22,7 @@ invariants:
   - 'A matched receipt remains request-local and requires revalidation before use'
   - 'The closed POSIX Node resolution profile pins every package file and module boundary; only npm metadata and package-bin-derived links are excluded from byte comparison'
   - 'Identity establishes observed content and resolution domain only; path-dependent semantics, selected Git behavior and production admission require separate qualification'
+  - 'Matched content receipts carry module-private runtime provenance and exact original request, signal, reviewed generation and unrenewed monotonic deadline ownership; they never confer native source-review authority.'
 acceptance:
   - id: A1
     given: 'a reviewed complete production CLI prefix and separately installed matching CLI'
@@ -30,6 +32,15 @@ acceptance:
     given: 'custom routing or changed application dependency boundary or source during capture'
     when: 'identity capture or retained receipt revalidation runs'
     then: 'the component declines with no CLI execution or state mutation'
+  - id: A3
+    given: >-
+      an authentic matched receipt, copied or forged receipt shapes, changed
+      original request or generation, cancellation and backward clock movement
+    when: 'the comparison component performs ownership assertions and freshness revalidation'
+    then: >-
+      only the authentic receipt for the exact original request and original signal
+      remains usable within its original budget, and every invalid or expired
+      receipt throws without fallback permission
 observability:
   - 'Retain real standalone installer fixtures and raw focused controls outside tracked source'
 rollback:
@@ -38,3 +49,25 @@ non_functional:
   security:
     - 'No capability string or mutable external manifest establishes identity'
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Two distinct maintained installer prefixes from source55080eb1 match across2056 regular files,21 packages,Node bytes and reviewed367-importer domain; compare+revalidate20.522s and restored8.646s within original30s. Exact domainSHA0e9cde8717ad8d13c0bfca1c5ccdebcad105af384dad69e46c23259a7bbbb246. Independently inspected external artifacts: /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/qualification-component/result.json, inputs.json and /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/execution-component-01/execution.json (exit0,inputs unchanged,source6db equals f476). CLI verify checks cited commit existence only; external artifact verification is manual because writer accepts repo-relative artifact paths only. No native admission/final joined-generation claim."
+    recorded_at: "2026-10-25T08:03:07.273Z"
+    command: python3 /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/supervise-component.py
+    exit_code: 0
+    commit_sha: f4764277d056a32bc3c2aa360d704e77a612280f
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Independently inspected /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/qualification-component/result.json and /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-budget-tests.log: changed application/dependency/type/exports/imports/loadsite/Node and redirected entry refused; selected fake Node marker absent; source/fixture pins restored. Focused46 controls exercise source change during open, cancellation/descriptor cleanup, startup routing and finite bounds. CLI verify checks commit existence only; external artifacts manually adjudicated. No native execution/custody claim."
+    recorded_at: "2026-10-25T08:03:11.848Z"
+    command: python3 /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/supervise-component.py
+    exit_code: 0
+    commit_sha: f4764277d056a32bc3c2aa360d704e77a612280f
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Independently inspected /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-budget-tests.log and .json:46controls passed; original30s unchanged,outerJest35s; exact receipt/request/signal,forged/copied,changed generation,cancellation,retained deadline,backward-clock exercised. /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/qualification-component/result.json also shows natural30s expiry and7distinct authentication rejections. Monotonic protection starts at first component observation; pre-comparison admission elapsed time belongs to exact native-owner signal and remains parent integration. Source unchanged6db; timeout delta f476. CLI verify checks commit existence only; external artifacts manually adjudicated."
+    recorded_at: "2026-10-25T08:03:13.864Z"
+    command: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath tests/runtime/cli-identity.test.js
+    exit_code: 0
+    commit_sha: f4764277d056a32bc3c2aa360d704e77a612280f
