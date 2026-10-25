@@ -36,5 +36,11 @@ acceptance:
     then: >-
       invalid supplied context refuses and owner, canonical, foreign-worktree and
       cross-repository checks retain their authority boundaries
+  - id: A3
+    given: 'the actual current native producer and authored upstream command-directory transport repair'
+    when: 'ordinary native calls are exercised after coordinated installation'
+    then: >-
+      real emitted execution_workdir agrees with actual command cwd and CAWS policy
+      decisions; synthetic fixtures alone cannot establish installed completion
 non_functional: {}
 contracts: []
