@@ -17,16 +17,19 @@
 // governance primitives directly. Equivalence to the pre-absorption baselines
 // (kernel: 15 suites / 605 tests; CLI: 1160 passing) is the acceptance bar.
 
+const os = require('node:os');
+const availableProcessors =
+  typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length;
+
 /** @type {import('jest').Config} */
 const mainProject = {
   displayName: 'caws-cli',
   testEnvironment: 'node',
   setupFiles: ['<rootDir>/tests/helpers/isolate-session-env.js'],
   testTimeout: 60000,
-  // maxWorkers stays default (parallel). The prior corpus deadlocked under
-  // parallel workers; the rebuild fixes that at the fixture-isolation layer
-  // (per-worker temp repos, no shared git index / .caws state) rather than
-  // forcing --runInBand. See tests/helpers/git-repo-factory.js.
+  // Fixtures isolate temp repositories and authority state across parallel
+  // workers. The global worker cap also bounds contention with native harnesses
+  // and interactive jobs; it changes no test or invocation deadline.
   testMatch: ['<rootDir>/tests/**/*.test.js', '<rootDir>/src/**/*.test.js'],
   // tests/helpers, tests/fixtures, AND tests/kernel (the kernel project owns it)
   // are not test files for THIS project.
@@ -67,7 +70,7 @@ const kernelProject = {
 
 module.exports = {
   rootDir: __dirname,
-  maxWorkers: '50%',
+  maxWorkers: Math.max(1, Math.min(2, Math.floor(availableProcessors / 2))),
   verbose: true,
   projects: [mainProject, kernelProject],
   // Jest reads coverage selection and thresholds from the global config,
