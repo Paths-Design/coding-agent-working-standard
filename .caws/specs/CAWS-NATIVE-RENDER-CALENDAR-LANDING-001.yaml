@@ -33,6 +33,13 @@ acceptance:
     given: 'renderer calendar mutation tests and complete current source inventory'
     when: 'mutation policy and focused per-file mutation checks execute'
     then: 'all 194 sources remain classified exactly once and 22 targets retain the 80 percent renderer calendar floor'
+  - id: A3
+    given: 'The exact seven-file checked calendar source candidate e5af425a'
+    when: 'CAWS lands the child into current main'
+    then: >-
+      All seven target Git blobs equal the checked source candidate and the child
+      lane binding is removed; no production selection or installed native cutover
+      is inferred
 observability:
   - 'Retain baseline, exact command exit logs, native timezone observation artifacts and checked revision outside the disposable lane'
 rollback:
