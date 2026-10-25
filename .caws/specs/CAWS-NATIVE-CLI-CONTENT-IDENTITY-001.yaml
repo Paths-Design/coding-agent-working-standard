@@ -56,3 +56,10 @@ evidence:
     command: python3 /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/supervise-component.py
     exit_code: 0
     commit_sha: f4764277d056a32bc3c2aa360d704e77a612280f
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Independently inspected /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/qualification-component/result.json and /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-budget-tests.log: changed application/dependency/type/exports/imports/loadsite/Node and redirected entry refused; selected fake Node marker absent; source/fixture pins restored. Focused46 controls exercise source change during open, cancellation/descriptor cleanup, startup routing and finite bounds. CLI verify checks commit existence only; external artifacts manually adjudicated. No native execution/custody claim."
+    recorded_at: "2026-10-25T08:03:11.848Z"
+    command: python3 /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/cli-identity-real/supervise-component.py
+    exit_code: 0
+    commit_sha: f4764277d056a32bc3c2aa360d704e77a612280f
