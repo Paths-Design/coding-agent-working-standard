@@ -9,7 +9,7 @@
 // source_sha256: scripts/generate-runtime-assets.mjs 890b0102cc7804b58c6b980d6ac2572b8d443606805941ac4ad2a6c1595761bd
 // source_sha256: src/init/repo-hook-policy.ts 62762afcc3c51bad0baed182fa187019f2350ca31337af26d096e7d8c9e12c5f
 // source_sha256: src/runtime/guard-config-entry.ts 6925e22465bd2f4d6ce23ff8a6b678d6c2ca68cef26ec4fbcb01940dd5d4d16a
-// source_sha256: src/runtime/guard-config-loader.ts 72234ae189a737cca45e6620a0b53d32a05a09d9a2147ce74ba332c6b0b98f00
+// source_sha256: src/runtime/guard-config-loader.ts d09908622d95477fa40da2aef67049a5bce7c25fc361f1ef698195cdda829900
 // source_sha256: src/runtime/json-custody.ts 669059dfd5f6e22a922b898052090551f46c520a192c54d28280d293fbcd6d7f
 // src/runtime/guard-config-entry.ts
 var import_node_fs2 = require("node:fs");
@@ -613,18 +613,24 @@ function parseGuardConfiguration(text) {
     guards = Object.fromEntries(
       Object.entries(guards).map(([name, entry]) => {
         if (!object(entry)) return [name, entry];
+        const schema = Object.hasOwn(GUARD_CONFIG_SURFACE, name) ? GUARD_CONFIG_SURFACE[name] : void 0;
         return [
           name,
           Object.fromEntries(
             Object.entries(entry).filter(
-              ([key, value]) => value !== null || key !== "additional_allow_prefixes" && key !== "thresholds"
+              ([key, value]) => value !== null || !(key === "additional_allow_prefixes" && schema?.prefixes || key === "thresholds" && schema && Object.keys(schema.thresholds).length > 0)
             )
           )
         ];
       })
     );
   }
-  const parsed = parseRepoHookPolicy(JSON.stringify({ version: 1, guards }));
+  let parsed;
+  try {
+    parsed = parseRepoHookPolicy(JSON.stringify({ version: 1, guards }));
+  } catch {
+    return { status: "invalid", guards: {} };
+  }
   if (!parsed.ok) return { status: "invalid", guards: {} };
   try {
     const source = lastRootGuardSource(text);

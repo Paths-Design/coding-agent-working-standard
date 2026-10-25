@@ -123,6 +123,99 @@ const deep = '['.repeat(140) + '0' + ']'.repeat(140);
 const threshold = (raw) => '{"god-object-check.sh":{"thresholds":{"loc":' + raw + '}}}';
 
 test.each([
+  {
+    'scope-guard.sh': {
+      thresholds: null,
+      additional_allow_prefixes: [{ prefix: 'native/', reason: 'Generated native sources' }],
+    },
+  },
+  { 'write-allowlist.sh': { thresholds: null } },
+  { 'god-object-check.sh': { additional_allow_prefixes: null, thresholds: { loc: 100 } } },
+  { 'loc-delta-check.sh': { additional_allow_prefixes: null } },
+])('forbidden null keys cannot disappear before whole-document validation %#', (guards) => {
+  expect(parseGuardConfiguration(JSON.stringify({ guards }))).toEqual({
+    status: 'invalid',
+    guards: {},
+  });
+});
+
+test('admitted null prefix and threshold fields retain empty configuration semantics', () => {
+  expect(
+    parseGuardConfiguration(
+      JSON.stringify({
+        guards: {
+          'scope-guard.sh': { additional_allow_prefixes: null },
+          'god-object-check.sh': { thresholds: null },
+        },
+      })
+    )
+  ).toEqual({
+    status: 'ok',
+    guards: {
+      'scope-guard.sh': { additional_allow_prefixes: [], thresholds: {} },
+      'god-object-check.sh': { additional_allow_prefixes: [], thresholds: {} },
+    },
+  });
+});
+
+scenario(
+  'standalone forbidden-null rejection exports no partial grants and retains YAML zones',
+  () => {
+    const root = temporaryRoot();
+    fs.mkdirSync(path.join(root, '.caws/hooks'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, '.caws/hooks/hook-policy.json'),
+      JSON.stringify({
+        guards: {
+          'scope-guard.sh': {
+            thresholds: null,
+            additional_allow_prefixes: [{ prefix: 'native/', reason: 'Generated native sources' }],
+          },
+        },
+      })
+    );
+    fs.writeFileSync(
+      path.join(root, '.caws/policy.yaml'),
+      'non_governed_zones:\n  - generated/**\n'
+    );
+    const result = invoke(root, process.execPath, [
+      path.join(cli, 'templates/hook-packs/shared/lib/guard-config.cjs'),
+      root,
+    ]);
+    succeeds(result);
+    expect(result.stderr).toEqual(Buffer.alloc(0));
+    expect(result.stdout.toString()).toBe(
+      'CAWS_GUARD_ZONE_COUNT=1\nCAWS_GUARD_ZONE_0=generated/\nCAWS_GUARD_CONFIG_STATUS=invalid\n'
+    );
+  }
+);
+
+test('deep malformed guard data returns invalid rather than escaping through validator recursion', () => {
+  const raw =
+    '{"guards":{"scope-guard.sh":{"extra":' + '['.repeat(3000) + '0' + ']'.repeat(3000) + '}}}';
+  expect(parseGuardConfiguration(raw)).toEqual({ status: 'invalid', guards: {} });
+});
+
+scenario('standalone malformed-guard rejection retains independent YAML zones', () => {
+  const root = temporaryRoot();
+  fs.mkdirSync(path.join(root, '.caws/hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, '.caws/hooks/hook-policy.json'),
+    '{"guards":{"scope-guard.sh":{"extra":' + '['.repeat(3000) + '0' + ']'.repeat(3000) + '}}}'
+  );
+  fs.writeFileSync(path.join(root, '.caws/policy.yaml'), 'non_governed_zones:\n  - generated/**\n');
+  const result = invoke(root, process.execPath, [
+    path.join(cli, 'templates/hook-packs/shared/lib/guard-config.cjs'),
+    root,
+  ]);
+  succeeds(result);
+  expect(result.stderr).toEqual(Buffer.alloc(0));
+  expect(result.stdout.toString()).toBe(
+    'CAWS_GUARD_ZONE_COUNT=1\nCAWS_GUARD_ZONE_0=generated/\nCAWS_GUARD_CONFIG_STATUS=invalid\n'
+  );
+});
+
+test.each([
   ['100', 'ok'],
   ['100.0', 'invalid'],
   ['1e2', 'invalid'],

@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TextDecoder } from 'node:util';
-import { parseRepoHookPolicy, type GuardConfig } from '../init/repo-hook-policy';
+import {
+  GUARD_CONFIG_SURFACE,
+  parseRepoHookPolicy,
+  type GuardConfig,
+} from '../init/repo-hook-policy';
 import { parseJsonSource } from './json-custody';
 
 export type GuardConfiguration =
@@ -120,19 +124,31 @@ export function parseGuardConfiguration(text: string | null): GuardConfiguration
     guards = Object.fromEntries(
       Object.entries(guards).map(([name, entry]) => {
         if (!object(entry)) return [name, entry];
+        const schema = Object.hasOwn(GUARD_CONFIG_SURFACE, name)
+          ? GUARD_CONFIG_SURFACE[name]
+          : undefined;
         return [
           name,
           Object.fromEntries(
             Object.entries(entry).filter(
               ([key, value]) =>
-                value !== null || (key !== 'additional_allow_prefixes' && key !== 'thresholds')
+                value !== null ||
+                !(
+                  (key === 'additional_allow_prefixes' && schema?.prefixes) ||
+                  (key === 'thresholds' && schema && Object.keys(schema.thresholds).length > 0)
+                )
             )
           ),
         ];
       })
     );
   }
-  const parsed = parseRepoHookPolicy(JSON.stringify({ version: 1, guards }));
+  let parsed: ReturnType<typeof parseRepoHookPolicy>;
+  try {
+    parsed = parseRepoHookPolicy(JSON.stringify({ version: 1, guards }));
+  } catch {
+    return { status: 'invalid', guards: {} };
+  }
   if (!parsed.ok) return { status: 'invalid', guards: {} };
   try {
     const source = lastRootGuardSource(text);

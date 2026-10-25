@@ -8,7 +8,7 @@ export * from './guard-config-loader';
 
 const STOCK_CONFIGURATION_SOURCES: Readonly<Record<string, string>> = Object.freeze({
   'guard-config.sh': 'c3d9d5b0f6ffb4eb6add5a3f27b2d3d2bf7f46d86b39614c351e8b5bba06c73c',
-  'guard-config.cjs': 'ae3b79835d9c21fc6cdbe5b920775af518e306a2802dd66012cff6cb2a454977',
+  'guard-config.cjs': 'bec57b8b08bcc69127da0dd81dfc956b50b79f923883c71504e1b197b6aa2f79',
 });
 
 /** Indexed assignments are private transport, not a caller policy API.
