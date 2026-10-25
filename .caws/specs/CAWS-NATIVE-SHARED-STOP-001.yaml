@@ -36,3 +36,9 @@ rollback:
   - 'Revert the bounded application extraction and CLI consumer through ordinary governed history.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Shared CLI/application source only. shared-stop-landing/tests-02 records exact pinned Node Jest argv for application/agent-stop application/agent-heartbeat runtime/agent-stop-output:19tests3suites exit0,12.020s, source/dist unchanged,no remaining group. Inspected fixtures-02/ismr2M own lease onlystatus,last_seen_reason,stopped_at changed, missing lease notcreated; RGgV2i cancellationbeforeapply preserves both; rawidentity and load-before-unsafeID receipts retained; all7cases peerbyteidentical. New no-prior warning expectation derived from leases-store.ts304-314; failed tests-01 preserved. build-01 exit0 beforecommit, both production source hashes exactlymatch29cf0118. Independent committed review grounded sharedorder/identity/output and tests. No typed hook/nativeadmission/installedrouting/cutover claim. Commit verification establishes existence, not execution."
+    recorded_at: "2026-10-25T01:12:24.925Z"
+    commit_sha: "29cf011850bc318cab9b50d686dc2c799a31084f"
