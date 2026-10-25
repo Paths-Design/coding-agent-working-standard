@@ -10973,7 +10973,7 @@ Additional bounded evidence and unresolved dependencies:
 
 - **E391 — consumed typed reprieve reader and explicit sibling closure.**
   `CAWS-NATIVE-REPRIEVE-READER-001` replaces the shell helper's embedded Python
-  reader with generated `lib/reprieve-reader.cjs`, shipped in shared pack112.
+  reader with generated `lib/reprieve-reader.cjs`, shipped in shared pack113.
   The shell sends four NUL-terminated UTF-8 context fields and clears Node
   preload/search variables only in the child. Malformed context, unavailable
   Node/asset, expired/revoked/mismatched records and unencodable output leave
@@ -11024,6 +11024,13 @@ Additional bounded evidence and unresolved dependencies:
   normalization. Two short-year regression cases require refusal before any
   private machine state is created. The initial0030 variant is invalid to Node
   and is replaced by the independently probed0048 variant.
+
+  Normal publication push09 finds two generated empty catch blocks that scoped
+  source lint did not exercise. The unit reopens with A3 failed; the full-suite
+  attempt is retained. Explicit equivalent assignments in the owning TypeScript
+  catches survive generation, preserving non-strict path fallback and exit1.
+  Shared pack113 and the literal reader source identities change together;
+  generated CJS participates in the complete lint command.
 
   Retained failed attempts include the initial25 stale SessionEnd-pin failures,
   two stale overlap-positive failures, seven typed-reader disagreements and a

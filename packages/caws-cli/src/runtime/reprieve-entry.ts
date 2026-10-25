@@ -27,6 +27,7 @@ if (args.length === 1 && args[0] === '--stdin0') {
       process.exitCode = 0;
     }
   } catch {
-    /* An unreadable context or record leaves the guard running. */
+    // An unreadable context or record leaves the guard running.
+    process.exitCode = 1;
   }
 }

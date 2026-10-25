@@ -212,7 +212,8 @@ function legacyRealpath(value: string): string {
       try {
         link = fs.lstatSync(next).isSymbolicLink();
       } catch {
-        /* Non-strict lookup keeps unresolved components. */
+        // Non-strict lookup keeps unresolved components.
+        link = false;
       }
       if (!link) {
         base = next;

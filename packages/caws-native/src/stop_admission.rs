@@ -139,7 +139,7 @@ const STOCK: &[(&str, &str)] = &[
     ),
     (
         "lib/reprieve-reader.cjs",
-        "d95a202b321d446b5726d5d2f8721e3b5dc2c273c71398f844a8303b8f83b6d2",
+        "6f17057670c52b95dba845c21f8378e15c9508864e90b7406cc481a056c286ab",
     ),
     (
         "lib/reprieve.sh",
