@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-GUARD-PROFILE-INTEGRATION-001
 title: 'Admit reviewed guard-config CJS source cohort'
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed exact reviewed de0e1b1c source cohort and lint repair; both bounded source-admission ACs dual-read back. Target all10 blobs and generated assets match. Full installed/native semantic qualification, supplied-native opt-in and cutover remain parent work.'
 created_at: '2026-10-25T01:24:58.081Z'
-updated_at: '2026-10-25T01:39:40.396Z'
+updated_at: '2026-10-25T01:56:26.065Z'
 created_by_session: '01a170a8-414e-7a61-af97-58bae56f4c8f'
 blast_radius:
   modules:
