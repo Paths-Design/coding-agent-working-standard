@@ -1,0 +1,50 @@
+id: CAWS-NATIVE-SHARED-STOP-001
+title: 'Land the shared CLI lease-stop application transaction'
+mode: refactor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed the reviewed shared CLI lease-stop transaction and direct filesystem tests with unchanged CLI contract. Recorded A1/A2 and exact main source equality; typed substitution remains unlanded and explicitly accepted by incoming lead under the failed typed child and full parent.'
+created_at: '2026-10-25T01:01:48.393Z'
+updated_at: '2026-10-25T01:14:16.977Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'CLI lease-stop application transaction and evidence handoff'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/application/agent-stop.ts'
+    - 'packages/caws-cli/src/shell/commands/agents.ts'
+    - 'packages/caws-cli/tests/application/agent-stop.test.js'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Keep CLI identity resolution raw receipts load/kernel/store order and error precedence unchanged; the shared operation changes only its selected own lease.'
+  - 'Do not activate typed Stop substitution until the incoming lead resolves the selected Git and installed-routing contract.'
+acceptance:
+  - id: A1
+    given: 'valid absent unsafe and unreadable lease inputs'
+    when: 'the CLI and extracted shared operation execute'
+    then: 'real filesystem own-only mutations no-op receipts raw identity normalization and error precedence match the existing CLI contract and callback interruption prevents apply'
+  - id: A2
+    given: 'the checked committed candidate'
+    when: 'review gates and main landing complete'
+    then: 'exact application CLI test and tracker source is on main and the unqualified typed substitution remains unlanded with explicit accepted ownership'
+observability:
+  - 'Preserve exact commands raw logs source pins and real lease before/after bytes outside the worktree.'
+rollback:
+  - 'Revert the bounded application extraction and CLI consumer through ordinary governed history.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Shared CLI/application source only. shared-stop-landing/tests-02 records exact pinned Node Jest argv for application/agent-stop application/agent-heartbeat runtime/agent-stop-output:19tests3suites exit0,12.020s, source/dist unchanged,no remaining group. Inspected fixtures-02/ismr2M own lease onlystatus,last_seen_reason,stopped_at changed, missing lease notcreated; RGgV2i cancellationbeforeapply preserves both; rawidentity and load-before-unsafeID receipts retained; all7cases peerbyteidentical. New no-prior warning expectation derived from leases-store.ts304-314; failed tests-01 preserved. build-01 exit0 beforecommit, both production source hashes exactlymatch29cf0118. Independent committed review grounded sharedorder/identity/output and tests. No typed hook/nativeadmission/installedrouting/cutover claim. Commit verification establishes existence, not execution."
+    recorded_at: "2026-10-25T01:12:24.925Z"
+    commit_sha: "29cf011850bc318cab9b50d686dc2c799a31084f"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "CAWS main merge completed after independent committed review and all5policygates. git diff --exit-code 6a70d6d6 main -- application/agent-stop.ts shell/commands/agents.ts tests/application/agent-stop.test.js docs/internal/caws-runtime-modernization.md exits0 across exact4intendedpaths; candidate ancestry0. Sourcecandidate29cf0118 tests02 exit0,19checks and reallease artifacts inspected. TrackerE388/E389 documents failed typed Git substitution and accepted incoming01a17052 ownership; fulltypedcandidatee51d8e6a staysoffmain in active failedchild. No installed runtime selection, parentacceptance, replay/rollback/residency/deployment claim. Commitverify is existence only."
+    recorded_at: "2026-10-25T01:14:15.411Z"
+    commit_sha: "6a70d6d6"

@@ -3,6 +3,7 @@ use caws_native::renderer_calendar::{
     OriginalCalendar, OriginalInvocation, PROFILE, REPLY_SCHEMA, REQUEST_SCHEMA,
 };
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     ffi::OsString,
     fs,
@@ -346,7 +347,7 @@ fn child_observations(case: &str) {
             assert_eq!(row["seconds"], seconds);
         }
         assert_eq!(fields(&results[0]), direct_system_epoch());
-        if case == "new_york" {
+        if matches!(case, "new_york" | "named_new_york") {
             for (index, expected) in [
                 (0, [69, 11, 31, 19, 0, 0]),
                 (2, [124, 2, 10, 1, 59, 59]),
@@ -362,7 +363,7 @@ fn child_observations(case: &str) {
             ] {
                 assert_eq!(fields(&results[index]), expected);
             }
-        } else if case != "absent" {
+        } else if matches!(case, "empty" | "utc" | "tzdir_empty" | "tzdir_explicit") {
             for (index, expected) in [
                 (0, [70, 0, 1, 0, 0, 0]),
                 (1, [69, 11, 31, 23, 59, 59]),
@@ -400,6 +401,9 @@ fn child_observations(case: &str) {
             assert!(row["message"].as_str().unwrap().len() <= 128);
             assert!(row.get("tmYear").is_none());
         }
+        // A missing/malformed zone and TZDIR handling are libc observations,
+        // not a promise of a particular fallback. Retain their actual fields
+        // for independent interpreter comparison under that exact environment.
         fs::write(output, serde_json::to_vec_pretty(&reply).unwrap()).unwrap();
     }
     assert_eq!(std::env::vars_os().collect::<Vec<_>>(), before);
@@ -425,6 +429,23 @@ fn original_process_timezone_observations() {
                 .as_nanos()
         ));
     fs::create_dir_all(&root).unwrap();
+    let named_zone = PathBuf::from("/usr/share/zoneinfo/America/New_York");
+    let zone_bytes =
+        fs::read(&named_zone).expect("named-zone qualification requires its actual TZif resource");
+    assert!(zone_bytes.starts_with(b"TZif"));
+    let private_tzdir = root.join("private-zoneinfo");
+    fs::create_dir(&private_tzdir).unwrap();
+    fs::write(private_tzdir.join("CAWS_Private_Zone"), &zone_bytes).unwrap();
+    fs::write(root.join("zone-resource.json"), serde_json::to_vec_pretty(&json!({
+        "sourcePath": named_zone,
+        "physicalPath": fs::canonicalize(&named_zone).unwrap(),
+        "sha256": format!("{:x}", Sha256::digest(&zone_bytes)),
+        "bytes": zone_bytes.len(),
+        "privateTzdir": private_tzdir,
+        "privateName": "CAWS_Private_Zone",
+        "boundary": "copied actual TZif bytes; whether libc honors TZDIR is observed, not assumed"
+    })).unwrap()).unwrap();
+    let missing_tzdir = root.join("unavailable-zoneinfo");
     let cases = [
         ("absent", None, None),
         ("empty", Some(""), None),
@@ -432,6 +453,19 @@ fn original_process_timezone_observations() {
         ("tzdir_empty", Some("UTC0"), Some("")),
         ("tzdir_explicit", Some("UTC0"), Some("/usr/share/zoneinfo")),
         ("new_york", Some("EST5EDT,M3.2.0/2,M11.1.0/2"), None),
+        ("named_new_york", Some("America/New_York"), None),
+        ("unavailable_zone", Some("CAWS/Unavailable_Zone"), None),
+        ("malformed_zone", Some(":::not-a-valid-zone<"), None),
+        (
+            "tzdir_private_named",
+            Some("CAWS_Private_Zone"),
+            Some(private_tzdir.to_str().unwrap()),
+        ),
+        (
+            "tzdir_unavailable",
+            Some("America/New_York"),
+            Some(missing_tzdir.to_str().unwrap()),
+        ),
         ("non_utf8_tz", None, None),
     ];
     for (case, tz, tzdir) in cases {
@@ -472,6 +506,15 @@ fn original_process_timezone_observations() {
             assert_eq!(reply["schema"], REPLY_SCHEMA);
             assert_ne!(reply["context"]["originalPid"], std::process::id());
             assert_eq!(reply["token"], TOKEN);
+            if case == "tzdir_private_named" {
+                let observed = fields(&reply["results"][3]);
+                fs::write(root.join("tzdir-behavior.json"), serde_json::to_vec_pretty(&json!({
+                    "case": case, "platform": std::env::consts::OS,
+                    "context": reply["context"], "actualSpringFields": observed,
+                    "matchesCopiedNewYorkFields": observed == [124, 2, 10, 3, 0, 0],
+                    "boundary": "observed libc TZDIR behavior, no cross-platform fallback or resource-closure claim"
+                })).unwrap()).unwrap();
+            }
         }
     }
     if retained.is_none() {

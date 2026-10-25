@@ -42,3 +42,9 @@ rollback:
   - 'Revert the bounded source changes through ordinary governed history; installed runtime remains separately selected.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: fail
+    evidence_ref: "Full typed substitution withheld: independent source trace shows native admission accepts arbitrary stable PATH Git and typed stop bypasses the later Node CLI Git lookup. Retained discriminating component check git-counterexample-01 executes one case and exits1: expected fallback null, actual exit0/stopped own-session with own lease changed. Source/test candidate e51d8e6a retains counterexample; real native-to-Node end-to-end wrapper execution remains unrun, causal reachability grounded invocation_project.rs629-715, context_git/original_project.rs777-790, stop_admission.rs270-291, engine.ts470-501. Historical186 passing tests did not cover this extension. Shared CLI extraction is separate CAWS-NATIVE-SHARED-STOP-001. Incoming lead01a17052 explicitly accepts remaining typed admission/installed Git contract; no machine-specific allowlist or unfenced child repair adopted."
+    recorded_at: "2026-10-25T01:06:25.657Z"
+    commit_sha: e51d8e6a

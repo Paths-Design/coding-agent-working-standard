@@ -33,10 +33,10 @@
 
 import * as os from 'node:os';
 import { computeActiveSummary, heartbeatAgentActivity } from '../../application/agent-heartbeat';
+import { stopAgentActivity } from '../../application/agent-stop';
 import {
   isOk,
   registerAgentSession,
-  stopAgentSession,
   setAgentLeaseWorkState,
   summarizeActiveAgents,
   LEASE_WORK_STATES,
@@ -415,37 +415,27 @@ export function runAgentsStopCommand(opts: StopOpts = {}): number {
   );
   if (idRes === null) return 1;
 
-  const now = nowFn();
-
-  const loadRes = loadLeases(cawsDir);
-  if (!isOk(loadRes)) {
-    err('caws agents stop: lease directory unreadable.');
-    err(renderDiagnostics(loadRes.errors, { showData }));
-    return 2;
-  }
-
-  const patchRes = stopAgentSession(loadRes.value.leases, idRes.identity, now);
-  if (!isOk(patchRes)) {
-    err('caws agents stop: kernel refused.');
-    err(renderDiagnostics(patchRes.errors, { showData }));
-    return 1;
-  }
-
-  const applyRes = applyLeasePatch(cawsDir, patchRes.value);
-  if (!isOk(applyRes)) {
-    err('caws agents stop: store write failed.');
-    err(renderDiagnostics(applyRes.errors, { showData }));
-    return 1;
+  const stopped = stopAgentActivity({ cawsDir, identity: idRes.identity, now: nowFn });
+  if (!stopped.ok) {
+    err(
+      stopped.stage === 'load'
+        ? 'caws agents stop: lease directory unreadable.'
+        : stopped.stage === 'apply'
+          ? 'caws agents stop: store write failed.'
+          : 'caws agents stop: kernel refused.'
+    );
+    err(renderDiagnostics(stopped.errors, { showData }));
+    return stopped.stage === 'load' ? 2 : 1;
   }
 
   if (json) {
     emitJson(out, {
       ok: true,
       session_id: idRes.identity.session_id,
-      wrote: applyRes.value.wrote,
-      diagnostics: applyRes.value.diagnostics,
+      wrote: stopped.value.wrote,
+      diagnostics: stopped.value.diagnostics,
     });
-  } else if (applyRes.value.wrote) {
+  } else if (stopped.value.wrote) {
     out(`stopped ${idRes.identity.session_id}`);
   } else {
     out(`no prior lease for ${idRes.identity.session_id} (no-op)`);

@@ -522,9 +522,9 @@ describe('mutation policy topology contract', () => {
     expect(result.status).toBe(0);
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
-    // The source inventory includes the behavioral renderer-calendar adapter.
+    // The source inventory includes the mutation-gated renderer-calendar adapter.
     expect(result.stdout).toMatch(/^PASS: 194 source files accounted for exactly once$/m);
-    expect(result.stdout).toMatch(/^PASS: 21 mutation targets across 3 surfaces$/m);
+    expect(result.stdout).toMatch(/^PASS: 22 mutation targets across 3 surfaces$/m);
   });
 
   test('session seal preparation is classified as behavioral parsing and rendering', () => {
@@ -538,6 +538,30 @@ describe('mutation policy topology contract', () => {
         .filter((group) => group.files.includes(source))
         .map(({ id, strategy, command }) => ({ id, strategy, command }))
     ).toEqual([{ id: 'behavioral', strategy: 'behavioral', command: 'npm test' }]);
+  });
+
+  test('renderer calendar has an in-process consumer and its own unchanged mutation floor', () => {
+    const policy = loadPolicy();
+    const source = 'src/transcripts/renderer-calendar.ts';
+    expect(
+      policy.proofGroups
+        .filter((group) => group.files.includes(source))
+        .map(({ id, strategy }) => ({ id, strategy }))
+    ).toEqual([{ id: 'mutation', strategy: 'mutation' }]);
+    expect(policy.surfaces.store.targets.filter((target) => target.source === source)).toEqual([
+      { source },
+    ]);
+    expect(policy.surfaces.store.tests).toContain(
+      'tests/transcripts/renderer-calendar-mutation.test.js'
+    );
+    expect(policy.surfaces.store.threshold).toBe(80);
+    const config = createStrykerConfig('store');
+    expect(config.mutate).toContain(source);
+    expect(config.jest.config.testMatch).toContain(
+      '<rootDir>/tests/transcripts/renderer-calendar-mutation.test.js'
+    );
+    expect(config.coverageAnalysis).toBe('perTest');
+    expect(config.thresholds.low).toBe(80);
   });
 
   test('an unclassified production source is a hard failure', () => {
@@ -589,7 +613,9 @@ describe('mutation policy topology contract', () => {
     expect(
       config.testFiles.every(
         (file) =>
-          file.startsWith('tests/store/') || file === 'tests/transcripts/store-timestamp.test.js'
+          file.startsWith('tests/store/') ||
+          file === 'tests/transcripts/store-timestamp.test.js' ||
+          file === 'tests/transcripts/renderer-calendar-mutation.test.js'
       )
     ).toBe(true);
     expect(config.testFiles).toContain('tests/store/messages-behavior-store.test.js');
@@ -608,6 +634,7 @@ describe('mutation policy topology contract', () => {
       'src/store/events-store.ts',
       'src/store/messages-store.ts',
       'src/store/yaml-patch.ts',
+      'src/transcripts/renderer-calendar.ts',
       'src/transcripts/store-timestamp.ts',
     ]);
     expect(config.testFiles).toEqual([
@@ -619,6 +646,7 @@ describe('mutation policy topology contract', () => {
       'tests/store/messages-dead-recipient-prune.test.js',
       'tests/store/messages-store.test.js',
       'tests/store/yaml-patch.test.js',
+      'tests/transcripts/renderer-calendar-mutation.test.js',
       'tests/transcripts/store-timestamp.test.js',
     ]);
     expect(

@@ -439,19 +439,18 @@ _god_object_threshold() {
   # cost regresses, which is exactly why it would otherwise go unnoticed:
   # nothing else in the suite would turn red.
   local counter="$CAWS_TEST_REPO/.parse-count"
-  local real="$CAWS_TEST_HOOKS_DIR/lib/guard-config.py"
-  local saved="$CAWS_TEST_REPO/.guard-config.py.real"
+  local real="$CAWS_TEST_HOOKS_DIR/lib/guard-config.cjs"
+  local saved="$CAWS_TEST_REPO/.guard-config.cjs"
   write_policy "$(scope_prefix_policy 'native/')"
   cp "$real" "$saved"
   : > "$counter"
-  # The wrapper must be PYTHON, not bash: guard-config.sh invokes the parser as
-  # `python3 "$script"`, so the shebang is never consulted. A bash stub here
-  # fails to parse, the loader reports `unavailable` with stderr suppressed,
-  # and the counter reads 0 -- indistinguishable from "the chain never ran".
+  # Count actual Node executions while retaining the standalone asset's output.
   cat > "$real" <<COUNTER
-import os, sys
-open("$counter", "a").write("x")
-os.execv(sys.executable, [sys.executable, "$saved"] + sys.argv[1:])
+const fs = require('node:fs');
+const cp = require('node:child_process');
+fs.appendFileSync("$counter", "x");
+const result = cp.spawnSync(process.execPath, ["$saved", ...process.argv.slice(2)], { stdio: 'inherit' });
+process.exit(result.status === null ? 1 : result.status);
 COUNTER
 
   run env \

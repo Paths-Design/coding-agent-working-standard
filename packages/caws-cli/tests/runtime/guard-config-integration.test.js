@@ -64,6 +64,13 @@ function fixture(surface = 'codex') {
   );
   // Scope authority is a controlled refusing boundary; this fixture tests config transport.
   put(
+    path.join(bin, 'node'),
+    '#!/bin/bash -p\ncase "$1" in */guard-config.cjs) printf "called\\n" >> "$CONFIG_TYPED_PARSER_WITNESS"; [[ "${CONFIG_TYPED_PARSER_MODE:-execute}" != deny ]] || exit 97;; esac\nexec ' +
+      quote(process.execPath) +
+      ' "$@"\n',
+    0o755
+  );
+  put(
     path.join(bin, 'caws'),
     '#!/bin/bash -p\nif [[ "$1 $2" == "scope check" ]]; then exit 1; fi\nif [[ "$1 $2" == "scope show" ]]; then printf \'%s\' \'{"decision":"reject","rule":"scope.reject.root_not_allowed","path":"native/core.rs","mode":"authoritative","boundSpecId":"TEST-001","bindingState":"bound"}\'; fi\n',
     0o755
@@ -76,6 +83,7 @@ function fixture(surface = 'codex') {
     CAWS_TRAP_KILL: '0',
     CAWS_HOOK_ADVISORY_DEDUP: '0',
     CONFIG_PARSER_WITNESS: path.join(root, 'config-parser-calls'),
+    CONFIG_TYPED_PARSER_WITNESS: path.join(root, 'typed-config-parser-calls'),
     CONSUMER_ROOT: root,
   };
   expect(cp.spawnSync('git', ['init', '-q'], { cwd: repo, env: environment }).status).toBe(0);
@@ -479,13 +487,16 @@ scenario(
         startup,
         'printf "startup\\n" >> "$CONSUMER_ROOT/startup-calls"\nexport CAWS_GOD_OBJECT_LOC=100 CAWS_GOD_OBJECT_DELTA=10 CAWS_LOC_DELTA_WARN_THRESHOLD=10\n'
       );
-      const result = await f.run(await f.prepare({ BASH_ENV: startup }));
+      const result = await f.run(
+        await f.prepare({ BASH_ENV: startup, CONFIG_TYPED_PARSER_MODE: 'deny' })
+      );
       expect(result.scope).toContain('TEST-001');
       expect(result.allowlist).toBe('1');
       expect(result.god).toContain('threshold: 100');
       expect(result.delta).toContain('threshold: 10');
       expect(fs.readFileSync(path.join(f.root, 'startup-calls'), 'utf8')).toContain('startup\n');
-      expect(fs.readFileSync(f.environment.CONFIG_PARSER_WITNESS, 'utf8')).toBe('called\n');
+      expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
+      expect(fs.readFileSync(f.environment.CONFIG_TYPED_PARSER_WITNESS, 'utf8')).toBe('called\n');
     } finally {
       f.close();
     }
@@ -719,7 +730,7 @@ scenario(
       f.policy(document());
       const prepared = await f.prepare();
       fs.appendFileSync(
-        path.join(f.runtime, 'lib/guard-config.py'),
+        path.join(f.runtime, 'lib/guard-config.cjs'),
         '\n# source changed after preparation\n'
       );
       await expect(f.run(prepared)).rejects.toThrow(
@@ -804,7 +815,7 @@ scenario.each(['\u2028', '\u2029'])(
 );
 
 scenario(
-  'source indexing limits retain the selected parser rather than asserting invalid policy',
+  'deep unrelated metadata preserves configured behavior without stock Python',
   async () => {
     const f = fixture();
     try {
@@ -815,8 +826,8 @@ scenario(
       f.policy(document());
       const prepared = await f.prepare();
       f.policy(raw);
-      shipped(await f.run(prepared));
-      expect(fs.readFileSync(f.environment.CONFIG_PARSER_WITNESS, 'utf8')).toBe('called\n');
+      configured(await f.run(prepared));
+      expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
     } finally {
       f.close();
     }
@@ -853,10 +864,15 @@ scenario(
       expect(denied.assignments).toContain('CAWS_GUARD_CONFIG_STATUS=invalid\n');
       expect(fs.existsSync(f.environment.CONFIG_PARSER_WITNESS)).toBe(false);
       // Explicit executable selection is a separate compatibility contract.
+      const customParser = path.join(f.root, 'guard-config.py');
+      f.put(
+        customParser,
+        'import sys\nsys.stdout.buffer.write(b"CAWS_GUARD_CONFIG_STATUS=ok\\nCAWS_GUARD_ZONE_COUNT=0\\nCAWS_GUARD_PREFIX_COUNT_SCOPE_GUARD_SH=1\\nCAWS_GUARD_PREFIX_SCOPE_GUARD_SH_0=\\x00/\\n")\n'
+      );
       const result = await f.run(
         await f.prepare({
           CONFIG_PARSER_MODE: 'execute',
-          CAWS_GUARD_CONFIG_PY: path.join(f.runtime, 'lib/guard-config.py'),
+          CAWS_GUARD_CONFIG_PY: customParser,
         })
       );
       expect(result.assignments).toContain('CAWS_GUARD_CONFIG_STATUS=ok\n');

@@ -8,20 +8,34 @@ import { builtinModules } from 'node:module';
 import { buildSync, version as esbuildVersion } from 'esbuild';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const entry = 'src/runtime/advisory-truncate-entry.ts';
-const algorithm = 'src/runtime/utf8.ts';
+const assets = [
+  {
+    entry: 'src/runtime/advisory-truncate-entry.ts',
+    output: 'templates/hook-packs/shared/advisory_truncate.cjs',
+    inputs: ['src/runtime/advisory-truncate-entry.ts', 'src/runtime/utf8.ts'],
+  },
+  {
+    entry: 'src/runtime/guard-config-entry.ts',
+    output: 'templates/hook-packs/shared/lib/guard-config.cjs',
+    inputs: [
+      'src/runtime/guard-config-entry.ts',
+      'src/runtime/guard-config-loader.ts',
+      'src/init/repo-hook-policy.ts',
+      'src/runtime/json-custody.ts',
+    ],
+  },
+];
 const generator = 'scripts/generate-runtime-assets.mjs';
-const output = 'templates/hook-packs/shared/advisory_truncate.cjs';
 const requiredEsbuildVersion = '0.25.10';
 const builtins = new Set(builtinModules.flatMap((name) => [name, 'node:' + name]));
 const normalize = (name) => name.replace(/\\/g, '/');
 
-function produce() {
+function produce({ entry, output, inputs }) {
   if (esbuildVersion !== requiredEsbuildVersion)
     throw new Error(
       'Runtime assets require esbuild ' + requiredEsbuildVersion + '; found ' + esbuildVersion
     );
-  const sourcePaths = [generator, entry, algorithm].sort();
+  const sourcePaths = [generator, ...inputs].sort();
   const provenance = sourcePaths.map((relative) => {
     const file = path.join(packageRoot, relative);
     if (!fs.lstatSync(file).isFile())
@@ -48,7 +62,7 @@ function produce() {
     tsconfigRaw: { compilerOptions: { target: 'ES2022', useDefineForClassFields: true } },
   });
   const actualInputs = Object.keys(result.metafile.inputs).map(normalize).sort();
-  const expectedInputs = [entry, algorithm].sort();
+  const expectedInputs = [...inputs].sort();
   if (JSON.stringify(actualInputs) !== JSON.stringify(expectedInputs))
     throw new Error('Unexpected runtime asset input set: ' + JSON.stringify(actualInputs));
   for (const record of Object.values(result.metafile.outputs)) {
@@ -79,39 +93,41 @@ try {
   const args = process.argv.slice(2);
   if (args.length > 1 || (args.length === 1 && args[0] !== '--check'))
     throw new Error('Usage: node scripts/generate-runtime-assets.mjs [--check]');
-  const expected = produce();
-  const target = path.join(packageRoot, output);
-  const current = fs.lstatSync(target, { throwIfNoEntry: false });
-  if (current && !current.isFile())
-    throw new Error('Runtime asset is not a regular file: ' + output);
-  if (args[0] === '--check') {
-    if (!current || !fs.readFileSync(target).equals(expected))
-      throw new Error(
-        'Runtime asset is missing or stale: ' +
-          output +
-          '; run node scripts/generate-runtime-assets.mjs'
-      );
-    if (process.platform !== 'win32' && (current.mode & 0o111) === 0)
-      throw new Error('Runtime asset is not executable: ' + output + '; regenerate it');
-    process.stderr.write('Runtime assets are current.\n');
-  } else {
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    const temporary = target + '.tmp.' + process.pid;
-    let descriptor;
-    let created = false;
-    try {
-      descriptor = fs.openSync(temporary, 'wx', 0o755);
-      created = true;
-      fs.writeFileSync(descriptor, expected);
-      if (process.platform !== 'win32') fs.fchmodSync(descriptor, 0o755);
-      fs.closeSync(descriptor);
-      descriptor = undefined;
-      fs.renameSync(temporary, target);
-    } finally {
-      if (descriptor !== undefined) fs.closeSync(descriptor);
-      if (created) fs.rmSync(temporary, { force: true });
+  const projections = assets.map((asset) => ({ ...asset, expected: produce(asset) }));
+  for (const { output, expected } of projections) {
+    const target = path.join(packageRoot, output);
+    const current = fs.lstatSync(target, { throwIfNoEntry: false });
+    if (current && !current.isFile())
+      throw new Error('Runtime asset is not a regular file: ' + output);
+    if (args[0] === '--check') {
+      if (!current || !fs.readFileSync(target).equals(expected))
+        throw new Error(
+          'Runtime asset is missing or stale: ' +
+            output +
+            '; run node scripts/generate-runtime-assets.mjs'
+        );
+      if (process.platform !== 'win32' && (current.mode & 0o111) === 0)
+        throw new Error('Runtime asset is not executable: ' + output + '; regenerate it');
+      process.stderr.write('Runtime assets are current.\n');
+    } else {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      const temporary = target + '.tmp.' + process.pid;
+      let descriptor;
+      let created = false;
+      try {
+        descriptor = fs.openSync(temporary, 'wx', 0o755);
+        created = true;
+        fs.writeFileSync(descriptor, expected);
+        if (process.platform !== 'win32') fs.fchmodSync(descriptor, 0o755);
+        fs.closeSync(descriptor);
+        descriptor = undefined;
+        fs.renameSync(temporary, target);
+      } finally {
+        if (descriptor !== undefined) fs.closeSync(descriptor);
+        if (created) fs.rmSync(temporary, { force: true });
+      }
+      process.stderr.write('Generated ' + output + '.\n');
     }
-    process.stderr.write('Generated ' + output + '.\n');
   }
 } catch (error) {
   process.stderr.write(
