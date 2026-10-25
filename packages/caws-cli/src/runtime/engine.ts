@@ -5,7 +5,13 @@ import { isAbsolute, join } from 'node:path';
 import { TextDecoder } from 'node:util';
 import type { AgentSurface } from '../init/hook-packs/types';
 import { settleMessageOffer } from '../store/messages-store';
-import { invocationEnvironment, resolveRuntimeProject, type ContextGitPort } from './context';
+import {
+  invocationEnvironment,
+  resolveRuntimeProject,
+  runtimeProjectCandidate,
+  runtimeProjectHasAuthority,
+  type ContextGitPort,
+} from './context';
 import {
   CONTEXT_GIT_CAPABILITY,
   EXECUTION_WORKDIR_CONTEXT_GIT_CAPABILITY,
@@ -345,27 +351,39 @@ export async function prepareRuntimeInvocation(
   );
   let selection = await select(context);
   if (executionWorkdir.status === 'resolved') {
-    if (context.status !== 'resolved')
-      throw new Error('Host execution context requires a resolvable session project');
-    const anchor = context;
-    const anchorGoverned =
-      selection.status === 'active' ||
-      existsSync(join(anchor.canonical, '.caws')) ||
-      existsSync(join(home, 'state/projects', digest(anchor.canonical) + '.json'));
-    context = await resolveRuntimeProject(
-      request.payload,
-      request.caller,
-      request.deadlineEpochMs,
-      contextGit,
-      executionWorkdir.path
-    );
-    if (context.status !== 'resolved')
-      throw new Error('Host execution directory cannot deactivate session governance');
-    if (anchorGoverned && context.canonical !== anchor.canonical)
-      throw new Error('Host execution directory belongs to a foreign canonical project');
-    selection = await select(context);
-    if (anchorGoverned && selection.status !== 'active')
-      throw new Error('Host execution directory cannot deactivate session governance');
+    if (context.status !== 'resolved') {
+      const candidate = runtimeProjectCandidate(request.payload, request.caller);
+      if (
+        runtimeProjectHasAuthority(candidate, home) ||
+        runtimeProjectHasAuthority(executionWorkdir.path, home)
+      )
+        throw new Error('Host execution context requires a resolvable session project');
+      // The first native Git failure consumed its port. Session and command
+      // directories without authority keep the inactive result without retrying.
+    } else {
+      const anchor = context;
+      const anchorGoverned =
+        selection.status === 'active' ||
+        existsSync(join(anchor.canonical, '.caws')) ||
+        existsSync(join(home, 'state/projects', digest(anchor.canonical) + '.json'));
+      context = await resolveRuntimeProject(
+        request.payload,
+        request.caller,
+        request.deadlineEpochMs,
+        contextGit,
+        executionWorkdir.path
+      );
+      if (
+        context.status !== 'resolved' &&
+        (anchorGoverned || runtimeProjectHasAuthority(executionWorkdir.path, home))
+      )
+        throw new Error('Host execution directory cannot deactivate session governance');
+      if (anchorGoverned && context.status === 'resolved' && context.canonical !== anchor.canonical)
+        throw new Error('Host execution directory belongs to a foreign canonical project');
+      selection = await select(context);
+      if (anchorGoverned && selection.status !== 'active')
+        throw new Error('Host execution directory cannot deactivate session governance');
+    }
   }
   if (signal.aborted) throw signal.reason;
   if (selection.status === 'inactive') {

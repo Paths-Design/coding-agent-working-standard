@@ -129,6 +129,34 @@ class HookExecutionDiagnostics(unittest.TestCase):
         self.assertEqual((self.repo / 'marker.log').read_text().splitlines(),
                          ['unavailable', str(self.repo)])
 
+    def test_unrelated_unadopted_directories_remain_inactive_with_valid_host_context(self):
+        scratch = self.root / 'ordinary-directory'
+        other_scratch = self.root / 'other-ordinary-directory'
+        plain_git = self.root / 'unadopted-project'
+        scratch.mkdir()
+        other_scratch.mkdir()
+        plain_git.mkdir()
+        init = subprocess.run(['git', 'init', '-q', str(plain_git)], env=self.env, capture_output=True)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        for label, session_dir in [('same-nongit-directory', scratch),
+                                   ('different-nongit-directory', other_scratch),
+                                   ('unadopted-git-to-nongit', plain_git)]:
+            raw = self.payload(cwd=str(session_dir), execution_workdir=str(scratch),
+                               tool_input={'command': 'echo unchanged'})
+            for event in ('pre_tool_use', 'post_tool_use'):
+                self.event = event
+                with self.subTest(label=label, event=event):
+                    result = self.invoke(label + event, raw)
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (0, b'', b''))
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+        self.event = 'pre_tool_use'
+        malformed = self.invoke('ordinary-directory-malformed-host', self.payload(
+            cwd=str(scratch), execution_workdir=None, tool_input={'command': 'echo unchanged'}))
+        self.assertEqual(malformed.returncode, 2)
+        self.assertIn(b'execution_workdir', malformed.stderr)
+
     def test_present_invalid_execution_context_refuses_before_dispatch(self):
         file = self.root / 'file-context'
         file.write_text('not a directory')

@@ -546,6 +546,17 @@ class ExecutionWorkdirError(ValueError):
     """Malformed present command context is a refusal on both tool events."""
 
 
+def project_authority_ancestor(candidate, home):
+    """A missing Git result cannot erase a physical ancestor's adoption/governance."""
+    try:
+        probe = Path(candidate).resolve(strict=True)
+    except (OSError, ValueError):
+        return True
+    return any((p / '.git').exists() or (p / '.caws').exists() or
+               confined(home, 'state/projects/' + digest(str(p).encode()) + '.json').exists()
+               for p in [probe, *probe.parents])
+
+
 def execution_workdir(payload, event):
     """Only the additive host field resolves command context; aliases are consistency checks."""
     if payload.get('tool_name') != 'Bash' or event not in {'pre_tool_use', 'post_tool_use'}:
@@ -729,7 +740,9 @@ def main():
     try:
         root = Path(git(candidate, 'rev-parse', '--show-toplevel'))
     except (ValueError, OSError) as error:
-        if execution['status'] == 'resolved':
+        if execution['status'] == 'resolved' and (
+                project_authority_ancestor(candidate, home) or
+                project_authority_ancestor(execution['path'], home)):
             raise ExecutionWorkdirError('Host execution context requires a resolvable session project') from None
         probe = Path(candidate).absolute()
         if any((p / '.git').exists() or (p / '.caws').exists() for p in [probe, *probe.parents]):
@@ -746,7 +759,9 @@ def main():
             root = Path(git(execution['path'], 'rev-parse', '--show-toplevel'))
             common = Path(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
         except (ValueError, OSError):
-            raise ExecutionWorkdirError('Host execution directory cannot deactivate session governance') from None
+            if anchor_governed or project_authority_ancestor(execution['path'], home):
+                raise ExecutionWorkdirError('Host execution directory cannot deactivate session governance') from None
+            return inactive('outside a resolvable Git project')
         canonical = common.parent
         if anchor_governed and canonical != anchor:
             raise ExecutionWorkdirError('Host execution directory belongs to a foreign canonical project')

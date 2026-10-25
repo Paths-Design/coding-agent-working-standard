@@ -196,3 +196,71 @@ test('real compatibility parser exports command and session coordinates while pr
   });
   expect(run({ ...input, execution_workdir: null }).status).toBe(2);
 });
+
+test.each(['.git', '.caws'])(
+  'a failed session Git query cannot ignore target %s authority markers',
+  async (marker) => {
+    const home = path.join(root, 'machine');
+    fs.mkdirSync(home);
+    fs.mkdirSync(path.join(command, marker));
+    const request = {
+      schema: 'caws.runtime.request.v1',
+      id: 'inactive-target',
+      runtimeDigest: 'a'.repeat(64),
+      surface: 'codex',
+      event: 'pre_tool_use',
+      configuration: 'system',
+      payload: payload({ execution_workdir: command }),
+      caller: { cwd: session, environment: { HOME: root, CAWS_HOME: home } },
+      deadlineEpochMs: Date.now() + 5000,
+    };
+    const git = {
+      run: jest.fn(async () => {
+        throw new Error('Git unavailable');
+      }),
+    };
+    await expect(
+      prepareRuntimeInvocation(request, new AbortController().signal, undefined, git)
+    ).rejects.toThrow(/requires a resolvable session project/);
+    expect(git.run).toHaveBeenCalledTimes(1);
+  }
+);
+
+test('a failed session Git query cannot erase ancestor governance or exact machine adoption', async () => {
+  const crypto = require('node:crypto');
+  const home = path.join(root, 'machine');
+  fs.mkdirSync(home);
+  const request = {
+    schema: 'caws.runtime.request.v1',
+    id: 'inactive-authority',
+    runtimeDigest: 'a'.repeat(64),
+    surface: 'codex',
+    event: 'pre_tool_use',
+    configuration: 'system',
+    payload: payload({ execution_workdir: session }),
+    caller: { cwd: session, environment: { HOME: root, CAWS_HOME: home } },
+    deadlineEpochMs: Date.now() + 5000,
+  };
+  const git = {
+    run: jest.fn(async () => {
+      throw new Error('Git unavailable');
+    }),
+  };
+  fs.mkdirSync(path.join(session, '.caws'));
+  await expect(
+    prepareRuntimeInvocation(request, new AbortController().signal, undefined, git)
+  ).rejects.toThrow(/requires a resolvable session project/);
+  fs.rmdirSync(path.join(session, '.caws'));
+  const key = crypto.createHash('sha256').update(session).digest('hex');
+  fs.mkdirSync(path.join(home, 'state/projects'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'state/projects', key + '.json'), '{}');
+  await expect(
+    prepareRuntimeInvocation(request, new AbortController().signal, undefined, git)
+  ).rejects.toThrow(/requires a resolvable session project/);
+  fs.unlinkSync(path.join(home, 'state/projects', key + '.json'));
+  fs.writeFileSync(path.join(session, '.git'), 'gitdir: /unresolved-canonical/worktrees/fixture\n');
+  await expect(
+    prepareRuntimeInvocation(request, new AbortController().signal, undefined, git)
+  ).rejects.toThrow(/requires a resolvable session project/);
+  expect(git.run).toHaveBeenCalledTimes(3);
+});

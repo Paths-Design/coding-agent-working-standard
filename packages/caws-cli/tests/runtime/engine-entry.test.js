@@ -457,3 +457,63 @@ test('actual entry malformed native selection chunk fails before Ready without l
     { selectionObservation: selectionAdvertisement() }
   );
 });
+
+test.each([
+  ['pre_tool_use', false],
+  ['post_tool_use', false],
+  ['pre_tool_use', true],
+  ['post_tool_use', true],
+])(
+  'actual entry retains inactive nongit directories during %s (different directory: %s) without retrying poisoned Git',
+  async (event, different) => {
+    const commandDir = different ? path.join(root, 'ordinary-command-directory') : root;
+    if (different) fs.mkdirSync(commandDir);
+    const payload = {
+      cwd: root,
+      execution_workdir: commandDir,
+      tool_name: 'Bash',
+      tool_input: { command: 'echo unchanged' },
+    };
+    await withEntry(
+      'caws.runtime.context-git.execution-workdir.v1',
+      async (peer) => {
+        const checkout = await peer.read();
+        expect(checkout).toMatchObject({ ordinal: 1, operation: 'checkout', cwd: root });
+        await peer.write(result(checkout, '', { exitCode: 128 }));
+        await finishInactive(peer, await peer.read());
+        expect(fs.existsSync(peer.marker)).toBe(false);
+      },
+      { event, payload, inputJson: JSON.stringify(payload) }
+    );
+  }
+);
+test.each(['pre_tool_use', 'post_tool_use'])(
+  'actual entry retains inactive unadopted Git session to nongit command directory during %s',
+  async (event) => {
+    const commandDir = path.join(root, 'ordinary-command-directory');
+    fs.mkdirSync(commandDir);
+    const payload = {
+      cwd: root,
+      execution_workdir: commandDir,
+      tool_name: 'Bash',
+      tool_input: { command: 'echo unchanged' },
+    };
+    await withEntry(
+      'caws.runtime.context-git.execution-workdir.v1',
+      async (peer) => {
+        const checkout = await peer.read();
+        expect(checkout).toMatchObject({ ordinal: 1, operation: 'checkout', cwd: root });
+        await peer.write(result(checkout, root));
+        const common = await peer.read();
+        expect(common).toMatchObject({ ordinal: 2, operation: 'commonDir', cwd: root });
+        await peer.write(result(common, path.join(root, '.git')));
+        const target = await peer.read();
+        expect(target).toMatchObject({ ordinal: 3, operation: 'checkout', cwd: commandDir });
+        await peer.write(result(target, '', { exitCode: 128 }));
+        await finishInactive(peer, await peer.read());
+        expect(fs.existsSync(peer.marker)).toBe(false);
+      },
+      { event, payload, inputJson: JSON.stringify(payload) }
+    );
+  }
+);

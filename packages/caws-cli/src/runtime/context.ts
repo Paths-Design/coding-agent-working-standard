@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, resolve, join } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { resolveGitBinaryForEnvironment } from '../store/git-binary';
@@ -141,6 +142,45 @@ function governedAncestor(candidate: string): boolean {
   }
 }
 
+/** Original session candidate; command context never rewrites the retained payload. */
+export function runtimeProjectCandidate(
+  payload: Readonly<Record<string, unknown>>,
+  caller: InvocationCaller,
+  executionWorkdir?: string
+): string {
+  const supplied = payload.cwd;
+  if (supplied !== undefined && supplied !== null && typeof supplied !== 'string')
+    throw new TypeError('Hook cwd must be a string when supplied.');
+  return resolve(
+    caller.cwd,
+    executionWorkdir ?? (supplied || caller.environment.CAWS_PROJECT_DIR || caller.cwd)
+  );
+}
+
+/** A failed Git probe does not establish absence of existing project authority.
+ * Inspect physical ancestors, existing Git markers and exact machine adoption keys without borrowing
+ * the target directory's authority or retrying the consumed native Git port. */
+export function runtimeProjectHasAuthority(candidate: string, home: string): boolean {
+  let current: string;
+  try {
+    current = realpathSync(candidate);
+  } catch {
+    return true;
+  }
+  for (;;) {
+    const key = createHash('sha256').update(current).digest('hex');
+    if (
+      existsSync(join(current, '.git')) ||
+      existsSync(join(current, '.caws')) ||
+      existsSync(join(home, 'state/projects', key + '.json'))
+    )
+      return true;
+    const parent = dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
+
 /** Actual checkout and canonical authority are separate, using the store's root mapping. */
 export async function resolveRuntimeProject(
   payload: Readonly<Record<string, unknown>>,
@@ -149,14 +189,7 @@ export async function resolveRuntimeProject(
   git: ContextGitPort = createContextGitPort(caller, deadlineEpochMs),
   executionWorkdir?: string
 ): Promise<RuntimeProjectContext> {
-  const supplied = payload.cwd;
-  if (supplied !== undefined && supplied !== null && typeof supplied !== 'string') {
-    throw new TypeError('Hook cwd must be a string when supplied.');
-  }
-  const candidate = resolve(
-    caller.cwd,
-    executionWorkdir ?? (supplied || caller.environment.CAWS_PROJECT_DIR || caller.cwd)
-  );
+  const candidate = runtimeProjectCandidate(payload, caller, executionWorkdir);
   let checkout: string;
   try {
     checkout = await git.run(['rev-parse', '--show-toplevel'], candidate);
