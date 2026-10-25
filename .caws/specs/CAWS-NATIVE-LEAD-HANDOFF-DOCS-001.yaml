@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-LEAD-HANDOFF-DOCS-001
 title: 'Land supported operating guidance and document lead transfer'
 mode: doc
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-lead-handoff-docs
 created_at: '2026-10-25T00:53:05.111Z'
-updated_at: '2026-10-25T00:53:05.111Z'
+updated_at: '2026-10-25T00:53:54.272Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
