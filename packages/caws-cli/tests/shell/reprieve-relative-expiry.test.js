@@ -225,6 +225,21 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: exactly-one-of (A3, A4)', () => {
 });
 
 describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: absolute-expiry refusals stay self-correcting', () => {
+  it.each(['0049-01-01Z', '0048-01-01Z'])(
+    'refuses reader-expired %s despite JavaScript year normalization',
+    (expiresAt) => {
+      const repoRoot = makeRepoRoot();
+      try {
+        expect(new Date(expiresAt).getTime()).toBeGreaterThan(NOW.getTime());
+        const result = grant(repoRoot, { expiresAt });
+        expect(result.code).toBe(1);
+        expect(result.err).toContain('in the past');
+        expect(fs.existsSync(path.join(repoRoot, 'machine-home'))).toBe(false);
+      } finally {
+        fs.rmSync(repoRoot, { recursive: true, force: true });
+      }
+    }
+  );
   it.each([
     '2099-02-30T04:05:06Z',
     '2099-02-29T04:05:06Z',

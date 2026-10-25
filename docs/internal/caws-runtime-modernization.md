@@ -11016,6 +11016,15 @@ Additional bounded evidence and unresolved dependencies:
   malformed/conflicting unrelated execution fields, and the completion marker
   prevents repeat parse/write. Foreign Sterling profiles remain unchanged.
 
+  Independent review identifies a concrete writer disagreement: JavaScript
+  interprets `0049-01-01Z` as2049 while the consumed parser reads year0049.
+  `grant-instant-red.log` reproduces an actual private fixture grant reporting
+  success for that expired spelling. Futurity uses the consumed microsecond
+  instant, with the reader's conservative clock boundary, rather than JavaScript
+  normalization. Two short-year regression cases require refusal before any
+  private machine state is created. The initial0030 variant is invalid to Node
+  and is replaced by the independently probed0048 variant.
+
   Retained failed attempts include the initial25 stale SessionEnd-pin failures,
   two stale overlap-positive failures, seven typed-reader disagreements and a
   missing-bootstrap test fixture. The fixture supplies the production bootstrap

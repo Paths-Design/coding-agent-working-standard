@@ -872,7 +872,8 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
       return 1;
     }
     expiresAt = new Date(RAW_EXPIRY);
-    if (!Number.isFinite(expiresAt.getTime()) || parseReprieveExpiry(RAW_EXPIRY) === undefined) {
+    const consumedExpiry = parseReprieveExpiry(RAW_EXPIRY);
+    if (!Number.isFinite(expiresAt.getTime()) || consumedExpiry === undefined) {
       err(
         `caws reprieve grant: --expires-at "${RAW_EXPIRY}" is not a valid ISO-8601 timestamp. Expected YYYY-MM-DDTHH:MM:SSZ, e.g. ${new Date(now.getTime() + 30 * 60_000).toISOString()}. To avoid computing a timestamp, use --for 30m instead.`
       );
@@ -881,7 +882,9 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     // Report "now" alongside the refusal: an operator reasoning in local time
     // near a UTC date boundary otherwise cannot see why a same-day timestamp is
     // already past, and burns retries guessing.
-    if (expiresAt.getTime() <= now.getTime()) {
+    // Date's permissive year normalization is not expiry authority. Compare
+    // the exact stored spelling's consumed instant at the reader boundary.
+    if (consumedExpiry < (BigInt(now.getTime()) + 1n) * 1000n) {
       err(
         `caws reprieve grant: --expires-at "${RAW_EXPIRY}" is in the past (now: ${now.toISOString()}). A reprieve must expire in the future. For a relative expiry, use --for 30m.`
       );
