@@ -2,7 +2,6 @@ id: CAWS-NATIVE-CLI-CONTENT-IDENTITY-001
 title: 'Compare separate CLI installs against a reviewed native content closure'
 mode: feature
 lifecycle_state: active
-worktree: native-cli-content-identity
 created_at: '2026-10-25T01:46:04.895Z'
 updated_at: '2026-10-25T01:46:06.123Z'
 created_by_session: '01a170a2-efe6-7bd2-a9ac-7cdcc3b070f7'
