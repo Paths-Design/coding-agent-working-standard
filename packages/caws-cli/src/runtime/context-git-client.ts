@@ -147,6 +147,7 @@ export function createNativeContextGitPort(
         );
       signal.addEventListener('abort', cancelled, { once: true });
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let settledGitExitConsumed = false;
       try {
         if (signal.aborted) cancelled();
         if (controller.signal.aborted) throw controller.signal.reason;
@@ -188,12 +189,47 @@ export function createNativeContextGitPort(
             'protocol',
             'Concurrent native context Git use poisoned the exchange'
           );
-        const output = usableOutput(result);
+        let output: string;
+        try {
+          output = usableOutput(result);
+        } catch (error) {
+          // Only the new finite profile can consume an observed nonzero Git
+          // terminal and continue to its next fixed ordinal. This is not a
+          // successful root, retry, renewed clock or fresh port.
+          if (
+            maximum === 4 &&
+            error instanceof ContextGitError &&
+            error.category === 'git_exit' &&
+            result.status === 'exited' &&
+            result.signal === null &&
+            result.exitCode !== null &&
+            result.exitCode !== 0 &&
+            Object.values(result.cleanup).every((value) => value === true)
+          ) {
+            if (controller.signal.aborted) throw controller.signal.reason;
+            if (signal.aborted)
+              throw new ContextGitError(
+                'cancelled',
+                'Original context Git invocation was cancelled',
+                result.cleanup
+              );
+            if (Date.now() >= deadlineEpochMs)
+              throw new ContextGitError(
+                'deadline',
+                'Original context Git deadline expired',
+                result.cleanup
+              );
+            if (ordinal % 2 === 1) checkout = cwd;
+            ordinal++;
+            settledGitExitConsumed = true;
+          }
+          throw error;
+        }
         if (ordinal % 2 === 1) checkout = output;
         ordinal++;
         return output;
       } catch (error) {
-        failed = true;
+        if (!settledGitExitConsumed) failed = true;
         if (error instanceof ContextGitError) throw error;
         throw new ContextGitError(
           'protocol',

@@ -546,7 +546,7 @@ class ExecutionWorkdirError(ValueError):
     """Malformed present command context is a refusal on both tool events."""
 
 
-def project_authority_ancestor(candidate, home):
+def project_requires_resolved_authority(candidate, home):
     """A missing Git result cannot erase a physical ancestor's adoption/governance."""
     try:
         probe = Path(candidate).resolve(strict=True)
@@ -737,21 +737,34 @@ def main():
         raise ValueError('Hook input must be an object')
     execution = execution_workdir(payload, event)
     candidate = payload.get('cwd') or os.environ.get('CAWS_PROJECT_DIR') or os.getcwd()
+    session_resolved = True
     try:
         root = Path(git(candidate, 'rev-parse', '--show-toplevel'))
     except (ValueError, OSError) as error:
-        if execution['status'] == 'resolved' and (
-                project_authority_ancestor(candidate, home) or
-                project_authority_ancestor(execution['path'], home)):
+        if execution['status'] == 'resolved' and project_requires_resolved_authority(candidate, home):
             raise ExecutionWorkdirError('Host execution context requires a resolvable session project') from None
-        probe = Path(candidate).absolute()
-        if any((p / '.git').exists() or (p / '.caws').exists() for p in [probe, *probe.parents]):
-            print(f'[caws machine adapter] project could not be resolved ({error}); '
-                  f'continuing without CAWS governance in {probe}', file=sys.stderr)
-        return inactive('outside a resolvable Git project')
-    common = Path(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
+        if execution['status'] == 'resolved' and Path(candidate).resolve() != Path(execution['path']):
+            session_resolved = False
+            try:
+                root = Path(git(execution['path'], 'rev-parse', '--show-toplevel'))
+            except (ValueError, OSError):
+                if project_requires_resolved_authority(execution['path'], home):
+                    raise ExecutionWorkdirError('Host execution directory cannot deactivate session governance') from None
+                return inactive('outside a resolvable Git project')
+        else:
+            probe = Path(candidate).absolute()
+            if any((p / '.git').exists() or (p / '.caws').exists() for p in [probe, *probe.parents]):
+                print(f'[caws machine adapter] project could not be resolved ({error}); '
+                      f'continuing without CAWS governance in {probe}', file=sys.stderr)
+            return inactive('outside a resolvable Git project')
+    try:
+        common = Path(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
+    except (ValueError, OSError):
+        if execution['status'] == 'resolved':
+            raise ExecutionWorkdirError('Host execution directory could not be resolved') from None
+        raise
     canonical = common.parent
-    if execution['status'] == 'resolved':
+    if execution['status'] == 'resolved' and session_resolved:
         anchor = canonical
         anchor_governed = ((anchor / '.caws').exists() or
                           confined(home, 'state/projects/' + digest(str(anchor).encode()) + '.json').exists())
@@ -759,7 +772,7 @@ def main():
             root = Path(git(execution['path'], 'rev-parse', '--show-toplevel'))
             common = Path(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
         except (ValueError, OSError):
-            if anchor_governed or project_authority_ancestor(execution['path'], home):
+            if anchor_governed or project_requires_resolved_authority(execution['path'], home):
                 raise ExecutionWorkdirError('Host execution directory cannot deactivate session governance') from None
             return inactive('outside a resolvable Git project')
         canonical = common.parent

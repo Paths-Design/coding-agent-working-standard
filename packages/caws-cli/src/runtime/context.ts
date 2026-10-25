@@ -158,9 +158,10 @@ export function runtimeProjectCandidate(
 }
 
 /** A failed Git probe does not establish absence of existing project authority.
+ * Git markers and failed physical lookup require resolution; neither grants CAWS authority.
  * Inspect physical ancestors, existing Git markers and exact machine adoption keys without borrowing
  * the target directory's authority or retrying the consumed native Git port. */
-export function runtimeProjectHasAuthority(candidate: string, home: string): boolean {
+export function runtimeProjectRequiresResolvedAuthority(candidate: string, home: string): boolean {
   let current: string;
   try {
     current = realpathSync(candidate);

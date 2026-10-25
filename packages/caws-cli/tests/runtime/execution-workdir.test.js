@@ -198,7 +198,7 @@ test('real compatibility parser exports command and session coordinates while pr
 });
 
 test.each(['.git', '.caws'])(
-  'a failed session Git query cannot ignore target %s authority markers',
+  'failed session and target Git queries retain unresolved target %s markers',
   async (marker) => {
     const home = path.join(root, 'machine');
     fs.mkdirSync(home);
@@ -221,8 +221,8 @@ test.each(['.git', '.caws'])(
     };
     await expect(
       prepareRuntimeInvocation(request, new AbortController().signal, undefined, git)
-    ).rejects.toThrow(/requires a resolvable session project/);
-    expect(git.run).toHaveBeenCalledTimes(1);
+    ).rejects.toThrow(/execution directory cannot deactivate/);
+    expect(git.run).toHaveBeenCalledTimes(2);
   }
 );
 

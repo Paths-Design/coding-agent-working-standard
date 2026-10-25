@@ -157,6 +157,66 @@ class HookExecutionDiagnostics(unittest.TestCase):
         self.assertEqual(malformed.returncode, 2)
         self.assertIn(b'execution_workdir', malformed.stderr)
 
+    def test_nongit_session_selects_successful_target_policy(self):
+        scratch, plain_git = self.root / 'nongit-session', self.root / 'plain-target'
+        scratch.mkdir()
+        plain_git.mkdir()
+        init = subprocess.run(['git', 'init', '-q', str(plain_git)], env=self.env, capture_output=True)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        for event in ('pre_tool_use', 'post_tool_use'):
+            self.event = event
+            result = self.invoke('nongit-to-plain-' + event, self.payload(cwd=str(scratch),
+                execution_workdir=str(plain_git), tool_input={'command': 'echo unchanged'}))
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b'', b''))
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
+        # The same nongit session reaches the actual adopted target's shipped guard.
+        nested = self.repo / 'nested'
+        nested.mkdir()
+        (nested / '.gitignore').write_text('*.generated\n')
+        (nested / 'private.generated').write_text('target sentinel\n')
+        policy = self.root / 'target-utility-policy.json'
+        policy.write_text(json.dumps({'version': 1, 'ignored_staging': True}))
+        self.env['CAWS_OPTIONAL_HOOK_POLICY'] = str(policy)
+        self.config['extensions']['pre_tool_use'].append(
+            {'handler': 'hook-utilities.sh', 'before': 'marker.sh'})
+        self.configure()
+        self.event = 'pre_tool_use'
+        raw = self.payload(cwd=str(scratch), execution_workdir=str(nested), turn_id='original-turn',
+                           tool_input={'command': 'git add -f private.generated'})
+        result = self.invoke('nongit-to-governed-target', raw)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn(b'Consumer ignored-staging policy: private.generated', result.stdout)
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertFalse((self.repo / '.git/index').exists())
+        row = self.rows(self.journals()[0])[0]
+        self.assertEqual(row['dispatch_cwd'], str(nested))
+        self.assertEqual(row['supplied_context']['session_cwd'], str(scratch))
+        self.assertEqual(row['input_sha256'], hashlib.sha256(json.dumps(raw).encode()).hexdigest())
+
+    def test_host_context_common_directory_failure_refuses_both_tool_events(self):
+        actual_git = __import__('shutil').which('git', path=self.env['PATH'])
+        self.assertIsNotNone(actual_git)
+        wrapper_dir = self.root / 'faulted-git-bin'
+        wrapper_dir.mkdir()
+        wrapper = wrapper_dir / 'git'
+        wrapper.write_text('#!/bin/sh\nfor arg in "$@"; do\n'
+                           '  if [ "$arg" = "--git-common-dir" ]; then\n'
+                           '    printf "fixture common-dir failure\\n" >&2\n    exit 128\n  fi\ndone\n'
+                           'exec ' + __import__('shlex').quote(actual_git) + ' "$@"\n')
+        wrapper.chmod(0o755)
+        self.env['PATH'] = str(wrapper_dir) + os.pathsep + self.env['PATH']
+        for event in ('pre_tool_use', 'post_tool_use'):
+            self.event = event
+            with self.subTest(event=event):
+                result = self.invoke('host-common-failure-' + event, self.payload(
+                    execution_workdir=str(self.repo), tool_input={'command': 'echo unchanged'}))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(b'Host execution directory could not be resolved', result.stderr)
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
     def test_present_invalid_execution_context_refuses_before_dispatch(self):
         file = self.root / 'file-context'
         file.write_text('not a directory')
