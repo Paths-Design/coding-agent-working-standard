@@ -54,3 +54,10 @@ rollback:
   - 'Revert the bounded source manifest and generated asset change through ordinary governed history.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "External raw root /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/guard-config-retirement/committed-01: actual build0, package-scoped lint0, six-suite Jest136pass1supplied-native skip0, Bats51cases0. All16 before/after source hashes match committed blobs; compiled inputs stable, no timeout or supervised group residue. Inspected raw integer/float/duplicate/escaped-key, metadata140, UTF8/NUL and admitted-null outcomes. Initial review-counterexamples-01 fails for actual forbidden-null partial grant and malformed guards3000 exception; schema-aware filtering and caught validation repair both. Actual standalone malformed and forbidden-null outputs retain generated YAML zone plus invalid with no partial prefix; unsafe-byte original retained under nul-baseline-01. Root inspected source, assertions and retained stdout. CLI verify checks commit existence only: absolute external artifact citations are unsupported and were refused without writing. Behavioral verification is the inspected execution, not CLI replay."
+    recorded_at: "2026-10-25T01:10:00.893Z"
+    exit_code: 0
+    commit_sha: "4c72b3e93762d778246860c43954d7201b243d99"
