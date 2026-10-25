@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-lease-stop-landing
 created_at: '2026-10-25T00:45:01.170Z'
-updated_at: '2026-10-25T00:45:15.478Z'
+updated_at: '2026-10-25T15:01:22.167Z'
 created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
 blast_radius:
   modules:
@@ -18,8 +18,9 @@ scope:
     - 'packages/caws-cli/src/runtime/stock-handlers.ts'
     - 'packages/caws-cli/src/shell/commands/agents.ts'
     - 'packages/caws-cli/tests/runtime/agent-stop-typed.test.js'
-    - 'docs/internal/caws-runtime-modernization.md'
   out: []
+  support:
+    - docs/internal/caws-runtime-modernization.md
 invariants:
   - 'Preserve CLI identity resolution, load/kernel/store error precedence and output; typed execution changes only the selected own lease after admitted native prefix and preserves custom shell fallback.'
   - 'Component landing never establishes ordinary installed typed routing, Python retirement, replay, rollback, residency or parent cutover acceptance.'
