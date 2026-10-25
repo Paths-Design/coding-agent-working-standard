@@ -2,9 +2,8 @@ id: CAWS-NATIVE-MAINTAINED-GIT-001
 title: 'Authenticate maintained Apple Git and retain late Stop query custody'
 mode: feature
 lifecycle_state: active
-worktree: native-maintained-git
 created_at: '2026-10-25T01:52:24.272Z'
-updated_at: '2026-10-25T08:14:34.349Z'
+updated_at: '2026-10-25T09:15:50.214Z'
 created_by_session: '01a170be-3812-7123-ab00-736f9bc2eeb9'
 blast_radius:
   modules:
@@ -40,10 +39,13 @@ scope:
     - packages/caws-cli/tests/runtime/agent-stop-late-context.test.js
     - packages/caws-cli/src/runtime/cli-identity-loader.ts
     - packages/caws-cli/tests/runtime/cli-identity-loader.test.js
+    - packages/caws-cli/tests/helpers/cli-identity-unit-domain.js
+    - packages/caws-cli/src/runtime/cli-identity-format.ts
   out: []
   support:
     - packages/caws-native/src/stop_admission.rs
     - packages/caws-native/tests/stock_stop_admission.rs
+    - packages/caws-cli/src/runtime/cli-identity.ts
 invariants:
   - 'Caller-supplied hashes, flags, paths and JSON never grant native Stop authority; independent Apple signature authentication and captured generation identity are required'
   - 'Every fixed resolver and late Git query retains its actual native Child through group settlement, pipe EOF and reap; unknown custom Git retains compatibility before prefix effects'

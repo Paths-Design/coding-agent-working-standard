@@ -1321,6 +1321,119 @@ mod tests {
     }
 
     #[test]
+    fn root_custody_survives_actual_outer_and_scoped_closing_readset_refusals() {
+        use crate::stop_git::{CustodiedFailure, RetainedFailures};
+        use std::rc::Rc;
+
+        // A cleanup-only owner tests storage and drop ordering. This constructs
+        // no Git permission, actual custodian, or native Stop eligibility.
+        struct CleanupOwner {
+            retained: bool,
+            attempts: Rc<Cell<usize>>,
+            drops: Rc<Cell<usize>>,
+        }
+        impl Drop for CleanupOwner {
+            fn drop(&mut self) {
+                self.drops.set(self.drops.get() + 1);
+            }
+        }
+        impl CustodiedFailure for CleanupOwner {
+            fn diagnostic(&self) -> &str {
+                "synthetic Git failure"
+            }
+            fn custodian_retained(&self) -> bool {
+                self.retained
+            }
+            fn cleanup_settled(&self) -> bool {
+                !self.retained
+            }
+            fn retry_cleanup(&mut self) -> Result<(), String> {
+                assert!(self.retained);
+                self.attempts.set(self.attempts.get() + 1);
+                self.retained = false;
+                Ok(())
+            }
+        }
+        for scoped in [false, true] {
+            fixture(|generation, home, _root| {
+                let policy = home.join("custody-policy.json");
+                fs::write(&policy, b"original").unwrap();
+                let clock = deadline();
+                let original_envelope = clock.envelope();
+                let mut observed = owner(generation, &clock, home);
+                capture(&mut observed, OperationKind::Read, &policy);
+                let receipt = observed.seal(|| Ok(())).unwrap();
+                let attempts = Rc::new(Cell::new(0));
+                let drops = Rc::new(Cell::new(0));
+                let calls = Cell::new(0);
+                // Root ownership is outside both real validation brackets.
+                let mut custody = RetainedFailures::default();
+                let result: Result<(), String> = receipt.validate_with(
+                    || Ok(()),
+                    |scope, cancel| {
+                        let mut checks = || {
+                            calls.set(calls.get() + 1);
+                            let failure: Result<(), CleanupOwner> = Err(CleanupOwner {
+                                retained: true,
+                                attempts: attempts.clone(),
+                                drops: drops.clone(),
+                            });
+                            let result = custody.retain(failure);
+                            // This mutation occurs only after the actual owner
+                            // moved to root storage and became a String error.
+                            fs::write(&policy, b"changed in callback").unwrap();
+                            result
+                        };
+                        let result = if scoped {
+                            receipt.validate_in_scope(scope, cancel, |_| checks())
+                        } else {
+                            checks()
+                        };
+                        custody.preserve(result)
+                    },
+                );
+                let closing = result.as_ref().unwrap_err();
+                assert!(
+                    closing.starts_with("Selection dependency changed"),
+                    "{closing}"
+                );
+                let error = custody.preserve(result).unwrap_err();
+                assert!(
+                    error.starts_with("synthetic Git failure; subsequent validation failure: ")
+                );
+                assert!(error.contains("Selection dependency changed"));
+                assert_eq!(calls.get(), 1);
+                assert_eq!(attempts.get(), 0);
+                assert_eq!(
+                    drops.get(),
+                    0,
+                    "real closing sweep cannot drop root custody"
+                );
+                assert_eq!(clock.envelope(), original_envelope);
+                assert!(custody.settle_cleanup().is_none());
+                assert_eq!(attempts.get(), 1);
+                assert_eq!(drops.get(), 0, "root retains record through output");
+                drop(custody);
+                assert_eq!(drops.get(), 1);
+                retain(
+                    home,
+                    if scoped {
+                        "scoped-custody"
+                    } else {
+                        "outer-custody"
+                    },
+                    json!({
+                        "callbackCalls": calls.get(), "cleanupAttempts": attempts.get(),
+                        "dropsAfterRootRelease": drops.get(), "closingRefusal": error,
+                        "originalDeadlineUnchanged": clock.envelope() == original_envelope,
+                        "scope": "actual generation/readset brackets with synthetic cleanup owner; no native Stop or actual Git custodian proof"
+                    }),
+                );
+            });
+        }
+    }
+
+    #[test]
     fn scoped_phases_keep_local_sweeps_and_exact_owner_inside_two_full_checks() {
         fixture(|generation, home, _root| {
             let policy = home.join("phase-policy.json");

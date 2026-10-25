@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-CLI-CONTENT-IDENTITY-001
 title: 'Compare separate CLI installs against a reviewed native content closure'
 mode: feature
-lifecycle_state: active
-worktree: native-cli-contract-join
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded CLI content identity component complete at f4764277d056a32bc3c2aa360d704e77a612280f: full reviewed package/Node/domain observation, runtime-private receipt provenance, exact original request/signal and nonrenewing first-observation deadline. A1-A3 evidence recorded and read back at events13591-13593;46 focused controls, two genuine maintained installations and25 retained real observations, strict build/lint/gates/doctor inspected. External artifacts retained under /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae. Independent committed-candidate review grounded. Component closure does not establish native admission, held execution custody, final joined closure, harness trust, Python retirement, publication or machine cutover. Migration lead01a17052 retains generation-owned loader/final domain review, exact original native timer through delayed first comparison/backward-clock control, prefix/beforeApply integration, installed native/rollback validation and sole global activation.'
 created_at: '2026-10-25T01:46:04.895Z'
-updated_at: '2026-10-25T01:46:06.123Z'
+updated_at: '2026-10-25T08:22:43.273Z'
 created_by_session: '01a170a2-efe6-7bd2-a9ac-7cdcc3b070f7'
 blast_radius:
   modules:

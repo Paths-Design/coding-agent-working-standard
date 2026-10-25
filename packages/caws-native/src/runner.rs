@@ -334,6 +334,8 @@ pub struct Session {
     cache_control_credit: usize,
     publication_control_credit: usize,
     context_git_control_credit: usize,
+    stop_lease_context_used: bool,
+    stop_lease_context_control_credit: usize,
     selection_control_credit: usize,
     #[cfg(feature = "sqlite-store")]
     store_control_credit: usize,
@@ -503,6 +505,8 @@ impl Session {
             cache_control_credit: 0,
             publication_control_credit: 0,
             context_git_control_credit: 0,
+            stop_lease_context_used: false,
+            stop_lease_context_control_credit: 0,
             selection_control_credit: 0,
             #[cfg(feature = "sqlite-store")]
             store_control_credit: 0,
@@ -872,6 +876,59 @@ impl Session {
         Ok(())
     }
 
+    /// One dedicated late consumer request only. Generic context Git credit
+    /// and pre-Ready discovery admission remain unchanged.
+    pub(crate) fn begin_stop_lease_context(
+        &mut self,
+        validated_bytes: usize,
+    ) -> Result<(), String> {
+        if self.stop_lease_context_used {
+            return Err("Stop lease context request already consumed".into());
+        }
+        self.stop_lease_context_used = true;
+        if validated_bytes > crate::protocol::MAX_STOP_LEASE_CONTEXT_REQUEST + 1 {
+            return Err("Stop lease context control credit exceeds one request".into());
+        }
+        self.stop_lease_context_control_credit = validated_bytes;
+        Ok(())
+    }
+    /// Called by the actual synchronous Git owner's cancellation checkpoints.
+    /// Drain stderr and detect engine overlap while the original owner runs;
+    /// no Node frame supplies argv, a path, an environment, or a new deadline.
+    pub(crate) fn stop_lease_context_checkpoint(
+        &mut self,
+        deadline: Instant,
+    ) -> Result<(), String> {
+        crate::cancellation::check()?;
+        if Instant::now() >= deadline {
+            return Err("original Stop lease context deadline expired".into());
+        }
+        if !self.buffered.is_empty() || self.out_done {
+            return Err("engine output overlapped pending Stop lease context".into());
+        }
+        self.pump_with_interests(None, deadline, &[], 0)?;
+        if !self.buffered.is_empty() || self.out_done {
+            return Err("engine output overlapped pending Stop lease context".into());
+        }
+        Ok(())
+    }
+    pub(crate) fn finish_stop_lease_context(
+        &mut self,
+        bytes: &[u8],
+        deadline: Instant,
+    ) -> Result<(), String> {
+        self.stop_lease_context_checkpoint(deadline)?;
+        let mut offset = 0;
+        while offset < bytes.len() {
+            offset += self.pump(Some(&bytes[offset..]), deadline)?;
+            // After the final write a legitimate next phase may arrive.
+            if offset < bytes.len() && (!self.buffered.is_empty() || self.out_done) {
+                return Err("engine output overlapped partial Stop lease context result".into());
+            }
+        }
+        Ok(())
+    }
+
     /// Credit only exact, already validated one-shot cache control bytes.
     /// The ordinary proposal frame and unclassified output budgets do not grow.
     pub fn credit_session_cache_control(&mut self, bytes: usize) -> Result<(), String> {
@@ -891,6 +948,7 @@ impl Session {
         {
             self.cache_control_credit
                 + self.context_git_control_credit
+                + self.stop_lease_context_control_credit
                 + self.selection_control_credit
                 + self.publication_control_credit
                 + self.store_control_credit
@@ -899,6 +957,7 @@ impl Session {
         {
             self.cache_control_credit
                 + self.context_git_control_credit
+                + self.stop_lease_context_control_credit
                 + self.selection_control_credit
                 + self.publication_control_credit
         }
@@ -1440,6 +1499,34 @@ mod tests {
             session.credit_session_cache_control(1).unwrap_err(),
             "cache control credit exceeds one exchange"
         );
+    }
+
+    #[test]
+    fn late_stop_context_credit_is_dedicated_single_use_and_overlap_is_refused() {
+        let mut current = session("/dev/stdin");
+        current.begin_stop_lease_context(512).unwrap();
+        assert_eq!(current.stop_lease_context_control_credit, 512);
+        assert_eq!(current.context_git_control_credit, 0);
+        assert_eq!(current.cache_control_credit, 0);
+        assert_eq!(
+            current.begin_stop_lease_context(512).unwrap_err(),
+            "Stop lease context request already consumed"
+        );
+        current.buffered.extend_from_slice(b"forged next frame");
+        assert!(
+            current
+                .stop_lease_context_checkpoint(deadline())
+                .unwrap_err()
+                .contains("overlapped")
+        );
+        let mut oversized = session("/dev/stdin");
+        assert!(
+            oversized
+                .begin_stop_lease_context(crate::protocol::MAX_STOP_LEASE_CONTEXT_REQUEST + 2)
+                .is_err()
+        );
+        assert_eq!(oversized.stop_lease_context_control_credit, 0);
+        assert!(oversized.begin_stop_lease_context(1).is_err());
     }
 
     #[test]

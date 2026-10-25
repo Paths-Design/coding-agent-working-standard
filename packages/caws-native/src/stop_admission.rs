@@ -1039,6 +1039,7 @@ mod tests {
                 service_offer: None,
             };
             let scans_before = crate::installed_generation::verification_count();
+            let mut pregrant_custody = crate::stop_git::FailureCustody::default();
             let pregrant = crate::stop_execution::PregrantStop::admit(
                 &original,
                 &config,
@@ -1046,8 +1047,10 @@ mod tests {
                 generation,
                 &ready,
                 || Ok(()),
+                &mut pregrant_custody,
             )
             .unwrap();
+            pregrant_custody.check().unwrap();
             assert!(
                 matches!(
                     pregrant,
@@ -1067,6 +1070,7 @@ mod tests {
             };
             let changed = format!("Selection dependency changed: read {}", selected.display());
             assert_eq!(stale, Refusal::Invalidated(changed.clone()));
+            let mut stale_custody = crate::stop_git::FailureCustody::default();
             let combined_stale = crate::stop_execution::PregrantStop::admit(
                 &original,
                 &config,
@@ -1074,10 +1078,12 @@ mod tests {
                 generation,
                 &ready,
                 || Ok(()),
+                &mut stale_custody,
             )
             .err()
             .expect("stale combined admission must refuse");
             assert_eq!(combined_stale, changed);
+            assert_eq!(stale_custody.check().unwrap_err(), changed);
 
             let calls = Cell::new(0usize);
             let sentinel = "direct stock admission cancellation sentinel";
@@ -1094,6 +1100,7 @@ mod tests {
                 1,
                 "original callback was skipped, replaced or repeated"
             );
+            let mut cancelled_custody = crate::stop_git::FailureCustody::default();
             let combined_cancelled = crate::stop_execution::PregrantStop::admit(
                 &original,
                 &config,
@@ -1101,10 +1108,12 @@ mod tests {
                 generation,
                 &ready,
                 || Err(sentinel.into()),
+                &mut cancelled_custody,
             )
             .err()
             .expect("cancelled combined admission must refuse");
             assert_eq!(combined_cancelled, sentinel);
+            assert_eq!(cancelled_custody.check().unwrap_err(), sentinel);
             clock.check().unwrap();
             assert!(!project.join(".caws/sessions").exists());
             if std::env::var_os("CAWS_NATIVE_GENERATION_TEST_ARTIFACTS").is_some() {

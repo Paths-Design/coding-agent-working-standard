@@ -33,6 +33,9 @@ pub mod original_project;
 #[path = "context_git/render.rs"]
 pub mod render;
 
+#[path = "context_git/stop.rs"]
+pub mod stop;
+
 pub const MAX_REQUEST: usize = 32 * 1024;
 pub const MAX_RESULT: usize = 2 * 1024 * 1024;
 pub const MAX_OUTPUT: usize = 1024 * 1024;
@@ -831,6 +834,9 @@ pub fn run_custodian(fd: RawFd) -> Result<(), String> {
             &configuration_bytes,
             configuration_cancelled,
         );
+    }
+    if envelope.schema.as_deref() == Some(stop::CONFIG_SCHEMA) {
+        return stop::run_configuration(&mut stream, &configuration_bytes, configuration_cancelled);
     }
     if envelope.schema.is_some() {
         return render::run_configuration(

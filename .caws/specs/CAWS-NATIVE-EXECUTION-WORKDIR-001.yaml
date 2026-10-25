@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-EXECUTION-WORKDIR-001
 title: 'Preserve host-resolved Bash command directory through CAWS policy selection'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-execution-workdir
 created_at: '2026-10-25T08:16:54.609Z'
-updated_at: '2026-10-25T08:17:50.062Z'
+updated_at: '2026-10-25T09:51:16.384Z'
 created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
 blast_radius:
   modules:
@@ -17,13 +18,36 @@ scope:
     - 'packages/caws-cli/src/runtime/execution-workdir.ts'
     - 'packages/caws-cli/tests/runtime/execution-workdir.test.js'
     - 'packages/caws-cli/tests/hooks/pytest/test_hook_execution_diagnostics.py'
+    - packages/caws-native/src/invocation_project.rs
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
+    - packages/caws-cli/tests/hooks/codex-bash-write-execution-context.test.js
   out: []
   support:
     - packages/caws-cli/src/runtime/handler-executor.ts
     - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-native/src/protocol.rs
+    - packages/caws-native/src/main.rs
+    - packages/caws-cli/src/runtime/stock-handlers.ts
+    - packages/caws-cli/src/runtime/context.ts
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/context_git/original_project.rs
+    - packages/caws-cli/src/runtime/journal.ts
+    - packages/caws-cli/src/runtime/context-git-client.ts
+    - packages/caws-cli/src/runtime/context-git-wire.ts
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/src/runtime/engine-entry.ts
+    - packages/caws-cli/tests/runtime/context-git-client.test.js
+    - packages/caws-cli/tests/runtime/engine-entry.test.js
+    - packages/caws-cli/tests/runtime/protocol.test.js
+    - packages/caws-native/src/context_git.rs
+    - packages/caws-native/src/context_git/tests.rs
+    - packages/caws-native/src/runner.rs
 invariants:
   - 'Session cwd and original tool/session/turn identifiers are preserved; only explicit host-resolved execution_workdir selects command directory and never grants ownership or scope'
   - 'Malformed, conflicting, missing-target and foreign authority coordinates fail closed; absent unsupported native transport is distinct from resolved context'
+  - 'Existing context-git v1 remains limited to two fixed queries; only independently native-validated Bash pre/post host context may advertise a separate four-query execution-workdir profile, with no caller count override or deadline renewal'
+  - 'Valid ungoverned command contexts retain inactive behavior; Git presence alone does not opt into CAWS. An ungoverned origin resolves the actual command target, while failed resolution cannot erase governed, adopted or unresolved authority.'
+  - 'Only a fully decoded, fully settled nonzero Git exit may consume its fixed ordinal and continue within the validated-host four-query profile; ordinary two-query failure poisoning, fatal-error refusal, token and executable binding, pair cwd binding and the original absolute deadline remain unchanged.'
 acceptance:
   - id: A1
     given: 'native Bash events with session cwd and host execution_workdir'
@@ -45,5 +69,12 @@ acceptance:
     then: >-
       real emitted execution_workdir agrees with actual command cwd and CAWS policy
       decisions; synthetic fixtures alone cannot establish installed completion
+  - id: A4
+    given: 'ordinary two-query native context and validated-host four-query execution context'
+    when: 'session governing authority is joined to actual command checkout'
+    then: >-
+      old third and new fifth queries refuse, native profile cannot be selected by
+      aliases or payload flags, and active session authority cannot fall inactive or
+      cross canonical repositories
 non_functional: {}
 contracts: []

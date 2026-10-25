@@ -42,6 +42,47 @@ impl Caller {
     }
 }
 
+pub const STOP_LEASE_CONTEXT_CAPABILITY: &str = "caws.runtime.stop-lease-context.v1";
+pub const STOP_LEASE_CONTEXT_REQUEST: &str = "caws.runtime.stop-lease-context.request.v1";
+pub const STOP_LEASE_CONTEXT_RESULT: &str = "caws.runtime.stop-lease-context.result.v1";
+pub const MAX_STOP_LEASE_CONTEXT_REQUEST: usize = 1024;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct StopLeaseContextRequest {
+    schema: String,
+    id: String,
+    runtime_digest: String,
+    token: String,
+    consumer_index: usize,
+}
+
+impl StopLeaseContextRequest {
+    pub(crate) fn result(
+        &self,
+        observation: caws_native::context_git::stop::SettledCommonDir,
+    ) -> Result<Vec<u8>, String> {
+        let (status, common_dir) = match observation {
+            caws_native::context_git::stop::SettledCommonDir::GitFailed => ("git_failed", None),
+            caws_native::context_git::stop::SettledCommonDir::Resolved { common_dir } => {
+                let text = common_dir
+                    .to_str()
+                    .ok_or("late Stop Git path is not UTF-8")?;
+                ("resolved", Some(text.to_owned()))
+            }
+        };
+        let mut bytes = serde_json::to_vec(&serde_json::json!({
+            "schema": STOP_LEASE_CONTEXT_RESULT,
+            "id": self.id, "runtimeDigest": self.runtime_digest,
+            "token": self.token, "consumerIndex": 3,
+            "status": status, "commonDir": common_dir,
+        }))
+        .map_err(|e| e.to_string())?;
+        bytes.push(b'\n');
+        Ok(bytes)
+    }
+}
+
 pub const SELECTION_OBSERVATION_CAPABILITY: &str = "caws.runtime.selection-observation.v1";
 pub const SELECTION_OBSERVATION_REQUEST: &str = "caws.runtime.selection-observation.request.v1";
 pub const SELECTION_OBSERVATION_RESULT: &str = "caws.runtime.selection-observation.result.v1";
@@ -88,6 +129,8 @@ pub struct Request {
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_prefix: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    stop_lease_context: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     selection_observation: Option<SelectionObservationCapability>,
     #[cfg(target_os = "macos")]
     session_end_prefix: &'static str,
@@ -104,6 +147,36 @@ pub struct Request {
 }
 
 impl Request {
+    /// Transport correlation only. The actual completed prefix and consumed
+    /// EligibleStop remain mandatory at the parent consumer boundary.
+    pub(crate) fn stop_lease_context_request(
+        &self,
+        bytes: &[u8],
+    ) -> Result<StopLeaseContextRequest, String> {
+        if self.stop_lease_context != Some(STOP_LEASE_CONTEXT_CAPABILITY)
+            || self.configuration != "system"
+            || self.surface != "opencode"
+            || self.event != "stop"
+            || bytes.len() > MAX_STOP_LEASE_CONTEXT_REQUEST
+        {
+            return Err("Stop lease context transport unavailable or oversized".into());
+        }
+        let row: StopLeaseContextRequest = serde_json::from_slice(bytes)
+            .map_err(|e| format!("invalid Stop lease context request: {e}"))?;
+        identity(&row.id, &row.runtime_digest, self)?;
+        if row.schema != STOP_LEASE_CONTEXT_REQUEST
+            || row.consumer_index != 3
+            || row.token.is_empty()
+            || row.token.len() > 128
+            || !row
+                .token
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._:-".contains(&b))
+        {
+            return Err("Stop lease context consumer or correlation mismatch".into());
+        }
+        Ok(row)
+    }
     /// This advertises observation transport only. The native caller supplies a
     /// successfully constructed owner; no engine field grants this lifecycle.
     pub fn advertise_selection_observation(
@@ -418,6 +491,12 @@ impl Request {
                 && config.surface == "opencode"
                 && config.event == "stop")
                 .then_some(caws_native::session_cache_wire::STOP_PREFIX_CAPABILITY),
+            stop_lease_context: (cfg!(target_os = "macos")
+                && cfg!(feature = "sqlite-store")
+                && config.configuration == "system"
+                && config.surface == "opencode"
+                && config.event == "stop")
+                .then_some(STOP_LEASE_CONTEXT_CAPABILITY),
             selection_observation: None,
             #[cfg(target_os = "macos")]
             session_end_prefix: caws_native::session_cache_wire::PREFIX_CAPABILITY,
@@ -493,6 +572,7 @@ pub struct Ready {
 pub enum EngineFrame {
     Ready(Ready),
     ContextGitRequest(Vec<u8>),
+    StopLeaseContextRequest(Vec<u8>),
     SelectionObservationRequest(Vec<u8>),
     SessionCacheRequest(Vec<u8>),
     SessionEndPrefixRequest(Vec<u8>),
@@ -602,6 +682,12 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
     }
     let header: Discriminator =
         serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
+    if header.schema == STOP_LEASE_CONTEXT_REQUEST {
+        if bytes.len() > MAX_STOP_LEASE_CONTEXT_REQUEST {
+            return Err("Stop lease context request exceeds frame budget".into());
+        }
+        return Ok(EngineFrame::StopLeaseContextRequest(bytes.to_vec()));
+    }
     if header.schema == SELECTION_OBSERVATION_REQUEST {
         // Classification grants no read or extra control credit. The advertised
         // native owner validates identity, operation and sequence before either.
@@ -823,6 +909,7 @@ mod tests {
             context_git_profile: caws_native::context_git::Profile::Ordinary,
             session_cache: caws_native::session_cache_wire::CAPABILITY,
             stop_prefix: None,
+            stop_lease_context: None,
             selection_observation: None,
             #[cfg(target_os = "macos")]
             session_end_prefix: caws_native::session_cache_wire::PREFIX_CAPABILITY,
@@ -842,6 +929,58 @@ mod tests {
             input_json: "{}".into(),
         }
     }
+    #[test]
+    fn stop_lease_frame_refuses_unadvertised_wrong_consumer_duplicate_and_forged_arguments() {
+        let mut request = fixture_request();
+        let valid = serde_json::json!({"schema":STOP_LEASE_CONTEXT_REQUEST,"id":request.id,
+            "runtimeDigest":request.runtime_digest,"token":"late-token","consumerIndex":3});
+        let bytes = serde_json::to_vec(&valid).unwrap();
+        assert!(request.stop_lease_context_request(&bytes).is_err());
+        request.surface = "opencode".into();
+        request.event = "stop".into();
+        request.stop_lease_context = Some(STOP_LEASE_CONTEXT_CAPABILITY);
+        assert!(request.stop_lease_context_request(&bytes).is_ok());
+        for (field, value) in [
+            ("consumerIndex", serde_json::json!(2)),
+            ("cwd", serde_json::json!("/neighbor")),
+            ("argv", serde_json::json!(["status"])),
+            ("environment", serde_json::json!({})),
+            ("id", serde_json::json!("neighbor")),
+        ] {
+            let mut changed = valid.clone();
+            changed[field] = value;
+            assert!(
+                request
+                    .stop_lease_context_request(&serde_json::to_vec(&changed).unwrap())
+                    .is_err(),
+                "{field}"
+            );
+        }
+        let duplicate = String::from_utf8(bytes.clone()).unwrap().replace(
+            "\"consumerIndex\":3",
+            "\"consumerIndex\":2,\"consumerIndex\":3",
+        );
+        assert!(
+            request
+                .stop_lease_context_request(duplicate.as_bytes())
+                .is_err()
+        );
+        assert!(matches!(
+            validate_frame(&bytes, &request).unwrap(),
+            EngineFrame::StopLeaseContextRequest(_)
+        ));
+        let control = request.stop_lease_context_request(&bytes).unwrap();
+        let result: serde_json::Value = serde_json::from_slice(
+            &control
+                .result(caws_native::context_git::stop::SettledCommonDir::GitFailed)
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(result["status"], "git_failed");
+        assert!(result["commonDir"].is_null());
+        assert_eq!(result["consumerIndex"], 3);
+    }
+
     #[test]
     fn selection_transport_is_optional_and_exactly_correlated() {
         let mut request = fixture_request();

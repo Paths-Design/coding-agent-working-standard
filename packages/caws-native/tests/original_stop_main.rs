@@ -217,9 +217,18 @@ const send=row=>process.stdout.write(JSON.stringify(row)+'\n');
   cwd=Buffer.from(result.stdout,'base64').toString('utf8').trim();
  }
  fs.writeFileSync(base+'/context-observed.json',JSON.stringify({initialQueries:initial,finalQueries:count(),rows}));
+ if(mode==='lease-before-ready'){
+  send({schema:'caws.runtime.stop-lease-context.request.v1',id:request.id,runtimeDigest:request.runtimeDigest,token,consumerIndex:3});await receive();throw Error('early lease received a result');
+ }
  send({schema:'caws.runtime.ready.v1',id:request.id,runtimeDigest:request.runtimeDigest,active:false,budgetHome:request.caller.environment.CAWS_HOME,projectDigest:null,sessionId:null});
  const dispatch=await receive();if(dispatch.schema!=='caws.runtime.dispatch.v1'||dispatch.nativeStop!==undefined)throw Error('dispatch mismatch');
  fs.writeFileSync(base+'/dispatch-observed.json',JSON.stringify(dispatch));
+ if(mode==='lease-after-ready'){
+  send({schema:'caws.runtime.stop-lease-context.request.v1',id:request.id,runtimeDigest:request.runtimeDigest,token,consumerIndex:3});await receive();throw Error('unprefixed lease received a result');
+ }
+ if(mode==='context-after-ready'){
+  send({schema:'caws.runtime.context-git.request.v1',id:request.id,runtimeDigest:request.runtimeDigest,token,ordinal:1,operation:'checkout',executable:process.env.CAWS_GIT_BINARY,cwd});await receive();throw Error('late generic Git received a result');
+ }
  if(mode==='selection-after-ready'){
   send(selectionRequest({kind:'exists',path:base+'/repo/absent-after-ready'}));await receive();throw Error('late selection received a result');
  }
@@ -478,6 +487,25 @@ fn native_selection_transport_refuses_invalid_overlapping_stale_and_late_request
         ),
         ("selection-stale", "Selection dependency changed", false),
         (
+            "lease-before-ready",
+            "Stop lease context request before Ready/dispatch",
+            false,
+        ),
+        (
+            "lease-after-ready",
+            if cfg!(feature = "sqlite-store") {
+                "Stop lease context requires completed native Stop prefix"
+            } else {
+                "Stop lease context transport unavailable or oversized"
+            },
+            true,
+        ),
+        (
+            "context-after-ready",
+            "context Git request after Ready",
+            true,
+        ),
+        (
             "selection-after-ready",
             "selection observation request after Ready",
             true,
@@ -558,21 +586,21 @@ fn native_selection_transport_refuses_invalid_overlapping_stale_and_late_request
         assert_eq!(progress["schema"], "caws.native.invocation-progress.v1");
         assert_eq!(
             progress["stockSelection"],
-            if case == "selection-after-ready" {
+            if dispatched {
                 "unsupported"
             } else {
                 "not_attempted"
             }
         );
         assert_eq!(progress["dispatchGrantWritten"], dispatched);
-        if case == "selection-after-ready" {
+        if dispatched {
             assert_eq!(progress["selectionPredispatchRevalidated"], true);
         }
         assert_eq!(
             progress["phase"],
             if case == "selection-stale" {
                 "selection-seal"
-            } else if case == "selection-after-ready" {
+            } else if dispatched {
                 "dispatch-grant"
             } else {
                 "selection-discovery"
