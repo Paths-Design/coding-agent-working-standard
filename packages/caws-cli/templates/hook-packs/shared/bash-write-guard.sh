@@ -371,7 +371,8 @@ while IFS= read -r cand; do
   # Cross-repo is adjudicated BEFORE the allowlist and the claim oracle: the
   # allowlist names paths relative to THIS project, so applying it to a sibling
   # repo's tree would admit its docs/, tests/ and .caws/ wholesale.
-  _FOREIGN_REPO="$(foreign_repo_root "$abs")"
+  _FOREIGN_REPO="$(foreign_repo_root "$abs"; printf x)"
+  _FOREIGN_REPO="${_FOREIGN_REPO%x}"
   if [[ -n "$_FOREIGN_REPO" ]]; then
     escalate block "$_FOREIGN_REPO" "block_foreign_repo"
     continue
@@ -457,7 +458,8 @@ while [[ $_GM_INDEX -lt ${#CAWS_AST_GIT_WORKTREE[@]} ]]; do
       escalate ask metadata-path-unrepresentable ask_git_metadata
       continue
     fi
-    _GM_REPO="$(foreign_repo_root "$_GM_PHYSICAL")"
+    _GM_REPO="$(foreign_repo_root "$_GM_PHYSICAL"; printf x)"
+    _GM_REPO="${_GM_REPO%x}"
     [[ -z "$_GM_REPO" ]] || _GM_FOREIGN="$_GM_REPO"
     case "$_GM_PHYSICAL" in
       "$PROJECT_DIR"|"${PROJECT_DIR%/}/"*) ;;

@@ -942,13 +942,19 @@ caws_foreign_repo_root() {
     *) return 0 ;;
   esac
   dir="$target"
-  [[ -d "$dir" ]] || dir="$(dirname "$dir")"
+  # Taking a parent through command substitution drops a directory name's
+  # trailing line feeds. Keep the lexical bytes until the .git lookup.
+  if [[ ! -d "$dir" ]]; then
+    dir="${dir%/*}"
+    [[ -n "$dir" ]] || dir=/
+  fi
   while [[ -n "$dir" && "$dir" != "/" ]]; do
     if [[ -e "$dir/.git" ]]; then
       [[ "$dir" != "$project_dir" ]] && printf '%s' "$dir"
       return 0
     fi
-    dir="$(dirname "$dir")"
+    dir="${dir%/*}"
+    [[ -n "$dir" ]] || dir=/
   done
   return 0
 }

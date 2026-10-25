@@ -138,6 +138,53 @@ describe('bash-write-guard: cross-repo boundary for targets named on the command
     const res = runGuard('echo scratch > /tmp/bwg-scratch-named.txt', fx);
     expect(res.exit).toBe(0);
   });
+
+  test('foreign repository path identity: the walker retains an LF-ending ancestor', () => {
+    const sibling = `${fx.sibling}\n`;
+    fs.mkdirSync(sibling);
+    execFileSync('git', ['init', '-q'], { cwd: sibling });
+    const physical = fs.realpathSync(sibling);
+    const target = path.join(physical, 'not-written.txt');
+    const observed = execFileSync(
+      'bash',
+      [
+        '--noprofile',
+        '--norc',
+        '-c',
+        'source "$1"; caws_foreign_repo_root "$2" "$3"',
+        '_',
+        path.join(TEMPLATES, 'lib/bash-mutation-targets.sh'),
+        target,
+        fs.realpathSync(fx.projectDir),
+      ],
+      { encoding: 'utf8' }
+    );
+    expect(observed).toBe(physical);
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
+  test('foreign repository path identity: a normal alias cannot hide an LF-ending sibling', () => {
+    const alias = path.join(fx.root, 'foreign-alias');
+    fs.symlinkSync(fx.sibling, alias);
+    const target = path.join(alias, 'not-written.txt');
+    const control = runGuard(`touch ${shellQuote(target)}`, fx);
+    expect(control.exit).toBe(2);
+    expect(control.stderr).toContain('DIFFERENT repository');
+    expect(control.stderr).toContain(fs.realpathSync(fx.sibling));
+
+    const sibling = `${fx.sibling}\n`;
+    fs.mkdirSync(sibling);
+    execFileSync('git', ['init', '-q'], { cwd: sibling });
+    fs.unlinkSync(alias);
+    fs.rmSync(fx.sibling, { recursive: true, force: true });
+    fs.symlinkSync(sibling, alias);
+    expect(fs.existsSync(fx.sibling)).toBe(false);
+    const observed = runGuard(`touch ${shellQuote(target)}`, fx);
+    expect(fs.existsSync(path.join(sibling, 'not-written.txt'))).toBe(false);
+    expect(observed.exit).toBe(2);
+    expect(observed.stderr).toContain('DIFFERENT repository');
+    expect(observed.stderr).toContain(fs.realpathSync(sibling));
+  });
 });
 
 describe('bash-write-guard: interpreter-mediated writes', () => {
@@ -146,6 +193,20 @@ describe('bash-write-guard: interpreter-mediated writes', () => {
     fx = makeFixture();
   });
   afterEach(() => fs.rmSync(fx.root, { recursive: true, force: true }));
+
+  test('an executable read in an opaque file is held without inventing a foreign write', () => {
+    const target = path.join(fx.projectDir, 'not-written.txt');
+    const script = writeScript(fx, '.tmp/read-executable.js', [
+      "const fs = require('node:fs');",
+      `fs.readFileSync(${JSON.stringify(path.join(fx.sibling, 'README.md'))});`,
+      `fs.writeFileSync(${JSON.stringify(target)}, 'owned');`,
+    ]);
+    const result = runGuard('node ' + shellQuote(script), fx);
+    expect(fs.existsSync(target)).toBe(false);
+    expect(result.exit).toBe(2);
+    expect(result.stderr).toContain('mutation-interpreter-effects');
+    expect(result.stderr).not.toContain('DIFFERENT repository');
+  });
 
   test('the observed bypass blocks: node runs a scratch script whose body writes a sibling repo', () => {
     // The exact live shape from session 1aa3f0bd — the path lives in the

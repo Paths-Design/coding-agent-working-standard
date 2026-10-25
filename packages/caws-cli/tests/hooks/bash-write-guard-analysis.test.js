@@ -366,6 +366,35 @@ test('a foreign read and owned write cannot be confused by path co-occurrence', 
   ).toBe(0);
   expect(fs.existsSync(target)).toBe(false);
 });
+test.each([
+  ['readFileSync', 0],
+  ['writeFileSync', 2],
+])('an executable pathname retains its %s role beside an owned write', (operation, status) => {
+  const executable = path.join(fx.sibling, '.nvm/versions/node/bin/node');
+  const target = path.join(fx.project, 'src/owned.txt');
+  fs.mkdirSync(path.dirname(executable), { recursive: true });
+  fs.writeFileSync(executable, 'original executable fixture');
+  const payload =
+    "const fs = require('node:fs'); const executable = " +
+    JSON.stringify(executable) +
+    '; fs.' +
+    operation +
+    '(executable, ' +
+    JSON.stringify(operation === 'readFileSync' ? 'utf8' : 'changed') +
+    '); fs.writeFileSync(' +
+    JSON.stringify(target) +
+    ", 'owned')";
+  const result = guard('node -e ' + quote(payload));
+  expect(result.error).toBeUndefined();
+  expect(fs.readFileSync(executable, 'utf8')).toBe('original executable fixture');
+  expect(fs.existsSync(target)).toBe(false);
+  expect(result.status).toBe(status);
+  if (status === 0) expect(result.stderr).toBe('');
+  else {
+    expect(result.stderr).toContain('DIFFERENT repository');
+    expect(result.stderr).toContain(fs.realpathSync(fx.sibling));
+  }
+});
 test('admitted interpreter source is analyzed without executing its bytes', () => {
   const marker = path.join(fx.root, 'source-executed');
   const result = guard(
