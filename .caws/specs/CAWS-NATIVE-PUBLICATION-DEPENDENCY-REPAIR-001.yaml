@@ -1,0 +1,35 @@
+id: CAWS-NATIVE-PUBLICATION-DEPENDENCY-REPAIR-001
+title: 'Repair audited publication dependency closure'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-25T01:31:52.363Z'
+updated_at: '2026-10-25T01:31:52.363Z'
+created_by_session: '01a170a2-efe6-7bd2-a9ac-7cdcc3b070f7'
+blast_radius:
+  modules:
+    - 'npm publication dependency closure'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'package-lock.json'
+  out: []
+invariants:
+  - 'Audit severity policy and package source contracts remain unchanged'
+acceptance:
+  - id: A1
+    given: 'vulnerable fast-uri and zod lock entries'
+    when: 'the npm low-severity audit runs after minimal compatible dependency upgrades'
+    then: 'the lock audit reports zero vulnerabilities'
+  - id: A2
+    given: 'the repaired installed closure'
+    when: 'focused schema and mutation protocol consumers plus build and lint checks run'
+    then: 'consumers preserve valid admission and invalid-input rejection without source changes'
+observability:
+  - 'Retain before and after lock audit JSON and focused raw check outputs outside tracked source'
+rollback:
+  - 'Revert the dependency lock repair commit; this restores the known audit failure'
+non_functional:
+  security:
+    - 'No audit waiver or severity reduction'
+contracts: []
