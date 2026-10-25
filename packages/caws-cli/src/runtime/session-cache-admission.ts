@@ -98,7 +98,8 @@ const SESSION_END_SOURCES: Readonly<Record<string, string>> = {
   'surfaces/codex/lib/run-handlers.sh':
     '8ebf6a8c131cc51e8f2ecd549db890340634d8fc1ebf38e5fc185a20e4532696',
   'lib/reprieve.sh': '4e6aa88e6021843fd41dedfe910e4e3c650695970c70a1a8c049cf2f6f8c6cff',
-  'lib/guard-config.sh': '934d60a8a56068caf2129a5705f207bf4b1203f2164dd385a057e510505cbd55',
+  'lib/guard-config.sh': 'c3d9d5b0f6ffb4eb6add5a3f27b2d3d2bf7f46d86b39614c351e8b5bba06c73c',
+  'lib/guard-config.cjs': 'bec57b8b08bcc69127da0dd81dfc956b50b79f923883c71504e1b197b6aa2f79',
 };
 
 /** Finite complete-prefix profile for the sole reviewed SessionEnd logger.
@@ -138,7 +139,8 @@ export function qualifiesForNativeSessionEndPrefix(context: {
       Object.values(selection.libraries).some(
         (library) => !['shared', 'surface'].includes(library.kind)
       ) ||
-      selection.handlers.length !== 1
+      selection.handlers.length !== 1 ||
+      [request.caller.environment, environment].some((env) => Boolean(env.CAWS_GUARD_CONFIG_PY))
     )
       return false;
     const handler = selection.handlers[0]!;
@@ -201,6 +203,7 @@ export function qualifiesForNativeSessionEndPrefix(context: {
       'run-handlers.sh': request.surface === 'codex' ? 'surface' : 'shared',
       'reprieve.sh': 'shared',
       'guard-config.sh': 'shared',
+      'guard-config.cjs': 'shared',
       'emit.sh': request.surface === 'codex' ? 'surface' : 'shared',
     };
     const required = new Set([
