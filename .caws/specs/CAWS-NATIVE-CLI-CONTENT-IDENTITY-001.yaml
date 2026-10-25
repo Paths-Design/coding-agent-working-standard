@@ -19,6 +19,8 @@ scope:
 invariants:
   - 'Unknown custom routing and unsupported Node resolution decline without execution or mutation'
   - 'A matched receipt remains request-local and requires revalidation before use'
+  - 'The closed POSIX Node resolution profile pins every package file and module boundary; only npm metadata and package-bin-derived links are excluded from byte comparison'
+  - 'Identity establishes observed content and resolution domain only; path-dependent semantics, selected Git behavior and production admission require separate qualification'
 acceptance:
   - id: A1
     given: 'a reviewed complete production CLI prefix and separately installed matching CLI'
