@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, realpathSync } from 'node:fs';
+import { realpathSync } from 'node:fs';
 import { resolveExecutionWorkdir } from './execution-workdir';
 import { isAbsolute, join } from 'node:path';
 import { TextDecoder } from 'node:util';
@@ -393,8 +393,7 @@ export async function prepareRuntimeInvocation(
       const anchor = context;
       const anchorGoverned =
         selection.status === 'active' ||
-        existsSync(join(anchor.canonical, '.caws')) ||
-        existsSync(join(home, 'state/projects', digest(anchor.canonical) + '.json'));
+        runtimeProjectRequiresResolvedAuthority(anchor.canonical, home, 'resolved-canonical');
       context = await resolveRuntimeProject(
         request.payload,
         request.caller,

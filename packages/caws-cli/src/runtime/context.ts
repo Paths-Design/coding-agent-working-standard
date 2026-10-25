@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, realpathSync } from 'node:fs';
+import { lstatSync, realpathSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, resolve, join } from 'node:path';
 import { TextDecoder } from 'node:util';
@@ -132,10 +132,46 @@ export function createContextGitPort(
   };
 }
 
+/** Only ENOENT proves absence. Dangling links and inaccessible metadata remain present/uncertain. */
+function entryRequiresResolution(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    return !(
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    );
+  }
+}
+
+/** Cache/runtime contents alone do not opt a directory into project governance. */
+function governanceRequiresResolution(directory: string): boolean {
+  try {
+    if (!lstatSync(directory).isDirectory()) return true;
+  } catch (error) {
+    return !(
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    );
+  }
+  return ['policy.yaml', 'specs', 'working-spec.yaml'].some((name) =>
+    entryRequiresResolution(join(directory, name))
+  );
+}
+
 function governedAncestor(candidate: string): boolean {
   let current = candidate;
   for (;;) {
-    if (existsSync(join(current, '.git')) || existsSync(join(current, '.caws'))) return true;
+    if (
+      entryRequiresResolution(join(current, '.git')) ||
+      governanceRequiresResolution(join(current, '.caws'))
+    )
+      return true;
     const parent = dirname(current);
     if (parent === current) return false;
     current = parent;
@@ -157,25 +193,35 @@ export function runtimeProjectCandidate(
   );
 }
 
-/** A failed Git probe does not establish absence of existing project authority.
- * Git markers and failed physical lookup require resolution; neither grants CAWS authority.
- * Inspect physical ancestors, existing Git markers and exact machine adoption keys without borrowing
- * the target directory's authority or retrying the consumed native Git port. */
-export function runtimeProjectRequiresResolvedAuthority(candidate: string, home: string): boolean {
+/** Presence and uncertainty require resolution; neither grants project authority.
+ * Failed Git checks physical ancestors. Successfully resolved canonical roots
+ * check their own project artifacts/adoption only: Git is not CAWS adoption. */
+export function runtimeProjectRequiresResolvedAuthority(
+  candidate: string,
+  home: string,
+  mode: 'failed-git' | 'resolved-canonical' = 'failed-git'
+): boolean {
   let current: string;
   try {
     current = realpathSync(candidate);
   } catch {
     return true;
   }
+  const adopted = (root: string): boolean =>
+    entryRequiresResolution(
+      join(home, 'state/projects', createHash('sha256').update(root).digest('hex') + '.json')
+    );
+  // Retain an exact known registration even if its canonical spelling aliases
+  // the physical root. This is a protection, not an authority grant.
+  if (mode === 'resolved-canonical' && candidate !== current && adopted(candidate)) return true;
   for (;;) {
-    const key = createHash('sha256').update(current).digest('hex');
     if (
-      existsSync(join(current, '.git')) ||
-      existsSync(join(current, '.caws')) ||
-      existsSync(join(home, 'state/projects', key + '.json'))
+      (mode === 'failed-git' && entryRequiresResolution(join(current, '.git'))) ||
+      governanceRequiresResolution(join(current, '.caws')) ||
+      adopted(current)
     )
       return true;
+    if (mode === 'resolved-canonical') return false;
     const parent = dirname(current);
     if (parent === current) return false;
     current = parent;

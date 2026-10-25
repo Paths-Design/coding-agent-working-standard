@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Machine-level CAWS adapter entry point. No project authority is stored here."""
 import hashlib
+import errno
+import stat
 import json
 import os
 from pathlib import Path
@@ -546,15 +548,39 @@ class ExecutionWorkdirError(ValueError):
     """Malformed present command context is a refusal on both tool events."""
 
 
-def project_requires_resolved_authority(candidate, home):
-    """A missing Git result cannot erase a physical ancestor's adoption/governance."""
+def entry_requires_resolution(path):
+    """Only ENOENT proves absence; dangling links and metadata errors remain uncertain."""
+    try:
+        Path(path).lstat()
+        return True
+    except OSError as error:
+        return error.errno != errno.ENOENT
+
+
+def governance_requires_resolution(directory):
+    """A normal cache/runtime directory without project artifacts does not opt in."""
+    try:
+        if not stat.S_ISDIR(Path(directory).lstat().st_mode):
+            return True
+    except OSError as error:
+        return error.errno != errno.ENOENT
+    return any(entry_requires_resolution(Path(directory) / name)
+               for name in ('policy.yaml', 'specs', 'working-spec.yaml'))
+
+
+def project_requires_resolved_authority(candidate, home, resolved_canonical=False):
+    """Protect present/uncertain state; successful Git alone never grants CAWS adoption."""
     try:
         probe = Path(candidate).resolve(strict=True)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RuntimeError):
         return True
-    return any((p / '.git').exists() or (p / '.caws').exists() or
-               confined(home, 'state/projects/' + digest(str(p).encode()) + '.json').exists()
-               for p in [probe, *probe.parents])
+    def adopted(root):
+        return entry_requires_resolution(home / 'state/projects' / (digest(str(root).encode()) + '.json'))
+    if resolved_canonical and Path(candidate) != probe and adopted(Path(candidate)):
+        return True
+    roots = [probe] if resolved_canonical else [probe, *probe.parents]
+    return any((not resolved_canonical and entry_requires_resolution(p / '.git')) or
+               governance_requires_resolution(p / '.caws') or adopted(p) for p in roots)
 
 
 def execution_workdir(payload, event):
@@ -753,7 +779,7 @@ def main():
                 return inactive('outside a resolvable Git project')
         else:
             probe = Path(candidate).absolute()
-            if any((p / '.git').exists() or (p / '.caws').exists() for p in [probe, *probe.parents]):
+            if project_requires_resolved_authority(probe, home):
                 print(f'[caws machine adapter] project could not be resolved ({error}); '
                       f'continuing without CAWS governance in {probe}', file=sys.stderr)
             return inactive('outside a resolvable Git project')
@@ -766,8 +792,7 @@ def main():
     canonical = common.parent
     if execution['status'] == 'resolved' and session_resolved:
         anchor = canonical
-        anchor_governed = ((anchor / '.caws').exists() or
-                          confined(home, 'state/projects/' + digest(str(anchor).encode()) + '.json').exists())
+        anchor_governed = project_requires_resolved_authority(anchor, home, resolved_canonical=True)
         try:
             root = Path(git(execution['path'], 'rev-parse', '--show-toplevel'))
             common = Path(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'))

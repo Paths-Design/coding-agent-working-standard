@@ -127,6 +127,7 @@ test('outside Git is quiet; a broken governance ancestor produces an explicit in
     diagnostic: '',
   });
   fs.mkdirSync(path.join(root, '.caws'));
+  fs.writeFileSync(path.join(root, '.caws/policy.yaml'), 'version: 1\n');
   const context = await resolveRuntimeProject({}, caller(root), deadline());
   expect(context.status).toBe('inactive');
   expect(context.diagnostic).toContain('continuing without CAWS governance');

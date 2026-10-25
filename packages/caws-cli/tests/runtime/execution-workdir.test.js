@@ -89,7 +89,10 @@ test('other tools retain session coordinates', () => {
 test.each(['outside', 'foreign', 'inactive', 'adopted'])(
   'governed session refuses %s command context before dispatch',
   async (kind) => {
-    if (kind === 'adopted') fs.mkdirSync(path.join(session, '.caws'));
+    if (kind === 'adopted') {
+      fs.mkdirSync(path.join(session, '.caws'));
+      fs.writeFileSync(path.join(session, '.caws/policy.yaml'), 'version: 1\n');
+    }
     const input = payload({
       execution_workdir: command,
       session_id: 'original',
@@ -203,6 +206,8 @@ test.each(['.git', '.caws'])(
     const home = path.join(root, 'machine');
     fs.mkdirSync(home);
     fs.mkdirSync(path.join(command, marker));
+    if (marker === '.caws')
+      fs.writeFileSync(path.join(command, marker, 'policy.yaml'), 'version: 1\n');
     const request = {
       schema: 'caws.runtime.request.v1',
       id: 'inactive-target',
@@ -247,9 +252,11 @@ test('a failed session Git query cannot erase ancestor governance or exact machi
     }),
   };
   fs.mkdirSync(path.join(session, '.caws'));
+  fs.writeFileSync(path.join(session, '.caws/policy.yaml'), 'version: 1\n');
   await expect(
     prepareRuntimeInvocation(request, new AbortController().signal, undefined, git)
   ).rejects.toThrow(/requires a resolvable session project/);
+  fs.unlinkSync(path.join(session, '.caws/policy.yaml'));
   fs.rmdirSync(path.join(session, '.caws'));
   const key = crypto.createHash('sha256').update(session).digest('hex');
   fs.mkdirSync(path.join(home, 'state/projects'), { recursive: true });
@@ -264,3 +271,155 @@ test('a failed session Git query cannot erase ancestor governance or exact machi
   ).rejects.toThrow(/requires a resolvable session project/);
   expect(git.run).toHaveBeenCalledTimes(3);
 });
+
+// These predicate controls inspect physical fixture metadata; no marker grants authority.
+const { runtimeProjectRequiresResolvedAuthority } = require('../../dist/runtime/context');
+const { ContextGitError } = require('../../dist/runtime/context-git-wire');
+function predicateRequest(home) {
+  const input = payload({
+    execution_workdir: command,
+    session_id: 'original',
+    tool_use_id: 'call',
+  });
+  return {
+    schema: 'caws.runtime.request.v1',
+    id: 'predicate-context',
+    runtimeDigest: 'a'.repeat(64),
+    surface: 'codex',
+    event: 'pre_tool_use',
+    configuration: 'system',
+    payload: input,
+    inputJson: JSON.stringify(input),
+    caller: { cwd: session, environment: { HOME: root, CAWS_HOME: home } },
+    deadlineEpochMs: Date.now() + 5000,
+  };
+}
+function danglingMarker(directory, home, kind) {
+  if (kind === 'adoption') {
+    const key = require('node:crypto').createHash('sha256').update(directory).digest('hex');
+    const file = path.join(home, 'state/projects', key + '.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.symlinkSync(path.join(root, 'missing-adoption'), file);
+  } else fs.symlinkSync(path.join(root, 'missing-marker'), path.join(directory, kind));
+}
+test('machine runtime and session-cache directories without project artifacts do not opt in', () => {
+  const user = path.join(root, 'user');
+  const home = path.join(user, '.caws');
+  fs.mkdirSync(path.join(home, 'state/projects'), { recursive: true });
+  for (const name of ['lib', 'bin', 'sessions']) fs.mkdirSync(path.join(home, name));
+  const ordinary = path.join(user, '.codex/artifacts/session');
+  fs.mkdirSync(ordinary, { recursive: true });
+  expect(runtimeProjectRequiresResolvedAuthority(ordinary, home)).toBe(false);
+  fs.mkdirSync(path.join(session, '.caws/sessions'), { recursive: true });
+  expect(runtimeProjectRequiresResolvedAuthority(session, home)).toBe(false);
+  fs.mkdirSync(path.join(session, '.git'));
+  expect(runtimeProjectRequiresResolvedAuthority(session, home)).toBe(true);
+  expect(runtimeProjectRequiresResolvedAuthority(session, home, 'resolved-canonical')).toBe(false);
+});
+test.each(['policy.yaml', 'specs', 'working-spec.yaml'])(
+  'project artifact %s requires resolution even when dangling',
+  (artifact) => {
+    const home = path.join(root, 'machine');
+    fs.mkdirSync(path.join(session, '.caws'));
+    fs.symlinkSync(path.join(root, 'missing-artifact'), path.join(session, '.caws', artifact));
+    expect(runtimeProjectRequiresResolvedAuthority(session, home)).toBe(true);
+    expect(runtimeProjectRequiresResolvedAuthority(session, home, 'resolved-canonical')).toBe(true);
+  }
+);
+test.each([
+  ['ENOENT', false],
+  ['EACCES', true],
+  ['EIO', true],
+  ['ENOTDIR', true],
+])('only ENOENT establishes missing project metadata (%s)', (code, expected) => {
+  const home = path.join(root, 'machine');
+  fs.mkdirSync(path.join(session, '.caws'));
+  const file = path.join(session, '.caws/policy.yaml');
+  const actual = fs.lstatSync;
+  const spy = jest.spyOn(fs, 'lstatSync').mockImplementation((value, ...args) => {
+    if (String(value) === file) throw Object.assign(new Error('fixture metadata error'), { code });
+    return actual(value, ...args);
+  });
+  try {
+    expect(runtimeProjectRequiresResolvedAuthority(session, home)).toBe(expected);
+    expect(spy).toHaveBeenCalledWith(file);
+  } finally {
+    spy.mockRestore();
+  }
+});
+test.each(['.git', '.caws', 'adoption'])(
+  'dangling original %s refuses before target query slots',
+  async (kind) => {
+    const home = path.join(root, 'machine');
+    fs.mkdirSync(home);
+    danglingMarker(session, home, kind);
+    const request = {
+      ...predicateRequest(home),
+      contextGit: 'caws.runtime.context-git.execution-workdir.v1',
+    };
+    const git = {
+      run: jest.fn(async () => {
+        throw new ContextGitError('git_exit', 'fixture no Git');
+      }),
+    };
+    await expect(
+      prepareRuntimeInvocation(request, new AbortController().signal, undefined, git)
+    ).rejects.toThrow(/requires a resolvable session project/);
+    expect(git.run.mock.calls).toEqual([[['rev-parse', '--show-toplevel'], session]]);
+  }
+);
+test.each(['.git', '.caws', 'adoption'])(
+  'failed target with dangling %s cannot become inactive',
+  async (kind) => {
+    const home = path.join(root, 'machine');
+    fs.mkdirSync(home);
+    danglingMarker(command, home, kind);
+    const request = {
+      ...predicateRequest(home),
+      contextGit: 'caws.runtime.context-git.execution-workdir.v1',
+    };
+    const git = {
+      run: jest.fn(async () => {
+        throw new ContextGitError('git_exit', 'fixture no Git');
+      }),
+    };
+    await expect(
+      prepareRuntimeInvocation(request, new AbortController().signal, undefined, git)
+    ).rejects.toThrow(/execution directory cannot deactivate/);
+    expect(git.run.mock.calls).toEqual([
+      [['rev-parse', '--show-toplevel'], session],
+      [['rev-parse', '--path-format=absolute', '--git-common-dir'], session],
+      [['rev-parse', '--show-toplevel'], command],
+    ]);
+  }
+);
+test.each(['.caws', 'adoption'])(
+  'resolved session with dangling %s cannot borrow foreign canonical authority',
+  async (kind) => {
+    const home = path.join(root, 'machine');
+    fs.mkdirSync(home);
+    danglingMarker(session, home, kind);
+    const request = predicateRequest(home);
+    const git = {
+      run: jest.fn(async (args, cwd) => (args.length === 2 ? cwd : path.join(cwd, '.git'))),
+    };
+    const select = jest.fn(async () => ({
+      status: 'inactive',
+      reason: 'fixture no selected policy',
+    }));
+    await expect(
+      prepareRuntimeInvocation(
+        request,
+        new AbortController().signal,
+        undefined,
+        git,
+        undefined,
+        undefined,
+        select
+      )
+    ).rejects.toThrow(/foreign canonical project/);
+    expect(git.run).toHaveBeenCalledTimes(4);
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(select.mock.calls[0][0].canonical).toBe(session);
+  }
+);

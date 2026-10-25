@@ -217,6 +217,97 @@ class HookExecutionDiagnostics(unittest.TestCase):
         self.assertFalse((self.repo / 'marker.log').exists())
         self.assertEqual(self.journals(), [])
 
+    def test_runtime_home_and_cache_only_ancestors_do_not_opt_in_to_project_governance(self):
+        user = self.root / 'user'
+        user.mkdir()
+        machine = user / '.caws'
+        self.home.rename(machine)
+        self.home = machine
+        self.env['HOME'], self.env['CAWS_HOME'] = str(user), str(machine)
+        self.runtime = machine / 'lib/runtimes' / self.runtime.name
+        self.project_file = machine / 'state/projects' / (hashlib.sha256(str(self.repo).encode()).hexdigest() + '.json')
+        first, second, plain = user / '.codex/artifacts/first', user / '.codex/artifacts/second', user / 'plain'
+        first.mkdir(parents=True)
+        second.mkdir(parents=True)
+        plain.mkdir()
+        # Another ancestor has only a session cache; its name alone does not opt in.
+        (user / '.codex/.caws/sessions').mkdir(parents=True)
+        init = subprocess.run(['git', 'init', '-q', str(plain)], env=self.env, capture_output=True)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        for label, target in [('equal', first), ('different', second), ('plain-git', plain)]:
+            for event in ('pre_tool_use', 'post_tool_use'):
+                self.event = event
+                raw = self.payload(cwd=str(first), execution_workdir=str(target), turn_id='original-turn',
+                                   tool_input={'command': 'echo unchanged'})
+                result = self.invoke('runtime-home-' + label + '-' + event, raw)
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b'', b''))
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
+        # Cache-only origin can reach the actual adopted target's real shipped guard.
+        nested = self.repo / 'nested'
+        nested.mkdir()
+        (nested / '.gitignore').write_text('*.generated\n')
+        (nested / 'private.generated').write_text('target sentinel\n')
+        policy = self.root / 'runtime-home-utility-policy.json'
+        policy.write_text(json.dumps({'version': 1, 'ignored_staging': True}))
+        self.env['CAWS_OPTIONAL_HOOK_POLICY'] = str(policy)
+        self.config['extensions']['pre_tool_use'].append({'handler': 'hook-utilities.sh', 'before': 'marker.sh'})
+        self.configure()
+        self.event = 'pre_tool_use'
+        raw = self.payload(cwd=str(first), execution_workdir=str(nested), turn_id='original-turn',
+                           tool_input={'command': 'git add -f private.generated'})
+        result = self.invoke('runtime-home-governed-target', raw)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn(b'Consumer ignored-staging policy: private.generated', result.stdout)
+        row = self.rows(self.journals()[0])[0]
+        self.assertEqual(row['supplied_context']['session_cwd'], str(first))
+        self.assertEqual(row['dispatch_cwd'], str(nested))
+        self.assertEqual(row['input_sha256'], hashlib.sha256(json.dumps(raw).encode()).hexdigest())
+        self.assertFalse((self.repo / '.git/index').exists())
+
+    def test_dangling_origin_target_and_resolved_anchor_metadata_never_disappears(self):
+        scratch = self.root / 'clean-origin'
+        scratch.mkdir()
+        def dangling(directory, kind):
+            if kind == 'adoption':
+                key = hashlib.sha256(str(directory).encode()).hexdigest()
+                record = self.home / 'state/projects' / (key + '.json')
+                record.symlink_to(self.root / 'missing-adoption')
+            else:
+                (directory / kind).symlink_to(self.root / 'missing-marker')
+        for kind in ('.git', '.caws', 'adoption'):
+            origin = self.root / ('dangling-origin-' + kind.replace('.', ''))
+            origin.mkdir()
+            dangling(origin, kind)
+            target = self.root / ('dangling-target-' + kind.replace('.', ''))
+            target.mkdir()
+            dangling(target, kind)
+            for event in ('pre_tool_use', 'post_tool_use'):
+                self.event = event
+                result = self.invoke('dangling-origin-' + kind + event, self.payload(
+                    cwd=str(origin), execution_workdir=str(self.repo), tool_input={'command': 'echo unchanged'}))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(b'requires a resolvable session project', result.stderr)
+                result = self.invoke('dangling-target-' + kind + event, self.payload(
+                    cwd=str(scratch), execution_workdir=str(target), tool_input={'command': 'echo unchanged'}))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(b'execution directory cannot deactivate', result.stderr)
+        for kind in ('.caws', 'adoption'):
+            origin = self.root / ('resolved-origin-' + kind.replace('.', ''))
+            origin.mkdir()
+            init = subprocess.run(['git', 'init', '-q', str(origin)], env=self.env, capture_output=True)
+            self.assertEqual(init.returncode, 0, init.stderr)
+            dangling(origin, kind)
+            for event in ('pre_tool_use', 'post_tool_use'):
+                self.event = event
+                result = self.invoke('resolved-dangling-origin-' + kind + event, self.payload(
+                    cwd=str(origin), execution_workdir=str(self.repo), tool_input={'command': 'echo unchanged'}))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(b'foreign canonical project', result.stderr)
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
     def test_present_invalid_execution_context_refuses_before_dispatch(self):
         file = self.root / 'file-context'
         file.write_text('not a directory')
