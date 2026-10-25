@@ -111,8 +111,10 @@ fn execute<'deadline>(
 ) -> Result<u8, Failure<'deadline>> {
     // Bounded diagnostics use the same local clock as the original I/O bound.
     // They never renew that bound, grant admission, or retain payload/path data.
+    let original_interval = original_deadline.envelope();
     let mut progress = InvocationProgress {
-        started: original_deadline.expires() - config.timeout,
+        started: original_deadline.expires()
+            - Duration::from_nanos(original_interval.expires_ns - original_interval.started_ns),
         phase: "payload",
         marks: Vec::new(),
         selection: None,
@@ -1247,29 +1249,17 @@ fn main() {
         }
     }
     let event = |name| args.windows(2).any(|v| v[0] == "--event" && v[1] == name);
-    let configuration = cancellation::install().and_then(|()| cli::Config::parse(&args));
-    let code = match configuration {
+    let invocation = cancellation::install().and_then(|()| cli::Invocation::parse(&args));
+    let code = match invocation {
         Err(error) => fallback(
             Failure::configuration(error),
             event("pre_tool_use"),
             event("stop"),
         ),
-        Ok(config) => {
-            // Same original start point: after configuration and before payload.
-            // This outer owner outlives execute and failure output, so the opaque
-            // capture can retain its original clock without a self-reference.
-            match MonotonicDeadline::capture(config.timeout) {
-                Err(error) => fallback(
-                    Failure::configuration(error.to_string()),
-                    event("pre_tool_use"),
-                    event("stop"),
-                ),
-                Ok(original_deadline) => match execute(&config, &original_deadline) {
-                    Ok(code) => code,
-                    Err(error) => fallback(error, event("pre_tool_use"), event("stop")),
-                },
-            }
-        }
+        Ok(cli::Invocation { config, deadline }) => match execute(&config, &deadline) {
+            Ok(code) => code,
+            Err(error) => fallback(error, event("pre_tool_use"), event("stop")),
+        },
     };
     std::process::exit(code.into());
 }
