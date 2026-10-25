@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-installed-entry
 created_at: '2026-10-22T01:32:17.915Z'
-updated_at: '2026-10-22T11:13:30.314Z'
+updated_at: '2026-10-25T22:58:47.191Z'
 created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
 blast_radius:
   modules:
@@ -43,6 +43,7 @@ scope:
     - packages/caws-cli/tests/adapter/system-runtime.test.js
     - packages/caws-cli/templates/hook-packs/shared/lib/harness_kimi.py
     - packages/caws-cli/tests/hooks/pytest/test_template_annotation_compat.py
+    - packages/caws-native/src/installed_generation.rs
   out: []
   support: []
 invariants:
