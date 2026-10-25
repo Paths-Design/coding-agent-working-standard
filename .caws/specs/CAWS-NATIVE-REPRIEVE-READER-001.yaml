@@ -94,9 +94,9 @@ evidence:
     recorded_at: "2026-10-25T20:35:31.236Z"
     commit_sha: ac1ea80d98595e1c62afce27388581522043572e
   - criterion_id: A3
-    status: pass
-    evidence_ref: "Committed fbbcb8664 plus ac1ea80d9: independent fresh Sol read-only peer inspected original full goal, child A1-A5, committed diff and raw checks. Load-bearing two-instant grant defect independently reproduced by actual private fixture red; repaired at reprieve.ts consumedExpiry comparison and two short-year regressions; bounded peer discharge inspected committed fix. Direct source,185 green checks and retained red establish repair, not peer agreement. typecheck/build/lint/doctor0E5W7I/gates27paths pass. Isolated81-case control passes; removing session,revocation,expiry or carrierUTF8 checks fails relevant assertions. E391 retains failures/remaining inventory/native/global/fullparent nonclaims. No report or clearance file created. CLI verify proves commit reachability only."
-    recorded_at: "2026-10-25T20:35:32.191Z"
+    status: fail
+    evidence_ref: "Normal push09 full lint reached generated reprieve-reader.cjs and found no-empty at205,327; scoped source lint did not exercise generated asset. Publication not qualified; running fullsuite retained. Reopened same unit to repair authoritative TypeScript catches and regenerate, qualify changed literal hashes/pack fingerprint, rerun full lint and normal publication. Earlier raw semantic/peer evidence remains bounded to checked ac1 source; no full parent/globalcutover claim. Optional denied collector remains unexecuted."
+    recorded_at: "2026-10-25T20:42:26.492Z"
     commit_sha: ac1ea80d98595e1c62afce27388581522043572e
   - criterion_id: A4
     status: pass
