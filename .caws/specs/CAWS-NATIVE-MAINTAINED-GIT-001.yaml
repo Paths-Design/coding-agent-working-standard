@@ -2,7 +2,6 @@ id: CAWS-NATIVE-MAINTAINED-GIT-001
 title: 'Authenticate maintained Apple Git and retain late Stop query custody'
 mode: feature
 lifecycle_state: active
-worktree: native-maintained-git
 created_at: '2026-10-25T01:52:24.272Z'
 updated_at: '2026-10-25T09:15:50.214Z'
 created_by_session: '01a170be-3812-7123-ab00-736f9bc2eeb9'
