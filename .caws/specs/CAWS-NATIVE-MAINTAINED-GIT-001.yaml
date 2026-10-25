@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-maintained-git
 created_at: '2026-10-25T01:52:24.272Z'
-updated_at: '2026-10-25T06:50:24.196Z'
+updated_at: '2026-10-25T06:55:43.935Z'
 created_by_session: '01a170be-3812-7123-ab00-736f9bc2eeb9'
 blast_radius:
   modules:
@@ -41,6 +41,7 @@ scope:
   out: []
   support:
     - packages/caws-native/src/stop_admission.rs
+    - packages/caws-native/tests/stock_stop_admission.rs
 invariants:
   - 'Caller-supplied hashes, flags, paths and JSON never grant native Stop authority; independent Apple signature authentication and captured generation identity are required'
   - 'Every fixed resolver and late Git query retains its actual native Child through group settlement, pipe EOF and reap; unknown custom Git retains compatibility before prefix effects'
