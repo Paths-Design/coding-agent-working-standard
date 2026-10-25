@@ -354,9 +354,8 @@ evidence:
     commit_sha: f07d6b1d007c6850708b49892f5d7522a81aca6f
   - criterion_id: A7
     status: unchecked
-    evidence_ref: "Root retains native adoption and rollback obligation. Fresh joined native preparation was refused before execution by deployed bash-write-guard: reading the pinned Node executable was classified as a foreign .nvm write. No rerouting, reprieve, shared CLI/runtime/registration change or foreign-lane takeover. Source helper is claimed by shell-analysis with uncommitted work; authorization to coordinate that owner is pending. Resume fresh preparation after supported guard resolution. Private rollback setup and failed candidate exports do not qualify installed rollback."
-    recorded_at: "2026-10-25T11:50:19.650Z"
-    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/combined-source-01/prepare-joined-native.cjs"
+    evidence_ref: "Root retains adoption and complete rollback. Fresh joined preparation was refused before execution by deployed bash-write-guard, classifying a pinned Node READ as a foreign .nvm write. Mixed-script retry, reprieve, runtime changes and foreign-lane takeover were withheld. Claimed shell-analysis helper has uncommitted work; owner coordination awaits requested human authorization. Resume after supported guard resolution. External preparation artifact is retained under Root combined-source-01/prepare-joined-native.cjs; commit-only verification does not establish execution or rollback."
+    recorded_at: "2026-10-25T11:51:38.317Z"
     commit_sha: fbc6503dbac26fede1db89653f71f392447a5f43
   - criterion_id: A3
     status: unchecked
