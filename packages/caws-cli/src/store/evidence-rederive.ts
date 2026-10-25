@@ -686,26 +686,66 @@ function jestCounts(
   };
 }
 
-/** A Node TAP result; SKIP and TODO never verify acceptance. */
+/** A Node TAP result; only per-result test identity can verify acceptance. */
 interface NodeTapResult {
   readonly name: string;
   readonly failed: boolean;
   readonly deferred: boolean;
+  readonly type: 'test' | 'suite' | 'unknown';
 }
+
+const NODE_TAP_DEFERRED_DIRECTIVES: ReadonlySet<string> = new Set(['SKIP', 'TODO']);
 
 function nodeTapResults(output: string): NodeTapResult[] {
   const results: NodeTapResult[] = [];
-  for (const line of output.split('\n')) {
-    const match = /^\s*(not )?ok \d+ - ((?:\\\\|\\#|[^\\#])*?)(?:\s+#\s*(SKIP|TODO)\b.*)?\s*$/.exec(
+  const lines = output.split('\n');
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? '';
+    const match = /^ *(not )?ok \d+ - ((?:\\\\|\\#|[^\\#])*?)(?:\s+#\s*([A-Z]+)\b.*)?\s*$/.exec(
       line
     );
-    if (match === null || match[2] === undefined) continue;
-    // TAP escapes # and backslashes in names. Preserve the conservative exact
-    // comparison: ambiguous spellings under-claim rather than verify a citation.
+    if (
+      match === null ||
+      match[2] === undefined ||
+      (match[3] !== undefined && !NODE_TAP_DEFERRED_DIRECTIVES.has(match[3]))
+    )
+      continue;
+    const indent = /^ */.exec(line)?.[0] ?? '';
+    const detailsIndent = `${indent}  `;
+    let type: NodeTapResult['type'] = 'unknown';
+    if (lines[index + 1] === `${detailsIndent}---`) {
+      let count = 0;
+      let observed: NodeTapResult['type'] = 'unknown';
+      let closed = false;
+      let detail = index + 2;
+      for (; detail < lines.length; detail++) {
+        const value = lines[detail] ?? '';
+        if (value === `${detailsIndent}...`) {
+          closed = true;
+          break;
+        }
+        // Only this result's own YAML field can identify its type. Nested
+        // error payloads, duplicates and unknown spellings grant no identity.
+        if (value.startsWith(`${detailsIndent}type:`)) {
+          count++;
+          observed =
+            value === `${detailsIndent}type: 'test'`
+              ? 'test'
+              : value === `${detailsIndent}type: 'suite'`
+                ? 'suite'
+                : 'unknown';
+        }
+      }
+      if (closed && count === 1) type = observed;
+      // Do not parse result-looking text inside a YAML payload as another test.
+      index = closed ? detail : lines.length;
+    }
+    // TAP escapes # and backslashes in names. Keep exact matching conservative.
     results.push({
       name: match[2],
       failed: match[1] !== undefined,
       deferred: match[3] !== undefined,
+      type,
     });
   }
   return results;
@@ -773,19 +813,31 @@ function nodeOutcome(
 
   const out = run.kind === 'ok' ? run.stdout : `${run.stdout}\n${run.stderr}`;
   const results = nodeTapResults(out);
-  const completed = results.filter((result) => !result.deferred);
-  if (testName !== undefined && !completed.some((result) => result.name === testName)) {
+  const fileDescription = nodeTapFileDescription(relFile);
+  const completed = results.filter(
+    (result) => !result.deferred && result.name !== relFile && result.name !== fileDescription
+  );
+  const selected =
+    testName === undefined ? completed : completed.filter((result) => result.name === testName);
+  if (selected.some((result) => result.type === 'unknown')) {
+    return {
+      ...base,
+      outcome: 'unavailable',
+      detail: `node --test ${process.version} cannot distinguish tests from containers in ${file}; per-result type identity is absent or ambiguous`,
+    };
+  }
+  const tests = selected.filter((result) => result.type === 'test');
+  if (
+    testName !== undefined &&
+    (tests.length === 0 || selected.some((result) => result.type === 'suite'))
+  ) {
     return {
       ...base,
       outcome: 'missing',
       detail: `node --test reported no completed result for ${JSON.stringify(testName)} in ${file}; absent, skipped and TODO results cannot verify a citation`,
     };
   }
-  const fileDescription = nodeTapFileDescription(relFile);
-  if (
-    testName === undefined &&
-    !completed.some((result) => result.name !== relFile && result.name !== fileDescription)
-  ) {
+  if (testName === undefined && tests.length === 0) {
     return {
       ...base,
       outcome: 'missing',

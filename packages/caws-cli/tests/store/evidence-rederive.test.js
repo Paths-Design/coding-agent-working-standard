@@ -831,6 +831,80 @@ describe('the node --test runner executes, and never verifies what it did not ru
     expect(o.A1[0].detail).toContain('no completed result for');
   });
 
+  test('a comment naming the file wrapper cannot verify a named citation', () => {
+    const { root } = mkFixtureRepo();
+    write(root, 'node/tests/sample.test.js', '// tests/sample.test.js\n');
+    const executions = [];
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::tests/sample.test.js'), {
+      runTests: true,
+      timeouts: { run: 3000 },
+      execFile(file, args, options) {
+        const stdout = execFileSync(file, args, options);
+        executions.push({ file, args: [...args], stdout });
+        return stdout;
+      },
+    });
+    expect(executions).toHaveLength(1);
+    expect(executions[0].file).toBe(process.execPath);
+    expect(executions[0].stdout).toMatch(/^ok 1 - tests\/sample\.test\.js$/m);
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toContain('no completed result for');
+  });
+
+  test.each([
+    ['file', "const { describe } = require('node:test'); describe('empty', () => {});", undefined],
+    ['named', "const { describe } = require('node:test'); describe('empty', () => {});", 'empty'],
+    [
+      'named with matching real sibling',
+      "const { describe, test } = require('node:test'); describe('empty', () => {}); test('empty sibling', () => {});",
+      'empty',
+    ],
+    [
+      'named populated suite',
+      "const { describe, test } = require('node:test'); describe('empty', () => { test('real child', () => {}); });",
+      'empty',
+    ],
+  ])('a %s container citation cannot verify an executed test', (_label, body, name) => {
+    const { root } = mkFixtureRepo();
+    write(root, 'node/tests/sample.test.js', body + '\n');
+    const target = 'node/tests/sample.test.js' + (name === undefined ? '' : '::' + name);
+    const o = outcomesFor(root, nodeSpec(target), { runTests: true, timeouts: { run: 3000 } });
+    expect(o.A1[0].outcome).toBe('missing');
+  });
+
+  test('a file containing a suite with a real child can verify the file citation', () => {
+    const { root } = mkFixtureRepo();
+    write(
+      root,
+      'node/tests/sample.test.js',
+      [
+        "const { describe, test } = require('node:test');",
+        "const assert = require('node:assert');",
+        "describe('suite', () => { test('real child', () => assert.equal(1 + 1, 2)); });",
+        '',
+      ].join('\n')
+    );
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js'), {
+      runTests: true,
+      timeouts: { run: 3000 },
+    });
+    expect(o.A1[0].outcome).toBe('passed');
+  });
+
+  test('an executed test whose name equals its file wrapper remains ambiguous', () => {
+    const { root } = mkFixtureRepo();
+    write(
+      root,
+      'node/tests/sample.test.js',
+      "const test = require('node:test'); test('tests/sample.test.js', () => {});\n"
+    );
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::tests/sample.test.js'), {
+      runTests: true,
+      timeouts: { run: 3000 },
+    });
+    expect(o.A1[0].outcome).toBe('missing');
+  });
+
   test('a file whose only TAP result is itself is missing, not passed', () => {
     const { root } = mkFixtureRepo();
     const o = outcomesFor(root, nodeSpec('node/tests/empty.test.js'), { runTests: true });
@@ -876,7 +950,8 @@ describe('the node --test runner executes, and never verifies what it did not ru
           runTests: true,
           execFile(file, args, options) {
             calls.push({ file, args: [...args], options });
-            return 'TAP version 13\nok 1 - adds\n1..1\n';
+            // This spy checks argv capability only, not legacy runtime parity.
+            return "TAP version 13\nok 1 - adds\n  ---\n  type: 'test'\n  ...\n1..1\n";
           },
         });
         expect(o.A1[0].outcome).toBe('passed');
@@ -965,11 +1040,70 @@ describe('the node --test runner executes, and never verifies what it did not ru
     expect(o.A1[0].detail).toContain('node --test exit');
   });
 
+  test.each([
+    ['absent block', ''],
+    ['absent type', '  ---\n  duration_ms: 1\n  ...\n'],
+    ['unknown type', "  ---\n  type: 'other'\n  ...\n"],
+    ['duplicate type', "  ---\n  type: 'test'\n  type: 'test'\n  ...\n"],
+    ['conflicting type', "  ---\n  type: 'test'\n  type: 'suite'\n  ...\n"],
+    ['nested type only', "  ---\n  error:\n    type: 'test'\n  ...\n"],
+    ['unclosed block', "  ---\n  type: 'test'\n"],
+  ])('%s metadata cannot grant a named or file result identity', (_label, details) => {
+    const { root } = mkFixtureRepo();
+    const calls = [];
+    for (const target of ['node/tests/sample.test.js::adds', 'node/tests/sample.test.js']) {
+      const o = outcomesFor(root, nodeSpec(target), {
+        runTests: true,
+        execFile(binary, args) {
+          calls.push({ binary, args: [...args] });
+          return 'TAP version 13\nok 1 - adds\n' + details + '1..1\n# pass 1\n';
+        },
+      });
+      expect(o.A1[0].outcome).toBe('unavailable');
+      expect(o.A1[0].detail).toContain(process.version);
+      expect(o.A1[0].detail).toContain('per-result type identity is absent or ambiguous');
+    }
+    expect(calls).toHaveLength(2);
+    expect(calls.every((call) => call.binary === process.execPath)).toBe(true);
+  });
+
+  test('an unknown same-name result cannot borrow another typed test result', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::adds'), {
+      runTests: true,
+      execFile: () =>
+        "TAP version 13\nok 1 - adds\nok 2 - adds\n  ---\n  type: 'test'\n  ...\n1..2\n",
+    });
+    expect(o.A1[0].outcome).toBe('unavailable');
+    expect(o.A1[0].detail).toContain('per-result type identity is absent or ambiguous');
+  });
+
+  test('an empty suite cannot share the authority of a same-name real test', () => {
+    const { root } = mkFixtureRepo();
+    write(
+      root,
+      'node/tests/sample.test.js',
+      [
+        "const { describe, test } = require('node:test');",
+        "const assert = require('node:assert');",
+        "describe('empty', () => {});",
+        "test('empty', () => assert.equal(1 + 1, 2));",
+        '',
+      ].join('\n')
+    );
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::empty'), {
+      runTests: true,
+      timeouts: { run: 3000 },
+    });
+    expect(o.A1[0].outcome).toBe('missing');
+  });
+
   test('a failed TAP result cannot be verified by an exit-zero summary', () => {
     const { root } = mkFixtureRepo();
     const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::adds'), {
       runTests: true,
-      execFile: () => 'TAP version 13\nnot ok 1 - adds\n1..1\n# pass 1\n# fail 0\n',
+      execFile: () =>
+        "TAP version 13\nnot ok 1 - adds\n  ---\n  type: 'test'\n  ...\n1..1\n# pass 1\n# fail 0\n",
     });
     expect(o.A1[0].outcome).toBe('failed');
     expect(o.A1[0].detail).toContain('reported a failed result');
