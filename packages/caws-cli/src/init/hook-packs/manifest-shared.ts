@@ -627,7 +627,8 @@ import { isAdapterCoveredSurface } from './types';
 // v111 (CAWS-NATIVE-EXECUTION-WORKDIR-001): Codex Bash relative-target checks
 // require validated host command-directory context; missing context retains
 // unavailable-native-context instead of an inferred ownership decision.
-export const SHARED_PACK_VERSION = 111;
+// v112: the stock reprieve consult uses a generated standalone typed reader.
+export const SHARED_PACK_VERSION = 112;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -983,6 +984,12 @@ export const SHARED_PACK: HookPackV1 = {
       // skips invocation of reprieved handlers for the resolved session.
       destPath: '.caws/hooks/lib/reprieve.sh',
       sourcePath: 'lib/reprieve.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/reprieve-reader.cjs',
+      sourcePath: 'lib/reprieve-reader.cjs',
       executable: false,
       managed: true,
     },

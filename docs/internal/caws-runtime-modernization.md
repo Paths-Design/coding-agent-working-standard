@@ -29,21 +29,19 @@ passing unit tests, or the existence of this document.
 
 ## Source location and progress
 
-Published source checkpoint `1c8b61f385c2058e564fbda53977601251c2b8d5` contains
-the same product source as CLI03 build revision
-`1a8818fb76fd3c3e98ef9286b9751473a35f152c`; the intervening changes update
-canonical spec evidence. The source includes reviewed CLI identity and late Stop
-context (`63745eb9b0`), shared/Codex pack metadata (`7fd6be290`) and
-host-workdir cache admission (`0888c0cdf`). Source publication does not
+Published source checkpoint `dabdb0eb26c7c8dc885972c152b5d3277071f732` includes
+the installed-deadline receiver `72fb7557`, in addition to reviewed CLI identity
+and late Stop context (`63745eb9b0`), shared/Codex pack metadata (`7fd6be290`)
+and host-workdir cache admission (`0888c0cdf`). Source publication does not
 establish native-image qualification or selected execution. The
 [canonical parent evidence](../../.caws/specs/CAWS-NATIVE-RUNTIME-001.yaml)
-records unchecked A1/A7 outcomes in events13690/13691. The retained genuine
-private CLI attempt03 reviews domain `67cb0b92…11f538a4` for 21 packages and
-2083 regular prefix files. Its 3014.670208ms carrier match and revalidation is a
-fixture observation under the original 30000ms budget, not native request
-custody, image admission, rollback or machine adoption. Native preparation is
-held at the deployed guard refusal on a pinned Node read; Root retains the
-required owner coordination and full installed qualification.
+records unchecked A1/A7 outcomes, including receiver boundary event13732. The
+retained genuine private CLI attempt03 reviews domain `67cb0b92…11f538a4` for 21
+packages and 2083 regular prefix files. Its 3014.670208ms carrier match and
+revalidation is a fixture observation under the original 30000ms budget, not
+native request custody, image admission, rollback or machine adoption. Native
+preparation is held at the deployed guard refusal on a pinned Node read; Root
+retains the required owner coordination and full installed qualification.
 
 The retained source lineage includes main merge
 `1c39bd3cd708076d54a34bfec10d8992de8f3286`, reconciled candidate
@@ -84,8 +82,8 @@ document's branch. Source publication, fresh package qualification, actual
 native execution and cutover acceptance remain separate obligations; E262
 records the landing and its bounded checks.
 
-The coverage measure is 35/37 rows with qualifying partial implementation
-(94.6%). It is not an overall completion percentage. Parent acceptance is 0/8;
+The coverage measure is 36/37 rows with qualifying partial implementation
+(97.3%). It is not an overall completion percentage. Parent acceptance is 0/8;
 zero complete production Python rows are retired. The selected machine runtime
 is `408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0`. Component
 acceptance, integration-branch landing, delivery on `main`, package
@@ -263,15 +261,15 @@ below supplies the row's source, boundary and acceptance evidence.
 | ------------ | -------------------------------------- | --------- |
 | R01          | yes                                    | 1         |
 | R02–R18      | yes                                    | 17        |
-| R19          | no                                     | 1         |
+| R19          | yes                                    | 1         |
 | R20–R21      | yes                                    | 2         |
 | R22          | no                                     | 1         |
 | R23–R26      | yes                                    | 4         |
 | R27          | yes                                    | 1         |
 | R28–R37      | yes                                    | 10        |
 
-Committed qualifying replacement implementation slices cover **35/37 feature
-rows (94.6%)**. R19/R22 lack that coverage, and no complete row has retired its
+Committed qualifying replacement implementation slices cover **36/37 feature
+rows (97.3%)**. R22 lacks that coverage, and no complete row has retired its
 Python production path. Investigations, reference evidence and support tooling
 alone do not qualify. This count includes standalone components awaiting parent
 integration; it measures feature coverage, not cutover effort or readiness.
@@ -281,6 +279,10 @@ evidence and selected installation state to determine cutover readiness. E174
 and E178 ground the Kimi and DSH row corrections; E184 grounds OpenCode and
 Zcode. E225's accepted and landed preparation component qualifies R18 as a
 partial implementation; its production renderer remains unreplaced.
+
+R19 contributes the consumed standalone reprieve reader and typed eligibility
+alignment in E391. The remaining embedded programs and complete dispatcher
+replacement remain obligations.
 
 R01 contributes a compiled stable-entry bootstrap component exercised against
 fixture assets. R27 contributes an actual private native-image installation
@@ -316,7 +318,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R16 | `shared/lib/harness_zcode.py`                                                                                       | TS Zcode adapter                                                           | closed component imported and parent transcript checks exercised, E190; production replacement open                                                         | Stateful model_io component evidence; DB-to-Claude-shaped acquisition, reader/cache/writer, registry, native and installed consumption remain parent obligations                                                                                                                                                                                                                                                                                                                                                                                                          |
 | R17 | `shared/lib/harness_dsh.py`                                                                                         | TS DSH adapter                                                             | closed component imported and parent transcript checks exercised, E190; production replacement open                                                         | Surface-specific transcript and native registration fixtures; root owns selected interpretation, registry, reader/cache/writer and native consumption                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | R18 | `shared/session_log_renderer.py`: normalized turn rendering                                                         | TS renderer + recoverable worker                                           | bounded preparation accepted and landed, E225; frontend settlement retained, E231; production renderer unreplaced                                           | Selected numeric/catch/spill and output boundaries exercised at199fa5e. Native publication/current-attempt admission, real SessionEnd consumption, production calendar, context-bound freshness, packaging and installed rendering remain open; E147/E165 partial-publication counterexamples are not closed by preparation.                                                                                                                                                                                                                                              |
-| R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | inventoried; unreplaced                                                                                                                                     | 15 executable shell consumers, 19 inline bodies and seven external callsites; the [embedded inventory](#embedded-and-developer-implementation-coverage) groups them and excludes textual interpreter mentions                                                                                                                                                                                                                                                                                                                                                             |
+| R19 | Python embedded in shell helpers/dispatchers                                                                        | TS modules or bounded native operations                                    | Consumed standalone reprieve reader; actual private dispatcher and typed eligibility controls, E391                                                         | One embedded body replaced. Fifteen executable shell consumers retain18 inline bodies and seven external callsites. Full dispatcher retirement, source-image integration and no-Python cutover remain open.                                                                                                                                                                                                                                                                                                                                                               |
 | R20 | Python developer/harvest/qualification scripts                                                                      | Typed TS tooling                                                           | rule-token, sensitivity, hook-harvest and replay leaves accepted, landed and integrated; three original paths unreplaced                                    | E134/E144/E148/E163 retain bounded reference profiles, deliberate repairs and raw failed/successful artifacts. E151/E163 integrate the exact source and Python deletions; qualify-render-daemon.py, qualify-transcript-cache.py and source_freshness.py remain; component progress is not parent acceptance                                                                                                                                                                                                                                                               |
 | R21 | Python-owned regression tests                                                                                       | TS/native behavioral tests                                                 | two test-module retirements integrated, E170/E236; remaining corpus unreplaced                                                                              | Integration source `cc95efeb`: eleven test modules plus conftest (12 tracked pytest files). Main has twelve modules plus conftest because `test_template_annotation_compat.py` remains main-only. Preserve independent hostile oracles and checked failure causes; production guard dependencies remain Python.                                                                                                                                                                                                                                                           |
 | R22 | Tracked installed `.caws/hooks` Python copies                                                                       | Governed self-host/runtime adoption                                        | unreplaced                                                                                                                                                  | Fourteen copies identified; do not edit generated/governed installation by hand                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -10969,6 +10971,71 @@ Additional bounded evidence and unresolved dependencies:
   | `native-render-calendar` / `CAWS-NATIVE-RENDER-CALENDAR-001`         | `2f870ef7`             | Reconcile original broader criteria against landed component and ordinary carrier/timezone resource qualification                                                                       |
   | `CAWS-NATIVE-TEST-PREPARATION-001` bridge                            | Source already on main | Hosted clean macOS/Ubuntu qualification and normal publication A3; retain uncertain license-marker mutation evidence                                                                    |
 
+- **E391 — consumed typed reprieve reader and explicit sibling closure.**
+  `CAWS-NATIVE-REPRIEVE-READER-001` replaces the shell helper's embedded Python
+  reader with generated `lib/reprieve-reader.cjs`, shipped in shared pack112.
+  The shell sends four NUL-terminated UTF-8 context fields and clears Node
+  preload/search variables only in the child. Malformed context, unavailable
+  Node/asset, expired/revoked/mismatched records and unencodable output leave
+  the handler running. The pure expiry parser preserves consumed CPython3.11
+  date/offset spelling semantics; a conservative millisecond comparison may
+  refuse the final fraction below1ms and cannot establish a late grant. Grant
+  validation rejects reader-inert expiry, while show/list preserve valid legacy
+  formats. No real session reprieve is granted or revoked.
+
+  Raw checks live under
+  `/Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/reprieve-reader-01/`.
+  `actual-output-comparison-01` retains6355 timestamp comparisons,97 record
+  cases through both actual entries,348 byte controls and30 entry expiry
+  controls with no observed mismatch in the declared comparison domain.
+  `bats-02.log` exercises13 actual private dispatcher cases. `focused-03.log`
+  records434 passing checks and one explicit supplied-native skip;
+  `pack-fingerprint-02.log` records14 package fingerprint checks. Manual
+  isolated mutants remove session matching, revocation, expiry and UTF-8 carrier
+  validation; each fails its relevant semantic assertions while the unchanged
+  reader control passes81 cases. These are selected falsifiers, not a whole-file
+  mutation score.
+
+  Actual typed eligibility shares expiry/output validation and retains its
+  stronger64KiB no-follow operational-file, ownership/mode/link checks and
+  strict existing-root policy. Real private-record Stop/SessionEnd composition
+  checks preserve mandatory prefixes and suppress only selected publication,
+  late Git/lease or seal effects. Prefix/publication ports are boundary doubles;
+  they do not prove installed SQLite effects. Mutation of the reader after
+  completed SessionEnd prefix is fatal, with zero seal/fallback/retry.
+
+  Native Stop's literal source inventory includes the reader. The service-image
+  overlap profile requires all four reprieve/config siblings' selected shared
+  identities and actual closure bytes, including omitted-metadata controls.
+  Eight discriminator cases use the complete current repository shared/surface
+  library selection, independent of the reviewed hash table; ten native Stop
+  admission cases preserve missing/mutated/symlink/override refusal. Earlier
+  profile drift is qualified by exact comment-only comparisons, inspected
+  deferred annotations/data-schema changes and actual selected-shell Stop
+  controls. The latter preserve session coordinates/cache writes despite
+  malformed/conflicting unrelated execution fields, and the completion marker
+  prevents repeat parse/write. Foreign Sterling profiles remain unchanged.
+
+  Independent review identifies a concrete writer disagreement: JavaScript
+  interprets `0049-01-01Z` as2049 while the consumed parser reads year0049.
+  `grant-instant-red.log` reproduces an actual private fixture grant reporting
+  success for that expired spelling. Futurity uses the consumed microsecond
+  instant, with the reader's conservative clock boundary, rather than JavaScript
+  normalization. Two short-year regression cases require refusal before any
+  private machine state is created. The initial0030 variant is invalid to Node
+  and is replaced by the independently probed0048 variant.
+
+  Retained failed attempts include the initial25 stale SessionEnd-pin failures,
+  two stale overlap-positive failures, seven typed-reader disagreements and a
+  missing-bootstrap test fixture. The fixture supplies the production bootstrap
+  before its corrected65-case qualification. The first profile-difference
+  collector used the wrong cwd and reported unavailable files; only the guarded
+  `source-profile-differences-02.json` is source evidence. Optional artifact
+  formatting/mutation commands refused by the deployed shell guard remain
+  unexecuted. No new native image, installed entry producer, actual harness,
+  authenticated replay, full no-Python package, fair workload or machine
+  adoption follows. Parent acceptance remains0/8 and selected runtime408c06a7.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
@@ -11007,21 +11074,23 @@ not an observation that the target exited.
 
 ## Embedded and developer implementation coverage
 
-The executable embedded-Python surface is 15 shell files, 19 inline bodies and
-seven external callsites. A textual `python` hit is not sufficient: seven
-broader search matches contain only comments or interpreter-recognition data.
-Line anchors below refer to the integration source tree `10690d4b`.
+The executable embedded-Python surface is15 shell files,18 inline bodies and
+seven external callsites. E391 replaces the reprieve reader body. The remaining
+external sites include the explicit custom guard-config parser and native-owned
+renderer interpreter boundary; neither is a retired first-party implementation.
+A textual `python` hit is not sufficient: comments, interpreter-recognition data
+and availability checks do not count as executable bodies. The table identifies
+remaining source functions; raw source coordinates are retained with E391.
 
-| Group / source sites                                                                                                                                           | Destination and decisive proof                                                                                                                                                                                  |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `shared/runtime-paths.sh:58`; shared/Codex/Kimi `lib/parse-input.sh`                                                                                           | Typed input normalization: raw controls/NUL/surrogate handling, shell-safe assignments, Codex multi-file patch first-action mode, Kimi fallback precedence and large-input transport                            |
-| `shared/lib/caws-state.sh:211`                                                                                                                                 | Checked path normalization/refusal contract: existing symlink ancestor with missing leaf and `/tmp` alias; retained legacy helper removal and final native port require consumer qualification                  |
-| `shared/lib/agent-surface.sh:520`, `shared/lib/run-handlers.sh:598`                                                                                            | Typed selection: malformed/absent override maps, custom paths and concurrent request environment isolation                                                                                                      |
-| `shared/lib/parse-input.sh:355,372,449`, `shared/lib/agent-pid.sh:162`, `shared/lib/session-cache.sh:29`                                                       | Native anchored filesystem + typed identity/cache: dir-relative no-follow writes, exclusive temp0600/rename, symlink races, unsafe IDs, original created_at, partial writes, PID reuse and retention boundaries |
-| `shared/lib/reprieve.sh:194`                                                                                                                                   | Owning reprieve reader: handler/session/repo scope, legacy null repo reach, revoke-key presence, naive-UTC/offset/equal-expiry and symlink ancestry                                                             |
-| `shared/goal-ac-gate.sh:192,209,244`                                                                                                                           | Typed verify-acs consumer: no binding, malformed/empty report, all verified, not-rederived, non-dict criteria and bounded infrastructure release; do not rederive authority                                     |
-| `shared/lib/run-handlers.sh:94,371`                                                                                                                            | Typed journal/supervisor: selected identity, start/result, short append/symlink failures, failed provenance independent of guard outcome                                                                        |
-| External calls in `shared/block-dangerous.sh`, `shared/session-log.sh`, `shared/hook-utilities.sh`, `shared/lib/guard-config.sh`, `shared/lib/run-handlers.sh` | Classifier, renderer/store, utility, config and truncation modules tracked separately in R05-R18; consumers must migrate with tests                                                                             |
+| Group / source sites                                                                                                                                                    | Destination and decisive proof                                                                                                                                                                                  |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared/runtime-paths.sh:58`; shared/Codex/Kimi `lib/parse-input.sh`                                                                                                    | Typed input normalization: raw controls/NUL/surrogate handling, shell-safe assignments, Codex multi-file patch first-action mode, Kimi fallback precedence and large-input transport                            |
+| `shared/lib/caws-state.sh:211`                                                                                                                                          | Checked path normalization/refusal contract: existing symlink ancestor with missing leaf and `/tmp` alias; retained legacy helper removal and final native port require consumer qualification                  |
+| `shared/lib/agent-surface.sh:520`, `shared/lib/run-handlers.sh:657`                                                                                                     | Typed selection: malformed/absent override maps, custom paths and concurrent request environment isolation                                                                                                      |
+| `shared/lib/parse-input.sh:356,373,450`, `shared/lib/agent-pid.sh:162`, `shared/lib/session-cache.sh:29`                                                                | Native anchored filesystem + typed identity/cache: dir-relative no-follow writes, exclusive temp0600/rename, symlink races, unsafe IDs, original created_at, partial writes, PID reuse and retention boundaries |
+| `shared/goal-ac-gate.sh:192,209,244`                                                                                                                                    | Typed verify-acs consumer: no binding, malformed/empty report, all verified, not-rederived, non-dict criteria and bounded infrastructure release; do not rederive authority                                     |
+| `shared/lib/run-handlers.sh:94,371`                                                                                                                                     | Typed journal/supervisor: selected identity, start/result, short append/symlink failures, failed provenance independent of guard outcome                                                                        |
+| External calls in `shared/block-dangerous.sh`, `shared/session-log.sh`, `shared/hook-utilities.sh`, `shared/lib/guard-config.sh`, `shared/lib/session-render-writer.sh` | Classifier, renderer/store, utility, config and truncation modules tracked separately in R05-R18; consumers must migrate with tests                                                                             |
 
 Remaining developer paths: `scripts/hook-experiments/` files
 `qualify-render-daemon.py`, `qualify-transcript-cache.py` and

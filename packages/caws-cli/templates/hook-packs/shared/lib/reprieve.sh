@@ -34,6 +34,10 @@ if [[ -n "${_CAWS_REPRIEVE_SH_LOADED:-}" ]]; then
 fi
 _CAWS_REPRIEVE_SH_LOADED=1
 
+# Capture the defining location before a caller changes directories. A failed
+# lookup cannot alias the optional reader to a filesystem-root path.
+_CAWS_REPRIEVE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)" || _CAWS_REPRIEVE_LIB_DIR=""
+
 # Resolve the machine session directory without creating it.
 caws_reprieve_state_dir() {
   local _sid="${1:-${CAWS_SESSION_ID:-${HOOK_SESSION_ID:-}}}"
@@ -185,73 +189,20 @@ caws_is_handler_reprieved() {
   local _reprieve_repo_root
   _reprieve_repo_root="$(_caws_reprieve_canonical_root "${CAWS_PROJECT_DIR:-.}")"
 
-  # Read + expiry-check + handler-match in ONE python call (the hook pack's
-  # established JSON tool — mirrors parse-input.sh / block-dangerous.sh usage).
-  # Emits "ADMIT <expires_at> <reason>" on a positive match, nothing otherwise.
-  # A malformed or unreadable file is treated as no-reprieve (fail-open, like
-  # the latch reader — never block a tool call because the reprieve cache broke).
+  # Read with the generated sibling, independent of the caller's working
+  # directory. Missing tooling or malformed records leave every guard running.
+  [[ -n "${_CAWS_REPRIEVE_LIB_DIR:-}" ]] || return 1
+  local reader="$_CAWS_REPRIEVE_LIB_DIR/reprieve-reader.cjs"
+  [[ -f "$reader" ]] && command -v node >/dev/null 2>&1 || return 1
+
+  # The reader is a standalone projection with builtin imports only. Clear
+  # Node's ambient preload/search controls for this child, preserving the rest
+  # of the caller environment and the existing tab-delimited reason transport.
   local verdict
-  verdict="$(python3 -c '
-import json, sys, os
-try:
-    from pathlib import Path
-    record_path = Path(sys.argv[1])
-    if any(p.is_symlink() for p in [record_path, *list(record_path.parents)[:4]]):
-        sys.exit(1)
-    with open(sys.argv[1]) as f:
-        rec = json.load(f)
-except Exception:
-    sys.exit(1)
-if not isinstance(rec, dict) or rec.get("session_id") != sys.argv[3] or "revoked_at" in rec:
-    sys.exit(1)
-if any(not isinstance(rec.get(k), str) or not rec[k] for k in ("created_at", "approved_by", "reason")):
-    sys.exit(1)
-expires_at = rec.get("expires_at")
-if not isinstance(expires_at, str) or not expires_at:
-    sys.exit(1)
-# Derived expiry. CAWS-GUARD-REPRIEVE-NAIVE-EXPIRY-001: a user may pass a
-# timezone-less --expires-at (e.g. "2026-07-19T04:00:00"); the writer is
-# supposed to reject those, but the reader must be robust to legacy/inert
-# files already on disk. Assume UTC for a naive datetime (the only sane
-# default for a tool whose now=UTC) so the compare does not TypeError on
-# naive-vs-aware -- which would silently disable the reprieve with no error
-# surfaced (the worst failure class: reports success while doing nothing).
-# A past expiry means absent. Never mutate the file on read.
-import datetime
-try:
-    exp = datetime.datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-except Exception:
-    sys.exit(1)
-if exp.tzinfo is None:
-    exp = exp.replace(tzinfo=datetime.timezone.utc)
-now = datetime.datetime.now(datetime.timezone.utc)
-if exp <= now:
-    sys.exit(1)
-handlers = rec.get("handlers")
-if not isinstance(handlers, list) or any(not isinstance(h, str) for h in handlers):
-    sys.exit(1)
-target = sys.argv[2]
-if target not in handlers:
-    sys.exit(1)
-# Reach (CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01). An ABSENT repo_root is
-# machine-wide: that is what `--all-repos` writes, and it is also what every
-# record written before this field existed looks like, so upgrading the pack
-# cannot silently void a grant a human already approved. A PRESENT repo_root
-# must equal the repo this invocation governs. realpath both sides -- the
-# granting cwd and the reading cwd name the same directory differently under
-# a symlinked checkout (/tmp -> /private/tmp on macOS), and a raw string
-# compare would refuse a valid grant with nothing in the output to explain it.
-# A non-string repo_root is malformed, and malformed is no-reprieve.
-repo_root = rec.get("repo_root")
-if repo_root is not None:
-    if not isinstance(repo_root, str) or not repo_root:
-        sys.exit(1)
-    if os.path.realpath(repo_root) != os.path.realpath(sys.argv[4]):
-        sys.exit(1)
-# Positive match. Emit expires_at + reason for the caller to log.
-reason = rec.get("reason", "")
-print("ADMIT\t" + expires_at + "\t" + str(reason))
-' "$reprieve_file" "$handler" "$session_id" "$_reprieve_repo_root" 2>/dev/null)" || return 1
+  # Preserve the caller's bytes until the reader validates UTF-8. Node argv
+  # replacement must not alias a malformed session or path to a valid grant.
+  verdict="$(printf '%s\0' "$reprieve_file" "$handler" "$session_id" "$_reprieve_repo_root" | \
+    NODE_OPTIONS= NODE_PATH= command node "$reader" --stdin0 2>/dev/null)" || return 1
 
   if [[ "$verdict" == ADMIT* ]]; then
     # Parse the tab-delimited ADMIT line into the caller-facing globals.

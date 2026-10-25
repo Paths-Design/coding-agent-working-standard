@@ -200,6 +200,87 @@ test('real compatibility parser exports command and session coordinates while pr
   expect(run({ ...input, execution_workdir: null }).status).toBe(2);
 });
 
+test.each([undefined, null, 'missing-directory', 'conflicting-aliases'])(
+  'selected Stop parser ignores unrelated execution fields %p and preserves its session writes',
+  (execution) => {
+    cp.execFileSync('git', ['init', '--quiet', session]);
+    fs.mkdirSync(path.join(session, '.caws/sessions/peer'), { recursive: true });
+    const peer = path.join(session, '.caws/sessions/peer/.session-envelope.json');
+    const peerBytes = Buffer.from('{"session_id":"peer","created_at":"preserve"}\n');
+    fs.writeFileSync(peer, peerBytes);
+    const input = payload({
+      execution_workdir: execution === 'conflicting-aliases' ? command : execution,
+      hook_event_name: 'Stop',
+      session_id: 'original',
+      tool_use_id: 'original-call',
+      tool_input: { command: 'printf unchanged', workdir: session, cwd: command },
+    });
+    const program = [
+      'source "$2" || exit $?;',
+      'source "$1" || exit $?;',
+      'parse_hook_input || exit $?;',
+      'printf "%s\\n" "$HOOK_CWD" "$HOOK_SESSION_CWD" "$HOOK_EXECUTION_WORKDIR_STATUS" "$HOOK_EXECUTION_WORKDIR" "$HOOK_SESSION_ID" "$HOOK_TOOL_USE_ID" "$HOOK_EVENT_NAME";',
+      // The native image preloads the same completion marker. A second call
+      // must neither reparse execution context nor repeat envelope writes.
+      '_hook_extract_scalar_fields() { printf forbidden-extractor >&2; return 91; };',
+      '_write_durable_session_envelope() { printf forbidden-cache-write >&2; return 92; };',
+      'parse_hook_input',
+    ].join('\n');
+    const result = cp.spawnSync(
+      '/bin/bash',
+      [
+        '-c',
+        program,
+        'stop-parser-test',
+        path.join(templates, 'codex/hooks/lib/parse-input.sh'),
+        path.join(templates, 'shared/runtime-paths.sh'),
+      ],
+      {
+        input: JSON.stringify(input),
+        encoding: 'utf8',
+        env: {
+          HOME: root,
+          PATH: process.env.PATH,
+          CAWS_SHARED_LIB_DIR: path.join(templates, 'shared/lib'),
+          CAWS_PROJECT_DIR: session,
+        },
+      }
+    );
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout.split('\n')).toEqual([
+      session,
+      session,
+      'not_applicable',
+      '',
+      'original',
+      'original-call',
+      'Stop',
+      '',
+    ]);
+    expect(
+      JSON.parse(
+        fs.readFileSync(path.join(session, '.caws/sessions/original/.session-envelope.json'))
+      )
+    ).toMatchObject({
+      session_id: 'original',
+      repo_root: session,
+      hook_event: 'Stop',
+      platform: 'codex',
+    });
+    expect(
+      JSON.parse(fs.readFileSync(path.join(session, '.caws/sessions/.caller-session.json')))
+    ).toMatchObject({ session_id: 'original', repo_root: session });
+    expect(fs.readFileSync(peer)).toEqual(peerBytes);
+    expect(fs.existsSync(path.join(command, '.caws'))).toBe(false);
+    expect(fs.readdirSync(path.join(session, '.caws/sessions')).sort()).toEqual([
+      '.caller-session.json',
+      'original',
+      'peer',
+    ]);
+  }
+);
+
 test.each(['.git', '.caws'])(
   'failed session and target Git queries retain unresolved target %s markers',
   async (marker) => {

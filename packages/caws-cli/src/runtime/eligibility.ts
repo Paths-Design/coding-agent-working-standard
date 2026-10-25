@@ -5,6 +5,7 @@ import type { HandlerEligibility } from './composer';
 import type { SelectedHandler } from './selection';
 import type { HookEvent } from './types';
 import { readOperationalFile } from './operational-files';
+import { parseReprieveExpiry, serializeReprieveMatch } from './reprieve-reader';
 
 export interface EligibilityContext {
   readonly home: string;
@@ -24,35 +25,7 @@ const present = (file: string): boolean => {
     throw error;
   }
 };
-
-/** Common ISO calendar forms, including the owning reader's naive-as-UTC compatibility. */
-function expiry(value: unknown): number {
-  if (typeof value !== 'string') return NaN;
-  const match =
-    /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:[.,](\d{1,6}))?)?(Z|[+-]\d{2}:?\d{2})?)?$/.exec(
-      value
-    );
-  if (!match) return NaN;
-  const year = Number(match[1]),
-    month = Number(match[2]),
-    day = Number(match[3]);
-  const calendar = new Date(0);
-  calendar.setUTCFullYear(year, month - 1, day);
-  if (
-    calendar.getUTCFullYear() !== year ||
-    calendar.getUTCMonth() !== month - 1 ||
-    calendar.getUTCDate() !== day ||
-    Number(match[4] ?? 0) > 23 ||
-    Number(match[5] ?? 0) > 59 ||
-    Number(match[6] ?? 0) > 59
-  )
-    return NaN;
-  return Date.parse(
-    match[4] === undefined
-      ? value
-      : value.replace(' ', 'T').replace(',', '.') + (match[8] ? '' : 'Z')
-  );
-}
+const utf8 = (value: string): boolean => Buffer.from(value, 'utf8').toString('utf8') === value;
 
 export function handlerEligibility(
   handler: SelectedHandler,
@@ -64,7 +37,12 @@ export function handlerEligibility(
   )
     return { status: 'runtime-disabled', reason: 'PostToolUse runtime disable list' };
   const sid = context.sessionId;
-  if (!sid || sid === 'unknown') return { status: 'run' };
+  if (
+    !sid ||
+    sid === 'unknown' ||
+    ![sid, handler.name, context.home, context.canonical, context.vendorDirectory].every(utf8)
+  )
+    return { status: 'run' };
   try {
     const safe = Buffer.from(sid, 'utf8')
       .toString('latin1')
@@ -96,7 +74,6 @@ export function handlerEligibility(
       !['created_at', 'approved_by', 'reason'].every(
         (key) => typeof record[key] === 'string' && (record[key] as string).length > 0
       ) ||
-      !(expiry(record.expires_at) > (context.now?.() ?? Date.now())) ||
       !Array.isArray(record.handlers) ||
       record.handlers.some((value) => typeof value !== 'string') ||
       !record.handlers.includes(handler.name)
@@ -107,8 +84,22 @@ export function handlerEligibility(
       record.repo_root !== null &&
       (typeof record.repo_root !== 'string' ||
         !record.repo_root ||
+        !utf8(record.repo_root) ||
         fs.realpathSync(record.repo_root) !== fs.realpathSync(context.canonical))
     )
+      return { status: 'run' };
+    const expiresAt = record.expires_at;
+    const expires = parseReprieveExpiry(expiresAt);
+    if (
+      typeof expiresAt !== 'string' ||
+      expires === undefined ||
+      serializeReprieveMatch({ expiresAt, reason: record.reason as string }) === undefined
+    )
+      return { status: 'run' };
+    // Read and validate each handler's current record. Reserve the clock's
+    // current millisecond, matching the shell reader without admitting late.
+    const milliseconds = context.now?.() ?? Date.now();
+    if (!Number.isSafeInteger(milliseconds) || expires < (BigInt(milliseconds) + 1n) * 1000n)
       return { status: 'run' };
     return {
       status: 'reprieved',

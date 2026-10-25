@@ -24,6 +24,11 @@ const assets = [
       'src/runtime/json-custody.ts',
     ],
   },
+  {
+    entry: 'src/runtime/reprieve-entry.ts',
+    output: 'templates/hook-packs/shared/lib/reprieve-reader.cjs',
+    inputs: ['src/runtime/reprieve-entry.ts', 'src/runtime/reprieve-reader.ts'],
+  },
 ];
 const generator = 'scripts/generate-runtime-assets.mjs';
 const requiredEsbuildVersion = '0.25.10';

@@ -60,6 +60,31 @@ impl IsolatedPrefix {
     }
 }
 
+// These selected libraries execute siblings by lexical location. Check both
+// the selected shared route and the complete executed sibling closure, even
+// when a caller omits a closure file from selection metadata. read_originals
+// independently verifies the actual runtime path, file identity and byte pins.
+const REVIEWED_SHARED_SIBLINGS: [&str; 4] = [
+    "guard-config.cjs",
+    "guard-config.sh",
+    "reprieve-reader.cjs",
+    "reprieve.sh",
+];
+fn reviewed_shared_siblings(selection: &Selection, originals: &Originals) -> bool {
+    REVIEWED_SHARED_SIBLINGS.into_iter().all(|name| {
+        let relative = format!("lib/{name}");
+        reviewed_sources().get(&relative).is_some_and(|expected| {
+            originals
+                .bytes
+                .get(&("runtime".to_owned(), relative))
+                .is_some_and(|observed| &hash(observed) == expected)
+                && selection.libraries.iter().any(|library| {
+                    library.name == name && library.kind == "shared" && &library.sha256 == expected
+                })
+        })
+    })
+}
+
 pub(super) fn derive_prefix_concurrency(
     manifest: &PreparedImageManifest,
     originals: &Originals,
@@ -124,6 +149,7 @@ pub(super) fn derive_prefix_concurrency(
         ]
         .into_iter()
         .all(matches_source)
+        && reviewed_shared_siblings(selection, originals)
         && !selection.libraries.is_empty()
         && selection.libraries.iter().all(|library| {
             let relative = match library.kind.as_str() {

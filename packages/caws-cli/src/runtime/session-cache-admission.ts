@@ -98,9 +98,10 @@ const SESSION_END_SOURCES: Readonly<Record<string, string>> = {
   'lib/run-handlers.sh': '90945b5dd70c9c6e223beefab24208603c2c1a822e4ba85d8bd298d430660093',
   'surfaces/codex/lib/run-handlers.sh':
     '8ebf6a8c131cc51e8f2ecd549db890340634d8fc1ebf38e5fc185a20e4532696',
-  'lib/reprieve.sh': '4e6aa88e6021843fd41dedfe910e4e3c650695970c70a1a8c049cf2f6f8c6cff',
+  'lib/reprieve.sh': '5eaa9953d1edc0e98ec73a365560371cf1daea25d4ec4f812e1d38403cf04a9d',
+  'lib/reprieve-reader.cjs': 'd95a202b321d446b5726d5d2f8721e3b5dc2c273c71398f844a8303b8f83b6d2',
   'lib/guard-config.sh': 'c3d9d5b0f6ffb4eb6add5a3f27b2d3d2bf7f46d86b39614c351e8b5bba06c73c',
-  'lib/guard-config.cjs': '4065e9febf662dd9a3933b65926e913ecd50b3bca73a4192e44f1097cc982b11',
+  'lib/guard-config.cjs': 'b7947a24da1670613bb43a548be9951d7fe3be6d4be2f9418607a35dac945a85',
 };
 
 /** Finite complete-prefix profile for the sole reviewed SessionEnd logger.
@@ -203,6 +204,7 @@ export function qualifiesForNativeSessionEndPrefix(context: {
       'agent-pid.sh': 'shared',
       'run-handlers.sh': request.surface === 'codex' ? 'surface' : 'shared',
       'reprieve.sh': 'shared',
+      'reprieve-reader.cjs': 'shared',
       'guard-config.sh': 'shared',
       'guard-config.cjs': 'shared',
       'emit.sh': request.surface === 'codex' ? 'surface' : 'shared',

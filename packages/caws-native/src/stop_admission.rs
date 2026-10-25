@@ -29,7 +29,7 @@ const PRODUCER: &str = "surfaces/opencode/native-plugin.ts";
 
 // Reviewed local source identities from component-comparison controlled-05's
 // reference.sharedFiles and baseline2188b06e runtime templates, with the
-// reviewed R06 guard-config shell/CJS cohort. These pins prove stock source
+// reviewed R06 guard-config and R19 reprieve shell/CJS cohorts. These pins prove stock source
 // identity only, never the remaining semantic/profile joins.
 
 const STOCK: &[(&str, &str)] = &[
@@ -79,7 +79,7 @@ const STOCK: &[(&str, &str)] = &[
     ),
     (
         "lib/guard-config.cjs",
-        "4065e9febf662dd9a3933b65926e913ecd50b3bca73a4192e44f1097cc982b11",
+        "b7947a24da1670613bb43a548be9951d7fe3be6d4be2f9418607a35dac945a85",
     ),
     (
         "lib/guard-config.sh",
@@ -138,8 +138,12 @@ const STOCK: &[(&str, &str)] = &[
         "b61ca58672ec23722042fa55b4ba65b8c95ebc67a28dbcdc4f335770fe32d5de",
     ),
     (
+        "lib/reprieve-reader.cjs",
+        "d95a202b321d446b5726d5d2f8721e3b5dc2c273c71398f844a8303b8f83b6d2",
+    ),
+    (
         "lib/reprieve.sh",
-        "4e6aa88e6021843fd41dedfe910e4e3c650695970c70a1a8c049cf2f6f8c6cff",
+        "5eaa9953d1edc0e98ec73a365560371cf1daea25d4ec4f812e1d38403cf04a9d",
     ),
     (
         "lib/run-handlers.sh",
@@ -1297,22 +1301,28 @@ mod tests {
         validate_libraries(&Readset::new(&receipt)?, &context)
     }
     #[test]
-    fn repository_stock_libraries_admit_reviewed_guard_config_cohort() {
+    fn repository_stock_libraries_admit_reviewed_guard_config_and_reprieve_cohort() {
         fixture(|generation, home, _| {
             let root = home.join("repository-stock");
             repository_libraries(&root);
             assert!(!root.join("lib/guard-config.py").exists());
             assert!(root.join("lib/guard-config.cjs").is_file());
+            assert!(root.join("lib/reprieve-reader.cjs").is_file());
             library_admission(generation, home, &root).unwrap();
         });
     }
     #[test]
-    fn guard_config_dependencies_and_unknown_inventory_refuse_before_effects() {
+    fn guard_config_and_reprieve_dependencies_and_unknown_inventory_refuse_before_effects() {
         fixture(|generation, home, _| {
             let root = home.join("repository-stock");
             repository_libraries(&root);
             library_admission(generation, home, &root).unwrap();
-            for name in ["guard-config.cjs", "guard-config.sh"] {
+            for name in [
+                "guard-config.cjs",
+                "guard-config.sh",
+                "reprieve-reader.cjs",
+                "reprieve.sh",
+            ] {
                 let file = root.join("lib").join(name);
                 let original = fs::read(&file).unwrap();
                 fs::remove_file(&file).unwrap();

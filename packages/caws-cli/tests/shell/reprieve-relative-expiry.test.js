@@ -28,6 +28,8 @@ const { execSync, spawnSync } = require('child_process');
 
 const {
   runReprieveGrantCommand,
+  runReprieveShowCommand,
+  runReprieveListCommand,
   parseDurationToSeconds,
   AGENT_SESSION_VARS,
 } = require('../../dist/shell/commands/reprieve');
@@ -223,6 +225,39 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: exactly-one-of (A3, A4)', () => {
 });
 
 describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: absolute-expiry refusals stay self-correcting', () => {
+  it.each(['0049-01-01Z', '0048-01-01Z'])(
+    'refuses reader-expired %s despite JavaScript year normalization',
+    (expiresAt) => {
+      const repoRoot = makeRepoRoot();
+      try {
+        expect(new Date(expiresAt).getTime()).toBeGreaterThan(NOW.getTime());
+        const result = grant(repoRoot, { expiresAt });
+        expect(result.code).toBe(1);
+        expect(result.err).toContain('in the past');
+        expect(fs.existsSync(path.join(repoRoot, 'machine-home'))).toBe(false);
+      } finally {
+        fs.rmSync(repoRoot, { recursive: true, force: true });
+      }
+    }
+  );
+  it.each([
+    '2099-02-30T04:05:06Z',
+    '2099-02-29T04:05:06Z',
+    '2099-02-03T24:00:00Z',
+    '2099-02-03T04:05:06z',
+    ' 2099-02-03T04:05:06Z ',
+  ])('refuses writer-normalized expiry %s that the runtime cannot consume', (expiresAt) => {
+    const repoRoot = makeRepoRoot();
+    try {
+      const result = grant(repoRoot, { expiresAt });
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('not a valid ISO-8601 timestamp');
+      expect(fs.existsSync(path.join(repoRoot, 'machine-home'))).toBe(false);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it('reports the current time when the expiry is in the past', () => {
     const repoRoot = makeRepoRoot();
     // The exact shape that burned two retries: "today at 19:20" authored while
@@ -255,6 +290,66 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: absolute-expiry refusals stay self-
     const r = grant(repoRoot, { expiresAt: '2026-07-27T00:00:00' });
     expect(r.code).toBe(1);
     expect(r.err).toContain('missing a timezone');
+  });
+});
+
+describe('reprieve observation follows the consumed legacy expiry interpretation', () => {
+  it.each([
+    ['20990203T040506Z', true],
+    ['2099-W06-2T04:05:06Z', true],
+    ['2099-02-03T04:05:06', true],
+    ['2099-02-03T04:05:06+0130', true],
+    ['2099-02-03T04:05:06,123456Z', true],
+    ['2099-02-30T04:05:06Z', false],
+    ['2099-02-03T24:00:00Z', false],
+    ['2099-02-03T04:05:06z', false],
+    ['2026-07-26T01:57:16.000999Z', false],
+    ['2026-07-26T01:57:16.001000Z', true],
+  ])('show/list interpret stored %s as active=%s', (expiresAt, active) => {
+    const repoRoot = makeRepoRoot();
+    try {
+      expect(grant(repoRoot, { for: '5m' }).code).toBe(0);
+      const record = { ...readRecord(repoRoot), expires_at: expiresAt };
+      fs.writeFileSync(
+        path.join(
+          repoRoot,
+          'machine-home/state/sessions',
+          SESSION,
+          `guard-reprieve-${SESSION}.json`
+        ),
+        JSON.stringify(record)
+      );
+      for (const [observe, field] of [
+        [runReprieveShowCommand, 'active'],
+        [runReprieveListCommand, 'reprieves'],
+      ]) {
+        const output = [];
+        const errors = [];
+        expect(
+          observe({
+            cwd: repoRoot,
+            homeDir: path.join(repoRoot, 'machine-home'),
+            env: {},
+            session: SESSION,
+            surface: 'claude-code',
+            now: () => NOW,
+            json: true,
+            out: (line) => output.push(line),
+            err: (line) => errors.push(line),
+          })
+        ).toBe(0);
+        expect(errors).toEqual([]);
+        const result = JSON.parse(output.join('\n'));
+        if (field === 'active') expect(result.active).toBe(active);
+        else {
+          expect(result.reprieves).toHaveLength(1);
+          expect(result.reprieves[0].active).toBe(active);
+          expect(result.reprieves[0].session_id).toBe(SESSION);
+        }
+      }
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
   });
 });
 
