@@ -66,6 +66,14 @@ acceptance:
       new grants cannot report success for consumed-reader-invalid expiry; existing
       valid legacy formats retain their interpretation and conservative millisecond
       comparison never grants after expiry
+  - id: A5
+    given: 'actual typed eligibility and the reviewed Stop/SessionEnd/prefix source closure'
+    when: 'legacy-compatible records and altered, missing or omitted source dependencies are presented'
+    then: >-
+      expiry and output decisions agree within the preserved bounded
+      operational-reader domain, reprieved effects are skipped after mandatory
+      prefixes, and unreviewed source never earns native or isolated-prefix
+      admission
 observability:
   - 'Raw expiry/binding outcomes, installed dispatcher guard effects and execution records, generated-asset pins and retained failures'
 rollback:
