@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: native-guard-profile-integration
 created_at: '2026-10-25T01:24:58.081Z'
-updated_at: '2026-10-25T01:37:53.661Z'
+updated_at: '2026-10-25T01:39:40.396Z'
 created_by_session: '01a170a8-414e-7a61-af97-58bae56f4c8f'
 blast_radius:
   modules:
@@ -23,6 +23,7 @@ scope:
     - packages/caws-cli/templates/hook-packs/shared/lib/guard-config.cjs
     - packages/caws-cli/tests/init/pack-fingerprints.json
     - packages/caws-cli/src/runtime/guard-config.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
   out: []
 invariants:
   - 'Source identity admission remains necessary only and preserves override, unsafe path, stale readset and cancellation refusal boundaries.'
