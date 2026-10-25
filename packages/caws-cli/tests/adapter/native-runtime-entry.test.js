@@ -836,8 +836,8 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
         path: '/usr/bin/git',
         physicalPath: '/usr/bin/git',
         sha256: hash,
-        device: 1,
-        inode: 2,
+        device: '1',
+        inode: '1152921500312571562',
         bytes: 3,
         mode: 33261,
         modifiedSeconds: 4,
@@ -856,8 +856,8 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       developerDirectory: '/Developer',
       developerIdentity: {
         physicalPath: '/Developer',
-        device: 1,
-        inode: 3,
+        device: '1',
+        inode: '18446744073709551615',
         mode: 16877,
         modifiedSeconds: 4,
         modifiedNanoseconds: 0,
@@ -903,6 +903,12 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     data.gitDistribution = syntheticGitObservation(sha(before.files.get('native/caws-native')));
     const bytes = selectSemanticData(data);
     expect(prepareDescriptor().files.get('native-stop-profile.json')).toEqual(bytes);
+    for (const inode of [Number('1152921500312571562'), '01', '+1', '-1', '18446744073709551616']) {
+      const bad = JSON.parse(JSON.stringify(data));
+      bad.gitDistribution.callerGit.inode = inode;
+      selectSemanticData(bad);
+      expect(() => prepareDescriptor()).toThrow();
+    }
     for (const kind of [
       'missing',
       'null',

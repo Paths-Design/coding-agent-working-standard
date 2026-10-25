@@ -477,8 +477,18 @@ function validateStopGitDistribution(value: unknown, nativeSha256: string): void
     'changedNanoseconds',
   ];
   const numeric = (p: Record<string, unknown>, names: string[]): void => {
-    if (names.some((k) => !Number.isSafeInteger(p[k])))
-      throw new Error('Git observation identity outside finite integer domain');
+    for (const k of names) {
+      if (k === 'device' || k === 'inode') {
+        const text = p[k];
+        if (
+          typeof text !== 'string' ||
+          !/^(0|[1-9][0-9]{0,19})$/.test(text) ||
+          BigInt(text) > 18446744073709551615n
+        )
+          throw new Error('Git filesystem identity must be canonical u64 decimal');
+      } else if (!Number.isSafeInteger(p[k]))
+        throw new Error('Git observation identity outside finite integer domain');
+    }
   };
   for (const label of ['callerGit', 'resolver', 'developerSelector', 'implementation']) {
     const p = value[label];
@@ -487,8 +497,6 @@ function validateStopGitDistribution(value: unknown, nativeSha256: string): void
       throw new Error('Invalid Git executable observation');
     numeric(p, integerKeys);
     if (
-      (p.device as number) < 0 ||
-      (p.inode as number) < 0 ||
       (p.bytes as number) <= 0 ||
       (p.mode as number) < 0 ||
       (p.modifiedNanoseconds as number) < 0 ||

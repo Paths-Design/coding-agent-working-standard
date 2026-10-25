@@ -29,13 +29,31 @@ const LOADER_TCB: &[&str] = &[
     "libz",
     "libiconv",
 ];
+// Filesystem identifiers are full-width u64 values. JSON numbers lose actual
+// macOS inode bits when the observation passes through the Node producer.
+mod decimal_u64 {
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+    pub fn serialize<S: Serializer>(value: &u64, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&value.to_string())
+    }
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u64, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        let value = text.parse::<u64>().map_err(D::Error::custom)?;
+        if value.to_string() != text {
+            return Err(D::Error::custom("noncanonical filesystem identity"));
+        }
+        Ok(value)
+    }
+}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Pinned {
     path: PathBuf,
     physical_path: PathBuf,
     sha256: String,
+    #[serde(with = "decimal_u64")]
     device: u64,
+    #[serde(with = "decimal_u64")]
     inode: u64,
     bytes: u64,
     mode: u32,
@@ -91,7 +109,9 @@ impl Pinned {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct DirectoryIdentity {
     physical_path: PathBuf,
+    #[serde(with = "decimal_u64")]
     device: u64,
+    #[serde(with = "decimal_u64")]
     inode: u64,
     mode: u32,
     modified_seconds: i64,
@@ -1281,6 +1301,37 @@ pub(super) fn run_configuration(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn filesystem_identity_json_retains_all_u64_bits_and_rejects_numeric_or_noncanonical_inputs() {
+        let value = DirectoryIdentity {
+            physical_path: PathBuf::from("/Developer"),
+            device: u64::MAX,
+            inode: 1_152_921_500_312_571_562,
+            mode: 16877,
+            modified_seconds: 1,
+            modified_nanoseconds: 0,
+            changed_seconds: 1,
+            changed_nanoseconds: 0,
+        };
+        let encoded = serde_json::to_value(&value).unwrap();
+        assert_eq!(encoded["device"], "18446744073709551615");
+        assert_eq!(encoded["inode"], "1152921500312571562");
+        assert_eq!(
+            serde_json::from_value::<DirectoryIdentity>(encoded.clone()).unwrap(),
+            value
+        );
+        for invalid in [
+            serde_json::json!(1152921500312571562u64),
+            serde_json::json!("01"),
+            serde_json::json!("+1"),
+            serde_json::json!("-1"),
+            serde_json::json!("18446744073709551616"),
+        ] {
+            let mut bad = encoded.clone();
+            bad["inode"] = invalid;
+            assert!(serde_json::from_value::<DirectoryIdentity>(bad).is_err());
+        }
+    }
     #[test]
     fn cli_trim_matches_js_edges_not_rust_extra_whitespace() {
         assert_eq!(cli_trim("\u{feff} /repo/.git\n"), "/repo/.git");

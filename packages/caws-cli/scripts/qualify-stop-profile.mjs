@@ -303,8 +303,19 @@ export function validateGitDistribution(value, nativeSha256) {
     'changedNanoseconds',
   ];
   const identity = (v, names) => {
-    for (const k of names)
-      assert(Number.isSafeInteger(v[k]), 'Git observation identity outside finite integer domain');
+    for (const k of names) {
+      if (k === 'device' || k === 'inode') {
+        assert(
+          typeof v[k] === 'string' && /^(0|[1-9][0-9]{0,19})$/.test(v[k]),
+          'Git filesystem identity must be canonical decimal'
+        );
+        assert(BigInt(v[k]) <= 18446744073709551615n, 'Git filesystem identity exceeds u64');
+      } else
+        assert(
+          Number.isSafeInteger(v[k]),
+          'Git observation identity outside finite integer domain'
+        );
+    }
   };
   for (const label of ['callerGit', 'resolver', 'developerSelector', 'implementation']) {
     const p = value[label];
@@ -313,9 +324,7 @@ export function validateGitDistribution(value, nativeSha256) {
     assert.match(p.sha256, /^[a-f0-9]{64}$/);
     identity(p, integerKeys);
     assert(
-      p.device >= 0 &&
-        p.inode >= 0 &&
-        p.bytes > 0 &&
+      p.bytes > 0 &&
         p.mode >= 0 &&
         p.modifiedNanoseconds >= 0 &&
         p.modifiedNanoseconds < 1e9 &&

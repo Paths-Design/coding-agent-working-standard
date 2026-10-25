@@ -254,10 +254,11 @@ test('semantic wrapper evidence ignores nested key order but preserves bytes and
 
 test('observed Git data requires exact native image and fixed provenance, never supplied policy', () => {
   run(`
-    const hash='1'.repeat(64), snapshot={path:'/usr/bin/git',physicalPath:'/usr/bin/git',sha256:hash,device:1,inode:2,bytes:3,mode:33261,modifiedSeconds:4,modifiedNanoseconds:0,changedSeconds:5,changedNanoseconds:0};
-    const directory={physicalPath:'/Developer',device:1,inode:3,mode:16877,modifiedSeconds:4,modifiedNanoseconds:0,changedSeconds:5,changedNanoseconds:0};
+    const hash='1'.repeat(64), snapshot={path:'/usr/bin/git',physicalPath:'/usr/bin/git',sha256:hash,device:'1',inode:'1152921500312571562',bytes:3,mode:33261,modifiedSeconds:4,modifiedNanoseconds:0,changedSeconds:5,changedNanoseconds:0};
+    const directory={physicalPath:'/Developer',device:'1',inode:'18446744073709551615',mode:16877,modifiedSeconds:4,modifiedNanoseconds:0,changedSeconds:5,changedNanoseconds:0};
     const value={schema:'caws.runtime.stop-git-distribution.v1',platform:'macos',os:{kernelRelease:'fixture',kernelVersion:'fixture',machine:'arm64'},inspectorNativeSha256:hash,callerGit:snapshot,resolver:{...snapshot,path:'/usr/bin/xcrun'},developerSelector:{...snapshot,path:'/usr/bin/xcode-select'},developerDirectory:'/Developer',developerIdentity:directory,implementation:{...snapshot,path:'/Developer/usr/bin/git',physicalPath:'/Developer/usr/bin/git'},provenance:{authenticator:'Security.framework/SecStaticCodeCheckValidity/all-architectures+strict/no-network',requirements:['identifier "com.apple.git" and anchor apple','identifier "com.apple.dt.xcode_select.tool-shim-public" and anchor apple','identifier "com.apple.xcrun" and anchor apple','identifier "com.apple.xcode-select" and anchor apple'],loaderTcb:['macos-platform-loader','apple-code-signing-trust-store','Security.framework','CoreFoundation.framework','CoreServices.framework','libSystem','libz','libiconv']}};
     assert.equal(q.validateGitDistribution(value,hash),value);
+    for(const inode of [1152921500312571562,'01','+1','-1','18446744073709551616'])assert.throws(()=>q.validateGitDistribution({...value,callerGit:{...snapshot,inode}},hash));
     assert.throws(()=>q.validateGitDistribution(value,'2'.repeat(64)),/native image/);
     for(const bad of [{...value,permission:true},{...value,platform:'linux'},{...value,provenance:{...value.provenance,requirements:[]}},{...value,resolver:{...value.resolver,path:'/custom/resolver'}},{...value,callerGit:{...snapshot,bytes:Number.MAX_SAFE_INTEGER+1}}])assert.throws(()=>q.validateGitDistribution(bad,hash));
     const missing={...value};delete missing.provenance;assert.throws(()=>q.validateGitDistribution(missing,hash));
