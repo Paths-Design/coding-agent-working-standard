@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-PUBLICATION-DEPENDENCY-REPAIR-001
 title: 'Repair audited publication dependency closure'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-publication-dependency-repair
 created_at: '2026-10-25T01:31:52.363Z'
-updated_at: '2026-10-25T01:31:52.363Z'
+updated_at: '2026-10-25T01:31:53.867Z'
 created_by_session: '01a170a2-efe6-7bd2-a9ac-7cdcc3b070f7'
 blast_radius:
   modules:
