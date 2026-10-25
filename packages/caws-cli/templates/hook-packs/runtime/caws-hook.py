@@ -830,13 +830,16 @@ def main():
         if execution['status'] == 'resolved':
             require_project_governance_paths(canonical)
         project_record = confined(home, 'state/projects/' + digest(str(canonical).encode()) + '.json')
-        try:
-            project_record.lstat()
-            known_project = True
-        except OSError as error:
-            if error.errno != errno.ENOENT:
-                raise
-            known_project = False
+        if execution['status'] == 'resolved':
+            try:
+                project_record.lstat()
+                known_project = True
+            except OSError as error:
+                if error.errno != errno.ENOENT:
+                    raise
+                known_project = False
+        else:
+            known_project = project_record.exists()
     except (ValueError, OSError) as error:
         if execution['status'] == 'resolved':
             raise ExecutionWorkdirError('Host execution governance paths are unresolved: ' + str(error)) from None

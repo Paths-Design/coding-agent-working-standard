@@ -347,6 +347,15 @@ class HookExecutionDiagnostics(unittest.TestCase):
                 self.assertEqual(result.returncode, 2, result.stderr)
                 self.assertIn(b'Host execution governance paths are unresolved', result.stderr)
                 self.assertIn(str(projects).encode(), result.stderr)
+            for tool, event in [('Read', 'pre_tool_use'), ('Read', 'post_tool_use'),
+                                ('Bash', 'session_start'), ('Bash', 'stop'),
+                                ('Bash', 'session_end'), ('Bash', 'pre_compact')]:
+                self.event = event
+                with self.subTest(tool=tool, event=event):
+                    result = self.invoke('unchanged-namespace-' + tool + '-' + event, self.payload(
+                        cwd=str(target), execution_workdir=None, tool_name=tool,
+                        tool_input={'command': 'echo unchanged'}))
+                    self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b'', b''))
             self.assertFalse((self.repo / 'marker.log').exists())
             self.assertEqual(self.journals(), [])
         finally:
