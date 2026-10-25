@@ -26,6 +26,7 @@ scope:
   out: []
 invariants:
   - 'Source identity admission remains necessary only and preserves override, unsafe path, stale readset and cancellation refusal boundaries.'
+  - 'Guard prefix separator rejection and reason edge-padding codepoint length semantics are preserved by lint-safe generated projection.'
 acceptance:
   - id: A1
     given: 'the current reviewed repository stock source cohort'
