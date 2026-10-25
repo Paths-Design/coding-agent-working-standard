@@ -66,3 +66,9 @@ evidence:
     recorded_at: "2026-10-25T01:10:02.048Z"
     exit_code: 0
     commit_sha: "4c72b3e93762d778246860c43954d7201b243d99"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Committed candidate cf3ced7 independently reviewed against original R06 task and raw checks. Two actual load-bearing counterexamples were reproduced and repaired in4c72b3e; bounded follow-up feedback separately grounded in owner schema, guarded validator call and actual regression/standalone outputs. Postcommit136Jestpass1nativeSkip,51Bats and exact source+compiled hashes establish checked candidate identity. Governed no-close merge d1f0871 landed; git diff --exit-code4c72 main over all16 changed paths and ancestor check both0; generated asset check onmain0. Source remains byte-equal at target. Complete image/harness/native supplied execution, shared session-cache-admission identity join, replay/rollback/workload and parent acceptance remain open under incoming lead. CLI verification establishes commit reachability only; raw execution inspected under external guard-config-retirement/committed-01."
+    recorded_at: "2026-10-25T01:11:21.012Z"
+    exit_code: 0
+    commit_sha: d1f0871ba094ce8cbd145c24138ed0e9d153dec2
