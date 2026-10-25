@@ -9,6 +9,8 @@ import { builtinModules, createRequire } from 'node:module';
 import { basename, delimiter, dirname, isAbsolute, join, posix, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { RuntimeRequest } from './protocol';
+import { cliClosureDigest } from './cli-identity-format';
+export { cliClosureDigest } from './cli-identity-format';
 
 export const CLI_IDENTITY_LIMITS = Object.freeze({
   files: 4096,
@@ -204,34 +206,6 @@ function original(input: CliIdentityInput): Original {
   return state;
 }
 
-/** Pure encoding contract shared with the external owner-review operation.
- * A digest binds a reviewed table to bytes; computing one is not a review.
- */
-export function cliClosureDigest(
-  reviewed: Omit<ReviewedCliIdentity, 'prefixRoot' | 'domain'>
-): string {
-  return hash(
-    Buffer.from(
-      JSON.stringify({
-        files: Object.entries(reviewed.files)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([path, pin]) => [
-            path,
-            { sha256: pin.sha256, sizeBytes: pin.sizeBytes, mode: pin.mode },
-          ]),
-        packages: Object.entries(reviewed.packages)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([path, pkg]) => [path, { name: pkg.name, version: pkg.version }]),
-        omissions: Object.entries(reviewed.omissions).sort(([a], [b]) => a.localeCompare(b)),
-        node: {
-          sha256: reviewed.node.sha256,
-          sizeBytes: reviewed.node.sizeBytes,
-          mode: reviewed.node.mode,
-        },
-      })
-    )
-  );
-}
 class Capture {
   readonly rows = new Map<string, string>();
   readonly texts = new Map<string, string>();

@@ -17,6 +17,7 @@ export const RESPONSE_SCHEMA = 'caws.runtime.response.v1';
 export const SESSION_CACHE_CAPABILITY = 'caws.runtime.session-cache.v1';
 export const SESSION_END_PREFIX_CAPABILITY = 'caws.runtime.session-end-prefix.v1';
 export const STOP_PREFIX_CAPABILITY = 'caws.runtime.stop-prefix.v1';
+export const STOP_LEASE_CONTEXT_CAPABILITY = 'caws.runtime.stop-lease-context.v1';
 export const TRANSCRIPT_STORE_CAPABILITY = 'caws.runtime.transcript-store.v1';
 export const SESSION_PUBLICATION_CAPABILITY = 'caws.runtime.session-publication.v1';
 export const SELECTION_OBSERVATION_CAPABILITY = 'caws.runtime.selection-observation.v1';
@@ -101,6 +102,8 @@ export interface RuntimeRequest {
   readonly sessionEndPrefix?: typeof SESSION_END_PREFIX_CAPABILITY;
   /** Complete native Stop prefix; SessionEnd is a different operation. */
   readonly stopPrefix?: typeof STOP_PREFIX_CAPABILITY;
+  /** Dedicated late fixed consumer transport; never general post-Ready Git. */
+  readonly stopLeaseContext?: typeof STOP_LEASE_CONTEXT_CAPABILITY;
   /** Optional finite native query profile; this does not select a stock consumer. */
   readonly sessionStore?: typeof TRANSCRIPT_STORE_CAPABILITY;
   /** Native-owned publication exchange; prepared bytes confer no path authority. */
@@ -217,6 +220,7 @@ export function decodeRuntimeRequest(
       ...(Object.hasOwn(value, 'sessionCache') ? ['sessionCache'] : []),
       ...(Object.hasOwn(value, 'sessionEndPrefix') ? ['sessionEndPrefix'] : []),
       ...(Object.hasOwn(value, 'stopPrefix') ? ['stopPrefix'] : []),
+      ...(Object.hasOwn(value, 'stopLeaseContext') ? ['stopLeaseContext'] : []),
       ...(Object.hasOwn(value, 'sessionStore') ? ['sessionStore'] : []),
       ...(Object.hasOwn(value, 'sessionPublication') ? ['sessionPublication'] : []),
       ...(Object.hasOwn(value, 'selectionObservation') ? ['selectionObservation'] : []),
@@ -239,6 +243,11 @@ export function decodeRuntimeRequest(
     throw new RuntimeProtocolError('Unsupported SessionEnd prefix capability');
   if (Object.hasOwn(value, 'stopPrefix') && value.stopPrefix !== STOP_PREFIX_CAPABILITY)
     throw new RuntimeProtocolError('Unsupported Stop prefix capability');
+  if (
+    Object.hasOwn(value, 'stopLeaseContext') &&
+    value.stopLeaseContext !== STOP_LEASE_CONTEXT_CAPABILITY
+  )
+    throw new RuntimeProtocolError('Unsupported Stop lease context capability');
   if (Object.hasOwn(value, 'sessionStore') && value.sessionStore !== TRANSCRIPT_STORE_CAPABILITY)
     throw new RuntimeProtocolError('Unsupported transcript store capability');
   if (
@@ -332,6 +341,9 @@ export function decodeRuntimeRequest(
       ? { sessionEndPrefix: SESSION_END_PREFIX_CAPABILITY }
       : {}),
     ...(value.stopPrefix === STOP_PREFIX_CAPABILITY ? { stopPrefix: STOP_PREFIX_CAPABILITY } : {}),
+    ...(value.stopLeaseContext === STOP_LEASE_CONTEXT_CAPABILITY
+      ? { stopLeaseContext: STOP_LEASE_CONTEXT_CAPABILITY }
+      : {}),
     ...(value.sessionStore === TRANSCRIPT_STORE_CAPABILITY
       ? { sessionStore: TRANSCRIPT_STORE_CAPABILITY }
       : {}),

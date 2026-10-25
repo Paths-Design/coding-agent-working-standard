@@ -13,6 +13,7 @@ mod runner;
 mod selection_observation;
 mod stop_admission;
 mod stop_execution;
+mod stop_git;
 mod stop_profile;
 
 use caws_native::monotonic_deadline::MonotonicDeadline;
@@ -49,6 +50,7 @@ fn retain_store_result(
 
 struct Failure<'deadline> {
     original_stop: Option<runner::OriginalStopPreparation<'deadline>>,
+    stop_git_custody: stop_git::FailureCustody,
     dispatched: bool,
     ready: Option<Box<protocol::Ready>>,
     message: String,
@@ -62,6 +64,7 @@ impl<'deadline> Failure<'deadline> {
     fn configuration(message: String) -> Self {
         Self {
             original_stop: None,
+            stop_git_custody: stop_git::FailureCustody::default(),
             dispatched: false,
             ready: None,
             message,
@@ -73,6 +76,23 @@ impl<'deadline> Failure<'deadline> {
         }
     }
 }
+// The terminal custody defense runs while the observed execution context is
+// owned. It must not reconstruct a post-dispatch failure as configuration.
+// The outer root transfers the actual Git custody slot on every Err return.
+fn retain_observed_stop_terminal<'deadline, T>(
+    value: T,
+    custody: &mut stop_git::FailureCustody,
+    mut observed: Failure<'deadline>,
+) -> Result<T, Failure<'deadline>> {
+    match custody.preserve(Ok(value)) {
+        Ok(value) => Ok(value),
+        Err(message) => {
+            observed.message = message;
+            Err(observed)
+        }
+    }
+}
+
 fn budget(ready: &protocol::Ready, expires: Instant) -> Result<StopBudget, String> {
     let identity =
         BudgetIdentity::resolve(ready.session_id.as_deref(), ready.project_digest.as_deref())
@@ -201,6 +221,9 @@ fn execute_observed<'deadline>(
         |phase| progress.mark(phase),
     );
     progress.original_render_captured = original_stop.render.available();
+    // Root custody outlives closing brackets, String-only callbacks and the
+    // outcome closure. A callback never owns the last retained Git failure.
+    let mut stop_git_custody = stop_git::FailureCustody::default();
     let outcome = (|| -> Result<u8, Failure<'deadline>> {
         progress.mark("selection-owner");
         let selection_limits = selection_observation::Limits::default();
@@ -312,6 +335,9 @@ fn execute_observed<'deadline>(
                             session.run_context_git(&mut context_git, &frame, deadline)?;
                         }
                     }
+                    protocol::EngineFrame::StopLeaseContextRequest(_) => {
+                        return Err("Stop lease context request before Ready/dispatch".into());
+                    }
                     protocol::EngineFrame::Ready(value) => {
                         progress.mark("ready-received");
                         progress.mark("selection-seal");
@@ -352,7 +378,7 @@ fn execute_observed<'deadline>(
                     deadline,
                 )?;
             }
-            let (stock_selection, eligible_stop) = if combined {
+            let (stock_selection, mut eligible_stop) = if combined {
                 progress.mark("stop-qualification");
                 match stop_execution::PregrantStop::admit(
                     original_stop
@@ -369,6 +395,7 @@ fn execute_observed<'deadline>(
                         .ok_or("missing original generation")?,
                     ready.as_ref().ok_or("missing Stop readiness")?,
                     cancellation::check,
+                    &mut stop_git_custody,
                 )
                 .map_err(|reason| {
                     progress.stock_selection = "invalidated";
@@ -414,7 +441,8 @@ fn execute_observed<'deadline>(
                 };
                 (selected, None)
             };
-            progress.native_stop = if eligible_stop.is_some() {
+            let native_stop_routed = eligible_stop.is_some();
+            progress.native_stop = if native_stop_routed {
                 "qualified"
             } else {
                 "unsupported"
@@ -475,6 +503,27 @@ fn execute_observed<'deadline>(
                     protocol::EngineFrame::ContextGitRequest(_) => {
                         return Err("context Git request after Ready".into());
                     }
+                    protocol::EngineFrame::StopLeaseContextRequest(frame) => {
+                        let control = request.stop_lease_context_request(&frame)?;
+                        // Logger reprieves can skip store/publication entirely.
+                        // Only the actual completed prefix and eligible owner
+                        // admit this separate fixed consumer boundary.
+                        if completed_stop_prefix.is_none() {
+                            return Err(
+                                "Stop lease context requires completed native Stop prefix".into()
+                            );
+                        }
+                        let eligible = eligible_stop
+                            .take()
+                            .ok_or("Stop lease context lacks unconsumed native eligibility")?;
+                        session.begin_stop_lease_context(frame.len() + 1)?;
+                        let observed = eligible.observe_lease_common_dir(
+                            || session.stop_lease_context_checkpoint(deadline),
+                            &mut stop_git_custody,
+                        )?;
+                        let result = control.result(observed)?;
+                        session.finish_stop_lease_context(&result, deadline)?;
+                    }
                     #[cfg(feature = "sqlite-store")]
                     protocol::EngineFrame::TranscriptStoreRequest(frame) => {
                         if store_attempted || publication_attempted {
@@ -486,7 +535,7 @@ fn execute_observed<'deadline>(
                         let result = match render_bridge::captured_publication_owner_config(
                             config, &request, context,
                         ) {
-                            Ok(owner) if eligible_stop.is_some() => {
+                            Ok(owner) if native_stop_routed => {
                                 let eligible = eligible_stop
                                     .as_ref()
                                     .ok_or("missing native Stop eligibility")?;
@@ -497,6 +546,7 @@ fn execute_observed<'deadline>(
                                     .original
                                     .as_ref()
                                     .ok_or("missing native Stop original")?;
+                                eligible.revalidate(cancellation::check, &mut stop_git_custody)?;
                                 let registration =
                                     caws_native::render_owner::NativeStopRegistration::capture(
                                         &frame,
@@ -504,6 +554,7 @@ fn execute_observed<'deadline>(
                                         original,
                                         completed,
                                     )?;
+                                eligible.revalidate(cancellation::check, &mut stop_git_custody)?;
                                 let cancelled = || cancellation::check().is_err();
                                 original_stop.render.with_transport(
                                     &mut session,
@@ -514,7 +565,12 @@ fn execute_observed<'deadline>(
                                             registration,
                                             deadline,
                                             &cancelled,
-                                            |_| eligible.revalidate(cancellation::check),
+                                            |_| {
+                                                eligible.revalidate(
+                                                    cancellation::check,
+                                                    &mut stop_git_custody,
+                                                )
+                                            },
                                             transport,
                                         )
                                     },
@@ -539,7 +595,7 @@ fn execute_observed<'deadline>(
                         };
                         let (binding, status) = retain_store_result(result, &mut store_settlement);
                         store_project_binding = binding;
-                        status?;
+                        stop_git_custody.preserve(status)?;
                     }
                     protocol::EngineFrame::SessionSealRequest(frame) => {
                         if publication_attempted || !prefix_complete {
@@ -580,7 +636,7 @@ fn execute_observed<'deadline>(
                         let eligible = eligible_stop
                             .as_ref()
                             .ok_or("Stop prefix lacks native eligibility")?;
-                        eligible.revalidate(cancellation::check)?;
+                        eligible.revalidate(cancellation::check, &mut stop_git_custody)?;
                         let context = ready.as_ref().ok_or("missing Stop prefix readiness")?;
                         let original = original_stop
                             .original
@@ -599,7 +655,7 @@ fn execute_observed<'deadline>(
                             },
                             || {
                                 progress.stop_prefix_authority_check(|| {
-                                    eligible.revalidate(cancellation::check)
+                                    eligible.revalidate(cancellation::check, &mut stop_git_custody)
                                 })
                             },
                             |previous| {
@@ -767,7 +823,7 @@ fn execute_observed<'deadline>(
                 }
             }
         })();
-        let (token, result, containment) = match proposal {
+        let (token, result, containment) = match stop_git_custody.preserve(proposal) {
             Ok(value) => value,
             Err(mut message) => {
                 if let Err(error) = session.cleanup() {
@@ -775,6 +831,7 @@ fn execute_observed<'deadline>(
                 }
                 return Err(Failure {
                     original_stop: None,
+                    stop_git_custody: stop_git::FailureCustody::default(),
                     dispatched,
                     ready: ready.map(Box::new),
                     message,
@@ -905,10 +962,22 @@ fn execute_observed<'deadline>(
             );
         }
         // Keep the resident record correlation through final frontend output.
-        #[cfg(feature = "sqlite-store")]
-        let _store_settlement = store_settlement.as_ref();
-        let _session_settlement = session_settlement.as_ref();
-        Ok(code)
+        retain_observed_stop_terminal(
+            code,
+            &mut stop_git_custody,
+            Failure {
+                original_stop: None,
+                stop_git_custody: stop_git::FailureCustody::default(),
+                dispatched,
+                ready: ready.map(Box::new),
+                message: String::new(),
+                session_settlement,
+                #[cfg(feature = "sqlite-store")]
+                store_settlement,
+                #[cfg(feature = "sqlite-store")]
+                store_project_binding,
+            },
+        )
     })();
     match outcome {
         Ok(code) => {
@@ -918,7 +987,11 @@ fn execute_observed<'deadline>(
             Ok(code)
         }
         Err(mut error) => {
+            error.message = stop_git_custody
+                .preserve::<()>(Err(error.message))
+                .expect_err("preserved execution failure");
             error.original_stop = Some(original_stop);
+            error.stop_git_custody = stop_git_custody;
             Err(error)
         }
     }
@@ -926,6 +999,7 @@ fn execute_observed<'deadline>(
 fn fallback(mut error: Failure<'_>, pre: bool, stop: bool) -> u8 {
     // Keep the actual optional capture and any RemoteFailure through fallback
     // output. Retry only cleanup; its original request clock is never renewed.
+    let stop_git_cleanup = error.stop_git_custody.settle_cleanup();
     let original_cleanup = error
         .original_stop
         .as_mut()
@@ -948,6 +1022,9 @@ fn fallback(mut error: Failure<'_>, pre: bool, stop: bool) -> u8 {
             ""
         }
     );
+    if let Some(cleanup) = stop_git_cleanup {
+        reason.push_str(&format!(" {cleanup}."));
+    }
     if let Some(cleanup) = original_cleanup {
         reason.push_str(&format!(" Original project native custodian retains cleanup: {cleanup}; native candidate was not retried."));
     }
@@ -1028,6 +1105,17 @@ fn main() {
         })();
         if let Err(error) = result {
             eprintln!("CAWS context Git custodian refused: {error}");
+            std::process::exit(75);
+        }
+        return;
+    }
+    if args.first().is_some_and(|arg| arg == "--stop-git-inspect") {
+        if args.len() != 1 {
+            eprintln!("Stop Git inspection accepts no asserted inputs");
+            std::process::exit(75);
+        }
+        if let Err(error) = stop_git::inspect_command() {
+            eprintln!("CAWS Stop Git inspection refused: {error}");
             std::process::exit(75);
         }
         return;
@@ -1280,5 +1368,82 @@ mod invocation_diagnostic_tests {
                 .keys()
                 .all(|key| matches!(key.as_str(), "count" | "elapsedMicros"))
         );
+    }
+}
+
+#[cfg(test)]
+mod stop_terminal_context_tests {
+    use super::*;
+
+    #[test]
+    fn retained_stop_failure_keeps_observed_dispatch_ready_and_budget_binding() {
+        for dispatched in [false, true] {
+            let ready = Box::new(protocol::Ready {
+                active: dispatched,
+                budget_home: "/observed/budget-home".into(),
+                project_digest: Some("a".repeat(64)),
+                session_id: Some("observed-session".into()),
+                service_offer: None,
+            });
+            let ready_identity = &*ready as *const protocol::Ready;
+            let mut custody = stop_git::FailureCustody::default();
+            let captured: Result<(), String> = custody.retain(Err(stop_git::Failure::Invalidated(
+                "retained Git refusal".into(),
+            )));
+            assert_eq!(captured.unwrap_err(), "retained Git refusal");
+            #[cfg(feature = "sqlite-store")]
+            let store = {
+                let mut store = StoreSettlement::unavailable(
+                    "observed-invocation",
+                    &"b".repeat(64),
+                    "retained store refusal".into(),
+                );
+                store.original_project_bound = true;
+                store
+            };
+            let observed = Failure {
+                original_stop: None,
+                stop_git_custody: stop_git::FailureCustody::default(),
+                dispatched,
+                ready: Some(ready),
+                message: String::new(),
+                session_settlement: None,
+                #[cfg(feature = "sqlite-store")]
+                store_settlement: Some(store),
+                #[cfg(feature = "sqlite-store")]
+                store_project_binding: StoreProjectBinding::Bound,
+            };
+            let failure = match retain_observed_stop_terminal(0, &mut custody, observed) {
+                Ok(_) => panic!("retained refusal cannot become terminal success"),
+                Err(failure) => failure,
+            };
+            assert_eq!(failure.message, "retained Git refusal");
+            assert_eq!(failure.dispatched, dispatched);
+            let retained_ready = failure.ready.as_deref().expect("observed Ready retained");
+            assert_eq!(retained_ready as *const protocol::Ready, ready_identity);
+            assert_eq!(retained_ready.active, dispatched);
+            assert_eq!(
+                retained_ready.budget_home,
+                std::path::Path::new("/observed/budget-home")
+            );
+            assert_eq!(
+                retained_ready.project_digest.as_deref(),
+                Some("a".repeat(64).as_str())
+            );
+            assert_eq!(
+                retained_ready.session_id.as_deref(),
+                Some("observed-session")
+            );
+            #[cfg(feature = "sqlite-store")]
+            {
+                assert!(matches!(
+                    failure.store_project_binding,
+                    StoreProjectBinding::Bound
+                ));
+                let store = failure.store_settlement.expect("store outcome retained");
+                assert_eq!(store.error.as_deref(), Some("retained store refusal"));
+                assert!(store.original_project_bound);
+            }
+        }
     }
 }

@@ -19,6 +19,8 @@ import { MACHINE_EVENTS } from '../init/native-hook-identification';
 import { assertMachinePath } from '../init/machine-paths';
 import type { ComposerDependencies, HandlerResult, OfferReference } from './composer';
 import type { RuntimeRequest } from './protocol';
+import type { MatchedCliIdentityReceipt } from './cli-identity';
+import type { NativeStopLeaseContextPort } from './stop-lease-context';
 import type { ActiveInvocationSelection, SelectedHandler } from './selection';
 import { tryExecuteStockHandler, type NativeSessionSealExecution } from './stock-handlers';
 import { CONTAINMENT_ENV, createContainmentCapability } from './containment';
@@ -47,6 +49,8 @@ export interface HandlerExecutorOptions {
   readonly nativeRenderAdmission?: NativeRenderAdmission;
   /** Supplied only after the actual native full-prefix terminal was accepted. */
   readonly nativeSessionSeal?: NativeSessionSealExecution;
+  readonly nativeStopLeaseContext?: NativeStopLeaseContextPort;
+  readonly nativeStopCliIdentity?: MatchedCliIdentityReceipt;
   /** Request-local execution, supplied only after native Stop prefix completion. */
   readonly nativeStopPublication?: {
     readonly loggerIndex: 2;

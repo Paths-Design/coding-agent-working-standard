@@ -1,6 +1,7 @@
 // Control admission and consumer connection checks; these do not prove native
 // custody, SQL/profile qualification, filesystem publication or local cutover.
 const fs = require('node:fs');
+const { AbortController } = globalThis;
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -8,7 +9,11 @@ const { decodeDispatchGrant } = require('../../dist/runtime/live-protocol');
 const { RuntimeProtocolError } = require('../../dist/runtime/protocol');
 const { createNativeStopPrefixPort } = require('../../dist/runtime/session-cache-client');
 const context = require('../../dist/runtime/context');
+const { compareCliIdentity } = require('../../dist/runtime/cli-identity');
+const { createCliIdentityUnitDomain } = require('../helpers/cli-identity-unit-domain');
+const { heartbeatAgentActivity } = require('../../dist/application/agent-heartbeat');
 const stock = require('../../dist/runtime/stock-handlers');
+const realExecuteStockHandler = stock.tryExecuteStockHandler;
 const eligibility = require('../../dist/runtime/eligibility');
 const publication = require('../../dist/runtime/session-store-publication');
 const executor = require('../../dist/runtime/handler-executor');
@@ -153,7 +158,20 @@ test('Stop prefix uses its own correlated previous/decision exchange and preserv
   await expect(port.capture('/canonical')).rejects.toThrow('single-use');
 });
 
-let root, request, selection, trace, controller, prefix, store, nativePublication, compatibility;
+// Real comparator provenance in a unit domain; not installer/native admission proof.
+const ORIGINAL_BUDGET_MS = 30000;
+jest.setTimeout(ORIGINAL_BUDGET_MS + 5000);
+let root,
+  request,
+  selection,
+  trace,
+  controller,
+  prefix,
+  store,
+  nativePublication,
+  compatibility,
+  reviewed,
+  lateGit;
 beforeEach(() => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-stop-connection-')));
   const runtime = path.join(root, 'runtime');
@@ -192,7 +210,7 @@ beforeEach(() => {
   request = {
     schema: 'caws.runtime.request.v1',
     ...requestBase,
-    deadlineEpochMs: Date.now() + 10000,
+    deadlineEpochMs: Date.now() + ORIGINAL_BUDGET_MS,
     payload: { cwd: root, session_id: 'supplied' },
     caller: {
       cwd: root,
@@ -201,7 +219,10 @@ beforeEach(() => {
     },
   };
   request.inputJson = JSON.stringify(request.payload);
+  reviewed = createCliIdentityUnitDomain(root);
+  request.caller.environment.PATH = path.join(root, 'identity-bin');
   controller = new globalThis.AbortController();
+  lateGit = { observe: jest.fn(async () => ({ status: 'git_failed', commonDir: null })) };
   prefix = {
     capture: jest.fn(async () => {
       trace.push('prefix');
@@ -223,9 +244,11 @@ beforeEach(() => {
       trace.push('publication');
       return { ...completedHandler, stdout: Buffer.from('native logger') };
     });
-  compatibility = jest
-    .spyOn(executor, 'executeCompatibilityDispatch')
-    .mockRejectedValue(new Error('compatibility replay'));
+  compatibility = jest.spyOn(executor, 'executeCompatibilityDispatch').mockResolvedValue({
+    ...completedHandler,
+    offerReceipts: Buffer.alloc(0),
+    executionRecords: Buffer.alloc(0),
+  });
 });
 afterEach(() => {
   const retain = process.env.CAWS_STOP_CONNECTION_ARTIFACT_DIR;
@@ -257,8 +280,14 @@ afterEach(() => {
   jest.restoreAllMocks();
   fs.rmSync(root, { recursive: true, force: true });
 });
-const prepare = () =>
-  prepareRuntimeInvocation(
+const prepare = async ({ withReceipt = true } = {}) => {
+  let receipt;
+  if (withReceipt) {
+    const compared = await compareCliIdentity({ reviewed, request, signal: controller.signal });
+    expect(compared).toMatchObject({ status: 'matched' });
+    receipt = compared.receipt;
+  }
+  return prepareRuntimeInvocation(
     request,
     controller.signal,
     undefined,
@@ -267,8 +296,11 @@ const prepare = () =>
     undefined,
     async () => selection,
     prefix,
-    store
+    store,
+    lateGit,
+    receipt
   );
+};
 
 test('mandatory prefix precedes ordinary composition and logger publication occupies index two', async () => {
   const prepared = await prepare();
@@ -344,24 +376,177 @@ test('logger source is reverified after prefix effects before native publication
 });
 
 test.each([{ BASH_ENV: '/foreign/startup' }, { CAWS_PRIOR_BASH_ENV: '/prior/startup' }])(
-  'ambient startup disagreement fails before the prefix: %j',
+  'ambient startup declines the real comparator before prefix: %j',
   async (environment) => {
     Object.assign(request.caller.environment, environment);
-    const prepared = await prepare();
-    await expect(prepared.dispatch(undefined, decode())).rejects.toThrow('disagrees');
+    const compared = await compareCliIdentity({ reviewed, request, signal: controller.signal });
+    expect(compared).toMatchObject({ status: 'declined', reason: 'Custom CLI routing or startup' });
+    const prepared = await prepare({ withReceipt: false });
+    await prepared.dispatch(undefined, decode());
     expect(prefix.capture).not.toHaveBeenCalled();
-    expect(compatibility).not.toHaveBeenCalled();
+    expect(nativePublication).not.toHaveBeenCalled();
+    expect(compatibility).toHaveBeenCalledTimes(1);
   }
 );
 
 test.each([{}, { BASH_ENV: '' }, { CAWS_PRIOR_BASH_ENV: '' }])(
   'absent and empty ambient startup remain inert: %j',
   async (environment) => {
-    Object.assign(request.caller.environment, environment, {
-      BASH_ENV: environment.BASH_ENV ?? path.join(selection.runtimeDirectory, 'handler-env.sh'),
-    });
+    Object.assign(request.caller.environment, environment);
     const prepared = await prepare();
     await prepared.dispatch(undefined, decode());
     expect(prefix.capture).toHaveBeenCalledTimes(1);
   }
 );
+
+test.each([undefined, '/explicit/custom-caws'])(
+  'missing real CLI receipt retains compatibility before prefix for CAWS_BIN=%s',
+  async (bin) => {
+    if (bin === undefined) delete request.caller.environment.CAWS_BIN;
+    else {
+      request.caller.environment.CAWS_BIN = bin;
+      expect(
+        await compareCliIdentity({ reviewed, request, signal: controller.signal })
+      ).toMatchObject({ status: 'declined', reason: 'Custom CLI routing or startup' });
+    }
+    const prepared = await prepare({ withReceipt: false });
+    await prepared.dispatch(undefined, decode());
+    expect(prefix.capture).not.toHaveBeenCalled();
+    expect(nativePublication).not.toHaveBeenCalled();
+    expect(compatibility).toHaveBeenCalledTimes(1);
+  }
+);
+
+test.each(['structural', 'copied', 'request', 'signal'])(
+  'a %s substitute cannot carry comparator provenance into preparation',
+  async (kind) => {
+    const compared = await compareCliIdentity({ reviewed, request, signal: controller.signal });
+    expect(compared.status).toBe('matched');
+    const receipt =
+      kind === 'structural'
+        ? { assertOwner() {}, async revalidate() {} }
+        : kind === 'copied'
+          ? { ...compared.receipt }
+          : compared.receipt;
+    await expect(
+      prepareRuntimeInvocation(
+        kind === 'request' ? { ...request } : request,
+        kind === 'signal' ? new AbortController().signal : controller.signal,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        async () => selection,
+        prefix,
+        store,
+        lateGit,
+        receipt
+      )
+    ).rejects.toThrow(
+      kind === 'structural' || kind === 'copied' ? 'provenance' : 'another original'
+    );
+    expect(prefix.capture).not.toHaveBeenCalled();
+    expect(nativePublication).not.toHaveBeenCalled();
+    expect(compatibility).not.toHaveBeenCalled();
+  }
+);
+
+// Unit-domain connection: the prefix and native publication are boundary doubles;
+// the stock source checks, comparator receipt, late consumer and lease store are real.
+test('real CLI owner connects prefix, logger and late agent-stop lease application', async () => {
+  const templates = path.join(__dirname, '../../templates/hook-packs');
+  const runtime = selection.runtimeDirectory;
+  const copy = (relative, source) => {
+    const destination = path.join(runtime, relative);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(path.join(templates, source), destination);
+    fs.chmodSync(destination, 0o755);
+    return destination;
+  };
+  selection.handlers = [
+    'goal-ac-gate.sh',
+    'plan-transcript-finalize.sh',
+    'session-log.sh',
+    'agent-stop.sh',
+  ].map((name) => {
+    const file = copy(name, 'shared/' + name);
+    return {
+      name,
+      path: file,
+      entry: name,
+      args: [],
+      kind: 'stock',
+      tier: 'repo-policy',
+      sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
+    };
+  });
+  for (const name of [
+    'agent-surface.sh',
+    'parse-input.sh',
+    'emit.sh',
+    'session-id.sh',
+    'caws-state.sh',
+    'guard-message.sh',
+    'agent-pid.sh',
+    'bash-mutation-targets.sh',
+    'heredoc.sh',
+  ]) {
+    const file = copy('lib/' + name, 'shared/lib/' + name);
+    selection.libraries[name] = {
+      kind: 'shared',
+      path: file,
+      sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
+    };
+  }
+  copy('handler-env.sh', 'runtime/handler-env.sh');
+  copy('runtime-paths.sh', 'shared/runtime-paths.sh');
+  copy('lib/session-cache.sh', 'shared/lib/session-cache.sh');
+  const seeded = heartbeatAgentActivity({
+    cawsDir: path.join(root, '.caws'),
+    identity: { session_id: 'supplied', platform: 'opencode' },
+    now: () => new Date(),
+    reason: 'manual_register',
+    context: {
+      repo_root: root,
+      cwd: root,
+      git_common_dir: path.join(root, '.git'),
+      git_dir: path.join(root, '.git'),
+      hook_pid: process.pid,
+      hostname: 'unit-domain',
+    },
+  });
+  expect(seeded.ok).toBe(true);
+  const lease = path.join(root, '.caws/leases/supplied.json');
+  const before = fs.readFileSync(lease);
+  lateGit.observe.mockImplementation(async () => {
+    trace.push('late-git');
+    expect(trace).toEqual([
+      'prefix',
+      'goal-ac-gate.sh',
+      'plan-transcript-finalize.sh',
+      'publication',
+      'agent-stop.sh',
+      'late-git',
+    ]);
+    expect(fs.readFileSync(lease)).toEqual(before);
+    return { status: 'resolved', commonDir: path.join(root, '.git') };
+  });
+  stock.tryExecuteStockHandler.mockImplementation(async (handler, options) => {
+    trace.push(handler.name);
+    if (handler.name !== 'agent-stop.sh') return completedHandler;
+    expect(options.request).toBe(request);
+    expect(options.signal).toBe(controller.signal);
+    expect(options.nativeStopLeaseContext).toBe(lateGit);
+    return realExecuteStockHandler(handler, options);
+  });
+  const prepared = await prepare();
+  const result = await prepared.dispatch(undefined, decode());
+  expect(result.nativeResult.exitCode).toBe(0);
+  expect(Buffer.from(result.nativeResult.stdout).toString()).toContain('native logger');
+  expect(lateGit.observe).toHaveBeenCalledTimes(1);
+  const stopped = JSON.parse(fs.readFileSync(lease));
+  expect(stopped.status).toBe('stopped');
+  expect(stopped.last_seen_reason).toBe('session_stop');
+  expect(stopped.stopped_at).toEqual(expect.any(String));
+  expect(compatibility).not.toHaveBeenCalled();
+});

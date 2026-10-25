@@ -647,6 +647,84 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       },
     };
   }
+  function reviewedCliDomain() {
+    const { cliClosureDigest } = require(path.join(dist, 'runtime/cli-identity'));
+    const files = Object.fromEntries(
+      Object.entries(descriptor.files)
+        .filter(
+          ([name]) => name.startsWith('node_modules/') && !name.endsWith('/.package-lock.json')
+        )
+        .map(([name, pin]) => [
+          name,
+          { ...pin, sizeBytes: fs.statSync(path.join(descriptor.prefixRoot, name)).size },
+        ])
+    );
+    const review = {
+      files,
+      packages: Object.fromEntries(
+        Object.entries(descriptor.packages).map(([name, pkg]) => [
+          name,
+          { name: pkg.name, version: pkg.version },
+        ])
+      ),
+      omissions: descriptor.omissions,
+      node: {
+        path: 'native/node',
+        sha256: descriptor.node.sha256,
+        sizeBytes: fs.statSync(descriptor.node.source).size,
+        mode: 0o755,
+      },
+    };
+    const file = reviewedFile(
+      'reviewed-cli-domain.json',
+      JSON.stringify({
+        schema: 'caws.cli.agents-stop-domain.v1',
+        operation: 'agents-stop-explicit-session-opencode',
+        closureSha256: cliClosureDigest(review),
+        importers: [],
+        dormantSites: [],
+      })
+    );
+    descriptor.cliIdentityDomain = { source: file.path, sha256: file.sha256 };
+    return file;
+  }
+  test('reviewed CLI policy is fixed pinned data copied into generation manifest inputs', () => {
+    const domain = reviewedCliDomain(),
+      prepared = prepareDescriptor();
+    const source = JSON.parse(prepared.files.get('native-cli-identity.json'));
+    expect(source.prefixRoot).toBe('native-prefix');
+    expect(source.domain).toEqual({
+      path: 'native-cli-domain.json',
+      sha256: domain.sha256,
+      sizeBytes: domain.sizeBytes,
+      mode: 0o644,
+    });
+    expect(source.node.path).toBe('native/node');
+    expect(source.files[cli + '/dist/index.js'].sha256).toBe(
+      descriptor.files[cli + '/dist/index.js'].sha256
+    );
+    expect(source.files).not.toHaveProperty('package-lock.json');
+    expect(prepared.files.get('native-cli-domain.json')).toEqual(fs.readFileSync(domain.path));
+    const modes = JSON.parse(prepared.files.get('native-modes.json'));
+    expect(modes['native-cli-domain.json']).toBe(0o644);
+    expect(modes['native-cli-identity.json']).toBe(0o644);
+  });
+  test('missing CLI policy remains absent; present malformed or changed policy refuses', () => {
+    expect(prepareDescriptor().files.has('native-cli-identity.json')).toBe(false);
+    const domain = reviewedCliDomain();
+    fs.appendFileSync(domain.path, ' ');
+    expect(() => prepareDescriptor()).toThrow(/domain content changed/);
+    descriptor.cliIdentityDomain.sha256 = sha(fs.readFileSync(domain.path));
+    fs.writeFileSync(domain.path, '{}');
+    descriptor.cliIdentityDomain.sha256 = sha(fs.readFileSync(domain.path));
+    expect(() => prepareDescriptor()).toThrow(/does not bind/);
+  });
+  test('reviewed policy for old package bytes cannot be relabeled for the new closure', () => {
+    reviewedCliDomain();
+    write(cli + '/dist/index.js', 'changed package bytes\n');
+    descriptor.files = input.files;
+    expect(() => prepareDescriptor()).toThrow(/does not bind/);
+  });
   function imageFile() {
     const file = path.join(root, 'receipt-image.json');
     fs.writeFileSync(file, JSON.stringify(descriptor), { mode: 0o600 });
@@ -829,6 +907,113 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     descriptor.stopProfile = { source, sha256: sha(bytes) };
     return bytes;
   }
+
+  function syntheticGitObservation(nativeSha256) {
+    const hash = 'b'.repeat(64),
+      snapshot = {
+        path: '/usr/bin/git',
+        physicalPath: '/usr/bin/git',
+        sha256: hash,
+        device: '1',
+        inode: '1152921500312571562',
+        bytes: 3,
+        mode: 33261,
+        modifiedSeconds: 4,
+        modifiedNanoseconds: 0,
+        changedSeconds: 5,
+        changedNanoseconds: 0,
+      };
+    return {
+      schema: 'caws.runtime.stop-git-distribution.v1',
+      platform: 'macos',
+      os: { kernelRelease: 'synthetic', kernelVersion: 'synthetic', machine: 'arm64' },
+      inspectorNativeSha256: nativeSha256,
+      callerGit: snapshot,
+      resolver: { ...snapshot, path: '/usr/bin/xcrun' },
+      developerSelector: { ...snapshot, path: '/usr/bin/xcode-select' },
+      developerDirectory: '/Developer',
+      developerIdentity: {
+        physicalPath: '/Developer',
+        device: '1',
+        inode: '18446744073709551615',
+        mode: 16877,
+        modifiedSeconds: 4,
+        modifiedNanoseconds: 0,
+        changedSeconds: 5,
+        changedNanoseconds: 0,
+      },
+      implementation: snapshot,
+      provenance: {
+        authenticator:
+          'Security.framework/SecStaticCodeCheckValidity/all-architectures+strict/no-network',
+        requirements: [
+          'identifier "com.apple.git" and anchor apple',
+          'identifier "com.apple.dt.xcode_select.tool-shim-public" and anchor apple',
+          'identifier "com.apple.xcrun" and anchor apple',
+          'identifier "com.apple.xcode-select" and anchor apple',
+        ],
+        loaderTcb: [
+          'macos-platform-loader',
+          'apple-code-signing-trust-store',
+          'Security.framework',
+          'CoreFoundation.framework',
+          'CoreServices.framework',
+          'libSystem',
+          'libz',
+          'libiconv',
+        ],
+      },
+    };
+  }
+  test('v1 controlled data rejects an added Git observation even when null', () => {
+    const before = prepareDescriptor();
+    for (const observation of [null, syntheticGitObservation('a'.repeat(64))]) {
+      const data = syntheticSemanticData(before);
+      data.gitDistribution = observation;
+      selectSemanticData(data);
+      expect(() => prepareDescriptor()).toThrow(/semantic profile/);
+    }
+  });
+  test('v2 observed Git data is copied into hashed image only with exact independent native identity', () => {
+    const before = prepareDescriptor(),
+      data = syntheticSemanticData(before);
+    data.schema = 'caws.runtime.stop-semantic-profile.v2';
+    data.gitDistribution = syntheticGitObservation(sha(before.files.get('native/caws-native')));
+    const bytes = selectSemanticData(data);
+    expect(prepareDescriptor().files.get('native-stop-profile.json')).toEqual(bytes);
+    for (const inode of [
+      Number('1152921500312571562'),
+      '01',
+      '+1',
+      '-1',
+      '18446744073709551616',
+      ...[10, 13, 8232, 8233].map((code) => '1' + String.fromCharCode(code)),
+    ]) {
+      const bad = JSON.parse(JSON.stringify(data));
+      bad.gitDistribution.callerGit.inode = inode;
+      selectSemanticData(bad);
+      expect(() => prepareDescriptor()).toThrow();
+    }
+    for (const kind of [
+      'missing',
+      'null',
+      'old image',
+      'unknown provenance',
+      'extra permission',
+      'unknown OS',
+    ]) {
+      const bad = JSON.parse(JSON.stringify(data));
+      if (kind === 'missing') delete bad.gitDistribution;
+      if (kind === 'null') bad.gitDistribution = null;
+      if (kind === 'old image') bad.gitDistribution.inspectorNativeSha256 = '0'.repeat(64);
+      if (kind === 'unknown provenance') bad.gitDistribution.provenance.requirements = [];
+      if (kind === 'extra permission') bad.gitDistribution.permission = true;
+      if (kind === 'unknown OS') bad.gitDistribution.platform = 'linux';
+      selectSemanticData(bad);
+      expect(() => prepareDescriptor()).toThrow();
+    }
+  });
+
   test('v2 includes exact semantic data without a final generation digest cycle or activation', () => {
     const before = prepareDescriptor();
     const data = syntheticSemanticData(before),

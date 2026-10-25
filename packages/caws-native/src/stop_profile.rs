@@ -60,6 +60,8 @@ struct Document {
     comparison: Comparison,
     provenance: Provenance,
     remaining_joins: Vec<String>,
+    #[serde(default, deserialize_with = "present_git_distribution")]
+    git_distribution: Option<Option<caws_native::context_git::stop::Observation>>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -112,6 +114,11 @@ struct Provenance {
     reference_adapter_sha256: String,
     reference_shared_inventory_sha256: String,
     corpus_sha256: String,
+}
+fn present_git_distribution<'de, D: serde::Deserializer<'de>>(
+    decoder: D,
+) -> Result<Option<Option<caws_native::context_git::stop::Observation>>, D::Error> {
+    Ok(Some(Option::deserialize(decoder)?))
 }
 fn unique_members<'de, D: serde::Deserializer<'de>>(
     decoder: D,
@@ -182,7 +189,30 @@ fn selected_digits(environment: &BTreeMap<String, String>) -> Result<u32, String
     }
 }
 fn validate(document: &Document) -> Result<(), String> {
-    if document.schema != "caws.runtime.stop-semantic-profile.v1"
+    let version_matches = match document.schema.as_str() {
+        "caws.runtime.stop-semantic-profile.v1" => document.git_distribution.is_none(),
+        "caws.runtime.stop-semantic-profile.v2" => document
+            .git_distribution
+            .as_ref()
+            .and_then(Option::as_ref)
+            .is_some_and(|v| v.validate().is_ok()),
+        _ => false,
+    };
+    if document
+        .git_distribution
+        .as_ref()
+        .and_then(Option::as_ref)
+        .is_some_and(|v| {
+            document
+                .implementation
+                .get("native/caws-native")
+                .map(String::as_str)
+                != Some(v.inspector_native_sha256())
+        })
+    {
+        return Err("Stop Git observation differs from semantic native implementation".into());
+    }
+    if !version_matches
         || document.surface != "opencode"
         || document.event != "stop"
         || document.scope != "controlled-components"
@@ -411,6 +441,14 @@ impl<'original> StopProfileReceipt<'original> {
                 sqlite,
             })
         }
+    }
+    /// Observed data, never an eligibility receipt. v1 remains controlled-only;
+    /// native Stop admission must require a separate live Git receipt for v2.
+    pub(crate) fn git_distribution(&self) -> Option<&caws_native::context_git::stop::Observation> {
+        self.document
+            .git_distribution
+            .as_ref()
+            .and_then(Option::as_ref)
     }
     pub(crate) fn sql_selector(&self) -> &str {
         &self
@@ -667,12 +705,68 @@ mod tests {
     }
     #[test]
     fn original_clock_and_cancellation_cannot_be_refreshed() {
-        let deadline = MonotonicDeadline::capture(Duration::from_millis(1)).unwrap();
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
         assert_eq!(
             check(&deadline, &mut || Err("original cancelled".into())).unwrap_err(),
             "original cancelled"
         );
-        std::thread::sleep(Duration::from_millis(2));
+        // Exercise this same captured owner after expiry. A one-millisecond
+        // capture can expire inside its own host-clock bracket under load.
+        std::thread::sleep(
+            deadline
+                .expires()
+                .saturating_duration_since(std::time::Instant::now())
+                + Duration::from_millis(2),
+        );
         assert!(check(&deadline, &mut || Ok(())).is_err());
+    }
+
+    fn git_observation() -> Value {
+        let snapshot = json!({"path":"/usr/bin/git","physicalPath":"/usr/bin/git","sha256":"b".repeat(64),"device":"1","inode":"1152921500312571562","bytes":3,"mode":33261,"modifiedSeconds":4,"modifiedNanoseconds":0,"changedSeconds":5,"changedNanoseconds":0});
+        let mut resolver = snapshot.clone();
+        resolver["path"] = json!("/usr/bin/xcrun");
+        let mut selector = snapshot.clone();
+        selector["path"] = json!("/usr/bin/xcode-select");
+        json!({"schema":"caws.runtime.stop-git-distribution.v1","platform":"macos","os":{"kernelRelease":"synthetic","kernelVersion":"synthetic","machine":"arm64"},"inspectorNativeSha256":"a".repeat(64),"callerGit":snapshot,"resolver":resolver,"developerSelector":selector,"developerDirectory":"/Developer","developerIdentity":{"physicalPath":"/Developer","device":"1","inode":"18446744073709551615","mode":16877,"modifiedSeconds":4,"modifiedNanoseconds":0,"changedSeconds":5,"changedNanoseconds":0},"implementation":snapshot,"provenance":{"authenticator":"Security.framework/SecStaticCodeCheckValidity/all-architectures+strict/no-network","requirements":["identifier \"com.apple.git\" and anchor apple","identifier \"com.apple.dt.xcode_select.tool-shim-public\" and anchor apple","identifier \"com.apple.xcrun\" and anchor apple","identifier \"com.apple.xcode-select\" and anchor apple"],"loaderTcb":["macos-platform-loader","apple-code-signing-trust-store","Security.framework","CoreFoundation.framework", "CoreServices.framework","libSystem","libz","libiconv"]}})
+    }
+    #[test]
+    fn observed_distribution_versions_preserve_missing_null_and_provenance_boundaries() {
+        // Schema consistency only: synthetic evidence cannot mint a live receipt.
+        assert_eq!(validate_value(fixture()), Ok(()));
+        let mut value = fixture();
+        value["gitDistribution"] = Value::Null;
+        assert!(validate_value(value).is_err());
+        let mut value = fixture();
+        value["gitDistribution"] = git_observation();
+        assert!(validate_value(value).is_err());
+        let mut value = fixture();
+        value["schema"] = json!("caws.runtime.stop-semantic-profile.v2");
+        assert!(validate_value(value.clone()).is_err());
+        value["gitDistribution"] = Value::Null;
+        assert!(validate_value(value.clone()).is_err());
+        value["gitDistribution"] = git_observation();
+        assert_eq!(validate_value(value.clone()), Ok(()));
+        for changed in [
+            "unknown",
+            "missing provenance",
+            "wrong native image",
+            "supplied permission",
+        ] {
+            let mut bad = value.clone();
+            match changed {
+                "unknown" => bad["gitDistribution"]["platform"] = json!("custom"),
+                "missing provenance" => {
+                    bad["gitDistribution"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("provenance");
+                }
+                "wrong native image" => {
+                    bad["gitDistribution"]["inspectorNativeSha256"] = json!("f".repeat(64))
+                }
+                _ => bad["gitDistribution"]["permission"] = json!(true),
+            }
+            assert!(validate_value(bad).is_err(), "{changed}");
+        }
     }
 }

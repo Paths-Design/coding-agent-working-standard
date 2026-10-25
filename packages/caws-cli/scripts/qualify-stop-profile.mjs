@@ -106,8 +106,18 @@ export function validateRequest(request) {
     'reference',
     'corpus',
     ...(Object.hasOwn(request, 'nativePolicyImage') ? ['nativePolicyImage'] : []),
+    ...(Object.hasOwn(request, 'gitDistribution') ? ['gitDistribution'] : []),
   ]);
   if (Object.hasOwn(request, 'nativePolicyImage')) validatePolicyImage(request.nativePolicyImage);
+  if (Object.hasOwn(request, 'gitDistribution')) {
+    assert(
+      Object.hasOwn(request, 'nativePolicyImage'),
+      'Git observation requires a selected complete native policy image'
+    );
+    exactKeys(request.gitDistribution, ['path', 'sha256']);
+    assert(path.isAbsolute(request.gitDistribution.path));
+    assert.match(request.gitDistribution.sha256, /^[a-f0-9]{64}$/);
+  }
   assert.equal(request.schema, 'caws.qualify-stop-components.request.v1');
   assert.equal(request.surface, 'opencode');
   exactKeys(request.candidate, ['node', 'native', 'engine', 'distRoot', 'distFiles']);
@@ -254,16 +264,124 @@ export function verifyPolicyImageBindings(candidate, prepared, imageFiles) {
   assert.deepEqual(dist, candidate.distFiles, 'complete compared dist differs from image');
   return actual;
 }
+
+export function validateGitDistribution(value, nativeSha256) {
+  exactKeys(value, [
+    'schema',
+    'platform',
+    'os',
+    'inspectorNativeSha256',
+    'callerGit',
+    'resolver',
+    'developerSelector',
+    'developerDirectory',
+    'developerIdentity',
+    'implementation',
+    'provenance',
+  ]);
+  assert.equal(value.schema, 'caws.runtime.stop-git-distribution.v1');
+  assert.equal(value.platform, 'macos');
+  assert.equal(
+    value.inspectorNativeSha256,
+    nativeSha256,
+    'Git observation native image differs from candidate'
+  );
+  assert.match(nativeSha256, /^[a-f0-9]{64}$/);
+  const absolute = (p) =>
+    typeof p === 'string' &&
+    path.isAbsolute(p) &&
+    Buffer.byteLength(p) <= 4096 &&
+    !p.includes('\0');
+  const integerKeys = [
+    'device',
+    'inode',
+    'bytes',
+    'mode',
+    'modifiedSeconds',
+    'modifiedNanoseconds',
+    'changedSeconds',
+    'changedNanoseconds',
+  ];
+  const identity = (v, names) => {
+    for (const k of names) {
+      if (k === 'device' || k === 'inode') {
+        assert(
+          typeof v[k] === 'string' && /^(0|[1-9][0-9]{0,19})$/.test(v[k]),
+          'Git filesystem identity must be canonical decimal'
+        );
+        assert(BigInt(v[k]) <= 18446744073709551615n, 'Git filesystem identity exceeds u64');
+        assert.equal(
+          BigInt(v[k]).toString(),
+          v[k],
+          'Git filesystem identity must be canonical decimal'
+        );
+      } else
+        assert(
+          Number.isSafeInteger(v[k]),
+          'Git observation identity outside finite integer domain'
+        );
+    }
+  };
+  for (const label of ['callerGit', 'resolver', 'developerSelector', 'implementation']) {
+    const p = value[label];
+    exactKeys(p, ['path', 'physicalPath', 'sha256', ...integerKeys]);
+    assert(absolute(p.path) && absolute(p.physicalPath));
+    assert.match(p.sha256, /^[a-f0-9]{64}$/);
+    identity(p, integerKeys);
+    assert(
+      p.bytes > 0 &&
+        p.mode >= 0 &&
+        p.modifiedNanoseconds >= 0 &&
+        p.modifiedNanoseconds < 1e9 &&
+        p.changedNanoseconds >= 0 &&
+        p.changedNanoseconds < 1e9
+    );
+  }
+  assert.equal(value.resolver.path, '/usr/bin/xcrun');
+  assert.equal(value.developerSelector.path, '/usr/bin/xcode-select');
+  assert(absolute(value.developerDirectory));
+  const directoryKeys = integerKeys.filter((k) => k !== 'bytes');
+  exactKeys(value.developerIdentity, ['physicalPath', ...directoryKeys]);
+  assert(absolute(value.developerIdentity.physicalPath));
+  identity(value.developerIdentity, directoryKeys);
+  exactKeys(value.os, ['kernelRelease', 'kernelVersion', 'machine']);
+  for (const v of Object.values(value.os))
+    assert(typeof v === 'string' && v && v.length <= 4096 && !v.includes('\0'));
+  exactKeys(value.provenance, ['authenticator', 'requirements', 'loaderTcb']);
+  assert.equal(
+    value.provenance.authenticator,
+    'Security.framework/SecStaticCodeCheckValidity/all-architectures+strict/no-network'
+  );
+  assert.deepEqual(value.provenance.requirements, [
+    'identifier "com.apple.git" and anchor apple',
+    'identifier "com.apple.dt.xcode_select.tool-shim-public" and anchor apple',
+    'identifier "com.apple.xcrun" and anchor apple',
+    'identifier "com.apple.xcode-select" and anchor apple',
+  ]);
+  assert.deepEqual(value.provenance.loaderTcb, [
+    'macos-platform-loader',
+    'apple-code-signing-trust-store',
+    'Security.framework',
+    'CoreFoundation.framework',
+    'CoreServices.framework',
+    'libSystem',
+    'libz',
+    'libiconv',
+  ]);
+  return value;
+}
+
 // Data construction is private to a successful live comparison. The exported
 // validation helpers used by hostile tests cannot mint an invocation receipt.
-function semanticPolicy(receipt, componentReceiptSha256, implementation) {
+function semanticPolicy(receipt, componentReceiptSha256, implementation, gitDistribution) {
   verifyCoverage(receipt.comparisons);
   for (const row of receipt.comparisons) {
     assert.match(row.referenceSha256, /^[a-f0-9]{64}$/);
     assert.equal(row.referenceSha256, row.candidateSha256);
   }
   return {
-    schema: SEMANTIC_PROFILE_SCHEMA,
+    schema: gitDistribution ? 'caws.runtime.stop-semantic-profile.v2' : SEMANTIC_PROFILE_SCHEMA,
+    ...(gitDistribution ? { gitDistribution } : {}),
     surface: 'opencode',
     event: 'stop',
     scope: 'controlled-components',
@@ -304,6 +422,40 @@ function pinFile(pin) {
   for (const key of ['dev', 'ino', 'size', 'mtimeMs', 'ctimeMs'])
     assert.equal(before[key], after[key]);
   return pin;
+}
+// The observation is untrusted data. Bound allocation and reads before parsing;
+// a size assertion after readFileSync would leave the producer unbounded.
+export function readPinnedGitObservation(pin) {
+  const maximum = 128 * 1024;
+  const before = fs.lstatSync(pin.path);
+  assert(before.isFile() && !before.isSymbolicLink(), 'Git observation must be regular');
+  assert.equal(fs.realpathSync(pin.path), pin.path, 'pins must use canonical physical paths');
+  assert(before.size > 0 && before.size <= maximum, 'Git observation size bound');
+  const descriptor = fs.openSync(pin.path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const opened = fs.fstatSync(descriptor);
+    const identity = ['dev', 'ino', 'size', 'mode', 'mtimeMs', 'ctimeMs'];
+    for (const key of identity) assert.equal(before[key], opened[key]);
+    const buffer = Buffer.alloc(maximum + 1);
+    let count = 0;
+    while (count < buffer.length) {
+      const received = fs.readSync(descriptor, buffer, count, buffer.length - count, null);
+      if (!received) break;
+      count += received;
+    }
+    assert(count > 0 && count <= maximum, 'Git observation size bound');
+    const after = fs.fstatSync(descriptor),
+      named = fs.lstatSync(pin.path);
+    for (const key of identity) {
+      assert.equal(opened[key], after[key]);
+      assert.equal(after[key], named[key]);
+    }
+    const bytes = buffer.subarray(0, count);
+    assert.equal(sha(bytes), pin.sha256, 'Git observation input pin mismatch');
+    return bytes;
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
 function pinTree(root, expected) {
   assert.equal(fs.realpathSync(root), root);
@@ -894,7 +1046,17 @@ export async function qualify(requestFile) {
       }
     }
     captureArtifacts(request.outputRoot);
+    let gitDistribution;
+    if (request.gitDistribution) {
+      const observationBytes = readPinnedGitObservation(request.gitDistribution);
+      gitDistribution = validateGitDistribution(
+        JSON.parse(observationBytes.toString('utf8')),
+        request.candidate.native.sha256
+      );
+      readPinnedGitObservation(request.gitDistribution);
+    }
     const receipt = {
+      ...(request.gitDistribution ? { gitDistributionPin: request.gitDistribution } : {}),
       schema: 'caws.stop-profile.component-comparison.v1',
       surface: 'opencode',
       event: 'stop',
@@ -932,7 +1094,7 @@ export async function qualify(requestFile) {
       // repeated exact tool/dist/image observations. No historical receipt input.
       save(
         path.join(request.outputRoot, 'native-stop-profile.json'),
-        semanticPolicy(receipt, sha(read(receiptFile)), implementation)
+        semanticPolicy(receipt, sha(read(receiptFile)), implementation, gitDistribution)
       );
     }
     save(path.join(request.outputRoot, 'stop-profile-component-draft.json'), {
