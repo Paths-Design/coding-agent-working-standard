@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: native-test-preparation
 created_at: '2026-10-23T06:26:43.506Z'
-updated_at: '2026-10-23T09:03:28.806Z'
+updated_at: '2026-10-25T02:49:13.188Z'
 created_by_session: '01a166d3-36ad-71a3-83a1-a1b8a6e32a7c'
 blast_radius:
   modules:
@@ -29,6 +29,8 @@ scope:
     - packages/caws-cli/scripts/clean-staged-docs.mjs
     - packages/caws-cli/tests/docs/package-license-transport.test.js
   out: []
+  support:
+    - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
 invariants:
   - 'Every ordinary full test route prepares current compiled helpers and a feature-off host native binary before Jest; preparation failure is never a skip or successful verdict.'
   - 'Generic test preparation never uses SQLite qualification or adopts an existing binary after a failed build; macOS actual custody remains a mandatory separate qualification.'
