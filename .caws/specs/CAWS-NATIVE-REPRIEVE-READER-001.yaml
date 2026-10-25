@@ -86,9 +86,9 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Consumed reader only: manually inspected reprieve-reader-01/bats-02.log13 actual private dispatcher controls and focused-03.log434pass1explicit supplied-native skip. Valid named guard skip/log/execution records, canonical worktree reach, missing asset/node, wrong session/repo, expiry/revoke presence, byte carrier and cleared globals verified by source/assertions. actual-output-comparison-01 retains6355 CPython3.11 expiry comparisons,97records through both actual entries,348 byte controls and30 entry controls; declared near-expiry/nonUTF8 compatibility exclusions preserved. No real session reprieve changed. Commit verification proves reachability, not execution of these external raw logs."
-    recorded_at: "2026-10-25T20:34:38.827Z"
-    commit_sha: ac1ea80d98595e1c62afce27388581522043572e
+    evidence_ref: "Final reader source58ed: inspected focused-04.log424pass0skip and bats-03.log13actual private dispatcher cases, covering named skip/log/records, worktree/canonical reach, expiry/revocation/session/repo/UTF8 refusal, missing tooling/asset and cleared globals. New reader6f170576...c286ab differs from checked d95 only explicit equivalent catch assignments plus source provenance; parser unchanged, so prior6355CPython3.11/97record/348byte/30entry comparison remains bounded prior evidence, not relabeled a fresh comparison. No real reprieve changed; final source/pack checks explicitly referenced. Commit verify proves reachability only."
+    recorded_at: "2026-10-25T20:56:42.853Z"
+    commit_sha: "58ed781a854b1fd8fe42592d7f765441b672aa2c"
   - criterion_id: A2
     status: pass
     evidence_ref: "Generated/shipped reader scope: generate-runtime-assets --check, compiled source tests and pack-fingerprint-02.log14pass inspected. Actual final npm pack/offline production install under reprieve-reader-01/packed-02, then normal installMachineRuntime, consumes exact reader d95a202b...f83b6d2 through installed shell with Python absent from PATH and hostile NODE_OPTIONS/NODE_PATH. Six raw cases valid/revoked/expired/foreign/missingasset/missingNode match and preserve record bytes; installed asset non-executable by manifest and uses builtin imports only. Source/runtime body contains no embedded Python reader. This is private package reader proof, not complete no-Python package or native-image qualification. CLI verify establishes committed-source reachability only."
