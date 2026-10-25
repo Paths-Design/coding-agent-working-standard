@@ -34,6 +34,7 @@ scope:
 invariants:
   - 'Every ordinary full test route prepares current compiled helpers and a feature-off host native binary before Jest; preparation failure is never a skip or successful verdict.'
   - 'Generic test preparation never uses SQLite qualification or adopts an existing binary after a failed build; macOS actual custody remains a mandatory separate qualification.'
+  - 'Qualification tests retain the fixed reviewed historical reference inventory; current candidate templates cannot regenerate or replace the oracle.'
 acceptance:
   - id: A1
     given: 'a checkout without generated qualification helpers or the native test binary'
