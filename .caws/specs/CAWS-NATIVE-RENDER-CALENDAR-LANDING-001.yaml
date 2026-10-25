@@ -47,3 +47,8 @@ evidence:
     evidence_ref: "Inspected /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/calendar-landing: committed-source-join.json, repaired/typescript.json exit0, repaired-calendar-02.log28cases, repaired/jest.json108cases, native unit6/integration6/doc2 rawlogs and reference-comparison zero failures. Native source bytes unchanged at e5af425a. MacOS source qualification only; no live carrier activation, full timezone resource closure, or native cutover. CLI verify checks commit existence only; raw checks were independently inspected."
     recorded_at: "2026-10-25T01:11:24.071Z"
     commit_sha: e5af425ad32d5accea34411b89bb09378959e996
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/calendar-landing/mutation-policy.log194sources22targets; repaired/mutation.json exit0 unchanged source pins; repaired/score.json unchanged80floor:1197detected/1393valid=85.929648percent,179survived17uncovered. Calendar-only mutation run; other store targets unexecuted. CLI verify checks commit existence only; raw reports were independently inspected."
+    recorded_at: "2026-10-25T01:11:25.349Z"
+    commit_sha: e5af425ad32d5accea34411b89bb09378959e996
