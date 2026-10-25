@@ -66,3 +66,9 @@ non_functional:
   security:
     - 'Trust only fixed native Apple requirements plus explicit macOS signing and loader TCB; custom and Linux distributions remain compatibility'
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "Root retains parent late-consumer integration and actual admitted query/lease falsifiers. Current117-file snapshot compiled under reviewed SQLite coordinator: native-maintained-git-sqlite-01/build-result.json completed7steps exit0,reaped directchildren, requestDigest d0ade36e76838cfa597872655c9ac936ce8d4614a8d0e7ed5f48f6bea0fb3674; nativeSHA2efcdb3b31a06d0d8cd46040db51e732d507687947de05473d507b50f817b269, build-readback inputsUnchanged true. Outer supervisor terminal execution/custody receipt ABSENT after hook quarantine, handle55187 missing and observedPID20483 absent. This is compilation evidence only: failed/unknown external custody retained, no reuse/adoption/cleanup proof. Parent checkpoint c7a0ec06 independent source review and default-feature controls pass but synthetic custody owners do not establish actualGit Childfailure transport. Actual source continues offmain; Root owns finalfreshbuild, ordinarygenerationloader+genuineCLIreceipt, SQLite-run positive/latefailedGit, and naturalcleanup under unchanged30s."
+    recorded_at: "2026-10-25T08:08:46.345Z"
+    commit_sha: c7a0ec06f
