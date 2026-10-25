@@ -7,6 +7,8 @@ import * as path from 'node:path';
 import { sha } from './machine-runtime-state';
 import { loadNativeSqliteBuildWithStableEntry } from '../tooling/native-sqlite-build';
 import type { ReviewedFile } from '../tooling/sqlite-static-build';
+import { cliClosureDigest } from '../runtime/cli-identity-format';
+import type { ReviewedCliIdentity } from '../runtime/cli-identity';
 
 export const NATIVE_ENTRY_SCHEMA = 'caws.runtime.native-entry.v1' as const;
 export interface NativeEntryMetadata {
@@ -45,6 +47,8 @@ export interface NativeImageInput {
   readonly stableEntry: Pin;
   /** Offline executed semantic evidence, not native selection/publication authority. */
   readonly stopProfile?: Pin;
+  /** Independently reviewed fixed import domain; never inferred from selected code. */
+  readonly cliIdentityDomain?: Pin;
   readonly timeoutMs: number;
 }
 /** Select a reviewed build, never independent native/stable executable pins. */
@@ -196,6 +200,7 @@ function prepareNativeImage(
       'stableEntry',
       'timeoutMs',
       ...(Object.hasOwn(input, 'stopProfile') ? ['stopProfile'] : []),
+      ...(Object.hasOwn(input, 'cliIdentityDomain') ? ['cliIdentityDomain'] : []),
     ],
     'native image'
   );
@@ -417,6 +422,86 @@ function prepareNativeImage(
   executablePaths.add('native/caws-hook-native');
   files.set('native-entry.json', Buffer.from(JSON.stringify(metadata)));
   if (build) files.set('native-build-provenance.json', Buffer.from(build.provenance));
+  if (Object.hasOwn(input, 'cliIdentityDomain')) {
+    if (!build) throw new Error('CLI identity domain requires reviewed v2 build image');
+    const pin = input.cliIdentityDomain!;
+    keys(pin, ['source', 'sha256'], 'reviewed CLI domain pin');
+    if (typeof pin.source !== 'string' || !digest(pin.sha256))
+      throw new Error('Invalid reviewed CLI domain pin');
+    const size = fs.lstatSync(pin.source).size;
+    if (!Number.isSafeInteger(size) || size < 1 || size > 4 * 1024 * 1024)
+      throw new Error('Reviewed CLI domain size bound');
+    const domain = capture(pin.source, {
+      path: pin.source,
+      sizeBytes: size,
+      sha256: pin.sha256,
+    }).bytes;
+    if (sha(domain) !== pin.sha256) throw new Error('Reviewed CLI domain content changed');
+    // These are the caller's reviewed pins after exact capture verification,
+    // never a selected installation's self-reported policy or a scanned graph.
+    const review = {
+      files: Object.fromEntries(
+        [...captured]
+          .filter(
+            ([name]) =>
+              name.startsWith('node_modules/') &&
+              !(
+                path.posix.basename(name) === '.package-lock.json' &&
+                path.posix.basename(path.posix.dirname(name)) === 'node_modules'
+              )
+          )
+          .map(([name, bytes]) => [
+            name,
+            {
+              sha256: input.files[name]!.sha256,
+              sizeBytes: bytes.length,
+              mode: input.files[name]!.mode,
+            },
+          ])
+      ),
+      packages: Object.fromEntries(
+        Object.entries(input.packages).map(([name, pkg]) => [
+          name,
+          { name: pkg.name, version: pkg.version },
+        ])
+      ),
+      omissions: input.omissions,
+      node: {
+        sha256: input.node.sha256,
+        sizeBytes: files.get(metadata.nodeExecutable)!.length,
+        mode: 0o755 as const,
+      },
+    } satisfies Omit<ReviewedCliIdentity, 'prefixRoot' | 'domain' | 'node'> & {
+      node: Omit<ReviewedCliIdentity['node'], 'path'>;
+    };
+    const parsed: unknown = JSON.parse(domain.toString('utf8'));
+    if (
+      !object(parsed) ||
+      parsed.schema !== 'caws.cli.agents-stop-domain.v1' ||
+      parsed.operation !== 'agents-stop-explicit-session-opencode' ||
+      parsed.closureSha256 !==
+        cliClosureDigest({ ...review, node: { path: metadata.nodeExecutable, ...review.node } })
+    )
+      throw new Error('Reviewed CLI domain does not bind this exact closure');
+    files.set('native-cli-domain.json', domain);
+    files.set(
+      'native-cli-identity.json',
+      Buffer.from(
+        JSON.stringify({
+          schema: 'caws.runtime.cli-identity-source.v1',
+          prefixRoot: 'native-prefix',
+          ...review,
+          node: { path: metadata.nodeExecutable, ...review.node },
+          domain: {
+            path: 'native-cli-domain.json',
+            sha256: pin.sha256,
+            sizeBytes: domain.length,
+            mode: 0o644,
+          },
+        })
+      )
+    );
+  }
   if (Object.hasOwn(input, 'stopProfile')) {
     if (!build) throw new Error('Semantic profile requires reviewed v2 build image');
     files.set('native-stop-profile.json', captureStopProfile(input.stopProfile!, files));
@@ -791,6 +876,7 @@ export function prepareNativeRuntimeEntryFromBuild(
       'completionReceipt',
       'nativeNotices',
       ...(Object.hasOwn(input, 'stopProfile') ? ['stopProfile'] : []),
+      ...(Object.hasOwn(input, 'cliIdentityDomain') ? ['cliIdentityDomain'] : []),
     ],
     'native build image'
   );
@@ -831,6 +917,9 @@ export function prepareNativeRuntimeEntryFromBuild(
       stableEntry: { source: stableEntry.path, sha256: stableEntry.sha256 },
       timeoutMs: input.timeoutMs,
       ...(Object.hasOwn(input, 'stopProfile') ? { stopProfile: input.stopProfile! } : {}),
+      ...(Object.hasOwn(input, 'cliIdentityDomain')
+        ? { cliIdentityDomain: input.cliIdentityDomain! }
+        : {}),
     },
     { native, stableEntry, provenance }
   );

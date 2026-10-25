@@ -13,6 +13,9 @@ import { TextDecoder } from 'node:util';
 import { assertMachinePath } from '../init/machine-paths';
 import { classifyCommand } from './classifier';
 import { executeAgentHeartbeat } from './agent-heartbeat';
+import { assertMatchedCliIdentityReceipt, type MatchedCliIdentityReceipt } from './cli-identity';
+import { executeAgentStop } from './agent-stop';
+import type { NativeStopLeaseContextPort } from './stop-lease-context';
 import { createGuardUtilityPorts, runGuardUtilities } from './guard-utilities';
 import type { HandlerResult } from './composer';
 import type { RuntimeRequest } from './protocol';
@@ -21,6 +24,7 @@ import { qualifiesForNativeSessionEndPrefix } from './session-cache-admission';
 
 /** Compatibility identities, not trust inferred from a filename or the current template bytes. */
 const HANDLERS: Readonly<Record<string, string>> = {
+  'agent-stop.sh': 'c94358159f8fd77585bcb8c3679cd81c8d3d5dba0ff0970c50bf91a0f5f5eaa5',
   'agent-heartbeat.sh': 'fb3d05634e974cbf1978a0748c4db59cc84dc87f43072a8b14761f9fc7cc5fed',
   'block-dangerous.sh': '636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5',
   'hook-utilities.sh': '8a38d1f75df38568566fdfbbc17acec468c1cc2b11b3f02f71705d2c930d56a8',
@@ -63,6 +67,9 @@ export interface StockHandlerContext {
   readonly environment: Readonly<Record<string, string>>;
   readonly signal: AbortSignal;
   readonly nativeSessionSeal?: NativeSessionSealExecution;
+  /** Supplied only after native Stop prefix completion, independently of logger eligibility. */
+  readonly nativeStopLeaseContext?: NativeStopLeaseContextPort;
+  readonly nativeStopCliIdentity?: MatchedCliIdentityReceipt;
 }
 const empty = (): HandlerResult => ({
   exitCode: 0,
@@ -152,7 +159,7 @@ function compatible(handler: SelectedHandler, context: StockHandlerContext): boo
       assertMachinePath(selection.runtimeDirectory, library.path);
       if (sha(library.path) !== library.sha256) return false;
     }
-    if (handler.name === 'agent-heartbeat.sh') {
+    if (handler.name === 'agent-heartbeat.sh' || handler.name === 'agent-stop.sh') {
       for (const [name, expected] of Object.entries({
         'handler-env.sh': '901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7',
         'runtime-paths.sh': 'c2cc098b08c110723c2d1805170ba2d73a855f0864e5792bb7a88a2c3def7f08',
@@ -246,6 +253,53 @@ function noDangerLatch(selection: ActiveInvocationSelection): boolean {
   return true;
 }
 
+/** Selection check is repeated immediately before lease application. */
+function assertNativeStopAgentSelection(
+  handler: SelectedHandler,
+  context: StockHandlerContext
+): void {
+  const { request, selection, environment } = context;
+  const chain = [
+    ['goal-ac-gate.sh', 'ef16f932c95c0d8e32a070ddd5b3309705d720f0d1e6ff96c51781671f100402'],
+    [
+      'plan-transcript-finalize.sh',
+      '8ed0b7173c5add2991a67789a2219a03b809046a39596c5d8a60d052f3d02ce2',
+    ],
+    ['session-log.sh', '8f6358e4ec37e9dcd35c98d77d2a77776e6d73c761895f37069b21e61f2f66a9'],
+    ['agent-stop.sh', HANDLERS['agent-stop.sh']],
+  ] as const;
+  if (
+    request.configuration !== 'system' ||
+    selection.surface !== 'opencode' ||
+    selection.event !== 'stop' ||
+    request.surface !== selection.surface ||
+    request.event !== selection.event ||
+    request.runtimeDigest !== selection.runtimeDigest ||
+    selection.hooksDirectory !== selection.runtimeDirectory ||
+    selection.handlers.length !== 4 ||
+    selection.handlers[3] !== handler ||
+    Object.keys(selection.overrides).length ||
+    Object.keys(selection.libraryOverrides).length ||
+    (environment.CAWS_BIN && environment.CAWS_BIN !== 'caws') ||
+    !compatible(handler, context)
+  )
+    throw new Error('Native Stop agent consumer changed after prefix; shell replay refused');
+  for (const [index, selected] of selection.handlers.entries()) {
+    const expected = chain[index]!;
+    assertMachinePath(selection.runtimeDirectory, selected.path);
+    if (
+      selected.kind !== 'stock' ||
+      selected.name !== expected[0] ||
+      selected.entry !== expected[0] ||
+      selected.sha256 !== expected[1] ||
+      selected.args.length ||
+      selected.path !== join(selection.runtimeDirectory, expected[0]) ||
+      sha(selected.path) !== selected.sha256
+    )
+      throw new Error('Native Stop ordered source changed before lease application');
+  }
+}
+
 /** Null means execute the selected shell source; it never means skip the handler. */
 export function tryExecuteStockHandler(
   handler: SelectedHandler,
@@ -265,6 +319,16 @@ export function tryExecuteStockHandler(
     )
       throw new Error('Native SessionEnd source profile changed after prefix completion');
     return context.nativeSessionSeal.execute();
+  }
+  if (handler.name === 'agent-stop.sh' && context.nativeStopLeaseContext) {
+    const cli = context.nativeStopCliIdentity;
+    if (!cli) throw new Error('Native Stop agent consumer lacks CLI identity owner');
+    assertMatchedCliIdentityReceipt(cli, context.request, context.signal);
+    return executeAgentStop(context, context.nativeStopLeaseContext, () => {
+      assertMatchedCliIdentityReceipt(cli, context.request, context.signal);
+      cli.assertOwner(context.request, context.signal);
+      assertNativeStopAgentSelection(handler, context);
+    });
   }
   if (!compatible(handler, context)) return null;
   const { request, selection, environment } = context;

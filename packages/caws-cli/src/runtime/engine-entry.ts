@@ -7,6 +7,7 @@ import {
   SESSION_END_PREFIX_CAPABILITY,
   SESSION_PUBLICATION_CAPABILITY,
   STOP_PREFIX_CAPABILITY,
+  STOP_LEASE_CONTEXT_CAPABILITY,
   TRANSCRIPT_STORE_CAPABILITY,
   type RuntimeRequest,
 } from './protocol';
@@ -30,12 +31,15 @@ import {
 } from './session-cache-client';
 import { createNativeTranscriptStorePort } from './transcript-store-client';
 import { createNativeSessionSealPort } from './session-publication-client';
+import { compareCliIdentity, type ReviewedCliIdentity } from './cli-identity';
+import { loadGenerationCliIdentity } from './cli-identity-loader';
+import { createNativeStopLeaseContextPort } from './stop-lease-context';
 import { createNativeContextGitPort } from './context-git-client';
 import { CONTEXT_GIT_CAPABILITY } from './context-git-wire';
 import { createNativeSelectionResolver } from './selection-observation';
 
 /** Private one-shot protocol entry. Installation and resident-host selection are separate contracts. */
-export async function runEngineEntry(): Promise<void> {
+export async function runEngineEntry(reviewedCliIdentity?: ReviewedCliIdentity): Promise<void> {
   const controller = new AbortController();
   const wire = new AbortController();
   const reader = new RuntimeFrameReader(process.stdin);
@@ -134,6 +138,17 @@ export async function runEngineEntry(): Promise<void> {
     const stopStore = stopCandidate
       ? createNativeTranscriptStorePort(request, stopTransport, controller.signal)
       : undefined;
+    // The ordinary entry resolves only its own exact generation. Missing
+    // reviewed data preserves compatibility; malformed present data is terminal.
+    // Generation admission and the native dispatch grant retain authority.
+    const reviewed = stopCandidate
+      ? (reviewedCliIdentity ??
+        (await loadGenerationCliIdentity(request, controller.signal, __filename)))
+      : undefined;
+    const cliIdentity = reviewed
+      ? await compareCliIdentity({ request, reviewed, signal: controller.signal })
+      : undefined;
+    if (controller.signal.aborted) throw controller.signal.reason;
     prepared = await prepareRuntimeInvocation(
       request,
       controller.signal,
@@ -152,7 +167,11 @@ export async function runEngineEntry(): Promise<void> {
           )
         : undefined,
       stopPrefix,
-      stopStore
+      stopStore,
+      stopCandidate && request.stopLeaseContext === STOP_LEASE_CONTEXT_CAPABILITY
+        ? createNativeStopLeaseContextPort(request, stopTransport, controller.signal)
+        : undefined,
+      cliIdentity?.status === 'matched' ? cliIdentity.receipt : undefined
     );
     await writeRuntimeFrame(
       process.stdout,

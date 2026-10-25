@@ -335,6 +335,9 @@ fn execute_observed<'deadline>(
                             session.run_context_git(&mut context_git, &frame, deadline)?;
                         }
                     }
+                    protocol::EngineFrame::StopLeaseContextRequest(_) => {
+                        return Err("Stop lease context request before Ready/dispatch".into());
+                    }
                     protocol::EngineFrame::Ready(value) => {
                         progress.mark("ready-received");
                         progress.mark("selection-seal");
@@ -375,7 +378,7 @@ fn execute_observed<'deadline>(
                     deadline,
                 )?;
             }
-            let (stock_selection, eligible_stop) = if combined {
+            let (stock_selection, mut eligible_stop) = if combined {
                 progress.mark("stop-qualification");
                 match stop_execution::PregrantStop::admit(
                     original_stop
@@ -438,7 +441,8 @@ fn execute_observed<'deadline>(
                 };
                 (selected, None)
             };
-            progress.native_stop = if eligible_stop.is_some() {
+            let native_stop_routed = eligible_stop.is_some();
+            progress.native_stop = if native_stop_routed {
                 "qualified"
             } else {
                 "unsupported"
@@ -499,6 +503,27 @@ fn execute_observed<'deadline>(
                     protocol::EngineFrame::ContextGitRequest(_) => {
                         return Err("context Git request after Ready".into());
                     }
+                    protocol::EngineFrame::StopLeaseContextRequest(frame) => {
+                        let control = request.stop_lease_context_request(&frame)?;
+                        // Logger reprieves can skip store/publication entirely.
+                        // Only the actual completed prefix and eligible owner
+                        // admit this separate fixed consumer boundary.
+                        if completed_stop_prefix.is_none() {
+                            return Err(
+                                "Stop lease context requires completed native Stop prefix".into()
+                            );
+                        }
+                        let eligible = eligible_stop
+                            .take()
+                            .ok_or("Stop lease context lacks unconsumed native eligibility")?;
+                        session.begin_stop_lease_context(frame.len() + 1)?;
+                        let observed = eligible.observe_lease_common_dir(
+                            || session.stop_lease_context_checkpoint(deadline),
+                            &mut stop_git_custody,
+                        )?;
+                        let result = control.result(observed)?;
+                        session.finish_stop_lease_context(&result, deadline)?;
+                    }
                     #[cfg(feature = "sqlite-store")]
                     protocol::EngineFrame::TranscriptStoreRequest(frame) => {
                         if store_attempted || publication_attempted {
@@ -510,7 +535,7 @@ fn execute_observed<'deadline>(
                         let result = match render_bridge::captured_publication_owner_config(
                             config, &request, context,
                         ) {
-                            Ok(owner) if eligible_stop.is_some() => {
+                            Ok(owner) if native_stop_routed => {
                                 let eligible = eligible_stop
                                     .as_ref()
                                     .ok_or("missing native Stop eligibility")?;

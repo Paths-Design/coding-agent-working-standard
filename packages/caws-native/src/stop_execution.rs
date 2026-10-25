@@ -212,6 +212,29 @@ impl<'owners, 'native: 'owners> EligibleStop<'owners, 'native> {
         custody.preserve(result)
     }
 
+    /// The selected agent-stop consumer consumes the actual admitted Git owner.
+    /// Every Failure reaches root custody before a closing String-only bracket.
+    pub(crate) fn observe_lease_common_dir(
+        self,
+        cancel: impl FnMut() -> Result<(), String>,
+        custody: &mut FailureCustody,
+    ) -> Result<caws_native::context_git::stop::SettledCommonDir, String> {
+        custody.check()?;
+        let Self {
+            selection,
+            profile,
+            git,
+        } = self;
+        let result = selection.readset().validate_with(cancel, |scope, cancel| {
+            let result = (|| {
+                profile.revalidate_in_scope(scope, &mut *cancel)?;
+                custody.retain(git.observe_common_dir(scope, &mut *cancel))
+            })();
+            custody.preserve(result)
+        });
+        custody.preserve(result)
+    }
+
     pub(crate) fn dispatch(&self, request: &Request) -> Result<Vec<u8>, String> {
         if request.id != self.selection.original().id()
             || request.runtime_digest != self.profile.runtime_digest()

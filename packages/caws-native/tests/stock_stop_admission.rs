@@ -38,6 +38,9 @@ mod stop_admission;
 #[path = "../src/stop_execution.rs"]
 mod stop_execution;
 #[allow(dead_code)]
+#[path = "../src/stop_git.rs"]
+mod stop_git;
+#[allow(dead_code)]
 #[path = "../src/stop_profile.rs"]
 mod stop_profile;
 

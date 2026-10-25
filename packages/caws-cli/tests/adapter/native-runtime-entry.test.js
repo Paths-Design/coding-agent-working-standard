@@ -647,6 +647,84 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       },
     };
   }
+  function reviewedCliDomain() {
+    const { cliClosureDigest } = require(path.join(dist, 'runtime/cli-identity'));
+    const files = Object.fromEntries(
+      Object.entries(descriptor.files)
+        .filter(
+          ([name]) => name.startsWith('node_modules/') && !name.endsWith('/.package-lock.json')
+        )
+        .map(([name, pin]) => [
+          name,
+          { ...pin, sizeBytes: fs.statSync(path.join(descriptor.prefixRoot, name)).size },
+        ])
+    );
+    const review = {
+      files,
+      packages: Object.fromEntries(
+        Object.entries(descriptor.packages).map(([name, pkg]) => [
+          name,
+          { name: pkg.name, version: pkg.version },
+        ])
+      ),
+      omissions: descriptor.omissions,
+      node: {
+        path: 'native/node',
+        sha256: descriptor.node.sha256,
+        sizeBytes: fs.statSync(descriptor.node.source).size,
+        mode: 0o755,
+      },
+    };
+    const file = reviewedFile(
+      'reviewed-cli-domain.json',
+      JSON.stringify({
+        schema: 'caws.cli.agents-stop-domain.v1',
+        operation: 'agents-stop-explicit-session-opencode',
+        closureSha256: cliClosureDigest(review),
+        importers: [],
+        dormantSites: [],
+      })
+    );
+    descriptor.cliIdentityDomain = { source: file.path, sha256: file.sha256 };
+    return file;
+  }
+  test('reviewed CLI policy is fixed pinned data copied into generation manifest inputs', () => {
+    const domain = reviewedCliDomain(),
+      prepared = prepareDescriptor();
+    const source = JSON.parse(prepared.files.get('native-cli-identity.json'));
+    expect(source.prefixRoot).toBe('native-prefix');
+    expect(source.domain).toEqual({
+      path: 'native-cli-domain.json',
+      sha256: domain.sha256,
+      sizeBytes: domain.sizeBytes,
+      mode: 0o644,
+    });
+    expect(source.node.path).toBe('native/node');
+    expect(source.files[cli + '/dist/index.js'].sha256).toBe(
+      descriptor.files[cli + '/dist/index.js'].sha256
+    );
+    expect(source.files).not.toHaveProperty('package-lock.json');
+    expect(prepared.files.get('native-cli-domain.json')).toEqual(fs.readFileSync(domain.path));
+    const modes = JSON.parse(prepared.files.get('native-modes.json'));
+    expect(modes['native-cli-domain.json']).toBe(0o644);
+    expect(modes['native-cli-identity.json']).toBe(0o644);
+  });
+  test('missing CLI policy remains absent; present malformed or changed policy refuses', () => {
+    expect(prepareDescriptor().files.has('native-cli-identity.json')).toBe(false);
+    const domain = reviewedCliDomain();
+    fs.appendFileSync(domain.path, ' ');
+    expect(() => prepareDescriptor()).toThrow(/domain content changed/);
+    descriptor.cliIdentityDomain.sha256 = sha(fs.readFileSync(domain.path));
+    fs.writeFileSync(domain.path, '{}');
+    descriptor.cliIdentityDomain.sha256 = sha(fs.readFileSync(domain.path));
+    expect(() => prepareDescriptor()).toThrow(/does not bind/);
+  });
+  test('reviewed policy for old package bytes cannot be relabeled for the new closure', () => {
+    reviewedCliDomain();
+    write(cli + '/dist/index.js', 'changed package bytes\n');
+    descriptor.files = input.files;
+    expect(() => prepareDescriptor()).toThrow(/does not bind/);
+  });
   function imageFile() {
     const file = path.join(root, 'receipt-image.json');
     fs.writeFileSync(file, JSON.stringify(descriptor), { mode: 0o600 });

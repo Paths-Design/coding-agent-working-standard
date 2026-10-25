@@ -49,6 +49,8 @@ import {
   type NativeSessionEndPrefixPort,
   type NativeStopPrefixPort,
 } from './session-cache-client';
+import { assertMatchedCliIdentityReceipt, type MatchedCliIdentityReceipt } from './cli-identity';
+import type { NativeStopLeaseContextPort } from './stop-lease-context';
 import type { NativeSessionSealPort } from './session-publication-client';
 import { executeNativeSessionSeal } from './session-seal-runtime';
 import type { NativeSessionSealExecution } from './stock-handlers';
@@ -287,8 +289,12 @@ export async function prepareRuntimeInvocation(
   nativeSessionEndPrefix?: NativeSessionEndPrefixPort,
   selectionResolver?: (options: SelectionOptions) => Promise<InvocationSelection>,
   nativeStopPrefix?: NativeStopPrefixPort,
-  nativeStopStore?: NativeTranscriptStorePublicationPort
+  nativeStopStore?: NativeTranscriptStorePublicationPort,
+  nativeStopLeaseContext?: NativeStopLeaseContextPort,
+  nativeStopCliIdentity?: MatchedCliIdentityReceipt
 ): Promise<PreparedRuntimeInvocation> {
+  if (nativeStopCliIdentity)
+    assertMatchedCliIdentityReceipt(nativeStopCliIdentity, request, signal);
   if (request.contextGit === CONTEXT_GIT_CAPABILITY && !contextGit)
     throw new Error('Native context Git capability requires its request-owned port');
   const environment = invocationEnvironment(request.caller);
@@ -404,6 +410,10 @@ export async function prepareRuntimeInvocation(
         if (admission) disposeNativeRenderAdmission(admission);
         throw new Error('Native render admission must match the prepared service offer');
       }
+      // A routing selector cannot replace the actual CLI content owner.
+      // OpenCode Stop already selects compatibilityRequired=true; discard only
+      // this optional native route before any prefix request or other effect.
+      if (nativeStop && !nativeStopCliIdentity) nativeStop = undefined;
       if (dispatched || acknowledged)
         throw new Error('Invocation dispatch is single-use and cannot resume after settlement');
       if (signal.aborted) throw signal.reason;
@@ -419,6 +429,7 @@ export async function prepareRuntimeInvocation(
         };
         let compatibility = compatibilityRequired(request, selection, environment);
         let sessionSeal: NativeSessionSealExecution | undefined;
+        let stopLeaseContext: NativeStopLeaseContextPort | undefined;
         let stopPublication:
           | { readonly loggerIndex: 2; execute(): Promise<import('./composer').HandlerResult> }
           | undefined;
@@ -429,6 +440,7 @@ export async function prepareRuntimeInvocation(
           if (
             !nativeStopPrefix ||
             !nativeStopStore ||
+            !nativeStopLeaseContext ||
             serviceOffer ||
             request.configuration !== 'system' ||
             selection.configuration !== 'system' ||
@@ -467,6 +479,11 @@ export async function prepareRuntimeInvocation(
             )
           )
             throw new Error('Native Stop grant disagrees with active invocation selection');
+          assertMatchedCliIdentityReceipt(nativeStopCliIdentity, request, signal);
+          const cli = nativeStopCliIdentity;
+          if (!cli) throw new Error('Native Stop requires its actual CLI identity owner');
+          await cli.revalidate();
+          if (signal.aborted) throw signal.reason;
           const prefix = await nativeStopPrefix.capture(selection.canonical);
           journal.append('stop_prefix_completed', {
             status: prefix.status,
@@ -480,6 +497,7 @@ export async function prepareRuntimeInvocation(
           if (!prefix.prefixComplete || !['completed', 'unavailable'].includes(prefix.status))
             throw new Error('Native Stop prefix incomplete; compatibility replay refused');
           compatibility = false;
+          stopLeaseContext = nativeStopLeaseContext;
           if (prefix.status === 'unavailable')
             cacheDiagnostic = '[caws runtime] ' + prefix.diagnostic + '\n';
           const publicationOptions: NativeStopPublicationOptions = {
@@ -629,6 +647,12 @@ export async function prepareRuntimeInvocation(
                 ...options,
                 ...(sessionSeal ? { nativeSessionSeal: sessionSeal } : {}),
                 ...(stopPublication ? { nativeStopPublication: stopPublication } : {}),
+                ...(stopLeaseContext && nativeStopCliIdentity
+                  ? {
+                      nativeStopLeaseContext: stopLeaseContext,
+                      nativeStopCliIdentity,
+                    }
+                  : {}),
               }),
               record: (observation) => journal.record(observation),
               eligibility: (handler) =>
