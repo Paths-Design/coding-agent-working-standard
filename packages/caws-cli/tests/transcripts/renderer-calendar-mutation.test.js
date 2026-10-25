@@ -1103,3 +1103,90 @@ test('an actual in-flight deadline aborts the observation signal and rejects dis
   );
   assert.equal(observationSignal.aborted, true);
 });
+test('calendar arrays snapshot data without executing length, index, or iterator getters', async () => {
+  let reads = 0;
+  const request = new Proxy(['1970-01-01T00:00:00Z'], {
+    get() {
+      reads++;
+      throw new Error('live request array read');
+    },
+  });
+  const aware = await resolveRendererCalendar(options(request, noPort));
+  assert.equal(aware.epochSeconds('1970-01-01T00:00:00Z'), 0);
+  const naive = await resolveRendererCalendar(
+    options(['1970-01-01'], {
+      async observe(request) {
+        return reply(
+          request,
+          new Proxy(
+            request.seconds.map((seconds) => {
+              assert.ok(seconds === '0' || seconds === '-86400');
+              return seconds === '0' ? fields(seconds, 1970, 1, 1) : fields(seconds, 1969, 12, 31);
+            }),
+            {
+              get() {
+                reads++;
+                throw new Error('live result array read');
+              },
+            }
+          )
+        );
+      },
+    })
+  );
+  assert.equal(naive.epochSeconds('1970-01-01'), 0);
+  assert.equal(reads, 0);
+});
+test('calendar array descriptor traps, sparse entries, and accessors retain typed refusals', async () => {
+  let getters = 0;
+  const variants = (values) => {
+    const accessor = [...values];
+    Object.defineProperty(accessor, '0', {
+      get() {
+        getters++;
+        return values[0];
+      },
+    });
+    return [
+      new Proxy([...values], {
+        ownKeys() {
+          throw new Error('array ownKeys');
+        },
+      }),
+      new Proxy([...values], {
+        getOwnPropertyDescriptor() {
+          throw new Error('array descriptor');
+        },
+      }),
+      accessor,
+      new Array(values.length),
+      Object.assign([...values], { extra: true }),
+    ];
+  };
+  const expected = (category) => (error) =>
+    error instanceof RendererCalendarContractError && error.category === category;
+  for (const timestamps of variants(['1970-01-01']))
+    await assert.rejects(resolveRendererCalendar(options(timestamps, noPort)), expected('request'));
+  for (const results of variants([fields('0', 1970, 1, 1)]))
+    await assert.rejects(
+      resolveRendererCalendar(
+        options(['1970-01-01'], {
+          async observe(request) {
+            return reply(request, results);
+          },
+        })
+      ),
+      expected('reply')
+    );
+  assert.equal(getters, 0);
+  await assert.rejects(
+    resolveRendererCalendar(
+      options(['1970-01-01'], {
+        async observe() {
+          throw new Error('outside array boundary');
+        },
+      })
+    ),
+    expected('transport')
+  );
+});

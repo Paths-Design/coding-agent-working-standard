@@ -400,6 +400,30 @@ function calendarArray(value: unknown, category: 'request' | 'reply'): value is 
     throw new RendererCalendarContractError(category, 'Unreadable calendar array');
   }
 }
+function calendarItems(value: readonly unknown[], category: 'request' | 'reply'): unknown[] {
+  let descriptors: Record<string, PropertyDescriptor>;
+  try {
+    descriptors = Object.getOwnPropertyDescriptors(value);
+  } catch {
+    throw new RendererCalendarContractError(category, 'Unreadable calendar array');
+  }
+  const length: unknown = descriptors.length?.value;
+  if (
+    typeof length !== 'number' ||
+    !Number.isSafeInteger(length) ||
+    length < 0 ||
+    Object.keys(descriptors).length !== length + 1
+  )
+    throw new RendererCalendarContractError(category, 'Calendar array requires dense data');
+  const items: unknown[] = [];
+  for (let index = 0; index < length; index++) {
+    const descriptor = descriptors[String(index)];
+    if (!descriptor || !Object.hasOwn(descriptor, 'value'))
+      throw new RendererCalendarContractError(category, 'Calendar array requires dense data');
+    items.push(descriptor.value);
+  }
+  return items;
+}
 function record(value: unknown, keys: readonly string[], category: 'request' | 'reply'): Row {
   if (!value || typeof value !== 'object')
     throw new RendererCalendarContractError(category, 'Calendar record required');
@@ -628,7 +652,7 @@ export async function resolveRendererCalendar(
     sortEpochs = options.sortEpochs;
   let totalBytes = 0;
   const timestamps = new Set<string | null>();
-  for (const timestamp of options.timestamps) {
+  for (const timestamp of calendarItems(options.timestamps, 'request')) {
     if (timestamp !== null && typeof timestamp !== 'string')
       throw new RendererCalendarContractError(
         'request',
@@ -717,16 +741,16 @@ export async function resolveRendererCalendar(
         reply.token !== token ||
         reply.sequence !== sequence ||
         JSON.stringify(context(reply.context, 'reply')) !== JSON.stringify(original) ||
-        !calendarArray(reply.results, 'reply') ||
-        reply.results.length !== seconds.length
+        !calendarArray(reply.results, 'reply')
       )
         throw new RendererCalendarContractError(
           'reply',
           'Local calendar correlation or original environment mismatch'
         );
-      seconds.forEach((second, index) =>
-        cache.set(second, localResult((reply.results as unknown[])[index], second))
-      );
+      const results = calendarItems(reply.results, 'reply');
+      if (results.length !== seconds.length)
+        throw new RendererCalendarContractError('reply', 'Local calendar result count mismatch');
+      seconds.forEach((second, index) => cache.set(second, localResult(results[index], second)));
       queryCount += seconds.length;
     }
     for (const [timestamp, job] of pending) {
