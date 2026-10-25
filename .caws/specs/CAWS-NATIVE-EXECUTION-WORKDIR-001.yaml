@@ -82,6 +82,6 @@ contracts: []
 evidence:
   - criterion_id: A3
     status: unchecked
-    evidence_ref: "Source fbc6503db and focused 287 JavaScript plus 21 bootstrap controls pass; actual producer under ordinary installed native hooks remains unqualified. Shared activation waits for paired producer restart coordination. External raw logs in Root artifact execution-workdir-consumer/governance-presence were inspected manually; --verify checks commit reachability only. Events 13655/13656 retain the unsupported absolute artifact citation attempts; no acceptance pass is inferred."
-    recorded_at: "2026-10-25T11:51:35.919Z"
-    commit_sha: fbc6503dbac26fede1db89653f71f392447a5f43
+    evidence_ref: "Reviewed source 4cc5e68c9 passes 299 focused JavaScript controls and 25 actual bootstrap tests, including strict Bash namespace/target refusal and silent non-Bash/lifecycle preservation. External raw logs are retained under Root execution-workdir-consumer/governance-coordinates; inspected manually. Actual current native producer plus ordinary installed delivery remains owed to coordinated paired deployment with RC owner 01a171eb-7902-72a0-99d5-3c63ab05451d. No global activation or A3 pass; commit verification establishes reachability only."
+    recorded_at: "2026-10-25T12:35:05.471Z"
+    commit_sha: "4cc5e68c97730b0b5943cb464cc1699966347ef2"
