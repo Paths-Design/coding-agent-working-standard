@@ -35,7 +35,7 @@ acceptance:
     given: >-
       an authentic matched receipt, copied or forged receipt shapes, changed
       original request or generation, cancellation and backward clock movement
-    when: 'consumer ownership assertions and freshness revalidation run before native effects'
+    when: 'the comparison component performs ownership assertions and freshness revalidation'
     then: >-
       only the authentic receipt for the exact original request and original signal
       remains usable within its original budget, and every invalid or expired
