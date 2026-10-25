@@ -11,7 +11,7 @@
       "id": "mutation",
       "strategy": "mutation",
       "command": "npm run mutation:run:kernel && npm run mutation:run:store && npm run mutation:run:shell",
-      "rationale": "Pure safety and authority decisions are held to an explicit per-file mutation floor.",
+      "rationale": "Pure safety, authority, timestamp parsing, and arithmetic decisions are held to an explicit per-file mutation floor.",
       "files": [
         "src/kernel/evidence/canonical-json.ts",
         "src/kernel/evidence/rederive.ts",
@@ -33,6 +33,7 @@
         "src/store/events-store.ts",
         "src/store/messages-store.ts",
         "src/store/yaml-patch.ts",
+        "src/transcripts/renderer-calendar.ts",
         "src/transcripts/store-timestamp.ts"
       ]
     },
@@ -211,7 +212,6 @@
         "src/transcripts/render-prepare.ts",
         "src/transcripts/render-reader.ts",
         "src/transcripts/render-values.ts",
-        "src/transcripts/renderer-calendar.ts",
         "src/transcripts/session-seal-prepare.ts",
         "src/transcripts/source-occurrence.ts",
         "src/transcripts/store-json.ts",
@@ -306,6 +306,9 @@
           "source": "src/store/yaml-patch.ts"
         },
         {
+          "source": "src/transcripts/renderer-calendar.ts"
+        },
+        {
           "source": "src/transcripts/store-timestamp.ts"
         }
       ],
@@ -318,6 +321,7 @@
         "tests/store/messages-dead-recipient-prune.test.js",
         "tests/store/messages-store.test.js",
         "tests/store/yaml-patch.test.js",
+        "tests/transcripts/renderer-calendar-mutation.test.js",
         "tests/transcripts/store-timestamp.test.js"
       ]
     },

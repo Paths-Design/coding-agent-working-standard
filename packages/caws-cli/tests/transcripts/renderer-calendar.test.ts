@@ -127,6 +127,50 @@ test('duration and epoch retain different date-only, separator and fallback admi
   assert.equal(rendererSecondsBetween(PROFILE, '2026-1-2T3:4:5Z', '2026-01-02T03:04:06Z'), null);
 });
 
+test('revoked timestamp and result arrays retain distinct typed refusal categories', async () => {
+  const request = Proxy.revocable([], {});
+  request.revoke();
+  let calls = 0;
+  const port: RendererLocalCalendarPort = {
+    async observe(input) {
+      calls++;
+      const results = Proxy.revocable([], {});
+      results.revoke();
+      return reply(input, results.proxy);
+    },
+  };
+  await assert.rejects(
+    resolveRendererCalendar(options(request.proxy, port)),
+    (error: unknown) =>
+      error instanceof RendererCalendarContractError &&
+      error.category === 'request' &&
+      error.message === 'Unreadable calendar array'
+  );
+  assert.equal(calls, 0);
+  await assert.rejects(
+    resolveRendererCalendar(options(['1970-01-01'], port)),
+    (error: unknown) =>
+      error instanceof RendererCalendarContractError &&
+      error.category === 'reply' &&
+      error.message === 'Unreadable calendar array'
+  );
+  assert.equal(calls, 1);
+});
+
+test('fallback short fractions pad exact microseconds without admitting a seventh digit', () => {
+  // Actual pinned CPython renderer outcomes, selected-boundary-probes-01/fractions.json.
+  for (const [timestamp, microsecond] of [
+    ['2026-1-2T3:4:5.1Z', 100000],
+    ['2026-1-2t3:4:5.12z', 120000],
+    ['2026-1-2T3:4:5.123Z', 123000],
+  ] as const) {
+    assert.equal(parsed('duration', timestamp)?.microsecond, microsecond);
+    assert.equal(parsed('duration', timestamp)?.offsetMicroseconds, null);
+    assert.equal(parsed('epoch', timestamp), null);
+  }
+  assert.equal(parsed('duration', '2026-1-2T3:4:5.1234567Z'), null);
+});
+
 test('ISO basic/week dates, reduced time, commas and microsecond truncation remain distinct', () => {
   for (const value of ['20260102T030405Z', '2026-W01-5T03:04:05Z', '2026W015T030405Z'])
     assert.deepEqual(parsed('epoch', value), parsed('epoch', '2026-01-02T03:04:05Z'));
@@ -141,6 +185,16 @@ test('ISO basic/week dates, reduced time, commas and microsecond truncation rema
   assert.equal(parsed('epoch', '2026-01-02🕐03:04:05')?.hour, 3);
 });
 
+test('ISO week 53 is admitted only when the source year has that week', () => {
+  assert.equal(parsed('epoch', '2019-W53-1T00:00:00Z'), null);
+  assert.equal(parsed('duration', '2019-W53-1T00:00:00Z'), null);
+  assert.deepEqual(
+    parsed('epoch', '2020-W53-7T00:00:00Z'),
+    parsed('epoch', '2021-01-03T00:00:00Z')
+  );
+  assert.equal(parsed('epoch', '9999-W52-7T00:00:00Z'), null);
+});
+
 test('offset arithmetic preserves integral normalization and accelerator zero-offset fraction behavior', () => {
   assert.equal(parsed('epoch', '2026-01-02T03:04:05+00:99:99')?.offsetMicroseconds, 6_039_000_000n);
   assert.equal(
@@ -151,6 +205,28 @@ test('offset arithmetic preserves integral normalization and accelerator zero-of
   assert.equal(parsed('duration', '2026-1-2T3:4:5+00:00:00.5')?.offsetMicroseconds, 500_000n);
   assert.equal(parsed('duration', '٢٠٢٦-1-2T3:4:5Z')?.year, 2026);
   assert.equal(parsed('epoch', '٢٠٢٦-01-02T03:04:05Z'), null);
+});
+
+test('all Unicode14 decimal blocks decode actual CPython digit values including adjacent mathematical blocks', () => {
+  // Zero points from actual CPython 3.11.13 unicodedata.decimal over all 0x110000
+  // codepoints. Each following 9 digits has actual values 1..9; five mathematical
+  // blocks are adjacent, so range length alone cannot supply a digit value.
+  const zeros = [
+    0x30, 0x660, 0x6f0, 0x7c0, 0x966, 0x9e6, 0xa66, 0xae6, 0xb66, 0xbe6, 0xc66, 0xce6, 0xd66, 0xde6,
+    0xe50, 0xed0, 0xf20, 0x1040, 0x1090, 0x17e0, 0x1810, 0x1946, 0x19d0, 0x1a80, 0x1a90, 0x1b50,
+    0x1bb0, 0x1c40, 0x1c50, 0xa620, 0xa8d0, 0xa900, 0xa9d0, 0xa9f0, 0xaa50, 0xabf0, 0xff10, 0x104a0,
+    0x10d30, 0x11066, 0x110f0, 0x11136, 0x111d0, 0x112f0, 0x11450, 0x114d0, 0x11650, 0x116c0,
+    0x11730, 0x118e0, 0x11950, 0x11c50, 0x11d50, 0x11da0, 0x16a60, 0x16ac0, 0x16b50, 0x1d7ce,
+    0x1d7d8, 0x1d7e2, 0x1d7ec, 0x1d7f6, 0x1e140, 0x1e2f0, 0x1e950, 0x1fbf0,
+  ];
+  assert.equal(zeros.length, 66);
+  for (const zero of zeros)
+    for (let digit = 0; digit < 10; digit++) {
+      const value = `200${String.fromCodePoint(zero + digit)}-1-2T3:4:5Z`;
+      assert.equal(parsed('duration', value)?.year, 2000 + digit, value);
+    }
+  for (const cp of [0x2f, 0x3a, 0x665 - 10, 0x11f50, 0x1e4f0])
+    assert.equal(parsed('duration', `200${String.fromCodePoint(cp)}-1-2T3:4:5Z`), null);
 });
 
 test('fallback offset integer conversion rejects mixed colon positions and retains adjacent legal forms', () => {
@@ -235,6 +311,20 @@ test('duration uses exact microseconds, awareness, Python decimal rounding and s
   assert.equal(rendererSecondsBetween(PROFILE, null, start), null);
 });
 
+test('exact hundredth ties use even parity on both signs and adjacent microseconds', () => {
+  const start = '2026-01-01T00:00:00Z';
+  for (const [fraction, positive, negative] of [
+    ['125000', '0.12', '-0.12'],
+    ['375000', '0.38', '-0.38'],
+    ['124999', '0.12', '-0.12'],
+    ['125001', '0.13', '-0.13'],
+  ] as const) {
+    const end = `2026-01-01T00:00:00.${fraction}Z`;
+    assert.equal(rendererSecondsBetween(PROFILE, start, end)?.lexeme, positive);
+    assert.equal(rendererSecondsBetween(PROFILE, end, start)?.lexeme, negative);
+  }
+});
+
 test('resolved aware epochs use no local port and reject timestamps outside their captured catalog', async () => {
   const timestamps = [
     '1970-01-01T00:00:00Z',
@@ -307,6 +397,95 @@ test('New York gap chooses later candidate and ambiguous fold chooses earlier ca
   assert.deepEqual(
     calls.map((call) => call.seconds.length),
     [2, 2, 2]
+  );
+});
+
+test('two-hour transitions retain the later gap and discover the earlier fold solution', async () => {
+  // Actual CPython3.11.13 localtime fields and datetime.timestamp results under
+  // XST-2XDT-4,M3.2.0/2,M11.1.0/2, captured with unchanged original environment.
+  const context: RendererCalendarContext = {
+    ...original,
+    tz: { kind: 'present', value: 'XST-2XDT-4,M3.2.0/2,M11.1.0/2' },
+  };
+  const calls: LocalCalendarRequest[] = [];
+  const catalog = {
+    '1710037800': fields('1710037800', 2024, 3, 10, 6, 30),
+    '1710023400': fields('1710023400', 2024, 3, 10, 0, 30),
+    '1710030600': fields('1710030600', 2024, 3, 10, 4, 30),
+    '1730597400': fields('1730597400', 2024, 11, 3, 3, 30),
+    '1730590200': fields('1730590200', 2024, 11, 3, 1, 30),
+    '1730503800': fields('1730503800', 2024, 11, 2, 3, 30),
+    '1730583000': fields('1730583000', 2024, 11, 3, 1, 30),
+  };
+  const timestamps = ['2024-03-10T02:30:00', '2024-11-03T01:30:00'];
+  const calendar = await resolveRendererCalendar({
+    ...options(timestamps, catalogPort(catalog, calls, context)),
+    context,
+  });
+  assert.equal(calendar.epochSeconds(timestamps[0]!), 1710030600);
+  assert.equal(calendar.epochSeconds(timestamps[1]!), 1730583000);
+  assert.deepEqual(
+    calls.map((call) => call.seconds),
+    [
+      ['1710037800', '1730597400'],
+      ['1710023400', '1730590200'],
+      ['1710030600', '1730503800'],
+      ['1730583000'],
+    ]
+  );
+});
+
+test('after a forward transition the first valid inverse survives an invalid later candidate', async () => {
+  // Actual CPython renderer epochs and raw local fields, selected-boundary-probes-01.
+  const context: RendererCalendarContext = {
+    ...original,
+    tz: { kind: 'present', value: 'XST-2XDT-4,M3.2.0/2,M11.1.0/2' },
+  };
+  const calls: LocalCalendarRequest[] = [];
+  const catalog = {
+    1710052200: fields('1710052200', 2024, 3, 10, 10, 30),
+    1710037800: fields('1710037800', 2024, 3, 10, 6, 30),
+    1709951400: fields('1709951400', 2024, 3, 9, 4, 30),
+    1710045000: fields('1710045000', 2024, 3, 10, 8, 30),
+    1710138600: fields('1710138600', 2024, 3, 11, 10, 30),
+    1710124200: fields('1710124200', 2024, 3, 11, 6, 30),
+  };
+  const timestamps = ['2024-03-10T06:30:00', '2024-03-11T06:30:00'];
+  const calendar = await resolveRendererCalendar({
+    ...options(timestamps, catalogPort(catalog, calls, context)),
+    context,
+  });
+  assert.equal(calendar.epochSeconds(timestamps[0]!), 1710037800);
+  assert.equal(calendar.epochSeconds(timestamps[1]!), 1710124200);
+  assert.deepEqual(
+    calls.map((call) => call.seconds),
+    [['1710052200', '1710138600'], ['1710037800', '1710124200'], ['1709951400'], ['1710045000']]
+  );
+});
+
+test('negative DST reverses gap and fold seasons without repeating cached observations', async () => {
+  // Actual CPython3.11.13 observations under XST0XDT1,M3.2.0/2,M11.1.0/2.
+  const context: RendererCalendarContext = {
+    ...original,
+    tz: { kind: 'present', value: 'XST0XDT1,M3.2.0/2,M11.1.0/2' },
+  };
+  const calls: LocalCalendarRequest[] = [];
+  const catalog = {
+    '1710034200': fields('1710034200', 2024, 3, 10, 1, 30),
+    '1709947800': fields('1709947800', 2024, 3, 9, 1, 30),
+    '1730601000': fields('1730601000', 2024, 11, 3, 1, 30),
+    '1730604600': fields('1730604600', 2024, 11, 3, 3, 30),
+  };
+  const timestamps = ['2024-03-10T01:30:00', '2024-11-03T02:30:00'];
+  const calendar = await resolveRendererCalendar({
+    ...options(timestamps, catalogPort(catalog, calls, context)),
+    context,
+  });
+  assert.equal(calendar.epochSeconds(timestamps[0]!), 1710034200);
+  assert.equal(calendar.epochSeconds(timestamps[1]!), 1730604600);
+  assert.deepEqual(
+    calls.map((call) => call.seconds),
+    [['1710034200', '1730601000'], ['1730604600'], ['1709947800']]
   );
 });
 
@@ -425,6 +604,59 @@ test('wrong identity, sequence, result order, raw fields and environment cannot 
     );
     assert.equal(count, 1);
   }
+});
+
+test('unreadable records keep typed failures while primitive and array records refuse before inspection', async () => {
+  const expected = (category: 'request' | 'reply', message: string) => (error: unknown) =>
+    error instanceof RendererCalendarContractError &&
+    error.category === category &&
+    error.message === message;
+  const revoked = Proxy.revocable({}, {});
+  revoked.revoke();
+  await assert.rejects(
+    resolveRendererCalendar({
+      ...options([], noPort),
+      context: revoked.proxy as RendererCalendarContext,
+    }),
+    expected('request', 'Unreadable calendar record')
+  );
+  for (const value of [null, 1, []])
+    await assert.rejects(
+      resolveRendererCalendar({
+        ...options([], noPort),
+        context: value as unknown as RendererCalendarContext,
+      }),
+      expected('request', 'Calendar record required')
+    );
+  let inspections = 0;
+  const array = new Proxy([], {
+    ownKeys() {
+      inspections++;
+      throw new Error('Array must refuse before reflection');
+    },
+  });
+  await assert.rejects(
+    resolveRendererCalendar({
+      ...options([], noPort),
+      context: array as unknown as RendererCalendarContext,
+    }),
+    expected('request', 'Calendar record required')
+  );
+  assert.equal(inspections, 0);
+  await assert.rejects(
+    resolveRendererCalendar(
+      options(['1970-01-01'], {
+        async observe(request) {
+          return reply(
+            request,
+            [fields('0', 1970, 1, 1)],
+            revoked.proxy as RendererCalendarContext
+          );
+        },
+      })
+    ),
+    expected('reply', 'Unreadable calendar record')
+  );
 });
 
 test('explicit query and byte frontiers refuse before excess observations', async () => {
@@ -592,4 +824,93 @@ test('cancellation/deadline and callback failure never become caught timestamp n
   assert.equal(typeof release, 'function');
   release!({ fabricated: true });
   assert.equal(calls, 1);
+});
+
+test('calendar arrays snapshot data without executing length, index, or iterator getters', async () => {
+  let reads = 0;
+  const request = new Proxy(['1970-01-01T00:00:00Z'], {
+    get() {
+      reads++;
+      throw new Error('live request array read');
+    },
+  });
+  const aware = await resolveRendererCalendar(options(request, noPort));
+  assert.equal(aware.epochSeconds('1970-01-01T00:00:00Z'), 0);
+  const naive = await resolveRendererCalendar(
+    options(['1970-01-01'], {
+      async observe(request) {
+        return reply(
+          request,
+          new Proxy(
+            request.seconds.map((seconds) => {
+              assert.ok(seconds === '0' || seconds === '-86400');
+              return seconds === '0' ? fields(seconds, 1970, 1, 1) : fields(seconds, 1969, 12, 31);
+            }),
+            {
+              get() {
+                reads++;
+                throw new Error('live result array read');
+              },
+            }
+          )
+        );
+      },
+    })
+  );
+  assert.equal(naive.epochSeconds('1970-01-01'), 0);
+  assert.equal(reads, 0);
+});
+
+test('calendar array descriptor traps, sparse entries, and accessors retain typed refusals', async () => {
+  let getters = 0;
+  const variants = <T>(values: T[]): T[][] => {
+    const accessor = [...values];
+    Object.defineProperty(accessor, '0', {
+      get() {
+        getters++;
+        return values[0];
+      },
+    });
+    return [
+      new Proxy([...values], {
+        ownKeys() {
+          throw new Error('array ownKeys');
+        },
+      }),
+      new Proxy([...values], {
+        getOwnPropertyDescriptor() {
+          throw new Error('array descriptor');
+        },
+      }),
+      accessor,
+      new Array<T>(values.length),
+      Object.assign([...values], { extra: true }),
+    ];
+  };
+  const expected = (category: 'request' | 'reply' | 'transport') => (error: unknown) =>
+    error instanceof RendererCalendarContractError && error.category === category;
+  for (const timestamps of variants(['1970-01-01']))
+    await assert.rejects(resolveRendererCalendar(options(timestamps, noPort)), expected('request'));
+  for (const results of variants([fields('0', 1970, 1, 1)]))
+    await assert.rejects(
+      resolveRendererCalendar(
+        options(['1970-01-01'], {
+          async observe(request) {
+            return reply(request, results);
+          },
+        })
+      ),
+      expected('reply')
+    );
+  assert.equal(getters, 0);
+  await assert.rejects(
+    resolveRendererCalendar(
+      options(['1970-01-01'], {
+        async observe() {
+          throw new Error('outside array boundary');
+        },
+      })
+    ),
+    expected('transport')
+  );
 });
