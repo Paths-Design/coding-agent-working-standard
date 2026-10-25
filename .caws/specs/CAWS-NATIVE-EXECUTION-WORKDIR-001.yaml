@@ -28,5 +28,13 @@ acceptance:
     then: >-
       the actual physical command directory is selected with raw session identifiers
       preserved, and lifecycle or non-Bash coordinates remain unchanged
+  - id: A2
+    given: >-
+      null, non-string, empty, relative, NUL, nonexistent, non-directory or
+      conflicting explicit directories and foreign worktrees
+    when: 'native Bash context is consumed'
+    then: >-
+      invalid supplied context refuses and owner, canonical, foreign-worktree and
+      cross-repository checks retain their authority boundaries
 non_functional: {}
 contracts: []
