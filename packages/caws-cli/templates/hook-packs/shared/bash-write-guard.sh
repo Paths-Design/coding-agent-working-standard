@@ -153,6 +153,18 @@ _CWD_CONTRACT=0
 [[ -n "${CAWS_AGENT_SURFACE:-}" && "$_CWD_CONTRACT_SURFACES" == *" $CAWS_AGENT_SURFACE "* ]] && _CWD_CONTRACT=1
 _CWD_RESOLVED=0
 [[ -n "${HOOK_CWD:-}" && -d "$HOOK_CWD" ]] && _CWD_RESOLVED=1
+# Codex session cwd anchors governance but does not identify the Bash command
+# directory. The native/compatibility ingress overwrites inherited HOOK_* and
+# computes this status from the validated host execution_workdir field.
+_CODEX_EXECUTION_CWD_UNAVAILABLE=0
+if [[ "${CAWS_AGENT_SURFACE:-}" == "codex" ]]; then
+  _CWD_RESOLVED=0
+  if [[ "${HOOK_EXECUTION_WORKDIR_STATUS:-}" == "resolved" && "${HOOK_CWD:-}" == /* && -d "$HOOK_CWD" ]]; then
+    _CWD_RESOLVED=1
+  else
+    _CODEX_EXECUTION_CWD_UNAVAILABLE=1
+  fi
+fi
 
 # CAWS-BASH-GUARD-BOUNDARY-DIVERGENCE-01: the cross-repository boundary.
 #
@@ -223,7 +235,10 @@ extract_targets() {
   # decision rather than a hidden property of the library.
   caws_bash_mutation_candidates "$1"
   if declare -F caws_bash_broad_mutations >/dev/null 2>&1; then
-    caws_bash_broad_mutations "$1" "$AGENT_CWD" | cut -f2
+    # Do not turn a cwd-relative broad mutation into a guessed absolute path.
+    local broad_base="$AGENT_CWD"
+    [[ "$_CODEX_EXECUTION_CWD_UNAVAILABLE" == "1" ]] && broad_base="."
+    caws_bash_broad_mutations "$1" "$broad_base" | cut -f2
   fi
 }
 
@@ -304,6 +319,15 @@ while IFS= read -r cand; do
   # file.py"` arrives as one operand containing its space. The sentinel
   # restoration and quote stripping that stood here undid damage the old
   # tokenizer did and were removed with it.
+  # Unknown Codex command context cannot justify ANY guessed relative root,
+  # including an allowlisted target or a supposed foreign worktree/repository.
+  # Absolute targets still carry their own coordinate and reach every boundary.
+  if [[ "$_CODEX_EXECUTION_CWD_UNAVAILABLE" == "1" ]]; then
+    case "$cand" in
+      /*) ;;
+      *) escalate ask "$cand" "unavailable_native_context"; continue ;;
+    esac
+  fi
   abs="$(abspath "$cand")"
   # CAWS-GUARD-ALLOWLIST-SYNC-001 + CAWS-GUARD-SCOPE-PRIORITY-001: record
   # whether this target is on the unconditional allowlist (docs/*, .caws/*
@@ -449,6 +473,12 @@ if declare -F caws_bash_dynamic_mutations >/dev/null 2>&1; then
   # dynamic verdict would compute correctly and then vanish.
   while IFS="$(printf '\t')" read -r _pat _reskind _prefix _basis _dynbase; do
     [[ -z "$_pat" ]] && continue
+    if [[ "$_CODEX_EXECUTION_CWD_UNAVAILABLE" == "1" ]]; then
+      case "$_pat" in
+        /*) ;;
+        *) escalate ask "$_pat" "unavailable_native_context"; continue ;;
+      esac
+    fi
     # CONSUME the producer's prefix; never re-derive it.
     if [[ "$_basis" != "lexically_proven" || -z "$_prefix" ]]; then
       # No provable confinement: the target could resolve anywhere, including
@@ -546,6 +576,8 @@ case "$WORST" in
     exit 2 ;;
   ask)
     case "$WORST_KIND" in
+      unavailable_native_context)
+        _REASON="[$_BG_ID] unavailable-native-context: Codex did not provide a validated host command directory for relative target '$WORST_DETAIL'. Session cwd anchors the project but does not identify command execution cwd. No ownership conclusion was made. Supply native execution_workdir or use an absolute target." ;;
       ask_uncertain)
         if [[ "$WORST_DETAIL" == cwd-unresolved:* ]]; then
           _REASON="[$_BG_ID] ask_uncertain: the operating cwd could not be resolved for the relative path '${WORST_DETAIL#cwd-unresolved:}', so which file it names (this checkout or another worktree's payload) cannot be decided. Approve only if you know the target is yours to mutate, or rerun with an absolute path."

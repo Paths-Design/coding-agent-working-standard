@@ -458,3 +458,201 @@ test('caller-selected relative wrapper and symlink paths are retained without re
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('execution-workdir profile carries two fixed correlated project pairs and refuses a fifth', async () => {
+  const f = fixture(
+    (frame) =>
+      result(frame, {
+        stdout: Buffer.from(
+          frame.ordinal === 1
+            ? '/session-checkout\n'
+            : frame.ordinal === 3
+              ? '/command-checkout\n'
+              : '/canonical/.git\n'
+        ).toString('base64'),
+      }),
+    { contextGit: 'caws.runtime.context-git.execution-workdir.v1' }
+  );
+  await expect(f.port.run(checkoutArgs, '/session')).resolves.toBe('/session-checkout');
+  await expect(f.port.run(commonArgs, '/session-checkout')).resolves.toBe('/canonical/.git');
+  await expect(f.port.run(checkoutArgs, '/command')).resolves.toBe('/command-checkout');
+  await expect(f.port.run(commonArgs, '/command-checkout')).resolves.toBe('/canonical/.git');
+  expect(f.writes.map(({ ordinal, operation, cwd }) => ({ ordinal, operation, cwd }))).toEqual([
+    { ordinal: 1, operation: 'checkout', cwd: '/session' },
+    { ordinal: 2, operation: 'commonDir', cwd: '/session-checkout' },
+    { ordinal: 3, operation: 'checkout', cwd: '/command' },
+    { ordinal: 4, operation: 'commonDir', cwd: '/command-checkout' },
+  ]);
+  expect(new Set(f.writes.map((frame) => frame.token)).size).toBe(1);
+  await expect(f.port.run(checkoutArgs, '/extra')).rejects.toMatchObject({ category: 'protocol' });
+  expect(f.reads()).toBe(4);
+});
+test('execution-workdir profile binds the fourth cwd to the third output and retains first failure', async () => {
+  const f = fixture(
+    (frame) =>
+      result(frame, {
+        stdout: Buffer.from(frame.ordinal % 2 ? '/checkout\n' : '/canonical/.git\n').toString(
+          'base64'
+        ),
+      }),
+    { contextGit: 'caws.runtime.context-git.execution-workdir.v1' }
+  );
+  await f.port.run(checkoutArgs, '/session');
+  await f.port.run(commonArgs, '/checkout');
+  await f.port.run(checkoutArgs, '/command');
+  await expect(f.port.run(commonArgs, '/foreign')).rejects.toMatchObject({ category: 'protocol' });
+  await expect(f.port.run(commonArgs, '/checkout')).rejects.toMatchObject({ category: 'protocol' });
+  expect(f.reads()).toBe(3);
+});
+
+test('settled nonzero exits consume only fixed execution-profile slots and retain pair cwd', async () => {
+  const f = fixture(
+    (frame) =>
+      frame.ordinal <= 2
+        ? result(frame, {
+            exitCode: 128,
+            stdout: Buffer.from('/untrusted-output\n').toString('base64'),
+            stderr: Buffer.from('not a Git project\n').toString('base64'),
+          })
+        : result(frame, {
+            stdout: Buffer.from(frame.ordinal === 3 ? '/target\n' : '/target/.git\n').toString(
+              'base64'
+            ),
+          }),
+    { contextGit: 'caws.runtime.context-git.execution-workdir.v1' }
+  );
+  await expect(f.port.run(checkoutArgs, '/original')).rejects.toMatchObject({
+    category: 'git_exit',
+    message: 'not a Git project',
+    cleanup,
+  });
+  await expect(f.port.run(commonArgs, '/original')).rejects.toMatchObject({
+    category: 'git_exit',
+    message: 'not a Git project',
+    cleanup,
+  });
+  await expect(f.port.run(checkoutArgs, '/target')).resolves.toBe('/target');
+  await expect(f.port.run(commonArgs, '/target')).resolves.toBe('/target/.git');
+  expect(f.writes.map(({ ordinal, operation, cwd }) => ({ ordinal, operation, cwd }))).toEqual([
+    { ordinal: 1, operation: 'checkout', cwd: '/original' },
+    { ordinal: 2, operation: 'commonDir', cwd: '/original' },
+    { ordinal: 3, operation: 'checkout', cwd: '/target' },
+    { ordinal: 4, operation: 'commonDir', cwd: '/target' },
+  ]);
+  expect(new Set(f.writes.map((frame) => frame.token)).size).toBe(1);
+  expect(new Set(f.writes.map((frame) => frame.executable))).toEqual(new Set(['/selected/git']));
+  await expect(f.port.run(checkoutArgs, '/extra')).rejects.toMatchObject({ category: 'protocol' });
+  expect(f.writes).toHaveLength(4);
+});
+test('a failed checkout binds commonDir to its requested cwd, never its nonzero stdout', async () => {
+  const f = fixture(
+    (frame) =>
+      result(frame, {
+        exitCode: 128,
+        stdout: Buffer.from('/untrusted-output\n').toString('base64'),
+      }),
+    { contextGit: 'caws.runtime.context-git.execution-workdir.v1' }
+  );
+  await expect(f.port.run(checkoutArgs, '/original')).rejects.toMatchObject({
+    category: 'git_exit',
+  });
+  await expect(f.port.run(commonArgs, '/untrusted-output')).rejects.toMatchObject({
+    category: 'protocol',
+  });
+  await expect(f.port.run(commonArgs, '/original')).rejects.toMatchObject({ category: 'protocol' });
+  expect(f.writes).toHaveLength(1);
+});
+test.each([undefined, 'caws.runtime.context-git.v1'])(
+  'ordinary profile %s poisons on its original settled Git failure',
+  async (contextGit) => {
+    const f = fixture(
+      (frame) =>
+        result(frame, {
+          exitCode: 128,
+          stderr: Buffer.from('original Git failure\n').toString('base64'),
+        }),
+      { contextGit }
+    );
+    const first = await f.port.run(checkoutArgs, '/original').catch((error) => error);
+    expect(first).toMatchObject({ category: 'git_exit', message: 'original Git failure', cleanup });
+    await expect(f.port.run(commonArgs, '/original')).rejects.toMatchObject({
+      category: 'protocol',
+    });
+    expect(first.message).toBe('original Git failure');
+    expect(f.writes).toHaveLength(1);
+  }
+);
+test.each([
+  ['cleanup', { exitCode: 128, cleanup: { ...cleanup, reaped: false } }],
+  ['signal', { exitCode: null, signal: 9 }],
+  ['utf8', { exitCode: 128, stderr: Buffer.from([255]).toString('base64') }],
+  ['protocol', { exitCode: 128, id: 'foreign' }],
+  ['identity', { status: 'identity_changed', exitCode: null }],
+])(
+  'execution profile %s error still poisons after an unusable first terminal',
+  async (category, changes) => {
+    const f = fixture((frame) => result(frame, changes), {
+      contextGit: 'caws.runtime.context-git.execution-workdir.v1',
+    });
+    await expect(f.port.run(checkoutArgs, '/original')).rejects.toMatchObject({ category });
+    await expect(f.port.run(commonArgs, '/original')).rejects.toMatchObject({
+      category: 'protocol',
+    });
+    expect(f.writes).toHaveLength(1);
+  }
+);
+test('a transport-thrown git_exit cannot mint a consumed native terminal', async () => {
+  const f = fixture(
+    () => {
+      throw new ContextGitError('git_exit', 'unobserved terminal');
+    },
+    { contextGit: 'caws.runtime.context-git.execution-workdir.v1' }
+  );
+  await expect(f.port.run(checkoutArgs, '/original')).rejects.toMatchObject({
+    category: 'git_exit',
+  });
+  await expect(f.port.run(commonArgs, '/original')).rejects.toMatchObject({ category: 'protocol' });
+  expect(f.writes).toHaveLength(1);
+});
+test('a settled nonzero result after the original absolute deadline cannot advance the port', async () => {
+  const initial = 1000000;
+  const now = jest.spyOn(Date, 'now').mockReturnValue(initial);
+  try {
+    const f = fixture(
+      (frame) => {
+        now.mockReturnValue(initial + 1001);
+        return result(frame, { exitCode: 128 });
+      },
+      {
+        deadlineEpochMs: initial + 1000,
+        contextGit: 'caws.runtime.context-git.execution-workdir.v1',
+      }
+    );
+    await expect(f.port.run(checkoutArgs, '/original')).rejects.toMatchObject({
+      category: 'deadline',
+    });
+    f.request.deadlineEpochMs = initial + 999999;
+    await expect(f.port.run(commonArgs, '/original')).rejects.toMatchObject({
+      category: 'protocol',
+    });
+    expect(f.writes).toHaveLength(1);
+  } finally {
+    now.mockRestore();
+  }
+});
+test('original cancellation cannot be reclassified as a settled nonzero continuation', async () => {
+  let controller;
+  const f = fixture(
+    (frame) => {
+      controller.abort(new Error('original cancelled'));
+      return result(frame, { exitCode: 128 });
+    },
+    { contextGit: 'caws.runtime.context-git.execution-workdir.v1' }
+  );
+  controller = f.controller;
+  await expect(f.port.run(checkoutArgs, '/original')).rejects.toMatchObject({
+    category: 'cancelled',
+  });
+  await expect(f.port.run(commonArgs, '/original')).rejects.toMatchObject({ category: 'protocol' });
+  expect(f.writes).toHaveLength(1);
+});

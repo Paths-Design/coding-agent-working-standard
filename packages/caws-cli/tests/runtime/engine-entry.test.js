@@ -376,6 +376,67 @@ test('actual entry serializes native selection reads on the existing reader befo
   );
 });
 
+test('actual entry uses four correlated exchanges only for execution-workdir capability', async () => {
+  const commandDir = path.join(root, 'command-directory');
+  fs.mkdirSync(commandDir);
+  const payload = {
+    cwd: root,
+    execution_workdir: commandDir,
+    tool_name: 'Bash',
+    session_id: 'original-session',
+    tool_use_id: 'original-call',
+    tool_input: { command: 'echo unchanged' },
+  };
+  await withEntry(
+    'caws.runtime.context-git.execution-workdir.v1',
+    async (peer) => {
+      const frames = [];
+      for (const [ordinal, operation, cwd] of [
+        [1, 'checkout', root],
+        [2, 'commonDir', root],
+        [3, 'checkout', commandDir],
+        [4, 'commonDir', root],
+      ]) {
+        const query = await peer.read();
+        frames.push(query);
+        expect(query).toMatchObject({
+          schema: 'caws.runtime.context-git.request.v1',
+          ordinal,
+          operation,
+          cwd,
+        });
+        await peer.write(result(query, operation === 'checkout' ? root : path.join(root, '.git')));
+      }
+      expect(new Set(frames.map((frame) => frame.token)).size).toBe(1);
+      await finishInactive(peer, await peer.read());
+      expect(peer.request.payload).toEqual(payload);
+      expect(fs.existsSync(peer.marker)).toBe(false);
+    },
+    { payload, inputJson: JSON.stringify(payload) }
+  );
+});
+test('actual entry refuses host directory on ordinary native profile before requesting Git', async () => {
+  const payload = {
+    cwd: root,
+    execution_workdir: root,
+    tool_name: 'Bash',
+    tool_input: { command: 'echo unchanged' },
+  };
+  await withEntry(
+    'caws.runtime.context-git.v1',
+    async (peer) => {
+      expect(await peer.read()).toMatchObject({
+        schema: 'caws.runtime.failure.v1',
+        ...identity,
+        message: expect.stringMatching(/does not support host execution-workdir/),
+      });
+      expect(await peer.terminal()).toEqual({ code: 1, signal: null, stderr: '' });
+      expect(fs.existsSync(peer.marker)).toBe(false);
+    },
+    { payload, inputJson: JSON.stringify(payload) }
+  );
+});
+
 test('actual entry malformed native selection chunk fails before Ready without live fallback', async () => {
   prepareNativeSelectionFixture();
   await withEntry(
@@ -396,3 +457,107 @@ test('actual entry malformed native selection chunk fails before Ready without l
     { selectionObservation: selectionAdvertisement() }
   );
 });
+
+test.each([
+  ['pre_tool_use', false],
+  ['post_tool_use', false],
+  ['pre_tool_use', true],
+  ['post_tool_use', true],
+])(
+  'actual entry resolves inactive nongit directories during %s (different directory: %s) with fixed query slots',
+  async (event, different) => {
+    const commandDir = different ? path.join(root, 'ordinary-command-directory') : root;
+    if (different) fs.mkdirSync(commandDir);
+    const payload = {
+      cwd: root,
+      execution_workdir: commandDir,
+      tool_name: 'Bash',
+      tool_input: { command: 'echo unchanged' },
+    };
+    await withEntry(
+      'caws.runtime.context-git.execution-workdir.v1',
+      async (peer) => {
+        const checkout = await peer.read();
+        expect(checkout).toMatchObject({ ordinal: 1, operation: 'checkout', cwd: root });
+        await peer.write(result(checkout, '', { exitCode: 128 }));
+        if (different) {
+          const common = await peer.read();
+          expect(common).toMatchObject({ ordinal: 2, operation: 'commonDir', cwd: root });
+          await peer.write(result(common, '', { exitCode: 128 }));
+          const target = await peer.read();
+          expect(target).toMatchObject({ ordinal: 3, operation: 'checkout', cwd: commandDir });
+          await peer.write(result(target, '', { exitCode: 128 }));
+        }
+        await finishInactive(peer, await peer.read());
+        expect(fs.existsSync(peer.marker)).toBe(false);
+      },
+      { event, payload, inputJson: JSON.stringify(payload) }
+    );
+  }
+);
+test.each(['pre_tool_use', 'post_tool_use'])(
+  'actual entry retains inactive unadopted Git session to nongit command directory during %s',
+  async (event) => {
+    const commandDir = path.join(root, 'ordinary-command-directory');
+    fs.mkdirSync(commandDir);
+    const payload = {
+      cwd: root,
+      execution_workdir: commandDir,
+      tool_name: 'Bash',
+      tool_input: { command: 'echo unchanged' },
+    };
+    await withEntry(
+      'caws.runtime.context-git.execution-workdir.v1',
+      async (peer) => {
+        const checkout = await peer.read();
+        expect(checkout).toMatchObject({ ordinal: 1, operation: 'checkout', cwd: root });
+        await peer.write(result(checkout, root));
+        const common = await peer.read();
+        expect(common).toMatchObject({ ordinal: 2, operation: 'commonDir', cwd: root });
+        await peer.write(result(common, path.join(root, '.git')));
+        const target = await peer.read();
+        expect(target).toMatchObject({ ordinal: 3, operation: 'checkout', cwd: commandDir });
+        await peer.write(result(target, '', { exitCode: 128 }));
+        await finishInactive(peer, await peer.read());
+        expect(fs.existsSync(peer.marker)).toBe(false);
+      },
+      { event, payload, inputJson: JSON.stringify(payload) }
+    );
+  }
+);
+
+test.each(['pre_tool_use', 'post_tool_use'])(
+  'actual entry selects successful unadopted target after two settled session Git exits during %s',
+  async (event) => {
+    const commandDir = path.join(root, 'unadopted-command-project');
+    fs.mkdirSync(commandDir);
+    fs.mkdirSync(path.join(commandDir, '.git')); // Marker does not determine authority after successful Git.
+    const payload = {
+      cwd: root,
+      execution_workdir: commandDir,
+      tool_name: 'Bash',
+      tool_input: { command: 'echo unchanged' },
+    };
+    await withEntry(
+      'caws.runtime.context-git.execution-workdir.v1',
+      async (peer) => {
+        const frames = [];
+        for (const [ordinal, operation, cwd, output, exitCode] of [
+          [1, 'checkout', root, '', 128],
+          [2, 'commonDir', root, '', 128],
+          [3, 'checkout', commandDir, commandDir, 0],
+          [4, 'commonDir', commandDir, path.join(commandDir, '.git'), 0],
+        ]) {
+          const query = await peer.read();
+          frames.push(query);
+          expect(query).toMatchObject({ ordinal, operation, cwd });
+          await peer.write(result(query, output, { exitCode }));
+        }
+        expect(new Set(frames.map((frame) => frame.token)).size).toBe(1);
+        await finishInactive(peer, await peer.read());
+        expect(fs.existsSync(peer.marker)).toBe(false);
+      },
+      { event, payload, inputJson: JSON.stringify(payload) }
+    );
+  }
+);

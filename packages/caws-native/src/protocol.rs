@@ -123,6 +123,8 @@ pub struct Request {
     surface: String,
     event: String,
     configuration: String,
+    #[serde(skip)]
+    context_git_profile: caws_native::context_git::Profile,
     session_cache: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_prefix: Option<&'static str>,
@@ -438,6 +440,9 @@ impl Request {
     pub fn caller_cwd(&self) -> &str {
         &self.caller.cwd
     }
+    pub fn context_git_profile(&self) -> caws_native::context_git::Profile {
+        self.context_git_profile
+    }
     pub fn new(
         config: &Config,
         payload: Box<RawValue>,
@@ -454,6 +459,23 @@ impl Request {
         if deadline > 9_007_199_254_740_991 {
             return Err("deadline exceeds JavaScript safe integer".into());
         }
+        // Capture the original epoch/deadline before filesystem observations:
+        // validating host context consumes this budget and never renews it.
+        let context_git_profile = if caws_native::invocation_project::execution_workdir(
+            &payload,
+            &config.surface,
+            &config.event,
+        )
+        .map_err(|failure| failure.to_string())?
+        .is_some()
+        {
+            caws_native::context_git::Profile::ExecutionWorkdir
+        } else {
+            caws_native::context_git::Profile::Ordinary
+        };
+        if Instant::now() >= expires {
+            return Err("request deadline expired during execution context validation".into());
+        }
         Ok(Self {
             schema: "caws.runtime.request.v1",
             id: format!("{}-{}", std::process::id(), since_epoch.as_nanos()),
@@ -461,6 +483,7 @@ impl Request {
             surface: config.surface.clone(),
             event: config.event.clone(),
             configuration: config.configuration.clone(),
+            context_git_profile,
             session_cache: caws_native::session_cache_wire::CAPABILITY,
             stop_prefix: (cfg!(target_os = "macos")
                 && cfg!(feature = "sqlite-store")
@@ -480,7 +503,7 @@ impl Request {
             #[cfg(target_os = "macos")]
             session_publication: "caws.runtime.session-publication.v1",
             #[cfg(target_os = "macos")]
-            context_git: caws_native::context_git::CAPABILITY,
+            context_git: context_git_profile.capability(),
             #[cfg(feature = "sqlite-store")]
             session_store: caws_native::transcript_store_wire::CAPABILITY,
             caller: Caller::capture()?,
@@ -883,6 +906,7 @@ mod tests {
             surface: "codex".into(),
             event: "pre_tool_use".into(),
             configuration: "system".into(),
+            context_git_profile: caws_native::context_git::Profile::Ordinary,
             session_cache: caws_native::session_cache_wire::CAPABILITY,
             stop_prefix: None,
             stop_lease_context: None,
@@ -1063,6 +1087,71 @@ mod tests {
             validate_frame(&oversized, &request).err(),
             Some("context Git request exceeds frame budget".into())
         );
+    }
+
+    #[test]
+    fn execution_workdir_profile_is_selected_only_by_trusted_constructor_inputs() {
+        let mut config = Config {
+            engine: "/not-executed/engine.js".into(),
+            node: "/not-executed/node".into(),
+            surface: "codex".into(),
+            event: "pre_tool_use".into(),
+            configuration: "system".into(),
+            digest: "a".repeat(64),
+            timeout: std::time::Duration::from_secs(30),
+        };
+        let make = |config: &Config, text: &str| {
+            Request::new(
+                config,
+                RawValue::from_string(text.into()).unwrap(),
+                text.into(),
+                Instant::now() + std::time::Duration::from_secs(30),
+            )
+        };
+        for event in ["pre_tool_use", "post_tool_use"] {
+            config.event = event.into();
+            let text = r#"{"tool_name":"Bash","execution_workdir":"/","cwd":"/session","session_id":"original"}"#;
+            let request = make(&config, text).unwrap();
+            assert_eq!(
+                request.context_git_profile(),
+                caws_native::context_git::Profile::ExecutionWorkdir
+            );
+            assert_eq!(request.payload.get(), text);
+            assert_eq!(request.input_json, text);
+            #[cfg(target_os = "macos")]
+            assert_eq!(
+                request.context_git,
+                caws_native::context_git::EXECUTION_WORKDIR_CAPABILITY
+            );
+            for invalid in ["null", "false", "0", r#""relative""#, r#""/nul\u0000path""#] {
+                let text =
+                    format!(r#"{{"tool_name":"Bash","cwd":"/","execution_workdir":{invalid}}}"#);
+                assert!(make(&config, &text).is_err(), "{text}");
+            }
+        }
+        for text in [
+            r#"{"tool_name":"Bash","contextGit":"caws.runtime.context-git.execution-workdir.v1","tool_input":{"cwd":"/"}}"#,
+            r#"{"tool_name":"Read","execution_workdir":null}"#,
+            r#"{"tool_name":"bash","execution_workdir":null}"#,
+        ] {
+            assert_eq!(
+                make(&config, text).unwrap().context_git_profile(),
+                caws_native::context_git::Profile::Ordinary
+            );
+        }
+        config.event = "stop".into();
+        let spoof = r#"{"tool_name":"Bash","execution_workdir":null,"hook_event_name":"pre_tool_use","contextGit":"caws.runtime.context-git.execution-workdir.v1"}"#;
+        assert_eq!(
+            make(&config, spoof).unwrap().context_git_profile(),
+            caws_native::context_git::Profile::Ordinary
+        );
+        let expired = Request::new(
+            &config,
+            RawValue::from_string("{}".into()).unwrap(),
+            "{}".into(),
+            Instant::now() - std::time::Duration::from_millis(1),
+        );
+        assert!(expired.is_err());
     }
 
     #[test]

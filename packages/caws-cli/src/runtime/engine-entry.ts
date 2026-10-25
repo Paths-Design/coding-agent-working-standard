@@ -35,7 +35,10 @@ import { compareCliIdentity, type ReviewedCliIdentity } from './cli-identity';
 import { loadGenerationCliIdentity } from './cli-identity-loader';
 import { createNativeStopLeaseContextPort } from './stop-lease-context';
 import { createNativeContextGitPort } from './context-git-client';
-import { CONTEXT_GIT_CAPABILITY } from './context-git-wire';
+import {
+  CONTEXT_GIT_CAPABILITY,
+  EXECUTION_WORKDIR_CONTEXT_GIT_CAPABILITY,
+} from './context-git-wire';
 import { createNativeSelectionResolver } from './selection-observation';
 
 /** Private one-shot protocol entry. Installation and resident-host selection are separate contracts. */
@@ -84,7 +87,8 @@ export async function runEngineEntry(reviewedCliIdentity?: ReviewedCliIdentity):
           )
         : undefined;
     const contextGit =
-      request.contextGit === CONTEXT_GIT_CAPABILITY
+      request.contextGit === CONTEXT_GIT_CAPABILITY ||
+      request.contextGit === EXECUTION_WORKDIR_CONTEXT_GIT_CAPABILITY
         ? createNativeContextGitPort(
             request,
             {

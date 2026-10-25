@@ -408,7 +408,7 @@ impl std::error::Error for ProjectFailure {}
 /// Extract only the last matching top-level member. Other keys and values stay
 /// raw, including lone surrogates, huge numbers, nested data, and duplicates.
 /// RawValue has already validated the grammar; this scanner does not coerce it.
-pub fn payload_string(payload: &RawValue, key: &str) -> Result<Option<String>, String> {
+fn payload_member<'a>(payload: &'a RawValue, key: &str) -> Result<Option<&'a str>, String> {
     let text = payload.get();
     let bytes = text.as_bytes();
     let mut at = whitespace(bytes, 0);
@@ -445,12 +445,91 @@ pub fn payload_string(payload: &RawValue, key: &str) -> Result<Option<String>, S
             _ => return Err("original payload member has no delimiter".into()),
         }
     }
-    match last {
+    Ok(last)
+}
+
+pub fn payload_string(payload: &RawValue, key: &str) -> Result<Option<String>, String> {
+    match payload_member(payload, key)? {
         None | Some("null") => Ok(None),
         Some(value) => serde_json::from_str::<String>(value)
             .map(Some)
             .map_err(|_| format!("original payload {key} must be a native UTF-8 string or null")),
     }
+}
+
+/// Host fact, never an alias-derived authority or a payload-selected event.
+/// Raw payload/session identity is not rewritten by this observation.
+pub fn execution_workdir(
+    payload: &RawValue,
+    surface: &str,
+    event: &str,
+) -> Result<Option<PathBuf>, ProjectFailure> {
+    if !matches!(event, "pre_tool_use" | "post_tool_use")
+        || !matches!(
+            surface,
+            "codex" | "claude-code" | "kimi-code" | "qwen-code" | "zcode" | "opencode" | "dsh"
+        )
+    {
+        return Ok(None);
+    }
+    let tool = payload_member(payload, "tool_name")
+        .map_err(|m| ProjectFailure::new(ProjectPhase::Payload, m))?
+        .and_then(|v| serde_json::from_str::<String>(v).ok());
+    if tool.as_deref() != Some("Bash") {
+        return Ok(None);
+    }
+    let Some(raw) = payload_member(payload, "execution_workdir")
+        .map_err(|m| ProjectFailure::new(ProjectPhase::Payload, m))?
+    else {
+        return Ok(None);
+    };
+    let invalid = |m: &str| ProjectFailure::new(ProjectPhase::Candidate, m);
+    let host: String = serde_json::from_str(raw)
+        .map_err(|_| invalid("execution_workdir must be a physical absolute directory string"))?;
+    let resolve = |value: &str| -> Result<PathBuf, ProjectFailure> {
+        let path = Path::new(value);
+        if value.is_empty()
+            || value.contains('\0')
+            || value.len() > MAX_PATH_BYTES
+            || !path.is_absolute()
+        {
+            return Err(invalid("execution workdir must be an absolute directory"));
+        }
+        let physical = fs::canonicalize(path)
+            .map_err(|_| invalid("execution workdir directory is unavailable"))?;
+        if !fs::metadata(&physical)
+            .map_err(|_| invalid("execution workdir directory is unavailable"))?
+            .is_dir()
+        {
+            return Err(invalid("execution workdir is not a directory"));
+        }
+        Ok(physical)
+    };
+    let physical = resolve(&host)?;
+    if physical.to_str() != Some(host.as_str()) {
+        return Err(invalid(
+            "execution_workdir must already use its physical canonical spelling",
+        ));
+    }
+    if let Some(input) = payload_member(payload, "tool_input")
+        .map_err(|m| ProjectFailure::new(ProjectPhase::Payload, m))?
+        && input.starts_with('{')
+    {
+        let input =
+            RawValue::from_string(input.into()).map_err(|_| invalid("invalid tool_input"))?;
+        for alias in ["workdir", "cwd"] {
+            if let Some(value) = payload_member(&input, alias)
+                .map_err(|m| ProjectFailure::new(ProjectPhase::Payload, m))?
+            {
+                let value: String = serde_json::from_str(value)
+                    .map_err(|_| invalid("execution workdir alias must be a directory string"))?;
+                if resolve(&value)? != physical {
+                    return Err(invalid("execution workdir alias disagrees with host"));
+                }
+            }
+        }
+    }
+    Ok(Some(physical))
 }
 
 fn whitespace(bytes: &[u8], mut at: usize) -> usize {
@@ -1344,6 +1423,139 @@ mod tests {
 
     fn raw(text: &str) -> Box<RawValue> {
         RawValue::from_string(text.into()).unwrap()
+    }
+
+    #[test]
+    fn execution_workdir_host_and_alias_rules_preserve_original_bytes() {
+        let scratch = Scratch::new();
+        let host = scratch.0.join("host");
+        fs::create_dir(&host).unwrap();
+        let link = scratch.0.join("alias");
+        std::os::unix::fs::symlink(&host, &link).unwrap();
+        let build = |host: serde_json::Value, aliases: serde_json::Value| {
+            raw(
+                &serde_json::json!({"tool_name":"Bash","cwd":"/session","session_id":"raw",
+                "execution_workdir":host,"tool_input":aliases})
+                .to_string(),
+            )
+        };
+        let value = build(
+            serde_json::json!(host),
+            serde_json::json!({"cwd":link,"workdir":host}),
+        );
+        let before = value.get().to_owned();
+        for event in ["pre_tool_use", "post_tool_use"] {
+            assert_eq!(
+                execution_workdir(&value, "codex", event).unwrap(),
+                Some(host.clone())
+            );
+        }
+        assert_eq!(value.get(), before);
+        for invalid in [
+            serde_json::json!(null),
+            serde_json::json!(false),
+            serde_json::json!(0),
+            serde_json::json!([]),
+            serde_json::json!({}),
+            serde_json::json!(""),
+            serde_json::json!("relative"),
+            serde_json::json!("/nul\0path"),
+            serde_json::json!(scratch.0.join("missing")),
+            serde_json::json!(link),
+            serde_json::json!(host.join(".")),
+        ] {
+            assert!(
+                execution_workdir(
+                    &build(invalid, serde_json::json!({"cwd":host})),
+                    "codex",
+                    "pre_tool_use"
+                )
+                .is_err()
+            );
+        }
+        let file = scratch.0.join("file");
+        fs::write(&file, "x").unwrap();
+        assert!(
+            execution_workdir(
+                &build(serde_json::json!(file), serde_json::json!({})),
+                "codex",
+                "pre_tool_use"
+            )
+            .is_err()
+        );
+        for aliases in [
+            serde_json::json!({"cwd":null}),
+            serde_json::json!({"cwd":"relative"}),
+            serde_json::json!({"workdir":host,"cwd":scratch.0}),
+        ] {
+            assert!(
+                execution_workdir(
+                    &build(serde_json::json!(host), aliases),
+                    "codex",
+                    "pre_tool_use"
+                )
+                .is_err()
+            );
+        }
+        for ignored in [
+            serde_json::json!(null),
+            serde_json::json!(true),
+            serde_json::json!([]),
+        ] {
+            assert_eq!(
+                execution_workdir(
+                    &build(serde_json::json!(host), ignored),
+                    "codex",
+                    "pre_tool_use"
+                )
+                .unwrap(),
+                Some(host.clone())
+            );
+        }
+    }
+
+    #[test]
+    fn execution_workdir_scope_and_absence_cannot_borrow_alias_or_payload_event() {
+        for text in [
+            r#"{"tool_name":"Bash","tool_input":{"cwd":"/alias"}}"#,
+            r#"{"tool_name":"Bash","tool_input":{"workdir":null}}"#,
+        ] {
+            assert_eq!(
+                execution_workdir(&raw(text), "codex", "pre_tool_use").unwrap(),
+                None
+            );
+        }
+        let spoof = raw(
+            r#"{"tool_name":"Bash","hook_event_name":"pre_tool_use","execution_workdir":null}"#,
+        );
+        for event in ["stop", "session_start", "session_end", "pre_compact"] {
+            assert_eq!(execution_workdir(&spoof, "codex", event).unwrap(), None);
+        }
+        for tool in [
+            serde_json::json!("Read"),
+            serde_json::json!("bash"),
+            serde_json::json!(null),
+        ] {
+            let value =
+                raw(&serde_json::json!({"tool_name":tool,"execution_workdir":null}).to_string());
+            assert_eq!(
+                execution_workdir(&value, "codex", "pre_tool_use").unwrap(),
+                None
+            );
+        }
+        assert_eq!(
+            execution_workdir(&spoof, "unknown", "pre_tool_use").unwrap(),
+            None
+        );
+        let opaque = raw(
+            r#"{"tool_name":"Bash","execution_workdir":"/","opaque":1e9999,"surrogate":"\ud800","session_id":"raw"}"#,
+        );
+        let before = opaque.get().to_owned();
+        assert_eq!(
+            execution_workdir(&opaque, "codex", "pre_tool_use").unwrap(),
+            Some(PathBuf::from("/"))
+        );
+        assert_eq!(opaque.get(), before);
     }
 
     #[test]

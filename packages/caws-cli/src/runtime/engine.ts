@@ -1,10 +1,23 @@
 import { createHash } from 'node:crypto';
+import { realpathSync } from 'node:fs';
+import { resolveExecutionWorkdir } from './execution-workdir';
 import { isAbsolute, join } from 'node:path';
 import { TextDecoder } from 'node:util';
 import type { AgentSurface } from '../init/hook-packs/types';
 import { settleMessageOffer } from '../store/messages-store';
-import { invocationEnvironment, resolveRuntimeProject, type ContextGitPort } from './context';
-import { CONTEXT_GIT_CAPABILITY } from './context-git-wire';
+import {
+  invocationEnvironment,
+  resolveRuntimeProject,
+  runtimeProjectCandidate,
+  runtimeProjectRequiresResolvedAuthority,
+  requireRuntimeProjectGovernancePaths,
+  type ContextGitPort,
+} from './context';
+import {
+  CONTEXT_GIT_CAPABILITY,
+  ContextGitError,
+  EXECUTION_WORKDIR_CONTEXT_GIT_CAPABILITY,
+} from './context-git-wire';
 import {
   composeHandlers,
   ComposerExecutionError,
@@ -295,7 +308,7 @@ export async function prepareRuntimeInvocation(
 ): Promise<PreparedRuntimeInvocation> {
   if (nativeStopCliIdentity)
     assertMatchedCliIdentityReceipt(nativeStopCliIdentity, request, signal);
-  if (request.contextGit === CONTEXT_GIT_CAPABILITY && !contextGit)
+  if (request.contextGit !== undefined && !contextGit)
     throw new Error('Native context Git capability requires its request-owned port');
   const environment = invocationEnvironment(request.caller);
   clearGuardConfigurationTransport(environment);
@@ -313,13 +326,17 @@ export async function prepareRuntimeInvocation(
   if (!home || !isAbsolute(home))
     throw new Error('Runtime requires an absolute caller machine home');
   environment.CAWS_HOME = home;
-  const context = await resolveRuntimeProject(
-    request.payload,
-    request.caller,
-    request.deadlineEpochMs,
-    contextGit
-  );
-  const selection =
+  const executionWorkdir = resolveExecutionWorkdir(request.payload, request.event);
+  if (executionWorkdir.status === 'resolved' && request.contextGit === CONTEXT_GIT_CAPABILITY)
+    throw new Error('Native context Git does not support host execution-workdir resolution');
+  if (
+    request.contextGit === EXECUTION_WORKDIR_CONTEXT_GIT_CAPABILITY &&
+    executionWorkdir.status !== 'resolved'
+  )
+    throw new Error('Execution-workdir context Git requires resolved host command context');
+  const select = async (
+    context: Awaited<ReturnType<typeof resolveRuntimeProject>>
+  ): Promise<InvocationSelection> =>
     context.status === 'resolved'
       ? await (selectionResolver ?? resolveInvocationSelection)({
           checkout: context.checkout,
@@ -332,6 +349,74 @@ export async function prepareRuntimeInvocation(
           caller: request.caller,
         })
       : { status: 'inactive' as const, reason: context.reason };
+  // Session authority is resolved first. The additive directory cannot turn an
+  // active session into an inactive invocation or borrow another project's policy.
+  let context = await resolveRuntimeProject(
+    request.payload,
+    request.caller,
+    request.deadlineEpochMs,
+    contextGit
+  );
+  let selection = await select(context);
+  if (executionWorkdir.status === 'resolved') {
+    if (context.status !== 'resolved') {
+      const candidate = runtimeProjectCandidate(request.payload, request.caller);
+      if (runtimeProjectRequiresResolvedAuthority(candidate, home))
+        throw new Error('Host execution context requires a resolvable session project');
+      if (realpathSync(candidate) !== executionWorkdir.path) {
+        if (request.contextGit === EXECUTION_WORKDIR_CONTEXT_GIT_CAPABILITY) {
+          // The first checkout failed without known/uncertain authority. Consume
+          // its fixed commonDir slot at that same cwd before the target pair.
+          try {
+            await contextGit!.run(
+              ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+              candidate
+            );
+          } catch (error) {
+            if (!(error instanceof ContextGitError) || error.category !== 'git_exit') throw error;
+          }
+        }
+        context = await resolveRuntimeProject(
+          request.payload,
+          request.caller,
+          request.deadlineEpochMs,
+          contextGit,
+          executionWorkdir.path
+        );
+        if (
+          context.status !== 'resolved' &&
+          runtimeProjectRequiresResolvedAuthority(executionWorkdir.path, home)
+        )
+          throw new Error('Host execution directory cannot deactivate session governance');
+        selection = await select(context);
+      }
+    } else {
+      const anchor = context;
+      const anchorWasActive = selection.status === 'active';
+      const anchorGoverned =
+        anchorWasActive ||
+        runtimeProjectRequiresResolvedAuthority(anchor.canonical, home, 'resolved-canonical');
+      context = await resolveRuntimeProject(
+        request.payload,
+        request.caller,
+        request.deadlineEpochMs,
+        contextGit,
+        executionWorkdir.path
+      );
+      if (
+        context.status !== 'resolved' &&
+        (anchorGoverned || runtimeProjectRequiresResolvedAuthority(executionWorkdir.path, home))
+      )
+        throw new Error('Host execution directory cannot deactivate session governance');
+      if (anchorGoverned && context.status === 'resolved' && context.canonical !== anchor.canonical)
+        throw new Error('Host execution directory belongs to a foreign canonical project');
+      selection = await select(context);
+      if (anchorWasActive && selection.status !== 'active')
+        throw new Error('Host execution directory cannot deactivate session governance');
+    }
+  }
+  if (executionWorkdir.status === 'resolved' && context.status === 'resolved')
+    requireRuntimeProjectGovernancePaths(context.canonical);
   if (signal.aborted) throw signal.reason;
   if (selection.status === 'inactive') {
     let used = false;

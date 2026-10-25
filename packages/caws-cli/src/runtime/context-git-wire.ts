@@ -3,13 +3,15 @@ import { isAbsolute } from 'node:path';
 import { objectMemberSource, parseJsonSource, type JsonSource } from './json-custody';
 
 export const CONTEXT_GIT_CAPABILITY = 'caws.runtime.context-git.v1';
+export const EXECUTION_WORKDIR_CONTEXT_GIT_CAPABILITY =
+  'caws.runtime.context-git.execution-workdir.v1';
 export const CONTEXT_GIT_REQUEST_SCHEMA = 'caws.runtime.context-git.request.v1';
 export const CONTEXT_GIT_RESULT_SCHEMA = 'caws.runtime.context-git.result.v1';
 export const MAX_CONTEXT_GIT_REQUEST_BYTES = 32 * 1024;
 export const MAX_CONTEXT_GIT_RESULT_BYTES = 2 * 1024 * 1024;
 export const MAX_CONTEXT_GIT_OUTPUT_BYTES = 1024 * 1024;
 export type ContextGitOperation = 'checkout' | 'commonDir';
-export type ContextGitOrdinal = 1 | 2;
+export type ContextGitOrdinal = 1 | 2 | 3 | 4;
 export interface ContextGitCleanup {
   readonly groupSettled: boolean;
   readonly stdoutEof: boolean;
@@ -99,8 +101,8 @@ export function createContextGitRequest(
     !digest(identity.runtimeDigest) ||
     !digest(token) ||
     !(
-      (ordinal === 1 && operation === 'checkout') ||
-      (ordinal === 2 && operation === 'commonDir')
+      ([1, 3].includes(ordinal) && operation === 'checkout') ||
+      ([2, 4].includes(ordinal) && operation === 'commonDir')
     ) ||
     !isAbsolute(executable) ||
     !nativeText(executable) ||
@@ -192,7 +194,7 @@ export function decodeContextGitResult(
     row.token !== expected.token ||
     row.ordinal !== expected.ordinal ||
     row.operation !== expected.operation ||
-    canonicalInteger(source!, 'ordinal', row.ordinal, 2) !== expected.ordinal
+    canonicalInteger(source!, 'ordinal', row.ordinal, 4) !== expected.ordinal
   )
     fail('Mismatched native context Git result identity');
   if (

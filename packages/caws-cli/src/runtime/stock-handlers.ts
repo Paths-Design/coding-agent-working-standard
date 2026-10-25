@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { resolveExecutionWorkdir } from './execution-workdir';
 import {
   accessSync,
   constants,
@@ -36,6 +37,8 @@ const LIBRARIES: Readonly<Record<string, readonly string[]>> = {
     '9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32',
   ],
   'parse-input.sh': [
+    // Host execution-workdir validation and separate session/command coordinates.
+    'c33d320efef119f826de58b145344288264b985f10d911b435645f6d851444fc',
     'd1823c3913094d20059823b1215ea5b173515912545eea09f8dfbcbb9c03ca30',
     '04a21ee0cd24d917bbee4c63f9285a2a867f2f9a08a9cdf2f9a78d3400a73c61',
     // Comment-only revision of d1823c39: the comment-stripped bytes are identical,
@@ -382,7 +385,9 @@ export function tryExecuteStockHandler(
     }
     const ports = createGuardUtilityPorts(environment, request.deadlineEpochMs);
     let cwd = selection.checkout;
-    if (typeof payload.cwd === 'string' && payload.cwd) {
+    const execution = resolveExecutionWorkdir(payload, request.event);
+    if (execution.status === 'resolved') cwd = execution.path;
+    else if (typeof payload.cwd === 'string' && payload.cwd) {
       try {
         // The shell utility resolves HOOK_CWD from its checkout-based process.
         // Keep symlink/.. traversal intact until the filesystem resolver sees it.
@@ -424,7 +429,10 @@ export function tryExecuteStockHandler(
   if (!home || !isAbsolute(home)) return null;
   const classification = classifyCommand(command, {
     repoRoot: selection.checkout,
-    cwd: selection.checkout,
+    cwd: (() => {
+      const execution = resolveExecutionWorkdir(payload, request.event);
+      return execution.status === 'resolved' ? execution.path : selection.checkout;
+    })(),
     home,
     environment,
     deadlineUnixMs: request.deadlineEpochMs,
