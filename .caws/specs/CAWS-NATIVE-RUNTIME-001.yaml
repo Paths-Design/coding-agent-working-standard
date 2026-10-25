@@ -366,7 +366,6 @@ evidence:
     commit_sha: "6defc8aa44d296cda598a97cd7eee2f16a8a54d2"
   - criterion_id: A2
     status: fail
-    evidence_ref: "Actual combined retained16 image still fails unchanged30000ms originalStop: production-stop-16-paired-execution-01/execution.json exit1; positive code2/30039.944ms, renderer owner deadline expired duringlogger after24generationchecks19.195s/3.751GB. Goal+plan complete; no ordinary publication and no stop wrapperexecution; own/peerleases remain exactactive; durable Unknown accepted record preserved; naturalownerexit0, no signals. Negative unexecuted. Artifacts /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/production-stop-16-paired-01. FreshCLItar8c935576...b565b and30componentcomparisons do not establish nativeparity or cutover; real machinepointer remains408c06a7...77baa0."
-    recorded_at: "2026-10-24T23:36:31.376Z"
-    exit_code: 1
-    commit_sha: "8b82867d3aa46e56fed14ea4703fa6f6e9c7b924"
+    evidence_ref: "E387 actual positive/hostile pair18 recovers bounded original30sdeadline after complete productiondependency reduction; receipt /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/production-dependency-checks/production-stop-18-execution-01 exits0. Positive15563ms publishes exactselectedsession and stopsownleaseonly; hostile9993ms refusesbefore reservation withzeroextraSQLopens/nooutput/unchangedleases; durablechecksums andnaturalcleanup inspected. Full A2 remains unmet: selected CLI compatibility route, ordinary installedtypedStop disconnected, complete supportedhook/native decisions and no first-party per-handler interpreterfanout not established. Parent0/8 unchanged; rootowns integratedpublication1532ef6f plus remainingrouting/replay/rollback/residency/retirement andlocaladoption."
+    recorded_at: "2026-10-25T00:23:27.597Z"
+    commit_sha: a6ec3b05a84eb69bff0226ae58f4e114751628c1
