@@ -1,0 +1,42 @@
+id: CAWS-NATIVE-RENDER-CALENDAR-LANDING-001
+title: 'Integrate calendar source and hostile-boundary checks on current main'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-25T00:51:37.243Z'
+updated_at: '2026-10-25T00:51:37.243Z'
+created_by_session: '01a17088-afcc-7970-aaeb-8c980680cb01'
+blast_radius:
+  modules:
+    - 'Renderer calendar source and native original-process observation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/renderer-calendar.ts'
+    - 'packages/caws-cli/tests/transcripts/renderer-calendar.test.ts'
+    - 'packages/caws-cli/tests/transcripts/renderer-calendar-mutation.test.js'
+    - 'packages/caws-cli/mutation-policy.json'
+    - 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+    - 'packages/caws-native/src/renderer_calendar.rs'
+    - 'packages/caws-native/tests/renderer_calendar.rs'
+  out: []
+invariants:
+  - 'Preserve exact request binding, typed failures, original timezone environment and existing render-observation accessors'
+  - 'Pure parsing and arithmetic retain CPython semantics and unchanged per-file mutation floor; no production selection or native cutover claim'
+acceptance:
+  - id: A1
+    given: 'current-main calendar consumers and hostile request/reply inputs'
+    when: 'integrated calendar tests and native observation tests execute'
+    then: 'typed refusals, parser arithmetic and original-process local calendar behavior satisfy the original calendar source contract and current render consumer compiles'
+  - id: A2
+    given: 'renderer calendar mutation tests and complete current source inventory'
+    when: 'mutation policy and focused per-file mutation checks execute'
+    then: 'all 194 sources remain classified exactly once and 22 targets retain the 80 percent renderer calendar floor'
+observability:
+  - 'Retain baseline, exact command exit logs, native timezone observation artifacts and checked revision outside the disposable lane'
+rollback:
+  - 'Revert the landing source commit through a governed fix; retain original lane and parent native-cutover obligations'
+non_functional: {}
+contracts:
+  - name: 'renderer-calendar-observation'
+    type: behavior
