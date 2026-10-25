@@ -10654,6 +10654,70 @@ Additional bounded evidence and unresolved dependencies:
   selection contract. Main landing and the original installed-image deadline
   check remain separate obligations. E383 remains failed.
 
+- **E387 — complete production dependency reduction and actual Stop pair.**
+  Candidate `a6ec3b05a84eb69bff0226ae58f4e114751628c1` removes the unused
+  Inquirer production declaration, its type dependency and the obsolete Jest
+  transform exception. Source inspection finds no first-party consumer. npm
+  removes43 lock records; all776 retained package identities and1584 retained
+  dependency edges agree with the baseline. Fourteen retained packages acquire
+  `dev: true`; configured overrides and Stryker's RxJS remain. No generation
+  hash, authority callback, content check or original30000ms deadline changes.
+
+  Evidence lives under
+  `/Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/`.
+  `production-dependency-reduction` retains the offline npm command, patch and
+  exact graph comparison. `production-dependency-checks/focused-tests-01`
+  retains the120s aggregate watchdog interruption during native fixture cases;
+  discovery finishes in0.42s. `focused-tests-02` preserves the same four suites
+  with an observation-only case reporter and300s aggregate watchdog, exits0
+  with108 checks in137.949s, and records unchanged source and an empty process
+  group. The native invocation deadline remains30000ms.
+
+  `production-dependency-qualification/dependency-a6ec3b05-01` retains a
+  preparation failure: the external recipe authored root npm manifests as0600,
+  which the maintained image API rejects. Corrected recipe03 authors those
+  manifests as0644 and pins the2299-file npm tool closure. Its ten stages exit0;
+  an empty offline production install contains20 third-party packages instead
+  of64. The maintained API validates the full declared dependency graph,
+  license-file presence, modes and inventory with no omissions. Root rehashes
+  all2047 prefix files and233 comparison artifacts;30 profile comparisons agree
+  and31 executions exit0. Native source/service inputs match the retained
+  fresh15 build origin; no new Rust compilation is claimed. The compiler SDK
+  remains a mutable build dependency, not a fully immutable toolchain proof.
+
+  `production-dependency-checks/isolated-smoke-state-03` retains13 command
+  outputs and actual governance/lease state. A qualification preload records
+  8316 CommonJS resolutions across412 files inside the tested prefix, refusing
+  outside resolution; its negative control exits1 before an outside payload
+  executes. Init, status, doctor and TUI execute; read-only commands preserve
+  governance bytes. Stop changes only its own lease, preserving peer bytes. The
+  unguarded first smoke cannot establish isolation because an ancestor
+  `node_modules` exists. CommonJS instrumentation does not establish unexercised
+  ESM or arbitrary plugin behavior.
+
+  `production-dependency-checks/production-stop-17-paired-01` retains actual
+  positive completion in14900.037ms and an overall failed probe: duplicate
+  exclusive writes of `native-progress.json` prevent the hostile case. The
+  corrected probe reuses the decoded diagnostic and removes the duplicate save,
+  preserving semantic assertions. Pair18 exits0 in45.518s. Its positive exits0
+  in15563.196ms, publishes only the selected user/reply, preserves original turn
+  context, opens the transcript database once, records durable CONSUMED,
+  releases retained state and stops only its own lease. The queued same-inode
+  producer mutation exits2 in9993.333ms, records `refused_before_reservation`,
+  adds no database open, publishes no marker/projection/turn/index and leaves
+  both leases byte-identical. Root rehashes consumer outputs and both durable
+  record bodies/request identities. `cleanup.json` records owner98310 exiting0
+  naturally, no socket, no outstanding originals and no service signals; the
+  supervisor records unchanged source and no remaining process group.
+
+  This is a main-based package candidate with an explicit selected CLI
+  compatibility route in a private configured fixture. It does not qualify the
+  unlanded typed Stop route, actual harness delivery, original-ID authenticated
+  replay, compatible rollback, concurrent residency, full Python retirement or
+  machine adoption. The selected machine pointer remains byte-identical (SHA256
+  `f8a3627299bc8c3d325eb42472f889b43e7c26c8a4e4c02996091867cb9f4f7e`). Root owns
+  coherent landing, publication integration and these remaining joins.
+
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
 main, parent evidence updates and integration of each remaining consumer.
