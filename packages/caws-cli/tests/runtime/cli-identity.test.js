@@ -7,6 +7,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { AbortController } = globalThis;
+// Comparison and revalidation share the original 30-second request budget.
+// Let that contract settle before the runner ends a slow filesystem test.
+const ORIGINAL_BUDGET_MS = 30000;
+jest.setTimeout(ORIGINAL_BUDGET_MS + 5000);
 const {
   compareCliIdentity,
   assertMatchedCliIdentityReceipt,
@@ -120,7 +124,7 @@ beforeEach(() => {
         cwd: root,
         processId: process.pid,
       },
-      deadlineEpochMs: Date.now() + 30000,
+      deadlineEpochMs: Date.now() + ORIGINAL_BUDGET_MS,
       inputJson: '{"session_id":"identity-original"}',
       payload: { session_id: 'identity-original' },
     },
