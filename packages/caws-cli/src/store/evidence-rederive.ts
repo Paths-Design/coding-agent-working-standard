@@ -704,12 +704,7 @@ function nodeTapResults(output: string): NodeTapResult[] {
     const match = /^ *(not )?ok \d+ - ((?:\\\\|\\#|[^\\#])*?)(?:\s+#\s*([A-Z]+)\b.*)?\s*$/.exec(
       line
     );
-    if (
-      match === null ||
-      match[2] === undefined ||
-      (match[3] !== undefined && !NODE_TAP_DEFERRED_DIRECTIVES.has(match[3]))
-    )
-      continue;
+    if (match === null || match[2] === undefined) continue;
     const indent = /^ */.exec(line)?.[0] ?? '';
     const detailsIndent = `${indent}  `;
     let type: NodeTapResult['type'] = 'unknown';
@@ -740,6 +735,7 @@ function nodeTapResults(output: string): NodeTapResult[] {
       // Do not parse result-looking text inside a YAML payload as another test.
       index = closed ? detail : lines.length;
     }
+    if (match[3] !== undefined && !NODE_TAP_DEFERRED_DIRECTIVES.has(match[3])) continue;
     // TAP escapes # and backslashes in names. Keep exact matching conservative.
     results.push({
       name: match[2],

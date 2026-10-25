@@ -1067,6 +1067,21 @@ describe('the node --test runner executes, and never verifies what it did not ru
     expect(calls.every((call) => call.binary === process.execPath)).toBe(true);
   });
 
+  test.each(['FUTURE', 'EXPECTED FAILURE'])(
+    '%s result payload cannot manufacture a typed test',
+    (directive) => {
+      const { root } = mkFixtureRepo();
+      for (const target of ['node/tests/sample.test.js::adds', 'node/tests/sample.test.js']) {
+        const o = outcomesFor(root, nodeSpec(target), {
+          runTests: true,
+          execFile: () =>
+            `TAP version 13\nok 1 - ignored # ${directive}\n  ---\n  error: |\n    ok 2 - adds\n      ---\n      type: 'test'\n      ...\n  ...\n1..1\n`,
+        });
+        expect(o.A1[0].outcome).toBe('missing');
+      }
+    }
+  );
+
   test('an unknown same-name result cannot borrow another typed test result', () => {
     const { root } = mkFixtureRepo();
     const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::adds'), {
