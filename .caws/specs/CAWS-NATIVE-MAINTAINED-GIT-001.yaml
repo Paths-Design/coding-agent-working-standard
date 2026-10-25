@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-maintained-git
 created_at: '2026-10-25T01:52:24.272Z'
-updated_at: '2026-10-25T05:28:48.457Z'
+updated_at: '2026-10-25T06:50:24.196Z'
 created_by_session: '01a170be-3812-7123-ab00-736f9bc2eeb9'
 blast_radius:
   modules:
@@ -25,6 +25,19 @@ scope:
     - 'packages/caws-cli/tests/tooling/qualify-stop-profile.test.js'
     - 'packages/caws-cli/tests/adapter/native-runtime-entry.test.js'
     - packages/caws-native/src/selection_observation.rs
+    - packages/caws-native/src/protocol.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/tests/original_stop_main.rs
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/src/runtime/engine-entry.ts
+    - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-cli/src/runtime/stock-handlers.ts
+    - packages/caws-cli/src/runtime/handler-executor.ts
+    - packages/caws-cli/src/runtime/stop-lease-context.ts
+    - packages/caws-cli/src/runtime/agent-stop.ts
+    - packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js
+    - packages/caws-cli/tests/runtime/stop-lease-context.test.js
+    - packages/caws-cli/tests/runtime/agent-stop-late-context.test.js
   out: []
   support:
     - packages/caws-native/src/stop_admission.rs
