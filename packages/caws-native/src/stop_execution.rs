@@ -8,6 +8,7 @@ use crate::{
     protocol::{Ready, Request},
     selection_observation::{GenerationValidationScope, SelectionObservationReceipt},
     stop_admission::{Refusal, StockStopSelection},
+    stop_git::{FailureCustody, StopGitAdmissionReceipt},
     stop_profile::StopProfileReceipt,
 };
 use std::{collections::BTreeMap, path::Path};
@@ -15,6 +16,7 @@ use std::{collections::BTreeMap, path::Path};
 pub(crate) struct EligibleStop<'owners, 'native> {
     selection: StockStopSelection<'owners, 'native>,
     profile: StopProfileReceipt<'owners>,
+    git: StopGitAdmissionReceipt<'owners, 'native>,
 }
 
 pub(crate) enum PregrantStop<'owners, 'native> {
@@ -56,34 +58,57 @@ impl<'owners, 'native: 'owners> PregrantStop<'owners, 'native> {
         generation: &'owners GenerationReceipt,
         ready: &Ready,
         cancel: impl FnMut() -> Result<(), String>,
+        custody: &mut FailureCustody,
     ) -> Result<Self, String> {
         if ready.service_offer.is_some() {
             return Err("Combined Stop admission cannot enclose a service offer".into());
         }
-        readset.validate_with(cancel, |scope, cancel| {
-            let selected = match StockStopSelection::admit_in_scope(
-                original, config, readset, scope, cancel,
-            ) {
-                Ok(selected) => selected,
-                Err(Refusal::Unsupported(_)) => return Ok(Self::Unsupported(None)),
-                Err(Refusal::Invalidated(reason)) => return Err(reason),
-            };
-            let Some(profile) =
-                EligibleStop::profile_in_scope(&selected, generation, ready, scope, cancel)?
-            else {
-                return Ok(Self::Unsupported(Some(selected)));
-            };
-            let eligible = EligibleStop {
-                selection: selected,
-                profile,
-            };
-            // Keep the final predispatch readset/profile/SQLite checks; only
-            // the full generation brackets enclose all three pure phases.
-            readset.validate_in_scope(scope, cancel, |cancel| {
-                eligible.profile.revalidate_in_scope(scope, cancel)
-            })?;
-            Ok(Self::Eligible(eligible))
-        })
+        custody.check()?;
+        let result = readset.validate_with(cancel, |scope, cancel| {
+            let result = (|| {
+                let selected = match StockStopSelection::admit_in_scope(
+                    original, config, readset, scope, cancel,
+                ) {
+                    Ok(selected) => selected,
+                    Err(Refusal::Unsupported(_)) => return Ok(Self::Unsupported(None)),
+                    Err(Refusal::Invalidated(reason)) => return Err(reason),
+                };
+                let Some(profile) =
+                    EligibleStop::profile_in_scope(&selected, generation, ready, scope, cancel)?
+                else {
+                    return Ok(Self::Unsupported(Some(selected)));
+                };
+                let Some(expected_git) = profile.git_distribution() else {
+                    // v1 and v2-null profiles cannot grant native Stop effects.
+                    return Ok(Self::Unsupported(Some(selected)));
+                };
+                let captured = StopGitAdmissionReceipt::capture_in_scope(
+                    scope,
+                    generation,
+                    original,
+                    expected_git,
+                    &mut *cancel,
+                );
+                let Some(git) = custody.retain(captured)? else {
+                    return Ok(Self::Unsupported(Some(selected)));
+                };
+                let eligible = EligibleStop {
+                    selection: selected,
+                    profile,
+                    git,
+                };
+                // Keep the final predispatch readset/profile/SQLite checks; only
+                // the full generation brackets enclose qualification before effects.
+                readset.validate_in_scope(scope, cancel, |cancel| {
+                    eligible.revalidate_in_scope(scope, cancel, custody)
+                })?;
+                Ok(Self::Eligible(eligible))
+            })();
+            // Preserve the first error before the closing bracket replaces it.
+            // Actual Git failures have already moved into root custody.
+            custody.preserve(result)
+        });
+        custody.preserve(result)
     }
 }
 
@@ -157,15 +182,34 @@ impl<'owners, 'native: 'owners> EligibleStop<'owners, 'native> {
             })
     }
 
+    fn revalidate_in_scope(
+        &self,
+        scope: &GenerationValidationScope<'_, 'native>,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+        custody: &mut FailureCustody,
+    ) -> Result<(), String> {
+        custody.check()?;
+        let result = (|| {
+            self.profile.revalidate_in_scope(scope, &mut *cancel)?;
+            let checked = self.git.revalidate_in_scope(scope, &mut *cancel);
+            custody.retain(checked)
+        })();
+        custody.preserve(result)
+    }
+
     pub(crate) fn revalidate(
         &self,
         cancel: impl FnMut() -> Result<(), String>,
+        custody: &mut FailureCustody,
     ) -> Result<(), String> {
-        self.selection
+        custody.check()?;
+        let result = self
+            .selection
             .readset()
             .validate_with(cancel, |scope, cancel| {
-                self.profile.revalidate_in_scope(scope, cancel)
-            })
+                self.revalidate_in_scope(scope, cancel, custody)
+            });
+        custody.preserve(result)
     }
 
     pub(crate) fn dispatch(&self, request: &Request) -> Result<Vec<u8>, String> {
