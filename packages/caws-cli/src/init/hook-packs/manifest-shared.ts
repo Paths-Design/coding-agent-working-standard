@@ -624,7 +624,10 @@ import { isAdapterCoveredSurface } from './types';
 // under Linux's per-argument exec limit.
 // v109: stock guard configuration uses a standalone typed Node loader.
 // v110: generated guard configuration preserves separator semantics with lint-safe predicates.
-export const SHARED_PACK_VERSION = 110;
+// v111 (CAWS-NATIVE-EXECUTION-WORKDIR-001): Codex Bash relative-target checks
+// require validated host command-directory context; missing context retains
+// unavailable-native-context instead of an inferred ownership decision.
+export const SHARED_PACK_VERSION = 111;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
