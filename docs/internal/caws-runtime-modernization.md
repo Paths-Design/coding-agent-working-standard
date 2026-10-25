@@ -10929,7 +10929,10 @@ Additional bounded evidence and unresolved dependencies:
   cannot be advertised as present main behavior.
 
   Continuing lead `01a17052-3ea7-79b1-86be-7296991f8fd0` accepts the following
-  unfinished custody. Source landing does not close these parent obligations:
+  unfinished custody. Canonical registry and bridge readback confirm that owner;
+  `claim_taken_over` events13404-13408 retain prior owners and `claim_bridged`
+  event13409 records test-preparation acquisition after the outgoing release.
+  Source landing does not close these parent obligations:
 
   | Preserved lane/spec                                                  | Candidate retained     | Remaining obligation                                                                                                                                                                    |
   | -------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
