@@ -8,6 +8,10 @@ const sources = [
   'scripts/generate-runtime-assets.mjs',
   'src/runtime/advisory-truncate-entry.ts',
   'src/runtime/utf8.ts',
+  'src/runtime/guard-config-entry.ts',
+  'src/runtime/guard-config-loader.ts',
+  'src/init/repo-hook-policy.ts',
+  'src/runtime/json-custody.ts',
 ];
 function fixture(copyProjection = false) {
   const root = temporaryRoot();
@@ -24,9 +28,12 @@ function fixture(copyProjection = false) {
   );
   const output = path.join(root, projection);
   if (copyProjection) {
-    fs.mkdirSync(path.dirname(output), { recursive: true });
-    fs.copyFileSync(path.join(packageRoot, projection), output);
-    fs.chmodSync(output, fs.statSync(path.join(packageRoot, projection)).mode & 0o777);
+    for (const relative of [projection, 'templates/hook-packs/shared/lib/guard-config.cjs']) {
+      const destination = path.join(root, relative);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.copyFileSync(path.join(packageRoot, relative), destination);
+      fs.chmodSync(destination, fs.statSync(path.join(packageRoot, relative)).mode & 0o777);
+    }
   }
   return {
     root,

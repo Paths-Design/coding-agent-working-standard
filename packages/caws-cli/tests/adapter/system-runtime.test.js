@@ -529,14 +529,15 @@ test('the runtime install set carries BOTH guard-config halves, so the machine c
   // then report `unavailable` forever, because it resolves the parser as its
   // own sibling. Shipping one without the other is silent, not loud.
   expect(result.files).toContain('lib/guard-config.sh');
-  expect(result.files).toContain('lib/guard-config.py');
+  expect(result.files).toContain('lib/guard-config.cjs');
 });
 
 test('both halves land on disk in the snapshot the launcher actually sources from', () => {
   const installed = installMachineRuntime({ home, templatesRoot: templates });
   const libDir = path.join(home, 'lib/runtimes', installed.digest, 'lib');
   expect(fs.existsSync(path.join(libDir, 'guard-config.sh'))).toBe(true);
-  expect(fs.existsSync(path.join(libDir, 'guard-config.py'))).toBe(true);
+  expect(fs.existsSync(path.join(libDir, 'guard-config.cjs'))).toBe(true);
+  expect(fs.existsSync(path.join(libDir, 'guard-config.py'))).toBe(false);
 });
 
 test('the handler chain still runs to completion when the repo declares no policy', () => {

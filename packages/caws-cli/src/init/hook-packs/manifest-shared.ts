@@ -496,7 +496,7 @@ import { isAdapterCoveredSurface } from './types';
 // v84 (CAWS-HOOKS-GUARD-CONFIG-TIER2-01): tier-2 guard configuration. A repo
 // may now declare DATA a shipped guard consults — additional allow prefixes,
 // clamped advisory thresholds — in the `guards` block of hook-policy.json,
-// without forking the guard. lib/guard-config.py parses it (and
+// without forking the guard. lib/guard-config.cjs parses it (and
 // policy.non_governed_zones, whose inline awk block moves here) exactly ONCE
 // per dispatch; lib/guard-config.sh exports the result so adopting guards read
 // plain variables and spawn nothing. Measured: a python3 start is ~31ms, so
@@ -622,7 +622,8 @@ import { isAdapterCoveredSurface } from './types';
 // builder markers, with no managed header and no dispatcher that sources it.
 // v108: audit tool-use fields travel over stdin, preserving large payloads
 // under Linux's per-argument exec limit.
-export const SHARED_PACK_VERSION = 108;
+// v109: stock guard configuration uses a standalone typed Node loader.
+export const SHARED_PACK_VERSION = 109;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -897,8 +898,8 @@ export const SHARED_PACK: HookPackV1 = {
       // hook-policy.json `guards` and policy.non_governed_zones, so one parse
       // serves every adopting guard and the two sources cannot disagree about
       // what the allow table contains.
-      destPath: '.caws/hooks/lib/guard-config.py',
-      sourcePath: 'lib/guard-config.py',
+      destPath: '.caws/hooks/lib/guard-config.cjs',
+      sourcePath: 'lib/guard-config.cjs',
       executable: false,
       managed: true,
     },
