@@ -46,6 +46,8 @@ invariants:
   - 'Session cwd and original tool/session/turn identifiers are preserved; only explicit host-resolved execution_workdir selects command directory and never grants ownership or scope'
   - 'Malformed, conflicting, missing-target and foreign authority coordinates fail closed; absent unsupported native transport is distinct from resolved context'
   - 'Existing context-git v1 remains limited to two fixed queries; only independently native-validated Bash pre/post host context may advertise a separate four-query execution-workdir profile, with no caller count override or deadline renewal'
+  - 'Valid ungoverned command contexts retain inactive behavior; Git presence alone does not opt into CAWS. An ungoverned origin resolves the actual command target, while failed resolution cannot erase governed, adopted or unresolved authority.'
+  - 'Only a fully decoded, fully settled nonzero Git exit may consume its fixed ordinal and continue within the validated-host four-query profile; ordinary two-query failure poisoning, fatal-error refusal, token and executable binding, pair cwd binding and the original absolute deadline remain unchanged.'
 acceptance:
   - id: A1
     given: 'native Bash events with session cwd and host execution_workdir'
