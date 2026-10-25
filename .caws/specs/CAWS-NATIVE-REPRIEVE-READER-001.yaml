@@ -91,9 +91,9 @@ evidence:
     commit_sha: "58ed781a854b1fd8fe42592d7f765441b672aa2c"
   - criterion_id: A2
     status: pass
-    evidence_ref: "Generated/shipped reader scope: generate-runtime-assets --check, compiled source tests and pack-fingerprint-02.log14pass inspected. Actual final npm pack/offline production install under reprieve-reader-01/packed-02, then normal installMachineRuntime, consumes exact reader d95a202b...f83b6d2 through installed shell with Python absent from PATH and hostile NODE_OPTIONS/NODE_PATH. Six raw cases valid/revoked/expired/foreign/missingasset/missingNode match and preserve record bytes; installed asset non-executable by manifest and uses builtin imports only. Source/runtime body contains no embedded Python reader. This is private package reader proof, not complete no-Python package or native-image qualification. CLI verify establishes committed-source reachability only."
-    recorded_at: "2026-10-25T20:35:31.236Z"
-    commit_sha: ac1ea80d98595e1c62afce27388581522043572e
+    evidence_ref: "Final shared113reader6f17057670c52b95dba845c21f8378e15c9508864e90b7406cc481a056c286ab: normal npm pack/offline production install packed-03 and actual installMachineRuntime produce private runtimeaa9d0a8c...da473f. Six installed-shell cases under Python-free PATH and hostile Nodepreload/search controls preserve exact bytes/status/record state, including revoked/expired/foreign/missingasset/missingNode refusals. Manifest installs CJS non-executable; generator checks builtins-only/provenance; focused04includesactual76file fingerprint113. Complete source lint includes CJS. No whole-package noPython or native-image claim; Node25.9 tested. CLI verification is source reachability only."
+    recorded_at: "2026-10-25T20:56:43.880Z"
+    commit_sha: "58ed781a854b1fd8fe42592d7f765441b672aa2c"
   - criterion_id: A3
     status: fail
     evidence_ref: "Normal push09 full lint reached generated reprieve-reader.cjs and found no-empty at205,327; scoped source lint did not exercise generated asset. Publication not qualified; running fullsuite retained. Reopened same unit to repair authoritative TypeScript catches and regenerate, qualify changed literal hashes/pack fingerprint, rerun full lint and normal publication. Earlier raw semantic/peer evidence remains bounded to checked ac1 source; no full parent/globalcutover claim. Optional denied collector remains unexecuted."
