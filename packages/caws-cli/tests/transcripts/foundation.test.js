@@ -42,7 +42,13 @@ test('compiles and runs the transcript foundation tests', () => {
       'Transcript test compilation'
     );
     const stdout = runChecked(
-      [path.join(__dirname, 'run.cjs'), path.join(output, 'tests/transcripts')],
+      [
+        ...(process.allowedNodeEnvironmentFlags.has('--test-reporter')
+          ? ['--test-reporter=tap']
+          : []),
+        path.join(__dirname, 'run.cjs'),
+        path.join(output, 'tests/transcripts'),
+      ],
       'Transcript foundation tests'
     );
     expect(stdout).toMatch(/^# tests [1-9]\d*$/m);

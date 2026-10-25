@@ -759,7 +759,14 @@ describe('the node --test runner executes, and never verifies what it did not ru
     // TAP result is the file.
     const raw = execFileSync(
       process.execPath,
-      ['--test', '--test-name-pattern=ghost', 'tests/sample.test.js'],
+      [
+        '--test',
+        ...(process.allowedNodeEnvironmentFlags.has('--test-reporter')
+          ? ['--test-reporter=tap']
+          : []),
+        '--test-name-pattern=ghost',
+        'tests/sample.test.js',
+      ],
       { cwd: path.join(root, 'node'), encoding: 'utf8' }
     );
     expect(raw).toMatch(/^# pass 1$/m);
@@ -768,7 +775,60 @@ describe('the node --test runner executes, and never verifies what it did not ru
     const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::ghost'), { runTests: true });
     expect(o.A1[0].outcome).toBe('missing');
     expect(o.A1[0].outcome).not.toBe('passed');
-    expect(o.A1[0].detail).toContain('no result for');
+    expect(o.A1[0].detail).toContain('no completed result for');
+  });
+
+  test.each([
+    ['empty', '// no tests\n', 'missing'],
+    [
+      'skipped',
+      "const test = require('node:test'); test('later', { skip: true }, () => {});\n",
+      'missing',
+    ],
+    [
+      'executed',
+      "const test = require('node:test'); const assert = require('node:assert'); test('adds', () => assert.equal(1 + 1, 2));\n",
+      'passed',
+    ],
+  ])(
+    'a real %s file at an escaped TAP path reports only tests that ran',
+    (_kind, body, expected) => {
+      const { root } = mkFixtureRepo();
+      const file = 'node/tests/odd#name.test.js';
+      write(root, file, body);
+      const o = outcomesFor(root, nodeSpec(file), { runTests: true });
+      expect(o.A1[0].outcome).toBe(expected);
+      expect(o.A1[0].detail).toContain(expected === 'passed' ? 'passed' : 'ran no test');
+    }
+  );
+
+  test('an escaped backslash file wrapper alone never verifies a file citation', () => {
+    const { root } = mkFixtureRepo();
+    const file = 'node/tests/odd\\name.test.js';
+    write(root, file, '// no tests\n');
+    const calls = [];
+    const o = outcomesFor(root, nodeSpec(file), {
+      runTests: true,
+      execFile(binary, args) {
+        calls.push({ binary, args: [...args] });
+        return 'TAP version 13\nok 1 - tests/odd\\\\name.test.js\n1..1\n# pass 1\n';
+      },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].binary).toBe(process.execPath);
+    expect(calls[0].args[calls[0].args.length - 1]).toBe('tests/odd\\name.test.js');
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toContain('ran no test');
+  });
+
+  test('unsupported TAP escape spellings cannot verify a named result', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::adds'), {
+      runTests: true,
+      execFile: () => 'TAP version 13\nok 1 - adds\\q\n1..1\n# pass 1\n',
+    });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toContain('no completed result for');
   });
 
   test('a file whose only TAP result is itself is missing, not passed', () => {
@@ -801,6 +861,120 @@ describe('the node --test runner executes, and never verifies what it did not ru
     expect(calls).toHaveLength(0);
   });
 
+  test.each([true, false])(
+    'reporter capability %s selects only argv supported by the executing Node',
+    (supported) => {
+      const { root } = mkFixtureRepo();
+      const original = Object.getOwnPropertyDescriptor(process, 'allowedNodeEnvironmentFlags');
+      const calls = [];
+      try {
+        Object.defineProperty(process, 'allowedNodeEnvironmentFlags', {
+          configurable: true,
+          value: { has: (flag) => flag === '--test-reporter' && supported },
+        });
+        const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::adds'), {
+          runTests: true,
+          execFile(file, args, options) {
+            calls.push({ file, args: [...args], options });
+            return 'TAP version 13\nok 1 - adds\n1..1\n';
+          },
+        });
+        expect(o.A1[0].outcome).toBe('passed');
+        expect(calls).toHaveLength(1);
+        expect(calls[0].file).toBe(process.execPath);
+        expect(calls[0].args).toEqual([
+          '--test',
+          ...(supported ? ['--test-reporter=tap'] : []),
+          '--test-name-pattern=adds',
+          'tests/sample.test.js',
+        ]);
+        expect(calls[0].options.shell).toBeFalsy();
+      } finally {
+        Object.defineProperty(process, 'allowedNodeEnvironmentFlags', original);
+      }
+    }
+  );
+
+  test.each([
+    ['skipped', "test('deferred', { skip: true }, () => { assert.fail('must not run'); });"],
+    ['TODO passing', "test('deferred', { todo: true }, () => { assert.equal(1, 1); });"],
+    [
+      'TODO failing',
+      "test('deferred', { todo: true }, () => { assert.fail('pending behavior'); });",
+    ],
+  ])('a real %s result never verifies a named or file citation', (_label, body) => {
+    const { root } = mkFixtureRepo();
+    write(
+      root,
+      'node/tests/sample.test.js',
+      [
+        "const test = require('node:test');",
+        "const assert = require('node:assert');",
+        body,
+        '',
+      ].join('\n')
+    );
+    const named = outcomesFor(root, nodeSpec('node/tests/sample.test.js::deferred'), {
+      runTests: true,
+    });
+    expect(named.A1[0].outcome).toBe('missing');
+    expect(named.A1[0].detail).toContain('no completed result for');
+    const file = outcomesFor(root, nodeSpec('node/tests/sample.test.js'), { runTests: true });
+    expect(file.A1[0].outcome).toBe('missing');
+    expect(file.A1[0].detail).toContain('ran no test');
+  });
+
+  test.each([
+    [
+      'cancelled',
+      "const controller = new AbortController(); test('cancelled', { signal: controller.signal }, () => { controller.abort(new Error('fixture cancellation')); });",
+      'cancelled',
+    ],
+    [
+      'cancelled child',
+      "test('parent', async (t) => { const controller = new AbortController(); await t.test('child', { signal: controller.signal }, () => { controller.abort(new Error('fixture cancellation')); }); });",
+      'parent',
+    ],
+  ])('a real %s result refutes its cited test', (_label, body, name) => {
+    const { root } = mkFixtureRepo();
+    write(root, 'node/tests/sample.test.js', "const test = require('node:test');\n" + body + '\n');
+    const executions = [];
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::' + name), {
+      runTests: true,
+      timeouts: { run: 3000 },
+      execFile(file, args, options) {
+        const execution = { file, args: [...args], timeout: options.timeout, stdout: '' };
+        executions.push(execution);
+        try {
+          const stdout = execFileSync(file, args, options);
+          execution.stdout = stdout;
+          return stdout;
+        } catch (error) {
+          // Retain the actual Node TAP without altering the thrown failure.
+          execution.stdout = String(error.stdout ?? '');
+          throw error;
+        }
+      },
+    });
+    expect(executions).toHaveLength(1);
+    expect(executions[0].file).toBe(process.execPath);
+    expect(executions[0].args).toContain('--test-name-pattern=' + name);
+    expect(executions[0].timeout).toBe(3000);
+    expect(executions[0].stdout).toMatch(/^# cancelled [1-9]\d*$/m);
+    expect(o.A1[0].outcome).toBe('failed');
+    expect(o.A1[0].detail).toContain('node --test exit');
+  });
+
+  test('a failed TAP result cannot be verified by an exit-zero summary', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::adds'), {
+      runTests: true,
+      execFile: () => 'TAP version 13\nnot ok 1 - adds\n1..1\n# pass 1\n# fail 0\n',
+    });
+    expect(o.A1[0].outcome).toBe('failed');
+    expect(o.A1[0].detail).toContain('reported a failed result');
+  });
+
   test('the cited name reaches node as an escaped pattern in argv, never through a shell', () => {
     const { root } = mkFixtureRepo();
     const { fn, calls } = spyExec();
@@ -811,6 +985,9 @@ describe('the node --test runner executes, and never verifies what it did not ru
     expect(calls).toHaveLength(1);
     expect(calls[0].file).toBe(process.execPath);
     expect(calls[0].args).toContain('--test');
+    expect(calls[0].args.includes('--test-reporter=tap')).toBe(
+      process.allowedNodeEnvironmentFlags.has('--test-reporter')
+    );
     expect(calls[0].args).toContain('--test-name-pattern=fails on purpose');
     expect(calls[0].options.shell).toBeFalsy();
   });
