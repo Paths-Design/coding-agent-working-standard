@@ -45,3 +45,9 @@ non_functional: {}
 contracts:
   - name: 'installed-invocation-deadline-v1'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Frontend receiver only: committed72fb7557d adds strict invoke-installed-v1 original-deadline reception. Root inspected cli receive exactly once, main execute same borrow, runner1859-1863 OriginalStopCapture and selection_observation262-265 pointer checks. Same-object downstream admission passage is SOURCE-SUPPORTED, not exercised by codex held-stdin runtime tests. Actual current native frontend with config30000/original interval10000/spent8000 expires in2006.326ms PreToolUse2 and2007.347ms Stop0, progress about10000ms, no engine marker/signals; all51 raw argv/status/stdout/stderr observations under /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/installed-deadline-receiver-01/restored-observations. receiver-readback.json source/binary/log pins inspected; retained tested-frontend SHA878fb5af is default-feature test binary, not installed image. No caller context, request identity, origin or admission grant is transported. Fresh-capture mutations in cli and main each fail101 at5s; source restored exactly and final tests0. Foreign producer remains unchanged and original installed callback defect remains open. Verify checks commit existence only, not external execution."
+    recorded_at: "2026-10-25T17:37:30.095Z"
+    commit_sha: "72fb7557d1cd20eba753441fcb8000f8a958bb51"
