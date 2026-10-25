@@ -43,3 +43,9 @@ rollback:
   - 'Revert the bounded profile integration commit; do not weaken source admission.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Source-cohort admission only: inspected exact committed de0e1b1c final-checks.json and raw final-focused-jest/native-source outputs under /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/native-guard-profile-integration/. Actual repository installable library bytes pass native validate_libraries (not complete StockStopSelection); both supported SessionEnd fixtures require current shell and CJS4065e9febf662dd9a3933b65926e913ecd50b3bca73a4192e44f1097cc982b11. Retired Python absent. All10 candidate blobs match checked source, pack110/fingerprint updated; build and full unchanged lint0. No full native/installed/semantic/30s cutover claim. CLI --verify below checks commit reachability only, not external logs or execution."
+    recorded_at: "2026-10-25T01:50:14.428Z"
+    commit_sha: de0e1b1c57f3d54c30e00c895c4f7ad709640c72
