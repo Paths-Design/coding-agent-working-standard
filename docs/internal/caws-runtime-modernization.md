@@ -10881,6 +10881,15 @@ Additional bounded evidence and unresolved dependencies:
   independently supported shared CLI application extraction and direct real
   lease/CLI tests from candidate `71e68b55`. It does not select the typed hook
   adapter. Parent acceptance and the three integrated outcomes remain unchanged.
+  Final source/test candidate `29cf0118` executes19 checks across three suites
+  in `shared-stop-landing/tests-02`, exit0 in12.020s with source/dist pins
+  unchanged and no remaining process group. `fixtures-02/shared-stop-ismr2M`
+  retains only the three stop-field changes; every retained case preserves peer
+  bytes. `shared-stop-RGgV2i` retains cancellation before application with both
+  leases unchanged. The first run's failing expectation of empty no-prior-lease
+  diagnostics is preserved in `tests-01`; the store contract requires its
+  warning and the corrected oracle preserves that behavior without production
+  changes.
 
 These additions retain33/37 qualifying partial rows,0/8 parent acceptance and
 zero complete production Python retirements. Root owns ledger publication to
