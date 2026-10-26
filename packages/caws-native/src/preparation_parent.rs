@@ -479,6 +479,12 @@ fn startup_environment_from(
         let Some(name) = name.to_str() else {
             continue;
         };
+        // Browser bridge metadata is not preparation input. Discard this exact
+        // field: it enters neither caller identity nor the cleared child
+        // environment. Other Node and loader namespaces remain refused.
+        if name == "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S" {
+            continue;
+        }
         if name.starts_with("NODE_") || name.starts_with("DYLD_") || name.starts_with("LD_") {
             return Err(format!("Startup injection variable refused: {name}"));
         }
@@ -2313,6 +2319,124 @@ mod tests {
             BTreeMap::from([("CODEX_THREAD_ID".into(), "session".into())])
         );
     }
+    #[test]
+    fn startup_context_metadata_is_discarded_without_identity_or_value_interpretation() {
+        let identity = startup_environment_from(vec![
+            (
+                "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S".into(),
+                "--require /untrusted; not a digest list".into(),
+            ),
+            ("CODEX_THREAD_ID".into(), "actual-caller".into()),
+        ])
+        .unwrap();
+        assert_eq!(
+            identity,
+            BTreeMap::from([("CODEX_THREAD_ID".into(), "actual-caller".into())])
+        );
+    }
+
+    #[test]
+    fn startup_context_metadata_never_masks_injection_or_admits_near_names() {
+        for key in [
+            "NODE_OPTIONS",
+            "NODE_PATH",
+            "NODE_UNKNOWN_STARTUP",
+            "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S_EXTRA",
+            "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256",
+            "NODE_REPL_EXTERNAL_MODULE",
+            "DYLD_INSERT_LIBRARIES",
+            "LD_PRELOAD",
+        ] {
+            for metadata_first in [false, true] {
+                let mut values = vec![
+                    (
+                        "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S".into(),
+                        "discarded".into(),
+                    ),
+                    (key.into(), "injected".into()),
+                ];
+                if !metadata_first {
+                    values.reverse();
+                }
+                assert_eq!(
+                    startup_environment_from(values).unwrap_err(),
+                    format!("Startup injection variable refused: {key}")
+                );
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn startup_context_is_absent_from_actual_fixed_child_environment() {
+        const CHILD: &str = "CAWS_PREPARATION_TEST_ENVIRONMENT_CHILD";
+        const COMPLETED: &str = "caws.closed-startup-control.completed";
+        if env::var_os(CHILD).is_none() {
+            let child = Command::new(env::current_exe().unwrap())
+                .env_clear().env(CHILD, "1")
+                .env("NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S", "untrusted metadata")
+                .env("CODEX_THREAD_ID", "identity-for-channel-only")
+                .args(["--exact", "preparation_parent::tests::startup_context_is_absent_from_actual_fixed_child_environment", "--nocapture"])
+                .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped())
+                .process_group(0).spawn().unwrap();
+            let mut owner = OwnedChild::new(child);
+            owner.prepare_pipes().unwrap();
+            let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+            let status = owner.finish(&deadline, METADATA, false);
+            if status.is_err() {
+                let teardown = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+                let _ = owner.finish(&teardown, METADATA, true);
+            }
+            assert_eq!(
+                status.unwrap(),
+                0,
+                "{}",
+                String::from_utf8_lossy(&owner.err)
+            );
+            assert!(owner.child.is_none());
+            assert_eq!(
+                owner
+                    .err
+                    .split(|b| *b == b'\n')
+                    .filter(|line| *line == COMPLETED.as_bytes())
+                    .count(),
+                1
+            );
+            return;
+        }
+        assert_eq!(
+            env::var("NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S").unwrap(),
+            "untrusted metadata"
+        );
+        assert_eq!(
+            env::var("CODEX_THREAD_ID").unwrap(),
+            "identity-for-channel-only"
+        );
+        let path = fs::canonicalize("/bin/sh").unwrap();
+        let bytes = fs::read(&path).unwrap();
+        let program = ProgramPin {
+            size_bytes: bytes.len() as u64,
+            sha256: sha(&bytes),
+            mode: fs::metadata(&path).unwrap().mode() & 0o7777,
+            path,
+        };
+        let args = vec!["-c".into(), r#"if [ "${NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S+present}" = present ] || [ "${CODEX_THREAD_ID+present}" = present ]; then exit 61; fi; [ "$LANG" = C ] || exit 62; printf 'CLOSED CHILD STARTUP\n'"#.into()];
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        let child = spawn_fixed(&program, &args, &env::temp_dir(), &[], None, &deadline).unwrap();
+        let mut owner = OwnedChild::new(child);
+        owner.prepare_pipes().unwrap();
+        let status = owner.finish(&deadline, METADATA, false);
+        if status.is_err() {
+            let teardown = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+            let _ = owner.finish(&teardown, METADATA, true);
+        }
+        assert_eq!(status.unwrap(), 0);
+        assert!(owner.child.is_none() && owner.out_eof && owner.err_eof);
+        assert_eq!(owner.out, b"CLOSED CHILD STARTUP\n");
+        assert!(owner.err.is_empty());
+        eprintln!("{COMPLETED}");
+    }
+
     #[test]
     fn incomplete_fd_snapshots_are_never_admitted() {
         let width = std::mem::size_of::<FdInfo>();
