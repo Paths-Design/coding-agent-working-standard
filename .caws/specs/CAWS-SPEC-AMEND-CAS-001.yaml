@@ -1,0 +1,40 @@
+id: CAWS-SPEC-AMEND-CAS-001
+title: 'Reject stale scope and body amendment plans under the authority lock'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-26T23:41:53.211Z'
+updated_at: '2026-10-26T23:41:53.211Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'spec scope and body lifecycle writers'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/store/specs-body-writer.ts'
+    - 'packages/caws-cli/tests/store/spec-amend-concurrency.test.js'
+  out: []
+invariants:
+  - 'Scope and body amendment effects require the current source to match the source used to derive the complete plan while the lifecycle lock is held.'
+  - 'A stale or unreadable source refuses before file writes, audit append, or auto-commit; no silent rebase drops concurrent lifecycle, scope, or evidence updates.'
+acceptance:
+  - id: A1
+    given: 'a scope or body amendment planned before a concurrent governed update'
+    when: 'the amendment acquires the lifecycle lock'
+    then: 'the stale amendment refuses and preserves the complete concurrent spec bytes and audit history.'
+  - id: A2
+    given: 'a target removed or made unreadable after amendment planning'
+    when: 'locked validation runs'
+    then: 'the amendment refuses before recreating or overwriting the target or appending an amendment event.'
+  - id: A3
+    given: 'an unchanged source and permitted amendment'
+    when: 'the guarded writer runs or a rejected stale request is retried'
+    then: 'the intended change and its exact audit event succeed with lifecycle and acceptance-evidence coupling preserved.'
+rollback:
+  - 'Revert this bounded source change through a new governed commit; do not rewrite source or audit history.'
+non_functional: {}
+contracts:
+  - name: 'amendment-freshness'
+    type: behavior
