@@ -338,6 +338,45 @@ function descendant(root: string, target: string): boolean {
   );
 }
 
+/** The CAWS root mapper alone cannot distinguish sibling Git stores. */
+function observePreparationProject(
+  cwd: string,
+  git: GitRunner
+): { repoRoot: string; cawsDir: string; commonDir: string } {
+  let observedCommon: string | undefined;
+  const resolved = resolveRepoRoot(cwd, {
+    requireCawsDir: true,
+    git: (args, options) => {
+      requireCondition(
+        args.join('\0') ===
+          ['rev-parse', '--path-format=absolute', '--git-common-dir'].join('\0') &&
+          options.cwd === cwd,
+        'Unexpected preparation project query'
+      );
+      const value = git(args, options);
+      normalizedAbsolute(value);
+      observedCommon = value;
+      return value;
+    },
+  });
+  requireCondition(
+    resolved.ok && observedCommon !== undefined,
+    'Cannot resolve canonical preparation project'
+  );
+  const commonDir = observedCommon;
+  const canonicalCommon = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    cwd: resolved.value.repoRoot,
+  });
+  normalizedAbsolute(canonicalCommon);
+  requireCondition(
+    fs.realpathSync(commonDir) === commonDir &&
+      fs.realpathSync(canonicalCommon) === canonicalCommon,
+    'Preparation Git directories must be physical'
+  );
+  requireCondition(commonDir === canonicalCommon, 'Checkout uses another Git object store');
+  return { ...resolved.value, commonDir };
+}
+
 /**
  * A source pin selects the current canonical or actively bound worktree HEAD
  * in the caller's project. It cannot select history, a foreign object store,
@@ -353,18 +392,17 @@ export function inspectPreparationSourceStanding(
   normalizedAbsolute(selection.sourceRoot);
   requireOid(selection.commit, selection.objectFormat);
   requireOid(selection.tree, selection.objectFormat);
-  const callerProject = resolveRepoRoot(caller.cwd, { git: caller.git, requireCawsDir: true });
-  requireCondition(callerProject.ok, 'Cannot resolve caller source project');
-  const sourceProject = resolveRepoRoot(selection.sourceRoot, {
-    git: caller.git,
-    requireCawsDir: true,
-  });
-  requireCondition(sourceProject.ok, 'Cannot resolve selected source project');
+  const callerProject = observePreparationProject(caller.cwd, caller.git);
+  const sourceProject = observePreparationProject(selection.sourceRoot, caller.git);
   requireCondition(
-    sourceProject.value.repoRoot === callerProject.value.repoRoot,
+    sourceProject.repoRoot === callerProject.repoRoot,
     'Source belongs to another canonical project'
   );
-  const { repoRoot, cawsDir } = callerProject.value;
+  requireCondition(
+    sourceProject.commonDir === callerProject.commonDir,
+    'Source uses another Git object store'
+  );
+  const { repoRoot, cawsDir } = callerProject;
   const sourceTop = caller.git(['rev-parse', '--show-toplevel'], { cwd: selection.sourceRoot });
   requireCondition(
     sourceTop === selection.sourceRoot,
@@ -430,9 +468,7 @@ export function inspectPreparationWriteAuthority(
     Array.isArray(selection.writePaths) && selection.writePaths.length <= MAX_OBJECTS,
     'Preparation destination count exceeds bound'
   );
-  const resolved = resolveRepoRoot(caller.cwd, { git: caller.git, requireCawsDir: true });
-  requireCondition(resolved.ok, 'Cannot resolve canonical preparation project');
-  const { repoRoot, cawsDir } = resolved.value;
+  const { repoRoot, cawsDir } = observePreparationProject(caller.cwd, caller.git);
   const worktreeRoot = caller.git(['rev-parse', '--show-toplevel'], { cwd: caller.cwd });
   normalizedAbsolute(worktreeRoot);
   requireCondition(

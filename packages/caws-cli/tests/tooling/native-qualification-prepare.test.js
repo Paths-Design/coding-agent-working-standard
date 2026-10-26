@@ -178,10 +178,12 @@ describe('native preparation actual worktree source and output observations', ()
       expect(fs.existsSync(selection.outputRoot)).toBe(false);
       expect(calls).toEqual([
         { args: ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd: lane },
+        { args: ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd: root },
         {
           args: ['rev-parse', '--path-format=absolute', '--git-common-dir'],
           cwd: source.sourceRoot,
         },
+        { args: ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd: root },
         { args: ['rev-parse', '--show-toplevel'], cwd: source.sourceRoot },
         { args: ['rev-parse', '--show-object-format'], cwd: source.sourceRoot },
         { args: ['rev-parse', '--verify', 'HEAD^{commit}'], cwd: source.sourceRoot },
@@ -221,6 +223,39 @@ describe('native preparation actual worktree source and output observations', ()
     expect(() => inspectPreparationSourceStanding(source, caller)).toThrow(
       'another canonical project'
     );
+  });
+
+  test('refuses an independent separate Git store under the same project parent', () => {
+    const separateLane = path.join(root, 'separate-source');
+    const separateStore = path.join(root, '.foreign-git');
+    fixtures.git(root, [
+      'clone',
+      '--no-hardlinks',
+      '--separate-git-dir',
+      separateStore,
+      root,
+      separateLane,
+    ]);
+    registry.prep.path = separateLane;
+    saveRegistry();
+    const source = sourceSelection(separateLane);
+    expect(fixtures.git(lane, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).toBe(
+      path.join(root, '.git')
+    );
+    expect(
+      fixtures.git(separateLane, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
+    ).toBe(separateStore);
+    expect(source.commit).toBe(fixtures.git(root, ['rev-parse', 'HEAD']));
+    expect(() => inspectPreparationSourceStanding(source, caller)).toThrow(
+      'another Git object store'
+    );
+    expect(() =>
+      inspectPreparationWriteAuthority(
+        { outputRoot: path.join(separateLane, 'tmp/prepare/run'), writePaths: [] },
+        { ...caller, cwd: separateLane }
+      )
+    ).toThrow('another Git object store');
+    expect(fs.existsSync(path.join(separateLane, 'tmp/prepare/run'))).toBe(false);
   });
 
   test.each(['draft', 'closed', 'archived'])('refuses a %s source lane', (state) => {
@@ -315,6 +350,7 @@ describe('native preparation actual worktree source and output observations', ()
     expect(fs.existsSync(selection.outputRoot)).toBe(false);
     expect(calls).toEqual([
       { args: ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd: lane },
+      { args: ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd: root },
       { args: ['rev-parse', '--show-toplevel'], cwd: lane },
       { args: ['check-ignore', '--quiet', '--no-index', '--', 'tmp/prepare/run'], cwd: lane },
     ]);
