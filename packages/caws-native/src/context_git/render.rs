@@ -205,6 +205,96 @@ mod tests {
     use std::{cell::Cell, os::unix::fs::PermissionsExt};
 
     #[test]
+    fn final_reap_preserves_metadata_but_rechecks_frontend_clock() {
+        for fail_after_reap in [false, true] {
+            let child = Command::new("/bin/cat")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            let pid = child.id();
+            let (control, peer) = UnixStream::pair().unwrap();
+            control.set_nonblocking(true).unwrap();
+            let mut pending = Pending {
+                child: Some(child),
+                pid,
+                control: Some(control),
+                input: vec![b'?'],
+                written: 0,
+                output: Vec::new(),
+                frame_end: None,
+                reply: None,
+                eof: false,
+                exited_successfully: false,
+                id: "post-reap-clock".into(),
+                digest: "a".repeat(64),
+                token: "fixture".into(),
+                aborted_configuration: false,
+                cancel_requested: false,
+            };
+            pending.cancel();
+            assert!(pending.aborted_configuration);
+            drop(peer);
+            let until = Instant::now() + Duration::from_secs(1);
+            loop {
+                let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+                assert_eq!(
+                    unsafe {
+                        libc::waitid(
+                            libc::P_PID,
+                            pid,
+                            info.as_mut_ptr(),
+                            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                        )
+                    },
+                    0
+                );
+                if unsafe { info.assume_init().si_pid() } == pid as libc::pid_t {
+                    break;
+                }
+                assert!(Instant::now() < until, "owned Child did not exit");
+                std::thread::yield_now();
+            }
+            let mut checks_after_actual_reap = 0;
+            let result = pending.advance_checked(|| {
+                let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+                let observed = unsafe {
+                    libc::waitid(
+                        libc::P_PID,
+                        pid,
+                        info.as_mut_ptr(),
+                        libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                    )
+                };
+                if observed < 0 {
+                    assert_eq!(
+                        io::Error::last_os_error().raw_os_error(),
+                        Some(libc::ECHILD)
+                    );
+                    checks_after_actual_reap += 1;
+                    if fail_after_reap {
+                        return Err("injected original clock expired after actual reap".into());
+                    }
+                }
+                Ok(())
+            });
+            assert!(pending.child.is_none());
+            assert!(pending.eof && pending.exited_successfully && pending.aborted_configuration);
+            assert!(pending.reply.is_none(), "no Git receipt was fabricated");
+            assert!(checks_after_actual_reap > 0);
+            if fail_after_reap {
+                assert_eq!(
+                    result.unwrap_err(),
+                    "injected original clock expired after actual reap"
+                );
+            } else {
+                assert_eq!(result.unwrap(), true);
+            }
+        }
+    }
+
+    #[test]
     fn verification_classification_preserves_typed_deadline_and_cancellation_during_hash() {
         let root = std::env::temp_dir().join(format!(
             "render-verification-{}-{}",
@@ -703,11 +793,13 @@ impl Pending {
         check()?;
         if self.eof {
             let Some(child) = self.child.as_mut() else {
+                check()?;
                 return Ok(true);
             };
             if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
                 self.child = None;
                 self.exited_successfully = status.success();
+                check()?;
                 if !status.success() {
                     return Err(format!("Render custodian exited abnormally: {status}"));
                 }
@@ -717,6 +809,7 @@ impl Pending {
                 return Ok(true);
             }
         }
+        check()?;
         Ok(false)
     }
 }

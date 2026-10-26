@@ -612,11 +612,13 @@ impl Pending {
         check()?;
         if self.eof {
             let Some(child) = self.child.as_mut() else {
+                check()?;
                 return Ok(true);
             };
             if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
                 self.child = None;
                 self.exited_successfully = status.success();
+                check()?;
                 if !status.success() {
                     return Err(format!("Stop custodian exited abnormally: {status}"));
                 }
@@ -626,6 +628,7 @@ impl Pending {
                 return Ok(true);
             }
         }
+        check()?;
         Ok(false)
     }
 }
@@ -1370,6 +1373,86 @@ pub(super) fn run_configuration(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn final_reap_preserves_metadata_but_rechecks_frontend_clock() {
+        for fail_after_reap in [false, true] {
+            let child = Command::new("/bin/cat")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            let pid = child.id();
+            let (control, peer) = UnixStream::pair().unwrap();
+            control.set_nonblocking(true).unwrap();
+            let mut pending = empty_pending("post-reap-clock", &"a".repeat(64), "fixture");
+            pending.child = Some(child);
+            pending.pid = pid;
+            pending.control = Some(control);
+            pending.input = vec![b'?'];
+            pending.eof = false;
+            pending.exited_successfully = false;
+            pending.cancel();
+            assert!(pending.aborted_configuration);
+            drop(peer);
+            let until = Instant::now() + Duration::from_secs(1);
+            loop {
+                let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+                assert_eq!(
+                    unsafe {
+                        libc::waitid(
+                            libc::P_PID,
+                            pid,
+                            info.as_mut_ptr(),
+                            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                        )
+                    },
+                    0
+                );
+                if unsafe { info.assume_init().si_pid() } == pid as libc::pid_t {
+                    break;
+                }
+                assert!(Instant::now() < until, "owned Child did not exit");
+                std::thread::yield_now();
+            }
+            let mut checks_after_actual_reap = 0;
+            let result = pending.advance_checked(|| {
+                let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+                let observed = unsafe {
+                    libc::waitid(
+                        libc::P_PID,
+                        pid,
+                        info.as_mut_ptr(),
+                        libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                    )
+                };
+                if observed < 0 {
+                    assert_eq!(
+                        io::Error::last_os_error().raw_os_error(),
+                        Some(libc::ECHILD)
+                    );
+                    checks_after_actual_reap += 1;
+                    if fail_after_reap {
+                        return Err("injected original clock expired after actual reap".into());
+                    }
+                }
+                Ok(())
+            });
+            assert!(pending.child.is_none());
+            assert!(pending.eof && pending.exited_successfully && pending.aborted_configuration);
+            assert!(pending.reply.is_none(), "no Git receipt was fabricated");
+            assert!(checks_after_actual_reap > 0);
+            if fail_after_reap {
+                assert_eq!(
+                    result.unwrap_err(),
+                    "injected original clock expired after actual reap"
+                );
+            } else {
+                assert_eq!(result.unwrap(), true);
+            }
+        }
+    }
 
     fn retained_transport_child() -> (Failure, UnixStream, std::process::ChildStdin) {
         // A real original Child and transport endpoints exercise frontend

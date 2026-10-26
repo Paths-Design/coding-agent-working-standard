@@ -511,8 +511,14 @@ if (observed.stdout !== 'EBADF' || observed.stderr !== 'EBADF') process.exit(77)
 const topology = require(require('node:path').join(
   require('node:path').dirname(engine), 'engine-topology.cjs'));
 const observeTopology = topology.observeTopology;
-topology.observeTopology = expected =>
-  observeTopology({ ...expected, engine: __filename });
+topology.observeTopology = expected => {
+  try { return observeTopology({ ...expected, engine: __filename }); }
+  catch (error) {
+    fs.writeFileSync(process.env.CAWS_NATIVE_TEST_ALIAS_MARKER + '.topology-error',
+      String(error.stack), { flag: 'wx', mode: 0o600 });
+    throw error;
+  }
+};
 require(engine);
 "#;
         fs::write(
@@ -563,7 +569,7 @@ require(engine);
         let template = fixture.command(mode, event, "3000");
         let mut args: Vec<_> = template.get_args().map(|arg| arg.to_os_string()).collect();
         assert_eq!(args[1], "--engine");
-        args[2] = engine_wrapper.into_os_string();
+        args[2] = fs::canonicalize(engine_wrapper).unwrap().into_os_string();
         let mut command = Command::new(template.get_program());
         command
             .args(args)
@@ -2151,11 +2157,13 @@ fn processing_reserve_rejects_late_proposal_without_renewing_terminal_time() {
             .unwrap()
             .contains("Checks did not complete")
     );
+    assert_eq!(response.as_object().unwrap().len(), 2);
+    assert!(response["reason"].as_str().unwrap().contains("deadline"));
     assert!(
         !output
             .stdout
-            .windows(b"native".len())
-            .any(|bytes| bytes == b"native")
+            .windows("native\n雪\0exact".len())
+            .any(|bytes| bytes == "native\n雪\0exact".as_bytes())
     );
     assert_eq!(fixture.requests().len(), 1, "no engine replay");
     let events = fs::read_to_string(fixture.dir.join("events.jsonl")).unwrap();
@@ -2193,7 +2201,7 @@ fn late_partial_stdout_and_stderr_leave_no_second_result_or_new_grace() {
     let base = fixture.command("large-native-result", "pre_tool_use", "2000");
     let mut args: Vec<std::ffi::OsString> = base.get_args().map(ToOwned::to_owned).collect();
     let index = args.iter().position(|arg| arg == "--engine").unwrap() + 1;
-    args[index] = engine_path.into_os_string();
+    args[index] = fs::canonicalize(engine_path).unwrap().into_os_string();
     let mut command = Command::new(base.get_program());
     command.args(args);
     for (name, value) in base.get_envs() {
