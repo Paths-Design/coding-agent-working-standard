@@ -23,8 +23,8 @@ invariants:
   - 'Preparation uses exact admitted commit and tree identities and enumerated blobs; no implicit working-tree source, replace refs, hooks, filters or arbitrary commands.'
   - 'Source and tool pins are provenance only. The actual maintained operation must verify independent source standing and exclusive output authority.'
   - 'Input byte inventories and modes are complete; link graphs are explicit and closed; foreign and protected inputs remain unchanged.'
-  - 'Only pinned read-only Git operations may launch. Cargo, npm, compiler and native candidate execution are forbidden during preparation.'
   - 'Preparation output and still-absent future build output are distinct. Exclusive no-follow custody rejects overlap and root substitution; uncertain partial outputs are retained without retry or adoption.'
+  - 'Only the independently reviewed pinned Node preparation entry and fixed pinned read-only Git operations may launch. Node startup is closed before launch; Cargo, npm, compiler and native candidate execution are forbidden during preparation.'
 acceptance:
   - id: A1
     given: 'admitted immutable source and pinned tool inputs with an authorized absent output'
