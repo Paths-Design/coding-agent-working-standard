@@ -8,6 +8,7 @@
 CAWS_COPY_WRITE_TARGET=()
 CAWS_COPY_CANONICAL=0
 CAWS_COPY_UNRESOLVED=''
+CAWS_COPY_FINAL_SYMLINK=0
 
 _caws_copy_hold() {
   [[ -n "$CAWS_COPY_UNRESOLVED" ]] || CAWS_COPY_UNRESOLVED="$1"
@@ -46,7 +47,7 @@ caws_copy_role_paths() {
   local _caws_cr_operation _caws_cr_knowledge _caws_cr_mode _caws_cr_cwd _caws_cr_directory
   local _caws_cr_operand _caws_cr_source_nominal _caws_cr_source_physical _caws_cr_child
   local _caws_cr_destination _caws_cr_effective _caws_cr_physical _caws_cr_parent
-  CAWS_COPY_WRITE_TARGET=(); CAWS_COPY_CANONICAL=0; CAWS_COPY_UNRESOLVED=''
+  CAWS_COPY_WRITE_TARGET=(); CAWS_COPY_CANONICAL=0; CAWS_COPY_UNRESOLVED=''; CAWS_COPY_FINAL_SYMLINK=0
   [[ ${CAWS_BASH_ANALYSIS_READY:-0} == 1 && "$_caws_cr_project" == /* ]] || return 2
   declare -F caws_guard_realpath_into >/dev/null &&
     declare -F caws_physical_dir_into >/dev/null || return 2
@@ -109,15 +110,22 @@ caws_copy_role_paths() {
       if ! _caws_copy_nominal_into _caws_cr_source_nominal "$_caws_cr_operand" "$_caws_cr_cwd"; then
         _caws_copy_hold 'copy source has no proven coordinate'; continue
       fi
-      if [[ -L "$_caws_cr_source_nominal" || ! -f "$_caws_cr_source_nominal" ]]; then
-        _caws_copy_hold 'copy source is not a modeled regular file'; continue
-      fi
-      caws_guard_realpath_into _caws_cr_source_physical "$_caws_cr_source_nominal" || return 2
       _caws_cr_child="${_caws_cr_operand##*/}"
       _caws_cr_effective="$_caws_cr_destination"
       if [[ $_caws_cr_directory == 1 ]]; then
         _caws_cr_effective="${_caws_cr_destination%/}/$_caws_cr_child"
       fi
+      if [[ "$_caws_cr_operation" == cp && -L "$_caws_cr_effective" ]]; then
+        # Force-copy fallback may unlink this entry rather than write its
+        # referent. Keep known referent violations, but never authorize the
+        # unmodeled entry replacement, even through an approval response.
+        CAWS_COPY_FINAL_SYMLINK=1
+        _caws_copy_hold 'copy final destination symlink entry semantics are unmodeled'
+      fi
+      if [[ -L "$_caws_cr_source_nominal" || ! -f "$_caws_cr_source_nominal" ]]; then
+        _caws_copy_hold 'copy source is not a modeled regular file'; continue
+      fi
+      caws_guard_realpath_into _caws_cr_source_physical "$_caws_cr_source_nominal" || return 2
       if [[ -d "$_caws_cr_effective" ]] ||
           [[ -e "$_caws_cr_effective" && ! -f "$_caws_cr_effective" ]] ||
           [[ "$_caws_cr_operation" == mv && -L "$_caws_cr_effective" ]]; then
@@ -131,8 +139,11 @@ caws_copy_role_paths() {
             "$_caws_cr_project"|"$_caws_cr_project"/*) CAWS_COPY_CANONICAL=1 ;;
           esac ;;
       esac
-      # A known forbidden pair remains forbidden even when either file's link
-      # identity cannot authorize the rest of this invocation.
+      # These resolved paths are ownership observations, not admission. Keep
+      # known foreign writes/deletions visible even when link identity or the
+      # destination parent cannot authorize the rest of this invocation.
+      _caws_copy_emit "$_caws_cr_physical"
+      [[ "$_caws_cr_operation" != mv ]] || _caws_copy_emit "$_caws_cr_source_physical"
       if [[ "$_caws_cr_operation" == mv ]] && ! _caws_copy_single_link "$_caws_cr_source_physical"; then
         _caws_copy_hold 'move source hard-link identity is unmodeled or unavailable'; continue
       fi
@@ -144,8 +155,6 @@ caws_copy_role_paths() {
       if ! caws_physical_dir_into _caws_cr_parent "$_caws_cr_parent"; then
         _caws_copy_hold 'copy destination parent does not exist'; continue
       fi
-      _caws_copy_emit "$_caws_cr_physical"
-      [[ "$_caws_cr_operation" != mv ]] || _caws_copy_emit "$_caws_cr_source_physical"
     done
     _caws_cr_row=$((_caws_cr_row + 1))
   done

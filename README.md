@@ -76,11 +76,13 @@ an exit-zero projection. The guide's owned execution boundary is proposed. The
 implemented copy guards consume complete operand roles for a closed regular-file
 `cp`/`mv` profile, so external artifact copies are distinguished from canonical
 writes. Unknown roles, hard-link aliases and unmodeled filesystem cases refuse.
-Native adoption requires complete final-launch context, custody through later
-rewrites, generation-bound Node and analyzer CLI identities, an isolated canary
-and rollback. A validated host execution directory establishes only that
-coordinate. The known reduced Codex command projection remains held; that
-protective refusal does not qualify native deployment.
+A copy's effective final symlink destination refuses even when approval is
+available; a destination-directory alias with a regular final child is
+supported. Native adoption requires complete final-launch context, custody
+through later rewrites, generation-bound Node and analyzer CLI identities, an
+isolated canary and rollback. A validated host execution directory establishes
+only that coordinate. The known reduced Codex command projection remains held;
+that protective refusal does not qualify native deployment.
 
 ## Quick start
 

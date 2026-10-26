@@ -316,6 +316,7 @@ if [[ ! -r "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" ]] ||
   exit 2
 fi
 
+CAWS_COPY_FINAL_SYMLINK=''
 if [[ ! -r "$SCRIPT_DIR/lib/copy-roles.sh" ]] ||
     ! source "$SCRIPT_DIR/lib/copy-roles.sh" ||
     ! caws_copy_role_paths "$PROJECT_DIR"; then
@@ -326,6 +327,10 @@ if [[ "$CAWS_COPY_CANONICAL" == 1 ]]; then
   echo 'BLOCKED: Copying files from a worktree to the main repo is forbidden.' >&2
   exit 2
 fi
+case "${CAWS_COPY_FINAL_SYMLINK:-}" in
+  0|1) ;;
+  *) echo '[bash-write-guard] copy-role final-entry observation is unavailable; failing closed.' >&2; exit 2 ;;
+esac
 extract_targets() {
   # Two channels, both consumed, because an ownership gate wants every path a
   # command might touch:
@@ -662,8 +667,18 @@ fi
 _BG_ID="CAWS bash-write-guard"
 command -v guard_identity >/dev/null 2>&1 && _BG_ID="$(guard_identity bash-write-guard)"
 
+# Preserve known ownership violations before refusing this unmodeled entry
+# operation. An ask response cannot confine cp's failed-open unlink fallback.
+if [[ "$CAWS_COPY_FINAL_SYMLINK" == 1 ]]; then
+  escalate block final-destination-symlink block_copy_final_symlink
+fi
+
 case "$WORST" in
   block)
+    if [[ "$WORST_KIND" == "block_copy_final_symlink" ]]; then
+      echo "[$_BG_ID] BLOCKED: copy final destination symlink entry semantics are unmodeled; approval cannot authorize this operation." >&2
+      exit 2
+    fi
     if [[ "$WORST_KIND" == "block_foreign_repo" ]]; then
       echo "[$_BG_ID] BLOCKED: this Bash command mutates a file inside a DIFFERENT repository ($WORST_DETAIL), not this session's project ($PROJECT_DIR)." >&2
       echo "  A session may READ sibling repos freely but must not WRITE into one from here — the same boundary scope-guard applies to Write/Edit." >&2

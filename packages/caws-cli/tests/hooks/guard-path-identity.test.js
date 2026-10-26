@@ -330,17 +330,135 @@ test('copy destination policy follows a destination-directory child symlink', ()
   const canonical = path.join(fx.project, 'canonical.json');
   fs.writeFileSync(canonical, 'canonical unchanged');
   fs.symlinkSync(canonical, path.join(archive, 'one.json'));
-  check(
-    invoke(
-      'worktree-guard.sh',
+  for (const script of ['bash-write-guard.sh', 'worktree-guard.sh']) {
+    const result = invoke(
+      script,
       fx.project,
-      payload('cp -- ' + quote(sources[0]) + ' ' + quote(archive))
-    ),
-    2,
-    'Copying files from a worktree to the main repo is forbidden.'
-  );
+      'cp -f -- ' + quote(sources[0]) + ' ' + quote(archive),
+      { CAWS_GUARD_NO_ASK: '0' }
+    );
+    check(result, 2, 'Copying files from a worktree to the main repo is forbidden.');
+    expect(result.stdout.trim()).toBe('');
+  }
   expect(fs.readFileSync(canonical, 'utf8')).toBe('canonical unchanged');
 });
+
+test.each(
+  ['canonical-entry', 'foreign-entry', 'directory-child'].flatMap((relation) =>
+    ['', '-f', '--force'].map((option) => ({ relation, option }))
+  )
+)(
+  'copy final destination symlink is a hard refusal for $relation with $option',
+  ({ relation, option }) => {
+    const { sources, archive } = copyPaths();
+    const referent = path.join(fx.linked, 'owned-readonly-target');
+    fs.writeFileSync(referent, 'owned unchanged', { mode: 0o444 });
+    let entry = path.join(fx.project, 'entry-link');
+    if (relation === 'foreign-entry') {
+      const foreign = path.join(fx.project, '.caws/worktrees/foreign');
+      fs.mkdirSync(foreign);
+      entry = path.join(foreign, 'entry-link');
+      fs.writeFileSync(
+        path.join(fx.project, '.caws/worktrees.json'),
+        JSON.stringify({
+          linked: { ...fx.entry, owner: { session_id: 'identity-fixture' } },
+          foreign: { name: 'foreign', path: foreign, owner: { session_id: 'foreign' } },
+        })
+      );
+    } else if (relation === 'directory-child') entry = path.join(archive, 'one.json');
+    fs.symlinkSync(referent, entry);
+    const destination = relation === 'directory-child' ? archive : entry;
+    const command = 'cp ' + option + ' -- ' + quote(sources[0]) + ' ' + quote(destination);
+    for (const script of ['bash-write-guard.sh', 'worktree-guard.sh']) {
+      const result = invoke(script, fx.project, command, { CAWS_GUARD_NO_ASK: '0' });
+      check(result, 2, 'final destination symlink');
+      expect(result.stdout.trim()).toBe('');
+    }
+    expect(fs.lstatSync(entry).isSymbolicLink()).toBe(true);
+    expect(fs.readlinkSync(entry)).toBe(referent);
+    expect(fs.statSync(referent).nlink).toBe(1);
+    expect(fs.readFileSync(referent, 'utf8')).toBe('owned unchanged');
+    expect(fs.readFileSync(sources[0], 'utf8')).toBe('one.json');
+  }
+);
+
+test.each(['', '-f', '--force'])(
+  'copy regular destinations and directory-parent aliases remain supported with %s',
+  (option) => {
+    const { sources, archive } = copyPaths();
+    const alias = path.join(fx.base, 'artifact-directory-alias');
+    fs.symlinkSync(archive, alias, 'dir');
+    const regular = path.join(archive, 'one.json');
+    fs.writeFileSync(regular, 'artifact unchanged');
+    for (const destination of [archive, alias]) {
+      const command =
+        'cp ' + option + ' -- ' + sources.map(quote).join(' ') + ' ' + quote(destination);
+      for (const script of ['bash-write-guard.sh', 'worktree-guard.sh']) {
+        const result = invoke(script, fx.project, command, {
+          CAWS_GUARD_NO_ASK: '0',
+          CAWS_COPY_FINAL_SYMLINK: '1',
+        });
+        check(result, 0);
+        expect(result.stdout.trim()).toBe('');
+        expect(result.stderr).not.toContain('BLOCKED');
+      }
+    }
+    expect(fs.readFileSync(regular, 'utf8')).toBe('artifact unchanged');
+    expect(fs.existsSync(path.join(archive, 'two.log'))).toBe(false);
+  }
+);
+
+test('copy source uncertainty cannot downgrade a final symlink to an approval request', () => {
+  const { sources, archive } = copyPaths();
+  const sourceAlias = path.join(fx.base, 'source-alias');
+  fs.symlinkSync(sources[0], sourceAlias);
+  const referent = path.join(fx.linked, 'owned-target');
+  fs.writeFileSync(referent, 'owned unchanged');
+  const destination = path.join(archive, 'entry-link');
+  fs.symlinkSync(referent, destination);
+  for (const script of ['bash-write-guard.sh', 'worktree-guard.sh']) {
+    const result = invoke(
+      script,
+      fx.project,
+      'cp -f -- ' + quote(sourceAlias) + ' ' + quote(destination),
+      { CAWS_GUARD_NO_ASK: '0' }
+    );
+    check(result, 2, 'final destination symlink');
+    expect(result.stdout.trim()).toBe('');
+  }
+  expect(fs.readlinkSync(destination)).toBe(referent);
+  expect(fs.readFileSync(referent, 'utf8')).toBe('owned unchanged');
+  expect(fs.readFileSync(sources[0], 'utf8')).toBe('one.json');
+});
+
+test.each(['bash-write-guard.sh', 'worktree-guard.sh'])(
+  '%s refuses a stale copy helper missing the final-entry observation',
+  (script) => {
+    const { sources, archive } = copyPaths();
+    const helper = path.join(fx.hooks, 'lib/copy-roles.sh');
+    const body = fs
+      .readFileSync(helper, 'utf8')
+      .replace('caws_copy_role_paths() {', 'caws_copy_role_paths_current() {');
+    fs.writeFileSync(
+      helper,
+      body +
+        '\ncaws_copy_role_paths() {\n' +
+        '  caws_copy_role_paths_current "$@"\n' +
+        '  local status=$?\n' +
+        '  unset CAWS_COPY_FINAL_SYMLINK\n' +
+        '  return "$status"\n' +
+        '}\n'
+    );
+    check(
+      invoke(script, fx.project, 'cp -- ' + quote(sources[0]) + ' ' + quote(archive), {
+        CAWS_COPY_FINAL_SYMLINK: '0',
+      }),
+      2,
+      'copy-role'
+    );
+    expect(fs.readdirSync(archive)).toEqual([]);
+  }
+);
 
 test.each(['-R', '--unmodeled-option'])(
   'copy destination policy holds unmodeled option %s without inventing a canonical target',
@@ -413,17 +531,66 @@ test('mandatory copy roles refuse a foreign destination hidden behind an externa
       linked: { ...fx.entry, owner: { session_id: 'foreign' } },
     })
   );
-  check(
-    invoke(
-      'bash-write-guard.sh',
-      fx.project,
-      payload('cp -- ' + quote(sources[0]) + ' ' + quote(archive))
-    ),
-    2,
-    'DIFFERENT session'
+  const result = invoke(
+    'bash-write-guard.sh',
+    fx.project,
+    'cp -f -- ' + quote(sources[0]) + ' ' + quote(archive),
+    { CAWS_GUARD_NO_ASK: '0' }
   );
+  check(result, 2, 'DIFFERENT session');
+  expect(result.stdout.trim()).toBe('');
   expect(fs.readFileSync(destination, 'utf8')).toBe('foreign unchanged');
 });
+
+test('known foreign symlink referent retains refusal before uncertain link identity', () => {
+  const { sources, archive } = copyPaths();
+  const destination = path.join(fx.linked, 'foreign-target.json');
+  fs.writeFileSync(destination, 'foreign unchanged');
+  fs.linkSync(destination, path.join(fx.base, 'referent-hardlink'));
+  fs.symlinkSync(destination, path.join(archive, 'one.json'));
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/worktrees.json'),
+    JSON.stringify({ linked: { ...fx.entry, owner: { session_id: 'foreign' } } })
+  );
+  const result = invoke(
+    'bash-write-guard.sh',
+    fx.project,
+    'cp -f -- ' + quote(sources[0]) + ' ' + quote(archive),
+    { CAWS_GUARD_NO_ASK: '0' }
+  );
+  check(result, 2, 'DIFFERENT session');
+  expect(result.stdout.trim()).toBe('');
+  expect(fs.statSync(destination).nlink).toBe(2);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('foreign unchanged');
+});
+
+test.each(['copy destination', 'move source'])(
+  'known foreign %s retains hard refusal before same-row link uncertainty',
+  (relation) => {
+    const { sources, archive } = copyPaths();
+    const destination = path.join(fx.linked, 'foreign-target.json');
+    fs.writeFileSync(destination, 'foreign unchanged');
+    fs.linkSync(
+      relation === 'copy destination' ? destination : sources[0],
+      path.join(fx.base, 'inode-alias')
+    );
+    fs.writeFileSync(
+      path.join(fx.project, '.caws/worktrees.json'),
+      JSON.stringify({ linked: { ...fx.entry, owner: { session_id: 'foreign' } } })
+    );
+    const command =
+      (relation === 'copy destination' ? 'cp -- ' : 'mv -- ') +
+      quote(sources[0]) +
+      ' ' +
+      quote(relation === 'copy destination' ? destination : archive);
+    const result = invoke('bash-write-guard.sh', fx.project, command, { CAWS_GUARD_NO_ASK: '0' });
+    check(result, 2, 'DIFFERENT session');
+    expect(result.stdout.trim()).toBe('');
+    expect(fs.readFileSync(destination, 'utf8')).toBe('foreign unchanged');
+    expect(fs.readFileSync(sources[0], 'utf8')).toBe('one.json');
+    expect(fs.readdirSync(archive)).toEqual([]);
+  }
+);
 
 test('mandatory copy roles allow an owned move and preserve the unexecuted source', () => {
   const { sources, archive } = copyPaths();

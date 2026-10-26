@@ -323,6 +323,7 @@ if printf '%s\n' "$COMMAND" | grep -qE '^(cp|mv)[[:space:]]'; then
     else printf '%s' "${HOOK_INPUT_JSON:-}"; fi
   }
   _CWD_RESOLVED=0; _CWD_CONTRACT=1
+  CAWS_COPY_FINAL_SYMLINK=''
   if [[ ! -r "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" || ! -r "$SCRIPT_DIR/lib/copy-roles.sh" ]] ||
       ! source "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" ||
       ! source "$SCRIPT_DIR/lib/copy-roles.sh"; then
@@ -337,6 +338,11 @@ if printf '%s\n' "$COMMAND" | grep -qE '^(cp|mv)[[:space:]]'; then
     echo 'BLOCKED: Copying files from a worktree to the main repo is forbidden.' >&2
     exit 2
   fi
+  case "${CAWS_COPY_FINAL_SYMLINK:-}" in
+    0) ;;
+    1) echo '[worktree-guard] BLOCKED: copy final destination symlink entry semantics are unmodeled.' >&2; exit 2 ;;
+    *) worktree_authority_unavailable copy-role-final-entry ;;
+  esac
   if [[ -n "$CAWS_COPY_UNRESOLVED" || ${#CAWS_AST_COPY_OPERATION[@]} -eq 0 || ${#CAWS_AST_ISSUES[@]} -gt 0 ]]; then
     worktree_authority_unavailable copy-roles
   fi

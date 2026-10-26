@@ -332,6 +332,36 @@ test('quoted search data never becomes executable interpreter source', () => {
   const result = guard('rg -F ' + quote('node => writeFileSync("/foreign/path")') + ' src');
   expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
 });
+test('quoted coordination text cannot load a mentioned script as executable source', () => {
+  const script = path.join(fx.project, 'prepare.cjs');
+  const marker = path.join(fx.root, 'mentioned-script-ran');
+  fs.writeFileSync(
+    script,
+    "require('node:fs').mkdirSync('dist/.', { recursive: true });\n" +
+      "require('node:fs').writeFileSync(" +
+      JSON.stringify(marker) +
+      ", 'executed');\n"
+  );
+  const command =
+    'caws message reply fixture-id --text ' +
+    quote('Preparation is pending; node ' + script + '; the destination is dist/.');
+  const completeProfile = guard(command);
+  expect(completeProfile.error).toBeUndefined();
+  expect(completeProfile.signal).toBeNull();
+  expect({ status: completeProfile.status, stderr: completeProfile.stderr }).toEqual({
+    status: 0,
+    stderr: '',
+  });
+  expect(completeProfile.stdout.trim()).toBe('');
+  const nativeProjection = guard(command, { CAWS_AGENT_SURFACE: 'codex' });
+  expect(nativeProjection.error).toBeUndefined();
+  expect(nativeProjection.signal).toBeNull();
+  expect(nativeProjection.status).toBe(2);
+  expect(nativeProjection.stderr).toContain('execution-contract');
+  expect(nativeProjection.stderr).not.toContain("relative target 'dist/.'");
+  expect(fs.existsSync(marker)).toBe(false);
+  expect(fs.existsSync(path.join(fx.project, 'dist'))).toBe(false);
+});
 test.each([
   'unknownCall()',
   "const write = require('fs').writeFileSync; write('/tmp/unbound','x')",
