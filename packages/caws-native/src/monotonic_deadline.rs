@@ -119,9 +119,35 @@ fn check_native_now(envelope: DeadlineEnvelope, now: u64) -> Result<u64, Deadlin
     Ok(remaining)
 }
 
+/// Last cooperative check before exec, suitable for a Command pre_exec closure.
+/// This uses the original envelope and CLOCK_MONOTONIC directly: no allocation,
+/// locks, formatting, Instant conversion, capture, or grace interval. It cannot
+/// make the clock sample and exec atomic; the caller places it last in pre_exec.
+/// Expiry is ETIMEDOUT; malformed intervals/clocks fail closed as EINVAL.
+pub fn check_before_exec(envelope: DeadlineEnvelope) -> Result<(), i32> {
+    validate_interval(envelope).map_err(|_| libc::EINVAL)?;
+    let mut raw = std::mem::MaybeUninit::<libc::timespec>::uninit();
+    // SAFETY: writable stack storage, read only after successful clock_gettime.
+    if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, raw.as_mut_ptr()) } != 0 {
+        return Err(std::io::Error::last_os_error()
+            .raw_os_error()
+            .unwrap_or(libc::EIO));
+    }
+    // SAFETY: clock_gettime initialized the complete timespec.
+    let raw = unsafe { raw.assume_init() };
+    let now = timespec_ns(raw.tv_sec, raw.tv_nsec).map_err(|_| libc::EINVAL)?;
+    check_native_now(envelope, now).map_err(|error| match error {
+        DeadlineError::Expired => libc::ETIMEDOUT,
+        _ => libc::EINVAL,
+    })?;
+    Ok(())
+}
+
 /// A validated original expiry and one captured local bound. No public Instant
 /// constructor, deserializer, or refresh operation can reset its budget.
-#[derive(Debug)]
+// Cloning retains both clock coordinates exactly; it never samples a clock or
+// restores elapsed time. This lets a live transport retain its caller's bound.
+#[derive(Clone, Debug)]
 pub struct MonotonicDeadline {
     envelope: DeadlineEnvelope,
     local_expires: Instant,
@@ -222,6 +248,51 @@ impl MonotonicDeadline {
 mod tests {
     use super::*;
     use std::collections::VecDeque;
+
+    #[test]
+    fn clone_preserves_original_native_and_local_expiry() {
+        let original = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+        let retained = original.clone();
+        assert_eq!(retained.envelope(), original.envelope());
+        assert_eq!(retained.expires(), original.expires());
+        assert_eq!(
+            retained
+                .check_observed_for_test(Ok(original.envelope().expires_ns), original.expires()),
+            Err(DeadlineError::Expired)
+        );
+        assert_eq!(
+            retained
+                .check_observed_for_test(Ok(original.envelope().started_ns), original.expires()),
+            Err(DeadlineError::Expired)
+        );
+    }
+
+    #[test]
+    fn exec_check_preserves_live_expired_and_invalid_semantics() {
+        let original = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+        assert_eq!(check_before_exec(original.envelope()), Ok(()));
+        assert_eq!(
+            check_before_exec(DeadlineEnvelope {
+                started_ns: 1,
+                expires_ns: 2
+            }),
+            Err(libc::ETIMEDOUT)
+        );
+        assert_eq!(
+            check_before_exec(DeadlineEnvelope {
+                started_ns: 2,
+                expires_ns: 2
+            }),
+            Err(libc::EINVAL)
+        );
+        assert_eq!(
+            check_before_exec(DeadlineEnvelope {
+                started_ns: u64::MAX - 1,
+                expires_ns: u64::MAX
+            }),
+            Err(libc::EINVAL)
+        );
+    }
     enum Sample {
         Instant(Instant),
         Native(Result<u64, DeadlineError>),

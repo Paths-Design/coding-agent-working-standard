@@ -6,6 +6,9 @@ fn configuration() -> Configuration {
         schema: CONFIG_SCHEMA.into(),
         invocation_id: "pure-worker-1".into(),
         runtime_digest: "a".repeat(64),
+        deadline: MonotonicDeadline::capture(Duration::from_secs(10))
+            .unwrap()
+            .envelope(),
         node: "/node".into(),
         engine: "/engine.js".into(),
         control_fd: 32,
@@ -425,4 +428,67 @@ fn no_child_is_terminal_without_fabricated_node_evidence_and_pending_dedup_ignor
     );
     changed.stdout_eof = true;
     assert!(!same_transition(&pending, &changed));
+}
+
+#[test]
+fn original_expiry_latches_delivery_stop_and_preserves_prior_failure() {
+    let original = MonotonicDeadline::capture(Duration::from_millis(10)).unwrap();
+    let mut failed = false;
+    let mut reason = None;
+    let mut failure = None;
+    let mut discard = false;
+    observe_deadline(
+        &original,
+        &mut failed,
+        &mut reason,
+        &mut failure,
+        &mut discard,
+    );
+    assert!(!failed && !discard);
+    assert_eq!(reason, None);
+    assert_eq!(failure, None);
+    while original.check().is_ok() {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert_eq!(
+        original.check(),
+        Err(caws_native::monotonic_deadline::DeadlineError::Expired)
+    );
+    observe_deadline(
+        &original,
+        &mut failed,
+        &mut reason,
+        &mut failure,
+        &mut discard,
+    );
+    assert!(failed && discard);
+    assert_eq!(reason.as_deref(), Some("original_deadline_expired"));
+    assert_eq!(
+        failure.as_deref(),
+        Some("Original monotonic deadline expired")
+    );
+    let retained = (reason.clone(), failure.clone());
+    observe_deadline(
+        &original,
+        &mut failed,
+        &mut reason,
+        &mut failure,
+        &mut discard,
+    );
+    assert_eq!((reason, failure), retained);
+
+    let mut failed = false;
+    let mut reason = Some("receipt_publication".to_owned());
+    let mut failure = Some("retained publication failure".to_owned());
+    let mut discard = false;
+    observe_deadline(
+        &original,
+        &mut failed,
+        &mut reason,
+        &mut failure,
+        &mut discard,
+    );
+    assert!(failed && discard);
+    assert_eq!(reason.as_deref(), Some("receipt_publication"));
+    assert_eq!(failure.as_deref(), Some("retained publication failure"));
 }

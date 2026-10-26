@@ -557,9 +557,31 @@ impl ValidatedTarget {
     pub fn attempt(self, deadline: Instant) -> ContainmentReceipt {
         self.attempt_with(&mut NativeObserver::default(), deadline)
     }
+    pub fn attempt_until(
+        self,
+        original: &caws_native::monotonic_deadline::MonotonicDeadline,
+        deadline: Instant,
+    ) -> ContainmentReceipt {
+        self.attempt_checked(
+            &mut NativeObserver::default(),
+            deadline.min(original.expires()),
+            &mut |_| original.check().map_err(|error| error.to_string()),
+        )
+    }
     fn attempt_with(self, observer: &mut impl Observer, deadline: Instant) -> ContainmentReceipt {
+        self.attempt_checked(observer, deadline, &mut |_| Ok(()))
+    }
+    fn attempt_checked(
+        self,
+        observer: &mut impl Observer,
+        deadline: Instant,
+        check: &mut impl FnMut(&'static str) -> Result<(), String>,
+    ) -> ContainmentReceipt {
         let mut receipt =
             ContainmentReceipt::held(&self.intent, HeldReason::ObservationUnavailable);
+        if check("containment-before-observation").is_err() || Instant::now() >= deadline {
+            return receipt;
+        }
         let current = match observer.observe(self.intent.pid, deadline, LookupMode::Terminal) {
             Ok(row) => row,
             Err(_) => return receipt,
@@ -568,7 +590,7 @@ impl ValidatedTarget {
             receipt.reason = HeldReason::IdentityMismatch;
             return receipt;
         }
-        if Instant::now() >= deadline {
+        if check("containment-before-signal").is_err() || Instant::now() >= deadline {
             return receipt;
         }
         // No retry: a failed/uncertain syscall does not authorize another effect.
@@ -1616,6 +1638,38 @@ mod tests {
         assert_eq!(receipt.reason, HeldReason::IdentityMismatch);
         assert!(observer.signals.is_empty());
     }
+
+    #[test]
+    fn original_clock_failure_after_reobservation_holds_without_a_signal() {
+        for failure in [
+            "Original monotonic deadline expired",
+            "CLOCK_MONOTONIC unavailable",
+        ] {
+            let mut observer = fake();
+            let captured = CapturedAncestors::capture_with(&mut observer, 99, 44, deadline());
+            let target = captured.validate(&intent()).ok().unwrap();
+            let mut stages = Vec::new();
+            let receipt = target.attempt_checked(&mut observer, deadline(), &mut |stage| {
+                stages.push(stage);
+                if stage == "containment-before-signal" {
+                    Err(failure.into())
+                } else {
+                    Ok(())
+                }
+            });
+            assert_eq!(
+                stages,
+                [
+                    "containment-before-observation",
+                    "containment-before-signal"
+                ]
+            );
+            assert_eq!(receipt.reason, HeldReason::ObservationUnavailable);
+            assert_eq!(receipt.status, "held");
+            assert!(observer.signals.is_empty(), "{failure}");
+        }
+    }
+
     #[test]
     fn accepted_and_failed_syscalls_are_not_target_exit_claims() {
         let mut observer = fake();

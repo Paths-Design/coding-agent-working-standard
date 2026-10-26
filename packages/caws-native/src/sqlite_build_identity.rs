@@ -234,10 +234,22 @@ impl<'original> SqliteIdentityReceipt<'original> {
     }
 }
 
-/// Preserve the build coordinator's diagnostic schema. No receipt is produced.
+/// Advertise the compiled receiver to tooling. Internal identity remains v1.
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let identity = observe_linked().map_err(std::io::Error::other)?;
-    let mut bytes = serde_json::to_vec(&identity)?;
+    let diagnostic = serde_json::json!({
+        "schema": "caws.sqlite_build_identity.v2",
+        "version": identity.version,
+        "sourceId": identity.source_id,
+        "threadSafe": identity.thread_safe,
+        "compileOptions": identity.compile_options,
+        "compiledPrefixSha256": identity.compiled_prefix_sha256,
+        "installedInvocation": {
+            "protocol": "invoke-installed-v1",
+            "maxOriginalTimeoutMs": 30_000,
+        },
+    });
+    let mut bytes = serde_json::to_vec(&diagnostic)?;
     bytes.push(b'\n');
     std::io::stdout().lock().write_all(&bytes)?;
     Ok(())

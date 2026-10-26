@@ -15,7 +15,104 @@ pub const MAX_REQUEST: usize = 8 * 1024 * 1024;
 pub const MAX_FRAME: usize = 4_194_304 + 4096;
 const MAX_ENGINE_STDERR: usize = 65_536;
 const CLEANUP_BUDGET: Duration = Duration::from_millis(500);
-const DELIVERY_BUDGET: Duration = Duration::from_millis(500);
+pub const DELIVERY_BUDGET: Duration = Duration::from_millis(500);
+pub const TERMINAL_BUDGET: Duration = Duration::from_millis(1000);
+pub const DIAGNOSTIC_BUDGET: Duration = Duration::from_millis(100);
+
+/// Earlier processing/terminal cutoffs reserve existing frontend work inside
+/// the original interval. Short calls retain half their interval for processing.
+pub struct CallbackBounds {
+    pub processing: Instant,
+    pub terminal: Instant,
+    pub cleanup: Instant,
+}
+impl CallbackBounds {
+    pub fn original(original: &caws_native::monotonic_deadline::MonotonicDeadline) -> Self {
+        let interval = original.envelope();
+        let total = Duration::from_nanos(interval.expires_ns - interval.started_ns);
+        let reserve = (TERMINAL_BUDGET + CLEANUP_BUDGET + DIAGNOSTIC_BUDGET).min(total / 2);
+        let diagnostic = reserve / 16;
+        let cleanup = reserve * 5 / 16;
+        Self {
+            processing: original.expires() - reserve,
+            terminal: original.expires() - diagnostic - cleanup,
+            cleanup: original.expires() - diagnostic,
+        }
+    }
+}
+pub fn check_until(
+    original: &caws_native::monotonic_deadline::MonotonicDeadline,
+    until: Instant,
+) -> Result<(), String> {
+    original.check().map_err(|error| error.to_string())?;
+    if Instant::now() >= until.min(original.expires()) {
+        return Err("request deadline expired".into());
+    }
+    Ok(())
+}
+pub fn cap_until(
+    original: &caws_native::monotonic_deadline::MonotonicDeadline,
+    until: Instant,
+    cap: Duration,
+) -> Instant {
+    original.expires().min(until).min(Instant::now() + cap)
+}
+
+/// Invoke has no incoming descriptor capability contract. Mark inherited
+/// nonstandard descriptors before creating private custodian descriptors.
+/// Descriptor flags are process-local; shared file-status flags stay intact.
+pub fn isolate_invoke_descriptors(
+    original: &caws_native::monotonic_deadline::MonotonicDeadline,
+) -> Result<(), String> {
+    let check = || original.check().map_err(|error| error.to_string());
+    check()?;
+    let entries = std::fs::read_dir("/dev/fd");
+    check()?;
+    let mut entries = entries.map_err(|error| format!("invoke descriptor enumeration: {error}"))?;
+    loop {
+        check()?;
+        let entry = entries.next();
+        check()?;
+        let Some(entry) = entry else {
+            break;
+        };
+        let entry = entry.map_err(|error| format!("invoke descriptor enumeration: {error}"))?;
+        let descriptor = entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse::<RawFd>().ok())
+            .filter(|descriptor| *descriptor >= 0)
+            .ok_or("invoke descriptor enumeration contains a non-descriptor name")?;
+        if descriptor <= libc::STDERR_FILENO {
+            continue;
+        }
+        check()?;
+        // SAFETY: query only flags on an enumerated descriptor, without pointers.
+        let flags = unsafe { libc::fcntl(descriptor, libc::F_GETFD) };
+        let error = (flags < 0).then(io::Error::last_os_error);
+        check()?;
+        if let Some(error) = error {
+            if error.raw_os_error() == Some(libc::EBADF) {
+                continue;
+            }
+            return Err(format!("invoke descriptor {descriptor} flags: {error}"));
+        }
+        check()?;
+        // SAFETY: preserve descriptor flags while adding close-on-exec.
+        let result = unsafe { libc::fcntl(descriptor, libc::F_SETFD, flags | libc::FD_CLOEXEC) };
+        let error = (result < 0).then(io::Error::last_os_error);
+        check()?;
+        if let Some(error) = error {
+            if error.raw_os_error() == Some(libc::EBADF) {
+                continue;
+            }
+            return Err(format!(
+                "invoke descriptor {descriptor} close-on-exec: {error}"
+            ));
+        }
+    }
+    check()
+}
 
 fn nonblocking(fd: RawFd) -> Result<i32, String> {
     // SAFETY: fcntl operates on a borrowed, live descriptor, without pointer arguments.
@@ -53,7 +150,8 @@ fn poll_with_max_wait(
     let remaining = deadline
         .checked_duration_since(Instant::now())
         .ok_or("request deadline expired")?;
-    let timeout = (remaining.as_millis().clamp(1, 100) as i32).min(max_wait_ms);
+    // Floor sub-millisecond waits instead of extending the absolute bound.
+    let timeout = (remaining.as_millis().min(100) as i32).min(max_wait_ms);
     // SAFETY: fds points at an initialized writable array for its stated length.
     if unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, timeout) } < 0 {
         let error = io::Error::last_os_error();
@@ -241,6 +339,27 @@ impl OwnedGroup {
             .cleanup_with(|| Self::finish_child(&mut self.child))
     }
 
+    fn finish_until(
+        &mut self,
+        original: &caws_native::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<std::process::ExitStatus, String> {
+        // Preserve the legacy direct-child cleanup and cached-exit semantics.
+        // Its existing 500ms cleanup attempt and possible Drop retry remain
+        // outside the strict callback claim for non-macOS/test-only direct owners.
+        // Normal macOS invocation uses the separately bounded custodian owner.
+        check_until(original, until)?;
+        let finished = self.finish().map_err(|error| error.to_string());
+        // A late completion stays cached by CleanupState even when this caller
+        // observes deadline failure. Failed cleanup retains the actual Child.
+        match (finished, check_until(original, until)) {
+            (Ok(status), Ok(())) => Ok(status),
+            (Err(cleanup), Ok(())) => Err(cleanup),
+            (Ok(_), Err(clock)) => Err(clock),
+            (Err(cleanup), Err(clock)) => Err(format!("{cleanup}; deadline: {clock}")),
+        }
+    }
+
     fn finish_child(child: &mut Child) -> Result<std::process::ExitStatus, CleanupFailure> {
         cleanup_attempt(&mut ChildCleanup {
             child,
@@ -269,17 +388,29 @@ enum EngineOwner {
     Custodied(Box<crate::engine_custody::Owner>),
 }
 impl EngineOwner {
-    fn pre_creation_failure(&mut self) -> Result<Option<String>, String> {
-        match self {
+    fn pre_creation_failure_until(
+        &mut self,
+        original: &caws_native::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<Option<String>, String> {
+        check_until(original, until)?;
+        let result = match self {
             #[cfg(target_os = "macos")]
-            Self::Custodied(owner) => owner.pre_creation_failure(),
+            Self::Custodied(owner) => owner.pre_creation_failure_until(original, until),
             Self::Direct(_) => Ok(None),
-        }
+        }?;
+        check_until(original, until)?;
+        Ok(result)
     }
-    fn exit_observed(&mut self) -> Result<bool, String> {
-        match self {
+    fn exit_observed_until(
+        &mut self,
+        original: &caws_native::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<bool, String> {
+        check_until(original, until)?;
+        let result = match self {
             #[cfg(target_os = "macos")]
-            Self::Custodied(owner) => owner.exit_observed(),
+            Self::Custodied(owner) => owner.exit_observed_until(original, until),
             Self::Direct(group) => {
                 let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
                 // Observe without reaping the original ownership anchor.
@@ -299,28 +430,36 @@ impl EngineOwner {
                 }
                 Ok(unsafe { info.assume_init().si_pid() } != 0)
             }
-        }
+        }?;
+        check_until(original, until)?;
+        Ok(result)
     }
-    fn finish(&mut self, deadline: Instant) -> Result<std::process::ExitStatus, String> {
+    fn finish_until(
+        &mut self,
+        original: &caws_native::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<std::process::ExitStatus, String> {
         match self {
             #[cfg(target_os = "macos")]
-            Self::Custodied(owner) => owner.finish(deadline),
-            Self::Direct(group) => {
-                let _ = deadline;
-                group.finish().map_err(|error| error.to_string())
-            }
+            Self::Custodied(owner) => owner.finish_until(original, until),
+            Self::Direct(group) => group.finish_until(original, until),
         }
     }
-    fn cleanup(&mut self) -> Result<(), String> {
+    fn cleanup_until(
+        &mut self,
+        original: &caws_native::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
         match self {
             #[cfg(target_os = "macos")]
-            Self::Custodied(owner) => owner.cleanup(),
-            Self::Direct(group) => group.cleanup().map_err(|error| error.to_string()),
+            Self::Custodied(owner) => owner.cleanup_until(original, until),
+            Self::Direct(group) => group.finish_until(original, until).map(|_| ()),
         }
     }
 }
 
 pub struct Session {
+    original_deadline: caws_native::monotonic_deadline::MonotonicDeadline,
     group: EngineOwner,
     stdin: ChildStdin,
     stdout: ChildStdout,
@@ -395,20 +534,29 @@ impl caws_native::transcript_store_wire::Transport for Session {
 }
 
 impl Session {
-    pub fn start(config: &Config, invocation_id: &str, deadline: Instant) -> Result<Self, String> {
-        Self::start_inner(config, invocation_id, deadline, cfg!(target_os = "macos"))
+    pub fn start(
+        config: &Config,
+        invocation_id: &str,
+        original_deadline: &caws_native::monotonic_deadline::MonotonicDeadline,
+    ) -> Result<Self, String> {
+        Self::start_inner(
+            config,
+            invocation_id,
+            original_deadline,
+            cfg!(target_os = "macos"),
+        )
     }
 
     fn start_inner(
         config: &Config,
         invocation_id: &str,
-        deadline: Instant,
+        original_deadline: &caws_native::monotonic_deadline::MonotonicDeadline,
         custody: bool,
     ) -> Result<Self, String> {
         crate::cancellation::check()?;
-        if Instant::now() >= deadline {
-            return Err("request deadline expired before engine spawn".into());
-        }
+        original_deadline
+            .check()
+            .map_err(|error| error.to_string())?;
         let mut command = Command::new(&config.node);
         command
             .arg(&config.engine)
@@ -437,8 +585,12 @@ impl Session {
         let render_sources = render_bank.as_ref().map(|bank| bank.child_sources());
         #[cfg(target_os = "macos")]
         let spawned = if custody {
-            let spawned =
-                crate::engine_custody::Owner::spawn(config, invocation_id, render_sources)?;
+            let spawned = crate::engine_custody::Owner::spawn(
+                config,
+                invocation_id,
+                render_sources,
+                original_deadline,
+            )?;
             Some((
                 EngineOwner::Custodied(Box::new(spawned.owner)),
                 spawned.stdin,
@@ -456,7 +608,8 @@ impl Session {
         let (group, stdin, stdout, stderr) = if let Some(spawned) = spawned {
             spawned
         } else {
-            // SAFETY: setpgid is async-signal-safe and this closure performs no allocation.
+            let original_envelope = original_deadline.envelope();
+            // SAFETY: only async-signal-safe operations and allocation-free checks.
             unsafe {
                 command.pre_exec(move || {
                     if libc::setpgid(0, 0) != 0 {
@@ -472,9 +625,13 @@ impl Session {
                         // descriptions are >=10 and close-on-exec.
                         libc::close(6);
                     }
-                    Ok(())
+                    caws_native::monotonic_deadline::check_before_exec(original_envelope)
+                        .map_err(io::Error::from_raw_os_error)
                 });
             }
+            original_deadline
+                .check()
+                .map_err(|error| error.to_string())?;
             let child = command.spawn().map_err(|e| format!("engine spawn: {e}"))?;
             let mut group = OwnedGroup {
                 child,
@@ -492,6 +649,7 @@ impl Session {
         nonblocking(stdout.as_raw_fd())?;
         nonblocking(stderr.as_raw_fd())?;
         Ok(Self {
+            original_deadline: original_deadline.clone(),
             group,
             stdin,
             stdout,
@@ -528,6 +686,9 @@ impl Session {
         ready: &mut crate::protocol::Ready,
         deadline: Instant,
     ) -> Result<Option<Vec<u8>>, String> {
+        let original = self.original_deadline.clone();
+        let deadline = deadline.min(original.expires());
+        check_until(&original, deadline)?;
         let Some(offer) = ready.service_offer.take() else {
             if let Some(bank) = &mut self.render_bank {
                 bank.withdraw();
@@ -542,6 +703,7 @@ impl Session {
         }
         let preparation =
             crate::render_bridge::prepare_offer(config, request, ready, *offer, deadline)?;
+        check_until(&original, deadline)?;
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
         std::thread::Builder::new()
             .name("caws-render-admission".into())
@@ -550,6 +712,7 @@ impl Session {
             })
             .map_err(|e| format!("render admission thread: {e}"))?;
         let admission = loop {
+            check_until(&original, deadline)?;
             match receiver.try_recv() {
                 Ok(result) => break result?,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
@@ -560,14 +723,13 @@ impl Session {
                 }
             }
         };
-        if Instant::now() >= deadline {
-            return Err("render admission exceeded native deadline".into());
-        }
+        check_until(&original, deadline)?;
         let (bridge, dispatch) = crate::render_bridge::activate(
             self.render_bank.as_mut().ok_or("render bank unavailable")?,
             admission,
             request,
         )?;
+        check_until(&original, deadline)?;
         self.render_bridge = Some(bridge);
         Ok(Some(dispatch))
     }
@@ -595,9 +757,28 @@ impl Session {
         extra: &[libc::pollfd],
         max_wait_ms: i32,
     ) -> Result<usize, String> {
+        self.pump_checked(write, deadline, extra, max_wait_ms, &mut || Ok(()))
+    }
+    fn pump_checked(
+        &mut self,
+        write: Option<&[u8]>,
+        deadline: Instant,
+        extra: &[libc::pollfd],
+        max_wait_ms: i32,
+        check: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<usize, String> {
+        let retained = self.original_deadline.clone();
+        let deadline = deadline.min(retained.expires());
+        let caller_check = check;
+        let mut check = || {
+            check_until(&retained, deadline)?;
+            caller_check()
+        };
+        check()?;
         if let Some(bridge) = &mut self.render_bridge {
             bridge.tick();
         }
+        check()?;
         let mut descriptors = vec![
             libc::pollfd {
                 fd: if write.is_some() {
@@ -637,10 +818,12 @@ impl Session {
             !self.terminal_containment,
             max_wait_ms,
         )?;
+        check()?;
         let mut written = 0;
         if let Some(bytes) = write
             && descriptors[0].revents != 0
         {
+            check()?;
             let chunk = &bytes[..bytes.len().min(16_384)];
             // SAFETY: chunk is readable for its length; the pipe is live and nonblocking.
             let count =
@@ -660,32 +843,59 @@ impl Session {
             }
         }
         if !self.out_done && descriptors[1].revents != 0 {
+            check()?;
             let before = self.buffered.len();
             self.out_done = read_chunk(self.stdout.as_raw_fd(), &mut self.buffered, MAX_FRAME)?;
+            check()?;
             self.stdout_bytes += self.buffered.len() - before;
             if self.stdout_bytes > MAX_FRAME + 16_384 + self.control_credit() {
                 return Err("engine stream exceeded total byte budget".into());
             }
         }
         if !self.err_done && descriptors[2].revents != 0 {
+            check()?;
             self.err_done = read_chunk(
                 self.stderr.as_raw_fd(),
                 &mut self.diagnostics,
                 MAX_ENGINE_STDERR,
             )?;
+            check()?;
         }
+        check()?;
         if let Some(bridge) = &mut self.render_bridge {
             bridge.tick();
         }
+        check()?;
         Ok(written)
     }
 
     pub fn send(&mut self, bytes: &[u8], deadline: Instant) -> Result<(), String> {
+        let original = self.original_deadline.clone();
+        self.send_until(bytes, &original, deadline)
+    }
+
+    pub fn send_until(
+        &mut self,
+        bytes: &[u8],
+        original: &caws_native::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        let retained = self.original_deadline.clone();
+        let until = until.min(original.expires()).min(retained.expires());
+        check_until(&retained, until)?;
+        check_until(original, until)?;
         let mut offset = 0;
         while offset < bytes.len() {
-            offset += self.pump(Some(&bytes[offset..]), deadline)?;
+            offset += self.pump_checked(
+                Some(&bytes[offset..]),
+                until.min(original.expires()),
+                &[],
+                100,
+                &mut || check_until(original, until),
+            )?;
         }
-        Ok(())
+        check_until(&retained, until)?;
+        check_until(original, until)
     }
 
     /// Only one pre-Ready exchange is live. While Git runs, Node stderr is
@@ -699,6 +909,28 @@ impl Session {
         frame: &[u8],
         deadline: Instant,
     ) -> Result<(), String> {
+        self.run_context_git_checked(owner, frame, deadline, None)
+    }
+    pub fn run_context_git_until(
+        &mut self,
+        owner: &mut caws_native::context_git::ContextGitOwner,
+        frame: &[u8],
+        original: &caws_native::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        check_until(original, until)?;
+        self.run_context_git_checked(owner, frame, until.min(original.expires()), Some(original))
+    }
+    fn run_context_git_checked(
+        &mut self,
+        owner: &mut caws_native::context_git::ContextGitOwner,
+        frame: &[u8],
+        deadline: Instant,
+        original: Option<&caws_native::monotonic_deadline::MonotonicDeadline>,
+    ) -> Result<(), String> {
+        let retained = self.original_deadline.clone();
+        let deadline = deadline.min(retained.expires());
+        check_until(&retained, deadline)?;
         let mut pending = owner.begin(frame)?;
         let exchange: Result<(), String> = (|| {
             let credit = self
@@ -710,13 +942,15 @@ impl Session {
             }
             self.context_git_control_credit = credit;
             loop {
+                check_until(&retained, deadline)?;
                 crate::cancellation::check()?;
                 // Check an already-buffered second frame/partial frame before
                 // advancing the new operation, including coalesced requests.
                 if !self.buffered.is_empty() {
                     return Err("engine output overlapped pending context Git request".into());
                 }
-                let result = pending.advance()?;
+                let result = pending.advance_until(&retained, deadline)?;
+                check_until(&retained, deadline)?;
                 self.pump_with_interests(
                     None,
                     deadline,
@@ -753,7 +987,11 @@ impl Session {
         match exchange {
             Ok(()) => Ok(()),
             Err(mut error) => {
-                if let Err(cleanup) = pending.cancel_and_settle(Instant::now() + CLEANUP_BUDGET) {
+                let cleanup = match original {
+                    Some(clock) => pending.cancel_and_settle_until(clock, deadline),
+                    None => pending.cancel_and_settle_until(&retained, deadline),
+                };
+                if let Err(cleanup) = cleanup {
                     error.push_str(&format!("; context Git cleanup: {cleanup}"));
                 }
                 // Dropping closes sole frontend control even on an uncertain
@@ -771,6 +1009,8 @@ impl Session {
         frame: &[u8],
         deadline: Instant,
     ) -> Result<(), String> {
+        let original = self.original_deadline.clone();
+        check_until(&original, deadline)?;
         crate::cancellation::check()?;
         let credit = self
             .context_git_control_credit
@@ -784,6 +1024,7 @@ impl Session {
             return Err("engine output overlapped captured context request".into());
         }
         let bytes = replay.response(frame)?;
+        check_until(&original, deadline)?;
         self.pump_with_interests(None, deadline, &[], 0)?;
         if !self.buffered.is_empty() || self.out_done {
             return Err("engine output overlapped captured context request".into());
@@ -807,6 +1048,12 @@ impl Session {
         frame: &[u8],
         deadline: Instant,
     ) -> Result<(), String> {
+        let original = self.original_deadline.clone();
+        let check = || {
+            check_until(&original, deadline)?;
+            crate::cancellation::check()
+        };
+        check()?;
         crate::cancellation::check()?;
         if !self.buffered.is_empty() {
             return Err("engine output overlapped selection observation request".into());
@@ -817,7 +1064,8 @@ impl Session {
         let encoded = serde_json::to_vec(&serde_json::json!({"snapshotId":inner.snapshot_id,
             "sequence":inner.sequence,"operation":inner.operation}))
         .map_err(|e| e.to_string())?;
-        let mut reply = owner.capture_json(&encoded, crate::cancellation::check)?;
+        let mut reply = owner.capture_json(&encoded, check)?;
+        check()?;
         let credit = self
             .selection_control_credit
             .checked_add(frame.len() + 1)
@@ -831,13 +1079,15 @@ impl Session {
             return Err("engine output overlapped selection observation request".into());
         }
         let byte_len = reply.byte_len();
-        let sha256 = reply.sha256(crate::cancellation::check)?;
+        let sha256 = reply.sha256(check)?;
+        check()?;
         let header = serde_json::json!({"schema":crate::protocol::SELECTION_OBSERVATION_RESULT,
             "id":request.id,"runtimeDigest":request.runtime_digest,"snapshotId":snapshot_id,
             "sequence":sequence,"byteLength":byte_len,"sha256":sha256});
         self.send_selection_frame(&header, false, deadline)?;
         let mut offset = 0usize;
-        while let Some(chunk) = reply.next_chunk(64 * 1024, crate::cancellation::check)? {
+        while let Some(chunk) = reply.next_chunk(64 * 1024, check)? {
+            check()?;
             use base64::Engine as _;
             let count = chunk.len();
             let chunk_frame = serde_json::json!({"schema":crate::protocol::SELECTION_OBSERVATION_CHUNK,
@@ -852,6 +1102,7 @@ impl Session {
         if offset != byte_len {
             return Err("selection response was not exhausted".into());
         }
+        check()?;
         Ok(())
     }
     fn send_selection_frame(
@@ -899,6 +1150,7 @@ impl Session {
         &mut self,
         deadline: Instant,
     ) -> Result<(), String> {
+        check_until(&self.original_deadline, deadline)?;
         crate::cancellation::check()?;
         if Instant::now() >= deadline {
             return Err("original Stop lease context deadline expired".into());
@@ -998,17 +1250,22 @@ impl Session {
         if self.terminal_containment {
             return Err("no engine frames admitted after terminal containment".into());
         }
+        let original = self.original_deadline.clone();
+        let deadline = deadline.min(original.expires());
         loop {
+            check_until(&original, deadline)?;
             crate::cancellation::check()?;
             if let Some(bytes) = self.buffered_frame()? {
+                check_until(&original, deadline)?;
                 return Ok(bytes);
             }
             if self.out_done {
                 let mut message = "engine stream closed before a complete frame".to_owned();
-                if let Some(cause) = self.group.pre_creation_failure()? {
+                if let Some(cause) = self.group.pre_creation_failure_until(&original, deadline)? {
                     message.push_str("; ");
                     message.push_str(&cause);
                 }
+                check_until(&original, deadline)?;
                 return Err(message);
             }
             self.pump(None, deadline)?;
@@ -1016,18 +1273,40 @@ impl Session {
     }
 
     pub fn settle(&mut self, deadline: Instant) -> Result<(), String> {
-        // Pipes can close before the process exits. A nonblocking waitid observes
-        // termination WITHOUT reaping, preserving ownership until group cleanup.
+        let original = self.original_deadline.clone();
+        self.settle_until(&original, deadline)
+    }
+
+    pub fn cleanup(&mut self) -> Result<(), String> {
+        let original = self.original_deadline.clone();
+        self.cleanup_until(&original, original.expires())
+    }
+
+    pub fn settle_until(
+        &mut self,
+        original: &caws_native::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        let retained = self.original_deadline.clone();
+        let until = until.min(original.expires()).min(retained.expires());
+        let mut check = || {
+            check_until(&retained, until)?;
+            check_until(original, until)
+        };
         loop {
+            check()?;
             if !self.terminal_containment {
                 crate::cancellation::check()?;
             }
-            if self.group.exit_observed()? {
+            let exited = self.group.exit_observed_until(&retained, until)?;
+            check()?;
+            if exited {
                 break;
             }
-            self.pump(None, deadline)?;
+            self.pump_checked(None, until.min(original.expires()), &[], 100, &mut check)?;
         }
-        let status = self.group.finish(deadline)?;
+        let status = self.group.finish_until(&retained, until)?;
+        check()?;
         if !status.success() {
             return Err(format!(
                 "engine exited unsuccessfully after proposal ({status})"
@@ -1035,9 +1314,12 @@ impl Session {
         }
         Ok(())
     }
-
-    pub fn cleanup(&mut self) -> Result<(), String> {
-        self.group.cleanup()
+    pub fn cleanup_until(
+        &mut self,
+        original: &caws_native::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        self.group.cleanup_until(original, until)
     }
 }
 
@@ -1065,18 +1347,19 @@ impl Drop for Flags {
 fn write_output(
     stdout: &[u8],
     stderr: &[u8],
-    budget: Duration,
+    deadline: Instant,
     observe_cancellation: bool,
+    descriptors: [RawFd; 2],
+    check: &mut impl FnMut(&'static str) -> Result<(), String>,
 ) -> Result<(), String> {
+    check("native-output-start").map_err(|error| format!("bounded output write: {error}"))?;
     if observe_cancellation {
         crate::cancellation::check()?;
     }
-    let _stdout_flags = Flags::nonblocking(libc::STDOUT_FILENO)?;
-    let _stderr_flags = Flags::nonblocking(libc::STDERR_FILENO)?;
+    let _stdout_flags = Flags::nonblocking(descriptors[0])?;
+    let _stderr_flags = Flags::nonblocking(descriptors[1])?;
     let buffers = [stdout, stderr];
-    let descriptors = [libc::STDOUT_FILENO, libc::STDERR_FILENO];
     let mut offsets = [0_usize; 2];
-    let deadline = Instant::now() + budget;
     while offsets[0] < stdout.len() || offsets[1] < stderr.len() {
         let mut fds = [
             libc::pollfd {
@@ -1098,11 +1381,20 @@ fn write_output(
                 revents: 0,
             },
         ];
+        check("native-output-before-poll")
+            .map_err(|error| format!("bounded output write: {error}"))?;
         poll_with_cancellation(&mut fds, deadline, observe_cancellation)
             .map_err(|e| format!("bounded output write: {e}"))?;
+        check("native-output-after-poll")
+            .map_err(|error| format!("bounded output write: {error}"))?;
         for index in 0..2 {
             if fds[index].revents == 0 {
                 continue;
+            }
+            check("native-output-before-write")
+                .map_err(|error| format!("bounded output write: {error}"))?;
+            if Instant::now() >= deadline {
+                return Err("bounded output write: request deadline expired".into());
             }
             let bytes =
                 &buffers[index][offsets[index]..buffers[index].len().min(offsets[index] + 16_384)];
@@ -1124,27 +1416,81 @@ fn write_output(
             }
         }
     }
+    check("native-output-complete").map_err(|error| format!("bounded output write: {error}"))?;
     Ok(())
 }
 
-pub fn write_native(stdout: &[u8], stderr: &[u8]) -> Result<(), String> {
-    write_output(stdout, stderr, DELIVERY_BUDGET, true)
+pub fn write_native(
+    stdout: &[u8],
+    stderr: &[u8],
+    original: &caws_native::monotonic_deadline::MonotonicDeadline,
+    until: Instant,
+) -> Result<(), String> {
+    write_native_checked(stdout, stderr, original, until, true)
+}
+fn write_native_checked(
+    stdout: &[u8],
+    stderr: &[u8],
+    original: &caws_native::monotonic_deadline::MonotonicDeadline,
+    until: Instant,
+    observe_cancellation: bool,
+) -> Result<(), String> {
+    let until = until.min(original.expires());
+    write_output(
+        stdout,
+        stderr,
+        until,
+        observe_cancellation,
+        [libc::STDOUT_FILENO, libc::STDERR_FILENO],
+        &mut |_| check_until(original, until),
+    )
 }
 
-/// Only the owner of a validated terminal target may use this delivery path.
-/// Output closure/backpressure cannot revoke an already earned containment effect.
+/// A validated target keeps its earned output-loss policy; original expiry can
+/// still hold its later signal. There is no renewed terminal delivery window.
 pub fn write_terminal_native(
     stdout: &[u8],
     stderr: &[u8],
     _target: &crate::process_effect::ValidatedTarget,
+    original: &caws_native::monotonic_deadline::MonotonicDeadline,
+    until: Instant,
 ) -> Result<(), String> {
-    write_output(stdout, stderr, DELIVERY_BUDGET, false)
+    write_native_checked(stdout, stderr, original, until, false)
 }
 
-pub fn write_diagnostic(stderr: &[u8]) {
-    // Cancellation diagnostics are best effort with their own 100ms ceiling;
-    // they must not recurse through the cancellation that caused the failure.
-    let _ = write_output(&[], stderr, Duration::from_millis(100), false);
+pub fn write_diagnostic(
+    stderr: &[u8],
+    original: &caws_native::monotonic_deadline::MonotonicDeadline,
+    until: Instant,
+) {
+    let until = cap_until(original, until, DIAGNOSTIC_BUDGET);
+    let _ = write_native_checked(&[], stderr, original, until, false);
+}
+
+/// Invalid configuration has no honest original clock. One nonblocking attempt
+/// per descriptor reports what it can; it does not mint a replacement interval.
+pub fn write_unclocked_configuration(stdout: &[u8], stderr: &[u8]) -> Result<(), String> {
+    let _stdout_flags = Flags::nonblocking(libc::STDOUT_FILENO)?;
+    let _stderr_flags = Flags::nonblocking(libc::STDERR_FILENO)?;
+    for (fd, bytes) in [(libc::STDOUT_FILENO, stdout), (libc::STDERR_FILENO, stderr)] {
+        if bytes.is_empty() {
+            continue;
+        }
+        let mut fds = [libc::pollfd {
+            fd,
+            events: libc::POLLOUT,
+            revents: 0,
+        }];
+        if unsafe { libc::poll(fds.as_mut_ptr(), 1, 0) } < 0 || fds[0].revents == 0 {
+            return Err("configuration output unavailable without waiting".into());
+        }
+        let bytes = &bytes[..bytes.len().min(16_384)];
+        let count = unsafe { libc::write(fd, bytes.as_ptr().cast(), bytes.len()) };
+        if count != bytes.len() as isize {
+            return Err("configuration output partial or unavailable; not retried".into());
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1356,6 +1702,122 @@ mod tests {
         }
     }
 
+    #[test]
+    fn reserve_stays_inside_original_interval_and_short_calls_keep_processing_time() {
+        use caws_native::monotonic_deadline::MonotonicDeadline;
+        for duration in [
+            Duration::from_millis(20),
+            Duration::from_millis(2000),
+            Duration::from_secs(30),
+        ] {
+            let original = MonotonicDeadline::capture(duration).unwrap();
+            let envelope = original.envelope();
+            let bounds = CallbackBounds::original(&original);
+            assert!(bounds.processing < bounds.terminal);
+            assert!(bounds.terminal < bounds.cleanup);
+            assert!(bounds.cleanup < original.expires());
+            assert!(original.expires() - bounds.processing <= duration / 2);
+            assert_eq!(original.envelope(), envelope);
+            assert!(check_until(&original, bounds.processing).is_ok());
+        }
+    }
+
+    #[test]
+    fn output_checks_original_clock_after_poll_and_before_each_chunk() {
+        use std::io::Read;
+        use std::os::unix::net::UnixStream;
+        for failure in [
+            "Original monotonic deadline expired",
+            "CLOCK_MONOTONIC unavailable",
+        ] {
+            for stage in ["native-output-after-poll", "native-output-before-write"] {
+                let (mut reader, writer) = UnixStream::pair().unwrap();
+                let (_error_reader, error_writer) = UnixStream::pair().unwrap();
+                let mut stages = Vec::new();
+                let result = write_output(
+                    b"must remain withheld",
+                    &[],
+                    Instant::now() + Duration::from_secs(1),
+                    false,
+                    [writer.as_raw_fd(), error_writer.as_raw_fd()],
+                    &mut |observed| {
+                        stages.push(observed);
+                        if observed == stage {
+                            Err(failure.into())
+                        } else {
+                            Ok(())
+                        }
+                    },
+                );
+                assert_eq!(
+                    result.unwrap_err(),
+                    format!("bounded output write: {failure}")
+                );
+                assert!(stages.contains(&stage));
+                drop(writer);
+                let mut output = Vec::new();
+                reader.read_to_end(&mut output).unwrap();
+                assert!(output.is_empty(), "{stage}: bytes escaped after {failure}");
+            }
+        }
+        let (mut reader, writer) = UnixStream::pair().unwrap();
+        let (_error_reader, error_writer) = UnixStream::pair().unwrap();
+        let mut chunks = 0;
+        let result = write_output(
+            &vec![b'x'; 32_768],
+            &[],
+            Instant::now() + Duration::from_secs(1),
+            false,
+            [writer.as_raw_fd(), error_writer.as_raw_fd()],
+            &mut |stage| {
+                if stage == "native-output-before-poll" {
+                    chunks += 1;
+                    if chunks == 2 {
+                        return Err("Original monotonic deadline expired".into());
+                    }
+                }
+                Ok(())
+            },
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "bounded output write: Original monotonic deadline expired"
+        );
+        assert_eq!(chunks, 2);
+        drop(writer);
+        let mut output = Vec::new();
+        reader.read_to_end(&mut output).unwrap();
+        // A nonblocking socket may accept a partial first chunk. Fail before
+        // polling again rather than waiting for an undrained socket to refill.
+        assert!((1..=16_384).contains(&output.len()));
+        assert_eq!(
+            output,
+            vec![b'x'; output.len()],
+            "only the accepted first prefix may escape"
+        );
+    }
+
+    #[test]
+    fn output_live_clock_control_preserves_exact_bytes() {
+        use std::io::Read;
+        use std::os::unix::net::UnixStream;
+        let (mut reader, writer) = UnixStream::pair().unwrap();
+        let (_error_reader, error_writer) = UnixStream::pair().unwrap();
+        write_output(
+            b"exact\0native",
+            &[],
+            Instant::now() + Duration::from_secs(1),
+            false,
+            [writer.as_raw_fd(), error_writer.as_raw_fd()],
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        drop(writer);
+        let mut output = Vec::new();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, b"exact\0native");
+    }
+
     fn deadline() -> Instant {
         Instant::now() + Duration::from_secs(10)
     }
@@ -1372,7 +1834,47 @@ mod tests {
         };
         // The unit-test executable is libtest, not the production custodian
         // entrypoint. Actual custody is qualified through the built binary.
-        Session::start_inner(&config, "runner-unit", deadline(), false).unwrap()
+        let original =
+            caws_native::monotonic_deadline::MonotonicDeadline::capture(config.timeout).unwrap();
+        Session::start_inner(&config, "runner-unit", &original, false).unwrap()
+    }
+
+    #[test]
+    fn expired_earlier_bound_does_not_consume_a_buffered_frame() {
+        let mut session = session("/dev/stdin");
+        session.buffered.extend_from_slice(b"queued\nnext\n");
+        assert!(session.original_deadline.check().is_ok());
+        assert_eq!(
+            session
+                .frame(Instant::now() - Duration::from_millis(1))
+                .unwrap_err(),
+            "request deadline expired"
+        );
+        assert_eq!(session.buffered, b"queued\nnext\n");
+        assert_eq!(session.examined_bytes, 0);
+        let until = session.original_deadline.expires();
+        assert_eq!(session.frame(until).unwrap(), b"queued");
+        assert_eq!(session.frame(until).unwrap(), b"next");
+    }
+
+    #[test]
+    fn buffered_data_and_empty_send_cannot_outlive_the_retained_clock() {
+        let mut session = session("/dev/stdin");
+        // Expire only this private transport test seam; its child and the
+        // caller's later Instant remain live.
+        session.original_deadline =
+            caws_native::monotonic_deadline::MonotonicDeadline::capture(Duration::from_millis(1))
+                .unwrap();
+        session.buffered.extend_from_slice(b"queued\n");
+        std::thread::sleep(Duration::from_millis(2));
+        let later = Instant::now() + Duration::from_secs(1);
+        assert_eq!(
+            session.frame(later).unwrap_err(),
+            "Original monotonic deadline expired"
+        );
+        assert_eq!(session.buffered, b"queued\n");
+        assert_eq!(session.examined_bytes, 0);
+        assert!(session.send(b"", later).is_err());
     }
 
     #[test]
@@ -1654,7 +2156,7 @@ impl OriginalRenderPreparation {
                 &cwd,
                 original.caller_environment(),
                 &executor.path,
-                original.deadline().expires(),
+                CallbackBounds::original(original.deadline()).processing,
             ),
             Err(diagnostic) => Self {
                 owner: None,
@@ -1759,6 +2261,24 @@ impl OriginalRenderPreparation {
                 .as_ref()
                 .is_none_or(|owner| owner.cleanup_settled())
     }
+    fn retry_cleanup_until(
+        &mut self,
+        original: &caws_native::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        let capture = self.capture_failure.as_mut().map_or(Ok(()), |failure| {
+            failure.retry_cleanup_until(original, until)
+        });
+        let owner = self
+            .owner
+            .as_mut()
+            .map_or(Ok(()), |owner| owner.retry_cleanup_until(original, until));
+        match (capture, owner) {
+            (Err(first), Err(second)) => Err(format!("{first}; {second}")),
+            (Err(error), _) | (_, Err(error)) => Err(error),
+            _ => Ok(()),
+        }
+    }
     fn retry_cleanup(&mut self) -> Result<(), String> {
         // Evaluate both: the first failed cleanup must not strand another owner.
         let capture = self
@@ -1798,11 +2318,13 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
         config: &Config,
         request: &crate::protocol::Request,
         deadline: &'deadline caws_native::monotonic_deadline::MonotonicDeadline,
+        supplied_generation: Option<crate::native_generation::GenerationReceipt>,
         generation_receipt_revalidations: crate::native_generation::CheckTimings,
         mut phase: impl FnMut(&'static str),
     ) -> Self {
+        let processing = CallbackBounds::original(deadline).processing;
         let mut prepared = Self {
-            generation: None,
+            generation: supplied_generation,
             original: None,
             failure: None,
             refusal: None,
@@ -1811,42 +2333,39 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
         if !Self::candidate(config) {
             return prepared;
         }
-        let environment = request.caller_environment();
-        let home = match environment.get("CAWS_HOME").filter(|v| !v.is_empty()) {
-            Some(value) => std::path::PathBuf::from(value),
-            None => match environment.get("HOME") {
-                Some(value) if !value.is_empty() => std::path::PathBuf::from(value).join(".caws"),
-                _ => {
-                    prepared.refusal = Some("original machine home unavailable".into());
-                    return prepared;
+        let generation = match prepared.generation.take() {
+            Some(generation) => generation,
+            None => {
+                let home = match Self::generation_home(request) {
+                    Ok(home) => home,
+                    Err(error) => {
+                        prepared.refusal = Some(error);
+                        return prepared;
+                    }
+                };
+                phase("generation-capture");
+                match crate::native_generation::GenerationReceipt::capture_with_diagnostics(
+                    &home,
+                    config,
+                    deadline.expires(),
+                    generation_receipt_revalidations,
+                    || {
+                        crate::cancellation::check()?;
+                        check_until(deadline, processing)
+                    },
+                ) {
+                    Ok(generation) => generation,
+                    Err(error) => {
+                        prepared.refusal = Some(error);
+                        return prepared;
+                    }
                 }
-            },
-        };
-        if !home.is_absolute() {
-            prepared.refusal = Some("original machine home must be absolute".into());
-            return prepared;
-        }
-        phase("generation-capture");
-        let generation = match crate::native_generation::GenerationReceipt::capture_with_diagnostics(
-            &home,
-            config,
-            deadline.expires(),
-            generation_receipt_revalidations,
-            || {
-                crate::cancellation::check()?;
-                deadline.check().map_err(|e| e.to_string())
-            },
-        ) {
-            Ok(value) => value,
-            Err(error) => {
-                prepared.refusal = Some(error);
-                return prepared;
             }
         };
         phase("original-executor");
         let executor = match generation.selected_native_executor(deadline.expires(), || {
             crate::cancellation::check()?;
-            deadline.check().map_err(|e| e.to_string())
+            check_until(deadline, processing)
         }) {
             Ok(value) => value,
             Err(error) => {
@@ -1860,7 +2379,10 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
             request.original_stop_input(),
             &executor,
             deadline,
-            crate::cancellation::check,
+            || {
+                crate::cancellation::check()?;
+                check_until(deadline, processing)
+            },
         );
         prepared.generation = Some(generation);
         match result {
@@ -1876,8 +2398,43 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
         }
         prepared
     }
+    pub(crate) fn generation_home(
+        request: &crate::protocol::Request,
+    ) -> Result<std::path::PathBuf, String> {
+        let environment = request.caller_environment();
+        let home = match environment
+            .get("CAWS_HOME")
+            .filter(|value| !value.is_empty())
+        {
+            Some(value) => std::path::PathBuf::from(value),
+            None => match environment.get("HOME").filter(|value| !value.is_empty()) {
+                Some(value) => std::path::PathBuf::from(value).join(".caws"),
+                None => return Err("original machine home unavailable".into()),
+            },
+        };
+        if !home.is_absolute() {
+            return Err("original machine home must be absolute".into());
+        }
+        Ok(home)
+    }
+
     pub fn cleanup_settled(&self) -> bool {
         self.failure.as_ref().is_none_or(|e| e.cleanup_settled()) && self.render.cleanup_settled()
+    }
+    pub fn retry_cleanup_until(
+        &mut self,
+        original: &caws_native::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        let capture = self.failure.as_mut().map_or(Ok(()), |failure| {
+            failure.retry_cleanup_until(original, until)
+        });
+        let render = self.render.retry_cleanup_until(original, until);
+        match (capture, render) {
+            (Err(first), Err(second)) => Err(format!("{first}; {second}")),
+            (Err(error), _) | (_, Err(error)) => Err(error),
+            _ => Ok(()),
+        }
     }
     pub fn retry_cleanup(&mut self) -> Result<(), String> {
         let original = self.failure.as_mut().map_or(Ok(()), |e| e.retry_cleanup());

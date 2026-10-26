@@ -205,6 +205,96 @@ mod tests {
     use std::{cell::Cell, os::unix::fs::PermissionsExt};
 
     #[test]
+    fn final_reap_preserves_metadata_but_rechecks_frontend_clock() {
+        for fail_after_reap in [false, true] {
+            let child = Command::new("/bin/cat")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            let pid = child.id();
+            let (control, peer) = UnixStream::pair().unwrap();
+            control.set_nonblocking(true).unwrap();
+            let mut pending = Pending {
+                child: Some(child),
+                pid,
+                control: Some(control),
+                input: vec![b'?'],
+                written: 0,
+                output: Vec::new(),
+                frame_end: None,
+                reply: None,
+                eof: false,
+                exited_successfully: false,
+                id: "post-reap-clock".into(),
+                digest: "a".repeat(64),
+                token: "fixture".into(),
+                aborted_configuration: false,
+                cancel_requested: false,
+            };
+            pending.cancel();
+            assert!(pending.aborted_configuration);
+            drop(peer);
+            let until = Instant::now() + Duration::from_secs(1);
+            loop {
+                let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+                assert_eq!(
+                    unsafe {
+                        libc::waitid(
+                            libc::P_PID,
+                            pid,
+                            info.as_mut_ptr(),
+                            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                        )
+                    },
+                    0
+                );
+                if unsafe { info.assume_init().si_pid() } == pid as libc::pid_t {
+                    break;
+                }
+                assert!(Instant::now() < until, "owned Child did not exit");
+                std::thread::yield_now();
+            }
+            let mut checks_after_actual_reap = 0;
+            let result = pending.advance_checked(|| {
+                let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+                let observed = unsafe {
+                    libc::waitid(
+                        libc::P_PID,
+                        pid,
+                        info.as_mut_ptr(),
+                        libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                    )
+                };
+                if observed < 0 {
+                    assert_eq!(
+                        io::Error::last_os_error().raw_os_error(),
+                        Some(libc::ECHILD)
+                    );
+                    checks_after_actual_reap += 1;
+                    if fail_after_reap {
+                        return Err("injected original clock expired after actual reap".into());
+                    }
+                }
+                Ok(())
+            });
+            assert!(pending.child.is_none());
+            assert!(pending.eof && pending.exited_successfully && pending.aborted_configuration);
+            assert!(pending.reply.is_none(), "no Git receipt was fabricated");
+            assert!(checks_after_actual_reap > 0);
+            if fail_after_reap {
+                assert_eq!(
+                    result.unwrap_err(),
+                    "injected original clock expired after actual reap"
+                );
+            } else {
+                assert_eq!(result.unwrap(), true);
+            }
+        }
+    }
+
+    #[test]
     fn verification_classification_preserves_typed_deadline_and_cancellation_during_hash() {
         let root = std::env::temp_dir().join(format!(
             "render-verification-{}-{}",
@@ -487,6 +577,58 @@ impl Failure {
                     .as_ref()
                     .is_some_and(|r| r.rows.iter().all(|r| positive_cleanup(&r.receipt))))
     }
+    /// Only the frontend wait is bounded here. The existing custodian keeps
+    /// actual-child custody after the original invocation stops waiting.
+    pub fn retry_cleanup_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        if self.cleanup_settled() {
+            return Ok(());
+        }
+        self.pending.cancel();
+        let until = until.min(original.expires());
+        loop {
+            frontend_cleanup_check(original, until)?;
+            match self
+                .pending
+                .advance_checked(|| frontend_cleanup_check(original, until).map(|_| ()))
+            {
+                Ok(true) => {
+                    return if self.cleanup_settled() {
+                        Ok(())
+                    } else {
+                        Err("remote Render cleanup lacks terminal custody receipt".into())
+                    };
+                }
+                Ok(false) => (),
+                Err(error) => {
+                    // A malformed receipt cannot prove cleanup, but the exact
+                    // custodian Child may still be observed/reaped nonblocking.
+                    if let Some(child) = self.pending.child.as_mut()
+                        && let Some(status) = child.try_wait().map_err(|e| e.to_string())?
+                    {
+                        self.pending.child = None;
+                        self.pending.exited_successfully = status.success();
+                    }
+                    return Err(error);
+                }
+            }
+            let mut fds = self
+                .pending
+                .control
+                .as_ref()
+                .map(|control| libc::pollfd {
+                    fd: control.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                })
+                .into_iter()
+                .collect::<Vec<_>>();
+            frontend_cleanup_poll(original, until, &mut fds)?;
+        }
+    }
     pub fn retry_cleanup(&mut self) -> Result<(), String> {
         if self.cleanup_settled() {
             return Ok(());
@@ -555,9 +697,14 @@ struct Pending {
     digest: String,
     token: String,
     aborted_configuration: bool,
+    cancel_requested: bool,
 }
 impl Pending {
     fn cancel(&mut self) {
+        if self.cancel_requested {
+            return;
+        }
+        self.cancel_requested = true;
         if self.written < self.input.len() {
             self.aborted_configuration = true;
             self.input.truncate(self.written);
@@ -583,11 +730,19 @@ impl Pending {
         }
     }
     fn advance(&mut self) -> Result<bool, String> {
+        self.advance_checked(|| Ok(()))
+    }
+    fn advance_checked(
+        &mut self,
+        mut check: impl FnMut() -> Result<(), String>,
+    ) -> Result<bool, String> {
+        check()?;
         let control = self
             .control
             .as_mut()
             .ok_or("remote Render control unavailable")?;
         while self.written < self.input.len() {
+            check()?;
             match control.write(&self.input[self.written..]) {
                 Ok(0) => return Err("remote Render configuration write closed".into()),
                 Ok(n) => self.written += n,
@@ -598,6 +753,7 @@ impl Pending {
         }
         if !self.eof {
             loop {
+                check()?;
                 let mut bytes = [0u8; 8192];
                 match control.read(&mut bytes) {
                     Ok(0) => {
@@ -622,6 +778,7 @@ impl Pending {
                 }
             }
         }
+        check()?;
         if let Some(end) = self.frame_end {
             if end + 1 != self.output.len() {
                 return Err("trailing private Render reply bytes".into());
@@ -633,13 +790,16 @@ impl Pending {
                 self.reply = Some(reply);
             }
         }
+        check()?;
         if self.eof {
             let Some(child) = self.child.as_mut() else {
+                check()?;
                 return Ok(true);
             };
             if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
                 self.child = None;
                 self.exited_successfully = status.success();
+                check()?;
                 if !status.success() {
                     return Err(format!("Render custodian exited abnormally: {status}"));
                 }
@@ -649,6 +809,7 @@ impl Pending {
                 return Ok(true);
             }
         }
+        check()?;
         Ok(false)
     }
 }
@@ -747,6 +908,7 @@ pub(crate) fn observe(
             digest: configuration.runtime_digest,
             token: configuration.token,
             aborted_configuration: false,
+            cancel_requested: false,
         })
     })();
     // No Git can exist before successful custodian spawn. Keep a typed empty
@@ -771,6 +933,7 @@ pub(crate) fn observe(
                     digest: input.invocation.runtime_digest.clone(),
                     token: input.token.into(),
                     aborted_configuration: false,
+                    cancel_requested: false,
                 },
             });
         }
