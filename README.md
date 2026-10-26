@@ -78,11 +78,18 @@ implemented copy guards consume complete operand roles for a closed regular-file
 writes. Unknown roles, hard-link aliases and unmodeled filesystem cases refuse.
 A copy's effective final symlink destination refuses even when approval is
 available; a destination-directory alias with a regular final child is
-supported. Native adoption requires complete final-launch context, custody
-through later rewrites, generation-bound Node and analyzer CLI identities, an
-isolated canary and rollback. A validated host execution directory establishes
-only that coordinate. The known reduced Codex command projection remains held;
-that protective refusal does not qualify native deployment.
+supported. Removal effects keep final-link entry ownership separate from
+referent writes; unsupported removal options remain unresolved. The shared
+ownership oracle follows registered physical worktree roots, including migrated
+locations, before path allowlists can permit a write. Unavailable or ambiguous
+payload ownership cannot grant admission. Existing registry read or format
+errors retain ownership uncertainty.
+
+Native adoption requires complete final-launch context, custody through later
+rewrites, generation-bound Node and analyzer CLI identities, an isolated canary
+and rollback. A validated host execution directory establishes only that
+coordinate. The known reduced Codex command projection remains held; that
+protective refusal does not qualify native deployment.
 
 ## Quick start
 

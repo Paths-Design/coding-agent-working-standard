@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: CAWS shared runtime setup and hook maintenance
 owner: CAWS maintainers
-updated: 2026-10-21
+updated: 2026-10-26
 audience: consumer
 ---
 
@@ -41,6 +41,15 @@ canonical write. Unknown options, incomplete roles and unmodeled filesystem
 cases refuse; the
 [command analysis guide](command-analysis.md#active-write-guard-integration)
 defines this closed profile and its filesystem snapshot limits.
+
+Removal checks distinguish a final link entry from its referent. The modeled
+`rm` profile checks an owned deletion entry without borrowing the referent's
+ownership; unsupported removal options remain held. Bash and Write/Edit share
+registered physical-path ownership checks, including migrated worktree
+locations. Metadata and documentation allowlists cannot override foreign payload
+ownership or erase unresolved payload identity. A failed role channel cannot
+become an empty allow. Malformed, unreadable or non-regular existing registry
+entries remain held.
 
 Ordinary runtime installation changes the shared handlers consumed by enabled
 registrations. The bounded analyzer and private package observations do not

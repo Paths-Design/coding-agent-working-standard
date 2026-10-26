@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: Bounded command analysis
 owner: CAWS maintainers
-updated: 2026-10-21
+updated: 2026-10-26
 audience: consumer
 ---
 
@@ -94,6 +94,32 @@ exit-zero response carrying `permissionDecision: ask` requests that decision; it
 does not authorize execution. Known ownership violations retain precedence over
 filesystem uncertainty. Guard fixtures establish the ask response envelope; they
 do not establish a native approval interface or a qualified native launch.
+
+The Bash consumer keeps removal-entry effects separate from referent writes. For
+statically recognized `rm` with the modeled `f`, `r`, `R` and `--` options, a
+final symlink is checked through its physical parent and literal final name.
+Deleting an owned link does not write its referent; a foreign link remains a
+foreign deletion entry even when its referent is owned. Unsupported removal
+options retain entry observations and an unresolved hold. They cannot become
+referent-only effects. Mixed operations on the same path retain their separate
+roles. Missing, malformed or failed effect transport refuses.
+
+The shared ownership oracle uses the registry's physical worktree paths,
+including locations preserved by migration. Worktree roots and descendants are
+ownership-checked before canonical path allowlists. The Bash and Write/Edit
+consumers preserve uncertainty for unavailable, overlapping or ambiguous payload
+ownership rather than treating it as an unclaimed canonical path. Known foreign
+ownership and canonical claims retain their protective precedence. A
+directory-removal observation includes its contained scope: known literal claims
+refuse, while unproved glob or YAML populations remain held. An owned symlink
+does not become a deletion of its referent's directory. These checks use
+filesystem observations; they do not fence later replacement or prove the
+effects of an unsupported recursive operation.
+
+A genuinely absent registry retains the uninitialized-project policy. An
+observed registry must be a readable regular file with an object or array
+container. Read, parse or type failures, a directory in its place, and dangling
+links retain ownership uncertainty before either consumer's path allowlists.
 
 The CLI response adds `execution: {command, cwd}` and `singleLifecycle` to the
 projection. The bridge requires the exact decoded source to match all supplied
@@ -612,7 +638,11 @@ node ../../node_modules/jest/bin/jest.js --config jest.config.js \
   tests/shell/mutation-view.test.js \
   tests/shell/hooks-analysis.test.js \
   tests/hooks/bash-write-guard-analysis.test.js \
-  tests/hooks/bash-write-guard-interpreter-cross-repo.test.js
+  tests/hooks/bash-write-guard-interpreter-cross-repo.test.js \
+  tests/hooks/worktree-claim-oracle.test.js \
+  tests/hooks/guard-path-identity.test.js \
+  tests/init/pack-fingerprint.test.js \
+  tests/ci/mutation-contract.test.js
 npm run mutation:run:analysis
 ```
 

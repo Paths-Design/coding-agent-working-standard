@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: Shared hook runtime and native adapter contract
 owner: CAWS maintainers
-updated: 2026-10-21
+updated: 2026-10-26
 audience: consumer
 ---
 
@@ -312,6 +312,16 @@ directory name. Unknown roles, options, coordinates and unmodeled filesystem
 entries refuse. The helper's bounded filesystem snapshot does not establish
 final-launch confinement; see the
 [closed copy profile](../guides/command-analysis.md#active-write-guard-integration).
+
+The Bash removal channel preserves an entry effect separately from referent
+writes. Supported `rm` symlink deletion checks the physical parent and final
+name; unsupported options retain uncertainty and cannot become referent-only
+permission. The shared oracle follows actual registered physical roots for
+default and migrated worktrees. Bash and Write/Edit perform ownership checks
+before metadata or documentation allowlists; unavailable or ambiguous payload
+ownership cannot become a canonical-path allow. Role transport failures refuse.
+An invalid or unreadable existing registry cannot become an absent-registry
+allow. These observations do not establish final-launch filesystem confinement.
 
 ## Payload `cwd` contract
 
