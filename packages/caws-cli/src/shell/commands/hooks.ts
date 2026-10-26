@@ -447,6 +447,8 @@ function failedMutationView(issue: ExecutionIssue): MutationCliView {
     interpreters: [],
     interpreterInvocations: [],
     gitMetadata: [],
+    copyInvocations: [],
+    copyOperations: [],
     issues: [issue],
     execution: null,
     singleLifecycle: null,

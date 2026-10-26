@@ -307,6 +307,45 @@ if lockfile_only_restore "$COMMAND" "${HOOK_CWD:-$PROJECT_DIR}"; then
 fi
 # ─── /Sanctioned path restores ───────────────────────────────────────────
 
+# Direct copy operations use the same typed roles as the mandatory write guard.
+# That guard also covers finite callees and nested shell source which this
+# lightweight Git policy view does not reconstruct.
+if printf '%s\n' "$COMMAND" | grep -qE '^(cp|mv)[[:space:]]'; then
+  _WG_POLICY_COMMAND="$COMMAND"
+  if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then
+    [[ -f "$HOOK_PAYLOAD_FILE" && -r "$HOOK_PAYLOAD_FILE" ]] || worktree_authority_unavailable copy-original-payload
+  elif [[ -z "${HOOK_INPUT_JSON:-}" ]]; then
+    HOOK_INPUT_JSON="$(cat)" || worktree_authority_unavailable copy-original-payload
+    export -n HOOK_INPUT_JSON 2>/dev/null || true
+  fi
+  original_payload() {
+    if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then cat "$HOOK_PAYLOAD_FILE"
+    else printf '%s' "${HOOK_INPUT_JSON:-}"; fi
+  }
+  _CWD_RESOLVED=0; _CWD_CONTRACT=1
+  if [[ ! -r "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" || ! -r "$SCRIPT_DIR/lib/copy-roles.sh" ]] ||
+      ! source "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" ||
+      ! source "$SCRIPT_DIR/lib/copy-roles.sh"; then
+    worktree_authority_unavailable copy-role-libraries
+  fi
+  if ! caws_bash_prepare_analysis "$HOOK_COMMAND" "$PROJECT_DIR" "$PROJECT_DIR"; then
+    printf '[worktree-guard] %s\n' "$CAWS_BASH_ANALYSIS_ERROR" >&2
+    worktree_authority_unavailable copy-role-analysis
+  fi
+  caws_copy_role_paths "$PROJECT_DIR" || worktree_authority_unavailable copy-role-paths
+  if [[ "$CAWS_COPY_CANONICAL" == 1 ]]; then
+    echo 'BLOCKED: Copying files from a worktree to the main repo is forbidden.' >&2
+    exit 2
+  fi
+  if [[ -n "$CAWS_COPY_UNRESOLVED" || ${#CAWS_AST_COPY_OPERATION[@]} -eq 0 || ${#CAWS_AST_ISSUES[@]} -gt 0 ]]; then
+    worktree_authority_unavailable copy-roles
+  fi
+  COMMAND="$_WG_POLICY_COMMAND"
+  # Complete copy-only facts need no Git activity registry. Destination write
+  # ownership is independently checked by the mandatory write guard.
+  printf '%s\n' "$COMMAND" | grep -qE '^git[[:space:]]' || exit 0
+fi
+
 CANONICAL_GUARD_CHECK_CWD=""
 CANONICAL_GUARD_GIT_DIR=""
 CANONICAL_GUARD_COMMON_DIR=""
@@ -357,37 +396,6 @@ if [[ "$CANONICAL_GUARD_GIT_DIR" == "$CANONICAL_GUARD_COMMON_DIR" ]]; then
       fi
 fi
 # ─── /CANONICAL-CHECKOUT-WORKTREE-GUARD-001 ──────────────────────────
-
-# Block cross-boundary file copies (worktree → main).
-WORKTREE_BASE="$PROJECT_DIR/.caws/worktrees"
-if [[ -d "$WORKTREE_BASE" ]]; then
-  if echo "$COMMAND" | grep -qE '^(cp|mv)[[:space:]]'; then
-    AGENT_IN_WORKTREE=false
-    if [[ -n "$HOOK_CWD" ]] && [[ "$HOOK_CWD" == "$WORKTREE_BASE"/* ]]; then
-      AGENT_IN_WORKTREE=true
-    fi
-
-    if [[ "$AGENT_IN_WORKTREE" != "true" ]]; then
-      if echo "$COMMAND" | grep -qF ".caws/worktrees/" || echo "$COMMAND" | grep -qF "$WORKTREE_BASE"; then
-        HAS_WT_PATH=false
-        HAS_MAIN_PATH=false
-        if echo "$COMMAND" | grep -qE '\.caws/worktrees/|'"$(echo "$WORKTREE_BASE" | sed 's/[\/&]/\\&/g')"''; then
-          HAS_WT_PATH=true
-        fi
-        if echo "$COMMAND" | grep -qE "(^|\s)$PROJECT_DIR/[^.]|core/|src/|tests/|packages/" && [[ "$HAS_WT_PATH" == "true" ]]; then
-          HAS_MAIN_PATH=true
-        fi
-        if [[ "$HAS_WT_PATH" == "true" ]] && [[ "$HAS_MAIN_PATH" == "true" ]]; then
-          echo "BLOCKED: Copying files from a worktree to the main repo is forbidden." >&2
-          echo "This bypasses worktree isolation. Work entirely within your worktree." >&2
-          echo "If tests need the main repo's venv, activate it with:" >&2
-          echo "  source $PROJECT_DIR/.venv/bin/activate" >&2
-          exit 2
-        fi
-      fi
-    fi
-  fi
-fi
 
 # Only check git commands from here on
 if ! echo "$COMMAND" | grep -qE '^git\s'; then

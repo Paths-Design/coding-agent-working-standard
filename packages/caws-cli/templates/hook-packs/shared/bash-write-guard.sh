@@ -316,6 +316,20 @@ if [[ ! -r "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" ]] ||
   exit 2
 fi
 
+if [[ ! -r "$SCRIPT_DIR/lib/copy-roles.sh" ]] ||
+    ! source "$SCRIPT_DIR/lib/copy-roles.sh" ||
+    ! caws_copy_role_paths "$PROJECT_DIR"; then
+  echo '[bash-write-guard] copy-role path infrastructure is unavailable; failing closed.' >&2
+  exit 2
+fi
+if [[ "$CAWS_COPY_CANONICAL" == 1 ]]; then
+  echo 'BLOCKED: Copying files from a worktree to the main repo is forbidden.' >&2
+  exit 2
+fi
+if [[ -n "$CAWS_COPY_UNRESOLVED" ]]; then
+  CAWS_AST_ISSUES+=( "mutation-copy-paths: $CAWS_COPY_UNRESOLVED" )
+fi
+
 extract_targets() {
   # Two channels, both consumed, because an ownership gate wants every path a
   # command might touch:
@@ -328,6 +342,7 @@ extract_targets() {
   # relative and are refused by the specific cwd policy before any guessed root.
   caws_bash_mutation_candidates "$1"
   caws_bash_analysis_interpreter_writes "$1"
+  printf '%s\n' ${CAWS_COPY_WRITE_TARGET[@]+"${CAWS_COPY_WRITE_TARGET[@]}"}
   if declare -F caws_bash_broad_mutations >/dev/null 2>&1; then
     # Do not turn a cwd-relative broad mutation into a guessed absolute path.
     local broad_base="$AGENT_CWD"

@@ -593,6 +593,8 @@ function protocolView(tokens, command = 'fixture') {
     interpreters: [],
     interpreterInvocations: [],
     gitMetadata: [],
+    copyInvocations: [],
+    copyOperations: [],
   };
 }
 function interpreterProtocol(
@@ -613,6 +615,160 @@ function interpreterProtocol(
   view.interpreterInvocations.push({ language: row.language, start: row.start, end: row.end });
   return { command, row, view };
 }
+function copyProtocol() {
+  const source = path.join(fx.project, 'copy-source');
+  const destination = path.join(fx.root, 'copy-target');
+  fs.writeFileSync(source, 'retained source');
+  const command = 'cp -- ' + quote(source) + ' ' + quote(destination);
+  const row = {
+    operation: 'cp',
+    start: 0,
+    end: command.length,
+    knowledge: 'finite',
+    sources: [source],
+    destination,
+    directoryMode: 'auto',
+    cwd: fs.realpathSync.native(fx.project),
+  };
+  const view = protocolView([], command);
+  view.copyInvocations.push({ operation: row.operation, start: row.start, end: row.end });
+  view.copyOperations.push(row);
+  return { command, row, view, source, destination };
+}
+test('complete copy roles admit an external destination without executing the command', () => {
+  const { command, view, source, destination } = copyProtocol();
+  expect(guard(command, protocolBackend(JSON.stringify(view))).status).toBe(0);
+  expect(fs.readFileSync(source, 'utf8')).toBe('retained source');
+  expect(fs.existsSync(destination)).toBe(false);
+});
+test.each([
+  [
+    'missing inventory',
+    (view) => {
+      delete view.copyInvocations;
+    },
+  ],
+  [
+    'missing roles',
+    (view) => {
+      delete view.copyOperations;
+    },
+  ],
+  [
+    'missing observation',
+    (view) => {
+      view.copyOperations = [];
+    },
+  ],
+  [
+    'uncovered observation',
+    (view) => {
+      view.copyInvocations = [];
+    },
+  ],
+  [
+    'wrong operation',
+    (view) => {
+      view.copyOperations[0].operation = 'rm';
+    },
+  ],
+  [
+    'mismatched inventory',
+    (view) => {
+      view.copyInvocations[0].operation = 'mv';
+    },
+  ],
+  [
+    'empty span',
+    (view) => {
+      view.copyOperations[0].end = 0;
+    },
+  ],
+  [
+    'out of source span',
+    (view) => {
+      view.copyOperations[0].end = 1000000;
+    },
+  ],
+  [
+    'unknown knowledge',
+    (view) => {
+      view.copyOperations[0].knowledge = 'safe';
+    },
+  ],
+  [
+    'empty finite sources',
+    (view) => {
+      view.copyOperations[0].sources = [];
+    },
+  ],
+  [
+    'empty finite source',
+    (view) => {
+      view.copyOperations[0].sources = [''];
+    },
+  ],
+  [
+    'null finite source',
+    (view) => {
+      view.copyOperations[0].sources = [null];
+    },
+  ],
+  [
+    'null finite destination',
+    (view) => {
+      view.copyOperations[0].destination = null;
+    },
+  ],
+  [
+    'empty finite destination',
+    (view) => {
+      view.copyOperations[0].destination = '';
+    },
+  ],
+  [
+    'unknown directory mode',
+    (view) => {
+      view.copyOperations[0].directoryMode = 'recursive';
+    },
+  ],
+  [
+    'relative cwd',
+    (view) => {
+      view.copyOperations[0].cwd = 'guess';
+    },
+  ],
+  [
+    'readonly hidden write',
+    (view) => {
+      view.copyOperations[0].knowledge = 'readonly';
+    },
+  ],
+  [
+    'unresolved hidden write',
+    (view) => {
+      view.copyOperations[0].knowledge = 'unresolved';
+    },
+  ],
+  [
+    'NUL operand',
+    (view) => {
+      view.copyOperations[0].sources = ['bad\0path'];
+    },
+  ],
+  [
+    'extra field',
+    (view) => {
+      view.copyOperations[0].trust = true;
+    },
+  ],
+])('malformed copy roles refuse before filesystem admission: %s', (_name, corrupt) => {
+  const { command, view } = copyProtocol();
+  corrupt(view);
+  const result = guard(command, protocolBackend(JSON.stringify(view)));
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('invalid or incomplete contract');
+});
 test('v2 rejects an old backend and requires interpreter coverage even on readonly results', () => {
   const { command, view } = interpreterProtocol();
   expect(guard(command, protocolBackend(JSON.stringify(view))).status).toBe(0);

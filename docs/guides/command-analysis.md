@@ -25,11 +25,11 @@ exit zero is not a permission verdict.
 with the original native execution envelope on JSON stdin. The CLI's literal
 `{command}` request form is also available for direct callers. This separate
 `caws.shell_mutation_view.v2` contract supplies shell tokens, source spans,
-observed directories, interpreter payloads and effect knowledge, Git metadata
-coordinates and unresolved issues. It has no permission verdict. Existing
-utility operand rules and the claim oracle determine whether a recognized write
-is authorized. A missing or malformed backend fails closed without falling back
-to the legacy lexer.
+observed directories, interpreter payloads and effect knowledge, copy operand
+roles, Git metadata coordinates and unresolved issues. It has no permission
+verdict. Existing utility operand rules and the claim oracle determine whether a
+recognized write is authorized. A missing or malformed backend fails closed
+without falling back to the legacy lexer.
 
 Every recognized interpreter invocation has an independent coverage entry and an
 effect result: `readonly`, `finite-writes`, or `unresolved`. Issue-free
@@ -38,6 +38,42 @@ rejects missing knowledge, malformed results and incompatible v1 responses;
 older consumers reject the v2 schema. These checks establish the trusted
 backend's structural contract, not authentication of an arbitrary replacement
 backend.
+
+Every recognized `cp` or `mv` invocation also has an ordered `copyInvocations`
+coverage entry and a `copyOperations` row. A row records `finite`, `readonly` or
+`unresolved` knowledge, source operands, destination, directory mode, observed
+cwd and source span. Both arrays are required, including when empty; missing,
+malformed or unmatched rows refuse. The producer reuses the bounded evaluator
+and does not execute shell expansions to obtain these roles.
+
+The closed copy profile supports bare `cp` and `mv`, the `command` wrapper,
+`--`, multiple source operands, target-directory options, and the modeled force,
+interactive, no-clobber and verbose flags; `cp -p` is also modeled. Options
+precede operands unless `--` explicitly ends option parsing. Unknown options,
+environment wrappers, executable-path variants, directory or symlink sources,
+recursive copies and preceding filesystem changes remain unresolved. Standalone
+`--help` and `--version` have readonly roles. These observations depend on the
+controlled host's ordinary utility selection; they do not attest the executable
+selected by a native launcher.
+
+`lib/copy-roles.sh` resolves regular-file operands against each row's proven cwd
+and inspects at most 128 source/destination pairs. A missing cwd permits
+absolute operands but cannot resolve relative ones. Directory destinations use
+the original source operand's basename; the helper checks the resulting child,
+including a child's symlink target. It permits only existing destination parents
+and holds unmodeled entries, move-destination symlinks and paths that cannot use
+the existing FILE transport. These filesystem observations are a snapshot, not
+protection against a later filesystem race.
+
+`worktree-guard.sh` replaces its whole-command copy heuristic with these roles
+for its selected copy calls. `bash-write-guard.sh` independently consumes the
+same roles, including finite executable variables and nested literal Bash
+sources. A worktree source copied to an external artifact directory does not
+become a canonical destination merely because its source contains `packages/`.
+An actual worktree-to-canonical destination refuses. Effective destination
+writes and `mv` source deletions pass through the existing ownership oracle;
+`cp` source reads retain their existing policy. Missing or incomplete roles
+cannot grant admission.
 
 The CLI response adds `execution: {command, cwd}` and `singleLifecycle` to the
 projection. The bridge requires the exact decoded source to match all supplied

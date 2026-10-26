@@ -631,7 +631,8 @@ import { isAdapterCoveredSurface } from './types';
 // v114: bounded mutation analysis and checked path identity share the guard boundary.
 // v115: registry consumers preserve canonical path bytes and diagnose unavailable readers.
 // v116: protected-operation selection and a lane named worktrees retain their meaning.
-export const SHARED_PACK_VERSION = 116;
+// v117: complete typed copy roles replace the source-byte destination heuristic.
+export const SHARED_PACK_VERSION = 117;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -857,6 +858,12 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/lib/bash-mutation-analysis.sh',
       sourcePath: 'lib/bash-mutation-analysis.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/copy-roles.sh',
+      sourcePath: 'lib/copy-roles.sh',
       executable: false,
       managed: true,
     },

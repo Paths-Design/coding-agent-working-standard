@@ -11,6 +11,9 @@ CAWS_AST_INTERPRETER_START=(); CAWS_AST_INTERPRETER_END=(); CAWS_AST_INTERPRETER
 CAWS_AST_INTERPRETER_PAYLOAD_START=(); CAWS_AST_INTERPRETER_PAYLOAD_END=()
 CAWS_AST_GIT_SUBCOMMAND=(); CAWS_AST_GIT_DIRECTORY=(); CAWS_AST_GIT_COMMON=()
 CAWS_AST_GIT_WORKTREE=(); CAWS_AST_GIT_START=(); CAWS_AST_GIT_END=()
+CAWS_AST_COPY_OPERATION=(); CAWS_AST_COPY_KNOWLEDGE=(); CAWS_AST_COPY_DESTINATION=()
+CAWS_AST_COPY_DIRECTORY_MODE=(); CAWS_AST_COPY_CWD=(); CAWS_AST_COPY_START=(); CAWS_AST_COPY_END=()
+CAWS_AST_COPY_SOURCE_OFFSET=(); CAWS_AST_COPY_SOURCE_COUNT=(); CAWS_AST_COPY_SOURCES=()
 CAWS_BASH_ANALYSIS_READY=0
 
 caws_bash_prepare_analysis() {
@@ -46,8 +49,12 @@ caws_bash_prepare_analysis() {
   CAWS_AST_INTERPRETER_PAYLOAD_START=(); CAWS_AST_INTERPRETER_PAYLOAD_END=()
   CAWS_AST_GIT_SUBCOMMAND=(); CAWS_AST_GIT_DIRECTORY=(); CAWS_AST_GIT_COMMON=()
   CAWS_AST_GIT_WORKTREE=(); CAWS_AST_GIT_START=(); CAWS_AST_GIT_END=()
+  CAWS_AST_COPY_OPERATION=(); CAWS_AST_COPY_KNOWLEDGE=(); CAWS_AST_COPY_DESTINATION=()
+  CAWS_AST_COPY_DIRECTORY_MODE=(); CAWS_AST_COPY_CWD=(); CAWS_AST_COPY_START=(); CAWS_AST_COPY_END=()
+  CAWS_AST_COPY_SOURCE_OFFSET=(); CAWS_AST_COPY_SOURCE_COUNT=(); CAWS_AST_COPY_SOURCES=()
   local tag value kind dynamic resolution unrepr coordinate start end operation payload_start payload_end
   local subcommand directory common worktree
+  local knowledge directory_mode copy_count copy_index
   local complete=0 malformed=0 execution_seen=0 execution_command='' execution_cwd=''
   while IFS= read -r -d '' tag; do
     [[ $complete == 0 ]] || { malformed=1; break; }
@@ -92,6 +99,23 @@ caws_bash_prepare_analysis() {
         if [[ "$value" != /* && -z "$coordinate" ]]; then
           CAWS_AST_ISSUES+=( interpreter_target_cwd_unresolved )
         fi ;;
+      copy)
+        IFS= read -r -d '' operation && IFS= read -r -d '' knowledge &&
+          IFS= read -r -d '' value && IFS= read -r -d '' directory_mode &&
+          IFS= read -r -d '' coordinate && IFS= read -r -d '' start &&
+          IFS= read -r -d '' end && IFS= read -r -d '' copy_count || { malformed=1; break; }
+        [[ "$copy_count" =~ ^[0-9]+$ && "$copy_count" -le 4096 ]] || { malformed=1; break; }
+        CAWS_AST_COPY_OPERATION+=( "$operation" ); CAWS_AST_COPY_KNOWLEDGE+=( "$knowledge" )
+        CAWS_AST_COPY_DESTINATION+=( "$value" ); CAWS_AST_COPY_DIRECTORY_MODE+=( "$directory_mode" )
+        CAWS_AST_COPY_CWD+=( "$coordinate" ); CAWS_AST_COPY_START+=( "$start" ); CAWS_AST_COPY_END+=( "$end" )
+        CAWS_AST_COPY_SOURCE_OFFSET+=( "${#CAWS_AST_COPY_SOURCES[@]}" )
+        CAWS_AST_COPY_SOURCE_COUNT+=( "$copy_count" )
+        copy_index=0
+        while [[ $copy_index -lt $copy_count ]]; do
+          IFS= read -r -d '' value || { malformed=1; break; }
+          CAWS_AST_COPY_SOURCES+=( "$value" ); copy_index=$((copy_index + 1))
+        done
+        [[ $malformed == 0 ]] || break ;;
       complete) complete=1 ;;
       *) malformed=1; break ;;
     esac
@@ -128,6 +152,18 @@ caws_bash_prepare_analysis() {
             bounded($row.payloads[0].text|source_length) and .end>.start)
         end
       else false end;
+    def copy_operation($document):
+      (keys==["cwd","destination","directoryMode","end","knowledge","operation","sources","start"]) and
+      (.operation=="cp" or .operation=="mv") and
+      coordinate($document.execution.cwd==null) and bounded($document.execution.command|source_length) and .end>.start and
+      (.sources|type)=="array" and (.sources|length)<=4096 and
+      if .knowledge=="finite" then
+        (.sources|length)>0 and all(.sources[]; type=="string" and length>0) and
+        (.destination|type)=="string" and (.destination|length)>0 and
+        (.directoryMode=="auto" or .directoryMode=="directory")
+      elif .knowledge=="readonly" or .knowledge=="unresolved" then
+        (.sources|length)==0 and .destination==null and .directoryMode==null
+      else false end;
     def valid:
       . as $document |
       type=="object" and .schema=="caws.shell_mutation_view.v2" and
@@ -140,6 +176,12 @@ caws_bash_prepare_analysis() {
       (.tokens|type)=="array" and (.issues|type)=="array" and (.interpreters|type)=="array" and
       (.interpreterInvocations|type)=="array" and
       (.gitMetadata|type)=="array" and
+      (.copyInvocations|type)=="array" and (.copyInvocations|length)<=4096 and
+      (.copyOperations|type)=="array" and (.copyOperations|length)<=4096 and
+      all(.copyInvocations[]; (keys==["end","operation","start"]) and
+        (.operation=="cp" or .operation=="mv") and bounded($document.execution.command|source_length) and .end>.start) and
+      all(.copyOperations[]; copy_operation($document)) and
+      ([.copyInvocations[]|{operation,start,end}]==[.copyOperations[]|{operation,start,end}]) and
       all(.tokens[]; (.value|type)=="string" and
         (.kind as $k | ["word","op","redirect","input_redirect","unsupported_nesting"]|index($k))!=null and
         (.dynamic|type)=="boolean" and (.resolution=="" or .resolution=="runtime") and
@@ -177,6 +219,8 @@ caws_bash_prepare_analysis() {
             $row.payloads[0].start,$row.payloads[0].end]|frame
         end),
       (.gitMetadata[] | ["git_metadata",.subcommand,.directory,.common,.worktree,.start,.end]|frame),
+      (.copyOperations[] | (["copy",.operation,.knowledge,(.destination//""),(.directoryMode//""),
+        (.cwd//""),.start,.end,(.sources|length)]+.sources)|frame),
       (["complete"]|frame)
     else error("invalid caws.shell_mutation_view.v2 response") end
   ' <<< "$json")

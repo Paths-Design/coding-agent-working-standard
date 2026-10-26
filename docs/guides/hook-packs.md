@@ -30,6 +30,14 @@ separate from the four advisory quality hooks below. See
 [bounded command analysis](command-analysis.md) for execution context, effect
 coverage and verification.
 
+Copy guards share the bounded backend's required `cp`/`mv` operand roles.
+Regular-file destinations, destination-directory children and move-source
+deletions receive explicit path checks. A source path alone cannot classify an
+external artifact destination as a canonical write. Unknown options, incomplete
+roles and unmodeled filesystem cases refuse; the
+[command analysis guide](command-analysis.md#active-write-guard-integration)
+defines this closed profile and its filesystem snapshot limits.
+
 Ordinary runtime installation changes the shared handlers consumed by enabled
 registrations. The bounded analyzer and private package observations do not
 qualify native adoption. The known reduced Codex producer is held because its

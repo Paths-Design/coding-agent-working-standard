@@ -145,7 +145,7 @@ export async function analyzeCommand(
   for (const [name, value] of Object.entries(process.env)) {
     if (
       name.startsWith('BASH_FUNC_') &&
-      !/^(?:command|env|git|caws|cd|sed|printf|echo|pwd|true|false|:|test|\[|read|rg|grep|cat|head|tail|wc|ls|cut|tr|sort|uniq)%%$/.test(
+      !/^(?:command|env|git|caws|cd|sed|cp|mv|printf|echo|pwd|true|false|:|test|\[|read|rg|grep|cat|head|tail|wc|ls|cut|tr|sort|uniq)%%$/.test(
         name.slice(10)
       )
     )

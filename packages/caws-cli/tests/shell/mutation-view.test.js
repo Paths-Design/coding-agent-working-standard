@@ -797,6 +797,8 @@ describe('mutation view uses shared traversal without granting scope', () => {
         ...actual.interpreterInvocations,
         ...actual.interpreters,
         ...actual.gitMetadata,
+        ...actual.copyInvocations,
+        ...actual.copyOperations,
       ]) {
         expect(Number.isInteger(item.start)).toBe(true);
         expect(item.start).toBeGreaterThanOrEqual(0);
@@ -1713,5 +1715,283 @@ describe('mutation projection preserves program roles and source custody', () =>
     expect(data).toHaveLength(1);
     expect(data[0].kind).toBe('word');
     expect(source('env-child-assignment-data').slice(data[0].start, data[0].end)).toBe('9A=x');
+  });
+});
+
+describe('copy operand role observations', () => {
+  const cases = [
+    {
+      id: 'cp-basic',
+      command: 'cp /input /output',
+      operation: 'cp',
+      sources: ['/input'],
+      destination: '/output',
+      mode: 'auto',
+    },
+    {
+      id: 'mv-basic',
+      command: 'mv /input /output',
+      operation: 'mv',
+      sources: ['/input'],
+      destination: '/output',
+      mode: 'auto',
+    },
+    {
+      id: 'cp-multiple',
+      command: 'cp -- /one /two /archive',
+      operation: 'cp',
+      sources: ['/one', '/two'],
+      destination: '/archive',
+      mode: 'auto',
+    },
+    {
+      id: 'mv-multiple',
+      command: 'mv -- /one /two /archive',
+      operation: 'mv',
+      sources: ['/one', '/two'],
+      destination: '/archive',
+      mode: 'auto',
+    },
+    {
+      id: 'cp-quoted',
+      command: "cp '/source data' '/destination data'",
+      operation: 'cp',
+      sources: ['/source data'],
+      destination: '/destination data',
+      mode: 'auto',
+    },
+    {
+      id: 'cp-dash-data',
+      command: 'cp -- -source -target',
+      operation: 'cp',
+      sources: ['-source'],
+      destination: '-target',
+      mode: 'auto',
+    },
+    {
+      id: 'cp-finite-assignment',
+      command: 'target=\'/archive\'; cp /input "$target"',
+      operation: 'cp',
+      sources: ['/input'],
+      destination: '/archive',
+      mode: 'auto',
+    },
+    {
+      id: 'cp-command-wrapper',
+      command: 'command -- cp /input /output',
+      operation: 'cp',
+      sources: ['/input'],
+      destination: '/output',
+      mode: 'auto',
+    },
+    {
+      id: 'cp-command-no-delimiter',
+      command: 'command cp /input /output',
+      operation: 'cp',
+      sources: ['/input'],
+      destination: '/output',
+      mode: 'auto',
+    },
+    {
+      id: 'cp-nested-shell',
+      command: "bash -c 'cp /input /output'",
+      operation: 'cp',
+      sources: ['/input'],
+      destination: '/output',
+      mode: 'auto',
+    },
+    {
+      id: 'cp-read-neighbor',
+      command: "printf '%s' before; cp /input /output",
+      operation: 'cp',
+      sources: ['/input'],
+      destination: '/output',
+      mode: 'auto',
+    },
+    {
+      id: 'cp-unknown-cwd',
+      command: 'cp /input /output',
+      cwd: null,
+      operation: 'cp',
+      sources: ['/input'],
+      destination: '/output',
+      mode: 'auto',
+    },
+    {
+      id: 'cp-relative-unknown-cwd',
+      command: 'cp input output',
+      cwd: null,
+      operation: 'cp',
+      sources: ['input'],
+      destination: 'output',
+      mode: 'auto',
+    },
+    ...['cp', 'mv'].flatMap((operation) => [
+      ...['-t', '--target-directory'].map((flag) => ({
+        id: `${operation}-${flag}`,
+        command: `${operation} ${flag} /archive /one /two`,
+        operation,
+        sources: ['/one', '/two'],
+        destination: '/archive',
+        mode: 'directory',
+      })),
+      {
+        id: `${operation}-directory-equals`,
+        command: `${operation} --target-directory=/archive /input`,
+        operation,
+        sources: ['/input'],
+        destination: '/archive',
+        mode: 'directory',
+      },
+      ...['-f', '--force', '-i', '--interactive', '-n', '--no-clobber', '-v', '--verbose'].map(
+        (flag) => ({
+          id: `${operation}-${flag}`,
+          command: `${operation} ${flag} /input /output`,
+          operation,
+          sources: ['/input'],
+          destination: '/output',
+          mode: 'auto',
+        })
+      ),
+      ...['--help', '--version'].map((flag) => ({
+        id: `${operation}-${flag}`,
+        command: `${operation} ${flag}`,
+        operation,
+        knowledge: 'readonly',
+      })),
+    ]),
+    {
+      id: 'cp-preserve',
+      command: 'cp -p /input /output',
+      operation: 'cp',
+      sources: ['/input'],
+      destination: '/output',
+      mode: 'auto',
+    },
+    ...[
+      ['cp-no-operands', 'cp'],
+      ['cp-one-operand', 'cp /input'],
+      ['cp-missing-directory', 'cp -t'],
+      ['cp-empty-directory', 'cp --target-directory= /input'],
+      ['cp-duplicate-directory', 'cp -t /one -t /two /input'],
+      [
+        'cp-duplicate-directory-equals',
+        'cp --target-directory=/one --target-directory=/two /input',
+      ],
+      ['cp-directory-no-source', 'cp -t /archive'],
+      ['cp-unknown-option', 'cp --unknown /input /output'],
+      ['cp-recursive', 'cp -R /input /output'],
+      ['mv-preserve', 'mv -p /input /output'],
+      ['cp-option-after-source', 'cp /input -f /output'],
+      ['cp-dynamic', 'cp /input "$target"'],
+      ['cp-empty-source', "cp '' /output"],
+      ['cp-empty-destination', "cp /input ''"],
+      ['cp-prefix-environment', 'DATA=1 cp /input /output'],
+      ['cp-env-wrapper', 'env cp /input /output'],
+      ['cp-exec-wrapper', 'exec cp /input /output'],
+      ['cp-wrapper-chain', 'command -- command cp /input /output'],
+      ['cp-opaque-executable', '/tmp/cp /input /output'],
+      ['cp-source-path', 'PATH=/elsewhere; cp /input /output'],
+    ].map(([id, command]) => ({
+      id,
+      command,
+      operation: id.startsWith('mv-') ? 'mv' : 'cp',
+      knowledge: 'unresolved',
+    })),
+    {
+      id: 'cp-inherited-function',
+      command: 'cp /input /output',
+      operation: 'cp',
+      knowledge: 'unresolved',
+      environment: { 'BASH_FUNC_cp%%': '() { printf changed; }' },
+    },
+    {
+      id: 'mv-inherited-function',
+      command: 'mv /input /output',
+      operation: 'mv',
+      knowledge: 'unresolved',
+      environment: { 'BASH_FUNC_mv%%': '() { printf changed; }' },
+    },
+    { id: 'copy-word-data', command: "printf '%s' 'cp /input /output'", noCopies: true },
+    {
+      id: 'copy-later-filesystem',
+      command: 'cp /one /two; cp /three /four',
+      operations: ['finite', 'unresolved'],
+    },
+  ];
+  let root, results;
+  beforeAll(() => {
+    root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-copy-view-')));
+    const requests = cases.map((fixture) => ({
+      id: fixture.id,
+      environment: fixture.environment,
+      input: { command: fixture.command, project: root, cwd: fixture.cwd === null ? null : root },
+    }));
+    const active = String(
+      globalThis.__stryker__?.activeMutant ?? process.env.__STRYKER_ACTIVE_MUTANT__ ?? ''
+    );
+    const child = spawnSync(
+      process.execPath,
+      [
+        '-e',
+        '(' + RUNNER + ')().catch(error=>{console.error(error);process.exitCode=1;})',
+        path.resolve(__dirname, '../../dist/shell/analysis/mutation-view.js'),
+        active,
+      ],
+      {
+        input: JSON.stringify(requests),
+        encoding: 'utf8',
+        timeout: 30000,
+        maxBuffer: 4 * 1024 * 1024,
+        shell: false,
+      }
+    );
+    expect(child.error).toBeUndefined();
+    expect(child.signal).toBeNull();
+    expect(child.status).toBe(0);
+    const batch = JSON.parse(child.stdout);
+    expect(batch).toHaveLength(cases.length);
+    for (const item of batch) expect(item.activeMutant).toBe(active);
+    results = new Map(batch.map((item) => [item.id, item.view]));
+  });
+  afterAll(() => {
+    if (root) fs.rmSync(root, { recursive: true, force: true });
+  });
+  test.each(cases)('$id preserves complete non-authoritative copy roles', (fixture) => {
+    const view = results.get(fixture.id);
+    expect(Object.hasOwn(view, 'decision')).toBe(false);
+    expect(view.copyInvocations).toEqual(
+      view.copyOperations.map(({ operation, start, end }) => ({ operation, start, end }))
+    );
+    for (const row of view.copyOperations) {
+      expect(row.start).toBeGreaterThanOrEqual(0);
+      expect(row.end).toBeGreaterThan(row.start);
+      expect(row.end).toBeLessThanOrEqual(fixture.command.length);
+      expect(row.cwd).toBe(fixture.cwd === null ? null : root);
+    }
+    if (fixture.noCopies) {
+      expect(view.copyOperations).toEqual([]);
+      expect(view.issues).toEqual([]);
+    } else if (fixture.operations) {
+      expect(view.copyOperations.map((row) => row.knowledge)).toEqual(fixture.operations);
+      expect(view.copyOperations[0].sources).toEqual(['/one']);
+      expect(view.copyOperations[0].destination).toBe('/two');
+      expect(view.copyOperations[1].sources).toEqual([]);
+      expect(view.copyOperations[1].destination).toBeNull();
+      expect(view.issues.map((issue) => issue.code)).toContain('mutation-copy-roles');
+    } else {
+      const knowledge = fixture.knowledge ?? 'finite';
+      expect(view.copyOperations).toHaveLength(1);
+      expect(view.copyOperations[0]).toMatchObject({
+        operation: fixture.operation,
+        knowledge,
+        sources: fixture.sources ?? [],
+        destination: fixture.destination ?? null,
+        directoryMode: fixture.mode ?? null,
+      });
+      if (knowledge === 'unresolved')
+        expect(view.issues.map((issue) => issue.code)).toContain('mutation-copy-roles');
+      else expect(view.issues).toEqual([]);
+    }
   });
 });

@@ -46,6 +46,18 @@ export interface MutationInterpreter {
   start: number;
   end: number;
 }
+export interface CopyInvocation {
+  operation: 'cp' | 'mv';
+  start: number;
+  end: number;
+}
+export interface CopyOperation extends CopyInvocation {
+  knowledge: 'finite' | 'readonly' | 'unresolved';
+  sources: string[];
+  destination: string | null;
+  directoryMode: 'auto' | 'directory' | null;
+  cwd: string | null;
+}
 export interface MutationView {
   schema: 'caws.shell_mutation_view.v2';
   tokens: MutationToken[];
@@ -53,6 +65,8 @@ export interface MutationView {
   interpreterInvocations: { language: 'node' | 'python'; start: number; end: number }[];
   interpreters: MutationInterpreter[];
   gitMetadata: GitMetadataWrite[];
+  copyInvocations: CopyInvocation[];
+  copyOperations: CopyOperation[];
 }
 export interface GitMetadataWrite {
   subcommand: 'add' | 'commit';
@@ -182,6 +196,8 @@ export async function projectMutationView(
     interpreterInvocations: [],
     interpreters: [],
     gitMetadata: [],
+    copyInvocations: [],
+    copyOperations: [],
   };
   type MetadataResult = {
     context: GitContext | null;
@@ -552,6 +568,127 @@ export async function projectMutationView(
         return;
       }
       finiteCallees.add(JSON.stringify([node.pos, node.end]));
+      if (name === 'cp' || name === 'mv') {
+        const original = span(node);
+        const identity: CopyInvocation = {
+          operation: name,
+          start: original.pos,
+          end: original.end,
+        };
+        view.copyInvocations.push(identity);
+        const unresolved = (message: string): void => {
+          view.copyOperations.push({
+            ...identity,
+            knowledge: 'unresolved',
+            sources: [],
+            destination: null,
+            directoryMode: null,
+            cwd: request.cwd === null ? null : state.cwd,
+          });
+          issue('mutation-copy-roles', message, original);
+        };
+        const commandOffset = argv[1]?.value === '--' ? 2 : 1;
+        const commandWrapper =
+          argv[0]?.value === 'command' && argv.length - args.length === commandOffset;
+        if (
+          (args !== argv && !commandWrapper) ||
+          unwrapped.environment ||
+          node.prefix.some((part) => part.type === 'Assignment') ||
+          executable !== name ||
+          state.bindings.has('PATH') ||
+          state.bindings.has('LD_PRELOAD') ||
+          state.bindings.has('DYLD_INSERT_LIBRARIES') ||
+          process.env[`BASH_FUNC_${name}%%`] !== undefined
+        ) {
+          unresolved('Copy or move executable selection and environment are not proven.');
+          return;
+        }
+        if (args.length === 2 && ['--help', '--version'].includes(args[1]?.value ?? '')) {
+          view.copyOperations.push({
+            ...identity,
+            knowledge: 'readonly',
+            sources: [],
+            destination: null,
+            directoryMode: null,
+            cwd: request.cwd === null ? null : state.cwd,
+          });
+          return;
+        }
+        if (
+          state.filesystemChanged === true ||
+          args.some((arg) => arg.value === null || arg.value.length === 0)
+        ) {
+          unresolved('Copy or move operands or preceding filesystem effects are unresolved.');
+          return;
+        }
+        const operands: string[] = [];
+        let directory: string | null = null,
+          options = true,
+          delimiter = false;
+        for (let index = 1; index < args.length; index++) {
+          const value = args[index]!.value!;
+          if (options && value === '--') {
+            options = false;
+            delimiter = true;
+            continue;
+          }
+          if (options && (value === '-t' || value === '--target-directory')) {
+            if (directory !== null || index + 1 >= args.length) {
+              unresolved('A single target directory requires one proven operand.');
+              return;
+            }
+            directory = args[++index]!.value!;
+            continue;
+          }
+          if (options && value.startsWith('--target-directory=')) {
+            if (directory !== null || value === '--target-directory=') {
+              unresolved('A single nonempty target directory is required.');
+              return;
+            }
+            directory = value.slice('--target-directory='.length);
+            continue;
+          }
+          if (
+            options &&
+            [
+              '-f',
+              '--force',
+              '-i',
+              '--interactive',
+              '-n',
+              '--no-clobber',
+              '-v',
+              '--verbose',
+            ].includes(value)
+          )
+            continue;
+          if (options && name === 'cp' && value === '-p') continue;
+          if (!delimiter && value.startsWith('-') && value !== '-') {
+            unresolved('Copy or move option semantics are outside the closed file profile.');
+            return;
+          }
+          options = false;
+          operands.push(value);
+        }
+        if (operands.length < (directory === null ? 2 : 1)) {
+          unresolved('Copy or move requires proven source and destination operands.');
+          return;
+        }
+        const destination = directory ?? operands.pop()!;
+        if (!operands.every((value) => text(value, original)) || !text(destination, original)) {
+          unresolved('Copy or move path observations exceeded the projection budget.');
+          return;
+        }
+        view.copyOperations.push({
+          ...identity,
+          knowledge: 'finite',
+          sources: operands,
+          destination,
+          directoryMode: directory === null ? 'auto' : 'directory',
+          cwd: request.cwd === null ? null : state.cwd,
+        });
+        return;
+      }
       if (name === 'sh') {
         issue(
           'mutation-shell-dialect',

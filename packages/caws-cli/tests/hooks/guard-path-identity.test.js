@@ -37,9 +37,19 @@ function fixture(basename = 'project', governed = true, lane = 'linked') {
   git(project, 'branch', 'target');
   const hooks = path.join(base, 'hooks');
   fs.cpSync(SHARED, hooks, { recursive: true });
+  const cli = path.join(base, 'caws');
+  fs.writeFileSync(
+    cli,
+    '#!/bin/bash\nexec ' +
+      quote(process.execPath) +
+      ' ' +
+      quote(path.resolve(__dirname, '../../dist/index.js')) +
+      ' "$@"\n',
+    { mode: 0o755 }
+  );
   const alias = path.join(base, 'ordinary-alias');
   fs.symlinkSync(project, alias, 'dir');
-  fx = { base, project, hooks, alias, marker: path.join(base, 'submitted-payload-ran') };
+  fx = { base, project, hooks, cli, alias, marker: path.join(base, 'submitted-payload-ran') };
   expect(fs.realpathSync(project)).toBe(project);
   if (governed) {
     const linked = path.join(project, '.caws/worktrees', lane);
@@ -71,7 +81,12 @@ function invoke(script, cwd, command = 'git clean -fd', extra = {}) {
     )
       delete env[key];
   }
-  const input = JSON.stringify({ tool_name: 'Bash', cwd, tool_input: { command } });
+  const input = JSON.stringify({
+    session_id: 'identity-fixture',
+    tool_name: 'Bash',
+    cwd,
+    tool_input: { command },
+  });
   return spawnSync('/bin/bash', [path.join(fx.hooks, script)], {
     cwd,
     input,
@@ -82,9 +97,12 @@ function invoke(script, cwd, command = 'git clean -fd', extra = {}) {
       HOME: fx.base,
       CAWS_HOME: path.join(fx.base, '.caws'),
       CAWS_HOOKS_DIR: fx.hooks,
+      CAWS_BIN: fx.cli,
       CAWS_PROJECT_DIR: cwd,
       CLAUDE_PROJECT_DIR: cwd,
       CAWS_AGENT_SURFACE: 'claude-code',
+      CAWS_SESSION_ID: 'identity-fixture',
+      CLAUDE_CODE_SESSION_ID: 'identity-fixture',
       HOOK_EVENT_NAME: script.startsWith('stop-') ? 'Stop' : 'PreToolUse',
       HOOK_TOOL_NAME: 'Bash',
       HOOK_COMMAND: command,
@@ -254,6 +272,246 @@ test('entryByName preserves a colliding flat lane and legacy map identity', () =
   }
   expect(fs.existsSync(fx.marker)).toBe(false);
 });
+
+function copyPaths() {
+  fixture();
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/worktrees.json'),
+    JSON.stringify({
+      linked: { ...fx.entry, owner: { session_id: 'identity-fixture' } },
+    })
+  );
+  const sourceDir = path.join(fx.linked, 'packages', 'evidence');
+  fs.mkdirSync(sourceDir, { recursive: true });
+  const sources = ['one.json', 'two.log'].map((name) => {
+    const file = path.join(sourceDir, name);
+    fs.writeFileSync(file, name);
+    return file;
+  });
+  const archive = path.join(fx.base, 'artifacts');
+  fs.mkdirSync(archive);
+  return { sources, archive };
+}
+
+test('copy destination policy permits multiple worktree sources to an external artifact directory', () => {
+  const { sources, archive } = copyPaths();
+  const result = invoke(
+    'worktree-guard.sh',
+    fx.project,
+    payload('cp -- ' + sources.map(quote).join(' ') + ' ' + quote(archive))
+  );
+  check(result, 0);
+  expect(result.stdout).toBe('');
+  expect(result.stderr).toBe('');
+  expect(fs.readdirSync(archive)).toEqual([]);
+  expect(sources.map((file) => fs.readFileSync(file, 'utf8'))).toEqual(['one.json', 'two.log']);
+});
+
+test('copy destination policy refuses an actual worktree to canonical copy', () => {
+  const { sources } = copyPaths();
+  const destination = path.join(fx.project, 'src', 'receipt.json');
+  fs.mkdirSync(path.dirname(destination));
+  fs.writeFileSync(destination, 'canonical unchanged');
+  check(
+    invoke(
+      'worktree-guard.sh',
+      fx.project,
+      payload('cp -- ' + quote(sources[0]) + ' ' + quote(destination))
+    ),
+    2,
+    'Copying files from a worktree to the main repo is forbidden.'
+  );
+  expect(fs.readFileSync(destination, 'utf8')).toBe('canonical unchanged');
+});
+
+test('copy destination policy follows a destination-directory child symlink', () => {
+  const { sources, archive } = copyPaths();
+  const canonical = path.join(fx.project, 'canonical.json');
+  fs.writeFileSync(canonical, 'canonical unchanged');
+  fs.symlinkSync(canonical, path.join(archive, 'one.json'));
+  check(
+    invoke(
+      'worktree-guard.sh',
+      fx.project,
+      payload('cp -- ' + quote(sources[0]) + ' ' + quote(archive))
+    ),
+    2,
+    'Copying files from a worktree to the main repo is forbidden.'
+  );
+  expect(fs.readFileSync(canonical, 'utf8')).toBe('canonical unchanged');
+});
+
+test.each(['-R', '--unmodeled-option'])(
+  'copy destination policy holds unmodeled option %s without inventing a canonical target',
+  (option) => {
+    const { sources, archive } = copyPaths();
+    const result = invoke(
+      'worktree-guard.sh',
+      fx.project,
+      payload('cp ' + option + ' ' + quote(sources[0]) + ' ' + quote(archive))
+    );
+    check(result, 2, 'authority unavailable: copy-roles');
+    expect(result.stderr).not.toContain('Copying files from a worktree to the main repo');
+    expect(fs.readdirSync(archive)).toEqual([]);
+  }
+);
+
+test('copy destination policy does not borrow the session directory for a missing execution coordinate', () => {
+  const { sources, archive } = copyPaths();
+  for (const [destination, status] of [
+    [quote(archive), 0],
+    ['relative-output', 2],
+  ]) {
+    const command = 'cp -- ' + quote(sources[0]) + ' ' + destination;
+    const input = JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
+    check(
+      invoke('worktree-guard.sh', fx.project, command, { HOOK_INPUT_JSON: input }),
+      status,
+      status === 2 ? 'authority unavailable: copy-roles' : undefined
+    );
+  }
+  expect(fs.readdirSync(archive)).toEqual([]);
+});
+
+test('mandatory copy roles preserve foreign source reads and refuse move-source deletion', () => {
+  const { sources, archive } = copyPaths();
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/worktrees.json'),
+    JSON.stringify({
+      linked: { ...fx.entry, owner: { session_id: 'foreign' } },
+    })
+  );
+  check(
+    invoke(
+      'bash-write-guard.sh',
+      fx.project,
+      payload('cp -- ' + quote(sources[0]) + ' ' + quote(archive))
+    ),
+    0
+  );
+  check(
+    invoke(
+      'bash-write-guard.sh',
+      fx.project,
+      payload('mv -- ' + quote(sources[0]) + ' ' + quote(archive))
+    ),
+    2,
+    'DIFFERENT session'
+  );
+  expect(fs.readFileSync(sources[0], 'utf8')).toBe('one.json');
+});
+
+test('mandatory copy roles refuse a foreign destination hidden behind an external directory child', () => {
+  const { sources, archive } = copyPaths();
+  const destination = path.join(fx.linked, 'foreign-target.json');
+  fs.writeFileSync(destination, 'foreign unchanged');
+  fs.symlinkSync(destination, path.join(archive, 'one.json'));
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/worktrees.json'),
+    JSON.stringify({
+      linked: { ...fx.entry, owner: { session_id: 'foreign' } },
+    })
+  );
+  check(
+    invoke(
+      'bash-write-guard.sh',
+      fx.project,
+      payload('cp -- ' + quote(sources[0]) + ' ' + quote(archive))
+    ),
+    2,
+    'DIFFERENT session'
+  );
+  expect(fs.readFileSync(destination, 'utf8')).toBe('foreign unchanged');
+});
+
+test('mandatory copy roles allow an owned move and preserve the unexecuted source', () => {
+  const { sources, archive } = copyPaths();
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/worktrees.json'),
+    JSON.stringify({
+      linked: { ...fx.entry, owner: { session_id: 'identity-fixture' } },
+    })
+  );
+  check(
+    invoke(
+      'bash-write-guard.sh',
+      fx.project,
+      payload('mv -- ' + quote(sources[0]) + ' ' + quote(archive))
+    ),
+    0
+  );
+  expect(fs.readFileSync(sources[0], 'utf8')).toBe('one.json');
+  expect(fs.readdirSync(archive)).toEqual([]);
+});
+
+test.each([
+  'directory-source',
+  'symlink-source',
+  'move-symlink-destination',
+  'missing-parent',
+  'missing-directory',
+  'multiple-to-file',
+])('copy destination policy holds unmodeled filesystem relation %s', (relation) => {
+  const { sources, archive } = copyPaths();
+  let source = sources[0],
+    destination = archive,
+    operation = 'cp';
+  if (relation === 'directory-source') source = path.dirname(source);
+  if (relation === 'symlink-source') {
+    source = path.join(fx.base, 'source-alias');
+    fs.symlinkSync(sources[0], source);
+  }
+  if (relation === 'move-symlink-destination') {
+    operation = 'mv';
+    destination = path.join(fx.base, 'archive-alias');
+    fs.symlinkSync(archive, destination, 'dir');
+  }
+  if (relation === 'missing-parent') destination = path.join(archive, 'absent', 'leaf');
+  if (relation === 'missing-directory') destination = path.join(archive, 'absent') + '/';
+  if (relation === 'multiple-to-file') {
+    destination = path.join(archive, 'existing-file');
+    fs.writeFileSync(destination, 'unchanged');
+  }
+  const operands = relation === 'multiple-to-file' ? sources : [source];
+  const command = operation + ' -- ' + [...operands, destination].map(quote).join(' ');
+  check(invoke('worktree-guard.sh', fx.project, command), 2, 'authority unavailable: copy-roles');
+  expect(fs.readFileSync(sources[0], 'utf8')).toBe('one.json');
+});
+
+test('copy destination policy checks target-directory operands and a finite observation budget', () => {
+  const { sources, archive } = copyPaths();
+  check(
+    invoke(
+      'worktree-guard.sh',
+      fx.project,
+      'cp -t ' + quote(archive) + ' -- ' + sources.map(quote).join(' ')
+    ),
+    0
+  );
+  const command = 'cp -- ' + Array(129).fill(quote(sources[0])).join(' ') + ' ' + quote(archive);
+  check(invoke('worktree-guard.sh', fx.project, command), 2, 'authority unavailable: copy-roles');
+  expect(fs.readdirSync(archive)).toEqual([]);
+});
+
+test.each(['program=cp; "$program"', 'bash -c'])(
+  'mandatory copy policy observes executable copy source through %s',
+  (prefix) => {
+    const { sources } = copyPaths();
+    const destination = path.join(fx.project, 'canonical.json');
+    fs.writeFileSync(destination, 'canonical unchanged');
+    const body = 'cp -- ' + quote(sources[0]) + ' ' + quote(destination);
+    const command =
+      prefix === 'bash -c'
+        ? prefix + ' ' + quote(body)
+        : prefix + ' -- ' + quote(sources[0]) + ' ' + quote(destination);
+    check(
+      invoke('bash-write-guard.sh', fx.project, command),
+      2,
+      'Copying files from a worktree to the main repo is forbidden.'
+    );
+    expect(fs.readFileSync(destination, 'utf8')).toBe('canonical unchanged');
+  }
+);
 
 test.each(['{broken', '[]', 'null'])(
   'invalid canonical registry %p cannot masquerade as inactivity',
