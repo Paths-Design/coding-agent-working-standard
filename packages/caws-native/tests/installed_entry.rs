@@ -369,6 +369,19 @@ fn generation_v1_remains_readable_without_installed_receiver_capability() {
         selected.installed_invocation_entry().unwrap_err(),
         "Selected generation does not support invoke-installed-v1"
     );
+    let deadline = caws_native::monotonic_deadline::MonotonicDeadline::capture(
+        std::time::Duration::from_millis(1000),
+    )
+    .unwrap();
+    let mut live = || Ok(());
+    let mut bounded = installed_generation::Verification::new(deadline.expires(), &mut live);
+    let (native, node, engine) = selected.native_paths(&mut bounded).unwrap();
+    assert_eq!(
+        selected
+            .validate_installed_invocation(&native, &node, &engine, 1000, &deadline, &mut bounded)
+            .unwrap_err(),
+        "Selected generation does not support invoke-installed-v1"
+    );
 }
 
 #[test]
@@ -478,6 +491,23 @@ fn installed_binding_requires_selected_paths_timeout_and_original_expiry() {
             "Installed invocation timeout differs from selected generation"
         );
     }
+    // A matching configured timeout does not excuse a larger original interval.
+    let longer = MonotonicDeadline::capture(Duration::from_millis(31000)).unwrap();
+    let mut live = || Ok(());
+    let mut longer_verify = installed_generation::Verification::new(longer.expires(), &mut live);
+    assert_eq!(
+        selected
+            .validate_installed_invocation(
+                &native,
+                &node,
+                &engine,
+                30000,
+                &longer,
+                &mut longer_verify
+            )
+            .unwrap_err(),
+        "Installed invocation timeout differs from selected generation"
+    );
     let mut live = || Ok(());
     let mut renewed = installed_generation::Verification::new(
         deadline.expires() + Duration::from_secs(1),
