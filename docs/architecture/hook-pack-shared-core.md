@@ -556,10 +556,10 @@ changes only a vendor tree does not contend for the shared version.
 - Idempotent: a byte-identical re-run reports unchanged and writes nothing.
 - Non-destructive: the settings.json / hooks.json merge preserves user-authored
   content; managed drift refuses by default (adopt/overwrite to override).
-- Shared PreToolUse dispatch refuses missing required core libraries with
-  exit 2. A malformed payload rejected by `parse_hook_input` after library
-  loading returns 0; that transient parse failure has a different contract from
-  absent enforcement infrastructure.
+- Shared PreToolUse dispatch requires `agent-surface.sh` and `parse-input.sh`
+  before parsing; either missing library produces exit 2. Rejected input returns
+  0 before the `run-handlers.sh` check. Accepted input then requires
+  `run-handlers.sh`, whose absence produces exit 2.
 - The hooks.json placeholder substitution (absolute dispatcher command paths)
   continues to run at install for the codex wiring; the substituted command now
   points at `.caws/hooks/dispatch/<event>.sh`.
