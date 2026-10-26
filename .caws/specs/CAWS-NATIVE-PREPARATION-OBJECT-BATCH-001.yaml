@@ -47,3 +47,9 @@ acceptance:
       failures remain explicit and do not qualify cutover
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed8c210b70 usesexistingboundedobjectarrayprotocol onlyforselectedimmutableblobs AFTERunchangedcompletecommit/tree/profileinventory. Root inspected35lineproductiondiff: sortedfileorder, uniqueOIDmap,type checks, decoder andindependentBuffer/modes/materialization unchanged. Node22normalbuild0+Jest202actualpass0skip; exactunscaled32unique=>31/1 bothSHAformats+cross-boundaryduplicatebytes/modes.No protected/unselectedblob requests. Independentcommittedpeer sourceclaims grounded; notactualfullsourceexport. Raw /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/native-object-batch-01; JSONSHA69e614c982288742cd5d2c8710a5f6b20896e0ff27ab1041aab146a155db6033. CLIverifycommitexistenceonly, Source/rawresultsmanuallyinspected."
+    recorded_at: "2026-10-26T13:46:48.816Z"
+    commit_sha: "8c210b70e7a44d5904c5ce190b60ed16dbc0ac32"
