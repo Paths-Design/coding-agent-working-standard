@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-EXECUTION-AUTHORIZER-WIRE-001
 title: 'Private execution authorizer wire transport'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-execution-authorizer-wire
 created_at: '2026-10-26T23:49:35.903Z'
-updated_at: '2026-10-26T23:49:35.903Z'
+updated_at: '2026-10-26T23:49:46.170Z'
 created_by_session: '01a17a9d-b74e-7993-8280-0c09f794de52'
 blast_radius:
   modules:
