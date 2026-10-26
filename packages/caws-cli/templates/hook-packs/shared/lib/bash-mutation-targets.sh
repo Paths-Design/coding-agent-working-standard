@@ -459,7 +459,7 @@ _caws_tok_is_opt() { [[ "${CAWS_TOK_VALUE[$1]}" == -* ]]; }
 # BROAD -- "a directory-scoped operation" and "a file-scoped operation over an
 # unresolved population" are different facts needing different policies.
 _caws_emit_operand() {
-  local i="$1" value="${CAWS_TOK_VALUE[$1]}" ast=0
+  local i="$1" value="${CAWS_TOK_VALUE[$1]}" role="${2:-referent}" ast=0
   [[ ${CAWS_BASH_ANALYSIS_REQUIRED:-0} == 1 ]] && ast=1
   if [[ $ast == 0 && ${coordinate_changed:-0} -eq 1 && "$value" != /* ]]; then
     CAWS_REC_UNSUPPORTED+=( changed_working_directory ); return 0
@@ -485,13 +485,14 @@ _caws_emit_operand() {
       CAWS_REC_UNREPR+=( "$value" ); return 0
     fi
     CAWS_REC_FILE+=( "$value" )
+    CAWS_REC_FILE_ROLE+=( "$role" )
   fi
   return 0
 }
 
 _caws_bash_scan_tokens() {
   local cmd="$1"
-  CAWS_REC_FILE=(); CAWS_REC_BROAD=(); CAWS_REC_DYNAMIC=()
+  CAWS_REC_FILE=(); CAWS_REC_FILE_ROLE=(); CAWS_REC_BROAD=(); CAWS_REC_DYNAMIC=()
   CAWS_REC_UNREPR=(); CAWS_REC_UNSUPPORTED=()
   if [[ ${CAWS_BASH_ANALYSIS_REQUIRED:-0} == 1 ]]; then
     if ! declare -F caws_bash_load_analysis_tokens >/dev/null 2>&1 ||
@@ -592,23 +593,37 @@ _caws_bash_scan_tokens() {
         fi
         i=$j; continue ;;
       truncate|touch|rm|mv|cp)
-        local j=$((i+1)) options=1 target=-1
+        local j=$((i+1)) options=1 target=-1 operand_role=referent
+        [[ "$t" == rm ]] && operand_role=unlink-entry
         local -a operands=()
         while [[ $j -lt $n ]]; do
           _caws_tok_is_sep "$j" && break
           local arg="${CAWS_TOK_VALUE[$j]}"
+          # Darwin rm stops option parsing at its first operand. A solitary
+          # dash is itself an operand; later dash-prefixed names cannot vanish.
+          if [[ "$t" == rm && ( "$arg" == - || "$arg" != -* ) ]]; then
+            options=0
+          fi
           if [[ $options -eq 1 ]]; then
             case "$arg" in --) options=0; j=$((j+1)); continue ;; esac
+            # An unknown option cannot erase entry ownership. Preserve that
+            # observation and mark the operation unresolved for the consumer.
+            if [[ "$t" == rm && "$arg" == -* ]]; then
+              local remove_flags="${arg#-}"
+              if [[ -z "$remove_flags" || "$remove_flags" == *[!frR]* ]]; then
+                operand_role=unlink-entry-unresolved
+              fi
+            fi
             case "$t:$arg" in
               touch:-d|touch:--date|touch:-t|touch:-r|touch:--reference|truncate:-s|truncate:--size|truncate:-r|truncate:--reference)
                 j=$((j+2)); continue ;;
               cp:-t|cp:--target-directory|mv:-t|mv:--target-directory)
                 target=$((j+1)); j=$((j+2)); continue ;;
             esac
-            case "$arg" in
-              --target-directory=*)
+            case "$t:$arg" in
+              cp:--target-directory=*|mv:--target-directory=*)
                 CAWS_TOK_VALUE[$j]="${arg#*=}"; target=$j; j=$((j+1)); continue ;;
-              -*) j=$((j+1)); continue ;;
+              *:-*) j=$((j+1)); continue ;;
             esac
           fi
           operands+=( "$j" ); j=$((j+1))
@@ -618,8 +633,8 @@ _caws_bash_scan_tokens() {
           elif [[ ${#operands[@]} -gt 1 ]]; then _caws_emit_operand "${operands[$((${#operands[@]}-1))]}"; fi
         else
           local operand
-          for operand in "${operands[@]+"${operands[@]}"}"; do _caws_emit_operand "$operand"; done
-          [[ $target -ge 0 && $target -lt $n ]] && _caws_emit_operand "$target"
+          for operand in "${operands[@]+"${operands[@]}"}"; do _caws_emit_operand "$operand" "$operand_role"; done
+          [[ $target -ge 0 && $target -lt $n ]] && _caws_emit_operand "$target" "$operand_role"
         fi
         i=$j; continue ;;
       dd)
@@ -745,6 +760,18 @@ caws_bash_mutation_candidates() {
   local cmd="$1"
   _caws_bash_scan_tokens "$cmd"
   printf '%s\n' ${CAWS_REC_FILE[@]+"${CAWS_REC_FILE[@]}"}
+}
+
+# Guard-only effect channel. The raw FILE channel remains unchanged for CASR.
+# Retain each observation, including two roles for the same path spelling.
+caws_bash_mutation_effects() {
+  local cmd="$1" index=0
+  _caws_bash_scan_tokens "$cmd"
+  [[ ${#CAWS_REC_FILE[@]} -eq ${#CAWS_REC_FILE_ROLE[@]} ]] || return 2
+  while [[ $index -lt ${#CAWS_REC_FILE[@]} ]]; do
+    printf '%s\t%s\n' "${CAWS_REC_FILE_ROLE[$index]}" "${CAWS_REC_FILE[$index]}"
+    index=$((index+1))
+  done
 }
 
 

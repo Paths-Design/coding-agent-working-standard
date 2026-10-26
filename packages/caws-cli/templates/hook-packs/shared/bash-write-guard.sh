@@ -298,7 +298,7 @@ fi
 # entry point above resolves, the guard runs, and the cross-repo arm silently
 # adjudicates nothing — a fail-OPEN that no output reports. Each function this
 # guard depends on is therefore checked by name, not inferred from one.
-for _fn in caws_foreign_repo_root; do
+for _fn in caws_foreign_repo_root caws_bash_mutation_effects; do
   if ! declare -F "$_fn" >/dev/null 2>&1; then
     echo "[bash-write-guard] CAWS hook infrastructure incomplete: lib/bash-mutation-targets.sh loaded but does not provide $_fn — the cross-repository arm cannot run. Failing CLOSED. Update the shared hook libs with: caws init adapters install" >&2
     printf '{"decision":"block","reason":"CAWS bash-write-guard: lib/bash-mutation-targets.sh is present but stale (missing %s), so the cross-repository boundary cannot be adjudicated. Failing closed. Update the hook pack: caws init adapters install"}\n' "$_fn"
@@ -332,24 +332,28 @@ case "${CAWS_COPY_FINAL_SYMLINK:-}" in
   *) echo '[bash-write-guard] copy-role final-entry observation is unavailable; failing closed.' >&2; exit 2 ;;
 esac
 extract_targets() {
-  # Two channels, both consumed, because an ownership gate wants every path a
-  # command might touch:
-  #   file operands -> unchanged, the sequence this guard has always seen.
-  #   broad roots   -> `git clean` rooted at AGENT_CWD, adjudicated exactly as
-  #                    before this split. A prefix test is what "might this
-  #                    touch a claimed path?" wants, so the conservative root is
-  #                    the right answer HERE even though CASR declines it.
-  # FILE operands retain each observation's directory. Unknown coordinates stay
-  # relative and are refused by the specific cwd policy before any guessed root.
-  caws_bash_mutation_candidates "$1"
-  caws_bash_analysis_interpreter_writes "$1"
-  printf '%s\n' ${CAWS_COPY_WRITE_TARGET[@]+"${CAWS_COPY_WRITE_TARGET[@]}"}
+  # Preserve per-operand effects; equal path spellings can have different roles.
+  # Interpreter/copy/broad paths keep their existing referent interpretation.
+  local effects paths candidate
+  effects="$(caws_bash_mutation_effects "$1")" || return 2
+  [[ -z "$effects" ]] || printf '%s\n' "$effects"
+  paths="$(caws_bash_analysis_interpreter_writes "$1")" || return 2
+  while IFS= read -r candidate; do
+    [[ -z "$candidate" ]] || printf 'referent\t%s\n' "$candidate"
+  done <<< "$paths"
+  for candidate in ${CAWS_COPY_WRITE_TARGET[@]+"${CAWS_COPY_WRITE_TARGET[@]}"}; do
+    printf 'referent\t%s\n' "$candidate"
+  done
   if declare -F caws_bash_broad_mutations >/dev/null 2>&1; then
     # Do not turn a cwd-relative broad mutation into a guessed absolute path.
     local broad_base="$AGENT_CWD"
     [[ "$_CODEX_EXECUTION_CWD_UNAVAILABLE" == "1" ]] && broad_base="."
-    caws_bash_broad_mutations "$1" "$broad_base" | cut -f2
+    paths="$(caws_bash_broad_mutations "$1" "$broad_base" | cut -f2)" || return 2
+    while IFS= read -r candidate; do
+      [[ -z "$candidate" ]] || printf 'referent\t%s\n' "$candidate"
+    done <<< "$paths"
   fi
+  return 0
 }
 
 # abspath_into <var> <path>: caws_guard_realpath_into's status; every caller
@@ -361,10 +365,34 @@ abspath_into() {
   esac
 }
 
+# A remove operation unlinks a literal final symlink, not its referent.
+# Physical ancestors still determine entry ownership and repository membership.
+mutation_target_into() {
+  local _effect_role="$3" _effect_candidate="$4"
+  local _effect_full _effect_parent _effect_leaf
+  case "$_effect_candidate" in
+    /*) _effect_full="$_effect_candidate" ;;
+    *) _effect_full="$AGENT_CWD/$_effect_candidate" ;;
+  esac
+  _effect_leaf="${_effect_full##*/}"
+  if [[ "$_effect_role" == unlink-entry* && -n "$_effect_leaf" &&
+        "$_effect_leaf" != . && "$_effect_leaf" != .. && -L "$_effect_full" ]]; then
+    _effect_parent="${_effect_full%/*}"
+    [[ -n "$_effect_parent" ]] || _effect_parent=/
+    caws_physical_dir_into _effect_parent "$_effect_parent" || return 1
+    printf -v "$1" '%s/%s' "${_effect_parent%/}" "$_effect_leaf"
+    printf -v "$2" '%s' "$_effect_parent"
+  else
+    abspath_into "$1" "$_effect_candidate" || return 1
+    printf -v "$2" '%s' "${!1}"
+  fi
+}
+
 # --- decide -----------------------------------------------------------------
 WORST="pass"
 WORST_DETAIL=""
 WORST_KIND=""
+_BWG_REMOVE_UNRESOLVED=0
 
 escalate() {
   local rank_new rank_cur
@@ -379,8 +407,29 @@ if [[ -n "$CAWS_COPY_UNRESOLVED" ]]; then
   escalate ask "$CAWS_COPY_UNRESOLVED" ask_copy_paths
 fi
 
-while IFS= read -r cand; do
-  [[ -z "$cand" ]] && continue
+if ! _BWG_EFFECTS="$(extract_targets "$COMMAND")"; then
+  _bwg_normalize_refuse 'mutation effect stream' "$COMMAND"
+fi
+while IFS= read -r effect; do
+  [[ -z "$effect" ]] && continue
+  if [[ "$effect" != *$'\t'* ]]; then
+    _bwg_normalize_refuse 'mutation effect record' "$effect"
+  fi
+  effect_role="${effect%%$'\t'*}"
+  cand="${effect#*$'\t'}"
+  case "$effect_role" in
+    referent|unlink-entry|unlink-entry-unresolved) ;;
+    *) _bwg_normalize_refuse 'mutation effect role' "$effect_role" ;;
+  esac
+  if [[ -z "$cand" || "$cand" == *$'\t'* ]]; then
+    _bwg_normalize_refuse 'mutation effect path' "$cand"
+  fi
+  if [[ "$effect_role" == unlink-entry* ]]; then
+    case "$effect_role:$cand" in
+      unlink-entry-unresolved:*|*:*/|*:*/.|*:*/..|*:'.'|*:'..')
+        _BWG_REMOVE_UNRESOLVED=1 ;;
+    esac
+  fi
   # Candidates arrive byte-faithful. The recognizer's lexer consumes syntactic
   # quote delimiters as it scans and never introduces a sentinel, so a quoted
   # operand already reads as the path it names and `rm "harness/wire/some
@@ -402,7 +451,8 @@ while IFS= read -r cand; do
     escalate ask "cwd-unresolved:$cand" "ask_uncertain"
     continue
   fi
-  abspath_into abs "$cand" || _bwg_normalize_refuse "mutation target" "$cand"
+  mutation_target_into abs _FOREIGN_PROBE "$effect_role" "$cand" ||
+    _bwg_normalize_refuse "mutation target" "$cand"
   # CAWS-GUARD-ALLOWLIST-SYNC-001 + CAWS-GUARD-SCOPE-PRIORITY-001: record
   # whether this target is on the unconditional allowlist (docs/*, .caws/*
   # minus payload, .tmp/*, .github/*, vendor dir, instruction files,
@@ -415,7 +465,7 @@ while IFS= read -r cand; do
   # Cross-repo is adjudicated BEFORE the allowlist and the claim oracle: the
   # allowlist names paths relative to THIS project, so applying it to a sibling
   # repo's tree would admit its docs/, tests/ and .caws/ wholesale.
-  _FOREIGN_REPO="$(foreign_repo_root "$abs"; printf x)"
+  _FOREIGN_REPO="$(foreign_repo_root "$_FOREIGN_PROBE"; printf x)"
   _FOREIGN_REPO="${_FOREIGN_REPO%x}"
   if [[ -n "$_FOREIGN_REPO" ]]; then
     escalate block "$_FOREIGN_REPO" "block_foreign_repo"
@@ -435,7 +485,12 @@ while IFS= read -r cand; do
       *) _ORACLE_PATH="$cand"; _CWD_UNRESOLVED=1 ;;
     esac
   fi
+  _REMOVE_TREE=0
+  if [[ "$effect_role" == unlink-entry* && -d "$abs" && ! -L "$abs" ]]; then
+    _REMOVE_TREE=1
+  fi
   out="$(CAWS_ORACLE_OPERATION=file CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
+    CAWS_ORACLE_REMOVE_TREE="$_REMOVE_TREE" \
     CAWS_ORACLE_CURRENT_BRANCH="" \
     CAWS_ORACLE_REL_PATH="$_ORACLE_PATH" \
     CAWS_ORACLE_CWD_UNRESOLVED="$_CWD_UNRESOLVED" \
@@ -461,21 +516,24 @@ while IFS= read -r cand; do
     degraded_no_yaml) _DEGRADED_NO_YAML=1 ;;
     block_foreign_worktree|block_claimed) escalate block "$detail" "$outcome" ;;
     ask_uncertain|error_fail_closed)
-      # CAWS-GUARD-SCOPE-PRIORITY-001: an allowlisted path defers to the
-      # allowlist on non-claim verdicts — a toolchain fault or uncertain
-      # ownership must not block a docs/** or .caws/** coordination edit.
-      # Only a positive claim (block_claimed/block_foreign_worktree, handled
-      # above) overrides the allowlist. Non-allowlisted paths escalate normally.
-      # An unresolved cwd is the exception: the allowlist names paths relative
-      # to the project, which a guessed root cannot establish.
-      if [[ "$_CAND_ALLOWLISTED" == "1" && "$detail" != cwd-unresolved:* ]]; then
+      if [[ "$detail" == remove-tree-* ||
+            ( "$_REMOVE_TREE" == 1 && "$outcome" == error_fail_closed ) ]]; then
+        _BWG_REMOVE_UNRESOLVED=1
+        continue
+      fi
+      # Coordination allowlists tolerate canonical scope-tool faults, but
+      # cannot establish cwd or registered payload ownership. Those specific
+      # uncertainties survive even under docs/** and .caws/** custom roots.
+      if [[ "$_CAND_ALLOWLISTED" == "1" && "$detail" != cwd-unresolved:* &&
+            "$detail" != worktree-container-* && "$detail" != worktree-payload-* &&
+            "$detail" != worktree-ownership-* ]]; then
         :
       else
         escalate ask "$detail" "$outcome"
       fi
       ;;
   esac
-done < <(extract_targets "$COMMAND")
+done <<< "$_BWG_EFFECTS"
 
 # Git add/commit write Git metadata rather than a payload FILE. Validate both
 # metadata roots at the repository boundary, then query the actual worktree's
@@ -667,6 +725,12 @@ fi
 _BG_ID="CAWS bash-write-guard"
 command -v guard_identity >/dev/null 2>&1 && _BG_ID="$(guard_identity bash-write-guard)"
 
+# Keep an already observed ownership block; unresolved removal is a hard hold
+# even when following an ambiguous final component happened to find an owner.
+if [[ "$_BWG_REMOVE_UNRESOLVED" == 1 ]]; then
+  escalate block 'unresolved remove options or final component' block_remove_unresolved
+fi
+
 # Preserve known ownership violations before refusing this unmodeled entry
 # operation. An ask response cannot confine cp's failed-open unlink fallback.
 if [[ "$CAWS_COPY_FINAL_SYMLINK" == 1 ]]; then
@@ -675,6 +739,10 @@ fi
 
 case "$WORST" in
   block)
+    if [[ "$WORST_KIND" == "block_remove_unresolved" ]]; then
+      echo "[$_BG_ID] BLOCKED: unresolved remove options or final component; entry effects cannot be authorized." >&2
+      exit 2
+    fi
     if [[ "$WORST_KIND" == "block_copy_final_symlink" ]]; then
       echo "[$_BG_ID] BLOCKED: copy final destination symlink entry semantics are unmodeled; approval cannot authorize this operation." >&2
       exit 2

@@ -231,6 +231,31 @@ if [[ -n "$CANONICAL_ROOT" ]]; then
   PROJECT_DIR="$CANONICAL_ROOT"
 fi
 
+# Actual registered roots may live outside the conventional namespace. Check
+# their ownership before any allowlist or operating-worktree early return.
+# Canonical scope policy remains with its existing session/branch logic below.
+if [[ -n "$FILE_PATH" ]]; then
+  command -v node >/dev/null 2>&1 || _wwg_node_refuse
+  if [[ ! -f "$CAWS_CLAIM_ORACLE" ]]; then
+    echo '[worktree-write-guard] ownership oracle unavailable; blocked' >&2
+    exit 2
+  fi
+  _OWNERSHIP_OUT="$(CAWS_ORACLE_OPERATION=file-ownership \
+    CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" CAWS_ORACLE_REL_PATH="$WRITE_TARGET" \
+    CAWS_ORACLE_CURRENT_BRANCH="" CAWS_ORACLE_SESSION_ID="$CAWS_ORACLE_SESSION_ID" \
+    node "$CAWS_CLAIM_ORACLE" 2>&1 || true)"
+  case "$_OWNERSHIP_OUT" in
+    pass:owner-self:*) exit 0 ;;
+    pass:*) ;;
+    block_foreign_worktree:*)
+      echo "[worktree-write-guard] BLOCKED: worktree '${_OWNERSHIP_OUT#*:}' is owned by a DIFFERENT session." >&2
+      exit 2 ;;
+    *)
+      echo "[worktree-write-guard] registered path ownership could not be established ($_OWNERSHIP_OUT); blocked" >&2
+      exit 2 ;;
+  esac
+fi
+
 # Always-allowed paths bypass enforcement.
 # CAWS-GUARD-ALLOWLIST-SYNC-001: the unconditional-allow path set lives in the
 # shared lib/write-allowlist.sh so worktree-write-guard and bash-write-guard

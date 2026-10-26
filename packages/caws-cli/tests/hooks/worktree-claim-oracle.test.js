@@ -33,6 +33,8 @@ const SHARED = process.env.CAWS_CLAIM_ORACLE_SHARED_DIR
 const ORACLE = path.join(SHARED, 'lib', 'worktree-claim-oracle.cjs');
 const CAWS_STATE = path.join(SHARED, 'lib', 'caws-state.sh');
 const BASH_WRITE_GUARD = path.join(SHARED, 'bash-write-guard.sh');
+const WORKTREE_WRITE_GUARD = path.join(SHARED, 'worktree-write-guard.sh');
+const CLI = path.resolve(__dirname, '../../dist/index.js');
 
 // The oracle resolves js-yaml by walking up from its own directory. Naming the
 // node_modules root that holds js-yaml keeps resolution the same when the shared
@@ -125,6 +127,17 @@ function writeRegistry(root, entries) {
   fs.writeFileSync(path.join(root, '.caws', 'worktrees.json'), JSON.stringify(entries));
 }
 
+function damageRegistry(root, failure) {
+  const registry = path.join(root, '.caws/worktrees.json');
+  if (failure === 'malformed') fs.writeFileSync(registry, '{unterminated');
+  else if (failure === 'scalar') fs.writeFileSync(registry, 'null');
+  else {
+    fs.unlinkSync(registry);
+    if (failure === 'directory') fs.mkdirSync(registry);
+    else fs.symlinkSync(path.join(root, 'absent-registry'), registry);
+  }
+}
+
 function registryEntry(root, name, specId, ownerSession) {
   return {
     [name]: {
@@ -152,7 +165,11 @@ function seedClaimant(root, { name, specId, owner, scopeIn }) {
 }
 
 // Run the oracle and return its first stdout line, `<outcome>:<detail>`.
-function runOracle(root, candidate, { sessionId = 'sess-self', blockJsYaml = false } = {}) {
+function runOracle(
+  root,
+  candidate,
+  { sessionId = 'sess-self', blockJsYaml = false, removeTree = false } = {}
+) {
   const args = blockJsYaml ? ['--require', blockerPath, ORACLE] : [ORACLE];
   const result = spawnSync(process.execPath, args, {
     encoding: 'utf8',
@@ -164,6 +181,7 @@ function runOracle(root, candidate, { sessionId = 'sess-self', blockJsYaml = fal
       CAWS_ORACLE_REL_PATH: candidate,
       CAWS_ORACLE_SESSION_ID: sessionId,
       CAWS_ORACLE_CURRENT_BRANCH: '',
+      CAWS_ORACLE_REMOVE_TREE: removeTree ? '1' : '0',
     },
   });
   expect(result.error).toBeUndefined();
@@ -172,6 +190,234 @@ function runOracle(root, candidate, { sessionId = 'sess-self', blockJsYaml = fal
 }
 
 describe('worktree-claim-oracle verdicts', () => {
+  test.each(['malformed', 'scalar', 'directory', 'dangling'])(
+    'existing %s registry cannot be mistaken for absent governance',
+    (failure) => {
+      const repo = makeRepo();
+      seedClaimant(repo, {
+        name: 'wt-foreign',
+        specId: 'FOREIGN',
+        owner: 'foreign-sess',
+        scopeIn: ['src/file'],
+      });
+      const target = path.join(repo, '.caws/worktrees/wt-foreign/file');
+      expect(runOracle(repo, target)).toBe('block_foreign_worktree:wt-foreign:foreign-sess');
+      damageRegistry(repo, failure);
+      expect(runOracle(repo, target)).toBe('error_fail_closed:worktree-ownership-registry');
+    }
+  );
+  test.each(['src', '.'])(
+    'canonical directory removal covers a narrower literal claim: %s',
+    (candidate) => {
+      const repo = makeRepo();
+      seedClaimant(repo, {
+        name: 'wt-claim',
+        specId: 'CLAIM',
+        owner: 'sess-self',
+        scopeIn: ['src/claimed.txt'],
+      });
+      expect(runOracle(repo, candidate, { removeTree: true })).toBe(
+        'block_claimed:wt-claim:src/claimed.txt'
+      );
+      expect(runOracle(repo, 'src-other', { removeTree: true })).toBe('pass:unclaimed');
+    }
+  );
+  test.each([false, true])(
+    'canonical tree effects cannot infer glob populations with YAML blocked=%s',
+    (blockJsYaml) => {
+      const repo = makeRepo();
+      seedClaimant(repo, {
+        name: 'wt-claim',
+        specId: 'CLAIM',
+        owner: 'foreign-sess',
+        scopeIn: ['src/*/claimed.txt'],
+      });
+      expect(runOracle(repo, 'src', { removeTree: true, blockJsYaml })).toBe(
+        'ask_uncertain:remove-tree-claims-unresolved'
+      );
+    }
+  );
+  test.each(['root', 'descendant', 'ancestor'])(
+    'registered custom physical paths preserve foreign ownership for %s',
+    (form) => {
+      const repo = makeRepo();
+      const custom = path.join(repo, 'docs/custom');
+      fs.mkdirSync(custom, { recursive: true });
+      const entries = registryEntry(repo, 'wt-custom', 'CUSTOM', 'foreign-sess');
+      entries['wt-custom'].path = 'docs/custom';
+      writeRegistry(repo, entries);
+      const candidate =
+        form === 'root'
+          ? custom
+          : form === 'ancestor'
+            ? path.dirname(custom)
+            : path.join(custom, 'new/deep/file');
+      expect(runOracle(repo, candidate, { blockJsYaml: true })).toBe(
+        'block_foreign_worktree:wt-custom:foreign-sess'
+      );
+    }
+  );
+  test('a unique owned custom root admits its payload but not a similarly named sibling', () => {
+    const repo = makeRepo();
+    const custom = path.join(repo, 'docs/custom');
+    fs.mkdirSync(custom, { recursive: true });
+    const entries = registryEntry(repo, 'wt-custom', 'CUSTOM', 'sess-self');
+    entries['wt-custom'].path = custom;
+    writeRegistry(repo, entries);
+    expect(runOracle(repo, path.join(custom, 'new/deep/file'), { blockJsYaml: true })).toBe(
+      'pass:owner-self:wt-custom'
+    );
+    expect(runOracle(repo, custom + '-other/file', { blockJsYaml: true })).toBe(
+      'degraded_no_yaml:no-js-yaml'
+    );
+  });
+  test('a conventional name cannot grant ownership when its registered path is elsewhere', () => {
+    const repo = makeRepo();
+    makeWorktreeDir(repo, 'wt-custom');
+    fs.mkdirSync(path.join(repo, 'lanes/custom'), { recursive: true });
+    const entries = registryEntry(repo, 'wt-custom', 'CUSTOM', 'sess-self');
+    entries['wt-custom'].path = 'lanes/custom';
+    writeRegistry(repo, entries);
+    expect(runOracle(repo, '.caws/worktrees/wt-custom/file', { blockJsYaml: true })).toBe(
+      'ask_uncertain:worktree-payload-no-entry:wt-custom'
+    );
+  });
+  test('an owned outer root cannot hide a nested foreign registered root', () => {
+    const repo = makeRepo();
+    const outer = path.join(repo, 'docs/custom');
+    const inner = path.join(outer, 'nested');
+    fs.mkdirSync(inner, { recursive: true });
+    const entries = {
+      ...registryEntry(repo, 'outer', 'OUTER', 'sess-self'),
+      ...registryEntry(repo, 'inner', 'INNER', 'foreign-sess'),
+    };
+    entries.outer.path = outer;
+    entries.inner.path = inner;
+    writeRegistry(repo, entries);
+    expect(runOracle(repo, outer, { blockJsYaml: true })).toBe(
+      'block_foreign_worktree:inner:foreign-sess'
+    );
+    expect(runOracle(repo, path.join(inner, 'file'), { blockJsYaml: true })).toBe(
+      'block_foreign_worktree:inner:foreign-sess'
+    );
+    expect(runOracle(repo, path.join(outer, 'other/file'), { blockJsYaml: true })).toBe(
+      'ask_uncertain:worktree-ownership-overlap'
+    );
+  });
+  test('duplicate physical roots cannot provide owner-self authority', () => {
+    const repo = makeRepo();
+    const custom = path.join(repo, 'docs/custom');
+    fs.mkdirSync(custom, { recursive: true });
+    const entries = {
+      ...registryEntry(repo, 'first', 'FIRST', 'sess-self'),
+      ...registryEntry(repo, 'second', 'SECOND', 'sess-self'),
+    };
+    entries.first.path = custom;
+    entries.second.path = custom;
+    writeRegistry(repo, entries);
+    expect(runOracle(repo, path.join(custom, 'file'), { blockJsYaml: true })).toBe(
+      'ask_uncertain:worktree-ownership-overlap'
+    );
+  });
+  test('a registry alias cannot grant owner-self authority', () => {
+    const repo = makeRepo();
+    const custom = path.join(repo, 'docs/custom');
+    const alias = path.join(repo, 'alias');
+    fs.mkdirSync(custom, { recursive: true });
+    fs.symlinkSync(custom, alias);
+    const entries = registryEntry(repo, 'wt-custom', 'CUSTOM', 'sess-self');
+    entries['wt-custom'].path = alias;
+    writeRegistry(repo, entries);
+    expect(runOracle(repo, path.join(custom, 'file'), { blockJsYaml: true })).toBe(
+      'ask_uncertain:worktree-ownership-path'
+    );
+  });
+  test.each(
+    ['absolute', 'absolute-trailing', 'relative', 'relative-trailing'].flatMap((form) =>
+      [
+        ['my-sess', 'pass:owner-self:wt-boundary'],
+        ['foreign-sess', 'block_foreign_worktree:wt-boundary:foreign-sess'],
+        [null, 'ask_uncertain:worktree-payload-no-owner:wt-boundary'],
+      ].map(([owner, expected]) => [form, owner, expected])
+    )
+  )(
+    'worktree directory roots retain owner decisions for %s coordinates and owner %s',
+    (form, owner, expected) => {
+      const repo = makeRepo();
+      makeWorktreeDir(repo, 'wt-boundary');
+      writeRegistry(repo, registryEntry(repo, 'wt-boundary', 'BOUNDARY', owner));
+      let candidate = '.caws/worktrees/wt-boundary';
+      if (form.startsWith('absolute')) candidate = path.join(repo, candidate);
+      if (form.endsWith('trailing')) candidate += '/';
+      expect(runOracle(repo, candidate, { sessionId: 'my-sess', blockJsYaml: true })).toBe(
+        expected
+      );
+    }
+  );
+
+  test.each(['.caws/worktrees/wt-ghost', '.caws/worktrees/wt-ghost/'])(
+    'worktree directory roots without a live entry remain uncertain: %s',
+    (candidate) => {
+      const repo = makeRepo();
+      makeWorktreeDir(repo, 'wt-control');
+      makeWorktreeDir(repo, 'wt-ghost');
+      writeRegistry(repo, registryEntry(repo, 'wt-control', 'CONTROL', 'my-sess'));
+      expect(runOracle(repo, candidate, { sessionId: 'my-sess', blockJsYaml: true })).toBe(
+        'ask_uncertain:worktree-payload-no-entry:wt-ghost'
+      );
+    }
+  );
+
+  test.each(['.caws/worktrees', '.caws', '.'])(
+    'foreign payload ancestors preserve ownership without YAML: %s',
+    (relative) => {
+      const repo = makeRepo();
+      makeWorktreeDir(repo, 'wt-other');
+      writeRegistry(repo, registryEntry(repo, 'wt-other', 'OTHER', 'foreign-sess'));
+      expect(
+        runOracle(repo, path.join(repo, relative), { sessionId: 'my-sess', blockJsYaml: true })
+      ).toBe('block_foreign_worktree:wt-other:foreign-sess');
+    }
+  );
+
+  test('foreign payload ancestors prefer known ownership refusal over earlier uncertainty', () => {
+    const repo = makeRepo();
+    makeWorktreeDir(repo, 'wt-unknown');
+    makeWorktreeDir(repo, 'wt-other');
+    writeRegistry(repo, {
+      ...registryEntry(repo, 'wt-unknown', 'UNKNOWN', null),
+      ...registryEntry(repo, 'wt-other', 'OTHER', 'foreign-sess'),
+    });
+    expect(
+      runOracle(repo, path.join(repo, '.caws'), { sessionId: 'my-sess', blockJsYaml: true })
+    ).toBe('block_foreign_worktree:wt-other:foreign-sess');
+  });
+
+  test('foreign payload ancestors retain ownership uncertainty rather than YAML degradation', () => {
+    const repo = makeRepo();
+    makeWorktreeDir(repo, 'wt-unknown');
+    writeRegistry(repo, registryEntry(repo, 'wt-unknown', 'UNKNOWN', null));
+    expect(
+      runOracle(repo, path.join(repo, '.caws'), { sessionId: 'my-sess', blockJsYaml: true })
+    ).toBe('ask_uncertain:worktree-container-no-owner:wt-unknown');
+  });
+
+  test('foreign payload ancestors do not inherit a similarly named directory prefix', () => {
+    const repo = makeRepo();
+    makeWorktreeDir(repo, 'wt-other');
+    writeRegistry(repo, registryEntry(repo, 'wt-other', 'OTHER', 'foreign-sess'));
+    fs.mkdirSync(path.join(repo, '.caws', 'worktrees-sibling'));
+    expect(runOracle(repo, path.join(repo, '.caws', 'worktrees-sibling'))).toBe('pass:unclaimed');
+  });
+
+  test('foreign payload ancestors do not turn owner-self into canonical claim permission', () => {
+    const repo = makeRepo();
+    seedClaimant(repo, { name: 'wt-mine', specId: 'MINE', owner: 'my-sess', scopeIn: ['.caws'] });
+    expect(runOracle(repo, path.join(repo, '.caws'), { sessionId: 'my-sess' })).toBe(
+      'block_claimed:wt-mine:.caws'
+    );
+  });
+
   test('a canonical path with js-yaml absent degrades instead of failing closed', () => {
     const repo = makeRepo();
     seedClaimant(repo, {
@@ -423,19 +669,28 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
       owner: 'foreign-session',
       scopeIn: ['packages/dir'],
     });
-    return { repo, home };
+    const cli = path.join(home, 'caws');
+    const shellQuote = (value) => "'" + value.replace(/'/g, "'\\''") + "'";
+    fs.writeFileSync(
+      cli,
+      '#!/bin/sh\nexec ' + shellQuote(process.execPath) + ' ' + shellQuote(CLI) + ' "$@"\n',
+      { mode: 0o755 }
+    );
+    return { repo, home, cli };
   }
 
   // Mirrors the Bats guard harness: an isolated HOME and CAWS_HOME and a synthetic
   // session, so no real session state, registration or kill authority is borrowed.
-  function runGuard({ repo, home }, command) {
+  function runGuard({ repo, home, cli }, command, { writePath, noAsk = false } = {}) {
     const envelope = JSON.stringify({
-      tool_name: 'Bash',
-      tool_input: { command },
+      tool_name: writePath ? 'Write' : 'Bash',
+      tool_input: writePath
+        ? { file_path: writePath, content: 'unexecuted preflight data' }
+        : { command },
       session_id: SESSION,
       cwd: repo,
     });
-    const result = spawnSync('/bin/bash', [BASH_WRITE_GUARD], {
+    const result = spawnSync('/bin/bash', [writePath ? WORKTREE_WRITE_GUARD : BASH_WRITE_GUARD], {
       cwd: repo,
       input: envelope,
       encoding: 'utf8',
@@ -443,12 +698,13 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
       env: {
         ...hermeticGitEnvironment(home),
         CAWS_HOME: path.join(home, '.caws'),
+        CAWS_BIN: cli,
         CAWS_PROJECT_DIR: repo,
         CAWS_AGENT_SURFACE: 'claude-code',
         HOOK_CWD: repo,
         HOOK_SESSION_ID: SESSION,
         CLAUDE_CODE_SESSION_ID: SESSION,
-        CAWS_GUARD_NO_ASK: '0',
+        CAWS_GUARD_NO_ASK: noAsk ? '1' : '0',
         NODE_PATH,
       },
     });
@@ -471,5 +727,120 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
     expect(result.status).toBe(0);
     expect(result.stdout).toBe('');
     expect(result.stderr).not.toContain('BLOCKED');
+  });
+
+  test.each(
+    ['Bash', 'Write'].flatMap((tool) =>
+      ['root', 'descendant', 'ancestor'].flatMap((form) =>
+        ['foreign-session', null].map((owner) => [tool, form, owner])
+      )
+    )
+  )('custom registered ownership survives allowlisting for %s %s owner %s', (tool, form, owner) => {
+    const fixture = makeClaimedRepo();
+    const custom = path.join(fixture.repo, 'docs/custom');
+    fs.mkdirSync(custom, { recursive: true });
+    const entries = registryEntry(fixture.repo, 'wt-custom', 'CUSTOM', owner);
+    entries['wt-custom'].path = custom;
+    writeRegistry(fixture.repo, entries);
+    const target =
+      form === 'root'
+        ? custom
+        : form === 'ancestor'
+          ? path.dirname(custom)
+          : path.join(custom, 'new/file');
+    const result = runGuard(fixture, 'rm -r ' + "'" + target + "'", {
+      noAsk: true,
+      ...(tool === 'Write' ? { writePath: target } : {}),
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain(owner ? 'DIFFERENT session' : 'worktree-');
+    expect(result.stderr).not.toContain('mandatory analyzer failed');
+    expect(fs.lstatSync(custom).isDirectory()).toBe(true);
+  });
+
+  test.each(
+    ['Bash', 'Write'].flatMap((tool) =>
+      ['malformed', 'scalar', 'directory', 'dangling'].map((failure) => [tool, failure])
+    )
+  )('%s cannot allowlist a custom payload with %s registry', (tool, failure) => {
+    const fixture = makeClaimedRepo();
+    const custom = path.join(fixture.repo, 'docs/custom');
+    fs.mkdirSync(custom, { recursive: true });
+    const target = path.join(custom, 'protected.txt');
+    fs.writeFileSync(target, 'foreign entry survives preflight\n');
+    const entries = registryEntry(fixture.repo, 'wt-custom', 'CUSTOM', 'foreign-session');
+    entries['wt-custom'].path = custom;
+    writeRegistry(fixture.repo, entries);
+    damageRegistry(fixture.repo, failure);
+    const result = runGuard(fixture, 'touch ' + "'" + target + "'", {
+      noAsk: true,
+      ...(tool === 'Write' ? { writePath: target } : {}),
+    });
+    expect({ status: result.status, stderr: result.stderr }).toEqual(
+      expect.objectContaining({ status: 2 })
+    );
+    expect(result.stderr).toContain('worktree-ownership-registry');
+    expect(fs.readFileSync(target, 'utf8')).toBe('foreign entry survives preflight\n');
+  });
+
+  test('Write cannot mistake inaccessible registry parents for absent governance', () => {
+    const fixture = makeClaimedRepo();
+    const custom = path.join(fixture.repo, 'docs/custom');
+    fs.mkdirSync(custom, { recursive: true });
+    const target = path.join(custom, 'protected.txt');
+    fs.writeFileSync(target, 'foreign entry survives preflight\n');
+    const entries = registryEntry(fixture.repo, 'wt-custom', 'CUSTOM', 'foreign-session');
+    entries['wt-custom'].path = custom;
+    writeRegistry(fixture.repo, entries);
+    const control = path.join(fixture.repo, '.caws');
+    const originalMode = fs.statSync(control).mode & 0o777;
+    let result;
+    fs.chmodSync(control, 0);
+    try {
+      result = runGuard(fixture, '', { noAsk: true, writePath: target });
+    } finally {
+      fs.chmodSync(control, originalMode);
+    }
+    expect(result.status).toBe(2);
+    // A privileged runner can traverse mode 000 and sees the known foreign
+    // owner; an unprivileged runner must retain the authority-read failure.
+    expect(result.stderr).toContain(
+      process.getuid() === 0 ? 'DIFFERENT session' : 'worktree-ownership-registry'
+    );
+    expect(fs.readFileSync(target, 'utf8')).toBe('foreign entry survives preflight\n');
+  });
+
+  test('Write preserves the genuinely absent-registry base state', () => {
+    const fixture = makeClaimedRepo();
+    fs.unlinkSync(path.join(fixture.repo, '.caws/worktrees.json'));
+    const directory = path.join(fixture.repo, 'docs');
+    fs.mkdirSync(directory);
+    const target = path.join(directory, 'new.txt');
+    const result = runGuard(fixture, '', { noAsk: true, writePath: target });
+    expect({ status: result.status, stdout: result.stdout, stderr: result.stderr }).toEqual({
+      status: 0,
+      stdout: '',
+      stderr: '',
+    });
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
+  test.each(['Bash', 'Write'])('a unique owned custom path admits %s payload', (tool) => {
+    const fixture = makeClaimedRepo();
+    const custom = path.join(fixture.repo, 'docs/custom');
+    fs.mkdirSync(custom, { recursive: true });
+    const entries = registryEntry(fixture.repo, 'wt-custom', 'CUSTOM', SESSION);
+    entries['wt-custom'].path = custom;
+    writeRegistry(fixture.repo, entries);
+    const target = path.join(custom, 'new/file');
+    const result = runGuard(
+      fixture,
+      'touch ' + "'" + target + "'",
+      tool === 'Write' ? { writePath: target } : {}
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('');
+    expect(fs.existsSync(target)).toBe(false);
   });
 });
