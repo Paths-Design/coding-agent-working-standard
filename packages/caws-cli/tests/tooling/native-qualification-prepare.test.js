@@ -13,6 +13,7 @@ const {
   inspectPreparationWriteAuthority,
   preparationSourceDisposition,
   collectPreparationProductionSource,
+  inspectPreparationSourceStanding,
 } = require('../../dist/tooling/native-qualification-prepare');
 
 describe('native preparation closed production input profile', () => {
@@ -83,7 +84,7 @@ describe('native preparation closed production input profile', () => {
   });
 });
 
-describe('native preparation actual worktree output authority reader', () => {
+describe('native preparation actual worktree source and output observations', () => {
   let root;
   let lane;
   let spec;
@@ -152,6 +153,152 @@ describe('native preparation actual worktree output authority reader', () => {
     };
   });
   afterEach(() => fixtures.cleanupAll());
+
+  function sourceSelection(sourceRoot = lane) {
+    return {
+      sourceRoot,
+      commit: fixtures.git(sourceRoot, ['rev-parse', '--verify', 'HEAD^{commit}']),
+      tree: fixtures.git(sourceRoot, ['rev-parse', '--verify', 'HEAD^{tree}']),
+      objectFormat: 'sha1',
+    };
+  }
+
+  test.each(['canonical', 'bound lane'])(
+    'observes exact current %s source without mutation',
+    (kind) => {
+      const source = sourceSelection(kind === 'canonical' ? root : lane);
+      const before = canonicalBytes();
+      expect(inspectPreparationSourceStanding(source, caller)).toEqual({
+        ...source,
+        repoRoot: root,
+        worktreeName: kind === 'canonical' ? null : 'prep',
+        specId: kind === 'canonical' ? null : 'PREP-001',
+      });
+      expect(canonicalBytes()).toEqual(before);
+      expect(fs.existsSync(selection.outputRoot)).toBe(false);
+      expect(calls).toEqual([
+        { args: ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd: lane },
+        {
+          args: ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+          cwd: source.sourceRoot,
+        },
+        { args: ['rev-parse', '--show-toplevel'], cwd: source.sourceRoot },
+        { args: ['rev-parse', '--show-object-format'], cwd: source.sourceRoot },
+        { args: ['rev-parse', '--verify', 'HEAD^{commit}'], cwd: source.sourceRoot },
+        { args: ['rev-parse', '--verify', 'HEAD^{tree}'], cwd: source.sourceRoot },
+        { args: ['rev-parse', '--verify', 'HEAD^{commit}'], cwd: source.sourceRoot },
+      ]);
+    }
+  );
+
+  test('source standing does not borrow its owner as output authority', () => {
+    const source = sourceSelection();
+    registry.prep.owner.session_id = 'different-owner';
+    saveRegistry();
+    expect(inspectPreparationSourceStanding(source, caller).commit).toBe(source.commit);
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow('another caller');
+  });
+
+  test('selects only HEAD while preserving dirty working files untouched', () => {
+    const source = sourceSelection();
+    const dirty = path.join(lane, 'uncommitted-source.ts');
+    fs.writeFileSync(dirty, 'uncommitted bytes');
+    expect(inspectPreparationSourceStanding(source, caller).commit).toBe(source.commit);
+    expect(fs.readFileSync(dirty, 'utf8')).toBe('uncommitted bytes');
+  });
+
+  test('refuses a historical commit even when its tree matches current HEAD', () => {
+    const source = sourceSelection();
+    fixtures.git(lane, ['commit', '--allow-empty', '-m', 'advance fixture source']);
+    expect(fixtures.git(lane, ['rev-parse', 'HEAD^{tree}'])).toBe(source.tree);
+    expect(() => inspectPreparationSourceStanding(source, caller)).toThrow('not the current HEAD');
+  });
+
+  test('refuses source from another canonical project', () => {
+    const foreign = fs.realpathSync(fixtures.makeTempRepo());
+    expect(initProject(foreign).ok).toBe(true);
+    const source = sourceSelection(foreign);
+    expect(() => inspectPreparationSourceStanding(source, caller)).toThrow(
+      'another canonical project'
+    );
+  });
+
+  test.each(['draft', 'closed', 'archived'])('refuses a %s source lane', (state) => {
+    const source = sourceSelection();
+    spec.lifecycle_state = state;
+    if (state !== 'draft') spec.resolution = 'completed';
+    saveSpec();
+    expect(loadSpecs(path.join(root, '.caws')).diagnostics).toEqual([]);
+    expect(() => inspectPreparationSourceStanding(source, caller)).toThrow(
+      'Source worktree spec must be active'
+    );
+  });
+
+  test('requires source registry membership and a bidirectional binding', () => {
+    const source = sourceSelection();
+    spec.worktree = 'another';
+    saveSpec();
+    expect(() => inspectPreparationSourceStanding(source, caller)).toThrow('bidirectional');
+    delete registry.prep;
+    saveRegistry();
+    expect(() => inspectPreparationSourceStanding(source, caller)).toThrow(
+      'exactly one live registry'
+    );
+  });
+
+  test('refuses duplicate source claims, subdirectory roots and path aliases', () => {
+    const source = sourceSelection();
+    registry.duplicate = { ...registry.prep };
+    saveRegistry();
+    expect(() => inspectPreparationSourceStanding(source, caller)).toThrow(
+      'exactly one live registry'
+    );
+    delete registry.duplicate;
+    saveRegistry();
+    fs.mkdirSync(path.join(lane, 'nested'));
+    expect(() =>
+      inspectPreparationSourceStanding({ ...source, sourceRoot: path.join(lane, 'nested') }, caller)
+    ).toThrow('actual Git checkout root');
+    const alias = path.join(root, 'source-alias');
+    fs.symlinkSync(lane, alias);
+    expect(() =>
+      inspectPreparationSourceStanding({ ...source, sourceRoot: alias }, caller)
+    ).toThrow('actual Git checkout root');
+  });
+
+  test('refuses malformed pins before Git and detects format/tree disagreement', () => {
+    const source = sourceSelection();
+    expect(() => inspectPreparationSourceStanding({ ...source, commit: 'HEAD' }, caller)).toThrow(
+      'full lowercase'
+    );
+    expect(calls).toEqual([]);
+    expect(() =>
+      inspectPreparationSourceStanding(
+        { ...source, commit: 'a'.repeat(64), tree: 'b'.repeat(64), objectFormat: 'sha256' },
+        caller
+      )
+    ).toThrow('object format mismatch');
+    expect(() =>
+      inspectPreparationSourceStanding({ ...source, tree: '1'.repeat(40) }, caller)
+    ).toThrow('tree pin does not match');
+  });
+
+  test('refuses a HEAD change between fixed observations', () => {
+    const source = sourceSelection();
+    const original = caller.git;
+    let headReads = 0;
+    caller.git = (args, options) => {
+      const result = original(args, options);
+      if (args.join(' ') === 'rev-parse --verify HEAD^{commit}' && ++headReads === 2)
+        return '1'.repeat(40);
+      return result;
+    };
+    expect(() => inspectPreparationSourceStanding(source, caller)).toThrow(
+      'HEAD changed during observation'
+    );
+    expect(headReads).toBe(2);
+    expect(fs.existsSync(selection.outputRoot)).toBe(false);
+  });
 
   test('reads real linked-worktree ownership and explicit relative scope without writes', () => {
     const before = canonicalBytes();

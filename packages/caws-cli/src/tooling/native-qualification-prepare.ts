@@ -58,6 +58,19 @@ export interface PreparationWriteObservation {
   checkedRelativePaths: string[];
 }
 
+export interface PreparationSourceSelection {
+  sourceRoot: string;
+  commit: string;
+  tree: string;
+  objectFormat: PreparationObjectFormat;
+}
+export interface PreparationSourceObservation extends PreparationSourceSelection {
+  repoRoot: string;
+  /** Canonical source does not borrow a lane's authority. */
+  worktreeName: string | null;
+  specId: string | null;
+}
+
 const MAX_OBJECT_BYTES = 16 * 1024 * 1024;
 const MAX_BATCH_BYTES = 512 * 1024 * 1024;
 const MAX_OBJECTS = 50000;
@@ -323,6 +336,82 @@ function descendant(root: string, target: string): boolean {
     !relative.startsWith(`..${path.sep}`) &&
     !path.isAbsolute(relative)
   );
+}
+
+/**
+ * A source pin selects the current canonical or actively bound worktree HEAD
+ * in the caller's project. It cannot select history, a foreign object store,
+ * an unregistered lane or dirty working files. This is a live observation,
+ * not an authority token; recheck it before materializing/publishing inputs.
+ * The maintained caller supplies the closed read-only Git transport.
+ */
+export function inspectPreparationSourceStanding(
+  selection: PreparationSourceSelection,
+  caller: PreparationCallerContext
+): PreparationSourceObservation {
+  normalizedAbsolute(caller.cwd);
+  normalizedAbsolute(selection.sourceRoot);
+  requireOid(selection.commit, selection.objectFormat);
+  requireOid(selection.tree, selection.objectFormat);
+  const callerProject = resolveRepoRoot(caller.cwd, { git: caller.git, requireCawsDir: true });
+  requireCondition(callerProject.ok, 'Cannot resolve caller source project');
+  const sourceProject = resolveRepoRoot(selection.sourceRoot, {
+    git: caller.git,
+    requireCawsDir: true,
+  });
+  requireCondition(sourceProject.ok, 'Cannot resolve selected source project');
+  requireCondition(
+    sourceProject.value.repoRoot === callerProject.value.repoRoot,
+    'Source belongs to another canonical project'
+  );
+  const { repoRoot, cawsDir } = callerProject.value;
+  const sourceTop = caller.git(['rev-parse', '--show-toplevel'], { cwd: selection.sourceRoot });
+  requireCondition(
+    sourceTop === selection.sourceRoot,
+    'Source must name its actual Git checkout root'
+  );
+  requireCondition(
+    fs.realpathSync(sourceTop) === sourceTop && fs.realpathSync(repoRoot) === repoRoot,
+    'Source project paths must be physical'
+  );
+  let worktreeName: string | null = null;
+  let specId: string | null = null;
+  if (sourceTop !== repoRoot) {
+    const registry = loadWorktrees(cawsDir);
+    requireCondition(registry.ok, 'Cannot load canonical source registry');
+    const matches = Object.entries(registry.value).filter(
+      ([, record]) => record?.path === sourceTop
+    );
+    requireCondition(matches.length === 1, 'Source worktree needs exactly one live registry entry');
+    const [name, record] = matches[0]!;
+    const specs = loadSpecs(cawsDir);
+    requireCondition(
+      !specs.diagnostics.some((item) => item.severity === 'error'),
+      'Canonical source spec load failed'
+    );
+    const spec = specs.specs.find((item) => item.id === record.specId);
+    requireCondition(spec?.lifecycle_state === 'active', 'Source worktree spec must be active');
+    requireCondition(
+      deriveBindingState(spec, registry.value, name).kind === 'bound',
+      'Source binding must be bidirectional'
+    );
+    worktreeName = name;
+    specId = spec.id;
+  }
+  const gitOptions = { cwd: sourceTop };
+  const observedFormat = caller.git(['rev-parse', '--show-object-format'], gitOptions);
+  requireCondition(observedFormat === selection.objectFormat, 'Source object format mismatch');
+  const observedCommit = caller.git(['rev-parse', '--verify', 'HEAD^{commit}'], gitOptions);
+  requireOid(observedCommit, selection.objectFormat);
+  requireCondition(observedCommit === selection.commit, 'Source pin is not the current HEAD');
+  const observedTree = caller.git(['rev-parse', '--verify', 'HEAD^{tree}'], gitOptions);
+  requireOid(observedTree, selection.objectFormat);
+  requireCondition(observedTree === selection.tree, 'Source tree pin does not match current HEAD');
+  requireCondition(
+    caller.git(['rev-parse', '--verify', 'HEAD^{commit}'], gitOptions) === observedCommit,
+    'Source HEAD changed during observation'
+  );
+  return { ...selection, repoRoot, worktreeName, specId };
 }
 
 /**
