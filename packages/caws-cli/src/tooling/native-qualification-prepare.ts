@@ -62,6 +62,136 @@ const MAX_OBJECT_BYTES = 16 * 1024 * 1024;
 const MAX_BATCH_BYTES = 512 * 1024 * 1024;
 const MAX_OBJECTS = 50000;
 
+// This is a production-input profile, not the publication curation authority.
+// All tracked first-party Markdown docs feed the maintained audience selector;
+// this profile does not duplicate its consumer/publication curation decision.
+const PRODUCTION_INPUT_FILES = new Set([
+  'LICENSE',
+  'package.json',
+  'package-lock.json',
+  'rust-toolchain.toml',
+  'scripts/install-cli-snapshot.mjs',
+  ...[
+    'package.json',
+    'README.md',
+    '.npmignore',
+    '.gitignore',
+    'tsconfig.vnext.json',
+    'surfaces/registry.json',
+    'src/index.js',
+    'src/config/index.js',
+    'src/error-handler.js',
+    'src/shell/legacy-command-map.js',
+    'src/shell/registered-command-groups.js',
+    'src/utils/detection.js',
+    'src/utils/error-categories.js',
+    'src/transcripts/unicode14/LICENSE.txt',
+    'src/transcripts/html311/LICENSE.txt',
+    'scripts/build-cli.js',
+    'scripts/generate-runtime-assets.mjs',
+    'scripts/generate-surface-registry.mjs',
+    'scripts/check-surface-registry.mjs',
+    'scripts/stage-consumer-docs.mjs',
+    'scripts/clean-staged-docs.mjs',
+    'scripts/generate-command-reference.mjs',
+    'scripts/validate-docs.mjs',
+  ].map((file) => `packages/caws-cli/${file}`),
+  ...[
+    'Cargo.toml',
+    'Cargo.lock',
+    'build.rs',
+    'src/process_comm_macos.c',
+    'src/owned_group_macos.c',
+    'src/service_image/prefix-profile.json',
+    'examples/process-comm-vis-oracle.c',
+    'examples/service-observer.rs',
+    'examples/service-custody-observer.rs',
+  ].map((file) => `packages/caws-native/${file}`),
+]);
+
+export type PreparationSourceDisposition = 'include' | 'unselected' | 'protected';
+
+/** Name-only selection. Call before requesting any source blob bytes. */
+export function preparationSourceDisposition(relativePath: string): PreparationSourceDisposition {
+  requireCondition(
+    typeof relativePath === 'string' &&
+      relativePath.length > 0 &&
+      relativePath.length <= 4096 &&
+      !path.posix.isAbsolute(relativePath) &&
+      path.posix.normalize(relativePath) === relativePath &&
+      relativePath
+        .split('/')
+        .every(
+          (name) =>
+            name.length > 0 &&
+            name.length <= 255 &&
+            name !== '.' &&
+            name !== '..' &&
+            /^[\x20-\x7e]+$/.test(name) &&
+            !name.includes('\\')
+        ),
+    'Unsafe source profile path'
+  );
+  const parts = relativePath.split('/');
+  const lower = parts.map((part) => part.toLowerCase());
+  const base = lower[lower.length - 1]!;
+  if (
+    lower.some(
+      (part) =>
+        part.startsWith('.env') ||
+        part.endsWith('.env') ||
+        [
+          '.git',
+          '.caws',
+          '.codex',
+          '.claude',
+          '.agent',
+          '.aws',
+          '.ssh',
+          '.azure',
+          '.kube',
+        ].includes(part) ||
+        part === 'node_modules' ||
+        part === '__pycache__'
+    ) ||
+    /^(credentials(?:\..*)?|id_(?:rsa|dsa|ecdsa|ed25519))$/.test(base) ||
+    /\.(?:pem|key|p12|pfx|pyc|pyo)$/.test(base) ||
+    base === '.npmrc' ||
+    relativePath.startsWith('packages/caws-cli/dist/') ||
+    relativePath.startsWith('packages/caws-native/target/') ||
+    relativePath.startsWith('packages/caws-cli/templates/hook-packs/claude-code/tmp/') ||
+    relativePath.startsWith('.cargo/')
+  )
+    return 'protected';
+  if (PRODUCTION_INPUT_FILES.has(relativePath)) return 'include';
+  if (relativePath.startsWith('docs/') && relativePath.endsWith('.md')) return 'include';
+  if (
+    /^packages\/caws-cli\/src\/(?:store|shell|kernel|init|runtime|transcripts|tooling)\/.+\.(?:ts|json)$/.test(
+      relativePath
+    )
+  )
+    return 'include';
+  if (relativePath.startsWith('packages/caws-cli/templates/hook-packs/')) {
+    // These are distributable templates, not effective machine registrations.
+    // Their operational scratch/state and arbitrary fixtures are not inputs.
+    const templateParts = lower.slice(4);
+    if (
+      templateParts.some((part) =>
+        ['tmp', 'state', 'sessions', 'artifacts', '.caws', '.codex', 'fixtures', 'tests'].includes(
+          part
+        )
+      )
+    )
+      return 'protected';
+    return 'include';
+  }
+  if (relativePath.startsWith('packages/caws-native/src/') && relativePath.endsWith('.rs')) {
+    if (base === 'tests.rs' || parts.slice(3).includes('tests')) return 'unselected';
+    return 'include';
+  }
+  return 'unselected';
+}
+
 function requireCondition(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
 }

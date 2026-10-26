@@ -11,7 +11,73 @@ const {
   decodePreparationGitTree,
   planPreparationGitExport,
   inspectPreparationWriteAuthority,
+  preparationSourceDisposition,
 } = require('../../dist/tooling/native-qualification-prepare');
+
+describe('native preparation closed production input profile', () => {
+  test.each([
+    'package-lock.json',
+    'packages/caws-cli/src/store/specs-store.ts',
+    'packages/caws-cli/src/kernel/schemas/spec.v1.json',
+    'packages/caws-cli/scripts/build-cli.js',
+    'packages/caws-cli/templates/hook-packs/claude-code/settings.json',
+    'packages/caws-cli/templates/hook-packs/shared/AGENTS.md',
+    'packages/caws-native/src/installed_entry.rs',
+    'packages/caws-native/examples/process-comm-vis-oracle.c',
+    'packages/caws-native/examples/service-observer.rs',
+    'packages/caws-native/examples/service-custody-observer.rs',
+    'docs/guides/worktree-isolation.md',
+    'docs/new-consumer-guide.md',
+    'docs/architecture/maintainer-input.md',
+  ])('selects traced production input %s', (file) => {
+    expect(preparationSourceDisposition(file)).toBe('include');
+  });
+
+  test.each([
+    '.caws/policy.yaml',
+    '.codex/hooks.json',
+    '.claude/settings.json',
+    'packages/caws-cli/src/runtime/.env.example',
+    'packages/caws-cli/src/runtime/.caws/state.json',
+    'packages/caws-cli/src/runtime/.codex/hooks.json',
+    'docs/.env/local.md',
+    'docs/.aws/credentials.md',
+    'packages/caws-cli/templates/hook-packs/shared/.env.fixture',
+    'packages/caws-cli/templates/hook-packs/shared/credentials.json',
+    'packages/caws-cli/templates/hook-packs/shared/private.key',
+    'packages/caws-cli/templates/hook-packs/claude-code/tmp/session.json',
+    'packages/caws-cli/templates/hook-packs/shared/state/pointer.json',
+    'packages/caws-cli/node_modules/example/index.js',
+    'packages/caws-native/target/release/caws',
+    '.npmrc',
+    '.cargo/config.toml',
+  ])('refuses protected source name before any blob selection: %s', (file) => {
+    expect(preparationSourceDisposition(file)).toBe('protected');
+  });
+
+  test.each([
+    'README.md',
+    'docs/diagram.svg',
+    'packages/caws-cli/tests/unit.test.js',
+    'packages/caws-native/src/tests.rs',
+    'packages/caws-native/src/worker/tests/example.rs',
+    'packages/caws-native/examples/unrelated.c',
+    'packages/caws-native/src/service_protocol/fixtures.json',
+    'packages/another-workspace/src/main.ts',
+  ])('does not broaden the fixed profile to %s', (file) => {
+    expect(preparationSourceDisposition(file)).toBe('unselected');
+  });
+
+  test.each([
+    '../package.json',
+    '/package.json',
+    'packages/caws-cli/src/../state.ts',
+    'a\\b',
+    'a//b',
+  ])('refuses malformed profile path %s', (file) => {
+    expect(() => preparationSourceDisposition(file)).toThrow('Unsafe source profile path');
+  });
+});
 
 describe('native preparation actual worktree output authority reader', () => {
   let root;
