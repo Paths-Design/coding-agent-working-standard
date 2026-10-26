@@ -34,6 +34,8 @@ const NATURAL: u8 = 3;
 const STOPPED: u8 = 4;
 const UNCERTAIN: u8 = 5;
 const SIGNALLED: u8 = 6;
+// Private stop request; unlike control EOF, this preserves status delivery.
+const CANCEL: u8 = 1;
 // Darwin has signals 1..31; stopped/continued statuses are never terminal.
 const MAX_SIGNAL: u32 = 31;
 const PACKET: usize = 5;
@@ -215,20 +217,99 @@ pub(crate) fn failure_status(event: &str) -> u8 {
 fn policy(event: &str) -> u8 {
     failure_status(event)
 }
-fn allowed(deadline: &MonotonicDeadline) -> bool {
-    let original = deadline.envelope();
-    original
-        .expires_ns
-        .checked_sub(original.started_ns)
-        .is_some_and(|interval| interval > 0 && interval <= MAX_ORIGINAL_NS)
-        && deadline.check().is_ok()
+/// Earlier operational cutoffs, never replacement deadline authority. Both
+/// retained clocks must remain live at every foreground/effect boundary.
+struct CompatibilityBudget<'a> {
+    original: &'a MonotonicDeadline,
+    policy: Option<&'a MonotonicDeadline>,
+    execution_end: Option<Instant>,
+    foreground_end: Instant,
 }
-fn check(deadline: &MonotonicDeadline) -> io::Result<()> {
-    if allowed(deadline) {
+impl<'a> CompatibilityBudget<'a> {
+    fn new(
+        original: &'a MonotonicDeadline,
+        policy: Option<&'a MonotonicDeadline>,
+    ) -> io::Result<Self> {
+        let outer = original.envelope();
+        let interval = outer
+            .expires_ns
+            .checked_sub(outer.started_ns)
+            .filter(|interval| *interval > 0 && *interval <= MAX_ORIGINAL_NS)
+            .ok_or_else(|| io::Error::other("invalid original compatibility interval"))?;
+        let (interval, expires) = if let Some(policy) = policy {
+            let selected = policy.envelope();
+            if selected.started_ns != outer.started_ns || selected.expires_ns > outer.expires_ns {
+                return Err(io::Error::other(
+                    "compatibility policy is not an original restriction",
+                ));
+            }
+            let selected_interval = selected
+                .expires_ns
+                .checked_sub(selected.started_ns)
+                .filter(|interval| *interval > 0)
+                .ok_or_else(|| io::Error::other("invalid compatibility policy interval"))?;
+            (selected_interval, original.expires().min(policy.expires()))
+        } else {
+            (interval, original.expires())
+        };
+        let duration = Duration::from_nanos(interval);
+        // Stop/EOF/status observation and residual host delivery run concurrently.
+        // Existing 500ms cleanup/delivery and 100ms diagnostic ceilings are caps,
+        // not promises that kernel operations complete inside these allocations.
+        let terminal = (duration / 4).clamp(Duration::from_millis(1), Duration::from_millis(500));
+        let returning = (duration / 8).clamp(Duration::from_millis(1), Duration::from_millis(100));
+        let foreground_end = expires
+            .checked_sub(returning)
+            .ok_or_else(|| io::Error::other("compatibility foreground cutoff underflow"))?;
+        let reserved = terminal
+            .checked_add(returning)
+            .ok_or_else(|| io::Error::other("compatibility reserve overflow"))?;
+        let execution_end = if reserved < duration {
+            Some(
+                expires
+                    .checked_sub(reserved)
+                    .ok_or_else(|| io::Error::other("compatibility execution cutoff underflow"))?,
+            )
+        } else {
+            // A valid short interval can have no dispatch phase. Never replace
+            // it with a new clock or spawn merely to report its exhaustion.
+            None
+        };
+        Ok(Self {
+            original,
+            policy,
+            execution_end,
+            foreground_end,
+        })
+    }
+    fn clocks_live(&self) -> bool {
+        self.original.check().is_ok() && self.policy.is_none_or(|clock| clock.check().is_ok())
+    }
+    fn execution_allowed(&self) -> bool {
+        self.clocks_live() && self.execution_end.is_some_and(|end| Instant::now() < end)
+    }
+    fn execution_check(&self) -> io::Result<()> {
+        if self.execution_allowed() {
+            Ok(())
+        } else {
+            Err(io::Error::other(
+                "compatibility execution phase unavailable",
+            ))
+        }
+    }
+    fn foreground_allowed(&self) -> bool {
+        self.clocks_live() && Instant::now() < self.foreground_end
+    }
+}
+fn allowed(budget: &CompatibilityBudget<'_>) -> bool {
+    budget.foreground_allowed()
+}
+fn check(budget: &CompatibilityBudget<'_>) -> io::Result<()> {
+    if allowed(budget) {
         Ok(())
     } else {
         Err(io::Error::other(
-            "original compatibility deadline invalid or expired",
+            "compatibility foreground deadline invalid or expired",
         ))
     }
 }
@@ -239,12 +320,17 @@ fn interests(fds: &mut Vec<libc::pollfd>, fd: RawFd, events: i16) {
         revents: 0,
     });
 }
-fn poll(fds: &mut [libc::pollfd], deadline: Option<&MonotonicDeadline>) -> io::Result<()> {
+fn poll(fds: &mut [libc::pollfd], deadline: Option<&CompatibilityBudget<'_>>) -> io::Result<()> {
     let timeout = if let Some(deadline) = deadline {
         check(deadline)?;
-        deadline
-            .expires()
-            .saturating_duration_since(Instant::now())
+        let now = Instant::now();
+        let next = deadline
+            .execution_end
+            .filter(|end| now < *end)
+            .map_or(deadline.foreground_end, |end| {
+                end.min(deadline.foreground_end)
+            });
+        next.saturating_duration_since(now)
             .as_millis()
             .min(TICK_MS as u128) as i32
     } else {
@@ -263,7 +349,7 @@ fn poll(fds: &mut [libc::pollfd], deadline: Option<&MonotonicDeadline>) -> io::R
     Ok(())
 }
 
-fn emit(fd: RawFd, bytes: &[u8], deadline: Option<&MonotonicDeadline>) {
+fn emit(fd: RawFd, bytes: &[u8], deadline: Option<&CompatibilityBudget<'_>>) {
     let Ok(_flags) = Flags::set(fd) else {
         return;
     };
@@ -303,8 +389,18 @@ fn emit(fd: RawFd, bytes: &[u8], deadline: Option<&MonotonicDeadline>) {
 pub(crate) fn refuse_before_dispatch(
     event: &str,
     error: &str,
-    deadline: Option<&MonotonicDeadline>,
+    original: Option<&MonotonicDeadline>,
+    policy_deadline: Option<&MonotonicDeadline>,
 ) -> u8 {
+    let budget = match original {
+        Some(original) => match CompatibilityBudget::new(original, policy_deadline) {
+            Ok(budget) if budget.foreground_allowed() => Some(budget),
+            _ => return policy(event),
+        },
+        None if policy_deadline.is_none() => None,
+        None => return policy(event),
+    };
+    let deadline = budget.as_ref();
     let Ok(_signals) = Signals::install() else {
         return policy(event);
     };
@@ -322,18 +418,54 @@ pub(crate) fn refuse_before_dispatch(
     emit(2, format!("[{message}]\n").as_bytes(), deadline);
     policy(event)
 }
-fn incomplete(deadline: &MonotonicDeadline, reason: &str) {
+fn incomplete(deadline: &CompatibilityBudget<'_>, reason: &str) {
+    let bytes = format!("[CAWS native installed entry: delivery incomplete; {reason}]\n");
+    emit_incomplete(2, bytes.as_bytes(), deadline);
+}
+
+fn emit_incomplete(fd: RawFd, bytes: &[u8], deadline: &CompatibilityBudget<'_>) {
     if !allowed(deadline) {
         return;
     }
-    let Ok(_flags) = Flags::set(2) else {
+    let Ok(_flags) = Flags::set(fd) else {
         return;
     };
-    let bytes = format!("[CAWS native installed entry: delivery incomplete; {reason}]\n");
-    if allowed(deadline) {
-        // One nonblocking diagnostic attempt cannot delay a cancellation until
-        // the rest of the invocation budget expires. No stdout is synthesized.
-        unsafe { libc::write(2, bytes.as_ptr().cast(), bytes.len()) };
+    // This is an operational cap inside both retained clocks, never a new
+    // deadline or permission to write after the foreground phase. A full host
+    // pipe may recover after its last payload chunk; allow that bounded retry.
+    let until = Instant::now()
+        .checked_add(Duration::from_millis(100))
+        .unwrap_or(deadline.foreground_end)
+        .min(deadline.foreground_end)
+        .min(deadline.original.expires());
+    let mut offset = 0;
+    while offset < bytes.len() && allowed(deadline) && Instant::now() < until {
+        let part = &bytes[offset..bytes.len().min(offset + CHUNK)];
+        let n = unsafe { libc::write(fd, part.as_ptr().cast(), part.len()) };
+        if n > 0 {
+            offset += n as usize;
+        } else if n == 0 || !transient(&io::Error::last_os_error()) {
+            return;
+        }
+        if offset == bytes.len() || !allowed(deadline) || Instant::now() >= until {
+            return;
+        }
+        let mut fds = [libc::pollfd {
+            fd,
+            events: libc::POLLOUT,
+            revents: 0,
+        }];
+        let timeout = until
+            .saturating_duration_since(Instant::now())
+            .as_millis()
+            .min(TICK_MS as u128) as i32;
+        if unsafe { libc::poll(fds.as_mut_ptr(), 1, timeout) } < 0
+            && io::Error::last_os_error().kind() != io::ErrorKind::Interrupted
+        {
+            return;
+        }
+        // The loop checks both original/policy clocks and the earlier cap after
+        // every poll, including EINTR, before another nonblocking write.
     }
 }
 
@@ -410,16 +542,29 @@ fn reap_worker(pid: libc::pid_t) {
 /// Consume an admitted command without changing its argv, cwd or environment.
 /// macOS is required for owned-group settlement. The caller must remain single
 /// threaded through this fork. Returns independently of unresolved worker cleanup.
-pub(crate) fn run(mut command: Command, deadline: &MonotonicDeadline, event: &str) -> u8 {
+pub(crate) fn run(
+    mut command: Command,
+    original: &MonotonicDeadline,
+    policy_deadline: Option<&MonotonicDeadline>,
+    event: &str,
+) -> u8 {
+    let budget = match CompatibilityBudget::new(original, policy_deadline) {
+        Ok(budget) => budget,
+        Err(_) => return policy(event),
+    };
+    let deadline = &budget;
+    // A consumed/insufficient execution phase is status-only, even if a small
+    // foreground remainder exists. Never fork merely to report this failure.
+    if !deadline.execution_allowed() {
+        return policy(event);
+    }
     if !cfg!(target_os = "macos") {
         return refuse_before_dispatch(
             event,
             "Compatibility custody requires macOS group settlement",
-            Some(deadline),
+            Some(original),
+            policy_deadline,
         );
-    }
-    if !allowed(deadline) {
-        return policy(event);
     }
     let signals = match Signals::install() {
         Ok(signals) => signals,
@@ -427,7 +572,8 @@ pub(crate) fn run(mut command: Command, deadline: &MonotonicDeadline, event: &st
             return refuse_before_dispatch(
                 event,
                 "Compatibility signal configuration failed",
-                Some(deadline),
+                Some(original),
+                policy_deadline,
             );
         }
     };
@@ -441,7 +587,8 @@ pub(crate) fn run(mut command: Command, deadline: &MonotonicDeadline, event: &st
         return refuse_before_dispatch(
             event,
             "Compatibility host stdio descriptor unavailable",
-            Some(deadline),
+            Some(original),
+            policy_deadline,
         );
     }
     let (foreground, worker) = match channels() {
@@ -450,11 +597,12 @@ pub(crate) fn run(mut command: Command, deadline: &MonotonicDeadline, event: &st
             return refuse_before_dispatch(
                 event,
                 "Compatibility private channels unavailable",
-                Some(deadline),
+                Some(original),
+                policy_deadline,
             );
         }
     };
-    if !allowed(deadline) {
+    if !deadline.execution_allowed() {
         return policy(event);
     }
     let original_parent = unsafe { libc::getppid() };
@@ -462,7 +610,12 @@ pub(crate) fn run(mut command: Command, deadline: &MonotonicDeadline, event: &st
     // command/clock and terminates with _exit, never returning to the caller.
     let pid = unsafe { libc::fork() };
     if pid < 0 {
-        return refuse_before_dispatch(event, "Compatibility worker fork failed", Some(deadline));
+        return refuse_before_dispatch(
+            event,
+            "Compatibility worker fork failed",
+            Some(original),
+            policy_deadline,
+        );
     }
     if pid == 0 {
         // Close host stdio before any fallible setup or Rust cleanup. A worker
@@ -485,7 +638,7 @@ pub(crate) fn run(mut command: Command, deadline: &MonotonicDeadline, event: &st
 
 fn foreground_main(
     channels: Channels,
-    deadline: &MonotonicDeadline,
+    deadline: &CompatibilityBudget<'_>,
     event: &str,
     original_parent: i32,
 ) -> u8 {
@@ -515,39 +668,51 @@ fn foreground_main(
     let mut status_eof = false;
     let mut spawned = false;
     let mut terminal = None;
+    let mut failure: Option<String> = None;
+    let mut cancel_sent = false;
     // Description inspects selection without consuming the caller's input.
     // Keep the private child input channel open until completion or cancellation.
     let forward_input = event != "describe";
     loop {
         if !allowed(deadline) {
-            return policy(event);
-        }
-        let signal = SIGNAL.load(Ordering::Relaxed);
-        if signal != 0 {
             return foreground_failure(
                 &channels,
                 deadline,
                 event,
-                &format!("caller interrupted; raw signal {signal}; cleanup unconfirmed"),
+                "foreground cutoff reached; cleanup unconfirmed",
             );
+        }
+        let signal = SIGNAL.load(Ordering::Relaxed);
+        if signal != 0 && failure.is_none() {
+            failure = Some(format!("caller interrupted; raw signal {signal}"));
         }
         if (original_parent > 1 && unsafe { libc::getppid() } != original_parent)
             || output_closed(1)
         {
-            return foreground_failure(
-                &channels,
-                deadline,
-                event,
-                "caller cancelled; cleanup unconfirmed",
-            );
+            failure.get_or_insert_with(|| "caller cancelled".into());
+        }
+        if terminal.is_none() && !deadline.execution_allowed() && failure.is_none() {
+            failure = Some("compatibility execution cutoff reached".into());
+        }
+        if failure.is_some() || terminal.is_some() {
+            if failure.is_some() && !cancel_sent {
+                cancel_sent = request_cancel(&channels);
+            }
+            input.discard();
+            if input_open {
+                let _ = channels.input.shutdown(std::net::Shutdown::Write);
+                input_open = false;
+            }
         }
         let operation = (|| -> io::Result<()> {
             check(deadline)?;
-            if forward_input && !input_eof && input_open && input.space() > 0 {
+            if failure.is_none() && forward_input && !input_eof && input_open && input.space() > 0 {
+                deadline.execution_check()?;
                 input_eof = input.read(0)?;
             }
             check(deadline)?;
             if input_open && !input.empty() {
+                deadline.execution_check()?;
                 if let Err(issue) = input.write(channels.input.as_raw_fd()) {
                     if matches!(
                         issue.kind(),
@@ -608,11 +773,6 @@ fn foreground_main(
                     _ => return Err(io::Error::other("invalid worker status transition")),
                 }
             }
-            if matches!(terminal, Some((SIGNALLED, _))) {
-                // Preserve the raw-signal diagnostic even if a host sink has
-                // become unwritable. No more compatibility output is required.
-                return Ok(());
-            }
             check(deadline)?;
             output.write(1)?;
             check(deadline)?;
@@ -621,39 +781,50 @@ fn foreground_main(
             Ok(())
         })();
         if operation.is_err() {
-            return foreground_failure(
-                &channels,
-                deadline,
-                event,
-                "compatibility transport or cleanup unconfirmed",
-            );
-        }
-        if let Some((SIGNALLED, signal)) = terminal {
-            return foreground_failure(
-                &channels,
-                deadline,
-                event,
-                &format!("compatibility child interrupted; raw signal {signal}"),
-            );
+            let reason = if let Some((SIGNALLED, signal)) = terminal {
+                let child = format!("compatibility child interrupted; raw signal {signal}");
+                failure
+                    .as_ref()
+                    .map_or(child.clone(), |reason| format!("{reason}; {child}"))
+            } else {
+                failure
+                    .clone()
+                    .unwrap_or_else(|| "compatibility transport or cleanup unconfirmed".into())
+            };
+            return foreground_failure(&channels, deadline, event, &reason);
         }
         if let Some((NO_CHILD, _)) = terminal {
             return refuse_before_dispatch(
                 event,
                 "Compatibility worker failed before child creation",
-                Some(deadline),
+                Some(deadline.original),
+                deadline.policy,
             );
         }
         if output_eof && error_eof && output.empty() && error.empty() {
+            if let Some((SIGNALLED, signal)) = terminal {
+                let child = format!("compatibility child interrupted; raw signal {signal}");
+                let reason = failure
+                    .as_ref()
+                    .map_or(child.clone(), |reason| format!("{reason}; {child}"));
+                incomplete(deadline, &reason);
+                return policy(event);
+            }
             if let Some((NATURAL, code)) = terminal {
+                if let Some(reason) = failure {
+                    incomplete(deadline, &reason);
+                    return policy(event);
+                }
                 return code as u8;
             }
             if let Some((STOPPED, _)) = terminal {
-                return foreground_failure(
-                    &channels,
+                incomplete(
                     deadline,
-                    event,
-                    "compatibility execution stopped",
+                    failure
+                        .as_deref()
+                        .unwrap_or("compatibility execution stopped"),
                 );
+                return policy(event);
             }
         }
         if status_eof && (terminal.is_none() || !status.empty()) {
@@ -665,7 +836,7 @@ fn foreground_main(
             );
         }
         let mut fds = Vec::with_capacity(6);
-        if forward_input && !input_eof && input_open && input.space() > 0 {
+        if failure.is_none() && forward_input && !input_eof && input_open && input.space() > 0 {
             interests(&mut fds, 0, libc::POLLIN);
         }
         if input_open && !input.empty() {
@@ -687,19 +858,88 @@ fn foreground_main(
             interests(&mut fds, 2, libc::POLLOUT);
         }
         if poll(&mut fds, Some(deadline)).is_err() {
-            return policy(event);
+            return foreground_failure(
+                &channels,
+                deadline,
+                event,
+                "foreground poll or clock failed; cleanup unconfirmed",
+            );
         }
+    }
+}
+
+/// Request stopping without closing the independent terminal-status channel.
+/// A transient full control socket is retried by the caller; permanent failure
+/// falls back to EOF, which the worker treats as loss of its foreground owner.
+fn request_cancel(channels: &Channels) -> bool {
+    let byte = [CANCEL];
+    let n = unsafe { libc::write(channels.control.as_raw_fd(), byte.as_ptr().cast(), 1) };
+    if n == 1 {
+        true
+    } else if n < 0 && transient(&io::Error::last_os_error()) {
+        false
+    } else {
+        let _ = channels.control.shutdown(std::net::Shutdown::Write);
+        true
     }
 }
 
 fn foreground_failure(
     channels: &Channels,
-    deadline: &MonotonicDeadline,
+    deadline: &CompatibilityBudget<'_>,
     event: &str,
     reason: &str,
 ) -> u8 {
-    // Request cancellation before attempting even best-effort diagnostics.
-    let _ = channels.control.shutdown(std::net::Shutdown::Both);
+    let mut cancelled = request_cancel(channels);
+    let _ = channels.input.shutdown(std::net::Shutdown::Write);
+    let mut status = Queue::default();
+    // A failed host descriptor/transport cannot be used to deliver more output.
+    // Drain only private sockets while the same foreground phase remains live.
+    // These observations do not synthesize EOF or confer a successful result.
+    while allowed(deadline) {
+        if !cancelled {
+            cancelled = request_cancel(channels);
+        }
+        for stream in [&channels.output, &channels.error] {
+            let mut discarded = Queue::default();
+            let _ = discarded.read(stream.as_raw_fd());
+        }
+        let status_eof = match status.read(channels.status.as_raw_fd()) {
+            Ok(eof) => eof,
+            Err(_) => break,
+        };
+        if status.0.len() > 4 * PACKET {
+            break;
+        }
+        while status.0.len() >= PACKET {
+            let kind = status.0.pop_front().expect("complete packet");
+            let mut value = [0; 4];
+            for byte in &mut value {
+                *byte = status.0.pop_front().expect("complete packet");
+            }
+            let value = u32::from_be_bytes(value);
+            if matches!((kind, value), (NO_CHILD | STOPPED, 0))
+                || (kind == NATURAL && value <= 255)
+                || (kind == SIGNALLED && (1..=MAX_SIGNAL).contains(&value))
+            {
+                incomplete(deadline, reason);
+                return policy(event);
+            }
+        }
+        if status_eof {
+            break;
+        }
+        // Retry ticks are scheduling only. The phase check before/after poll
+        // prevents a full tick from being appended to the foreground allowance.
+        let mut fds = [libc::pollfd {
+            fd: channels.status.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        }];
+        if poll(&mut fds, Some(deadline)).is_err() {
+            break;
+        }
+    }
     incomplete(deadline, reason);
     policy(event)
 }
@@ -733,9 +973,9 @@ impl Drop for DescriptorDirectory {
 #[cfg(target_os = "macos")]
 fn close_inherited_descriptors(
     channels: &Channels,
-    deadline: &MonotonicDeadline,
+    deadline: &CompatibilityBudget<'_>,
 ) -> io::Result<()> {
-    check(deadline)?;
+    deadline.execution_check()?;
     let keep = [
         channels.control.as_raw_fd(),
         channels.input.as_raw_fd(),
@@ -761,7 +1001,7 @@ fn close_inherited_descriptors(
     let mut seen_private = [false; 5];
     let mut entries = 0;
     loop {
-        check(deadline)?;
+        deadline.execution_check()?;
         if SIGNAL.load(Ordering::Relaxed) != 0 {
             return Err(io::Error::new(
                 io::ErrorKind::Interrupted,
@@ -821,17 +1061,17 @@ fn close_inherited_descriptors(
     // temporary DIR first; no descriptor-creating operation follows this point.
     directory.close()?;
     for fd in descriptors {
-        check(deadline)?;
+        deadline.execution_check()?;
         if unsafe { libc::close(fd) } != 0 {
             // In particular, do not retry close after EINTR using a potentially
             // reused number. Refuse dispatch; _exit releases every remaining fd.
             return Err(io::Error::last_os_error());
         }
     }
-    check(deadline)
+    deadline.execution_check()
 }
 #[cfg(not(target_os = "macos"))]
-fn close_inherited_descriptors(_: &Channels, _: &MonotonicDeadline) -> io::Result<()> {
+fn close_inherited_descriptors(_: &Channels, _: &CompatibilityBudget<'_>) -> io::Result<()> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "descriptor isolation requires macOS",
@@ -861,7 +1101,7 @@ fn isolate_host() -> io::Result<()> {
     }
     Ok(())
 }
-fn no_child(channels: &Channels, deadline: &MonotonicDeadline) -> ! {
+fn no_child(channels: &Channels, deadline: &CompatibilityBudget<'_>) -> ! {
     let mut status = Queue::default();
     status.packet(NO_CHILD, 0);
     while !status.empty() && allowed(deadline) {
@@ -894,10 +1134,10 @@ fn terminal_status(status: ExitStatus) -> Option<(u8, u32)> {
     })
 }
 
-fn worker_main(command: &mut Command, deadline: &MonotonicDeadline, channels: Channels) -> ! {
+fn worker_main(command: &mut Command, deadline: &CompatibilityBudget<'_>, channels: Channels) -> ! {
     if close_inherited_descriptors(&channels, deadline).is_err()
         || isolate_host().is_err()
-        || !allowed(deadline)
+        || !deadline.execution_allowed()
         || SIGNAL.load(Ordering::Relaxed) != 0
     {
         no_child(&channels, deadline);
@@ -932,7 +1172,7 @@ fn worker_main(command: &mut Command, deadline: &MonotonicDeadline, channels: Ch
             Ok(())
         });
     }
-    if !allowed(deadline) {
+    if !deadline.execution_allowed() {
         no_child(&channels, deadline);
     }
     let child = match command.spawn() {
@@ -951,7 +1191,7 @@ struct Custody {
     stdout: Option<ChildStdout>,
     stderr: Option<ChildStderr>,
 }
-fn own_child(mut child: Child, channels: Channels, deadline: &MonotonicDeadline) -> ! {
+fn own_child(mut child: Child, channels: Channels, deadline: &CompatibilityBudget<'_>) -> ! {
     // All identity and pipe handles live outside the unwind boundary. A panic
     // cannot drop Child or turn a lost pipe observation into confirmed EOF.
     let mut custody = Custody {
@@ -994,7 +1234,7 @@ fn close_channel(channel: &mut Option<&UnixStream>) {
         let _ = stream.shutdown(std::net::Shutdown::Both);
     }
 }
-fn pump_child(custody: &mut Custody, deadline: &MonotonicDeadline) -> ! {
+fn pump_child(custody: &mut Custody, deadline: &CompatibilityBudget<'_>) -> ! {
     let Custody {
         child,
         channels,
@@ -1028,7 +1268,6 @@ fn pump_child(custody: &mut Custody, deadline: &MonotonicDeadline) -> ! {
     let mut error_eof = false;
     let mut failed = !ready;
     let mut stopping = !ready;
-    let mut unknown_sent = false;
     let mut disconnected = false;
     let mut next_stop = Instant::now();
     let mut stop_accepted = false;
@@ -1041,6 +1280,15 @@ fn pump_child(custody: &mut Custody, deadline: &MonotonicDeadline) -> ! {
         if !disconnected {
             match live.read(channels.control.as_raw_fd()) {
                 Ok(false) if live.empty() => (),
+                Ok(false) if !live.empty() && live.0.iter().all(|byte| *byte == CANCEL) => {
+                    // Foreground may request stopping before it has read this
+                    // worker's terminal packet. Do not discard a reaped child's
+                    // residual output because that private request arrived late.
+                    if exit.is_none() {
+                        failed = true;
+                        stopping = true;
+                    }
+                }
                 _ => {
                     disconnected = true;
                     failed = true;
@@ -1048,7 +1296,10 @@ fn pump_child(custody: &mut Custody, deadline: &MonotonicDeadline) -> ! {
                 }
             }
         }
-        if !allowed(deadline) || SIGNAL.load(Ordering::Relaxed) != 0 {
+        if !allowed(deadline)
+            || (exit.is_none() && !deadline.execution_allowed())
+            || SIGNAL.load(Ordering::Relaxed) != 0
+        {
             failed = true;
             stopping = true;
         }
@@ -1090,7 +1341,7 @@ fn pump_child(custody: &mut Custody, deadline: &MonotonicDeadline) -> ! {
                 }
             }
             if let Some(pipe) = &stdin {
-                if !allowed(deadline) {
+                if !deadline.execution_allowed() {
                     failed = true;
                     stopping = true;
                 } else if input.write(pipe.as_raw_fd()).is_err() {
@@ -1189,10 +1440,9 @@ fn pump_child(custody: &mut Custody, deadline: &MonotonicDeadline) -> ! {
                 Err(_) => failed = true,
             }
         }
-        if failed && !unknown_sent {
-            status.packet(UNCERTAIN, 0);
-            unknown_sent = true;
-        }
+        // Execution failure is not a cleanup-unknown attestation. Keep the
+        // actual Child through stop/EOF/settlement/reap observation. Only the
+        // completed chain can publish a terminal packet below.
         if let Some((kind, value)) = exit
             && output_eof
             && error_eof
@@ -1268,5 +1518,339 @@ fn pump_child(custody: &mut Custody, deadline: &MonotonicDeadline) -> ! {
             failed = true;
             stopping = true;
         }
+    }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+    use caws_native::monotonic_deadline::DeadlineEnvelope;
+
+    #[test]
+    fn original_thirty_seconds_reserves_six_hundred_and_one_hundred_milliseconds() {
+        let original = MonotonicDeadline::capture(Duration::from_millis(30_000)).unwrap();
+        let envelope = original.envelope();
+        let budget = CompatibilityBudget::new(&original, None).unwrap();
+
+        assert_eq!(
+            original
+                .expires()
+                .checked_duration_since(budget.execution_end.unwrap()),
+            Some(Duration::from_millis(600))
+        );
+        assert_eq!(
+            original
+                .expires()
+                .checked_duration_since(budget.foreground_end),
+            Some(Duration::from_millis(100))
+        );
+        assert!(std::ptr::eq(budget.original, &original));
+        assert!(budget.policy.is_none());
+        assert_eq!(original.envelope(), envelope);
+    }
+
+    #[test]
+    fn selected_twelve_hundred_milliseconds_uses_both_retained_local_bounds() {
+        let original = MonotonicDeadline::capture(Duration::from_millis(30_000)).unwrap();
+        let envelope = original.envelope();
+        let selected_envelope = DeadlineEnvelope {
+            started_ns: envelope.started_ns,
+            expires_ns: envelope.started_ns.checked_add(1_200_000_000).unwrap(),
+        };
+        let selected = MonotonicDeadline::receive(selected_envelope).unwrap();
+        let budget = CompatibilityBudget::new(&original, Some(&selected)).unwrap();
+        let retained_end = original.expires().min(selected.expires());
+
+        assert_eq!(
+            retained_end.checked_duration_since(budget.execution_end.unwrap()),
+            Some(Duration::from_millis(400))
+        );
+        assert_eq!(
+            retained_end.checked_duration_since(budget.foreground_end),
+            Some(Duration::from_millis(100))
+        );
+        assert!(budget.foreground_end < original.expires());
+        assert!(budget.foreground_end < selected.expires());
+        assert!(std::ptr::eq(budget.original, &original));
+        assert!(std::ptr::eq(budget.policy.unwrap(), &selected));
+        assert_eq!(original.envelope(), envelope);
+        assert_eq!(selected.envelope(), selected_envelope);
+    }
+
+    #[test]
+    fn equal_policy_interval_also_uses_the_earlier_captured_local_bound() {
+        let original = MonotonicDeadline::capture(Duration::from_millis(30_000)).unwrap();
+        let selected = MonotonicDeadline::receive(original.envelope()).unwrap();
+        let budget = CompatibilityBudget::new(&original, Some(&selected)).unwrap();
+        let retained_end = original.expires().min(selected.expires());
+
+        assert_eq!(
+            retained_end.checked_duration_since(budget.execution_end.unwrap()),
+            Some(Duration::from_millis(600))
+        );
+        assert_eq!(
+            retained_end.checked_duration_since(budget.foreground_end),
+            Some(Duration::from_millis(100))
+        );
+    }
+
+    #[test]
+    fn one_and_two_millisecond_intervals_have_no_execution_phase() {
+        for milliseconds in [1, 2] {
+            let original = MonotonicDeadline::capture(Duration::from_millis(milliseconds)).unwrap();
+            let budget = CompatibilityBudget::new(&original, None).unwrap();
+            assert!(
+                budget.execution_end.is_none(),
+                "{milliseconds}ms must not create a dispatch phase"
+            );
+            assert_eq!(
+                original
+                    .expires()
+                    .checked_duration_since(budget.foreground_end),
+                Some(Duration::from_millis(1))
+            );
+        }
+    }
+
+    #[test]
+    fn three_milliseconds_retains_exactly_one_millisecond_for_execution() {
+        let original = MonotonicDeadline::capture(Duration::from_millis(3)).unwrap();
+        let budget = CompatibilityBudget::new(&original, None).unwrap();
+        assert_eq!(
+            original
+                .expires()
+                .checked_duration_since(budget.execution_end.unwrap()),
+            Some(Duration::from_millis(2))
+        );
+        assert_eq!(
+            original
+                .expires()
+                .checked_duration_since(budget.foreground_end),
+            Some(Duration::from_millis(1))
+        );
+    }
+
+    #[test]
+    fn selected_policy_cannot_change_the_original_start() {
+        let original = MonotonicDeadline::capture(Duration::from_millis(30_000)).unwrap();
+        let envelope = original.envelope();
+        let selected = MonotonicDeadline::receive(DeadlineEnvelope {
+            started_ns: envelope.started_ns.checked_sub(1).unwrap(),
+            expires_ns: envelope.expires_ns,
+        })
+        .unwrap();
+
+        assert!(CompatibilityBudget::new(&original, Some(&selected)).is_err());
+    }
+
+    #[test]
+    fn selected_policy_cannot_extend_the_original_expiry() {
+        let original = MonotonicDeadline::capture(Duration::from_millis(30_000)).unwrap();
+        let envelope = original.envelope();
+        let selected = MonotonicDeadline::receive(DeadlineEnvelope {
+            started_ns: envelope.started_ns,
+            expires_ns: envelope.expires_ns.checked_add(1).unwrap(),
+        })
+        .unwrap();
+
+        assert!(CompatibilityBudget::new(&original, Some(&selected)).is_err());
+    }
+
+    #[test]
+    fn compatibility_rejects_an_original_above_thirty_seconds() {
+        let original = MonotonicDeadline::capture(Duration::from_millis(30_001)).unwrap();
+        assert!(CompatibilityBudget::new(&original, None).is_err());
+    }
+
+    fn diagnostic_full_socket() -> (UnixStream, UnixStream, usize) {
+        let (writer, reader) = UnixStream::pair().unwrap();
+        writer.set_nonblocking(true).unwrap();
+        reader.set_nonblocking(true).unwrap();
+        let capacity: libc::c_int = 4096;
+        assert_eq!(
+            unsafe {
+                libc::setsockopt(
+                    writer.as_raw_fd(),
+                    libc::SOL_SOCKET,
+                    libc::SO_SNDBUF,
+                    (&capacity as *const libc::c_int).cast(),
+                    std::mem::size_of_val(&capacity) as libc::socklen_t,
+                )
+            },
+            0
+        );
+        let chunk = [b'Q'; 8192];
+        let last_byte = [b'Q'];
+        let mut filled = 0;
+        // The final single-byte pass establishes actual lack of write capacity,
+        // rather than only lack of room for the preceding large write.
+        for bytes in [&chunk[..], &last_byte[..]] {
+            let mut blocked = false;
+            for _ in 0..2048 {
+                let count =
+                    unsafe { libc::write(writer.as_raw_fd(), bytes.as_ptr().cast(), bytes.len()) };
+                if count > 0 {
+                    filled += count as usize;
+                    assert!(
+                        filled <= 1_048_576,
+                        "socket fill exceeded its finite fixture cap"
+                    );
+                } else if count < 0 {
+                    let error = io::Error::last_os_error();
+                    if error.kind() == io::ErrorKind::WouldBlock {
+                        blocked = true;
+                        break;
+                    }
+                    assert_eq!(error.kind(), io::ErrorKind::Interrupted, "{error}");
+                } else {
+                    panic!("socket fill made no progress");
+                }
+            }
+            assert!(
+                blocked,
+                "socket never reached WouldBlock within its fixture cap"
+            );
+        }
+        assert!(filled > 0);
+        let mut writable = [libc::pollfd {
+            fd: writer.as_raw_fd(),
+            events: libc::POLLOUT,
+            revents: 0,
+        }];
+        assert_eq!(unsafe { libc::poll(writable.as_mut_ptr(), 1, 0) }, 0);
+        (writer, reader, filled)
+    }
+
+    fn diagnostic_drain_socket(reader: &mut UnixStream) -> Vec<u8> {
+        use std::io::Read;
+        let mut observed = Vec::new();
+        let mut chunk = [0; 8192];
+        let mut blocked = false;
+        for _ in 0..2048 {
+            match reader.read(&mut chunk) {
+                Ok(0) => panic!("owned writer unexpectedly closed before diagnostic observation"),
+                Ok(count) => {
+                    observed.extend_from_slice(&chunk[..count]);
+                    assert!(
+                        observed.len() <= 1_056_768,
+                        "socket drain exceeded its fixture cap"
+                    );
+                }
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    blocked = true;
+                    break;
+                }
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => (),
+                Err(error) => panic!("socket drain failed: {error}"),
+            }
+        }
+        assert!(
+            blocked,
+            "socket drain never reached WouldBlock within its fixture cap"
+        );
+        observed
+    }
+
+    #[test]
+    fn incomplete_diagnostic_full_socket_observes_one_hundred_millisecond_retry_cap() {
+        let (writer, mut reader, filled) = diagnostic_full_socket();
+        let original = MonotonicDeadline::capture(Duration::from_millis(30_000)).unwrap();
+        let envelope = original.envelope();
+        let budget = CompatibilityBudget::new(&original, None).unwrap();
+        let original_live_before = original.check().is_ok();
+        let started = Instant::now();
+        let foreground_remaining = budget.foreground_end.duration_since(started);
+        emit_incomplete(writer.as_raw_fd(), b"DIAGNOSTIC MUST NOT FIT\n", &budget);
+        let elapsed = started.elapsed();
+        let original_live_after = original.check().is_ok();
+        let observed = diagnostic_drain_socket(&mut reader);
+        eprintln!(
+            "diagnostic_cap filled={} drained={} elapsed_ns={} foreground_remaining_ns={} original_live_before={} original_live_after={}",
+            filled,
+            observed.len(),
+            elapsed.as_nanos(),
+            foreground_remaining.as_nanos(),
+            original_live_before,
+            original_live_after,
+        );
+        assert!(original_live_before);
+        // This scheduling observation window does not permit retry work after
+        // the helper's internal 100ms cap. It rejects both a single attempt and
+        // borrowing the much later retained foreground deadline.
+        assert!(
+            elapsed >= Duration::from_millis(75),
+            "retry returned early: {elapsed:?}"
+        );
+        assert!(
+            elapsed < Duration::from_millis(150),
+            "retry exceeded observation window: {elapsed:?}"
+        );
+        assert_eq!(
+            observed,
+            vec![b'Q'; filled],
+            "diagnostic bytes entered a full socket"
+        );
+        assert_eq!(original.envelope(), envelope);
+    }
+
+    #[test]
+    fn incomplete_diagnostic_uses_earlier_foreground_cutoff_without_borrowing_one_hundred_ms() {
+        let (writer, mut reader, filled) = diagnostic_full_socket();
+        let original = MonotonicDeadline::capture(Duration::from_millis(30_000)).unwrap();
+        let envelope = original.envelope();
+        let selected_envelope = DeadlineEnvelope {
+            started_ns: envelope.started_ns,
+            expires_ns: envelope.started_ns.checked_add(80_000_000).unwrap(),
+        };
+        let selected = MonotonicDeadline::receive(selected_envelope).unwrap();
+        let budget = CompatibilityBudget::new(&original, Some(&selected)).unwrap();
+        let original_live_before = original.check().is_ok();
+        let selected_live_before = selected.check().is_ok();
+        let started = Instant::now();
+        let foreground_remaining = budget.foreground_end.duration_since(started);
+        assert!(foreground_remaining < Duration::from_millis(80));
+        emit_incomplete(
+            writer.as_raw_fd(),
+            b"EARLIER DIAGNOSTIC MUST NOT FIT\n",
+            &budget,
+        );
+        let ended = Instant::now();
+        let elapsed = ended.duration_since(started);
+        let original_live_after = original.check().is_ok();
+        let selected_live_after = selected.check().is_ok();
+        let observed = diagnostic_drain_socket(&mut reader);
+        eprintln!(
+            "diagnostic_earlier filled={} drained={} elapsed_ns={} foreground_remaining_ns={} past_foreground={} before_selected_expiry={} original_live_before={} selected_live_before={} original_live_after={} selected_live_after={}",
+            filled,
+            observed.len(),
+            elapsed.as_nanos(),
+            foreground_remaining.as_nanos(),
+            ended >= budget.foreground_end,
+            ended < selected.expires(),
+            original_live_before,
+            selected_live_before,
+            original_live_after,
+            selected_live_after,
+        );
+        assert!(original_live_before && selected_live_before);
+        assert!(
+            ended >= budget.foreground_end,
+            "retry returned before its earlier cutoff"
+        );
+        assert!(
+            ended < selected.expires(),
+            "retry borrowed time beyond selected original interval"
+        );
+        assert!(
+            elapsed < Duration::from_millis(100),
+            "retry borrowed a fresh 100ms: {elapsed:?}"
+        );
+        assert_eq!(
+            observed,
+            vec![b'Q'; filled],
+            "diagnostic bytes entered a full socket"
+        );
+        assert_eq!(original.envelope(), envelope);
+        assert_eq!(selected.envelope(), selected_envelope);
     }
 }

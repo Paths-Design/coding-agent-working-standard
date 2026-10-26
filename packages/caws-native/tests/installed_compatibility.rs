@@ -290,6 +290,8 @@ impl Fixture {
             stderr: Vec::new(),
             out_eof: false,
             err_eof: false,
+            stdout_eof_elapsed: None,
+            stderr_eof_elapsed: None,
             started,
             finished: false,
         }
@@ -324,9 +326,15 @@ impl Fixture {
         fs::write(self.root.join("stderr.bin"), &result.stderr).unwrap();
         fs::write(self.root.join("result.json"), serde_json::to_vec_pretty(&serde_json::json!({
             "exit_code":result.status.code(),"elapsed_ms":result.elapsed.as_millis(),"watchdog_fired":result.watchdog,
+            "foreground_elapsed_ms":result.elapsed.as_millis(),
+            "completion_elapsed_ms":result.completion_elapsed.map(|elapsed|elapsed.as_millis()),
+            "foreground_exit_observed_ns":result.elapsed.as_nanos(),
+            "stdout_eof_observed_ns":result.stdout_eof_elapsed.map(|elapsed|elapsed.as_nanos()),
+            "stderr_eof_observed_ns":result.stderr_eof_elapsed.map(|elapsed|elapsed.as_nanos()),
+            "completion_observed_ns":result.completion_elapsed.map(|elapsed|elapsed.as_nanos()),
+            "process_sample_elapsed_ms":result.process_sample_elapsed.as_millis(),
             "stdout_eof":result.out_eof,"stderr_eof":result.err_eof,"input_bytes_written":result.input_bytes
         })).unwrap()).unwrap();
-        self.sample("after-foreground");
     }
 }
 impl Drop for Fixture {
@@ -345,6 +353,11 @@ struct Process {
 struct ResultRecord {
     status: ExitStatus,
     elapsed: Duration,
+    completion_elapsed: Option<Duration>,
+    stdout_eof_elapsed: Option<Duration>,
+    stderr_eof_elapsed: Option<Duration>,
+    process_sample_elapsed: Duration,
+    processes: Vec<Process>,
     watchdog: bool,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
@@ -361,6 +374,8 @@ struct Running {
     stderr: Vec<u8>,
     out_eof: bool,
     err_eof: bool,
+    stdout_eof_elapsed: Option<Duration>,
+    stderr_eof_elapsed: Option<Duration>,
     started: Instant,
     finished: bool,
 }
@@ -379,6 +394,18 @@ fn drain(reader: &mut impl Read, bytes: &mut Vec<u8>) -> bool {
     false
 }
 impl Running {
+    fn drain_stdout(&mut self) {
+        if !self.out_eof && drain(&mut self.output, &mut self.stdout) {
+            self.out_eof = true;
+            self.stdout_eof_elapsed = Some(self.started.elapsed());
+        }
+    }
+    fn drain_stderr(&mut self) {
+        if !self.err_eof && drain(&mut self.error, &mut self.stderr) {
+            self.err_eof = true;
+            self.stderr_eof_elapsed = Some(self.started.elapsed());
+        }
+    }
     fn observe_custody_without_reading_output(&self, fixture: &Fixture) {
         let until = Instant::now() + Duration::from_secs(1);
         while !fixture.root.join("started.json").exists() && Instant::now() < until {
@@ -407,8 +434,8 @@ impl Running {
     fn wait_for_witness(&mut self, fixture: &Fixture, name: &str) {
         let until = Instant::now() + Duration::from_secs(2);
         while !fixture.root.join(format!("{name}.json")).exists() && Instant::now() < until {
-            self.out_eof |= drain(&mut self.output, &mut self.stdout);
-            self.err_eof |= drain(&mut self.error, &mut self.stderr);
+            self.drain_stdout();
+            self.drain_stderr();
             thread::sleep(Duration::from_millis(5));
         }
         assert!(
@@ -419,8 +446,8 @@ impl Running {
     fn wait_for_stdout(&mut self, expected: &[u8]) {
         let until = Instant::now() + Duration::from_secs(2);
         while self.stdout.len() < expected.len() && Instant::now() < until {
-            self.out_eof |= drain(&mut self.output, &mut self.stdout);
-            self.err_eof |= drain(&mut self.error, &mut self.stderr);
+            self.drain_stdout();
+            self.drain_stderr();
             thread::sleep(Duration::from_millis(5));
         }
         assert_eq!(
@@ -458,10 +485,10 @@ impl Running {
                 }
             }
             if drain_output {
-                self.out_eof |= drain(&mut self.output, &mut self.stdout);
+                self.drain_stdout();
             }
             if drain_error {
-                self.err_eof |= drain(&mut self.error, &mut self.stderr);
+                self.drain_stderr();
             }
             if let Some(status) = self.child.try_wait().unwrap() {
                 break status;
@@ -492,13 +519,29 @@ impl Running {
         // A worker retaining these pipes cannot hang this collector.
         let until = Instant::now() + Duration::from_millis(250);
         while !(self.out_eof && self.err_eof) && Instant::now() < until {
-            self.out_eof |= drain(&mut self.output, &mut self.stdout);
-            self.err_eof |= drain(&mut self.error, &mut self.stderr);
+            self.drain_stdout();
+            self.drain_stderr();
             thread::sleep(Duration::from_millis(5));
         }
+        // Completion is observed only when the foreground is reaped and both
+        // harness-facing streams have returned EOF. A failed collector records
+        // null rather than presenting its finite collection limit as completion.
+        let completion_elapsed = match (self.stdout_eof_elapsed, self.stderr_eof_elapsed) {
+            (Some(stdout), Some(stderr)) => Some(elapsed.max(stdout).max(stderr)),
+            _ => None,
+        };
+        // Take the contemporaneous process observation before persistence work.
+        // These rows authorize observations only; they are never signal targets.
+        let processes = fixture.sample("after-foreground");
+        let process_sample_elapsed = self.started.elapsed();
         let result = ResultRecord {
             status,
             elapsed,
+            completion_elapsed,
+            stdout_eof_elapsed: self.stdout_eof_elapsed,
+            stderr_eof_elapsed: self.stderr_eof_elapsed,
+            process_sample_elapsed,
+            processes,
             watchdog,
             stdout: std::mem::take(&mut self.stdout),
             stderr: std::mem::take(&mut self.stderr),
@@ -536,6 +579,49 @@ impl Drop for Running {
         }
     }
 }
+fn completion_elapsed(result: &ResultRecord) -> Duration {
+    result
+        .completion_elapsed
+        .expect("foreground exit and both output EOFs must be observed")
+}
+fn assert_private_group_not_live(fixture: &Fixture, result: &ResultRecord, witness: &str) {
+    let selected = fixture.witness(witness);
+    let pid = selected["pid"].as_u64().unwrap() as u32;
+    let pgid = selected["pgid"].as_u64().unwrap() as u32;
+    let worker = selected["ppid"].as_u64().unwrap() as u32;
+    assert!(worker > 1 && worker != pid);
+    assert_eq!(
+        pgid, pid,
+        "selected child must witness its own private group"
+    );
+    let live: Vec<_> = result
+        .processes
+        .iter()
+        .filter(|process| {
+            (process.pid == pid
+                || process.pgid == pgid
+                || process.pid == worker
+                || process.pgid == worker)
+                && !process.state.starts_with('Z')
+        })
+        .map(|process| {
+            (
+                process.pid,
+                process.ppid,
+                process.pgid,
+                process.state.as_str(),
+            )
+        })
+        .collect();
+    assert!(
+        live.is_empty(),
+        "post-completion sample returned a live worker/selected/private-group member: {live:?}; artifacts: {}",
+        fixture.root.display()
+    );
+    // Absence and zombie-only rows are bounded snapshot observations. They do
+    // not prove escaped-descendant absence or independently prove the worker reap.
+}
+
 fn expect_code(result: &ResultRecord, code: i32) {
     assert_eq!(result.status.code(), Some(code));
 }
@@ -562,6 +648,7 @@ fn legacy_natural_nonzero_codes_and_original_argv_are_preserved() {
             fixture.witness("started")["argv"],
             serde_json::json!(["codex", "pre_tool_use", "--system"])
         );
+        assert_private_group_not_live(&fixture, &result, "started");
     }
 }
 
@@ -595,6 +682,7 @@ fn describe_natural_nonzero_codes_are_preserved_without_native_or_legacy_retry()
         assert_eq!(argv[6], pointer["digest"]);
         assert_eq!(argv[7], "--configuration");
         assert_eq!(argv[8], "system");
+        assert_private_group_not_live(&fixture, &result, "started");
     }
 }
 
@@ -633,6 +721,7 @@ fn legacy_stdin_raw_bytes_eof_cwd_and_environment_reach_selected_child() {
         fixture.witness("started")["context"],
         "spaces and unicode: café"
     );
+    assert_private_group_not_live(&fixture, &result, "started");
 }
 
 #[test]
@@ -652,6 +741,7 @@ fn raw_signal_uses_event_fault_policy_and_does_not_append_block_json() {
             "missing raw signal diagnostic: {error}"
         );
         assert!(error.len() <= 1024, "unbounded signal diagnostic");
+        assert_private_group_not_live(&fixture, &result, "started");
     }
     let fixture = Fixture::new("describe-signal");
     fixture.install("witness('started')\nos.write(1,b'describe partial\\n')\nos.kill(os.getpid(),signal.SIGTERM)",true);
@@ -665,6 +755,7 @@ fn raw_signal_uses_event_fault_policy_and_does_not_append_block_json() {
         error.contains("signal") && error.contains("15"),
         "missing raw signal diagnostic: {error}"
     );
+    assert_private_group_not_live(&fixture, &result, "started");
 }
 
 #[test]
@@ -739,6 +830,7 @@ fn describe_does_not_consume_unread_caller_stdin() {
         "describe consumed caller-owned stdin; artifacts: {}",
         fixture.root.display()
     );
+    assert_private_group_not_live(&fixture, &result, "started");
 }
 
 #[test]
@@ -756,7 +848,8 @@ fn describe_pending_stdin_is_bounded_by_selected_timeout() {
     assert!(result.stdout.is_empty());
     assert!(fixture.root.join("started.json").exists());
     assert!(!fixture.root.join("unexpected-eof.json").exists());
-    assert!(result.elapsed < Duration::from_millis(DESCRIBE_MS + 700));
+    assert!(completion_elapsed(&result) < Duration::from_millis(DESCRIBE_MS));
+    assert_private_group_not_live(&fixture, &result, "started");
 }
 
 #[test]
@@ -782,7 +875,8 @@ fn describe_stdout_and_stderr_backpressure_cannot_hold_foreground_past_deadline(
             assert!(result.stdout.is_empty());
         }
         assert!(!fixture.root.join("unexpected-completion.json").exists());
-        assert!(result.elapsed < Duration::from_millis(DESCRIBE_MS + 700));
+        assert!(completion_elapsed(&result) < Duration::from_millis(DESCRIBE_MS));
+        assert_private_group_not_live(&fixture, &result, "started");
     }
 }
 
@@ -821,7 +915,8 @@ fn describe_foreground_cancellation_preserves_partial_stdout_and_observed_custod
     expect_code(&result, 2);
     assert_no_synthesized_stdout(&result, b"before cancel\n");
     assert!(String::from_utf8_lossy(&result.stderr).contains("delivery incomplete"));
-    assert!(result.elapsed < Duration::from_millis(DESCRIBE_MS + 700));
+    assert!(completion_elapsed(&result) < Duration::from_millis(DESCRIBE_MS));
+    assert_private_group_not_live(&fixture, &result, "started");
 }
 
 #[test]
@@ -847,7 +942,8 @@ fn describe_exited_leader_with_live_pipe_holder_cannot_leak_late_output() {
         "sample returned a live member of the observed private group"
     );
     // This is a sampled private-group observation, not an escaped-descendant census.
-    assert!(result.elapsed < Duration::from_millis(DESCRIBE_MS + 700));
+    assert!(completion_elapsed(&result) < Duration::from_millis(DESCRIBE_MS));
+    assert_private_group_not_live(&fixture, &result, "leader");
 }
 
 #[test]
@@ -870,10 +966,11 @@ fn legacy_execution_uses_original_thirty_second_deadline() {
         result.elapsed
     );
     assert!(
-        result.elapsed < Duration::from_millis(30_700),
-        "legacy exceeded original deadline: {:?}",
-        result.elapsed
+        completion_elapsed(&result) < Duration::from_millis(30_000),
+        "legacy completion exceeded original deadline: {:?}",
+        completion_elapsed(&result)
     );
+    assert_private_group_not_live(&fixture, &result, "started");
 }
 
 #[test]
@@ -914,7 +1011,7 @@ fn inherited_stdout_alias_cannot_keep_harness_output_open_during_private_pipe_un
     let result = running.finish(&fixture, Some(b""), true, true, FAST_LIMIT);
     expect_code(&result, 2);
     assert_no_synthesized_stdout(&result, b"LEADER WITH ESCAPED HOLDER\n");
-    assert!(result.elapsed < Duration::from_millis(DESCRIBE_MS + 700));
+    assert!(completion_elapsed(&result) < Duration::from_millis(DESCRIBE_MS));
     let inherited = fixture.witness("pre-exec-facts");
     assert_eq!(inherited["pid"], foreground);
     assert_eq!(inherited["setup"], "DuplicateStdout");
@@ -933,6 +1030,34 @@ fn inherited_stdout_alias_cannot_keep_harness_output_open_during_private_pipe_un
             && !process.state.starts_with('Z')),
         "the private pipe holder must remain live when harness output EOF is observed"
     );
+    assert!(
+        result
+            .processes
+            .iter()
+            .any(|process| process.pid == worker && !process.state.starts_with('Z')),
+        "uncertain private-pipe custody must retain a live worker at host completion"
+    );
+    assert!(
+        result
+            .processes
+            .iter()
+            .any(|process| process.pid == selected
+                && process.ppid == worker
+                && process.pgid == selected
+                && process.state.starts_with('Z')),
+        "the worker must retain the exited actual child while its private pipes remain held"
+    );
+    assert!(
+        result
+            .processes
+            .iter()
+            .any(|process| process.pid == holder_pid
+                && process.pgid == holder_pid
+                && !process.state.starts_with('Z')),
+        "the escaped private-pipe holder must be live in the completion sample"
+    );
+    // This is the deliberately uncertain case. Host completion is bounded, but
+    // no universal descendant cutoff, worker-exit or cleanup completion is claimed.
     // The holder self-expires after three seconds. It is outside the original
     // private group; this test neither signals it nor claims it has been cleaned.
 }
@@ -979,6 +1104,8 @@ fn inherited_blocked_sigterm_does_not_delay_foreground_cancellation_until_expiry
         cancellation_elapsed < Duration::from_millis(500),
         "blocked inherited SIGTERM was not handled promptly: {cancellation_elapsed:?}"
     );
+    assert!(completion_elapsed(&result) < Duration::from_millis(DESCRIBE_MS));
+    assert_private_group_not_live(&fixture, &result, "started");
 }
 
 #[test]
@@ -1018,9 +1145,153 @@ fn selected_policy_expiry_during_generation_verification_does_not_borrow_origina
         assert!(!fixture.root.join("started.json").exists());
         assert!(!fixture.root.join("native-started.bin").exists());
         assert!(result.elapsed > Duration::from_millis(1));
-        assert!(result.elapsed < Duration::from_secs(30));
+        assert!(completion_elapsed(&result) < Duration::from_secs(30));
     }
     // This fixture requires actual verification to consume the 1ms budget on the
     // executing host. Without phase instrumentation, wall time alone cannot prove
     // the precise internal expiry checkpoint on arbitrarily faster hardware.
+}
+
+#[test]
+fn spontaneously_signalled_child_drains_produced_bytes_after_mild_reader_delay() {
+    const PAYLOAD: usize = 128 * 1024;
+    let fixture = Fixture::new("signalled-buffered-output");
+    let expected_stdout: Vec<u8> = (0..PAYLOAD).map(|index| (index % 256) as u8).collect();
+    let stderr_payload: Vec<u8> = (0..PAYLOAD)
+        .map(|index| (255 - index % 256) as u8)
+        .collect();
+    fs::write(fixture.root.join("stdout-produced.bin"), &expected_stdout).unwrap();
+    fs::write(fixture.root.join("stderr-produced.bin"), &stderr_payload).unwrap();
+    // Each returned write count witnesses bytes accepted by the actual private
+    // output pipe. Signal only after both complete writes, without a harness
+    // signal or a production test switch. Both payloads exceed a forwarding turn.
+    fixture.install("witness('started')\nstdout_payload=bytes(range(256))*512\nstderr_payload=bytes(reversed(range(256)))*512\ndef produce(fd,payload):\n    written=0\n    while written<len(payload):\n        count=os.write(fd,payload[written:])\n        assert count>0\n        written+=count\n    return written\nstdout_bytes=produce(1,stdout_payload)\nstderr_bytes=produce(2,stderr_payload)\nwitness('produced',stdout_bytes=stdout_bytes,stderr_bytes=stderr_bytes)\nos.kill(os.getpid(),signal.SIGTERM)",true);
+    let running = fixture.spawn("stop", true);
+    // Observe the actual selected child without draining either output pipe.
+    // A finite self-signalling child may already be exited when ps can sample it;
+    // the started witness supplies this phase boundary without a live-ps guard.
+    let start_until = running.started + Duration::from_secs(1);
+    while !fixture.root.join("started.json").exists() && Instant::now() < start_until {
+        thread::sleep(Duration::from_millis(5));
+    }
+    let started_before_reading = fixture.root.join("started.json").exists();
+    let child_start_observed = Instant::now();
+    let child_start_observed_elapsed = running.started.elapsed();
+    // Withhold both readers briefly from this observed phase, independently of
+    // executable startup latency. Payload and selected timeout remain unchanged.
+    let hold_until = child_start_observed + Duration::from_millis(100);
+    while started_before_reading && Instant::now() < hold_until {
+        thread::sleep(Duration::from_millis(5));
+    }
+    let witness_until = child_start_observed + Duration::from_millis(250);
+    while started_before_reading
+        && !fixture.root.join("produced.json").exists()
+        && Instant::now() < witness_until
+    {
+        thread::sleep(Duration::from_millis(5));
+    }
+    let produced_before_reading = fixture.root.join("produced.json").exists();
+    let mut stdout_queued: libc::c_int = 0;
+    let mut stderr_queued: libc::c_int = 0;
+    let stdout_query = unsafe {
+        libc::ioctl(
+            running.output.as_raw_fd(),
+            libc::FIONREAD,
+            &mut stdout_queued,
+        )
+    };
+    let stdout_errno = if stdout_query == 0 {
+        None
+    } else {
+        io::Error::last_os_error().raw_os_error()
+    };
+    let stderr_query = unsafe {
+        libc::ioctl(
+            running.error.as_raw_fd(),
+            libc::FIONREAD,
+            &mut stderr_queued,
+        )
+    };
+    let stderr_errno = if stderr_query == 0 {
+        None
+    } else {
+        io::Error::last_os_error().raw_os_error()
+    };
+    let pressure_observed = running.started.elapsed();
+    let pressure_since_child_observation = child_start_observed.elapsed();
+    fs::write(fixture.root.join("reader-pressure.json"), serde_json::to_vec_pretty(&serde_json::json!({
+        "started_before_reading":started_before_reading,
+        "child_start_observed_elapsed_ms":started_before_reading.then_some(child_start_observed_elapsed.as_millis()),
+        "produced_before_reading":produced_before_reading, "payload_bytes_per_stream":PAYLOAD,
+        "reader_probe_since_child_observation_ms":started_before_reading.then_some(pressure_since_child_observation.as_millis()),
+        "reader_probe_elapsed_ms":pressure_observed.as_millis(), "stdout_host_queued_bytes":stdout_queued,
+        "stderr_host_queued_bytes":stderr_queued, "stdout_query_result":stdout_query,
+        "stderr_query_result":stderr_query,"stdout_errno":stdout_errno,"stderr_errno":stderr_errno,
+    })).unwrap()).unwrap();
+    let reader_delay = running.started.elapsed();
+    let reader_delay_since_child_observation = child_start_observed.elapsed();
+    let result = running.finish(&fixture, Some(b""), true, true, FAST_LIMIT);
+    fs::write(
+        fixture.root.join("reader-start.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "reader_pump_start_elapsed_ms":reader_delay.as_millis(),
+            "child_start_observed_elapsed_ms":started_before_reading.then_some(child_start_observed_elapsed.as_millis()),
+            "reader_pump_start_since_child_observation_ms":started_before_reading.then_some(reader_delay_since_child_observation.as_millis()),
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    // A missing produced witness or absent pressure is an explicit setup gap:
+    // this run cannot establish sensitivity to queued-output loss on this host.
+    assert!(
+        started_before_reading,
+        "setup gap: selected child start was not observed within its finite wait; artifacts: {}",
+        fixture.root.display()
+    );
+    assert!(
+        produced_before_reading,
+        "setup gap: selected child did not complete both writes within 250ms after its start was observed; artifacts: {}",
+        fixture.root.display()
+    );
+    assert!(
+        reader_delay_since_child_observation < Duration::from_millis(300),
+        "setup gap: withholding after child observation was not mild: {reader_delay_since_child_observation:?}"
+    );
+    assert_eq!(
+        stdout_query, 0,
+        "stdout pressure query failed: {stdout_errno:?}"
+    );
+    assert_eq!(
+        stderr_query, 0,
+        "stderr pressure query failed: {stderr_errno:?}"
+    );
+    assert!(
+        stdout_queued >= 0 && (stdout_queued as usize) < PAYLOAD,
+        "setup gap: no stdout bytes remained outside the harness pipe"
+    );
+    assert!(
+        stderr_queued >= 0 && (stderr_queued as usize) < PAYLOAD,
+        "setup gap: no stderr bytes remained outside the harness pipe"
+    );
+    let produced = fixture.witness("produced");
+    assert_eq!(produced["stdout_bytes"], PAYLOAD);
+    assert_eq!(produced["stderr_bytes"], PAYLOAD);
+    expect_code(&result, 2);
+    assert!(
+        result.stdout == expected_stdout,
+        "signalled child stdout changed or truncated: expected {PAYLOAD} bytes, observed {}; artifacts: {}",
+        result.stdout.len(),
+        fixture.root.display()
+    );
+    let mut expected_stderr = stderr_payload;
+    expected_stderr.extend_from_slice(b"[CAWS native installed entry: delivery incomplete; compatibility child interrupted; raw signal 15]\n");
+    assert!(
+        result.stderr == expected_stderr,
+        "signalled child stderr payload or raw-signal diagnostic changed: expected {} bytes, observed {}; artifacts: {}",
+        expected_stderr.len(),
+        result.stderr.len(),
+        fixture.root.display()
+    );
+    assert!(completion_elapsed(&result) < Duration::from_millis(DESCRIBE_MS));
+    assert_private_group_not_live(&fixture, &result, "started");
 }

@@ -97,6 +97,8 @@ pub struct Selection {
 }
 struct SelectionFailure {
     message: String,
+    // Keep the global clock even when selection creates an earlier policy bound.
+    original_deadline: Arc<MonotonicDeadline>,
     // None means the selected policy could not yield a live delivery clock.
     // It never authorizes a fresh clock or a best-effort post-expiry write.
     delivery_deadline: Option<Arc<MonotonicDeadline>>,
@@ -124,6 +126,7 @@ impl Selection {
     ) -> Result<Self, SelectionFailure> {
         let before_policy = |message: String| SelectionFailure {
             message,
+            original_deadline: Arc::clone(&original_deadline),
             delivery_deadline: Some(Arc::clone(&original_deadline)),
         };
         original_deadline
@@ -164,6 +167,7 @@ impl Selection {
                 .checked_add(configured * 1_000_000)
                 .ok_or_else(|| SelectionFailure {
                     message: "Installed entry deadline overflow".into(),
+                    original_deadline: Arc::clone(&original_deadline),
                     delivery_deadline: None,
                 })?
                 .min(original.expires_ns);
@@ -175,6 +179,7 @@ impl Selection {
                     })
                     .map_err(|e| SelectionFailure {
                         message: e.to_string(),
+                        original_deadline: Arc::clone(&original_deadline),
                         delivery_deadline: None,
                     })?,
                 ))
@@ -192,6 +197,7 @@ impl Selection {
         };
         selected.checkpoint().map_err(|message| SelectionFailure {
             message,
+            original_deadline: Arc::clone(&selected.original_deadline),
             delivery_deadline: Some(Arc::clone(selected.delivery_deadline())),
         })?;
         Ok(selected)
@@ -349,9 +355,10 @@ impl Selection {
 fn configuration_failure(
     invocation: &Invocation,
     error: &str,
-    deadline: Option<&MonotonicDeadline>,
+    original: Option<&MonotonicDeadline>,
+    policy: Option<&MonotonicDeadline>,
 ) -> u8 {
-    compatibility::refuse_before_dispatch(invocation.failure_event(), error, deadline)
+    compatibility::refuse_before_dispatch(invocation.failure_event(), error, original, policy)
 }
 
 pub fn run() -> u8 {
@@ -371,12 +378,13 @@ pub fn run() -> u8 {
                 "invalid-invocation",
                 &error,
                 original_deadline.as_ref().ok(),
+                None,
             );
         }
     };
     let original_deadline = match original_deadline {
         Ok(deadline) => Arc::new(deadline),
-        Err(error) => return configuration_failure(&invocation, &error.to_string(), None),
+        Err(error) => return configuration_failure(&invocation, &error.to_string(), None, None),
     };
     let home = match std::env::var_os("CAWS_HOME")
         .map(PathBuf::from)
@@ -388,6 +396,7 @@ pub fn run() -> u8 {
                 &invocation,
                 "Machine home is unavailable",
                 Some(&original_deadline),
+                None,
             );
         }
     };
@@ -395,9 +404,12 @@ pub fn run() -> u8 {
         Ok(selected) => selected,
         Err(failure) => {
             return match failure.delivery_deadline {
-                Some(deadline) => {
-                    configuration_failure(&invocation, &failure.message, Some(&deadline))
-                }
+                Some(deadline) => configuration_failure(
+                    &invocation,
+                    &failure.message,
+                    Some(&failure.original_deadline),
+                    Some(&deadline),
+                ),
                 // An expired/invalid selected clock cannot authorize delivery.
                 None => compatibility::failure_status(invocation.failure_event()),
             };
@@ -409,18 +421,29 @@ pub fn run() -> u8 {
     }) {
         Ok(command) => command,
         Err(error) => {
-            return configuration_failure(&invocation, &error, Some(selected.delivery_deadline()));
+            return configuration_failure(
+                &invocation,
+                &error,
+                Some(&selected.original_deadline),
+                selected.policy_deadline.as_deref(),
+            );
         }
     };
     if selected.generation.native_entry().is_some() && !invocation.describe {
         // Native dispatch preserves PID, cwd and stdio. Its receiver consumes
         // the exact original-clock carrier already bound into this command.
         let error = format!("Selected entry launch failed: {}", command.exec());
-        configuration_failure(&invocation, &error, Some(selected.delivery_deadline()))
+        configuration_failure(
+            &invocation,
+            &error,
+            Some(&selected.original_deadline),
+            selected.policy_deadline.as_deref(),
+        )
     } else {
         compatibility::run(
             command,
-            selected.delivery_deadline(),
+            &selected.original_deadline,
+            selected.policy_deadline.as_deref(),
             invocation.failure_event(),
         )
     }
