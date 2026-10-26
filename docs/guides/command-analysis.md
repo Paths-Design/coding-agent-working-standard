@@ -120,6 +120,8 @@ A genuinely absent registry retains the uninitialized-project policy. An
 observed registry must be a readable regular file with an object or array
 container. Read, parse or type failures, a directory in its place, and dangling
 links retain ownership uncertainty before either consumer's path allowlists.
+File ownership retains LF characters in its environment-coordinate channel; Git
+metadata and mutation projection fields keep their separate transport limits.
 
 The CLI response adds `execution: {command, cwd}` and `singleLifecycle` to the
 projection. The bridge requires the exact decoded source to match all supplied

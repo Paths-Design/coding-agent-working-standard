@@ -127,6 +127,16 @@ function writeRegistry(root, entries) {
   fs.writeFileSync(path.join(root, '.caws', 'worktrees.json'), JSON.stringify(entries));
 }
 
+function opaqueRegisteredRoot(repo) {
+  const parent = path.join(repo, 'docs/opaque-parent');
+  const lane = path.join(parent, 'lane');
+  fs.mkdirSync(lane, { recursive: true });
+  const entries = registryEntry(repo, 'opaque-lane', 'OPAQUE', 'foreign-session');
+  entries['opaque-lane'].path = lane;
+  writeRegistry(repo, entries);
+  return { parent, lane, originalMode: fs.statSync(parent).mode & 0o777 };
+}
+
 function damageRegistry(root, failure) {
   const registry = path.join(root, '.caws/worktrees.json');
   if (failure === 'malformed') fs.writeFileSync(registry, '{unterminated');
@@ -190,6 +200,31 @@ function runOracle(
 }
 
 describe('worktree-claim-oracle verdicts', () => {
+  test('unavailable registered-root observations preserve the census while genuine ghosts stay absent', () => {
+    const repo = makeRepo();
+    const root = opaqueRegisteredRoot(repo);
+    const target = path.join(repo, 'docs');
+    expect(runOracle(repo, target, { removeTree: true })).toBe(
+      'block_foreign_worktree:opaque-lane:foreign-session'
+    );
+    let observed;
+    fs.chmodSync(root.parent, 0);
+    try {
+      observed = runOracle(repo, target, { removeTree: true });
+    } finally {
+      fs.chmodSync(root.parent, root.originalMode);
+    }
+    // A privileged process can still observe the foreign root; it cannot
+    // establish this fixture's EACCES branch. Unprivileged runs must retain it.
+    expect(observed).toBe(
+      process.getuid() === 0
+        ? 'block_foreign_worktree:opaque-lane:foreign-session'
+        : 'ask_uncertain:worktree-ownership-path'
+    );
+    expect(fs.lstatSync(root.lane).isDirectory()).toBe(true);
+    fs.rmdirSync(root.lane);
+    expect(runOracle(repo, target, { removeTree: true })).toBe('pass:no-active-worktrees');
+  });
   test.each(['malformed', 'scalar', 'directory', 'dangling'])(
     'existing %s registry cannot be mistaken for absent governance',
     (failure) => {
@@ -782,6 +817,35 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
     expect(result.stderr).toContain('worktree-ownership-registry');
     expect(fs.readFileSync(target, 'utf8')).toBe('foreign entry survives preflight\n');
   });
+
+  test.each(['Bash', 'Write'])(
+    '%s retains unavailable registered-root observations before canonical allowlists',
+    (tool) => {
+      const fixture = makeClaimedRepo();
+      const root = opaqueRegisteredRoot(fixture.repo);
+      const target = path.join(fixture.repo, 'docs/protected.txt');
+      fs.writeFileSync(target, 'accessible entry survives preflight\n');
+      const check = () =>
+        runGuard(fixture, 'touch ' + "'" + target + "'", {
+          noAsk: true,
+          ...(tool === 'Write' ? { writePath: target } : {}),
+        });
+      expect(check().status).toBe(0);
+      let result;
+      fs.chmodSync(root.parent, 0);
+      try {
+        result = check();
+      } finally {
+        fs.chmodSync(root.parent, root.originalMode);
+      }
+      // Root can traverse this fixture, so only the unprivileged branch
+      // demonstrates the observation failure rather than ordinary admission.
+      expect(result.status).toBe(process.getuid() === 0 ? 0 : 2);
+      if (process.getuid() !== 0) expect(result.stderr).toContain('worktree-ownership-path');
+      expect(fs.lstatSync(root.lane).isDirectory()).toBe(true);
+      expect(fs.readFileSync(target, 'utf8')).toBe('accessible entry survives preflight\n');
+    }
+  );
 
   test('Write cannot mistake inaccessible registry parents for absent governance', () => {
     const fixture = makeClaimedRepo();

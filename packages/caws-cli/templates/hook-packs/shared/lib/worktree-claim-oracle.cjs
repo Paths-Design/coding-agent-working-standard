@@ -299,6 +299,18 @@ function containsPath(root, candidate) {
   return root === candidate || candidate.indexOf(root === path.sep ? root : root + path.sep) === 0;
 }
 
+// File ownership coordinates arrive through environment values, which preserve
+// pathname bytes. Git-metadata transport has a separate separator restriction;
+// reusing its directory reader here would reject legitimate LF roots.
+function filePhysicalDirectory(value) {
+  if (typeof value !== 'string' || !path.isAbsolute(value)) {
+    throw new Error('invalid-directory');
+  }
+  var physical = fs.realpathSync(value);
+  if (!fs.statSync(physical).isDirectory()) throw new Error('invalid-physical-directory');
+  return physical;
+}
+
 // Callers may deliberately preserve the final symlink for an unlink. Resolve
 // only physical parents, including the existing prefix of a not-yet-created
 // path, so ownership is never silently changed to the final referent.
@@ -308,7 +320,7 @@ function physicalEntryPath(project, candidate) {
   var parent = path.dirname(absolute), suffix = [path.basename(absolute)];
   while (true) {
     try {
-      return path.join(metadataPhysicalDirectory(parent), ...suffix);
+      return path.join(filePhysicalDirectory(parent), ...suffix);
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
       var next = path.dirname(parent);
@@ -442,9 +454,15 @@ function main() {
       var wtPath = (typeof w.path === 'string' && w.path)
         ? w.path
         : path.join(projectDir, '.caws', 'worktrees', String(w.name || ''));
-      // WORKTREE-GUARD-RISK-SURFACE-001: a dir-gone (ghost) entry never
-      // participates in the authority decision.
-      return fs.existsSync(path.resolve(projectDir, wtPath));
+      // WORKTREE-GUARD-RISK-SURFACE-001: only observed absence makes a ghost.
+      // Retain inaccessible or otherwise unobserved roots so the physical-root
+      // check below preserves ownership uncertainty instead of an empty census.
+      try {
+        fs.lstatSync(path.resolve(projectDir, wtPath));
+        return true;
+      } catch (error) {
+        return error.code !== 'ENOENT';
+      }
     });
   } catch (e) {
     emit('error_fail_closed', 'registry-parse:' + e.message);
@@ -481,7 +499,7 @@ function main() {
       ? path.resolve(projectDir, covered.path)
       : path.join(projectDir, '.caws', 'worktrees', String(covered.name || ''));
     var physicalRoot;
-    try { physicalRoot = metadataPhysicalDirectory(storedRoot); }
+    try { physicalRoot = filePhysicalDirectory(storedRoot); }
     catch (_) { ownershipUncertain = 'worktree-ownership-path'; continue; }
     var relevant = containsPath(physicalRoot, absoluteCandidate) || containsPath(absoluteCandidate, physicalRoot);
     roots.push({ entry: covered, root: physicalRoot, relevant: relevant });
