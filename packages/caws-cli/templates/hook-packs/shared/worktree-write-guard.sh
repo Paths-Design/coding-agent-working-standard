@@ -234,8 +234,7 @@ fi
 # Actual registered roots may live outside the conventional namespace. Check
 # their ownership before any allowlist or operating-worktree early return.
 # Canonical scope policy remains with its existing session/branch logic below.
-if [[ -n "$FILE_PATH" && ( -e "$PROJECT_DIR/.caws/worktrees.json" ||
-                          -L "$PROJECT_DIR/.caws/worktrees.json" ) ]]; then
+if [[ -n "$FILE_PATH" ]]; then
   command -v node >/dev/null 2>&1 || _wwg_node_refuse
   if [[ ! -f "$CAWS_CLAIM_ORACLE" ]]; then
     echo '[worktree-write-guard] ownership oracle unavailable; blocked' >&2

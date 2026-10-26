@@ -783,6 +783,48 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
     expect(fs.readFileSync(target, 'utf8')).toBe('foreign entry survives preflight\n');
   });
 
+  test('Write cannot mistake inaccessible registry parents for absent governance', () => {
+    const fixture = makeClaimedRepo();
+    const custom = path.join(fixture.repo, 'docs/custom');
+    fs.mkdirSync(custom, { recursive: true });
+    const target = path.join(custom, 'protected.txt');
+    fs.writeFileSync(target, 'foreign entry survives preflight\n');
+    const entries = registryEntry(fixture.repo, 'wt-custom', 'CUSTOM', 'foreign-session');
+    entries['wt-custom'].path = custom;
+    writeRegistry(fixture.repo, entries);
+    const control = path.join(fixture.repo, '.caws');
+    const originalMode = fs.statSync(control).mode & 0o777;
+    let result;
+    fs.chmodSync(control, 0);
+    try {
+      result = runGuard(fixture, '', { noAsk: true, writePath: target });
+    } finally {
+      fs.chmodSync(control, originalMode);
+    }
+    expect(result.status).toBe(2);
+    // A privileged runner can traverse mode 000 and sees the known foreign
+    // owner; an unprivileged runner must retain the authority-read failure.
+    expect(result.stderr).toContain(
+      process.getuid() === 0 ? 'DIFFERENT session' : 'worktree-ownership-registry'
+    );
+    expect(fs.readFileSync(target, 'utf8')).toBe('foreign entry survives preflight\n');
+  });
+
+  test('Write preserves the genuinely absent-registry base state', () => {
+    const fixture = makeClaimedRepo();
+    fs.unlinkSync(path.join(fixture.repo, '.caws/worktrees.json'));
+    const directory = path.join(fixture.repo, 'docs');
+    fs.mkdirSync(directory);
+    const target = path.join(directory, 'new.txt');
+    const result = runGuard(fixture, '', { noAsk: true, writePath: target });
+    expect({ status: result.status, stdout: result.stdout, stderr: result.stderr }).toEqual({
+      status: 0,
+      stdout: '',
+      stderr: '',
+    });
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
   test.each(['Bash', 'Write'])('a unique owned custom path admits %s payload', (tool) => {
     const fixture = makeClaimedRepo();
     const custom = path.join(fixture.repo, 'docs/custom');
