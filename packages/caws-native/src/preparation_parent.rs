@@ -2157,8 +2157,48 @@ mod tests {
         );
         fs::remove_dir_all(root).unwrap();
     }
+    #[cfg(target_os = "macos")]
     #[test]
     fn private_include_is_refused_before_program_reads_children_or_sentinel_reads() {
+        const CHILD: &str = "CAWS_PREPARATION_TEST_PRIVATE_INCLUDE_CHILD";
+        if env::var_os(CHILD).is_none() {
+            // Cargo injects a dynamic-library search path into its test
+            // process. Run this startup-boundary control in its own sterile
+            // process; production must continue rejecting that variable.
+            let child = Command::new(env::current_exe().unwrap())
+                .env_clear()
+                .env(CHILD, "1")
+                .args([
+                    "--exact",
+                    "preparation_parent::tests::private_include_is_refused_before_program_reads_children_or_sentinel_reads",
+                    "--nocapture",
+                ])
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .process_group(0)
+                .spawn()
+                .unwrap();
+            let mut owner = OwnedChild::new(child);
+            owner.prepare_pipes().unwrap();
+            let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+            let status = owner.finish(&deadline, METADATA, false);
+            if status.is_err() {
+                // Separate fixture teardown never renews a production request.
+                let teardown = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+                let _ = owner.finish(&teardown, METADATA, true);
+            }
+            assert_eq!(
+                status.unwrap(),
+                0,
+                "stdout: {}\nstderr: {}",
+                String::from_utf8_lossy(&owner.out),
+                String::from_utf8_lossy(&owner.err)
+            );
+            assert!(owner.child.is_none());
+            return;
+        }
+        assert!(startup_environment().is_ok());
         let root = temp_root("private-include");
         let view = root.join("view");
         private_view_fixture(&view);

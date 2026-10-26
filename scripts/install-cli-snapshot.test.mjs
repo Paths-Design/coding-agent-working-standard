@@ -209,7 +209,15 @@ function installGeneratorFixture(packageRoot) {
     'scripts/generate-runtime-assets.mjs',
     'src/runtime/advisory-truncate-entry.ts',
     'src/runtime/utf8.ts',
+    'src/runtime/guard-config-entry.ts',
+    'src/runtime/guard-config-loader.ts',
+    'src/init/repo-hook-policy.ts',
+    'src/runtime/json-custody.ts',
+    'src/runtime/reprieve-entry.ts',
+    'src/runtime/reprieve-reader.ts',
     'templates/hook-packs/shared/advisory_truncate.cjs',
+    'templates/hook-packs/shared/lib/guard-config.cjs',
+    'templates/hook-packs/shared/lib/reprieve-reader.cjs',
   ]) {
     const destination = path.join(packageRoot, relative);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
