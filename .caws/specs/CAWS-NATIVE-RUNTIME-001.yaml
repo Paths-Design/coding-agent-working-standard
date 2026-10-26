@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-23T11:05:47.715Z'
+updated_at: '2026-10-26T06:34:58.625Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -125,6 +125,8 @@ scope:
     - packages/caws-cli/src/store/
     - packages/caws-cli/src/transcripts/session-seal-prepare.ts
     - packages/caws-cli/tests/transcripts/session-seal-prepare.test.ts
+    - .native-frozen-source-01a17052-01.tmp
+    - .native-frozen-build-01a17052-01.tmp
   out:
     - packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh
