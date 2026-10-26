@@ -35,5 +35,14 @@ acceptance:
       existing identity, framing, total byte and count checks refuse before
       materialization and no subsequent request or mutation occurs; aggregate limits
       do not reset across groups
+  - id: A3
+    given: >-
+      the committed reviewed candidate and actual pinned private installation with
+      genuine ordinary caller context
+    when: 'complete configured preparation runs under the unchanged 30000ms original budget'
+    then: >-
+      complete exact frozen source and inventory plus retained terminal custody
+      facts are produced within the bound while future build output remains absent;
+      failures remain explicit and do not qualify cutover
 non_functional: {}
 contracts: []
