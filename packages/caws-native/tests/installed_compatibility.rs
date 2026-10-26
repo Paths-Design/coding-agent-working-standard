@@ -1307,14 +1307,156 @@ fn spontaneously_signalled_child_drains_produced_bytes_after_mild_reader_delay()
 
 #[test]
 fn natural_terminal_queued_before_cutoff_survives_late_foreground_resume() {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    struct Envelope {
+        started_ns: String,
+        expires_ns: String,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct ClockFragment {
+        original: Envelope,
+        // This case requires the selected 1200ms restriction; null is a setup failure.
+        selected: Envelope,
+    }
+    fn canonical_u64(value: &str) -> u64 {
+        let parsed = value
+            .parse::<u64>()
+            .expect("clock field must be a u64 string");
+        assert_eq!(
+            parsed.to_string(),
+            value,
+            "clock field must be canonical decimal"
+        );
+        parsed
+    }
+    fn native_now() -> u64 {
+        let mut raw = std::mem::MaybeUninit::<libc::timespec>::uninit();
+        assert_eq!(
+            unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, raw.as_mut_ptr()) },
+            0,
+            "native observer clock failed: {}",
+            io::Error::last_os_error()
+        );
+        let raw = unsafe { raw.assume_init() };
+        let seconds = u64::try_from(raw.tv_sec).expect("negative monotonic seconds");
+        let nanos = u64::try_from(raw.tv_nsec).expect("negative monotonic nanos");
+        assert!(nanos < 1_000_000_000);
+        seconds
+            .checked_mul(1_000_000_000)
+            .and_then(|n| n.checked_add(nanos))
+            .unwrap()
+    }
+    #[derive(Clone, Copy)]
+    struct Stamp {
+        native_ns: u64,
+        launch_elapsed: Duration,
+    }
+    impl Stamp {
+        fn read(began: Instant) -> Self {
+            Self {
+                native_ns: native_now(),
+                launch_elapsed: began.elapsed(),
+            }
+        }
+        fn json(self, original_start: u64) -> serde_json::Value {
+            serde_json::json!({
+                "native_ns":self.native_ns.to_string(),
+                "native_original_elapsed_ns":self.native_ns.checked_sub(original_start).map(|n|n.to_string()),
+                "launch_elapsed_ns":self.launch_elapsed.as_nanos().to_string(),
+            })
+        }
+    }
+    #[derive(Clone, Copy, serde::Serialize)]
+    struct ProcessInfo {
+        pid: u32,
+        ppid: u32,
+        pgid: u32,
+        status: u32,
+        birth_seconds: u64,
+        birth_micros: u64,
+    }
+    impl ProcessInfo {
+        fn same_birth(self, other: Self) -> bool {
+            self.pid == other.pid
+                && self.birth_seconds == other.birth_seconds
+                && self.birth_micros == other.birth_micros
+        }
+    }
+    struct ProcessObservation {
+        actor: &'static str,
+        requested_pid: u32,
+        bytes: i32,
+        errno: i32,
+        info: Option<ProcessInfo>,
+        absent: bool,
+        before: Stamp,
+        after: Stamp,
+    }
+    impl ProcessObservation {
+        fn read(actor: &'static str, pid: u32, began: Instant) -> Self {
+            let before = Stamp::read(began);
+            let mut raw = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+            let size = std::mem::size_of::<libc::proc_bsdinfo>();
+            unsafe { *libc::__error() = 0 };
+            let bytes = unsafe {
+                libc::proc_pidinfo(
+                    pid as i32,
+                    libc::PROC_PIDTBSDINFO,
+                    0,
+                    raw.as_mut_ptr().cast(),
+                    size as i32,
+                )
+            };
+            let errno = unsafe { *libc::__error() };
+            let after = Stamp::read(began);
+            let info = if bytes == size as i32 {
+                let raw = unsafe { raw.assume_init() };
+                (raw.pbi_pid == pid
+                    && raw.pbi_uid == unsafe { libc::geteuid() }
+                    && raw.pbi_start_tvsec > 0
+                    && raw.pbi_start_tvusec < 1_000_000)
+                    .then_some(ProcessInfo {
+                        pid: raw.pbi_pid,
+                        ppid: raw.pbi_ppid,
+                        pgid: raw.pbi_pgid,
+                        status: raw.pbi_status,
+                        birth_seconds: raw.pbi_start_tvsec,
+                        birth_micros: raw.pbi_start_tvusec,
+                    })
+            } else {
+                None
+            };
+            Self {
+                actor,
+                requested_pid: pid,
+                bytes,
+                errno,
+                info,
+                absent: bytes == 0 && errno == libc::ESRCH,
+                before,
+                after,
+            }
+        }
+        fn json(&self, original_start: u64) -> serde_json::Value {
+            serde_json::json!({
+                "actor":self.actor, "requested_pid":self.requested_pid,
+                "returned_bytes":self.bytes, "errno":self.errno,
+                "observation":if self.info.is_some() {"present"} else if self.absent {"absent"} else {"unknown"},
+                "process":self.info, "before":self.before.json(original_start),
+                "after":self.after.json(original_start),
+            })
+        }
+    }
     struct ResumeOwnedForeground<'a> {
         child: &'a mut Child,
         paused: bool,
     }
     impl<'a> ResumeOwnedForeground<'a> {
         fn stop(child: &'a mut Child) -> io::Result<Self> {
-            // This is the actual unreaped foreground Child held by this test.
-            // No PID read from a witness or process snapshot is ever signalled.
+            // Only this actual unreaped Child can be signalled. Observation PIDs
+            // below are read-only and never provide signal or reap authority.
             if unsafe { libc::kill(child.id() as i32, libc::SIGSTOP) } != 0 {
                 return Err(io::Error::last_os_error());
             }
@@ -1336,18 +1478,16 @@ fn natural_terminal_queued_before_cutoff_survives_late_foreground_resume() {
     impl Drop for ResumeOwnedForeground<'_> {
         fn drop(&mut self) {
             if self.paused {
-                // An assertion or fixture failure cannot leave our child stopped.
                 let _ = unsafe { libc::kill(self.child.id() as i32, libc::SIGCONT) };
             }
         }
     }
-    const EARLY_TERMINAL_MS: u64 = 700;
-    const EXECUTION_CUTOFF_MS: u64 = 800;
-    const FOREGROUND_CUTOFF_MS: u64 = 1100;
-    const RESUME_MS: u64 = 950;
+
     let fixture = Fixture::new("queued-natural-terminal-late-resume");
     fixture.install_source(br#"#!/bin/sh
 w="$CAWS_COMPATIBILITY_WITNESS"
+printf '%s' "$CAWS_NATIVE_DESCRIBE_CONTEXT" | /usr/bin/plutil -extract deadlineObservation json -o "$w/clock.writing" -- - 2>/dev/null || exit 75
+/bin/mv "$w/clock.writing" "$w/clock.json" || exit 75
 printf '{"pid":%s,"ppid":%s,"pgid":%s}\n' "$$" "$PPID" "$$" > "$w/started.writing"
 /bin/mv "$w/started.writing" "$w/started.json"
 remaining=1000000
@@ -1363,144 +1503,233 @@ exit 37
     let mut running = fixture.spawn("stop", true);
     let began = running.started;
     let foreground = running.child.id();
-    let early_until = began + Duration::from_millis(EARLY_TERMINAL_MS);
-    // The selected child waits on its fixture file. No output is drained while
-    // arranging the foreground pause and observing the worker's terminal state.
-    while !fixture.root.join("started.json").exists() && Instant::now() < early_until {
-        thread::sleep(Duration::from_millis(5));
+    // A setup watchdog only; it does not define any production phase or clock.
+    while !fixture.root.join("started.json").exists() && began.elapsed() < FAST_LIMIT {
+        thread::sleep(Duration::from_millis(2));
     }
     if !fixture.root.join("started.json").exists() {
-        fs::write(
-            fixture.root.join("pause-setup.json"),
-            serde_json::to_vec_pretty(&serde_json::json!({
-                "started_observed":false, "observation_elapsed_ms":began.elapsed().as_millis(),
-            }))
-            .unwrap(),
-        )
-        .unwrap();
         let _ = running.finish(&fixture, Some(b""), true, true, FAST_LIMIT);
-        panic!(
-            "setup gap: selected child start was not observed before700ms; artifacts: {}",
-            fixture.root.display()
-        );
+        panic!("setup gap: selected child did not publish the timing fragment and started witness");
     }
-    let start_observed = began.elapsed();
+    let mut clock_bytes = Vec::new();
+    fs::File::open(fixture.root.join("clock.json"))
+        .unwrap()
+        .take(2049)
+        .read_to_end(&mut clock_bytes)
+        .unwrap();
+    assert!(
+        clock_bytes.len() <= 2048,
+        "timing fragment exceeded its byte bound"
+    );
+    let clock: ClockFragment =
+        serde_json::from_slice(&clock_bytes).expect("closed timing fragment");
+    let original_start = canonical_u64(&clock.original.started_ns);
+    let original_expiry = canonical_u64(&clock.original.expires_ns);
+    let selected_start = canonical_u64(&clock.selected.started_ns);
+    let selected_expiry = canonical_u64(&clock.selected.expires_ns);
+    assert!(original_start > 0);
+    assert_eq!(
+        original_expiry.checked_sub(original_start),
+        Some(30_000_000_000)
+    );
+    assert_eq!(selected_start, original_start);
+    assert_eq!(
+        selected_expiry.checked_sub(selected_start),
+        Some(1_200_000_000)
+    );
+    assert!(selected_expiry <= original_expiry);
+    let interval = selected_expiry.checked_sub(selected_start).unwrap();
+    let terminal_reserve = (interval / 4).clamp(1_000_000, 500_000_000);
+    let returning_reserve = (interval / 8).clamp(1_000_000, 100_000_000);
+    let execution_upper = selected_expiry
+        .checked_sub(terminal_reserve + returning_reserve)
+        .unwrap();
+    let foreground_upper = selected_expiry.checked_sub(returning_reserve).unwrap();
+    let early_until = execution_upper.checked_sub(100_000_000).unwrap();
+    let resume_target = original_start.checked_add(950_000_000).unwrap();
+    assert_eq!(
+        execution_upper.checked_sub(original_start),
+        Some(800_000_000)
+    );
+    assert_eq!(
+        foreground_upper.checked_sub(original_start),
+        Some(1_100_000_000)
+    );
+    let start_observed = Stamp::read(began);
+    assert!(start_observed.native_ns >= original_start);
     let selected = fixture.witness("started");
-    let selected_pid = selected["pid"].as_u64().unwrap() as u32;
-    let worker = selected["ppid"].as_u64().unwrap() as u32;
-    let pause_sent = began.elapsed();
+    let selected_pid = u32::try_from(selected["pid"].as_u64().unwrap()).unwrap();
+    let worker = u32::try_from(selected["ppid"].as_u64().unwrap()).unwrap();
+    assert!(worker > 1 && selected_pid > 1 && worker != foreground);
+    let initial_foreground = ProcessObservation::read("foreground-initial", foreground, began);
+    let initial_worker = ProcessObservation::read("worker-initial", worker, began);
+    let initial_selected = ProcessObservation::read("selected-initial", selected_pid, began);
+    let mut observations = vec![
+        initial_foreground.json(original_start),
+        initial_worker.json(original_start),
+        initial_selected.json(original_start),
+    ];
+    fs::write(
+        fixture.root.join("process-observations-before-pause.json"),
+        serde_json::to_vec_pretty(&observations).unwrap(),
+    )
+    .unwrap();
+    let foreground_birth = initial_foreground
+        .info
+        .expect("setup gap: foreground birth unavailable");
+    let worker_birth = initial_worker
+        .info
+        .expect("setup gap: worker birth unavailable");
+    let selected_birth = initial_selected
+        .info
+        .expect("setup gap: selected birth unavailable");
+    assert_ne!(foreground_birth.status, libc::SZOMB);
+    assert_eq!(worker_birth.ppid, foreground);
+    assert_eq!(selected_birth.ppid, worker);
+    assert_eq!(selected_birth.pgid, selected_pid);
+
+    let pause_sent = Stamp::read(began);
     let mut paused = ResumeOwnedForeground::stop(&mut running.child)
         .expect("setup gap: actual foreground child could not be paused");
-    let stopped_rows = fixture.sample("foreground-paused-before-release");
-    let pause_observed = began.elapsed();
-    let foreground_stopped = stopped_rows
-        .iter()
-        .any(|process| process.pid == foreground && process.state.contains('T'));
-    let worker_owned_before_release = stopped_rows.iter().any(|process| {
-        process.pid == worker && process.ppid == foreground && !process.state.starts_with('Z')
+    // No subprocess (including ps) is spawned anywhere inside this pause.
+    let mut paused_foreground = ProcessObservation::read("foreground-paused", foreground, began);
+    // Signal acceptance does not prove that the target has entered SSTOP.
+    // Observe it within the same execution setup window before releasing work.
+    while paused_foreground.info.is_some_and(|p| {
+        foreground_birth.same_birth(p) && p.status != libc::SSTOP && p.status != libc::SZOMB
+    }) && native_now() < early_until
+        && began.elapsed() < FAST_LIMIT
+    {
+        observations.push(paused_foreground.json(original_start));
+        thread::sleep(Duration::from_millis(2));
+        paused_foreground = ProcessObservation::read("foreground-paused", foreground, began);
+    }
+    let paused_worker = ProcessObservation::read("worker-before-release", worker, began);
+    let paused_selected = ProcessObservation::read("selected-before-release", selected_pid, began);
+    let foreground_stopped = paused_foreground
+        .info
+        .is_some_and(|p| foreground_birth.same_birth(p) && p.status == libc::SSTOP);
+    let worker_owned = paused_worker.info.is_some_and(|p| {
+        worker_birth.same_birth(p) && p.ppid == foreground && p.status != libc::SZOMB
     });
-    let selected_owned_before_release = stopped_rows.iter().any(|process| {
-        process.pid == selected_pid && process.ppid == worker && process.pgid == selected_pid
+    let selected_owned = paused_selected.info.is_some_and(|p| {
+        selected_birth.same_birth(p) && p.ppid == worker && p.pgid == selected_pid
     });
-    let release_elapsed =
-        if foreground_stopped && began.elapsed() < Duration::from_millis(EARLY_TERMINAL_MS) {
+    observations.extend([
+        paused_foreground.json(original_start),
+        paused_worker.json(original_start),
+        paused_selected.json(original_start),
+    ]);
+    let release =
+        if foreground_stopped && worker_owned && selected_owned && native_now() < early_until {
             fs::write(fixture.root.join("release-natural"), b"release\n").unwrap();
-            Some(began.elapsed())
+            Some(Stamp::read(began))
         } else {
             None
         };
     let mut done_observed = None;
-    let mut worker_terminal_observed = None;
+    let mut worker_terminal = None;
     let mut worker_terminal_state = None;
-    let mut observations = 0;
-    while Instant::now() < early_until && release_elapsed.is_some() {
+    let mut reused_birth_observed = false;
+    while release.is_some() && native_now() < early_until && began.elapsed() < FAST_LIMIT {
         if fixture.root.join("done.json").exists() {
-            done_observed.get_or_insert_with(|| began.elapsed());
-            let rows = fixture.sample(&format!("natural-terminal-before-resume-{observations}"));
-            observations += 1;
-            match rows.iter().find(|process| process.pid == worker) {
-                Some(process) if process.state.starts_with('Z') => {
-                    worker_terminal_state = Some(process.state.clone());
-                    worker_terminal_observed = Some(began.elapsed());
-                    break;
-                }
-                None => {
-                    worker_terminal_state = Some("absent".to_owned());
-                    worker_terminal_observed = Some(began.elapsed());
-                    break;
-                }
-                Some(_) => (),
+            done_observed.get_or_insert_with(|| Stamp::read(began));
+            let owner = ProcessObservation::read("foreground-still-paused", foreground, began);
+            let terminal = ProcessObservation::read("worker-terminal", worker, began);
+            let stopped_same_owner = owner
+                .info
+                .is_some_and(|p| foreground_birth.same_birth(p) && p.status == libc::SSTOP);
+            reused_birth_observed |= owner.info.is_some_and(|p| !foreground_birth.same_birth(p))
+                || terminal.info.is_some_and(|p| !worker_birth.same_birth(p));
+            let terminal_same_worker = terminal.info.is_some_and(|p| {
+                worker_birth.same_birth(p) && p.ppid == foreground && p.status == libc::SZOMB
+            });
+            if stopped_same_owner
+                && !reused_birth_observed
+                && (terminal_same_worker || terminal.absent)
+            {
+                worker_terminal = Some(terminal.after);
+                worker_terminal_state = Some(if terminal.absent {
+                    "strict-ESRCH"
+                } else {
+                    "SZOMB"
+                });
+            }
+            observations.extend([owner.json(original_start), terminal.json(original_start)]);
+            if worker_terminal.is_some() || reused_birth_observed {
+                break;
             }
         }
-        thread::sleep(Duration::from_millis(5));
+        thread::sleep(Duration::from_millis(2));
     }
-    // Same fixed scheduling on the old and repaired candidates. The original
-    // capture itself is not exposed by the compatibility carrier. Since capture
-    // precedes the selected-child witness, witness observation +800ms is a
-    // source-derived upper bound for this selected policy's execution cutoff.
-    let resume_target = began + Duration::from_millis(RESUME_MS);
-    while Instant::now() < resume_target {
-        thread::sleep(Duration::from_millis(5));
+    loop {
+        let now = native_now();
+        if now >= resume_target || began.elapsed() >= FAST_LIMIT {
+            break;
+        }
+        thread::sleep(Duration::from_nanos(resume_target - now).min(Duration::from_millis(2)));
     }
-    let resume_sent = began.elapsed();
+    let resume_sent = Stamp::read(began);
     let resume_result = paused.resume();
     drop(paused);
-    let resume_completed = began.elapsed();
-    let crossed_execution_bound =
-        resume_sent > start_observed + Duration::from_millis(EXECUTION_CUTOFF_MS);
+    let resume_completed = Stamp::read(began);
     fs::write(fixture.root.join("pause-resume.json"), serde_json::to_vec_pretty(&serde_json::json!({
-        "foreground_pid":foreground, "selected_pid":selected_pid, "worker_pid":worker,
-        "selected_start_observed_ms":start_observed.as_millis(),
-        "pause_sent_ms":pause_sent.as_millis(), "pause_observed_ms":pause_observed.as_millis(),
-        "foreground_stopped":foreground_stopped, "worker_owned_before_release":worker_owned_before_release,
-        "selected_owned_before_release":selected_owned_before_release,
-        "release_elapsed_ms":release_elapsed.map(|at|at.as_millis()),
-        "done_observed_ms":done_observed.map(|at|at.as_millis()),
-        "worker_terminal_observed_ms":worker_terminal_observed.map(|at|at.as_millis()),
-        "worker_terminal_state":worker_terminal_state, "resume_target_ms":RESUME_MS,
-        "resume_sent_ms":resume_sent.as_millis(), "resume_completed_ms":resume_completed.as_millis(),
-        "resume_ok":resume_result.is_ok(), "original_capture_directly_observed":false,
-        "source_execution_cutoff_ms":EXECUTION_CUTOFF_MS,"source_foreground_cutoff_ms":FOREGROUND_CUTOFF_MS,
-        "execution_cutoff_upper_bound_ms":(start_observed+Duration::from_millis(EXECUTION_CUTOFF_MS)).as_millis(),
-        "resume_crossed_execution_upper_bound":crossed_execution_bound,
+        "clock_fragment":serde_json::from_slice::<serde_json::Value>(&clock_bytes).unwrap(),
+        "foreground_pid":foreground, "worker_pid":worker, "selected_pid":selected_pid,
+        "selected_start_observed":start_observed.json(original_start),
+        "pause_sent":pause_sent.json(original_start), "release":release.map(|s|s.json(original_start)),
+        "done_observed":done_observed.map(|s|s.json(original_start)),
+        "worker_terminal":worker_terminal.map(|s|s.json(original_start)), "worker_terminal_state":worker_terminal_state,
+        "foreground_stopped":foreground_stopped, "worker_owned":worker_owned, "selected_owned":selected_owned,
+        "reused_birth_observed":reused_birth_observed, "process_observations":observations,
+        "terminal_reserve_ns":terminal_reserve.to_string(), "returning_reserve_ns":returning_reserve.to_string(),
+        "execution_envelope_upper_ns":execution_upper.to_string(),
+        "foreground_envelope_upper_ns":foreground_upper.to_string(), "resume_target_ns":resume_target.to_string(),
+        "resume_sent":resume_sent.json(original_start), "resume_completed":resume_completed.json(original_start),
+        "resume_ok":resume_result.is_ok(), "direct_local_phase_capture":false,
     })).unwrap()).unwrap();
+    // This unchanged collector samples ps only after SIGCONT, outside the pause.
     let result = running.finish(&fixture, Some(b""), true, true, FAST_LIMIT);
+    let post_finish = Stamp::read(began);
     fs::write(fixture.root.join("natural-terminal-outcome.json"), serde_json::to_vec_pretty(&serde_json::json!({
-        "exit_code":result.status.code(),
+        "exit_code":result.status.code(), "post_finish":post_finish.json(original_start),
+        "completion_launch_elapsed_ns":completion_elapsed(&result).as_nanos().to_string(),
+        "stdout_eof_launch_elapsed_ns":result.stdout_eof_elapsed.map(|s|s.as_nanos().to_string()),
+        "stderr_eof_launch_elapsed_ns":result.stderr_eof_elapsed.map(|s|s.as_nanos().to_string()),
+        "post_finish_native_observation_upper_bounds_exit_and_both_eofs":result.out_eof && result.err_eof,
         "execution_cutoff_diagnostic_observed":String::from_utf8_lossy(&result.stderr).contains("compatibility execution cutoff reached"),
-        "completion_elapsed_ms":completion_elapsed(&result).as_millis(),
     })).unwrap()).unwrap();
     assert!(
-        foreground_stopped,
-        "setup gap: foreground stop was not observed"
+        foreground_stopped && worker_owned && selected_owned,
+        "setup gap: exact paused foreground/worker/selected ancestry unavailable"
     );
     assert!(
-        worker_owned_before_release && selected_owned_before_release,
-        "setup gap: expected selected-child/worker/paused-foreground ancestry was not observed"
+        !reused_birth_observed,
+        "setup gap: observed process birth changed"
     );
     assert!(
-        release_elapsed.is_some(),
-        "setup gap: selected child could not be released before700ms"
+        release.is_some(),
+        "setup gap: release missed retained execution window"
     );
     assert!(
-        done_observed.is_some_and(|at| at < Duration::from_millis(EARLY_TERMINAL_MS)),
-        "setup gap: natural child completion was not observed before700ms"
+        done_observed.is_some_and(|s| s.native_ns < execution_upper),
+        "setup gap: natural completion was not observed before retained execution upper bound"
     );
     assert!(
-        worker_terminal_observed.is_some_and(|at| at < Duration::from_millis(EARLY_TERMINAL_MS)),
-        "setup gap: terminal worker was not observed before700ms"
+        worker_terminal.is_some_and(|s| s.native_ns < execution_upper),
+        "setup gap: terminal worker was not observed before retained execution upper bound"
     );
     assert!(
         resume_result.is_ok(),
         "actual owned foreground child did not resume: {resume_result:?}"
     );
     assert!(
-        crossed_execution_bound,
-        "setup gap: resume did not cross the source-derived execution cutoff bound"
+        resume_sent.native_ns >= resume_target && resume_sent.native_ns > execution_upper,
+        "setup gap: resume did not cross the same retained execution upper bound"
     );
     assert!(
-        resume_completed < Duration::from_millis(1050),
-        "setup gap: resume missed the selected foreground phase"
+        resume_completed.native_ns < foreground_upper,
+        "setup gap: resume missed the retained foreground upper bound"
     );
     let done = fixture.witness("done");
     assert_eq!(done["pid"], selected_pid);
@@ -1512,10 +1741,15 @@ exit 37
         result.stderr.is_empty(),
         "completed natural execution acquired a cutoff diagnostic"
     );
-    assert!(completion_elapsed(&result) < Duration::from_millis(DESCRIBE_MS));
+    assert!(result.out_eof && result.err_eof);
+    assert!(
+        post_finish.native_ns < foreground_upper && post_finish.native_ns < selected_expiry,
+        "completion/EOF observation missed the same retained selected/foreground upper bounds"
+    );
     assert_private_group_not_live(&fixture, &result, "started");
-    // A terminal worker snapshot plus inspected worker exit conditions supports
-    // the queued-terminal inference. It does not decode the private packet or
-    // independently witness the original capture. On the old candidate, the
-    // retained execution-cutoff diagnostic identifies the actual rejected branch.
+    // Actual retained envelopes bound native-time comparisons. Production's
+    // conservatively captured local Instant limits can be earlier: these are
+    // envelope upper bounds, never direct observations of local phase capture.
+    // Terminal worker + source exit conditions infer a queued packet; this test
+    // does not decode it. Kernel stalls can invalidate timing setup or collection.
 }

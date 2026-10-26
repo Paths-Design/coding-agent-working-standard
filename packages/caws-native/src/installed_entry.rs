@@ -6,7 +6,7 @@ use crate::installed_generation::{
     self, MAX_METADATA, Selection as GenerationSelection, Verification,
 };
 use caws_native::monotonic_deadline::{DeadlineEnvelope, MonotonicDeadline};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -86,6 +86,38 @@ struct Pointer {
     version: u64,
     digest: String,
 }
+// Ephemeral description data, never a deadline constructor or dispatch carrier.
+// Fixed fields keep phase estimates, selector data and authority out of this view.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DescribeDeadlineEnvelope {
+    started_ns: String,
+    expires_ns: String,
+}
+
+#[derive(Serialize)]
+struct DescribeDeadlineObservation {
+    original: DescribeDeadlineEnvelope,
+    selected: Option<DescribeDeadlineEnvelope>,
+}
+
+fn describe_deadline_observation(
+    original: &MonotonicDeadline,
+    selected: Option<&MonotonicDeadline>,
+) -> DescribeDeadlineObservation {
+    fn observed(deadline: &MonotonicDeadline) -> DescribeDeadlineEnvelope {
+        let envelope = deadline.envelope();
+        DescribeDeadlineEnvelope {
+            started_ns: envelope.started_ns.to_string(),
+            expires_ns: envelope.expires_ns.to_string(),
+        }
+    }
+    DescribeDeadlineObservation {
+        original: observed(original),
+        selected: selected.map(observed),
+    }
+}
+
 #[derive(Debug)]
 pub struct Selection {
     generation: GenerationSelection,
@@ -284,6 +316,9 @@ impl Selection {
                     let context = serde_json::to_string(&serde_json::json!({
                         "cwd": std::env::current_dir().map_err(|e| e.to_string())?,
                         "environment": environment,
+                        "deadlineObservation": describe_deadline_observation(
+                            &self.original_deadline, self.policy_deadline.as_deref(),
+                        ),
                     }))
                     .map_err(|e| e.to_string())?;
                     if context.len() > 128 * 1024 {
@@ -446,5 +481,78 @@ pub fn run() -> u8 {
             selected.policy_deadline.as_deref(),
             invocation.failure_event(),
         )
+    }
+}
+
+#[cfg(test)]
+mod deadline_observation_tests {
+    use super::*;
+
+    #[test]
+    fn observes_retained_original_and_restricted_selected_without_renewal() {
+        let original = MonotonicDeadline::capture(Duration::from_millis(30_000)).unwrap();
+        let original_envelope = original.envelope();
+        let original_local_expiry = original.expires();
+        let selected_envelope = DeadlineEnvelope {
+            started_ns: original_envelope.started_ns,
+            expires_ns: original_envelope
+                .started_ns
+                .checked_add(1_200_000_000)
+                .unwrap(),
+        };
+        let selected = MonotonicDeadline::receive(selected_envelope).unwrap();
+        let selected_local_expiry = selected.expires();
+
+        let observation =
+            serde_json::to_value(describe_deadline_observation(&original, Some(&selected)))
+                .unwrap();
+
+        // Exact object equality also rejects numeric timestamps, extra phase
+        // estimates, authority fields and unrelated caller context.
+        assert_eq!(
+            observation,
+            serde_json::json!({
+                "original": {
+                    "startedNs": original_envelope.started_ns.to_string(),
+                    "expiresNs": original_envelope.expires_ns.to_string(),
+                },
+                "selected": {
+                    "startedNs": selected_envelope.started_ns.to_string(),
+                    "expiresNs": selected_envelope.expires_ns.to_string(),
+                },
+            })
+        );
+        assert_ne!(
+            observation["original"]["expiresNs"],
+            observation["selected"]["expiresNs"]
+        );
+        assert_eq!(original.envelope(), original_envelope);
+        assert_eq!(original.expires(), original_local_expiry);
+        assert_eq!(selected.envelope(), selected_envelope);
+        assert_eq!(selected.expires(), selected_local_expiry);
+    }
+
+    #[test]
+    fn absent_selected_is_null_and_does_not_duplicate_or_renew_original() {
+        let original = MonotonicDeadline::capture(Duration::from_millis(30_000)).unwrap();
+        let original_envelope = original.envelope();
+        let original_local_expiry = original.expires();
+
+        let observation =
+            serde_json::to_value(describe_deadline_observation(&original, None)).unwrap();
+
+        assert_eq!(
+            observation,
+            serde_json::json!({
+                "original": {
+                    "startedNs": original_envelope.started_ns.to_string(),
+                    "expiresNs": original_envelope.expires_ns.to_string(),
+                },
+                "selected": null,
+            })
+        );
+        assert!(observation["selected"].is_null());
+        assert_eq!(original.envelope(), original_envelope);
+        assert_eq!(original.expires(), original_local_expiry);
     }
 }
