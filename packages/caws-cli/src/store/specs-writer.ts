@@ -80,7 +80,7 @@ export interface CreateSpecInput {
   /**
    * Acceptance criteria to populate at creation time. Each entry is rendered
    * into the canonical v11 `acceptance:` array using A1/A2/... ids, preserving
-   * caller order. When omitted, create keeps the legacy TODO scaffold.
+   * caller order. When omitted, create uses the default acceptance scaffold.
    */
   readonly acceptance?: readonly {
     readonly given: string;
@@ -98,11 +98,9 @@ export interface CreateSpecInput {
   readonly rollback?: readonly string[];
   readonly security?: readonly string[];
   /**
-   * blast_radius.modules and invariants. Both are REQUIRED non-empty by
-   * spec.v1.json, and until CAWS-DEFECT-SPECS-CREATE-TODO-SCAFFOLD-01 neither
-   * had a flag — so every spec the CLI created committed a literal TODO string
-   * into tracked governance state, with no surface able to discharge it.
-   * Optional: omitting them preserves the placeholder scaffold byte-for-byte.
+   * blast_radius.modules and invariants are required non-empty by spec.v1.json.
+   * Supplied values populate those fields; omitting them preserves the default
+   * scaffold byte-for-byte for the guided-authoring flow.
    */
   readonly modules?: readonly string[];
   readonly invariants?: readonly string[];
@@ -923,13 +921,9 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
     `${key}:`,
     ...values.map((v) => `  - ${sq(v)}`),
   ];
-  // CAWS-DEFECT-SPECS-CREATE-TODO-SCAFFOLD-01: blast_radius.modules and
-  // invariants are REQUIRED non-empty by spec.v1.json, so the template had to
-  // emit something — and with no flag to supply it, that something was a
-  // literal TODO string committed into tracked governance state. These two
-  // flags make the scaffolded fields reachable from the command that scaffolds
-  // them. The placeholders remain the fallback (A2): existing callers and the
-  // guided-authoring flow must be byte-identical when the flags are absent.
+  // CAWS-DEFECT-SPECS-CREATE-TODO-SCAFFOLD-01: required modules and invariants
+  // use supplied values or their shared scaffold constants. Existing callers
+  // and the guided-authoring flow remain byte-identical when flags are absent.
   const moduleLines =
     input.modules !== undefined && input.modules.length > 0
       ? input.modules.map((v) => `    - ${sq(v)}`)
@@ -996,8 +990,8 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
  *
  * Single-sourced deliberately. Three surfaces must agree on what a placeholder
  * IS — the renderer that writes it, the create-time advisory that reports it,
- * and `caws specs amend`, which treats "this entry is a placeholder" as
- * permission to overwrite an otherwise-immutable closed spec. If those drift,
+ * and `caws specs amend`, which permits an exact scaffold match to be filled
+ * in an otherwise-immutable closed spec. If those drift,
  * amend either refuses a legitimate discharge or silently rewrites a real
  * claim, so the constant is the contract.
  */
@@ -1022,7 +1016,7 @@ export const SCOPE_IN_PLACEHOLDER = 'TODO: list the file(s) or directories this 
 
 /**
  * The create scaffold's acceptance placeholder: each of given/when/then
- * renders as the bare string 'TODO' (the create template above). Same
+ * renders the shared acceptance constant below. Same
  * single-source contract as the two placeholders above — the renderer that
  * writes it, the create-time advisory, and `caws specs amend`'s closed-spec
  * AC discharge check all key off this exact string. If those drift, amend
@@ -3695,6 +3689,31 @@ export function amendScopeSpec(
       cawsDir,
       plannedWrites: [{ path: targetPath, contents: patched }],
       events: [event],
+      // The plan includes the complete YAML, including lifecycle and evidence.
+      // Refuse stale plans rather than overwrite another writer's newer state.
+      validate: () => {
+        try {
+          if (fs.readFileSync(targetPath).equals(Buffer.from(originalBytes, 'utf8'))) {
+            return ok(undefined);
+          }
+        } catch (e) {
+          const cause = e as { code?: string };
+          return err(
+            storeDiagnostic(
+              STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+              `Spec "${input.id}" cannot be re-read for amendment; retry from its current state.`,
+              { subject: input.id, data: { code: cause.code } }
+            )
+          );
+        }
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+            `Spec "${input.id}" changed since amendment planning; retry from its current state.`,
+            { subject: input.id }
+          )
+        );
+      },
     })
   );
   if (!txnResult.ok) {
