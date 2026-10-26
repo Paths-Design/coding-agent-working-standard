@@ -734,6 +734,40 @@ fn legacy_stdin_raw_bytes_eof_cwd_and_environment_reach_selected_child() {
 }
 
 #[test]
+fn closed_selected_stdin_with_pending_input_preserves_natural_code_and_full_output() {
+    let fixture = Fixture::new("closed-selected-stdin");
+    // Close the actual selected stdin before the caller supplies any bytes.
+    // Output handshakes keep the child alive while the real pumps process that
+    // pending input; no test signal is sent to either foreground or worker.
+    fixture.install("os.close(0)\nwitness('started',stdin_closed=True)\nwhile not (w/'input-sent').exists():\n    time.sleep(0.001)\nos.write(1,b'AFTER STDIN CLOSED\\n')\nwhile not (w/'output-observed').exists():\n    time.sleep(0.001)\nos.write(1,b'NATURAL COMPLETION\\x00\\xff\\n')\nos.write(2,b'COMPLETE STDERR\\n')\nsys.exit(37)", false);
+    let mut running = fixture.spawn("pre_tool_use", false);
+    running.wait_for_witness(&fixture, "started");
+    assert_eq!(fixture.witness("started")["stdin_closed"], true);
+    let pending = b"pending input after selected stdin closes\x00\xff\n";
+    fs::write(fixture.root.join("stdin-sent.bin"), pending).unwrap();
+    running.input.as_mut().unwrap().write_all(pending).unwrap();
+    fs::write(fixture.root.join("input-sent"), b"ready").unwrap();
+    let expected_prefix = b"AFTER STDIN CLOSED\n";
+    let until = Instant::now() + Duration::from_secs(2);
+    while running.stdout.len() < expected_prefix.len() && Instant::now() < until {
+        running.drain_stdout();
+        running.drain_stderr();
+        thread::sleep(Duration::from_millis(5));
+    }
+    // Preserve the early failure too, before the final collector can be reached.
+    fs::write(fixture.root.join("prefix-stdout.bin"), &running.stdout).unwrap();
+    fs::write(fixture.root.join("prefix-stderr.bin"), &running.stderr).unwrap();
+    assert_eq!(running.stdout, expected_prefix);
+    fs::write(fixture.root.join("output-observed"), b"ready").unwrap();
+    let result = running.finish(&fixture, Some(b""), true, true, FAST_LIMIT);
+    expect_code(&result, 37);
+    assert_no_synthesized_stdout(&result, b"AFTER STDIN CLOSED\nNATURAL COMPLETION\x00\xff\n");
+    assert_eq!(result.stderr, b"COMPLETE STDERR\n");
+    assert!(completion_elapsed(&result) < FAST_LIMIT);
+    assert_private_group_not_live(&fixture, &result, "started");
+}
+
+#[test]
 fn raw_signal_uses_event_fault_policy_and_does_not_append_block_json() {
     for event in EVENTS {
         let fixture = Fixture::new(&format!("signal-{event}"));
@@ -926,6 +960,50 @@ fn describe_foreground_cancellation_preserves_partial_stdout_and_observed_custod
     assert!(String::from_utf8_lossy(&result.stderr).contains("delivery incomplete"));
     assert!(completion_elapsed(&result) < Duration::from_millis(DESCRIBE_MS));
     assert_private_group_not_live(&fixture, &result, "started");
+}
+
+#[test]
+fn actual_foreground_sigpipe_uses_fault_policy_and_preserves_partial_output() {
+    for (event, describe, code) in [
+        ("pre_tool_use", false, 2),
+        ("stop", false, 0),
+        ("stop", true, 2),
+    ] {
+        let fixture = Fixture::new(&format!("foreground-sigpipe-{event}-{describe}"));
+        fixture.install(
+            "witness('started')\nos.write(1,b'BEFORE CALLER SIGPIPE\\n')\ntime.sleep(4)",
+            describe,
+        );
+        let mut running = fixture.spawn(event, describe);
+        running.wait_for_witness(&fixture, "started");
+        running.wait_for_stdout(b"BEFORE CALLER SIGPIPE\n");
+        running.observe_custody_without_reading_output(&fixture);
+        // This is a real caller signal to our unreaped direct foreground Child,
+        // independently of every private descriptor's write-error behavior.
+        let signal_result = unsafe { libc::kill(running.child.id() as i32, libc::SIGPIPE) };
+        fs::write(
+            fixture.root.join("signal-sent.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "foreground_pid":running.child.id(), "signal":libc::SIGPIPE,
+                "result":signal_result,
+                "elapsed_before_signal_ms":running.started.elapsed().as_millis(),
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(signal_result, 0);
+        let result = running.finish(&fixture, Some(b""), true, true, FAST_LIMIT);
+        expect_code(&result, code);
+        assert_no_synthesized_stdout(&result, b"BEFORE CALLER SIGPIPE\n");
+        let diagnostic = String::from_utf8_lossy(&result.stderr);
+        assert!(
+            diagnostic.contains("caller interrupted; raw signal 13"),
+            "missing actual caller SIGPIPE diagnostic: {diagnostic}"
+        );
+        assert!(diagnostic.len() <= 1024, "unbounded signal diagnostic");
+        assert!(completion_elapsed(&result) < Duration::from_millis(DESCRIBE_MS));
+        assert_private_group_not_live(&fixture, &result, "started");
+    }
 }
 
 #[test]

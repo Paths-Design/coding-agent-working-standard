@@ -476,6 +476,25 @@ struct Channels {
     error: UnixStream,
     status: UnixStream,
 }
+fn private_no_sigpipe(fd: RawFd) -> io::Result<()> {
+    // Darwin applies this to pipes as well as sockets. Only descriptors created
+    // for our private transport receive it: EPIPE remains an I/O failure, while
+    // an actual caller SIGPIPE still reaches the installed signal handler.
+    #[cfg(target_os = "macos")]
+    if unsafe { libc::fcntl(fd, libc::F_SETNOSIGPIPE, 1) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = fd;
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "private signal isolation requires Darwin",
+        ));
+    }
+    #[cfg(target_os = "macos")]
+    Ok(())
+}
 fn channels() -> io::Result<(Channels, Channels)> {
     let (a, b) = UnixStream::pair()?;
     let (c, d) = UnixStream::pair()?;
@@ -508,6 +527,7 @@ fn channels() -> io::Result<(Channels, Channels)> {
         ] {
             stream.set_nonblocking(true)?;
             let fd = stream.as_raw_fd();
+            private_no_sigpipe(fd)?;
             let old = unsafe { libc::fcntl(fd, libc::F_GETFD) };
             if old < 0 || unsafe { libc::fcntl(fd, libc::F_SETFD, old | libc::FD_CLOEXEC) } < 0 {
                 return Err(io::Error::last_os_error());
@@ -1255,6 +1275,13 @@ fn pump_child(custody: &mut Custody, deadline: &CompatibilityBudget<'_>) -> ! {
         stderr,
     } = custody;
     let mut ready = true;
+    if let Some(pipe) = stdin.as_ref()
+        && private_no_sigpipe(pipe.as_raw_fd()).is_err()
+    {
+        // The actual Child is already in custody. Setup failure enters the
+        // existing stop/EOF/settlement path instead of dropping its owner.
+        ready = false;
+    }
     for fd in [
         stdin.as_ref().map(AsRawFd::as_raw_fd),
         stdout.as_ref().map(AsRawFd::as_raw_fd),
@@ -1537,6 +1564,40 @@ fn pump_child(custody: &mut Custody, deadline: &CompatibilityBudget<'_>) -> ! {
 mod budget_tests {
     use super::*;
     use caws_native::monotonic_deadline::DeadlineEnvelope;
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn private_channels_preserve_epipe_without_generating_sigpipe() {
+        let (writer, reader) = channels().unwrap();
+        for side in [&writer, &reader] {
+            for stream in [
+                &side.control,
+                &side.input,
+                &side.output,
+                &side.error,
+                &side.status,
+            ] {
+                assert_eq!(
+                    unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_GETNOSIGPIPE) },
+                    1
+                );
+            }
+        }
+        drop(reader);
+        for stream in [
+            &writer.control,
+            &writer.input,
+            &writer.output,
+            &writer.error,
+            &writer.status,
+        ] {
+            assert_eq!(
+                unsafe { libc::write(stream.as_raw_fd(), b"x".as_ptr().cast(), 1) },
+                -1
+            );
+            assert_eq!(io::Error::last_os_error().raw_os_error(), Some(libc::EPIPE));
+        }
+    }
 
     #[test]
     fn original_thirty_seconds_reserves_six_hundred_and_one_hundred_milliseconds() {
