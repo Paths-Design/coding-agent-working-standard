@@ -1,0 +1,38 @@
+id: CAWS-NATIVE-EXECUTION-AUTHORIZER-WIRE-001
+title: 'Private execution authorizer wire transport'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-26T23:49:35.903Z'
+updated_at: '2026-10-26T23:49:35.903Z'
+created_by_session: '01a17a9d-b74e-7993-8280-0c09f794de52'
+blast_radius:
+  modules:
+    - 'execution_authorizer_wire'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/execution_authorizer_wire.rs'
+    - 'packages/caws-native/src/lib.rs'
+  out: []
+invariants:
+  - 'Transport observations never confer launch or project authority; record bytes retain their original identity.'
+acceptance:
+  - id: A1
+    given: 'immutable UTF-8 JSON record bytes'
+    when: 'an analyze or final validation request is encoded'
+    then: 'canonical base64 and SHA256 preserve the exact original bytes and invalid envelopes are rejected'
+  - id: A2
+    given: 'bounded incremental reply bytes'
+    when: 'one correlated reply reaches EOF'
+    then: 'strict schema correlation phase revision framing and limits are enforced against hostile inputs'
+observability:
+  - 'Focused tests report only cases and generic errors, never input payloads.'
+rollback:
+  - 'Revert the wire module and its private lib declaration as one logical unit.'
+non_functional:
+  security:
+    - 'No process spawn, identity minting, fd ownership proof, raw source logs or launch permission type.'
+contracts:
+  - name: 'execution-authorizer-v1'
+    type: schema
