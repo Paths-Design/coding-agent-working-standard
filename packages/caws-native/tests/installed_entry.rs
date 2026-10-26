@@ -56,6 +56,12 @@ impl Fixture {
         })).unwrap()).unwrap();
     }
     fn generation(&self, native: Option<&[u8]>) -> String {
+        self.generation_with_entry(native, serde_json::json!({
+            "schema":"caws.runtime.native-entry.v1", "nativeExecutable":"native/caws-native",
+            "nodeExecutable":"native/node", "engineEntry":"engine.js", "describeEntry":"describe.js", "timeoutMs":1000,
+        }))
+    }
+    fn generation_with_entry(&self, native: Option<&[u8]>, metadata: serde_json::Value) -> String {
         let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::from([
             ("launcher.py".into(), b"raise SystemExit(77)\n".to_vec()),
             (
@@ -75,10 +81,10 @@ impl Fixture {
                 "describe.js".into(),
                 b"throw Error('not a real description fixture');".to_vec(),
             );
-            files.insert("native-entry.json".into(), serde_json::to_vec(&serde_json::json!({
-                "schema":"caws.runtime.native-entry.v1", "nativeExecutable":"native/caws-native",
-                "nodeExecutable":"native/node", "engineEntry":"engine.js", "describeEntry":"describe.js", "timeoutMs":1000,
-            })).unwrap());
+            files.insert(
+                "native-entry.json".into(),
+                serde_json::to_vec(&metadata).unwrap(),
+            );
             files.insert("native-modes.json".into(), Vec::new());
             let modes: BTreeMap<_, _> = files
                 .keys()
@@ -337,4 +343,158 @@ fn non_utf8_invocation_refuses_before_pointer_access() {
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
     assert!(String::from_utf8_lossy(&output.stderr).contains("must be UTF-8"));
+}
+
+fn installed_v2_metadata() -> serde_json::Value {
+    serde_json::json!({
+        "schema":"caws.runtime.native-entry.v2", "nativeExecutable":"native/caws-native",
+        "nodeExecutable":"native/node", "engineEntry":"engine.js", "describeEntry":"describe.js", "timeoutMs":30000,
+        "installedInvocation":{"protocol":"invoke-installed-v1","maxOriginalTimeoutMs":30000},
+    })
+}
+
+#[test]
+fn generation_v1_remains_readable_without_installed_receiver_capability() {
+    let fixture = Fixture::new();
+    let digest = fixture.generation(Some(b"#!/bin/sh\nexit 91\n"));
+    let mut cancel = || Ok(());
+    let mut verify = installed_generation::Verification::new(
+        std::time::Instant::now() + std::time::Duration::from_secs(30),
+        &mut cancel,
+    );
+    let selected =
+        installed_generation::Selection::read_generation(&fixture.0, &digest, &mut verify).unwrap();
+    assert!(selected.native_entry().is_some());
+    assert_eq!(
+        selected.installed_invocation_entry().unwrap_err(),
+        "Selected generation does not support invoke-installed-v1"
+    );
+}
+
+#[test]
+fn generation_capability_wire_shape_and_policy_are_exact() {
+    let mut cases = Vec::new();
+    for change in [
+        "missing",
+        "null",
+        "extra",
+        "extra-capability",
+        "protocol",
+        "max-short",
+        "max-long",
+        "zero",
+        "timeout-long",
+        "schema",
+    ] {
+        let mut metadata = installed_v2_metadata();
+        match change {
+            "missing" => {
+                metadata
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("installedInvocation");
+            }
+            "null" => metadata["installedInvocation"] = serde_json::Value::Null,
+            "extra" => metadata["callerCapability"] = true.into(),
+            "extra-capability" => metadata["installedInvocation"]["fallback"] = true.into(),
+            "protocol" => metadata["installedInvocation"]["protocol"] = "invoke".into(),
+            "max-short" => metadata["installedInvocation"]["maxOriginalTimeoutMs"] = 29999.into(),
+            "max-long" => metadata["installedInvocation"]["maxOriginalTimeoutMs"] = 30001.into(),
+            "zero" => metadata["timeoutMs"] = 0.into(),
+            "timeout-long" => metadata["timeoutMs"] = 30001.into(),
+            "schema" => metadata["schema"] = "caws.runtime.native-entry.v3".into(),
+            _ => unreachable!(),
+        }
+        cases.push((change, metadata));
+    }
+    let mut v1_null = installed_v2_metadata();
+    v1_null["schema"] = "caws.runtime.native-entry.v1".into();
+    v1_null["installedInvocation"] = serde_json::Value::Null;
+    cases.push(("v1-null-capability", v1_null));
+    for (name, metadata) in cases {
+        let fixture = Fixture::new();
+        let digest = fixture.generation_with_entry(Some(b"#!/bin/sh\nexit 91\n"), metadata);
+        let mut cancel = || Ok(());
+        let mut verify = installed_generation::Verification::new(
+            std::time::Instant::now() + std::time::Duration::from_secs(30),
+            &mut cancel,
+        );
+        let error =
+            installed_generation::Selection::read_generation(&fixture.0, &digest, &mut verify)
+                .unwrap_err();
+        assert!(error.contains("native entry"), "{name}: {error}");
+    }
+}
+
+#[test]
+fn installed_binding_requires_selected_paths_timeout_and_original_expiry() {
+    use caws_native::monotonic_deadline::MonotonicDeadline;
+    use std::time::Duration;
+    let fixture = Fixture::new();
+    let digest =
+        fixture.generation_with_entry(Some(b"#!/bin/sh\nexit 91\n"), installed_v2_metadata());
+    let deadline = MonotonicDeadline::capture(Duration::from_secs(30)).unwrap();
+    let mut cancel = || deadline.check().map_err(|error| error.to_string());
+    let mut verify = installed_generation::Verification::new(deadline.expires(), &mut cancel);
+    let selected =
+        installed_generation::Selection::read_generation(&fixture.0, &digest, &mut verify).unwrap();
+    let (native, node, engine) = selected.native_paths(&mut verify).unwrap();
+    assert!(
+        selected
+            .validate_installed_invocation(&native, &node, &engine, 30000, &deadline, &mut verify)
+            .is_ok()
+    );
+    for (wrong_native, wrong_node, wrong_engine) in [
+        (fixture.0.join("wrong-native"), node.clone(), engine.clone()),
+        (native.clone(), fixture.0.join("wrong-node"), engine.clone()),
+        (native.clone(), node.clone(), fixture.0.join("wrong-engine")),
+    ] {
+        assert_eq!(
+            selected
+                .validate_installed_invocation(
+                    &wrong_native,
+                    &wrong_node,
+                    &wrong_engine,
+                    30000,
+                    &deadline,
+                    &mut verify
+                )
+                .unwrap_err(),
+            "Invocation paths differ from admitted native generation"
+        );
+    }
+    for timeout in [1, 29999, 30001, 120000] {
+        assert_eq!(
+            selected
+                .validate_installed_invocation(
+                    &native,
+                    &node,
+                    &engine,
+                    timeout,
+                    &deadline,
+                    &mut verify
+                )
+                .unwrap_err(),
+            "Installed invocation timeout differs from selected generation"
+        );
+    }
+    let mut live = || Ok(());
+    let mut renewed = installed_generation::Verification::new(
+        deadline.expires() + Duration::from_secs(1),
+        &mut live,
+    );
+    assert_eq!(
+        selected
+            .validate_installed_invocation(&native, &node, &engine, 30000, &deadline, &mut renewed)
+            .unwrap_err(),
+        "Installed verification exceeds original deadline"
+    );
+    let expired = MonotonicDeadline::capture(Duration::from_millis(1)).unwrap();
+    std::thread::sleep(Duration::from_millis(10));
+    assert!(
+        selected
+            .validate_installed_invocation(&native, &node, &engine, 30000, &expired, &mut verify)
+            .unwrap_err()
+            .contains("expired")
+    );
 }
