@@ -1,6 +1,7 @@
 //! Private per-invocation engine custody. This is transport and original-child
 //! ownership, never project authority or permission to adopt a process by PID.
 use crate::cli::Config;
+use caws_native::monotonic_deadline::{DeadlineEnvelope, MonotonicDeadline};
 use caws_native::owned_group::{GroupSettlement, GroupStop, SettlementError, StopError};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -24,7 +25,7 @@ use std::{
 #[cfg(test)]
 mod tests;
 pub(crate) mod worker;
-pub(super) const CONFIG_SCHEMA: &str = "caws.engine.custody.configuration.v1";
+pub(super) const CONFIG_SCHEMA: &str = "caws.engine.custody.configuration.v2";
 pub(super) const RECEIPT_SCHEMA: &str = "caws.engine.custody.receipt.v1";
 pub(super) const MAX_CONFIG: u64 = 65_536;
 pub(super) const MAX_JOURNAL: u64 = 1_048_576;
@@ -36,6 +37,7 @@ pub(super) struct Configuration {
     pub schema: String,
     pub invocation_id: String,
     pub runtime_digest: String,
+    pub deadline: DeadlineEnvelope,
     pub node: PathBuf,
     pub engine: PathBuf,
     pub control_fd: RawFd,
@@ -290,7 +292,11 @@ impl Owner {
         config: &Config,
         invocation_id: &str,
         render: Option<[RawFd; 3]>,
+        original_deadline: &MonotonicDeadline,
     ) -> Result<Spawned, String> {
+        original_deadline
+            .check()
+            .map_err(|error| error.to_string())?;
         let parent = std::env::temp_dir()
             .canonicalize()
             .map_err(|e| e.to_string())?;
@@ -337,6 +343,7 @@ impl Owner {
             schema: CONFIG_SCHEMA.into(),
             invocation_id: invocation_id.into(),
             runtime_digest: config.digest.clone(),
+            deadline: original_deadline.envelope(),
             node: config.node.clone(),
             engine: config.engine.clone(),
             control_fd: remote.as_raw_fd(),
@@ -386,6 +393,7 @@ impl Owner {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         remove_preloads(&mut command);
+        let original_envelope = original_deadline.envelope();
         unsafe {
             command.pre_exec(move || {
                 if libc::setsid() < 0 {
@@ -396,9 +404,13 @@ impl Owner {
                         return Err(io::Error::last_os_error());
                     }
                 }
-                Ok(())
+                caws_native::monotonic_deadline::check_before_exec(original_envelope)
+                    .map_err(io::Error::from_raw_os_error)
             });
         }
+        original_deadline
+            .check()
+            .map_err(|error| error.to_string())?;
         let child = command
             .spawn()
             .map_err(|e| format!("engine custodian spawn: {e}; retained {}", root.display()))?;

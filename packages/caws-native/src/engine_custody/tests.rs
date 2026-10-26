@@ -494,6 +494,9 @@ impl DescriptorFixture {
             schema: CONFIG_SCHEMA.into(),
             invocation_id: INVOCATION.into(),
             runtime_digest: DIGEST.into(),
+            deadline: MonotonicDeadline::capture(Duration::from_secs(10))
+                .unwrap()
+                .envelope(),
             node: directory.0.join("private-node"),
             engine: directory.0.join("private-engine"),
             control_fd: control.as_raw_fd(),
@@ -508,7 +511,7 @@ impl DescriptorFixture {
             configuration,
         }
     }
-    fn invoke(&self) -> Result<WorkerInput, String> {
+    fn configuration_descriptor(&self) -> OwnedFd {
         let path = self.directory.0.join("configuration.json");
         let mut writer = OpenOptions::new()
             .write(true)
@@ -526,7 +529,10 @@ impl DescriptorFixture {
         let configuration = high(file.as_raw_fd()).unwrap();
         // Valid readonly private configuration transfers exactly once. All
         // rejection controls run after worker_input owns this descriptor.
-        worker_input(configuration.into_raw_fd())
+        configuration
+    }
+    fn invoke(&self) -> Result<WorkerInput, String> {
+        worker_input(self.configuration_descriptor().into_raw_fd())
     }
     fn rejection(&self) -> String {
         match self.invoke() {
@@ -567,6 +573,281 @@ fn worker_input_accepts_private_append_receipt_and_connected_control_descriptors
     assert_eq!(
         fs::read(directory.0.join("receipt.jsonl")).unwrap(),
         b"private journal\n"
+    );
+}
+
+#[test]
+fn custody_configuration_requires_exact_original_envelope() {
+    let fixture = DescriptorFixture::new();
+    let mut value = serde_json::to_value(&fixture.configuration).unwrap();
+    let decoded: Configuration = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(decoded.deadline, fixture.configuration.deadline);
+    assert_eq!(decoded.schema, "caws.engine.custody.configuration.v2");
+    value.as_object_mut().unwrap().remove("deadline");
+    assert!(
+        serde_json::from_value::<Configuration>(value)
+            .unwrap_err()
+            .to_string()
+            .contains("deadline")
+    );
+}
+
+#[cfg(target_os = "macos")]
+fn barrier_pipe() -> [OwnedFd; 2] {
+    let mut descriptors = [-1; 2];
+    assert_eq!(unsafe { libc::pipe(descriptors.as_mut_ptr()) }, 0);
+    let read = unsafe { OwnedFd::from_raw_fd(descriptors[0]) };
+    let write = unsafe { OwnedFd::from_raw_fd(descriptors[1]) };
+    [
+        high(read.as_raw_fd()).unwrap(),
+        high(write.as_raw_fd()).unwrap(),
+    ]
+}
+
+#[cfg(target_os = "macos")]
+fn deadline_worker_case(stage: &str, expire: bool) {
+    let mut fixture = DescriptorFixture::new();
+    let original = MonotonicDeadline::capture(Duration::from_secs(2)).unwrap();
+    fixture.configuration.deadline = original.envelope();
+    fixture.configuration.node = "/bin/sh".into();
+    fs::write(
+        &fixture.configuration.engine,
+        b"printf 'deadline-live\n' > \"$0.marker\"\n",
+    )
+    .unwrap();
+    let marker = fixture
+        .configuration
+        .engine
+        .with_file_name("private-engine.marker");
+    if stage == "received-invalid" {
+        fixture.configuration.deadline.expires_ns = fixture.configuration.deadline.started_ns;
+    }
+    if stage == "received-expired" {
+        while original.check().is_ok() {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(
+            original.check(),
+            Err(caws_native::monotonic_deadline::DeadlineError::Expired)
+        );
+    }
+    let configuration = fixture.configuration_descriptor();
+    let [ready_read, ready_write] = barrier_pipe();
+    let [release_read, release_write] = barrier_pipe();
+    let inherited = [
+        configuration.as_raw_fd(),
+        fixture.control.as_raw_fd(),
+        fixture.receipt.as_raw_fd(),
+        ready_write.as_raw_fd(),
+        release_read.as_raw_fd(),
+    ];
+    let mut command = Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--ignored",
+            "--exact",
+            "engine_custody::tests::deadline_worker_subprocess",
+            "--nocapture",
+        ])
+        .env(
+            "CAWS_TEST_CUSTODY_CONFIGURATION",
+            configuration.as_raw_fd().to_string(),
+        )
+        .env(
+            "CAWS_TEST_CUSTODY_READY",
+            ready_write.as_raw_fd().to_string(),
+        )
+        .env(
+            "CAWS_TEST_CUSTODY_RELEASE",
+            release_read.as_raw_fd().to_string(),
+        )
+        .env("CAWS_TEST_CUSTODY_STAGE", stage)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    unsafe {
+        command.pre_exec(move || {
+            for descriptor in inherited {
+                if libc::fcntl(descriptor, libc::F_SETFD, 0) < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+            }
+            Ok(())
+        });
+    }
+    let mut child = command.spawn().unwrap();
+    let custodian_pid = child.id();
+    // Keep the original control peer alive and send no stop byte. Deadline
+    // rejection must therefore come from the original envelope alone.
+    drop(ready_write);
+    drop(release_read);
+    if !stage.starts_with("received-") {
+        let mut descriptor = libc::pollfd {
+            fd: ready_read.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        let ready = unsafe { libc::poll(&mut descriptor, 1, 3000) };
+        if ready != 1 || descriptor.revents & libc::POLLIN == 0 {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!(
+                "worker failed to reach {stage} barrier: {ready}, {}",
+                descriptor.revents
+            );
+        }
+        let mut byte = [0u8];
+        assert_eq!(
+            unsafe { libc::read(ready_read.as_raw_fd(), byte.as_mut_ptr().cast(), 1) },
+            1
+        );
+        assert_eq!(byte, [1]);
+        assert_eq!(
+            original.check(),
+            Ok(()),
+            "original must be live at the actual boundary"
+        );
+        if expire {
+            while original.check().is_ok() {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            assert_eq!(
+                original.check(),
+                Err(caws_native::monotonic_deadline::DeadlineError::Expired)
+            );
+        }
+        assert_eq!(
+            unsafe { libc::write(release_write.as_raw_fd(), [1u8].as_ptr().cast(), 1) },
+            1
+        );
+    }
+    let join_bound = Instant::now() + Duration::from_secs(5);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() >= join_bound {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("worker did not reap and exit after {stage}");
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    };
+    assert!(
+        status.success(),
+        "isolated worker failed: {:?}",
+        child.wait_with_output().unwrap().stderr
+    );
+    let receipts: Vec<Receipt> = fs::read(fixture.directory.0.join("receipt.jsonl"))
+        .unwrap()
+        .split(|&byte| byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| serde_json::from_slice(line).unwrap())
+        .collect();
+    let row = receipts.last().expect("durable terminal receipt");
+    assert_eq!(row.invocation_id, INVOCATION);
+    assert_eq!(row.runtime_digest, DIGEST);
+    assert_eq!(row.custodian_pid, custodian_pid);
+    assert!(row.terminal(), "terminal original-child evidence: {row:?}");
+    if expire || stage == "received-invalid" {
+        assert_eq!(receipts.len(), 1);
+        assert_eq!(row.sequence, 1);
+        assert_eq!(row.state, ReceiptState::NoChild);
+        assert_eq!(row.node_pid, None);
+        assert_eq!(row.child_exit_raw, None);
+        assert_eq!(row.stop, None);
+        assert_eq!(row.settlement, None);
+        assert!(row.stdout_eof && row.stderr_eof);
+        assert_eq!((row.stdout_bytes, row.stderr_bytes), (0, 0));
+        let expected_reason = if stage == "received-invalid" {
+            "invalid_original_deadline"
+        } else {
+            "original_deadline_expired"
+        };
+        assert_eq!(row.reason.as_deref(), Some(expected_reason));
+        if stage == "pre-exec" {
+            assert_eq!(
+                row.error,
+                Some(format!("engine spawn: errno {}", libc::ETIMEDOUT))
+            );
+        } else {
+            let expected = if stage == "received-invalid" {
+                "Monotonic deadline interval must be positive"
+            } else {
+                "Original monotonic deadline expired"
+            };
+            assert_eq!(row.error.as_deref(), Some(expected));
+        }
+        assert!(
+            !marker.exists(),
+            "expired/invalid envelope must not execute Node marker"
+        );
+    } else {
+        assert_eq!(row.state, ReceiptState::Complete);
+        assert!(row.node_pid.is_some_and(|pid| pid > 1));
+        assert_eq!(fs::read(marker).unwrap(), b"deadline-live\n");
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn worker_preparation_delay_uses_original_deadline_with_live_mate() {
+    deadline_worker_case("before-spawn", false);
+    deadline_worker_case("before-spawn", true);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn worker_pre_exec_delay_uses_original_deadline_with_live_mate() {
+    deadline_worker_case("pre-exec", false);
+    deadline_worker_case("pre-exec", true);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn worker_rejects_expired_and_invalid_received_envelopes_with_terminal_no_child() {
+    deadline_worker_case("received-expired", true);
+    deadline_worker_case("received-invalid", false);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "isolated subprocess helper; invoked with private descriptors by its parent tests"]
+fn deadline_worker_subprocess() {
+    let descriptor = |name| {
+        std::env::var(name)
+            .expect("parent test descriptor")
+            .parse::<RawFd>()
+            .unwrap()
+    };
+    let config = descriptor("CAWS_TEST_CUSTODY_CONFIGURATION");
+    let ready = descriptor("CAWS_TEST_CUSTODY_READY");
+    let release = descriptor("CAWS_TEST_CUSTODY_RELEASE");
+    close_on_exec(ready).unwrap();
+    close_on_exec(release).unwrap();
+    let stage = std::env::var("CAWS_TEST_CUSTODY_STAGE").unwrap();
+    let pre_exec_barrier = (stage == "pre-exec").then_some([ready, release]);
+    worker::run_inner(
+        config,
+        || {
+            assert!(
+                !stage.starts_with("received-"),
+                "invalid/expired receipt must precede preparation"
+            );
+            if stage == "before-spawn" {
+                worker::test_barrier(ready, release).unwrap();
+            }
+        },
+        pre_exec_barrier,
+    )
+    .unwrap();
+    // Command::spawn must reap an exec-refused child. The success mate also
+    // requires the worker to settle/reap its actual Node before returning.
+    let mut status = 0;
+    assert_eq!(unsafe { libc::waitpid(-1, &mut status, libc::WNOHANG) }, -1);
+    assert_eq!(
+        io::Error::last_os_error().raw_os_error(),
+        Some(libc::ECHILD)
     );
 }
 

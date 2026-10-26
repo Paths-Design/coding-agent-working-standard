@@ -289,7 +289,7 @@ fn discover(
         let mut bytes = vec![0; meta.len() as usize];
         io(file.read_exact_at(&mut bytes, 0))?;
         let config: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-        if config["schema"] == "caws.engine.custody.configuration.v1"
+        if config["schema"] == "caws.engine.custody.configuration.v2"
             && config["invocation_id"] == id
             && config["runtime_digest"] == DIGEST
             && config["node"] == node.to_string_lossy().as_ref()

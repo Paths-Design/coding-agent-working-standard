@@ -395,20 +395,29 @@ impl caws_native::transcript_store_wire::Transport for Session {
 }
 
 impl Session {
-    pub fn start(config: &Config, invocation_id: &str, deadline: Instant) -> Result<Self, String> {
-        Self::start_inner(config, invocation_id, deadline, cfg!(target_os = "macos"))
+    pub fn start(
+        config: &Config,
+        invocation_id: &str,
+        original_deadline: &caws_native::monotonic_deadline::MonotonicDeadline,
+    ) -> Result<Self, String> {
+        Self::start_inner(
+            config,
+            invocation_id,
+            original_deadline,
+            cfg!(target_os = "macos"),
+        )
     }
 
     fn start_inner(
         config: &Config,
         invocation_id: &str,
-        deadline: Instant,
+        original_deadline: &caws_native::monotonic_deadline::MonotonicDeadline,
         custody: bool,
     ) -> Result<Self, String> {
         crate::cancellation::check()?;
-        if Instant::now() >= deadline {
-            return Err("request deadline expired before engine spawn".into());
-        }
+        original_deadline
+            .check()
+            .map_err(|error| error.to_string())?;
         let mut command = Command::new(&config.node);
         command
             .arg(&config.engine)
@@ -437,8 +446,12 @@ impl Session {
         let render_sources = render_bank.as_ref().map(|bank| bank.child_sources());
         #[cfg(target_os = "macos")]
         let spawned = if custody {
-            let spawned =
-                crate::engine_custody::Owner::spawn(config, invocation_id, render_sources)?;
+            let spawned = crate::engine_custody::Owner::spawn(
+                config,
+                invocation_id,
+                render_sources,
+                original_deadline,
+            )?;
             Some((
                 EngineOwner::Custodied(Box::new(spawned.owner)),
                 spawned.stdin,
@@ -456,7 +469,8 @@ impl Session {
         let (group, stdin, stdout, stderr) = if let Some(spawned) = spawned {
             spawned
         } else {
-            // SAFETY: setpgid is async-signal-safe and this closure performs no allocation.
+            let original_envelope = original_deadline.envelope();
+            // SAFETY: only async-signal-safe operations and allocation-free checks.
             unsafe {
                 command.pre_exec(move || {
                     if libc::setpgid(0, 0) != 0 {
@@ -472,9 +486,13 @@ impl Session {
                         // descriptions are >=10 and close-on-exec.
                         libc::close(6);
                     }
-                    Ok(())
+                    caws_native::monotonic_deadline::check_before_exec(original_envelope)
+                        .map_err(io::Error::from_raw_os_error)
                 });
             }
+            original_deadline
+                .check()
+                .map_err(|error| error.to_string())?;
             let child = command.spawn().map_err(|e| format!("engine spawn: {e}"))?;
             let mut group = OwnedGroup {
                 child,
@@ -1372,7 +1390,9 @@ mod tests {
         };
         // The unit-test executable is libtest, not the production custodian
         // entrypoint. Actual custody is qualified through the built binary.
-        Session::start_inner(&config, "runner-unit", deadline(), false).unwrap()
+        let original =
+            caws_native::monotonic_deadline::MonotonicDeadline::capture(config.timeout).unwrap();
+        Session::start_inner(&config, "runner-unit", &original, false).unwrap()
     }
 
     #[test]

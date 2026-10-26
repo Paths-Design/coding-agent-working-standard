@@ -333,7 +333,7 @@ fn execute_observed<'deadline>(
                 })
                 .map_err(Failure::configuration)?;
         }
-        let mut session = runner::Session::start(config, &request.id, deadline)
+        let mut session = runner::Session::start(config, &request.id, original_deadline)
             .map_err(Failure::configuration)?;
         let mut ready = None;
         let mut dispatched = false;
