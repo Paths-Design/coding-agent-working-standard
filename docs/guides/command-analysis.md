@@ -43,9 +43,11 @@ The CLI response adds `execution: {command, cwd}` and `singleLifecycle` to the
 projection. The bridge requires the exact decoded source to match all supplied
 native `command`/`cmd` fields and uses the returned execution directory for
 downstream ownership checks. A known directory is physical; an unknown directory
-stays `null`. Invalid source or unavailable analysis returns `execution:null`,
-empty facts and a bounded issue. Returned bounded facts survive later projection
-uncertainty so an independently observed foreign write retains precedence.
+stays `null`. Caught decoding or outer-command failures return `execution:null`,
+empty facts and a bounded issue. Normally returned parser and projection issues
+retain the decoded execution record and any observed facts. Those bounded facts
+survive later projection uncertainty so an independently observed foreign write
+retains precedence.
 
 Native `exec_command`/`shell_command` spellings require explicit Bash and
 `tool_input.login:false`. Their `workdir` resolves against the original native
