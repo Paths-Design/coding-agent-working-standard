@@ -40,3 +40,9 @@ non_functional: {}
 contracts:
   - name: 'private-io-caller-signal-separation'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "Candidate committed; restored actual installed compatibility late-natural control passes and original 30s bounds unchanged. Independent review feedback received; Root raw-artifact discharge pending. No integration, full installed scenario or machine adoption claim."
+    recorded_at: "2026-10-26T10:57:05.061Z"
+    commit_sha: d9feda882dff7a4b4d784edbe7e6e649c5b114b3
