@@ -587,6 +587,17 @@ function inspectTree(
   visit('');
   insist(seen.size === expected.size, 'Reviewed tree files missing');
 }
+/** Shared file-custody checks for offline preparation; this object grants no build authority. */
+export const nativeSqlitePreparationCustody = Object.freeze({
+  validateRequest,
+  realDirectories,
+  readBounded,
+  verifyFile,
+  fileIdentity,
+  exclusive,
+  inspectTree,
+});
+
 function embeddedPaths(root: string): { client: string; image: string } {
   const templates = path.join(root, 'caws-cli', 'templates', 'hook-packs');
   return {
