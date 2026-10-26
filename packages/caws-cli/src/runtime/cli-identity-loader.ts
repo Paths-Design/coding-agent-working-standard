@@ -214,9 +214,32 @@ export async function loadGenerationCliIdentity(
   const entry: unknown = JSON.parse(
     (await member('native-entry.json', 64 * 1024)).toString('utf8')
   );
+  if (!object(entry)) throw new Error('Generation CLI identity running entry mismatch');
+  const installed = entry.schema === 'caws.runtime.native-entry.v2';
+  exact(entry, [
+    'schema',
+    'nativeExecutable',
+    'nodeExecutable',
+    'engineEntry',
+    'describeEntry',
+    'timeoutMs',
+    ...(installed ? ['installedInvocation'] : []),
+  ]);
+  if (installed) {
+    exact(entry.installedInvocation, ['protocol', 'maxOriginalTimeoutMs']);
+    if (
+      entry.installedInvocation.protocol !== 'invoke-installed-v1' ||
+      entry.installedInvocation.maxOriginalTimeoutMs !== 30000
+    )
+      throw new Error('Unsupported generation installed invocation capability');
+  }
   if (
-    !object(entry) ||
-    entry.schema !== 'caws.runtime.native-entry.v1' ||
+    !['caws.runtime.native-entry.v1', 'caws.runtime.native-entry.v2'].includes(
+      entry.schema as string
+    ) ||
+    !Number.isSafeInteger(entry.timeoutMs) ||
+    (entry.timeoutMs as number) < 1 ||
+    (entry.timeoutMs as number) > (installed ? 30000 : 120000) ||
     entry.engineEntry !== ENGINE ||
     entry.nodeExecutable !== 'native/node' ||
     path.join(root, ENGINE) !== engineFilename ||

@@ -52,7 +52,11 @@ export interface SqlitePrefixManifest {
   object: ReviewedFile;
   bindings: ReviewedFile;
 }
-export interface SqliteBuildIdentity {
+export interface InstalledInvocationCapability {
+  readonly protocol: 'invoke-installed-v1';
+  readonly maxOriginalTimeoutMs: 30000;
+}
+export interface SqliteBuildIdentityV1 {
   schema: 'caws.sqlite_build_identity.v1';
   version: string;
   sourceId: string;
@@ -60,6 +64,11 @@ export interface SqliteBuildIdentity {
   compileOptions: string[];
   compiledPrefixSha256: string;
 }
+export interface SqliteBuildIdentityV2 extends Omit<SqliteBuildIdentityV1, 'schema'> {
+  schema: 'caws.sqlite_build_identity.v2';
+  installedInvocation: InstalledInvocationCapability;
+}
+export type SqliteBuildIdentity = SqliteBuildIdentityV1 | SqliteBuildIdentityV2;
 export interface NativeBuildArtifacts {
   native: ReviewedFile;
   observer: ReviewedFile;
@@ -894,7 +903,16 @@ function inspectSysRlib(
     extras: inventory.members.filter((member) => member.index !== selected[0]!.index),
   };
 }
-function validateIdentity(value: unknown, prefixSha: string): SqliteBuildIdentity {
+/** Validate the selected native's retained diagnostic, never infer capability from receipt v2. */
+export function validateNativeSqliteBuildIdentity(
+  value: unknown,
+  prefixSha: string
+): SqliteBuildIdentity {
+  const v2 =
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>).schema === 'caws.sqlite_build_identity.v2';
   shape(value, [
     'schema',
     'version',
@@ -902,10 +920,12 @@ function validateIdentity(value: unknown, prefixSha: string): SqliteBuildIdentit
     'threadSafe',
     'compileOptions',
     'compiledPrefixSha256',
+    ...(v2 ? ['installedInvocation'] : []),
   ]);
   const identity = value as SqliteBuildIdentity;
   insist(
-    identity.schema === 'caws.sqlite_build_identity.v1' &&
+    (identity.schema === 'caws.sqlite_build_identity.v1' ||
+      identity.schema === 'caws.sqlite_build_identity.v2') &&
       identity.version === '3.53.4' &&
       identity.sourceId === SOURCE_ID &&
       identity.threadSafe === 1 &&
@@ -920,6 +940,14 @@ function validateIdentity(value: unknown, prefixSha: string): SqliteBuildIdentit
       REQUIRED_OPTIONS.every((option) => identity.compileOptions.includes(option)),
     'Required observed SQLite compile options missing'
   );
+  if (identity.schema === 'caws.sqlite_build_identity.v2') {
+    shape(identity.installedInvocation, ['protocol', 'maxOriginalTimeoutMs']);
+    insist(
+      identity.installedInvocation.protocol === 'invoke-installed-v1' &&
+        identity.installedInvocation.maxOriginalTimeoutMs === 30000,
+      'Unsupported installed invocation capability'
+    );
+  }
   return identity;
 }
 
@@ -1149,7 +1177,10 @@ export async function buildNativeSqliteCandidate(
     ]);
     verifyFile(nativePin);
     const identityBytes = stepBytes(identityStep);
-    const observedIdentity = validateIdentity(strictJson(identityBytes), prefixPin.sha256);
+    const observedIdentity = validateNativeSqliteBuildIdentity(
+      strictJson(identityBytes),
+      prefixPin.sha256
+    );
     const identityPath = path.join(outputRoot, 'observed-sqlite-identity.json');
     exclusive(identityPath, identityBytes);
 
@@ -1355,7 +1386,7 @@ export function loadNativeSqliteBuild(requestFilePath: string): LoadedNativeSqli
       build.artifacts.generatedBinding.sizeBytes === expectedManifest.bindings.sizeBytes,
     'Generated binding pin mismatch'
   );
-  const observed = validateIdentity(
+  const observed = validateNativeSqliteBuildIdentity(
     strictJson(verifyFile(build.artifacts.runtimeIdentity)),
     build.prefixManifest.sha256
   );

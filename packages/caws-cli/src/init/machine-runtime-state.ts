@@ -160,18 +160,36 @@ function parseNativeEntryMetadata(
     !metadata ||
     typeof metadata !== 'object' ||
     Array.isArray(metadata) ||
-    Object.keys(metadata).sort().join(',') !==
-      'describeEntry,engineEntry,nativeExecutable,nodeExecutable,schema,timeoutMs'
+    ![
+      'describeEntry,engineEntry,nativeExecutable,nodeExecutable,schema,timeoutMs',
+      'describeEntry,engineEntry,installedInvocation,nativeExecutable,nodeExecutable,schema,timeoutMs',
+    ].includes(Object.keys(metadata).sort().join(','))
   )
     throw new Error('Malformed native entry metadata');
   const entry = metadata as Record<string, unknown>;
   if (
-    entry.schema !== 'caws.runtime.native-entry.v1' ||
+    !['caws.runtime.native-entry.v1', 'caws.runtime.native-entry.v2'].includes(
+      entry.schema as string
+    ) ||
+    Object.hasOwn(entry, 'installedInvocation') !==
+      (entry.schema === 'caws.runtime.native-entry.v2') ||
     !Number.isSafeInteger(entry.timeoutMs) ||
     (entry.timeoutMs as number) < 1 ||
-    (entry.timeoutMs as number) > 120000
+    (entry.timeoutMs as number) > (entry.schema === 'caws.runtime.native-entry.v2' ? 30000 : 120000)
   )
     throw new Error('Unsupported native entry schema or timeout');
+  if (entry.schema === 'caws.runtime.native-entry.v2') {
+    const capability = entry.installedInvocation;
+    if (
+      !capability ||
+      typeof capability !== 'object' ||
+      Array.isArray(capability) ||
+      Object.keys(capability).sort().join(',') !== 'maxOriginalTimeoutMs,protocol' ||
+      (capability as Record<string, unknown>).protocol !== 'invoke-installed-v1' ||
+      (capability as Record<string, unknown>).maxOriginalTimeoutMs !== 30000
+    )
+      throw new Error('Unsupported installed invocation capability');
+  }
   for (const key of ['nativeExecutable', 'nodeExecutable', 'engineEntry', 'describeEntry']) {
     const relative = entry[key];
     validateRuntimeRelative(relative);

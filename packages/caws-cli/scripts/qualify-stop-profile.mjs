@@ -97,6 +97,50 @@ export function exactKeys(value, keys) {
     'unsupported or missing request fields'
   );
 }
+/** Transport capability is checked then stripped from SQLite semantic profile data. */
+export function projectSqliteBuildIdentity(value) {
+  const v2 = value?.schema === 'caws.sqlite_build_identity.v2';
+  exactKeys(value, [
+    'schema',
+    'version',
+    'sourceId',
+    'threadSafe',
+    'compileOptions',
+    'compiledPrefixSha256',
+    ...(v2 ? ['installedInvocation'] : []),
+  ]);
+  assert(
+    v2 || value.schema === 'caws.sqlite_build_identity.v1',
+    'unsupported SQLite diagnostic schema'
+  );
+  if (v2) {
+    exactKeys(value.installedInvocation, ['protocol', 'maxOriginalTimeoutMs']);
+    assert.equal(value.installedInvocation.protocol, 'invoke-installed-v1');
+    assert.equal(value.installedInvocation.maxOriginalTimeoutMs, 30000);
+  }
+  assert(typeof value.version === 'string' && value.version.length > 0);
+  assert(typeof value.sourceId === 'string' && value.sourceId.length > 0);
+  assert([0, 1, 2].includes(value.threadSafe));
+  assert(
+    typeof value.compiledPrefixSha256 === 'string' &&
+      /^[a-f0-9]{64}$/.test(value.compiledPrefixSha256)
+  );
+  assert(Array.isArray(value.compileOptions) && value.compileOptions.length > 0);
+  assert(
+    value.compileOptions.every(
+      (option) => typeof option === 'string' && option.length > 0 && !option.includes('\0')
+    )
+  );
+  assert.equal(new Set(value.compileOptions).size, value.compileOptions.length);
+  return {
+    schema: 'caws.sqlite_build_identity.v1',
+    version: value.version,
+    sourceId: value.sourceId,
+    threadSafe: value.threadSafe,
+    compileOptions: [...value.compileOptions],
+    compiledPrefixSha256: value.compiledPrefixSha256,
+  };
+}
 export function validateRequest(request) {
   exactKeys(request, [
     'schema',
@@ -641,18 +685,9 @@ export async function qualify(requestFile) {
     return JSON.parse(stdout.toString('utf8'));
   };
   try {
-    const sqlite = run('native-sqlite-identity', request.candidate.native.path, [
-      '--sqlite-build-identity',
-    ]);
-    exactKeys(sqlite, [
-      'schema',
-      'version',
-      'sourceId',
-      'threadSafe',
-      'compileOptions',
-      'compiledPrefixSha256',
-    ]);
-    assert.equal(sqlite.schema, 'caws.sqlite_build_identity.v1');
+    const sqlite = projectSqliteBuildIdentity(
+      run('native-sqlite-identity', request.candidate.native.path, ['--sqlite-build-identity'])
+    );
     const cells = JSON.parse(read(request.corpus.cells.path));
     assert.deepEqual(
       Object.keys(cells.fixtures).sort(),

@@ -285,3 +285,28 @@ test('Git observation capture bounds bytes before parsing and rejects replacemen
     } finally {fs.rmSync(root,{recursive:true,force:true});}
   `);
 });
+
+test('SQLite diagnostic projection validates capability without adding transport data to the SQL profile', () => {
+  run(`
+    const old={schema:'caws.sqlite_build_identity.v1',version:'fixture',sourceId:'fixture',threadSafe:1,compileOptions:['A=1'],compiledPrefixSha256:'a'.repeat(64)};
+    const current={...old,schema:'caws.sqlite_build_identity.v2',installedInvocation:{protocol:'invoke-installed-v1',maxOriginalTimeoutMs:30000}};
+    assert.deepEqual(q.projectSqliteBuildIdentity(old),old);
+    assert.deepEqual(q.projectSqliteBuildIdentity(current),old);
+    const projected=q.projectSqliteBuildIdentity(current);
+    assert(!Object.hasOwn(projected,'installedInvocation'));
+    assert.notEqual(projected.compileOptions,current.compileOptions);
+    for(const kind of ['missing','null','extra','protocol','maximum','schema','v1 capability']) {
+      const value=structuredClone(current);
+      if(kind==='missing') delete value.installedInvocation;
+      if(kind==='null') value.installedInvocation=null;
+      if(kind==='extra') value.installedInvocation.renew=true;
+      if(kind==='protocol') value.installedInvocation.protocol='invoke';
+      if(kind==='maximum') value.installedInvocation.maxOriginalTimeoutMs=120000;
+      if(kind==='schema') value.schema='caws.sqlite_build_identity.v3';
+      if(kind==='v1 capability') value.schema='caws.sqlite_build_identity.v1';
+      assert.throws(()=>q.projectSqliteBuildIdentity(value));
+    }
+    assert.throws(()=>q.projectSqliteBuildIdentity({...current,compileOptions:[]}));
+    assert.throws(()=>q.projectSqliteBuildIdentity({...current,compiledPrefixSha256:'invalid'}));
+  `);
+});
