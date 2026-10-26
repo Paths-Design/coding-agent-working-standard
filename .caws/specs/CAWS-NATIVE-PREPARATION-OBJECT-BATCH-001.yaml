@@ -26,5 +26,14 @@ acceptance:
       bounded requests preserve complete ordered paths, exact bytes, independent
       buffers and modes; excluded or protected blobs are never requested before
       complete metadata admission
+  - id: A2
+    given: >-
+      malformed, corrupt, missing, reordered, duplicated, surplus or incorrectly
+      typed nonfirst objects and later request failures
+    when: 'collection processes a bounded group'
+    then: >-
+      existing identity, framing, total byte and count checks refuse before
+      materialization and no subsequent request or mutation occurs; aggregate limits
+      do not reset across groups
 non_functional: {}
 contracts: []
