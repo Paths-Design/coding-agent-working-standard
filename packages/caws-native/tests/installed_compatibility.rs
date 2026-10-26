@@ -802,6 +802,34 @@ fn raw_signal_uses_event_fault_policy_and_does_not_append_block_json() {
 }
 
 #[test]
+fn actual_selected_child_sigpipe_retains_raw_signal_fault_policy() {
+    for (event, describe, code) in [
+        ("pre_tool_use", false, 2),
+        ("stop", false, 0),
+        ("stop", true, 2),
+    ] {
+        let fixture = Fixture::new(&format!("child-sigpipe-{event}-{describe}"));
+        // Python ignores PIPE at startup; explicitly restore the selected
+        // program's default before sending a genuine signal to itself.
+        fixture.install("witness('started')\nos.write(1,b'BEFORE CHILD SIGPIPE\\n')\nsignal.signal(signal.SIGPIPE,signal.SIG_DFL)\nos.kill(os.getpid(),signal.SIGPIPE)", describe);
+        let result =
+            fixture
+                .spawn(event, describe)
+                .finish(&fixture, Some(b""), true, true, FAST_LIMIT);
+        expect_code(&result, code);
+        assert_no_synthesized_stdout(&result, b"BEFORE CHILD SIGPIPE\n");
+        let diagnostic = String::from_utf8_lossy(&result.stderr);
+        assert!(
+            diagnostic.contains("compatibility child interrupted; raw signal 13"),
+            "missing selected child SIGPIPE diagnostic: {diagnostic}"
+        );
+        assert!(!diagnostic.contains("caller interrupted"));
+        assert!(diagnostic.len() <= 1024);
+        assert_private_group_not_live(&fixture, &result, "started");
+    }
+}
+
+#[test]
 fn describe_does_not_consume_unread_caller_stdin() {
     let fixture = Fixture::new("describe-preserves-caller-stdin");
     // The selected description process never reads fd 0. Its short finite wait
