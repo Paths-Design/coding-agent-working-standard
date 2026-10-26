@@ -1,0 +1,41 @@
+id: CAWS-NATIVE-COMPAT-SIGPIPE-001
+title: 'Separate private I/O failures from real caller signals'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-26T10:31:35.750Z'
+updated_at: '2026-10-26T10:31:35.750Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Native installed compatibility private transport and child stdin'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/installed_compatibility.rs'
+    - 'packages/caws-native/tests/installed_compatibility.rs'
+  out: []
+invariants:
+  - 'Only newly owned private descriptors receive descriptor-local signal suppression; host descriptors, genuine caller and child signals, exact output and original deadlines retain their contracts'
+  - 'The original installed-entry owner branch and worktree remain untouched; this owned repair is independently committed and verified before any authorized integration'
+acceptance:
+  - id: A1
+    given: 'the selected child naturally completes before the retained execution cutoff and its terminal observation is queued'
+    when: 'the paused frontend resumes after that cutoff but before its unchanged foreground and selected bounds'
+    then: 'exact natural code37 and output are preserved with both EOFs and no manufactured caller signal'
+  - id: A2
+    given: 'closed private socket peers and child stdin plus a genuinely signalled foreground'
+    when: 'private writes fail or actual caller SIGPIPE arrives'
+    then: 'private EPIPE never fabricates caller interruption while real caller and child signal fault policies remain enforced'
+  - id: A3
+    given: 'the committed repair and retained failing baseline'
+    when: 'focused native regression and a branch-specific hostile mutation are executed'
+    then: 'restored controls pass, the intended mutant reaches its unique marker and fails, original deadline bounds remain unchanged and remaining installed integration stays explicit'
+observability:
+  - 'Retained Root native-joined-proof-01 baseline and independent repair logs outside source control'
+rollback:
+  - 'Retain the original committed candidate and use a normal corrective commit; no history rewrite, foreign worktree cleanup or global activation'
+non_functional: {}
+contracts:
+  - name: 'private-io-caller-signal-separation'
+    type: behavior
