@@ -127,6 +127,17 @@ function writeRegistry(root, entries) {
   fs.writeFileSync(path.join(root, '.caws', 'worktrees.json'), JSON.stringify(entries));
 }
 
+function damageRegistry(root, failure) {
+  const registry = path.join(root, '.caws/worktrees.json');
+  if (failure === 'malformed') fs.writeFileSync(registry, '{unterminated');
+  else if (failure === 'scalar') fs.writeFileSync(registry, 'null');
+  else {
+    fs.unlinkSync(registry);
+    if (failure === 'directory') fs.mkdirSync(registry);
+    else fs.symlinkSync(path.join(root, 'absent-registry'), registry);
+  }
+}
+
 function registryEntry(root, name, specId, ownerSession) {
   return {
     [name]: {
@@ -179,6 +190,22 @@ function runOracle(
 }
 
 describe('worktree-claim-oracle verdicts', () => {
+  test.each(['malformed', 'scalar', 'directory', 'dangling'])(
+    'existing %s registry cannot be mistaken for absent governance',
+    (failure) => {
+      const repo = makeRepo();
+      seedClaimant(repo, {
+        name: 'wt-foreign',
+        specId: 'FOREIGN',
+        owner: 'foreign-sess',
+        scopeIn: ['src/file'],
+      });
+      const target = path.join(repo, '.caws/worktrees/wt-foreign/file');
+      expect(runOracle(repo, target)).toBe('block_foreign_worktree:wt-foreign:foreign-sess');
+      damageRegistry(repo, failure);
+      expect(runOracle(repo, target)).toBe('error_fail_closed:worktree-ownership-registry');
+    }
+  );
   test.each(['src', '.'])(
     'canonical directory removal covers a narrower literal claim: %s',
     (candidate) => {
@@ -729,6 +756,31 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
     expect(result.stderr).toContain(owner ? 'DIFFERENT session' : 'worktree-');
     expect(result.stderr).not.toContain('mandatory analyzer failed');
     expect(fs.lstatSync(custom).isDirectory()).toBe(true);
+  });
+
+  test.each(
+    ['Bash', 'Write'].flatMap((tool) =>
+      ['malformed', 'scalar', 'directory', 'dangling'].map((failure) => [tool, failure])
+    )
+  )('%s cannot allowlist a custom payload with %s registry', (tool, failure) => {
+    const fixture = makeClaimedRepo();
+    const custom = path.join(fixture.repo, 'docs/custom');
+    fs.mkdirSync(custom, { recursive: true });
+    const target = path.join(custom, 'protected.txt');
+    fs.writeFileSync(target, 'foreign entry survives preflight\n');
+    const entries = registryEntry(fixture.repo, 'wt-custom', 'CUSTOM', 'foreign-session');
+    entries['wt-custom'].path = custom;
+    writeRegistry(fixture.repo, entries);
+    damageRegistry(fixture.repo, failure);
+    const result = runGuard(fixture, 'touch ' + "'" + target + "'", {
+      noAsk: true,
+      ...(tool === 'Write' ? { writePath: target } : {}),
+    });
+    expect({ status: result.status, stderr: result.stderr }).toEqual(
+      expect.objectContaining({ status: 2 })
+    );
+    expect(result.stderr).toContain('worktree-ownership-registry');
+    expect(fs.readFileSync(target, 'utf8')).toBe('foreign entry survives preflight\n');
   });
 
   test.each(['Bash', 'Write'])('a unique owned custom path admits %s payload', (tool) => {

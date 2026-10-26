@@ -421,15 +421,18 @@ function main() {
   }
 
   var registryPath = path.join(projectDir, '.caws', 'worktrees.json');
-  var registry;
+  var registry, registryObserved = false;
   try {
+    var registryStat = fs.lstatSync(registryPath);
+    registryObserved = true;
+    if (!registryStat.isFile()) throw new Error('invalid-registry-entry');
     registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    if (!registry || typeof registry !== 'object') throw new Error('invalid-registry-shape');
   } catch (e) {
-    // No registry / unreadable -> no active worktrees to enforce. This is the
-    // genuinely-unguarded base state, not an authority read failure that
-    // should block; the calling guard already fail-opens when the registry
-    // is absent. Treat as pass.
-    emit('pass', 'no-registry');
+    // Only a genuinely absent registry is uninitialized governance. Existing
+    // unreadable, malformed or redirected authority cannot establish no owner.
+    if (!registryObserved && e.code === 'ENOENT') emit('pass', 'no-registry');
+    emit('error_fail_closed', 'worktree-ownership-registry');
   }
 
   var worktrees;
