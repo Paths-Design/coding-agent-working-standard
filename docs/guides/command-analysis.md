@@ -50,11 +50,12 @@ The closed copy profile supports bare `cp` and `mv`, the `command` wrapper,
 `--`, multiple source operands, target-directory options, and the modeled force,
 interactive, no-clobber and verbose flags; `cp -p` is also modeled. Options
 precede operands unless `--` explicitly ends option parsing. Unknown options,
-environment wrappers, executable-path variants, directory or symlink sources,
-recursive copies and preceding filesystem changes remain unresolved. Standalone
-`--help` and `--version` have readonly roles. These observations depend on the
-controlled host's ordinary utility selection; they do not attest the executable
-selected by a native launcher.
+environment wrappers, executable-path variants, known inherited loader
+overrides, directory or symlink sources, recursive copies and preceding
+filesystem changes, including changes inherited by nested shells, remain
+unresolved. Standalone `--help` and `--version` have readonly roles. These
+observations depend on the controlled host's ordinary utility selection; they do
+not attest the executable selected by a native launcher.
 
 `lib/copy-roles.sh` resolves regular-file operands against each row's proven cwd
 and inspects at most 128 source/destination pairs. A missing cwd permits
@@ -62,8 +63,11 @@ absolute operands but cannot resolve relative ones. Directory destinations use
 the original source operand's basename; the helper checks the resulting child,
 including a child's symlink target. It permits only existing destination parents
 and holds unmodeled entries, move-destination symlinks and paths that cannot use
-the existing FILE transport. These filesystem observations are a snapshot, not
-protection against a later filesystem race.
+the existing FILE transport. Existing destinations and move sources must be
+regular files with one hard link; unavailable link identity also holds. An
+external pathname cannot authorize a copy through an inode shared with a foreign
+payload. Copy-source reads retain their existing policy. These filesystem
+observations are a snapshot, not protection against a later filesystem race.
 
 `worktree-guard.sh` replaces its whole-command copy heuristic with these roles
 for its selected copy calls. `bash-write-guard.sh` independently consumes the
@@ -74,6 +78,12 @@ An actual worktree-to-canonical destination refuses. Effective destination
 writes and `mv` source deletions pass through the existing ownership oracle;
 `cp` source reads retain their existing policy. Missing or incomplete roles
 cannot grant admission.
+
+A copy filesystem hold uses the existing human-decision channel only when that
+channel requires an actual approval. Without it the mandatory guard exits 2. An
+exit-zero response carrying `permissionDecision: ask` requests that decision; it
+does not authorize execution. Known ownership violations retain precedence over
+filesystem uncertainty.
 
 The CLI response adds `execution: {command, cwd}` and `singleLifecycle` to the
 projection. The bridge requires the exact decoded source to match all supplied

@@ -34,6 +34,12 @@ _caws_copy_emit() {
   fi
 }
 
+_caws_copy_single_link() {
+  # realpath resolves symlinks, not aliases of the same inode. Do not let an
+  # external pathname authorize a write through a hardlink into owned payload.
+  python3 -c 'import os, stat, sys; s = os.stat(sys.argv[1]); sys.exit(0 if stat.S_ISREG(s.st_mode) and s.st_nlink == 1 else 2)' "$1" 2>/dev/null
+}
+
 caws_copy_role_paths() {
   local _caws_cr_project="$1" _caws_cr_name _caws_cr_rows _caws_cr_total
   local _caws_cr_row=0 _caws_cr_index _caws_cr_offset _caws_cr_count _caws_cr_checked=0
@@ -107,6 +113,9 @@ caws_copy_role_paths() {
         _caws_copy_hold 'copy source is not a modeled regular file'; continue
       fi
       caws_guard_realpath_into _caws_cr_source_physical "$_caws_cr_source_nominal" || return 2
+      if [[ "$_caws_cr_operation" == mv ]] && ! _caws_copy_single_link "$_caws_cr_source_physical"; then
+        _caws_copy_hold 'move source hard-link identity is unmodeled or unavailable'; continue
+      fi
       _caws_cr_child="${_caws_cr_operand##*/}"
       _caws_cr_effective="$_caws_cr_destination"
       if [[ $_caws_cr_directory == 1 ]]; then
@@ -118,6 +127,9 @@ caws_copy_role_paths() {
         _caws_copy_hold 'copy destination entry semantics are unmodeled'; continue
       fi
       caws_guard_realpath_into _caws_cr_physical "$_caws_cr_effective" || return 2
+      if [[ -e "$_caws_cr_physical" ]] && ! _caws_copy_single_link "$_caws_cr_physical"; then
+        _caws_copy_hold 'copy destination hard-link identity is unmodeled or unavailable'; continue
+      fi
       case "$_caws_cr_source_physical" in
         "$_caws_cr_project"/.caws/worktrees/*)
           case "$_caws_cr_physical" in

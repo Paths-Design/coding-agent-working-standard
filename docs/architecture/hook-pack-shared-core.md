@@ -301,11 +301,12 @@ For selected `cp` and `mv` calls, `worktree-guard.sh` consumes the bounded
 backend's complete operand-role projection instead of inferring a destination
 from the whole command. The mandatory `bash-write-guard.sh` consumes the same
 projection independently. `lib/copy-roles.sh` resolves regular-file destination
-children, checks symlink targets and includes move-source deletion in ownership
-checks. An external artifact destination remains external when a source path
-contains a repository directory name. Unknown roles, options, coordinates and
-unmodeled filesystem entries refuse. The helper's bounded filesystem snapshot
-does not establish final-launch confinement; see the
+children, checks symlink targets and single-link file identity, and includes
+move-source deletion in ownership checks. An external artifact destination
+remains external when a source path contains a repository directory name.
+Unknown roles, options, coordinates and unmodeled filesystem entries refuse. The
+helper's bounded filesystem snapshot does not establish final-launch
+confinement; see the
 [closed copy profile](../guides/command-analysis.md#active-write-guard-integration).
 
 ## Payload `cwd` contract

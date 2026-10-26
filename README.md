@@ -75,12 +75,12 @@ issues and effect coverage; parser or backend failures can appear as issues in
 an exit-zero projection. The guide's owned execution boundary is proposed. The
 implemented copy guards consume complete operand roles for a closed regular-file
 `cp`/`mv` profile, so external artifact copies are distinguished from canonical
-writes. Unknown roles and unmodeled filesystem cases refuse. Native adoption
-requires complete final-launch context, custody through later rewrites,
-generation-bound Node and analyzer CLI identities, an isolated canary and
-rollback. A validated host execution directory establishes only that coordinate.
-The known reduced Codex command projection remains held; that protective refusal
-does not qualify native deployment.
+writes. Unknown roles, hard-link aliases and unmodeled filesystem cases refuse.
+Native adoption requires complete final-launch context, custody through later
+rewrites, generation-bound Node and analyzer CLI identities, an isolated canary
+and rollback. A validated host execution directory establishes only that
+coordinate. The known reduced Codex command projection remains held; that
+protective refusal does not qualify native deployment.
 
 ## Quick start
 

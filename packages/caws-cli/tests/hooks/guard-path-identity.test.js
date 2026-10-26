@@ -102,6 +102,7 @@ function invoke(script, cwd, command = 'git clean -fd', extra = {}) {
       CLAUDE_PROJECT_DIR: cwd,
       CAWS_AGENT_SURFACE: 'claude-code',
       CAWS_SESSION_ID: 'identity-fixture',
+      CAWS_GUARD_NO_ASK: '1',
       CLAUDE_CODE_SESSION_ID: 'identity-fixture',
       HOOK_EVENT_NAME: script.startsWith('stop-') ? 'Stop' : 'PreToolUse',
       HOOK_TOOL_NAME: 'Bash',
@@ -442,6 +443,117 @@ test('mandatory copy roles allow an owned move and preserve the unexecuted sourc
   );
   expect(fs.readFileSync(sources[0], 'utf8')).toBe('one.json');
   expect(fs.readdirSync(archive)).toEqual([]);
+});
+
+test.each(['canonical', 'foreign'])(
+  'mandatory copy roles hold an external destination hardlinked to %s payload',
+  (relation) => {
+    const { sources, archive } = copyPaths();
+    const target = path.join(relation === 'foreign' ? fx.linked : fx.project, 'linked-target');
+    fs.writeFileSync(target, 'linked payload unchanged');
+    fs.linkSync(target, path.join(archive, 'one.json'));
+    expect(fs.statSync(target).nlink).toBe(2);
+    check(
+      invoke(
+        'bash-write-guard.sh',
+        fx.project,
+        'cp -- ' + quote(sources[0]) + ' ' + quote(archive)
+      ),
+      2,
+      'hard-link'
+    );
+    expect(fs.readFileSync(target, 'utf8')).toBe('linked payload unchanged');
+  }
+);
+
+test('mandatory copy roles admit an ordinary existing single-link destination', () => {
+  const { sources, archive } = copyPaths();
+  const destination = path.join(archive, 'one.json');
+  fs.writeFileSync(destination, 'ordinary unchanged');
+  expect(fs.statSync(destination).nlink).toBe(1);
+  check(
+    invoke('bash-write-guard.sh', fx.project, 'cp -- ' + quote(sources[0]) + ' ' + quote(archive)),
+    0
+  );
+  expect(fs.readFileSync(destination, 'utf8')).toBe('ordinary unchanged');
+});
+
+test('a hard-link hold requests a real human decision when that channel is available', () => {
+  const { sources, archive } = copyPaths();
+  fs.linkSync(sources[0], path.join(archive, 'one.json'));
+  const result = invoke(
+    'bash-write-guard.sh',
+    fx.project,
+    'cp -- ' + quote(sources[0]) + ' ' + quote(archive),
+    { CAWS_GUARD_NO_ASK: '0' }
+  );
+  expect(result.status).toBe(0);
+  const output = JSON.parse(result.stdout);
+  expect(output.hookSpecificOutput.permissionDecision).toBe('ask');
+  expect(output.hookSpecificOutput.permissionDecisionReason).toContain('hard-link');
+  expect(fs.readdirSync(archive)).toEqual(['one.json']);
+});
+
+test('copy-source hard links remain readable while move-source identity is held', () => {
+  const { sources, archive } = copyPaths();
+  fs.linkSync(sources[0], path.join(fx.base, 'source-hardlink'));
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/worktrees.json'),
+    JSON.stringify({
+      linked: { ...fx.entry, owner: { session_id: 'identity-fixture' } },
+    })
+  );
+  check(
+    invoke('bash-write-guard.sh', fx.project, 'cp -- ' + quote(sources[0]) + ' ' + quote(archive)),
+    0
+  );
+  check(
+    invoke('bash-write-guard.sh', fx.project, 'mv -- ' + quote(sources[0]) + ' ' + quote(archive)),
+    2,
+    'hard-link'
+  );
+  expect(fs.readFileSync(sources[0], 'utf8')).toBe('one.json');
+});
+
+test('unavailable hard-link identity cannot grant an existing destination write', () => {
+  const { sources, archive } = copyPaths();
+  const destination = path.join(archive, 'one.json');
+  fs.writeFileSync(destination, 'unchanged');
+  const bin = path.join(fx.base, 'python-bin');
+  fs.mkdirSync(bin);
+  const python = execFileSync('which', ['python3'], { encoding: 'utf8' }).trim();
+  fs.writeFileSync(
+    path.join(bin, 'python3'),
+    '#!/bin/bash\n' +
+      'if [[ "$1" == -c && "$2" == *st_nlink* ]]; then exit 71; fi\n' +
+      'exec ' +
+      quote(python) +
+      ' "$@"\n',
+    { mode: 0o755 }
+  );
+  check(
+    invoke('bash-write-guard.sh', fx.project, 'cp -- ' + quote(sources[0]) + ' ' + quote(archive), {
+      PATH: bin + path.delimiter + process.env.PATH,
+    }),
+    2,
+    'hard-link'
+  );
+  expect(fs.readFileSync(destination, 'utf8')).toBe('unchanged');
+});
+
+test('known foreign writes retain precedence over copy filesystem uncertainty', () => {
+  const { sources, archive } = copyPaths();
+  fs.linkSync(sources[0], path.join(archive, 'one.json'));
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/worktrees.json'),
+    JSON.stringify({
+      linked: { ...fx.entry, owner: { session_id: 'foreign' } },
+    })
+  );
+  const command =
+    'cp -- ' + quote(sources[0]) + ' ' + quote(archive) + '; printf changed > ' + quote(sources[1]);
+  check(invoke('bash-write-guard.sh', fx.project, command), 2, 'DIFFERENT session');
+  expect(fs.readFileSync(sources[1], 'utf8')).toBe('two.log');
 });
 
 test.each([

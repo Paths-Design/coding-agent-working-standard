@@ -326,10 +326,6 @@ if [[ "$CAWS_COPY_CANONICAL" == 1 ]]; then
   echo 'BLOCKED: Copying files from a worktree to the main repo is forbidden.' >&2
   exit 2
 fi
-if [[ -n "$CAWS_COPY_UNRESOLVED" ]]; then
-  CAWS_AST_ISSUES+=( "mutation-copy-paths: $CAWS_COPY_UNRESOLVED" )
-fi
-
 extract_targets() {
   # Two channels, both consumed, because an ownership gate wants every path a
   # command might touch:
@@ -373,6 +369,10 @@ escalate() {
     WORST="$1"; WORST_DETAIL="$2"; WORST_KIND="$3"
   fi
 }
+
+if [[ -n "$CAWS_COPY_UNRESOLVED" ]]; then
+  escalate ask "$CAWS_COPY_UNRESOLVED" ask_copy_paths
+fi
 
 while IFS= read -r cand; do
   [[ -z "$cand" ]] && continue
@@ -704,6 +704,8 @@ case "$WORST" in
     exit 2 ;;
   ask)
     case "$WORST_KIND" in
+      ask_copy_paths)
+        _REASON="[$_BG_ID] Copy or move write paths could not be established ($WORST_DETAIL). This filesystem relation was not authorized; approve only if every affected path belongs to this session." ;;
       unavailable_native_context)
         _REASON="[$_BG_ID] unavailable-native-context: Codex did not provide a validated host command directory for relative target '$WORST_DETAIL'. Session cwd anchors the project but does not identify command execution cwd. No ownership conclusion was made. Supply native execution_workdir or use an absolute target." ;;
       ask_uncertain)

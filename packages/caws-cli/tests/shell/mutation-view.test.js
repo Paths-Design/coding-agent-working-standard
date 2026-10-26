@@ -1912,10 +1912,49 @@ describe('copy operand role observations', () => {
       knowledge: 'unresolved',
       environment: { 'BASH_FUNC_mv%%': '() { printf changed; }' },
     },
+    ...[
+      'LD_PRELOAD',
+      'LD_LIBRARY_PATH',
+      'LD_DEBUG_OUTPUT',
+      'DYLD_INSERT_LIBRARIES',
+      'DYLD_LIBRARY_PATH',
+    ].map((name) => ({
+      id: 'cp-inherited-loader-' + name,
+      command: 'cp /input /output',
+      operation: 'cp',
+      knowledge: 'unresolved',
+      environment: { [name]: '/unmodeled-loader-setting' },
+    })),
     { id: 'copy-word-data', command: "printf '%s' 'cp /input /output'", noCopies: true },
     {
       id: 'copy-later-filesystem',
       command: 'cp /one /two; cp /three /four',
+      operations: ['finite', 'unresolved'],
+    },
+    {
+      id: 'copy-nested-filesystem',
+      command: "cp /one /two; bash -c 'cp /three /four'",
+      operations: ['finite', 'unresolved'],
+    },
+    {
+      id: 'copy-deep-filesystem',
+      command: 'cp /one /two; bash -c \'bash -c "cp /three /four"\'',
+      operations: ['finite', 'unresolved'],
+    },
+    {
+      id: 'copy-parent-redirect',
+      command: "bash -c 'cp /input /output' > /log",
+      operation: 'cp',
+      knowledge: 'unresolved',
+    },
+    {
+      id: 'copy-later-help',
+      command: 'cp /one /two; cp --help',
+      operations: ['finite', 'unresolved'],
+    },
+    {
+      id: 'copy-nested-help',
+      command: "cp /one /two; bash -c 'cp --help'",
       operations: ['finite', 'unresolved'],
     },
   ];

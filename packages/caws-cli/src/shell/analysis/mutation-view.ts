@@ -596,11 +596,19 @@ export async function projectMutationView(
           node.prefix.some((part) => part.type === 'Assignment') ||
           executable !== name ||
           state.bindings.has('PATH') ||
-          state.bindings.has('LD_PRELOAD') ||
-          state.bindings.has('DYLD_INSERT_LIBRARIES') ||
+          [...state.bindings.keys()].some((key) => /^(?:LD_|DYLD_)/.test(key)) ||
+          Object.keys(process.env).some((key) => /^(?:LD_|DYLD_)/.test(key)) ||
           process.env[`BASH_FUNC_${name}%%`] !== undefined
         ) {
           unresolved('Copy or move executable selection and environment are not proven.');
+          return;
+        }
+        if (
+          state.filesystemChanged === true ||
+          inheritedEffects(job) ||
+          args.some((arg) => arg.value === null || arg.value.length === 0)
+        ) {
+          unresolved('Copy or move operands or preceding filesystem effects are unresolved.');
           return;
         }
         if (args.length === 2 && ['--help', '--version'].includes(args[1]?.value ?? '')) {
@@ -612,13 +620,6 @@ export async function projectMutationView(
             directoryMode: null,
             cwd: request.cwd === null ? null : state.cwd,
           });
-          return;
-        }
-        if (
-          state.filesystemChanged === true ||
-          args.some((arg) => arg.value === null || arg.value.length === 0)
-        ) {
-          unresolved('Copy or move operands or preceding filesystem effects are unresolved.');
           return;
         }
         const operands: string[] = [];
