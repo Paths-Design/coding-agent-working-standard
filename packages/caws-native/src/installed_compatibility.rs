@@ -668,7 +668,10 @@ fn foreground_main(
     let mut status_eof = false;
     let mut spawned = false;
     let mut terminal = None;
-    let mut failure: Option<String> = None;
+    // Execution cutoff requests stopping; it does not refute a later valid
+    // NATURAL attestation. Infrastructure failures independently override it.
+    let mut execution_stop_requested = false;
+    let mut infrastructure_failure: Option<String> = None;
     let mut cancel_sent = false;
     // Description inspects selection without consuming the caller's input.
     // Keep the private child input channel open until completion or cancellation.
@@ -683,19 +686,20 @@ fn foreground_main(
             );
         }
         let signal = SIGNAL.load(Ordering::Relaxed);
-        if signal != 0 && failure.is_none() {
-            failure = Some(format!("caller interrupted; raw signal {signal}"));
+        if signal != 0 && infrastructure_failure.is_none() {
+            infrastructure_failure = Some(format!("caller interrupted; raw signal {signal}"));
         }
         if (original_parent > 1 && unsafe { libc::getppid() } != original_parent)
             || output_closed(1)
         {
-            failure.get_or_insert_with(|| "caller cancelled".into());
+            infrastructure_failure.get_or_insert_with(|| "caller cancelled".into());
         }
-        if terminal.is_none() && !deadline.execution_allowed() && failure.is_none() {
-            failure = Some("compatibility execution cutoff reached".into());
+        if terminal.is_none() && !deadline.execution_allowed() {
+            execution_stop_requested = true;
         }
-        if failure.is_some() || terminal.is_some() {
-            if failure.is_some() && !cancel_sent {
+        let stop_requested = execution_stop_requested || infrastructure_failure.is_some();
+        if stop_requested || terminal.is_some() {
+            if stop_requested && !cancel_sent {
                 cancel_sent = request_cancel(&channels);
             }
             input.discard();
@@ -706,13 +710,17 @@ fn foreground_main(
         }
         let operation = (|| -> io::Result<()> {
             check(deadline)?;
-            if failure.is_none() && forward_input && !input_eof && input_open && input.space() > 0 {
-                deadline.execution_check()?;
+            if !stop_requested
+                && forward_input
+                && !input_eof
+                && input_open
+                && input.space() > 0
+                && deadline.execution_allowed()
+            {
                 input_eof = input.read(0)?;
             }
             check(deadline)?;
-            if input_open && !input.empty() {
-                deadline.execution_check()?;
+            if input_open && !input.empty() && deadline.execution_allowed() {
                 if let Err(issue) = input.write(channels.input.as_raw_fd()) {
                     if matches!(
                         issue.kind(),
@@ -783,11 +791,11 @@ fn foreground_main(
         if operation.is_err() {
             let reason = if let Some((SIGNALLED, signal)) = terminal {
                 let child = format!("compatibility child interrupted; raw signal {signal}");
-                failure
+                infrastructure_failure
                     .as_ref()
                     .map_or(child.clone(), |reason| format!("{reason}; {child}"))
             } else {
-                failure
+                infrastructure_failure
                     .clone()
                     .unwrap_or_else(|| "compatibility transport or cleanup unconfirmed".into())
             };
@@ -801,17 +809,17 @@ fn foreground_main(
                 deadline.policy,
             );
         }
-        if output_eof && error_eof && output.empty() && error.empty() {
+        if output_eof && error_eof && output.empty() && error.empty() && status.empty() {
             if let Some((SIGNALLED, signal)) = terminal {
                 let child = format!("compatibility child interrupted; raw signal {signal}");
-                let reason = failure
+                let reason = infrastructure_failure
                     .as_ref()
                     .map_or(child.clone(), |reason| format!("{reason}; {child}"));
                 incomplete(deadline, &reason);
                 return policy(event);
             }
             if let Some((NATURAL, code)) = terminal {
-                if let Some(reason) = failure {
+                if let Some(reason) = infrastructure_failure {
                     incomplete(deadline, &reason);
                     return policy(event);
                 }
@@ -820,9 +828,13 @@ fn foreground_main(
             if let Some((STOPPED, _)) = terminal {
                 incomplete(
                     deadline,
-                    failure
+                    infrastructure_failure
                         .as_deref()
-                        .unwrap_or("compatibility execution stopped"),
+                        .unwrap_or(if execution_stop_requested {
+                            "compatibility execution cutoff reached"
+                        } else {
+                            "compatibility execution stopped"
+                        }),
                 );
                 return policy(event);
             }
@@ -836,7 +848,7 @@ fn foreground_main(
             );
         }
         let mut fds = Vec::with_capacity(6);
-        if failure.is_none() && forward_input && !input_eof && input_open && input.space() > 0 {
+        if !stop_requested && forward_input && !input_eof && input_open && input.space() > 0 {
             interests(&mut fds, 0, libc::POLLIN);
         }
         if input_open && !input.empty() {

@@ -72,6 +72,15 @@ impl Fixture {
         let source = format!(
             "#!/usr/bin/env python3\nimport os, sys, json, time, signal\nfrom pathlib import Path\nw = Path(os.environ['CAWS_COMPATIBILITY_WITNESS'])\ndef witness(name, **extra):\n    data = dict(pid=os.getpid(), ppid=os.getppid(), pgid=os.getpgid(0), sid=os.getsid(0), monotonic_ns=time.monotonic_ns(), **extra)\n    temporary = w / (name + '.writing')\n    temporary.write_text(json.dumps(data))\n    temporary.rename(w / (name + '.json'))\nsignal.alarm(5)\n{body}\n"
         );
+        self.install_source(source.as_bytes(), describe, timeout_ms, engine_padding);
+    }
+    fn install_source(
+        &self,
+        source: &[u8],
+        describe: bool,
+        timeout_ms: u64,
+        engine_padding: usize,
+    ) {
         let mut files = BTreeMap::<String, Vec<u8>>::from([
             ("launcher.py".into(), b"raise SystemExit(79)\n".to_vec()),
             (
@@ -79,7 +88,7 @@ impl Fixture {
                 if describe {
                     b"raise SystemExit(78)\n".to_vec()
                 } else {
-                    source.as_bytes().to_vec()
+                    source.to_vec()
                 },
             ),
         ]);
@@ -97,7 +106,7 @@ impl Fixture {
             files.extend([
                 ("native/caws-native".into(), native),
                 ("native/caws-hook-native".into(), b"fixture identity only\n".to_vec()),
-                ("native/node".into(), source.into_bytes()),
+                ("native/node".into(), source.to_vec()),
                 ("engine.js".into(), engine),
                 ("describe.js".into(), b"fixture describe argv member\n".to_vec()),
                 ("native-entry.json".into(), serde_json::to_vec(&serde_json::json!({
@@ -1294,4 +1303,219 @@ fn spontaneously_signalled_child_drains_produced_bytes_after_mild_reader_delay()
     );
     assert!(completion_elapsed(&result) < Duration::from_millis(DESCRIBE_MS));
     assert_private_group_not_live(&fixture, &result, "started");
+}
+
+#[test]
+fn natural_terminal_queued_before_cutoff_survives_late_foreground_resume() {
+    struct ResumeOwnedForeground<'a> {
+        child: &'a mut Child,
+        paused: bool,
+    }
+    impl<'a> ResumeOwnedForeground<'a> {
+        fn stop(child: &'a mut Child) -> io::Result<Self> {
+            // This is the actual unreaped foreground Child held by this test.
+            // No PID read from a witness or process snapshot is ever signalled.
+            if unsafe { libc::kill(child.id() as i32, libc::SIGSTOP) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(Self {
+                child,
+                paused: true,
+            })
+        }
+        fn resume(&mut self) -> io::Result<()> {
+            if self.paused {
+                if unsafe { libc::kill(self.child.id() as i32, libc::SIGCONT) } != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                self.paused = false;
+            }
+            Ok(())
+        }
+    }
+    impl Drop for ResumeOwnedForeground<'_> {
+        fn drop(&mut self) {
+            if self.paused {
+                // An assertion or fixture failure cannot leave our child stopped.
+                let _ = unsafe { libc::kill(self.child.id() as i32, libc::SIGCONT) };
+            }
+        }
+    }
+    const EARLY_TERMINAL_MS: u64 = 700;
+    const EXECUTION_CUTOFF_MS: u64 = 800;
+    const FOREGROUND_CUTOFF_MS: u64 = 1100;
+    const RESUME_MS: u64 = 950;
+    let fixture = Fixture::new("queued-natural-terminal-late-resume");
+    fixture.install_source(br#"#!/bin/sh
+w="$CAWS_COMPATIBILITY_WITNESS"
+printf '{"pid":%s,"ppid":%s,"pgid":%s}\n' "$$" "$PPID" "$$" > "$w/started.writing"
+/bin/mv "$w/started.writing" "$w/started.json"
+remaining=1000000
+while [ ! -f "$w/release-natural" ] && [ "$remaining" -gt 0 ]; do
+    remaining=$((remaining - 1))
+done
+[ -f "$w/release-natural" ] || exit 76
+printf 'NATURAL DONE\n'
+printf '{"pid":%s,"ppid":%s,"pgid":%s,"code":37,"stdout_bytes":13}\n' "$$" "$PPID" "$$" > "$w/done.writing"
+/bin/mv "$w/done.writing" "$w/done.json"
+exit 37
+"#,true,DESCRIBE_MS,0);
+    let mut running = fixture.spawn("stop", true);
+    let began = running.started;
+    let foreground = running.child.id();
+    let early_until = began + Duration::from_millis(EARLY_TERMINAL_MS);
+    // The selected child waits on its fixture file. No output is drained while
+    // arranging the foreground pause and observing the worker's terminal state.
+    while !fixture.root.join("started.json").exists() && Instant::now() < early_until {
+        thread::sleep(Duration::from_millis(5));
+    }
+    if !fixture.root.join("started.json").exists() {
+        fs::write(
+            fixture.root.join("pause-setup.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "started_observed":false, "observation_elapsed_ms":began.elapsed().as_millis(),
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let _ = running.finish(&fixture, Some(b""), true, true, FAST_LIMIT);
+        panic!(
+            "setup gap: selected child start was not observed before700ms; artifacts: {}",
+            fixture.root.display()
+        );
+    }
+    let start_observed = began.elapsed();
+    let selected = fixture.witness("started");
+    let selected_pid = selected["pid"].as_u64().unwrap() as u32;
+    let worker = selected["ppid"].as_u64().unwrap() as u32;
+    let pause_sent = began.elapsed();
+    let mut paused = ResumeOwnedForeground::stop(&mut running.child)
+        .expect("setup gap: actual foreground child could not be paused");
+    let stopped_rows = fixture.sample("foreground-paused-before-release");
+    let pause_observed = began.elapsed();
+    let foreground_stopped = stopped_rows
+        .iter()
+        .any(|process| process.pid == foreground && process.state.contains('T'));
+    let worker_owned_before_release = stopped_rows.iter().any(|process| {
+        process.pid == worker && process.ppid == foreground && !process.state.starts_with('Z')
+    });
+    let selected_owned_before_release = stopped_rows.iter().any(|process| {
+        process.pid == selected_pid && process.ppid == worker && process.pgid == selected_pid
+    });
+    let release_elapsed =
+        if foreground_stopped && began.elapsed() < Duration::from_millis(EARLY_TERMINAL_MS) {
+            fs::write(fixture.root.join("release-natural"), b"release\n").unwrap();
+            Some(began.elapsed())
+        } else {
+            None
+        };
+    let mut done_observed = None;
+    let mut worker_terminal_observed = None;
+    let mut worker_terminal_state = None;
+    let mut observations = 0;
+    while Instant::now() < early_until && release_elapsed.is_some() {
+        if fixture.root.join("done.json").exists() {
+            done_observed.get_or_insert_with(|| began.elapsed());
+            let rows = fixture.sample(&format!("natural-terminal-before-resume-{observations}"));
+            observations += 1;
+            match rows.iter().find(|process| process.pid == worker) {
+                Some(process) if process.state.starts_with('Z') => {
+                    worker_terminal_state = Some(process.state.clone());
+                    worker_terminal_observed = Some(began.elapsed());
+                    break;
+                }
+                None => {
+                    worker_terminal_state = Some("absent".to_owned());
+                    worker_terminal_observed = Some(began.elapsed());
+                    break;
+                }
+                Some(_) => (),
+            }
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    // Same fixed scheduling on the old and repaired candidates. The original
+    // capture itself is not exposed by the compatibility carrier. Since capture
+    // precedes the selected-child witness, witness observation +800ms is a
+    // source-derived upper bound for this selected policy's execution cutoff.
+    let resume_target = began + Duration::from_millis(RESUME_MS);
+    while Instant::now() < resume_target {
+        thread::sleep(Duration::from_millis(5));
+    }
+    let resume_sent = began.elapsed();
+    let resume_result = paused.resume();
+    drop(paused);
+    let resume_completed = began.elapsed();
+    let crossed_execution_bound =
+        resume_sent > start_observed + Duration::from_millis(EXECUTION_CUTOFF_MS);
+    fs::write(fixture.root.join("pause-resume.json"), serde_json::to_vec_pretty(&serde_json::json!({
+        "foreground_pid":foreground, "selected_pid":selected_pid, "worker_pid":worker,
+        "selected_start_observed_ms":start_observed.as_millis(),
+        "pause_sent_ms":pause_sent.as_millis(), "pause_observed_ms":pause_observed.as_millis(),
+        "foreground_stopped":foreground_stopped, "worker_owned_before_release":worker_owned_before_release,
+        "selected_owned_before_release":selected_owned_before_release,
+        "release_elapsed_ms":release_elapsed.map(|at|at.as_millis()),
+        "done_observed_ms":done_observed.map(|at|at.as_millis()),
+        "worker_terminal_observed_ms":worker_terminal_observed.map(|at|at.as_millis()),
+        "worker_terminal_state":worker_terminal_state, "resume_target_ms":RESUME_MS,
+        "resume_sent_ms":resume_sent.as_millis(), "resume_completed_ms":resume_completed.as_millis(),
+        "resume_ok":resume_result.is_ok(), "original_capture_directly_observed":false,
+        "source_execution_cutoff_ms":EXECUTION_CUTOFF_MS,"source_foreground_cutoff_ms":FOREGROUND_CUTOFF_MS,
+        "execution_cutoff_upper_bound_ms":(start_observed+Duration::from_millis(EXECUTION_CUTOFF_MS)).as_millis(),
+        "resume_crossed_execution_upper_bound":crossed_execution_bound,
+    })).unwrap()).unwrap();
+    let result = running.finish(&fixture, Some(b""), true, true, FAST_LIMIT);
+    fs::write(fixture.root.join("natural-terminal-outcome.json"), serde_json::to_vec_pretty(&serde_json::json!({
+        "exit_code":result.status.code(),
+        "execution_cutoff_diagnostic_observed":String::from_utf8_lossy(&result.stderr).contains("compatibility execution cutoff reached"),
+        "completion_elapsed_ms":completion_elapsed(&result).as_millis(),
+    })).unwrap()).unwrap();
+    assert!(
+        foreground_stopped,
+        "setup gap: foreground stop was not observed"
+    );
+    assert!(
+        worker_owned_before_release && selected_owned_before_release,
+        "setup gap: expected selected-child/worker/paused-foreground ancestry was not observed"
+    );
+    assert!(
+        release_elapsed.is_some(),
+        "setup gap: selected child could not be released before700ms"
+    );
+    assert!(
+        done_observed.is_some_and(|at| at < Duration::from_millis(EARLY_TERMINAL_MS)),
+        "setup gap: natural child completion was not observed before700ms"
+    );
+    assert!(
+        worker_terminal_observed.is_some_and(|at| at < Duration::from_millis(EARLY_TERMINAL_MS)),
+        "setup gap: terminal worker was not observed before700ms"
+    );
+    assert!(
+        resume_result.is_ok(),
+        "actual owned foreground child did not resume: {resume_result:?}"
+    );
+    assert!(
+        crossed_execution_bound,
+        "setup gap: resume did not cross the source-derived execution cutoff bound"
+    );
+    assert!(
+        resume_completed < Duration::from_millis(1050),
+        "setup gap: resume missed the selected foreground phase"
+    );
+    let done = fixture.witness("done");
+    assert_eq!(done["pid"], selected_pid);
+    assert_eq!(done["code"], 37);
+    assert_eq!(done["stdout_bytes"], 13);
+    expect_code(&result, 37);
+    assert_no_synthesized_stdout(&result, b"NATURAL DONE\n");
+    assert!(
+        result.stderr.is_empty(),
+        "completed natural execution acquired a cutoff diagnostic"
+    );
+    assert!(completion_elapsed(&result) < Duration::from_millis(DESCRIBE_MS));
+    assert_private_group_not_live(&fixture, &result, "started");
+    // A terminal worker snapshot plus inspected worker exit conditions supports
+    // the queued-terminal inference. It does not decode the private packet or
+    // independently witness the original capture. On the old candidate, the
+    // retained execution-cutoff diagnostic identifies the actual rejected branch.
 }
