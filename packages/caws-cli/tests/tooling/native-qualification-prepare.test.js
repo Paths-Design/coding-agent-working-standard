@@ -179,6 +179,55 @@ describe('native preparation complete Git export inventory', () => {
       planPreparationGitExport([blob, root, commit], commit.oid, root.oid, 'sha1')
     ).toThrow('incorrect graph edge type');
   });
+
+  function nestedGraph(depth, name) {
+    let root = object('tree', Buffer.alloc(0));
+    const objects = [root];
+    for (let i = 0; i < depth; i++) {
+      root = object('tree', treeRecord('40000', name, root.oid));
+      objects.push(root);
+    }
+    const commit = object('commit', `tree ${root.oid}\n\nmessage`);
+    return { objects: [...objects, commit], commit, root };
+  }
+
+  test('refuses a valid rehashed graph deeper than the source recursion bound', () => {
+    const fixture = nestedGraph(65, 'd');
+    expect(() =>
+      planPreparationGitExport(fixture.objects, fixture.commit.oid, fixture.root.oid, 'sha1')
+    ).toThrow('depth exceeds bound');
+  });
+
+  test('refuses an overlong materialized path even when every component is valid', () => {
+    const fixture = nestedGraph(21, 'd'.repeat(200));
+    expect(() =>
+      planPreparationGitExport(fixture.objects, fixture.commit.oid, fixture.root.oid, 'sha1')
+    ).toThrow('path inventory exceeds bound');
+  });
+
+  test('bounds materialized entries when a small graph reuses an empty subtree', () => {
+    const empty = object('tree', Buffer.alloc(0));
+    const wide = object(
+      'tree',
+      Buffer.concat(
+        Array.from({ length: 1000 }, (_, i) =>
+          treeRecord('40000', `d${String(i).padStart(4, '0')}`, empty.oid)
+        )
+      )
+    );
+    const root = object(
+      'tree',
+      Buffer.concat(
+        Array.from({ length: 51 }, (_, i) =>
+          treeRecord('40000', `p${String(i).padStart(2, '0')}`, wide.oid)
+        )
+      )
+    );
+    const commit = object('commit', `tree ${root.oid}\n\nmessage`);
+    expect(() =>
+      planPreparationGitExport([empty, wide, root, commit], commit.oid, root.oid, 'sha1')
+    ).toThrow('path inventory exceeds bound');
+  });
 });
 
 describe('native preparation commit and tree interpretation', () => {
