@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: bridge-lifecycle-lock
 created_at: '2026-10-26T22:42:32.159Z'
-updated_at: '2026-10-26T22:42:46.931Z'
+updated_at: '2026-10-26T23:01:47.374Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
@@ -16,6 +16,7 @@ scope:
     - 'packages/caws-cli/src/store/bridge-store.ts'
     - 'packages/caws-cli/tests/store/bridge-store.test.js'
     - 'packages/caws-cli/tests/shell/claim-bridge.test.js'
+    - packages/caws-cli/src/shell/commands/worktree.ts
   out: []
 invariants:
   - 'Acquire, refresh, takeover and release hold the lifecycle lock from bridge registry load through transaction completion or recovery.'
