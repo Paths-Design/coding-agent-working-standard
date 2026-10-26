@@ -8,7 +8,7 @@ updated_at: '2026-10-26T11:37:45.803Z'
 created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'Native preparation caller context and closed child startup'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
