@@ -2808,12 +2808,18 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
     // Exact creation receipts never carry unrelated bridge cleanup along.
     const receiptOnly = opts.state?.length === 1 && opts.state[0] === 'verified-dead-creation';
     const bridgePlan = bridgeGhostPlan(ctx.cawsDir, !receiptOnly);
+    const bridgeCleanupFailed = !receiptOnly && !bridgePlan.ok;
+    const succeeded = !bridgeCleanupFailed && !outcomes.some((item) => item.action !== 'applied');
+    if (bridgeCleanupFailed && !bridgePlan.ok) {
+      err('caws worktree prune: bridge cleanup failed.');
+      err(renderDiagnostics(bridgePlan.errors, { showData }));
+    }
 
     if (opts.json === true) {
       out(
         JSON.stringify(
           {
-            ok: !outcomes.some((item) => item.action !== 'applied'),
+            ok: succeeded,
             dry_run: false,
             read_only: false,
             outcomes,
@@ -2823,7 +2829,9 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
                   bridge_ghosts: bridgePlan.value.candidates,
                   bridge_removed: bridgePlan.value.removed,
                 }
-              : {}),
+              : bridgeCleanupFailed
+                ? { bridge_errors: bridgePlan.errors }
+                : {}),
             filters: {
               state: opts.state ?? [],
               include: opts.include ?? [],
@@ -2838,7 +2846,7 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
       renderWorktreePruneApply(outcomes, out);
       if (bridgePlan.ok) renderBridgeGhostSection(bridgePlan.value, out);
     }
-    return outcomes.some((item) => item.action !== 'applied') ? 1 : 0;
+    return succeeded ? 0 : 1;
   }
 
   if (opts.json === true) {
@@ -2880,26 +2888,12 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
  * nothing read-side; removal is disk hygiene (no events). Spec states come
  * from loadSpecs so the plan never guesses.
  */
-function bridgeGhostPlan(
-  cawsDir: string,
-  apply: boolean
-):
-  | {
-      ok: true;
-      value: {
-        candidates: ReadonlyArray<{ specId: string; holderSessionId: string; reason: string }>;
-        removed: ReadonlyArray<string>;
-        apply: boolean;
-      };
-    }
-  | { ok: false } {
+function bridgeGhostPlan(cawsDir: string, apply: boolean): ReturnType<typeof pruneBridgeGhosts> {
   const specs = loadSpecs(cawsDir);
   const specStates: Record<string, string | undefined> = {};
   for (const s of specs.specs) specStates[s.id] = s.lifecycle_state;
   const activeIds = specs.specs.filter((s) => s.lifecycle_state === 'active').map((s) => s.id);
-  const r = pruneBridgeGhosts(cawsDir, { activeSpecIds: activeIds, specStates, apply });
-  if (!r.ok) return { ok: false };
-  return { ok: true, value: r.value };
+  return pruneBridgeGhosts(cawsDir, { activeSpecIds: activeIds, specStates, apply });
 }
 
 export function runWorktreeRepairCommand(opts: WorktreeRepairOptions): number {

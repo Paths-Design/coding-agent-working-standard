@@ -144,6 +144,83 @@ const SESS_A = sessEnv('sess-a');
 const SESS_B = sessEnv('sess-b');
 
 describe('AUTH-BINDING-BRIDGE-001 command surface', () => {
+  test.each([true, false])(
+    'applied bridge pruning reports lifecycle contention (json: %s)',
+    (json) => {
+      const { root, cawsDir } = mkRepo();
+      writeSpec(cawsDir, 'BR-992', 'active', ['src/**']);
+      expect(claim(root, { spec: 'BR-992', env: SESS_A }).code).toBe(0);
+      fs.unlinkSync(path.join(cawsDir, 'specs', 'BR-992.yaml'));
+      const beforeBridge = fs.readFileSync(path.join(cawsDir, 'claims', 'bridge.json'));
+      const beforeEvents = fs.readFileSync(path.join(cawsDir, 'events.jsonl'));
+      const held = acquireLifecycleLock(cawsDir);
+      expect(held.ok).toBe(true);
+      try {
+        const out = [];
+        const err = [];
+        const code = runWorktreePruneCommand({
+          env: SESS_A,
+          cwd: root,
+          apply: true,
+          json,
+          out: (line) => out.push(line),
+          err: (line) => err.push(line),
+        });
+        expect(code).toBe(1);
+        if (json) {
+          const result = JSON.parse(out.join('\n'));
+          expect(result.ok).toBe(false);
+          expect(result.bridge_errors.map((error) => error.rule)).toEqual([
+            'store.lifecycle.lock_contention',
+          ]);
+          expect(result.outcomes).toEqual([]);
+        }
+        expect(err.join('\n')).toContain('store.lifecycle.lock_contention');
+        expect(fs.readFileSync(path.join(cawsDir, 'claims', 'bridge.json'))).toEqual(beforeBridge);
+        expect(fs.readFileSync(path.join(cawsDir, 'events.jsonl'))).toEqual(beforeEvents);
+      } finally {
+        releaseLifecycleLock(held.value);
+      }
+    }
+  );
+
+  test.each(['preview', 'receipt-only'])(
+    'bridge %s remains read-only under lifecycle contention',
+    (mode) => {
+      const { root, cawsDir } = mkRepo();
+      writeSpec(cawsDir, 'BR-993', 'active', ['src/**']);
+      expect(claim(root, { spec: 'BR-993', env: SESS_A }).code).toBe(0);
+      fs.unlinkSync(path.join(cawsDir, 'specs', 'BR-993.yaml'));
+      const beforeBridge = fs.readFileSync(path.join(cawsDir, 'claims', 'bridge.json'));
+      const beforeEvents = fs.readFileSync(path.join(cawsDir, 'events.jsonl'));
+      const held = acquireLifecycleLock(cawsDir);
+      expect(held.ok).toBe(true);
+      try {
+        const out = [];
+        const err = [];
+        const code = runWorktreePruneCommand({
+          env: SESS_A,
+          cwd: root,
+          json: true,
+          ...(mode === 'receipt-only' ? { apply: true, state: ['verified-dead-creation'] } : {}),
+          out: (line) => out.push(line),
+          err: (line) => err.push(line),
+        });
+        const result = JSON.parse(out.join('\n'));
+        expect(code).toBe(0);
+        expect(result.ok).toBe(true);
+        expect(result.bridge_ghosts).toEqual([
+          { specId: 'BR-993', holderSessionId: 'sess-a', reason: 'spec-missing' },
+        ]);
+        expect(err).toEqual([]);
+        expect(fs.readFileSync(path.join(cawsDir, 'claims', 'bridge.json'))).toEqual(beforeBridge);
+        expect(fs.readFileSync(path.join(cawsDir, 'events.jsonl'))).toEqual(beforeEvents);
+      } finally {
+        releaseLifecycleLock(held.value);
+      }
+    }
+  );
+
   test.each(['acquire', 'refresh', 'takeover', 'named release', 'bare release'])(
     'bridge %s refuses under lifecycle contention and succeeds after release',
     (operation) => {
