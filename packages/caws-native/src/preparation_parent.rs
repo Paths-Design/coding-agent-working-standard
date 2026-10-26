@@ -2161,6 +2161,7 @@ mod tests {
     #[test]
     fn private_include_is_refused_before_program_reads_children_or_sentinel_reads() {
         const CHILD: &str = "CAWS_PREPARATION_TEST_PRIVATE_INCLUDE_CHILD";
+        const COMPLETED: &str = "caws.private-include-control.completed";
         if env::var_os(CHILD).is_none() {
             // Cargo injects a dynamic-library search path into its test
             // process. Run this startup-boundary control in its own sterile
@@ -2196,6 +2197,15 @@ mod tests {
                 String::from_utf8_lossy(&owner.err)
             );
             assert!(owner.child.is_none());
+            assert_eq!(
+                owner
+                    .err
+                    .split(|b| *b == b'\n')
+                    .filter(|line| *line == COMPLETED.as_bytes())
+                    .count(),
+                1,
+                "Exit zero must not hide an exact selector that ran no test"
+            );
             return;
         }
         assert!(startup_environment().is_ok());
@@ -2238,6 +2248,7 @@ mod tests {
         assert_eq!(observed, sentinel_bytes);
         drop(fifo);
         fs::remove_dir_all(root).unwrap();
+        eprintln!("{COMPLETED}");
     }
     #[test]
     fn file_pins_detect_replacement_and_forbid_symlinks() {
