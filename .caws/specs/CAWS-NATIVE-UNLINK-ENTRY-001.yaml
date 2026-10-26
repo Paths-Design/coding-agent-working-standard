@@ -1,0 +1,37 @@
+id: CAWS-NATIVE-UNLINK-ENTRY-001
+title: 'Preserve final symlink deletion entry ownership'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-26T15:18:00.132Z'
+updated_at: '2026-10-26T15:18:00.132Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Existing Bash mutation operand and ownership consumer'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh'
+    - 'packages/caws-cli/tests/hooks/bash-write-guard-analysis.test.js'
+    - 'packages/caws-cli/tests/hooks/pytest/test_bash_mutation_boundary.py'
+  out: []
+invariants:
+  - 'Only statically recognized rm operands gain deletion-entry semantics for a literal final symlink; referent writes and all unsupported or unresolved cases keep existing protective decisions'
+  - 'Resolve physical parents and retain independent per-operand roles, cross-repository and canonical or foreign claims; no generic realpath relaxation, broad utility admission or installed guard bypass'
+acceptance:
+  - id: A1
+    given: 'a statically recognized rm operand naming a final symlink in an owned physical parent'
+    when: 'the existing mutation consumer adjudicates the effect'
+    then: 'it admits only the owned deletion entry and preserves referent bytes while raw candidate compatibility and per-effect role transport remain exact'
+  - id: A2
+    given: 'canonical or foreign entries, aliased ancestors, broken links, ambiguous endings, mixed rm and referent writes, or malformed effect transport'
+    when: 'the existing guard and actual ownership oracle evaluate the command'
+    then: 'hostile ownership and referent effects refuse without new admission while supported ordinary deletion decisions remain unchanged'
+  - id: A3
+    given: 'the committed reviewed candidate isolated from the active frozen guard run'
+    when: 'focused existing producer and copied-hook consumer checks run with matching analyzer and real oracle'
+    then: 'semantic positive and hostile controls pass with retained raw output and fixture effects, without claiming installed publication or machine cutover'
+non_functional: {}
+contracts: []
