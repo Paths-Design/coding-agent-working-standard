@@ -476,10 +476,15 @@ export function unconditionalCommandHook(
   );
 }
 
-/** Qwen's supported budgets are milliseconds. Smaller custom budgets require
- * reconciliation; these floors do not attest that a callback finishes in time.
+/** Codex bounds SessionEnd during host teardown; Qwen budgets are milliseconds.
+ * Budget qualification does not attest that a callback finishes in time.
  */
 export function qualifiedHookTimeout(surface: string, event: string, timeout: unknown): boolean {
+  if (surface === 'codex' && event === 'session_end')
+    return (
+      timeout === undefined ||
+      (typeof timeout === 'number' && Number.isInteger(timeout) && timeout >= 1 && timeout <= 3)
+    );
   if (surface !== 'qwen-code') return true;
   const floor =
     event === 'pre_tool_use'
