@@ -556,6 +556,32 @@ test('known foreign writes retain precedence over copy filesystem uncertainty', 
   expect(fs.readFileSync(sources[1], 'utf8')).toBe('two.log');
 });
 
+test.each(['cp', 'mv'])(
+  'known canonical %s destination retains hard refusal before same-row link uncertainty',
+  (operation) => {
+    const { sources } = copyPaths();
+    fs.writeFileSync(
+      path.join(fx.project, '.caws/worktrees.json'),
+      JSON.stringify({
+        linked: { ...fx.entry, owner: { session_id: 'identity-fixture' } },
+      })
+    );
+    const destination = path.join(fx.project, 'canonical-output');
+    fs.writeFileSync(destination, 'canonical unchanged');
+    fs.linkSync(operation === 'cp' ? destination : sources[0], path.join(fx.base, 'inode-alias'));
+    const result = invoke(
+      'bash-write-guard.sh',
+      fx.project,
+      operation + ' -- ' + quote(sources[0]) + ' ' + quote(destination),
+      { CAWS_GUARD_NO_ASK: '0' }
+    );
+    check(result, 2, 'Copying files from a worktree to the main repo is forbidden.');
+    expect(result.stdout.trim()).toBe('');
+    expect(fs.readFileSync(destination, 'utf8')).toBe('canonical unchanged');
+    expect(fs.readFileSync(sources[0], 'utf8')).toBe('one.json');
+  }
+);
+
 test.each([
   'directory-source',
   'symlink-source',

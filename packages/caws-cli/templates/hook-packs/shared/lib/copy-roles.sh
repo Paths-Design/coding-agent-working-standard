@@ -113,9 +113,6 @@ caws_copy_role_paths() {
         _caws_copy_hold 'copy source is not a modeled regular file'; continue
       fi
       caws_guard_realpath_into _caws_cr_source_physical "$_caws_cr_source_nominal" || return 2
-      if [[ "$_caws_cr_operation" == mv ]] && ! _caws_copy_single_link "$_caws_cr_source_physical"; then
-        _caws_copy_hold 'move source hard-link identity is unmodeled or unavailable'; continue
-      fi
       _caws_cr_child="${_caws_cr_operand##*/}"
       _caws_cr_effective="$_caws_cr_destination"
       if [[ $_caws_cr_directory == 1 ]]; then
@@ -127,9 +124,6 @@ caws_copy_role_paths() {
         _caws_copy_hold 'copy destination entry semantics are unmodeled'; continue
       fi
       caws_guard_realpath_into _caws_cr_physical "$_caws_cr_effective" || return 2
-      if [[ -e "$_caws_cr_physical" ]] && ! _caws_copy_single_link "$_caws_cr_physical"; then
-        _caws_copy_hold 'copy destination hard-link identity is unmodeled or unavailable'; continue
-      fi
       case "$_caws_cr_source_physical" in
         "$_caws_cr_project"/.caws/worktrees/*)
           case "$_caws_cr_physical" in
@@ -137,6 +131,14 @@ caws_copy_role_paths() {
             "$_caws_cr_project"|"$_caws_cr_project"/*) CAWS_COPY_CANONICAL=1 ;;
           esac ;;
       esac
+      # A known forbidden pair remains forbidden even when either file's link
+      # identity cannot authorize the rest of this invocation.
+      if [[ "$_caws_cr_operation" == mv ]] && ! _caws_copy_single_link "$_caws_cr_source_physical"; then
+        _caws_copy_hold 'move source hard-link identity is unmodeled or unavailable'; continue
+      fi
+      if [[ -e "$_caws_cr_physical" ]] && ! _caws_copy_single_link "$_caws_cr_physical"; then
+        _caws_copy_hold 'copy destination hard-link identity is unmodeled or unavailable'; continue
+      fi
       _caws_cr_parent="${_caws_cr_physical%/*}"
       [[ -n "$_caws_cr_parent" ]] || _caws_cr_parent=/
       if ! caws_physical_dir_into _caws_cr_parent "$_caws_cr_parent"; then
