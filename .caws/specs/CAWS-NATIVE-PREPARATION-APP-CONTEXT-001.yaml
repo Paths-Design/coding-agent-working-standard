@@ -31,5 +31,12 @@ acceptance:
       of the inert metadata name
     when: 'preparation inspects startup environment'
     then: 'all remain refused before pin or child work; no namespace or prefix allowance is introduced'
+  - id: A3
+    given: 'the committed repair and retained actual pre-child refusal'
+    when: 'benign and hostile controls and the actual ordinary caller path are exercised'
+    then: >-
+      focused controls support the exact classification, the caller no longer fails
+      solely for inert metadata, unchanged deadline and complete preparation outcome
+      remain explicitly reported
 non_functional: {}
 contracts: []
