@@ -61,6 +61,11 @@ impl Fixture {
             "nodeExecutable":"native/node", "engineEntry":"engine.js", "describeEntry":"describe.js", "timeoutMs":1000,
         }))
     }
+    fn installed_current(&self, native: &[u8]) -> String {
+        let mut metadata = installed_v2_metadata();
+        metadata["timeoutMs"] = 1000.into();
+        self.generation_with_entry(Some(native), metadata)
+    }
     fn generation_with_entry(&self, native: Option<&[u8]>, metadata: serde_json::Value) -> String {
         let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::from([
             ("launcher.py".into(), b"raise SystemExit(77)\n".to_vec()),
@@ -202,7 +207,7 @@ fn positively_recognized_legacy_delegates_to_its_bootstrap() {
 #[test]
 fn native_process_nonzero_is_not_retried_through_legacy() {
     let f = Fixture::new();
-    f.generation(Some(b"#!/bin/sh\nprintf 'NATIVE_DISPATCHED\\n'\nexit 37\n"));
+    f.installed_current(b"#!/bin/sh\nprintf 'NATIVE_DISPATCHED\\n'\nexit 37\n");
     let output = f.invoke(&["codex", "stop"]);
     assert_eq!(output.status.code(), Some(37));
     assert_eq!(output.stdout, b"NATIVE_DISPATCHED\n");
@@ -211,7 +216,7 @@ fn native_process_nonzero_is_not_retried_through_legacy() {
 #[test]
 fn modified_native_member_fails_before_dispatch_without_legacy_retry() {
     let f = Fixture::new();
-    let digest = f.generation(Some(b"#!/bin/sh\necho NATIVE_DISPATCHED\n"));
+    let digest = f.installed_current(b"#!/bin/sh\necho NATIVE_DISPATCHED\n");
     fs::write(
         f.0.join("lib/runtimes").join(digest).join("engine.js"),
         b"changed",
@@ -226,7 +231,7 @@ fn modified_native_member_fails_before_dispatch_without_legacy_retry() {
 fn undeclared_shadow_member_and_mode_changes_refuse() {
     for shadow in [true, false] {
         let f = Fixture::new();
-        let digest = f.generation(Some(b"#!/bin/sh\necho NATIVE_DISPATCHED\n"));
+        let digest = f.installed_current(b"#!/bin/sh\necho NATIVE_DISPATCHED\n");
         let generation = f.0.join("lib/runtimes").join(digest);
         if shadow {
             fs::write(generation.join("shadow.js"), b"unexpected").unwrap();
@@ -251,12 +256,25 @@ fn undeclared_shadow_member_and_mode_changes_refuse() {
 #[test]
 fn native_selection_remains_pinned_when_pointer_advances() {
     let f = Fixture::new();
-    let first = f.generation(Some(b"#!/bin/sh\necho SELECTED_A\n"));
-    let selected = installed_entry::Selection::read(&f.0).unwrap();
-    let second = f.generation(Some(b"#!/bin/sh\necho SELECTED_B\n"));
+    let original = caws_native::monotonic_deadline::MonotonicDeadline::capture(
+        std::time::Duration::from_millis(30000),
+    )
+    .unwrap();
+    let expected = original.envelope();
+    let first = f.installed_current(b"#!/bin/sh\necho SELECTED_A\n");
+    let selected = installed_entry::Selection::read_with_deadline(&f.0, original).unwrap();
+    let second = f.installed_current(b"#!/bin/sh\necho SELECTED_B\n");
     assert_ne!(first, second);
     let invocation = installed_entry::Invocation::parse(&["codex".into(), "stop".into()]).unwrap();
-    let output = selected.command(&invocation).unwrap().output().unwrap();
+    let mut command = selected.command(&invocation).unwrap();
+    let carrier = deadline_carrier(&command);
+    assert_eq!(carrier["runtimeDigest"], first);
+    assert_eq!(carrier["startedNs"], expected.started_ns.to_string());
+    assert_eq!(
+        carrier["expiresNs"],
+        (expected.started_ns + 1000 * 1_000_000).to_string()
+    );
+    let output = command.output().unwrap();
     f.retain(&["PINNED_SELECTION_A_AFTER_POINTER_B"], &output);
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stdout, b"SELECTED_A\n");
@@ -273,7 +291,7 @@ fn native_selection_remains_pinned_when_pointer_advances() {
 #[test]
 fn selected_generation_mutation_after_pointer_read_refuses_launch() {
     let f = Fixture::new();
-    let digest = f.generation(Some(b"#!/bin/sh\necho SELECTED_A\n"));
+    let digest = f.installed_current(b"#!/bin/sh\necho SELECTED_A\n");
     let selected = installed_entry::Selection::read(&f.0).unwrap();
     fs::write(
         f.0.join("lib/runtimes").join(digest).join("engine.js"),
@@ -294,7 +312,7 @@ fn selected_generation_mutation_after_pointer_read_refuses_launch() {
 #[test]
 fn installed_entry_exec_retains_pid_cwd_stdin_and_environment_at_selected_process_boundary() {
     let f = Fixture::new();
-    f.generation(Some(b"#!/bin/sh\nprintf '%s\\n' \"$$\" > \"$R01_WITNESS/pid.txt\"\npwd -P > \"$R01_WITNESS/cwd.txt\"\nprintf '%s' \"$R01_CONTEXT\" > \"$R01_WITNESS/environment.bin\"\ncat > \"$R01_WITNESS/stdin.bin\"\n"));
+    f.installed_current(b"#!/bin/sh\nprintf '%s\\n' \"$$\" > \"$R01_WITNESS/pid.txt\"\npwd -P > \"$R01_WITNESS/cwd.txt\"\nprintf '%s' \"$R01_CONTEXT\" > \"$R01_WITNESS/environment.bin\"\ncat > \"$R01_WITNESS/stdin.bin\"\n");
     let raw = b"{ \"fixture\": \"raw bytes, not a proposed command\" }\n\n";
     let mut child = Command::new(env!("CARGO_BIN_EXE_caws-hook-native"))
         .args(["codex", "stop"])
@@ -527,4 +545,240 @@ fn installed_binding_requires_selected_paths_timeout_and_original_expiry() {
             .unwrap_err()
             .contains("expired")
     );
+}
+
+// These tests witness installed transport argv and a stub frontend boundary.
+// They do not exercise the actual caws-native receiver's generation admission.
+fn command_arguments(command: &Command) -> Vec<String> {
+    command
+        .get_args()
+        .map(|value| {
+            value
+                .to_str()
+                .expect("forwarded argv must be UTF-8")
+                .to_owned()
+        })
+        .collect()
+}
+fn deadline_carrier(command: &Command) -> serde_json::Value {
+    let arguments = command_arguments(command);
+    assert_eq!(arguments.len(), 17);
+    assert_eq!(arguments[0], "invoke-installed-v1");
+    assert_eq!(
+        arguments
+            .iter()
+            .filter(|value| value.as_str() == "--original-deadline")
+            .count(),
+        1
+    );
+    let position = arguments
+        .iter()
+        .position(|value| value == "--original-deadline")
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_str(&arguments[position + 1]).unwrap();
+    let keys: std::collections::BTreeSet<_> = value
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        keys,
+        ["expiresNs", "runtimeDigest", "startedNs"]
+            .into_iter()
+            .collect()
+    );
+    for key in ["startedNs", "expiresNs"] {
+        let decimal = value[key]
+            .as_str()
+            .expect("deadline integers must be strings");
+        let parsed: u64 = decimal.parse().unwrap();
+        assert_eq!(decimal, parsed.to_string());
+    }
+    value
+}
+
+#[test]
+fn installed_handoff_uses_exact_selected_arguments_and_canonical_original_clock() {
+    use caws_native::monotonic_deadline::MonotonicDeadline;
+    use std::time::Duration;
+    let original = MonotonicDeadline::capture(Duration::from_millis(30000)).unwrap();
+    let expected = original.envelope();
+    // Capture precedes fixture creation, pointer publication and selection I/O.
+    let fixture = Fixture::new();
+    let digest = fixture.installed_current(b"#!/bin/sh\nexit 0\n");
+    let before_selection = MonotonicDeadline::capture(Duration::from_secs(30))
+        .unwrap()
+        .envelope();
+    assert!(expected.started_ns < before_selection.started_ns);
+    let selected = installed_entry::Selection::read_with_deadline(&fixture.0, original).unwrap();
+    let invocation =
+        installed_entry::Invocation::parse(&["codex".into(), "stop".into(), "--system".into()])
+            .unwrap();
+    let command = selected.command(&invocation).unwrap();
+    let carrier = deadline_carrier(&command);
+    assert_eq!(carrier["startedNs"], expected.started_ns.to_string());
+    assert_eq!(
+        carrier["expiresNs"],
+        (expected.started_ns + 1000 * 1_000_000).to_string()
+    );
+    assert!(
+        carrier["expiresNs"]
+            .as_str()
+            .unwrap()
+            .parse::<u64>()
+            .unwrap()
+            < expected.expires_ns
+    );
+    assert_eq!(carrier["runtimeDigest"], digest);
+    let root = fixture.0.join("lib/runtimes").join(&digest);
+    assert_eq!(
+        command.get_program(),
+        root.join("native/caws-native").as_os_str()
+    );
+    assert_eq!(
+        command_arguments(&command),
+        vec![
+            "invoke-installed-v1".to_owned(),
+            "--engine".to_owned(),
+            root.join("engine.js").to_str().unwrap().to_owned(),
+            "--node".to_owned(),
+            root.join("native/node").to_str().unwrap().to_owned(),
+            "--timeout-ms".to_owned(),
+            "1000".to_owned(),
+            "--original-deadline".to_owned(),
+            serde_json::to_string(&carrier).unwrap(),
+            "--surface".to_owned(),
+            "codex".to_owned(),
+            "--event".to_owned(),
+            "stop".to_owned(),
+            "--runtime-digest".to_owned(),
+            digest,
+            "--configuration".to_owned(),
+            "system".to_owned(),
+        ]
+    );
+    // Revalidation and rebuilding command argv must retain the exact clock.
+    assert_eq!(
+        deadline_carrier(&selected.command(&invocation).unwrap()),
+        carrier
+    );
+}
+
+#[test]
+fn selected_policy_cannot_extend_an_earlier_original_expiry() {
+    use caws_native::monotonic_deadline::MonotonicDeadline;
+    use std::time::Duration;
+    let original = MonotonicDeadline::capture(Duration::from_millis(20000)).unwrap();
+    let expected = original.envelope();
+    let fixture = Fixture::new();
+    fixture.generation_with_entry(Some(b"#!/bin/sh\nexit 0\n"), installed_v2_metadata());
+    let selected = installed_entry::Selection::read_with_deadline(&fixture.0, original).unwrap();
+    let invocation = installed_entry::Invocation::parse(&["codex".into(), "stop".into()]).unwrap();
+    let command = selected.command(&invocation).unwrap();
+    let carrier = deadline_carrier(&command);
+    assert_eq!(carrier["startedNs"], expected.started_ns.to_string());
+    assert_eq!(carrier["expiresNs"], expected.expires_ns.to_string());
+    assert_eq!(command_arguments(&command)[6], "30000");
+}
+
+#[test]
+fn installed_original_above_thirty_seconds_or_expired_refuses_before_selection() {
+    use caws_native::monotonic_deadline::MonotonicDeadline;
+    use std::time::Duration;
+    let fixture = Fixture::new(); // No pointer: deadline refusal must win first.
+    let longer = MonotonicDeadline::capture(Duration::from_millis(30001)).unwrap();
+    let error = installed_entry::Selection::read_with_deadline(&fixture.0, longer).unwrap_err();
+    assert_eq!(error, "Installed entry original interval exceeds 30000ms");
+    let expired = MonotonicDeadline::capture(Duration::from_millis(1)).unwrap();
+    std::thread::sleep(Duration::from_millis(10));
+    let error = installed_entry::Selection::read_with_deadline(&fixture.0, expired).unwrap_err();
+    assert_eq!(error, "Original monotonic deadline expired");
+    assert!(!fixture.0.join("state/adapter-runtime.json").exists());
+}
+
+#[test]
+fn installed_v1_dispatch_refuses_before_frontend_without_ordinary_or_legacy_retry() {
+    let fixture = Fixture::new();
+    fixture.generation(Some(
+        b"#!/bin/sh\nprintf 'FRONTEND_WAS_EXECUTED\\n'\n: > \"$CAWS_HOME/frontend-witness\"\n",
+    ));
+    let selected = installed_entry::Selection::read(&fixture.0).unwrap();
+    let invocation =
+        installed_entry::Invocation::parse(&["codex".into(), "pre_tool_use".into()]).unwrap();
+    let error = selected
+        .command(&invocation)
+        .err()
+        .expect("v1 must not create installed command");
+    assert_eq!(
+        error,
+        "Selected generation does not support invoke-installed-v1"
+    );
+    let output = fixture.invoke(&["codex", "pre_tool_use"]);
+    assert_eq!(output.status.code(), Some(2));
+    let refusal: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(refusal["decision"], "block");
+    assert!(
+        refusal["reason"]
+            .as_str()
+            .unwrap()
+            .contains("does not support invoke-installed-v1")
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("does not support invoke-installed-v1")
+    );
+    assert!(!fixture.0.join("frontend-witness").exists());
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("FRONTEND_WAS_EXECUTED"));
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("LEGACY_EXECUTED"));
+}
+
+#[test]
+fn stub_frontend_observes_explicit_selected_handoff_despite_hostile_ambient_deadline() {
+    use caws_native::monotonic_deadline::MonotonicDeadline;
+    use std::time::Duration;
+    let fixture = Fixture::new();
+    let digest = fixture.installed_current(b"#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAWS_HOME/observed-argv.txt\"\nprintf 'STUB_FRONTEND_OBSERVED\\n'\n");
+    let forged_digest = "f".repeat(64);
+    let forged = serde_json::json!({"startedNs":"0","expiresNs":u64::MAX.to_string(),"runtimeDigest":forged_digest});
+    let before = MonotonicDeadline::capture(Duration::from_secs(30))
+        .unwrap()
+        .envelope();
+    let output = Command::new(env!("CARGO_BIN_EXE_caws-hook-native"))
+        .args(["codex", "stop", "--system"])
+        .env("CAWS_HOME", &fixture.0)
+        .env(
+            "CAWS_NATIVE_ORIGINAL_DEADLINE",
+            serde_json::to_string(&forged).unwrap(),
+        )
+        .env("CAWS_RUNTIME_DIGEST", &forged_digest)
+        .output()
+        .unwrap();
+    let after = MonotonicDeadline::capture(Duration::from_secs(30))
+        .unwrap()
+        .envelope();
+    fixture.retain(
+        &["STUB_FRONTEND_HANDOFF_WITH_HOSTILE_AMBIENT_DATA"],
+        &output,
+    );
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"STUB_FRONTEND_OBSERVED\n");
+    assert!(output.stderr.is_empty());
+    let arguments = fs::read_to_string(fixture.0.join("observed-argv.txt")).unwrap();
+    let arguments: Vec<_> = arguments.lines().collect();
+    assert_eq!(arguments.len(), 17);
+    assert_eq!(arguments[0], "invoke-installed-v1");
+    assert_eq!(arguments[7], "--original-deadline");
+    assert_eq!(arguments[13], "--runtime-digest");
+    assert_eq!(arguments[14], digest);
+    let carrier: serde_json::Value = serde_json::from_str(arguments[8]).unwrap();
+    assert_eq!(carrier["runtimeDigest"], digest);
+    assert_ne!(carrier, forged);
+    let started = carrier["startedNs"].as_str().unwrap();
+    let expires = carrier["expiresNs"].as_str().unwrap();
+    let start_ns: u64 = started.parse().unwrap();
+    let expire_ns: u64 = expires.parse().unwrap();
+    assert_eq!(started, start_ns.to_string());
+    assert_eq!(expires, expire_ns.to_string());
+    assert!(start_ns >= before.started_ns && start_ns <= after.started_ns);
+    assert_eq!(expire_ns - start_ns, 1000 * 1_000_000);
 }

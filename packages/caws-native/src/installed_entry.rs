@@ -5,13 +5,19 @@
 use crate::installed_generation::{
     self, MAX_METADATA, Selection as GenerationSelection, Verification,
 };
+use caws_native::monotonic_deadline::{DeadlineEnvelope, MonotonicDeadline};
 use serde::Deserialize;
 use std::collections::BTreeMap;
-use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+#[path = "installed_compatibility.rs"]
+mod compatibility;
+
+const ORIGINAL_TIMEOUT_MS: u64 = installed_generation::MAX_ORIGINAL_TIMEOUT_MS;
 
 const SURFACES: &[&str] = &[
     "codex",
@@ -40,6 +46,14 @@ pub struct Invocation {
     original: Vec<String>,
 }
 impl Invocation {
+    fn failure_event(&self) -> &str {
+        if self.describe {
+            "describe"
+        } else {
+            &self.event
+        }
+    }
+
     pub fn parse(args: &[String]) -> Result<Self, String> {
         let usage = "Usage: caws-hook-native <surface> <pre_tool_use|post_tool_use|session_start|stop|pre_compact|session_end> [--system] [--describe]";
         if args.len() < 2
@@ -78,42 +92,146 @@ pub struct Selection {
     // Compatibility projection for existing installed-entry callers. Launch
     // arguments and revalidation use the private verified generation directly.
     pub inspected_digest: String,
-    expires: Instant,
+    original_deadline: Arc<MonotonicDeadline>,
+    policy_deadline: Option<Arc<MonotonicDeadline>>,
+}
+struct SelectionFailure {
+    message: String,
+    // None means the selected policy could not yield a live delivery clock.
+    // It never authorizes a fresh clock or a best-effort post-expiry write.
+    delivery_deadline: Option<Arc<MonotonicDeadline>>,
 }
 impl Selection {
     pub fn read(home: &Path) -> Result<Self, String> {
-        // The installed entry precedes Config. Reuse its existing maximum
-        // native timeout; command revalidation retains this original expiry.
-        let expires = Instant::now() + Duration::from_millis(120_000);
-        let mut cancel = || Ok(());
-        let mut verify = Verification::new(expires, &mut cancel);
-        verify.checkpoint()?;
-        if !home.is_absolute() {
-            return Err("CAWS_HOME must be absolute".into());
+        let deadline = MonotonicDeadline::capture(Duration::from_millis(ORIGINAL_TIMEOUT_MS))
+            .map_err(|e| e.to_string())?;
+        Self::read_with_deadline(home, deadline)
+    }
+
+    /// The run entry captures this clock before argument, pointer or generation
+    /// work. This API accepts only an existing restriction, never ambient data.
+    pub(crate) fn read_with_deadline(
+        home: &Path,
+        original_deadline: MonotonicDeadline,
+    ) -> Result<Self, String> {
+        Self::read_with_shared_deadline(home, Arc::new(original_deadline))
+            .map_err(|failure| failure.message)
+    }
+
+    fn read_with_shared_deadline(
+        home: &Path,
+        original_deadline: Arc<MonotonicDeadline>,
+    ) -> Result<Self, SelectionFailure> {
+        let before_policy = |message: String| SelectionFailure {
+            message,
+            delivery_deadline: Some(Arc::clone(&original_deadline)),
+        };
+        original_deadline
+            .check()
+            .map_err(|e| before_policy(e.to_string()))?;
+        let original = original_deadline.envelope();
+        if original.expires_ns - original.started_ns > ORIGINAL_TIMEOUT_MS * 1_000_000 {
+            return Err(before_policy(
+                "Installed entry original interval exceeds 30000ms".into(),
+            ));
         }
-        let pointer: Pointer = serde_json::from_slice(&installed_generation::read_metadata(
-            home,
-            "state/adapter-runtime.json",
-            MAX_METADATA,
-            &mut verify,
-        )?)
-        .map_err(|e| format!("Malformed runtime pointer: {e}"))?;
-        if pointer.version != 1 || !installed_generation::valid_digest(&pointer.digest) {
-            return Err("Malformed runtime pointer".into());
-        }
-        let generation = GenerationSelection::read_generation(home, &pointer.digest, &mut verify)?;
-        Ok(Self {
+        let generation = (|| -> Result<GenerationSelection, String> {
+            let mut cancel = || original_deadline.check().map_err(|e| e.to_string());
+            let mut verify = Verification::new(original_deadline.expires(), &mut cancel);
+            verify.checkpoint()?;
+            if !home.is_absolute() {
+                return Err("CAWS_HOME must be absolute".into());
+            }
+            let pointer: Pointer = serde_json::from_slice(&installed_generation::read_metadata(
+                home,
+                "state/adapter-runtime.json",
+                MAX_METADATA,
+                &mut verify,
+            )?)
+            .map_err(|e| format!("Malformed runtime pointer: {e}"))?;
+            if pointer.version != 1 || !installed_generation::valid_digest(&pointer.digest) {
+                return Err("Malformed runtime pointer".into());
+            }
+            GenerationSelection::read_generation(home, &pointer.digest, &mut verify)
+        })()
+        .map_err(before_policy)?;
+        // Verified metadata may shorten the original 30s maximum from the same
+        // start. Capability admission remains separate from recognizing v1.
+        let policy_deadline = if let Some(entry) = generation.native_entry() {
+            let configured = entry.timeout_ms.min(ORIGINAL_TIMEOUT_MS);
+            let expires_ns = original
+                .started_ns
+                .checked_add(configured * 1_000_000)
+                .ok_or_else(|| SelectionFailure {
+                    message: "Installed entry deadline overflow".into(),
+                    delivery_deadline: None,
+                })?
+                .min(original.expires_ns);
+            if expires_ns < original.expires_ns {
+                Some(Arc::new(
+                    MonotonicDeadline::receive(DeadlineEnvelope {
+                        started_ns: original.started_ns,
+                        expires_ns,
+                    })
+                    .map_err(|e| SelectionFailure {
+                        message: e.to_string(),
+                        delivery_deadline: None,
+                    })?,
+                ))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let selected = Self {
             inspected_digest: generation.inspected_digest.clone(),
             generation,
-            expires,
-        })
+            original_deadline,
+            policy_deadline,
+        };
+        selected.checkpoint().map_err(|message| SelectionFailure {
+            message,
+            delivery_deadline: Some(Arc::clone(selected.delivery_deadline())),
+        })?;
+        Ok(selected)
+    }
+
+    fn delivery_deadline(&self) -> &Arc<MonotonicDeadline> {
+        self.policy_deadline
+            .as_ref()
+            .unwrap_or(&self.original_deadline)
+    }
+
+    fn checkpoint(&self) -> Result<(), String> {
+        self.original_deadline.check().map_err(|e| e.to_string())?;
+        if let Some(policy) = &self.policy_deadline {
+            policy.check().map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    fn expires(&self) -> Instant {
+        self.policy_deadline
+            .as_ref()
+            .map_or(self.original_deadline.expires(), |policy| {
+                policy.expires().min(self.original_deadline.expires())
+            })
+    }
+
+    fn forwarded_deadline(&self) -> DeadlineEnvelope {
+        self.policy_deadline
+            .as_ref()
+            .unwrap_or(&self.original_deadline)
+            .envelope()
     }
 
     pub(crate) fn command(&self, invocation: &Invocation) -> Result<Command, String> {
         // Recheck the selected generation, never the pointer. This detects changes
         // before this launch attempt; it does not claim custody of future imports.
-        let mut cancel = || Ok(());
-        let mut verify = Verification::new(self.expires, &mut cancel);
+        self.checkpoint()?;
+        let mut cancel = || self.checkpoint();
+        let mut verify = Verification::new(self.expires(), &mut cancel);
         self.generation.revalidate(&mut verify)?;
         if self.inspected_digest != self.generation.inspected_digest {
             return Err("Selected manifest changed before launch".into());
@@ -124,6 +242,8 @@ impl Selection {
                 command
                     .arg(self.generation.member_path("bootstrap.py", &mut verify)?)
                     .args(&invocation.original);
+                // run retains the original clock while supervising compatibility.
+                self.checkpoint()?;
                 Ok(command)
             }
             Some(entry) => {
@@ -133,6 +253,7 @@ impl Selection {
                     "project"
                 };
                 let mut command = if invocation.describe {
+                    // run supervises describe with the selected original clock.
                     let mut command = Command::new(
                         self.generation
                             .member_path(&entry.node_executable, &mut verify)?,
@@ -174,12 +295,15 @@ impl Selection {
                     command.env("CAWS_NATIVE_DESCRIBE_CONTEXT", context);
                     command
                 } else {
+                    // Admit from the already verified selected metadata before
+                    // constructing a native command. Never probe or retry v1.
+                    let entry = self.generation.installed_invocation_entry()?;
                     let mut command = Command::new(
                         self.generation
                             .member_path(&entry.native_executable, &mut verify)?,
                     );
                     command
-                        .arg("invoke")
+                        .arg("invoke-installed-v1")
                         .arg("--engine")
                         .arg(
                             self.generation
@@ -191,7 +315,19 @@ impl Selection {
                                 .member_path(&entry.node_executable, &mut verify)?,
                         )
                         .arg("--timeout-ms")
-                        .arg(entry.timeout_ms.to_string());
+                        .arg(entry.timeout_ms.min(ORIGINAL_TIMEOUT_MS).to_string());
+                    // Forward only the retained native clock and selected digest.
+                    // Ambient environment cannot renew or replace this carrier;
+                    // an unsupported or failed receiver is never retried.
+                    let deadline = self.forwarded_deadline();
+                    command.arg("--original-deadline").arg(
+                        serde_json::to_string(&serde_json::json!({
+                            "startedNs": deadline.started_ns.to_string(),
+                            "expiresNs": deadline.expires_ns.to_string(),
+                            "runtimeDigest": self.inspected_digest,
+                        }))
+                        .map_err(|e| e.to_string())?,
+                    );
                     command
                 };
                 command
@@ -203,28 +339,24 @@ impl Selection {
                     .arg(&self.inspected_digest)
                     .arg("--configuration")
                     .arg(configuration);
+                self.checkpoint()?;
                 Ok(command)
             }
         }
     }
 }
 
-fn configuration_failure(invocation: &Invocation, error: &str) -> u8 {
-    let message = format!("CAWS native installed entry: {error}");
-    let _ = writeln!(std::io::stderr(), "[{message}]");
-    if invocation.event == "pre_tool_use" {
-        let _ = writeln!(
-            std::io::stdout(),
-            "{}",
-            serde_json::json!({"decision":"block", "reason":message})
-        );
-        2
-    } else {
-        0
-    }
+fn configuration_failure(
+    invocation: &Invocation,
+    error: &str,
+    deadline: Option<&MonotonicDeadline>,
+) -> u8 {
+    compatibility::refuse_before_dispatch(invocation.failure_event(), error, deadline)
 }
 
 pub fn run() -> u8 {
+    // Capture before argument decoding, machine-home or generation lookup.
+    let original_deadline = MonotonicDeadline::capture(Duration::from_millis(ORIGINAL_TIMEOUT_MS));
     let arguments = std::env::args_os()
         .skip(1)
         .map(|value| value.into_string())
@@ -235,20 +367,61 @@ pub fn run() -> u8 {
     {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(std::io::stderr(), "[CAWS native installed entry] {error}");
-            return 2;
+            return compatibility::refuse_before_dispatch(
+                "invalid-invocation",
+                &error,
+                original_deadline.as_ref().ok(),
+            );
         }
     };
-    let result = (|| {
-        let home = std::env::var_os("CAWS_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".caws")))
-            .ok_or("Machine home is unavailable")?;
-        let selected = Selection::read(&home)?;
-        let mut command = selected.command(&invocation)?;
-        // exec retains the caller's PID, cwd and stdio; the selected native
-        // frontend captures the original environment before sanitizing Node.
-        Err::<(), String>(format!("Selected entry launch failed: {}", command.exec()))
-    })();
-    configuration_failure(&invocation, &result.unwrap_err())
+    let original_deadline = match original_deadline {
+        Ok(deadline) => Arc::new(deadline),
+        Err(error) => return configuration_failure(&invocation, &error.to_string(), None),
+    };
+    let home = match std::env::var_os("CAWS_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".caws")))
+    {
+        Some(home) => home,
+        None => {
+            return configuration_failure(
+                &invocation,
+                "Machine home is unavailable",
+                Some(&original_deadline),
+            );
+        }
+    };
+    let selected = match Selection::read_with_shared_deadline(&home, original_deadline) {
+        Ok(selected) => selected,
+        Err(failure) => {
+            return match failure.delivery_deadline {
+                Some(deadline) => {
+                    configuration_failure(&invocation, &failure.message, Some(&deadline))
+                }
+                // An expired/invalid selected clock cannot authorize delivery.
+                None => compatibility::failure_status(invocation.failure_event()),
+            };
+        }
+    };
+    let mut command = match selected.command(&invocation).and_then(|command| {
+        selected.checkpoint()?;
+        Ok(command)
+    }) {
+        Ok(command) => command,
+        Err(error) => {
+            return configuration_failure(&invocation, &error, Some(selected.delivery_deadline()));
+        }
+    };
+    if selected.generation.native_entry().is_some() && !invocation.describe {
+        // Native dispatch preserves PID, cwd and stdio. Its receiver consumes
+        // the exact original-clock carrier already bound into this command.
+        let error = format!("Selected entry launch failed: {}", command.exec());
+        configuration_failure(&invocation, &error, Some(selected.delivery_deadline()))
+    } else {
+        compatibility::run(
+            command,
+            selected.delivery_deadline(),
+            invocation.failure_event(),
+        )
+    }
 }

@@ -109,9 +109,6 @@ if (require.main === module)
   void runDescribeEntry().catch((error: unknown) => {
     const message = '[caws native describe] ' + String(error);
     process.stderr.write(message + '\n');
-    // Native description follows the configuration-fault policy and dispatches nothing.
-    if (process.argv.includes('pre_tool_use')) {
-      process.stdout.write(JSON.stringify({ decision: 'block', reason: message }) + '\n');
-      process.exitCode = 2;
-    }
+    // Description errors use stderr and exit 2; stdout contains selection results.
+    process.exitCode = 2;
   });
