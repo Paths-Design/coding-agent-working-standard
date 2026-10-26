@@ -630,7 +630,8 @@ import { isAdapterCoveredSurface } from './types';
 // v112: the stock reprieve consult uses a generated standalone typed reader.
 // v114: bounded mutation analysis and checked path identity share the guard boundary.
 // v115: registry consumers preserve canonical path bytes and diagnose unavailable readers.
-export const SHARED_PACK_VERSION = 115;
+// v116: protected-operation selection and a lane named worktrees retain their meaning.
+export const SHARED_PACK_VERSION = 116;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

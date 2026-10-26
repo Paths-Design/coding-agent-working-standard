@@ -34,10 +34,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ ! -f "$SCRIPT_DIR/lib/parse-input.sh" ]] || ! source "$SCRIPT_DIR/lib/parse-input.sh"; then
   worktree_authority_unavailable hook-input
 fi
-# shellcheck source=lib/caws-state.sh
-if [[ ! -f "$SCRIPT_DIR/lib/caws-state.sh" ]] || ! source "$SCRIPT_DIR/lib/caws-state.sh"; then
-  worktree_authority_unavailable canonical-root
-fi
 # shellcheck source=lib/agent-surface.sh
 # Provides CAWS_PROJECT_DIR and caws_source_lib — load-bearing (caws_source_lib
 # is called below). Fail CLOSED if absent: a guard that blocks dangerous git ops
@@ -70,6 +66,14 @@ if [[ -f "$SCRIPT_DIR/lib/heredoc.sh" && -f "$SCRIPT_DIR/lib/bash-mutation-targe
 else
   echo "[worktree-guard] command-recognition library unavailable; blocked" >&2
   exit 2
+fi
+# An empty protected-operation view needs no registry authority. This is checked
+# after lexical projection so executable nested Git commands remain visible.
+[[ -n "$COMMAND" ]] || exit 0
+
+# shellcheck source=lib/caws-state.sh
+if [[ ! -f "$SCRIPT_DIR/lib/caws-state.sh" ]] || ! source "$SCRIPT_DIR/lib/caws-state.sh"; then
+  worktree_authority_unavailable canonical-root
 fi
 
 # Path identity is assigned, never captured through newline-stripping stdout.

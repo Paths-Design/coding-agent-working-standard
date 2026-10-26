@@ -16,7 +16,7 @@ function git(cwd, ...args) {
   });
 }
 
-function fixture(basename = 'project', governed = true) {
+function fixture(basename = 'project', governed = true, lane = 'linked') {
   const base = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'caws-guard-identity-'));
   const project = path.join(base, basename);
   fs.mkdirSync(project);
@@ -41,10 +41,10 @@ function fixture(basename = 'project', governed = true) {
   fx = { base, project, hooks, alias, marker: path.join(base, 'submitted-payload-ran') };
   expect(fs.realpathSync(project)).toBe(project);
   if (governed) {
-    const linked = path.join(project, '.caws/worktrees/linked');
+    const linked = path.join(project, '.caws/worktrees', lane);
     git(project, 'worktree', 'add', '-q', '-b', 'worker', linked);
     const entry = {
-      name: 'linked',
+      name: lane,
       path: linked,
       branch: 'worker',
       baseBranch: 'main',
@@ -167,6 +167,49 @@ test.each(['map', 'array'])('legacy nested %s registry remains readable', (shape
   );
 });
 
+test('a flat lane named worktrees is an entry rather than a legacy envelope', () => {
+  fixture('project\n', true, 'worktrees');
+  const entry = { ...fx.entry, owner: { session_id: 'foreign' } };
+  delete entry.name;
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/worktrees.json'),
+    JSON.stringify({ worktrees: entry })
+  );
+  check(
+    invoke('worktree-guard.sh', fx.project, 'git switch target'),
+    2,
+    "(e.g. 'worktrees' in .caws/worktrees.json)"
+  );
+  check(
+    invoke('worktree-guard.sh', fx.project),
+    2,
+    'BLOCKED: git clean (untracked-file deletion) is not allowed while worktrees are active.'
+  );
+  check(
+    invoke('stop-worktree-check.sh', fx.project),
+    0,
+    'REMINDER: 1 active worktree(s) remain: worktrees.'
+  );
+  const oracle = spawnSync(
+    process.execPath,
+    [path.join(fx.hooks, 'lib/worktree-claim-oracle.cjs')],
+    {
+      encoding: 'utf8',
+      timeout: 15000,
+      env: {
+        ...process.env,
+        CAWS_ORACLE_PROJECT_DIR: fx.project,
+        CAWS_ORACLE_REL_PATH: path.join(fx.linked, 'payload.txt'),
+        CAWS_ORACLE_SESSION_ID: 'identity-fixture',
+      },
+    }
+  );
+  expect(oracle.error).toBeUndefined();
+  expect(oracle.signal).toBeNull();
+  expect(oracle.status).toBe(0);
+  expect(oracle.stdout.trim()).toBe('block_foreign_worktree:worktrees:foreign');
+});
+
 test.each(['{broken', '[]', 'null'])(
   'invalid canonical registry %p cannot masquerade as inactivity',
   (bytes) => {
@@ -207,6 +250,28 @@ test('malformed parallel registry cannot masquerade as inactive authority', () =
     2,
     '[worktree-guard] authority unavailable: parallel-registry'
   );
+});
+
+test('unavailable authority applies only to projected protected operations', () => {
+  fixture();
+  fs.writeFileSync(path.join(fx.project, '.caws/worktrees.json'), '{broken');
+  for (const command of ["printf '%s' ok", "node -e 'console.log({value: 1})'"]) {
+    const harmless = invoke('worktree-guard.sh', fx.project, payload(command));
+    check(harmless, 0);
+    expect(harmless.stderr).toBe('');
+  }
+  for (const command of [
+    'git switch target',
+    'git clean -fd',
+    'printf \'%s\' "$(git switch target)"',
+  ]) {
+    check(
+      invoke('worktree-guard.sh', fx.project, payload(command)),
+      2,
+      '[worktree-guard] authority unavailable: worktrees-registry'
+    );
+  }
+  expect(git(fx.project, 'branch', '--show-current')).toBe('main\n');
 });
 
 test.each([

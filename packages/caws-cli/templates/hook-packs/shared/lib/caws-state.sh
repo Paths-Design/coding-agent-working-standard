@@ -560,8 +560,16 @@ caws_compose_risk() {
 # .name from the outer key where the entry lacks one.
 export CAWS_NODE_ENTRIES_OF='function entriesOf(r) {
   if (!r || typeof r !== "object") return [];
+  function isEntry(v) {
+    return v && typeof v === "object" && !Array.isArray(v) && (
+      typeof v.status === "string" || typeof v.spec_id === "string" ||
+      typeof v.specId === "string" || typeof v.path === "string" ||
+      typeof v.branch === "string" || typeof v.name === "string"
+    );
+  }
   // v10 envelope: { version, worktrees: { <name>: {...} } }
-  if (r.worktrees && typeof r.worktrees === "object") {
+  // A v11 lane can itself be named worktrees; entry markers take precedence.
+  if (r.worktrees && typeof r.worktrees === "object" && !isEntry(r.worktrees)) {
     var src = r.worktrees;
     var out0 = [];
     for (var k in src) if (Object.prototype.hasOwnProperty.call(src, k)) {
@@ -588,14 +596,7 @@ export CAWS_NODE_ENTRIES_OF='function entriesOf(r) {
   var out = [];
   for (var k2 in r) if (Object.prototype.hasOwnProperty.call(r, k2)) {
     var v2 = r[k2];
-    if (v2 && typeof v2 === "object" && !Array.isArray(v2) && (
-      typeof v2.status === "string" ||
-      typeof v2.spec_id === "string" ||
-      typeof v2.specId === "string" ||
-      typeof v2.path === "string" ||
-      typeof v2.branch === "string" ||
-      typeof v2.name === "string"
-    )) {
+    if (isEntry(v2)) {
       if (!v2.name) v2 = Object.assign({}, v2, { name: k2 });
       out.push(v2);
     }
@@ -609,22 +610,22 @@ export CAWS_NODE_ENTRIES_OF='function entriesOf(r) {
 # worktree) rather than iterating all entries.
 export CAWS_NODE_ENTRY_BY_NAME='function entryByName(r, name) {
   if (!r || typeof r !== "object" || !name) return null;
-  if (r.worktrees && typeof r.worktrees === "object") {
+  function isEntry(v) {
+    return v && typeof v === "object" && !Array.isArray(v) && (
+      typeof v.status === "string" || typeof v.spec_id === "string" ||
+      typeof v.specId === "string" || typeof v.path === "string" ||
+      typeof v.branch === "string" || typeof v.name === "string"
+    );
+  }
+  if (r.worktrees && typeof r.worktrees === "object" && !isEntry(r.worktrees)) {
     return r.worktrees[name] || null;
   }
   var v = r[name];
-  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
   // Per CAWS-1117-ENTRY-BY-NAME-V11-SHAPE-01: previous discriminator
   // rejected v11-CLI-created entries because caws-cli 11.1.7
   // worktree-create no longer emits status. Admit any object that
   // carries at least one v11/v10 marker field.
-  if (typeof v.status === "string") return v;
-  if (typeof v.spec_id === "string") return v;
-  if (typeof v.specId === "string") return v;
-  if (typeof v.path === "string") return v;
-  if (typeof v.branch === "string") return v;
-  if (typeof v.name === "string") return v;
-  return null;
+  return isEntry(v) ? v : null;
 }'
 
 # entrySpecId(entry) — extract the bound spec id from a registry entry,
