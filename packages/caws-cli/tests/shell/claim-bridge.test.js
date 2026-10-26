@@ -34,6 +34,7 @@ const { runWorktreePruneCommand } = require('../../dist/shell/commands/worktree'
 const { runStatusCommand } = require('../../dist/shell/commands/status');
 const { initProject } = require('../../dist/store/init-store');
 const { loadEvents } = require('../../dist/store/events-store');
+const { acquireLifecycleLock, releaseLifecycleLock } = require('../../dist/store/lifecycle-lock');
 const { makeTempRepo, cleanupAll } = require('../helpers/git-repo-factory');
 
 afterAll(() => {
@@ -143,6 +144,40 @@ const SESS_A = sessEnv('sess-a');
 const SESS_B = sessEnv('sess-b');
 
 describe('AUTH-BINDING-BRIDGE-001 command surface', () => {
+  test.each(['acquire', 'refresh', 'takeover', 'named release', 'bare release'])(
+    'bridge %s refuses under lifecycle contention and succeeds after release',
+    (operation) => {
+      const { root, cawsDir } = mkRepo();
+      writeSpec(cawsDir, 'BR-990', 'active', ['src/**']);
+      writeSpec(cawsDir, 'BR-991', 'active', ['docs/**']);
+      expect(claim(root, { spec: 'BR-990', env: SESS_A }).code).toBe(0);
+      const options = {
+        acquire: { spec: 'BR-991', env: SESS_A },
+        refresh: { spec: 'BR-990', env: SESS_A },
+        takeover: { spec: 'BR-990', env: SESS_B, takeover: true },
+        'named release': { spec: 'BR-990', env: SESS_A, release: true },
+        'bare release': { env: SESS_A, release: true },
+      }[operation];
+      const bridgePath = path.join(cawsDir, 'claims', 'bridge.json');
+      const eventsPath = path.join(cawsDir, 'events.jsonl');
+      const beforeBridge = fs.readFileSync(bridgePath);
+      const beforeEvents = fs.readFileSync(eventsPath);
+      const held = acquireLifecycleLock(cawsDir);
+      expect(held.ok).toBe(true);
+      try {
+        const blocked = claim(root, options);
+        expect(blocked.code).toBe(1);
+        expect(blocked.err.join('\n')).toContain('store.lifecycle.lock_contention');
+        expect(fs.readFileSync(bridgePath)).toEqual(beforeBridge);
+        expect(fs.readFileSync(eventsPath)).toEqual(beforeEvents);
+      } finally {
+        releaseLifecycleLock(held.value);
+      }
+      expect(claim(root, options).code).toBe(0);
+      expect(fs.existsSync(path.join(cawsDir, 'state.lock'))).toBe(false);
+    }
+  );
+
   test('A1: acquire records binding + event; scope admits in-scope via bridged authority', () => {
     const { root, cawsDir } = mkRepo();
     writeSpec(cawsDir, 'BR-901', 'active', ['src/**']);

@@ -13,9 +13,11 @@
 //   { "BR-001": { session_id, platform?, acquired_at, last_seen?,
 //                 context_cwd?, prior_owners?: [...] } }
 //
-// Every mutation is a lifecycle transaction: bridge.json write + the paired
-// audit event append in ONE runLifecycleTransaction (no partial state is ever
-// observable). Events: claim_bridged (acquire), bridge_claim_taken_over
+// Authority mutations hold the lifecycle lock before reading bridge.json,
+// through the paired audit append and any transaction recovery. Callers must
+// not acquire the lock themselves: these entry points own it. Transaction
+// failures remain explicit, including unrecovered partial state.
+// Events: claim_bridged (acquire), bridge_claim_taken_over
 // (takeover, prior_owners audit both on the entry and in the event),
 // claim_released (release). Retire is READ-SIDE (a non-active spec's bridge
 // confers nothing) + prune (disk hygiene for dead entries; NO event — the
@@ -31,6 +33,7 @@ import * as path from 'node:path';
 import { type Actor, type EventBody, type Result, err, ok } from '../kernel';
 
 import { writeFileAtomic } from './atomic-write';
+import { withLifecycleLock } from './lifecycle-lock';
 import { runLifecycleTransaction } from './lifecycle-transaction';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
@@ -153,6 +156,13 @@ export function acquireBridge(
   cawsDir: string,
   input: AcquireBridgeInput
 ): Result<{ readonly specId: string; readonly refreshed: boolean }> {
+  return withLifecycleLock(cawsDir, () => acquireBridgeUnderLock(cawsDir, input));
+}
+
+function acquireBridgeUnderLock(
+  cawsDir: string,
+  input: AcquireBridgeInput
+): Result<{ readonly specId: string; readonly refreshed: boolean }> {
   const loaded = loadBridges(cawsDir);
   const dirOk = ensureClaimsDir(cawsDir);
   if (!dirOk.ok) return err(dirOk.errors);
@@ -227,6 +237,13 @@ export interface TakeoverBridgeInput {
  * entry for a transition that did not happen).
  */
 export function takeoverBridge(
+  cawsDir: string,
+  input: TakeoverBridgeInput
+): Result<{ readonly priorOwnerSessionId: string }> {
+  return withLifecycleLock(cawsDir, () => takeoverBridgeUnderLock(cawsDir, input));
+}
+
+function takeoverBridgeUnderLock(
   cawsDir: string,
   input: TakeoverBridgeInput
 ): Result<{ readonly priorOwnerSessionId: string }> {
@@ -325,6 +342,13 @@ export interface ReleaseBridgeOutcome {
  * event per removed binding, all in one lifecycle transaction.
  */
 export function releaseBridge(
+  cawsDir: string,
+  input: ReleaseBridgeInput
+): Result<ReleaseBridgeOutcome> {
+  return withLifecycleLock(cawsDir, () => releaseBridgeUnderLock(cawsDir, input));
+}
+
+function releaseBridgeUnderLock(
   cawsDir: string,
   input: ReleaseBridgeInput
 ): Result<ReleaseBridgeOutcome> {
@@ -436,13 +460,15 @@ export interface BridgePrunePlan {
 /**
  * Plan (and optionally apply) cleanup of RETIRED bridge bindings — entries
  * whose spec is missing, closed, or archived. Read-side authority already
- ignores these (a non-active spec's bridge confers nothing); prune is disk
+ * ignores these (a non-active spec's bridge confers nothing); prune is disk
  * hygiene only and appends NO event (the retirement's audit trail is the
  * spec_closed/spec_archived event). Dry-run by default; --apply is the
  * operator's explicit call. Mutations use the plain atomic writer — no
  * lifecycle transaction is needed for an eventless hygiene write, but the
- * lifecycle lock is still taken so a concurrent acquire/release never
- * interleaves with a prune.
+ * lifecycle lock covers the registry read and write on apply so concurrent
+ * bridge mutations cannot overwrite each other. Preview takes no lock and
+ * remains read-only. The caller supplies specStates; locking here does not
+ * make that earlier spec snapshot atomic with the bridge mutation.
  */
 export function pruneBridgeGhosts(
   cawsDir: string,
@@ -451,6 +477,15 @@ export function pruneBridgeGhosts(
     readonly specStates: Readonly<Record<string, string | undefined>>;
     readonly apply: boolean;
   }
+): Result<BridgePrunePlan> {
+  return input.apply
+    ? withLifecycleLock(cawsDir, () => planOrApplyBridgePrune(cawsDir, input))
+    : planOrApplyBridgePrune(cawsDir, input);
+}
+
+function planOrApplyBridgePrune(
+  cawsDir: string,
+  input: Parameters<typeof pruneBridgeGhosts>[1]
 ): Result<BridgePrunePlan> {
   const loaded = loadBridges(cawsDir);
   if (!loaded.ok) return err(loaded.errors);
