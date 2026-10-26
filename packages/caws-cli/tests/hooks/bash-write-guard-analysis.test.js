@@ -898,6 +898,256 @@ function git(command, cwd = fx.project) {
     env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
   }).trim();
 }
+// Guard inputs are never evaluated as shell source. The fixed-argv deletion
+// control below touches only its temporary fixture link.
+function deletionEntryFixture() {
+  const { own } = metadataWorktrees();
+  const claimed = path.join(fx.project, 'src/claimed.txt');
+  const owned = path.join(own, 'ordinary.txt');
+  fs.writeFileSync(claimed, 'canonical referent survives preflight\n');
+  fs.writeFileSync(owned, 'owned entry survives preflight\n');
+  const link = path.join(own, 'target-link');
+  fs.symlinkSync(claimed, link);
+  return { own, claimed, owned, link };
+}
+function deletionDecision(command, status, message) {
+  const result = guard(command);
+  expect(result.error).toBeUndefined();
+  expect({ status: result.status, stdout: result.stdout, stderr: result.stderr }).toEqual(
+    expect.objectContaining({ status })
+  );
+  if (status === 0) expect(result.stderr).toBe('');
+  if (message !== undefined) expect(result.stderr).toContain(message);
+}
+test.each(['rm', 'rm -f', 'rm -r', 'rm -rf', '/bin/rm --', 'command rm --'])(
+  'final deletion entry %s admits an owned link without claiming its canonical referent',
+  (verb) => {
+    const { claimed, link } = deletionEntryFixture();
+    deletionDecision(verb + ' ' + quote(link), 0);
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(claimed, 'utf8')).toBe('canonical referent survives preflight\n');
+  }
+);
+test.each(['touch', 'truncate -s 0', 'printf changed >'])(
+  'final deletion entry repair preserves referent ownership for %s',
+  (verb) => {
+    const { claimed, link } = deletionEntryFixture();
+    deletionDecision(verb + ' ' + quote(link), 2, 'src/claimed.txt');
+    expect(fs.readFileSync(claimed, 'utf8')).toBe('canonical referent survives preflight\n');
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+  }
+);
+test('admitted final deletion removes only the controlled fixture link', () => {
+  const { claimed, link } = deletionEntryFixture();
+  const before = fs.statSync(claimed);
+  deletionDecision('rm -- ' + quote(link), 0);
+  const removed = spawnSync('/bin/rm', ['--', link], { encoding: 'utf8' });
+  expect(removed.error).toBeUndefined();
+  expect(removed.status).toBe(0);
+  expect(removed.stderr).toBe('');
+  expect(() => fs.lstatSync(link)).toThrow(expect.objectContaining({ code: 'ENOENT' }));
+  const after = fs.statSync(claimed);
+  expect([after.dev, after.ino, after.size]).toEqual([before.dev, before.ino, before.size]);
+  expect(fs.readFileSync(claimed, 'utf8')).toBe('canonical referent survives preflight\n');
+});
+test.each(['rm LINK; touch LINK', 'touch LINK; rm LINK'])(
+  'final deletion entry roles remain independent for %s',
+  (source) => {
+    const { link } = deletionEntryFixture();
+    deletionDecision(source.replaceAll('LINK', quote(link)), 2, 'src/claimed.txt');
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+  }
+);
+test('final deletion entry ownership follows the entry and every physical ancestor', () => {
+  const { own, owned, link } = deletionEntryFixture();
+  const foreignLink = path.join(fx.foreign, 'points-to-owned');
+  fs.symlinkSync(owned, foreignLink);
+  deletionDecision('rm ' + quote(foreignLink), 2, "worktree 'foreign'");
+  const canonicalLink = path.join(fx.project, 'src/claimed.txt');
+  fs.unlinkSync(canonicalLink);
+  fs.symlinkSync(owned, canonicalLink);
+  deletionDecision('rm ' + quote(canonicalLink), 2, 'src/claimed.txt');
+  const siblingLink = path.join(fx.sibling, 'points-to-owned');
+  fs.symlinkSync(own, siblingLink);
+  deletionDecision('rm ' + quote(siblingLink), 2, 'DIFFERENT repository');
+  const foreignAlias = path.join(own, 'foreign-alias');
+  fs.symlinkSync(fx.foreign, foreignAlias);
+  deletionDecision(
+    'rm ' + quote(path.join(foreignAlias, 'points-to-owned')),
+    2,
+    "worktree 'foreign'"
+  );
+  const ownedAlias = path.join(fx.root, 'owned-alias');
+  fs.symlinkSync(own, ownedAlias);
+  deletionDecision('rm ' + quote(path.join(ownedAlias, path.basename(link))), 0);
+  expect(fs.lstatSync(foreignLink).isSymbolicLink()).toBe(true);
+  expect(fs.lstatSync(canonicalLink).isSymbolicLink()).toBe(true);
+  expect(fs.lstatSync(siblingLink).isSymbolicLink()).toBe(true);
+  expect(fs.readFileSync(owned, 'utf8')).toBe('owned entry survives preflight\n');
+});
+test('final deletion entry supports broken links and preserves ordinary deletion decisions', () => {
+  const { own, owned } = deletionEntryFixture();
+  const broken = path.join(own, 'broken');
+  fs.symlinkSync(path.join(fx.project, 'src/claimed.txt/missing'), broken);
+  deletionDecision('rm ' + quote(broken), 0);
+  deletionDecision('rm ' + quote(owned), 0);
+  deletionDecision('rm -r ' + quote(own), 0);
+  deletionDecision('rm -r ' + quote(fx.foreign), 2, "worktree 'foreign'");
+  expect(fs.lstatSync(broken).isSymbolicLink()).toBe(true);
+  expect(fs.readFileSync(owned, 'utf8')).toBe('owned entry survives preflight\n');
+});
+test.each(['.caws/worktrees', '.caws', '.'])(
+  'directory removal of %s cannot cover a foreign worktree',
+  (relative) => {
+    const { owned } = deletionEntryFixture();
+    deletionDecision('rm -r ' + quote(path.join(fx.project, relative)), 2, "worktree 'foreign'");
+    expect(fs.readFileSync(owned, 'utf8')).toBe('owned entry survives preflight\n');
+    expect(fs.lstatSync(fx.foreign).isDirectory()).toBe(true);
+  }
+);
+test('canonical directory removal preserves a narrower literal scope claim', () => {
+  const claimed = path.join(fx.project, 'src/claimed.txt');
+  fs.writeFileSync(claimed, 'claimed descendant survives preflight\n');
+  deletionDecision('rm -r ' + quote(path.dirname(claimed)), 2, 'src/claimed.txt');
+  expect(fs.readFileSync(claimed, 'utf8')).toBe('claimed descendant survives preflight\n');
+});
+test('canonical directory removal holds unproved glob populations', () => {
+  const directory = path.join(fx.project, 'cache');
+  fs.mkdirSync(directory);
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/specs/CLAIM.yaml'),
+    'id: CLAIM\nlifecycle_state: active\nscope:\n  in:\n    - cache/*/protected.txt\n'
+  );
+  deletionDecision('rm -rf ' + quote(directory), 2, 'unresolved remove');
+  expect(fs.lstatSync(directory).isDirectory()).toBe(true);
+});
+test('canonical directory removal admits a tree disjoint from literal claims', () => {
+  const directory = path.join(fx.project, 'cache');
+  fs.mkdirSync(directory);
+  deletionDecision('rm -rf ' + quote(directory), 0);
+  expect(fs.lstatSync(directory).isDirectory()).toBe(true);
+});
+test.each(['.caws', '.caws/worktrees'])(
+  'directory removal cannot allowlist uncertain ownership inside %s',
+  (relative) => {
+    const { owned } = deletionEntryFixture();
+    const registryPath = path.join(fx.project, '.caws/worktrees.json');
+    const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    registry.foreign.owner = null;
+    fs.writeFileSync(registryPath, JSON.stringify(registry));
+    deletionDecision(
+      'rm -r ' + quote(path.join(fx.project, relative)),
+      2,
+      'worktree-container-no-owner'
+    );
+    expect(fs.readFileSync(owned, 'utf8')).toBe('owned entry survives preflight\n');
+  }
+);
+test.each(['/', '/.', '/..'])(
+  'final deletion entry does not admit an ambiguous final component %s',
+  (suffix) => {
+    const { own } = deletionEntryFixture();
+    const nested = path.join(fx.sibling, 'nested');
+    fs.mkdirSync(nested);
+    const alias = path.join(own, 'directory-link');
+    fs.symlinkSync(nested, alias);
+    deletionDecision('rm -r ' + quote(alias + suffix), 2);
+    expect(fs.lstatSync(alias).isSymbolicLink()).toBe(true);
+  }
+);
+test('final deletion entry does not broaden an unmodeled rm option', () => {
+  const { link } = deletionEntryFixture();
+  deletionDecision('rm --unmodeled-option ' + quote(link), 2);
+  expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+});
+test.each(['-v', '-fv'])(
+  'unmodeled deletion option %s preserves entry ownership before refusing',
+  (option) => {
+    const { own, owned, link, claimed } = deletionEntryFixture();
+    const foreignLink = path.join(fx.foreign, 'points-to-owned');
+    fs.symlinkSync(owned, foreignLink);
+    deletionDecision('rm ' + option + ' ' + quote(foreignLink), 2, "worktree 'foreign'");
+    fs.unlinkSync(claimed);
+    fs.symlinkSync(owned, claimed);
+    deletionDecision('rm ' + option + ' ' + quote(claimed), 2, 'src/claimed.txt');
+    deletionDecision('rm ' + option + ' ' + quote(link), 2, 'unresolved remove');
+    expect(fs.lstatSync(foreignLink).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(claimed).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(owned, 'utf8')).toBe('owned entry survives preflight\n');
+    expect(fs.lstatSync(own).isDirectory()).toBe(true);
+  }
+);
+test.each([
+  ['-', 'rm -'],
+  ['-f', 'rm ordinary -f'],
+  ['--', 'rm ordinary --'],
+])('literal deletion operand %s cannot disappear as an option', (name, command) => {
+  const { own } = metadataWorktrees();
+  const target = path.join(fx.project, name);
+  fs.writeFileSync(target, 'literal operand survives preflight\n');
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/specs/CLAIM.yaml'),
+    'id: CLAIM\nlifecycle_state: active\nscope:\n  in:\n    - ' + JSON.stringify(name) + '\n'
+  );
+  deletionDecision(command, 2, 'foreign:' + name);
+  expect(fs.readFileSync(target, 'utf8')).toBe('literal operand survives preflight\n');
+  const ownedTarget = path.join(own, name);
+  fs.writeFileSync(ownedTarget, 'owned literal operand survives preflight\n');
+  fs.writeFileSync(path.join(own, 'ordinary'), 'owned first operand\n');
+  const ownedDecision = guard(command, { HOOK_CWD: own });
+  expect({
+    status: ownedDecision.status,
+    stdout: ownedDecision.stdout,
+    stderr: ownedDecision.stderr,
+  }).toEqual({ status: 0, stdout: '', stderr: '' });
+  expect(fs.readFileSync(ownedTarget, 'utf8')).toBe('owned literal operand survives preflight\n');
+});
+test.each(['/', '/.', '/..'])(
+  'ambiguous foreign deletion entry %s cannot borrow an owned referent',
+  (suffix) => {
+    const { own, owned } = deletionEntryFixture();
+    const nested = path.join(own, 'nested');
+    fs.mkdirSync(nested);
+    const foreignLink = path.join(fx.foreign, 'points-to-owned-directory');
+    fs.symlinkSync(nested, foreignLink);
+    deletionDecision('rm -r ' + quote(foreignLink + suffix), 2, 'unresolved remove');
+    expect(fs.lstatSync(foreignLink).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(owned, 'utf8')).toBe('owned entry survives preflight\n');
+  }
+);
+test('final deletion entry refuses a partially emitted failed effect stream', () => {
+  const { link } = deletionEntryFixture();
+  fs.appendFileSync(
+    path.join(fx.hooks, 'lib/bash-mutation-targets.sh'),
+    '\ncaws_bash_mutation_effects() { printf "unlink-entry\\t%s\\n" ' +
+      quote(link) +
+      '; return 2; }\n'
+  );
+  deletionDecision('rm ' + quote(link), 2, 'mutation effect stream');
+  expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+});
+test('final deletion entry refuses a missing effect channel in a stale library', () => {
+  const { link } = deletionEntryFixture();
+  fs.appendFileSync(
+    path.join(fx.hooks, 'lib/bash-mutation-targets.sh'),
+    '\nunset -f caws_bash_mutation_effects\n'
+  );
+  deletionDecision('rm ' + quote(link), 2, 'caws_bash_mutation_effects');
+  expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+});
+test.each(['unknown-role\t', '\t', 'referent-without-delimiter'])(
+  'final deletion entry refuses malformed effect transport %s',
+  (prefix) => {
+    const { link } = deletionEntryFixture();
+    fs.appendFileSync(
+      path.join(fx.hooks, 'lib/bash-mutation-targets.sh'),
+      '\ncaws_bash_mutation_effects() { printf "%s\\n" ' + quote(prefix + link) + '; }\n'
+    );
+    deletionDecision('rm ' + quote(link), 2, 'mutation effect');
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+  }
+);
 function metadataWorktrees() {
   git([
     '-c',
