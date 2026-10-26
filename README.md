@@ -59,6 +59,26 @@ Run `caws <group> --help` for live options, or see
 [`docs/command-reference.md`](docs/command-reference.md) for the exhaustive leaf
 and flag surface.
 
+### Bounded shell analysis
+
+The [command analysis guide](docs/guides/command-analysis.md) describes the
+bounded analyzer, mandatory write-guard consumer and private package checks. The
+two diagnostic commands have different exit contracts:
+
+| Command                    | Exit contract                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `caws hooks analyze`       | 0: bounded allow; 1: deny; 2: unresolved.                                                                    |
+| `caws hooks mutation-view` | 0: completed projection, including projections with issues; 2: a caught decoding or outer-command exception. |
+
+A mutation projection has no permission verdict. Consumers inspect its schema,
+issues and effect coverage; parser or backend failures can appear as issues in
+an exit-zero projection. The guide's owned execution boundary is proposed.
+Native adoption requires complete final-launch context, custody through later
+rewrites, generation-bound Node and analyzer CLI identities, an isolated canary
+and rollback. A validated host execution directory establishes only that
+coordinate. The known reduced Codex command projection remains held; that
+protective refusal does not qualify native deployment.
+
 ## Quick start
 
 ### Prerequisites

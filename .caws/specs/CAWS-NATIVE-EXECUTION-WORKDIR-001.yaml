@@ -1,9 +1,11 @@
 id: CAWS-NATIVE-EXECUTION-WORKDIR-001
 title: 'Preserve host-resolved Bash command directory through CAWS policy selection'
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'All A1-A4 are supported and dual-read back: native installed fixture plus current consumer controls and exact native hostile-profile test. Source landed/published in9ff; original scoped candidate43f2 was actually installed/exercised, then normal public rollback408 completed after separate GUI launchd preflight TCC failure. Closure covers authored command-directory transport and its authority boundary, not GUI engine activation, child actor projection repair, full typed native image or parent runtime cutover. Parent and Root receiver/other owners retain all remaining obligations. Actual source gates13682-13686, independent peer feedback grounded before landing, normal push10 checks, fresh doctor0E5W7I retained.'
 created_at: '2026-10-25T08:16:54.609Z'
-updated_at: '2026-10-25T13:13:11.939Z'
+updated_at: '2026-10-26T00:20:56.741Z'
 created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
 blast_radius:
   modules:
@@ -101,4 +103,9 @@ evidence:
     status: pass
     evidence_ref: "Root inspected five fresh named maintained Python diagnostics cases at14aa4558 product9ff: invalid explicit null/nonstring/empty/relative/NUL/missing/nondirectory context refuses pre+post before dispatch or journal; each alias must agree; scratch/foreign contexts cannot erase governed session authority. Raw workdir-acceptance-01/python-focused.log exit0/5run6.626s, identity/hashes retained; synthetic payload/isolated install limit explicit. Full normal-push10 current product guard suitePASS and retained governance-coordinates/root-jest named owned-relative allow, foreign/absoluteforeign/canonicalclaimed refuse, unclaimedcanonical allow with actual exit assertions. Native invocation_project/protocol/context_git source unchanged4ce437..9ff, retained native-execution/protocol named host/alias/no-borrow controls inspected through source mapping. A3 authentic installed positive and canonical negative independently inspected, current live machine rolled back408 after GUI controller TCC preflight failure; no full native image/GUI cutover claim. --verify only commit reachability."
     recorded_at: "2026-10-26T00:10:57.985Z"
+    commit_sha: "9ff69b39b8a6b14072370e0f61139d2f60726b72"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Root actual maintained Cargo --locked --lib exact context_git::tests::frame_fields_cannot_upgrade_an_ordinary_profile_or_change_fixed_order executed1pass0ignored exit0,15.71s compile, raw workdir-acceptance-01/native-frame-profile.log. Current canonicalHEADd6fceb native source equals9ff by empty gitdiff. Source assertions enforce ordinary profile cannot upgrade from frame flags, fixed command order/token and settled cleanup. This closes the previously unselected hostile-frame control. Retained native-execution-01 named fixed_profiles_refuse_old_third_and_execution_fifth_without_renewing_deadline and native-protocol-02 trusted-constructor selector controls exercised; context_git/protocol/invocation_project source unchanged4ce437..9ff. Current normal-push10 context-git-client suitePASS plus inspected correlated four-query/fifth and ordinary poisoning/cancellation assertions, fresh5case Python governed/scratch/foreign refusal prove authority cannot disappear/cross repositories. Fixed-limit expired-clock test alone is not successful-child proof; client successful-pair controls supply that distinct behavior. No alias/payload flag authority, count override or renewed deadline. Actual source gates13682-13686 and full normalpush10 retained; no new code changed. --verify only commit reachability; parentfullnativeparity remains open."
+    recorded_at: "2026-10-26T00:20:23.517Z"
     commit_sha: "9ff69b39b8a6b14072370e0f61139d2f60726b72"

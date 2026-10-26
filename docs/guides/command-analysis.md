@@ -4,13 +4,21 @@ authority: reference
 status: active
 title: Bounded command analysis
 owner: CAWS maintainers
-updated: 2026-10-19
+updated: 2026-10-21
 audience: consumer
 ---
 
 # Bounded command analysis
 
 ## Active write-guard integration
+
+The diagnostic commands have different exit contracts. `caws hooks analyze`
+returns 0 for bounded allow, 1 for deny and 2 for unresolved.
+`caws hooks mutation-view` returns 0 when projection completes, including a
+projection containing issues, and 2 for a caught decoding or outer-command
+exception. Parser/backend analysis failures can become issues in a normally
+returned projection. A consumer must inspect schema, issues and effect coverage;
+exit zero is not a permission verdict.
 
 `bash-write-guard.sh` requires
 `caws hooks mutation-view --json --cwd <execution-cwd> --project <canonical-root>`,
@@ -50,6 +58,10 @@ Ordinary metadata such as descriptions and timeouts has no such restriction. The
 literal `Bash` compatibility profile retains its Bash assumption when no shell
 is supplied, except for the known incompatible Codex producer. That assumption
 does not establish a host's normalization or default executor settings.
+
+The startup flag describes the supported Bash mode. It does not attest the
+child's complete environment, interpreter startup hooks or executable identity;
+the source profiles below retain their separate controlled-host assumptions.
 
 The
 [Codex 0.163.0 producer](https://github.com/openai/codex/blob/83086188ae0614bd882818ff1aa23f3194962012/codex-rs/core/src/tools/handlers/unified_exec/exec_command.rs)
@@ -137,8 +149,10 @@ programs and file-based interpreter entry points remain unresolved. Reading a
 script before execution would not bind those bytes to the eventual launch.
 
 The profile assumes ordinary Node builtins and controlled startup; it is a
-source-analysis contract, not runtime confinement. Source-selected preload or
-interpreter environments cannot qualify it. Weak path-literal co-occurrence
+source-analysis contract, not runtime confinement. Preloads selected by the
+submitted source and assignments to tracked startup bindings remain unresolved.
+Ordinary application bindings, such as `NODE_ENV` or `NODE_OPTIONS_DATA`, do not
+by themselves invalidate this profile. Weak path-literal co-occurrence
 observations remain separate legacy diagnostics and confer no write permission
 or mutation finding in the mandatory v2 consumer. Arbitrary external
 applications retain the explicitly limited recognizer boundary.
@@ -336,11 +350,14 @@ Native `exec_command`/`shell_command` inputs require an explicit supported
 shell; native Bash also requires `login:false`. Native `workdir` is the
 execution cwd, resolved against the caller's base cwd; conflicting command
 fields are unresolved. The normalized name `Bash` alone does not establish a
-native command's dialect. `CAWS_BIN` and the pin environment are trusted
-launcher configuration; validating a response schema does not authenticate a
-malicious replacement CLI. Known inherited POSIX/keyword settings are refused.
-Their assignment rules can change the executable or Git environment selected by
-later source. The
+native command's dialect. The mandatory bridge selects `${CAWS_BIN:-caws}`; its
+inherited executable and `PATH` are host assumptions. A response schema does not
+authenticate the analyzer. Native adoption must bind both the Node executable
+and analyzer CLI bytes to the selected generation and retain that identity
+through the handler, bridge and child launch. Pointing `CAWS_BIN` at a CLI
+script alone leaves its interpreter selection unbound. Known inherited
+POSIX/keyword settings are refused. Their assignment rules can change the
+executable or Git environment selected by later source. The
 [Bash mode contract](https://www.gnu.org/s/bash/manual/html_node/Bash-POSIX-Mode.html)
 and
 [environment rules](https://www.gnu.org/software/bash/manual/html_node/Environment.html)
@@ -355,13 +372,14 @@ data. See the
 
 The assumptions have different evidence:
 
-| Dependency                                                                                      | Status and decisive check                                                                                                                                                                                                        |
-| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Submitted expansions remain inert during analysis.                                              | Established for the exercised corpus by compiled-consumer, installed-handler and packaged sentinel checks; unsupported syntax stays unresolved.                                                                                  |
-| Git discovery matches the pin's reciprocal metadata.                                            | Established for real linked-worktree, unmapped, forged, nested-foreign and source-visible mapping-change fixtures; concurrent replacement remains outside the host contract.                                                     |
-| Argument roles distinguish options from data.                                                   | Established only for the declared closed profiles and paired fixtures. Unknown options are unresolved; `uniq`'s second operand is an output, and ripgrep decompression is outside the reader profile.                            |
-| Bash startup state, executable identity and repository configuration satisfy the host contract. | Assumed, not established by source analysis. Native adoption must verify or enforce these properties.                                                                                                                            |
-| The actual executor receives the checked command and cwd.                                       | The matching Codex release source omits actual shell, startup mode and per-call cwd from the hook projection. Complete execution binding is not established by this adapter. Later transformations also require reauthorization. |
+| Dependency                                                                                      | Status and decisive check                                                                                                                                                                                                            |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Submitted expansions remain inert during analysis.                                              | Established for the exercised corpus by compiled-consumer, installed-handler and packaged sentinel checks; unsupported syntax stays unresolved.                                                                                      |
+| Git discovery matches the pin's reciprocal metadata.                                            | Established for real linked-worktree, unmapped, forged, nested-foreign and source-visible mapping-change fixtures; concurrent replacement remains outside the host contract.                                                         |
+| Argument roles distinguish options from data.                                                   | Established only for the declared closed profiles and paired fixtures. Unknown options are unresolved; `uniq`'s second operand is an output, and ripgrep decompression is outside the reader profile.                                |
+| Bash startup state, executable identity and repository configuration satisfy the host contract. | Assumed, not established by source analysis. Native adoption must verify or enforce these properties.                                                                                                                                |
+| The selected generation supplies the analyzer's Node executable and CLI bytes through launch.   | Unqualified: the handler environment and mandatory bridge retain inherited `CAWS_BIN` or `PATH` selection. Native generation identity must reach this consumer; schema validation does not establish it.                             |
+| The actual executor receives the checked command and cwd.                                       | Validated host `execution_workdir` establishes a directory coordinate. The known reduced Codex command projection does not bind complete shell, startup or final launch context. Later transformations also require reauthorization. |
 
 Git subcommand options use closed argument-role profiles. An option such as
 `--grep` consumes its data operand; identical bytes in an executable option
@@ -517,14 +535,48 @@ producing admission, but does not qualify a rollout that blocks benign commands.
 Native adoption requires demonstrated execution-contract support and an isolated
 canary before replacing the deployed runtime.
 
-`tests/shell/command-analysis.test.js` drives the compiled consumer over stdin
-and checks decisions, deterministic traces, source spans and absent side
-effects. `tests/shell/hooks-analysis.test.js` checks the public CLI and exact
-payload transport. `tests/hooks/bats/worktree-pin-guard.bats` installs the
-actual pack in isolated HOME/CAWS_HOME and checks benign admission,
-quoted/variable Git refusal, mixed lifecycle commands, missing infrastructure
-and release/repoint behavior. The parser dependency and native ESM loader must
-also work from a packed install.
+The declared analysis topology contains three suites:
+`tests/shell/command-analysis.test.js`,
+`tests/shell/interpreter-effects.test.js` and
+`tests/shell/mutation-view.test.js`. Together they check bounded decisions,
+effect profiles, deterministic traces, source spans, projection semantics and
+absent submitted side effects. The public CLI transport and mandatory guard
+consumer have separate checks. From the repository root, run the candidate's
+normal emission and these focused consumers:
+
+```bash
+cd packages/caws-cli
+npm run build
+node ../../node_modules/jest/bin/jest.js --config jest.config.js \
+  --selectProjects caws-cli --runInBand --runTestsByPath \
+  tests/shell/command-analysis.test.js \
+  tests/shell/interpreter-effects.test.js \
+  tests/shell/mutation-view.test.js \
+  tests/shell/hooks-analysis.test.js \
+  tests/hooks/bash-write-guard-analysis.test.js \
+  tests/hooks/bash-write-guard-interpreter-cross-repo.test.js
+npm run mutation:run:analysis
+```
+
+The mutation command uses `mutation-policy.json` and the declared three-suite
+topology through `stryker.analysis.conf.js`. It must cover all six registered
+sources: `analyze.ts`, `git-context.ts`, `interpreter-effects.ts`,
+`mutation-view.ts`, `policies.ts` and `words.ts`. The runner applies the
+unchanged 80% floor separately to every file through
+`scripts/assert-mutation-report.mjs`; zero valid mutants, invalid/pending
+verdicts and unallowed exclusions do not pass. A single-file diagnostic,
+aggregate score, narrowed test configuration or Stryker process exit zero does
+not establish this full contract. Retain raw commands, actual statuses, source
+and test identities, failed attempts and meaningful survivor analysis.
+
+Use repository-installed Bats for `tests/hooks/bats/worktree-pin-guard.bats` and
+the mandatory guard fixtures in isolated HOME/CAWS_HOME. Check benign admission,
+quoted/variable foreign Git refusal, mixed lifecycle commands, missing
+infrastructure and release/repoint behavior. A private packed installation must
+also carry and load the actual parser dependency and native ESM loader, and
+exercise its shipped guard consumer with preserved refusal and output semantics.
+Package tests with synthetic execution metadata remain separate from a real
+host's final-launch contract.
 
 Functional completion requires these observable results, hostile negative
 controls that fail when the policy is removed, a non-executing historical replay
