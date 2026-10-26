@@ -30,6 +30,7 @@ describe('native preparation closed production input profile', () => {
     'docs/guides/worktree-isolation.md',
     'docs/new-consumer-guide.md',
     'docs/architecture/maintainer-input.md',
+    'docs/credentials-guide.md',
   ])('selects traced production input %s', (file) => {
     expect(preparationSourceDisposition(file)).toBe('include');
   });
@@ -45,6 +46,8 @@ describe('native preparation closed production input profile', () => {
     'docs/.aws/credentials.md',
     'packages/caws-cli/templates/hook-packs/shared/.env.fixture',
     'packages/caws-cli/templates/hook-packs/shared/credentials.json',
+    'packages/caws-cli/templates/hook-packs/shared/credentials/token.json',
+    'docs/credentials/token.md',
     'packages/caws-cli/templates/hook-packs/shared/private.key',
     'packages/caws-cli/templates/hook-packs/claude-code/tmp/session.json',
     'packages/caws-cli/templates/hook-packs/shared/state/pointer.json',
@@ -378,6 +381,8 @@ describe('native preparation profile before blob reads', () => {
     'docs/.env/guide.md',
     'packages/caws-cli/src/runtime/.caws/state.json',
     'packages/caws-cli/templates/hook-packs/shared/credentials.json',
+    'packages/caws-cli/templates/hook-packs/shared/credentials/token.json',
+    'docs/credentials/token.md',
   ])('refuses required protected input %s before reading any blobs', (name) => {
     const fixture = graph([
       ['package.json', 'otherwise selected'],
@@ -385,6 +390,17 @@ describe('native preparation profile before blob reads', () => {
     ]);
     expect(() => collect(fixture)).toThrow(`Required production input is protected: ${name}`);
     expect(fixture.calls.filter(({ kind }) => kind === 'blob')).toEqual([]);
+  });
+
+  test('selects a benign credentials-guide sibling without treating it as a credential directory', () => {
+    const fixture = graph([['docs/credentials-guide.md', 'ordinary authored documentation']]);
+    const result = collect(fixture);
+    expect(result.files.map(({ relativePath, bytes }) => [relativePath, bytes.toString()])).toEqual(
+      [['docs/credentials-guide.md', 'ordinary authored documentation']]
+    );
+    expect(fixture.calls.filter(({ kind }) => kind === 'blob')).toEqual([
+      { oid: fixture.blobs['docs/credentials-guide.md'].oid, kind: 'blob' },
+    ]);
   });
 
   test('does not request unselected test fixtures or an empty profile', () => {

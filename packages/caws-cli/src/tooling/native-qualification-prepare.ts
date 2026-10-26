@@ -157,6 +157,7 @@ export function preparationSourceDisposition(relativePath: string): PreparationS
       (part) =>
         part.startsWith('.env') ||
         part.endsWith('.env') ||
+        /^(credentials(?:\..*)?|id_(?:rsa|dsa|ecdsa|ed25519))$/.test(part) ||
         [
           '.git',
           '.caws',
@@ -171,7 +172,6 @@ export function preparationSourceDisposition(relativePath: string): PreparationS
         part === 'node_modules' ||
         part === '__pycache__'
     ) ||
-    /^(credentials(?:\..*)?|id_(?:rsa|dsa|ecdsa|ed25519))$/.test(base) ||
     /\.(?:pem|key|p12|pfx|pyc|pyo)$/.test(base) ||
     base === '.npmrc' ||
     relativePath.startsWith('packages/caws-cli/dist/') ||
