@@ -46,6 +46,15 @@ impl Failure {
     pub fn cleanup_settled(&self) -> bool {
         self.git.as_ref().is_none_or(git::Failure::cleanup_settled)
     }
+    pub fn retry_cleanup_until(
+        &mut self,
+        original: &crate::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        self.git.as_mut().map_or(Ok(()), |failure| {
+            failure.retry_cleanup_until(original, until)
+        })
+    }
     pub fn retry_cleanup(&mut self) -> Result<(), String> {
         self.git
             .as_mut()
@@ -175,6 +184,18 @@ impl ObservationOwner {
     }
     pub fn cleanup_settled(&self) -> bool {
         !self.failure_transferred && self.failure.as_ref().is_none_or(Failure::cleanup_settled)
+    }
+    pub fn retry_cleanup_until(
+        &mut self,
+        original: &crate::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        if self.failure_transferred {
+            return Err("Render observation failure custody was transferred".into());
+        }
+        self.failure.as_mut().map_or(Ok(()), |failure| {
+            failure.retry_cleanup_until(original, until)
+        })
     }
     pub fn retry_cleanup(&mut self) -> Result<(), String> {
         if self.failure_transferred {

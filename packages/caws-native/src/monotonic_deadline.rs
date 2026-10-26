@@ -145,7 +145,9 @@ pub fn check_before_exec(envelope: DeadlineEnvelope) -> Result<(), i32> {
 
 /// A validated original expiry and one captured local bound. No public Instant
 /// constructor, deserializer, or refresh operation can reset its budget.
-#[derive(Debug)]
+// Cloning retains both clock coordinates exactly; it never samples a clock or
+// restores elapsed time. This lets a live transport retain its caller's bound.
+#[derive(Clone, Debug)]
 pub struct MonotonicDeadline {
     envelope: DeadlineEnvelope,
     local_expires: Instant,
@@ -246,6 +248,24 @@ impl MonotonicDeadline {
 mod tests {
     use super::*;
     use std::collections::VecDeque;
+
+    #[test]
+    fn clone_preserves_original_native_and_local_expiry() {
+        let original = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+        let retained = original.clone();
+        assert_eq!(retained.envelope(), original.envelope());
+        assert_eq!(retained.expires(), original.expires());
+        assert_eq!(
+            retained
+                .check_observed_for_test(Ok(original.envelope().expires_ns), original.expires()),
+            Err(DeadlineError::Expired)
+        );
+        assert_eq!(
+            retained
+                .check_observed_for_test(Ok(original.envelope().started_ns), original.expires()),
+            Err(DeadlineError::Expired)
+        );
+    }
 
     #[test]
     fn exec_check_preserves_live_expired_and_invalid_semantics() {

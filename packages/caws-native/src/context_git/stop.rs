@@ -393,6 +393,58 @@ impl Failure {
                     .as_ref()
                     .is_some_and(|r| r.rows.iter().all(positive_cleanup)))
     }
+    /// Only the frontend wait is bounded here. The existing custodian keeps
+    /// actual-child custody after the original invocation stops waiting.
+    pub fn retry_cleanup_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        if self.cleanup_settled() {
+            return Ok(());
+        }
+        self.pending.cancel();
+        let until = until.min(original.expires());
+        loop {
+            frontend_cleanup_check(original, until)?;
+            match self
+                .pending
+                .advance_checked(|| frontend_cleanup_check(original, until).map(|_| ()))
+            {
+                Ok(true) => {
+                    return if self.cleanup_settled() {
+                        Ok(())
+                    } else {
+                        Err("remote Stop cleanup lacks terminal custody receipt".into())
+                    };
+                }
+                Ok(false) => (),
+                Err(error) => {
+                    // A malformed receipt cannot prove cleanup, but the exact
+                    // custodian Child may still be observed/reaped nonblocking.
+                    if let Some(child) = self.pending.child.as_mut()
+                        && let Some(status) = child.try_wait().map_err(|e| e.to_string())?
+                    {
+                        self.pending.child = None;
+                        self.pending.exited_successfully = status.success();
+                    }
+                    return Err(error);
+                }
+            }
+            let mut fds = self
+                .pending
+                .control
+                .as_ref()
+                .map(|control| libc::pollfd {
+                    fd: control.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                })
+                .into_iter()
+                .collect::<Vec<_>>();
+            frontend_cleanup_poll(original, until, &mut fds)?;
+        }
+    }
     pub fn retry_cleanup(&mut self) -> Result<(), String> {
         if self.cleanup_settled() {
             return Ok(());
@@ -460,9 +512,14 @@ struct Pending {
     digest: String,
     token: String,
     aborted_configuration: bool,
+    cancel_requested: bool,
 }
 impl Pending {
     fn cancel(&mut self) {
+        if self.cancel_requested {
+            return;
+        }
+        self.cancel_requested = true;
         if self.written < self.input.len() {
             self.aborted_configuration = true;
             self.input.truncate(self.written);
@@ -488,6 +545,13 @@ impl Pending {
         }
     }
     fn advance(&mut self) -> Result<bool, String> {
+        self.advance_checked(|| Ok(()))
+    }
+    fn advance_checked(
+        &mut self,
+        mut check: impl FnMut() -> Result<(), String>,
+    ) -> Result<bool, String> {
+        check()?;
         if self.output.len() > MAX_REPLY {
             return Err("private Stop reply exceeded bound".into());
         }
@@ -496,6 +560,7 @@ impl Pending {
             .as_mut()
             .ok_or("remote Stop control unavailable")?;
         while self.written < self.input.len() {
+            check()?;
             match control.write(&self.input[self.written..]) {
                 Ok(0) => return Err("remote Stop configuration write closed".into()),
                 Ok(n) => self.written += n,
@@ -506,6 +571,7 @@ impl Pending {
         }
         if !self.eof {
             loop {
+                check()?;
                 let mut bytes = [0u8; 8192];
                 let capacity = (MAX_REPLY + 1 - self.output.len()).min(bytes.len());
                 match control.read(&mut bytes[..capacity]) {
@@ -531,6 +597,7 @@ impl Pending {
                 }
             }
         }
+        check()?;
         if let Some(end) = self.frame_end {
             if end + 1 != self.output.len() {
                 return Err("trailing private Stop reply bytes".into());
@@ -542,6 +609,7 @@ impl Pending {
                 self.reply = Some(reply);
             }
         }
+        check()?;
         if self.eof {
             let Some(child) = self.child.as_mut() else {
                 return Ok(true);
@@ -590,6 +658,7 @@ fn empty_pending(id: &str, digest: &str, token: &str) -> Pending {
         digest: digest.into(),
         token: token.into(),
         aborted_configuration: false,
+        cancel_requested: false,
     }
 }
 fn remote(
@@ -1301,6 +1370,136 @@ pub(super) fn run_configuration(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn retained_transport_child() -> (Failure, UnixStream, std::process::ChildStdin) {
+        // A real original Child and transport endpoints exercise frontend
+        // custody only. This peer cannot mint native Git cleanup receipts.
+        let mut child = Command::new("/bin/cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let release = child.stdin.take().unwrap();
+        let (control, peer) = UnixStream::pair().unwrap();
+        control.set_nonblocking(true).unwrap();
+        peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+        let mut pending = empty_pending("bounded-cleanup-fixture", &"a".repeat(64), "fixture");
+        pending.pid = child.id();
+        pending.child = Some(child);
+        pending.control = Some(control);
+        pending.eof = false;
+        pending.exited_successfully = false;
+        (
+            Failure {
+                diagnostic: "original fixture failure".into(),
+                pending,
+            },
+            peer,
+            release,
+        )
+    }
+    fn passive_reap_observed(pid: u32) {
+        let until = Instant::now() + Duration::from_secs(1);
+        loop {
+            let mut information = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+            let result = unsafe {
+                libc::waitid(
+                    libc::P_PID,
+                    pid,
+                    information.as_mut_ptr(),
+                    libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                )
+            };
+            if result < 0 {
+                assert_eq!(
+                    io::Error::last_os_error().raw_os_error(),
+                    Some(libc::ECHILD)
+                );
+                break;
+            }
+            assert_eq!(result, 0);
+            assert!(
+                Instant::now() < until,
+                "passive owner did not reap original child"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+    #[test]
+    fn bounded_frontend_wait_retains_actual_child_and_drop_passively_reaps_without_receipt() {
+        let (mut failure, mut peer, release) = retained_transport_child();
+        let pid = failure.custodian_pid();
+        let original = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+        let until = Instant::now() + Duration::from_millis(10);
+        let error = failure.retry_cleanup_until(&original, until).unwrap_err();
+        assert!(error.contains("frontend cleanup deadline"));
+        assert!(
+            original.check().is_ok(),
+            "caller reserve is the earlier bound"
+        );
+        assert!(failure.custodian_retained());
+        assert_eq!(failure.pending.child.as_ref().unwrap().id(), pid);
+        assert!(!failure.cleanup_settled());
+        assert!(failure.receipt().is_none());
+        assert!(failure.raw_reply().is_empty());
+        let mut byte = [0u8; 1];
+        assert_eq!(
+            peer.read(&mut byte).unwrap(),
+            0,
+            "owned cancel shuts down frontend writes"
+        );
+        assert!(failure.pending.cancel_requested);
+        drop(failure);
+        // The original child is still blocked on its retained input. Frontend
+        // Drop must transfer the Child to the passive wait, without killing it.
+        let mut information = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+        assert_eq!(
+            unsafe {
+                libc::waitid(
+                    libc::P_PID,
+                    pid,
+                    information.as_mut_ptr(),
+                    libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                )
+            },
+            0
+        );
+        assert_eq!(unsafe { information.assume_init().si_pid() }, 0);
+        drop(release);
+        passive_reap_observed(pid);
+    }
+    #[test]
+    fn expired_original_requests_cancel_but_does_not_read_or_renew_frontend_cleanup() {
+        let (mut failure, mut peer, release) = retained_transport_child();
+        let pid = failure.custodian_pid();
+        let original = MonotonicDeadline::capture(Duration::from_millis(5)).unwrap();
+        while original.check().is_ok() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        peer.write_all(b"not a custody receipt\\n").unwrap();
+        let error = failure
+            .retry_cleanup_until(&original, Instant::now() + Duration::from_secs(1))
+            .unwrap_err();
+        assert!(error.contains("Original monotonic deadline expired"));
+        assert!(failure.custodian_retained());
+        assert!(!failure.cleanup_settled());
+        assert!(
+            failure.raw_reply().is_empty(),
+            "no transport read after original expiry"
+        );
+        assert!(failure.receipt().is_none());
+        let mut byte = [0u8; 1];
+        assert_eq!(
+            peer.read(&mut byte).unwrap(),
+            0,
+            "cancel remains best effort after expiry"
+        );
+        drop(failure);
+        drop(release);
+        passive_reap_observed(pid);
+    }
+
     #[test]
     fn filesystem_identity_json_retains_all_u64_bits_and_rejects_numeric_or_noncanonical_inputs() {
         let value = DirectoryIdentity {

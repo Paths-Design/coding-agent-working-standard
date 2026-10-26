@@ -444,6 +444,178 @@ fn failure(output: &Output, code: i32, stage: &str) {
 }
 
 #[test]
+fn inherited_output_aliases_close_at_exec_without_changing_parent_descriptor_flags() {
+    use std::os::unix::process::CommandExt;
+
+    const STDOUT_ALIAS: i32 = 1000;
+    const STDERR_ALIAS: i32 = 1001;
+
+    fn flags(descriptor: i32) -> (i32, i32) {
+        let descriptor_flags = unsafe { libc::fcntl(descriptor, libc::F_GETFD) };
+        let status_flags = unsafe { libc::fcntl(descriptor, libc::F_GETFL) };
+        assert!(descriptor_flags >= 0 && status_flags >= 0);
+        (descriptor_flags, status_flags)
+    }
+
+    fn aliases(mut command: Command, shared: i32, shared_flags: i32) -> Command {
+        unsafe {
+            command.pre_exec(move || {
+                // Only the child descriptor table changes. This extra borrowed
+                // descriptor shares an OFD with the parent, exposing F_SETFL bugs.
+                if libc::fcntl(shared, libc::F_SETFD, shared_flags & !libc::FD_CLOEXEC) < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                for (source, target) in [
+                    (libc::STDOUT_FILENO, STDOUT_ALIAS),
+                    (libc::STDERR_FILENO, STDERR_ALIAS),
+                ] {
+                    if libc::dup2(source, target) != target {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    let flags = libc::fcntl(target, libc::F_GETFD);
+                    if flags < 0
+                        || libc::fcntl(target, libc::F_SETFD, flags & !libc::FD_CLOEXEC) < 0
+                    {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                }
+                Ok(())
+            });
+        }
+        command
+    }
+
+    fn wrapper(fixture: &Fixture) -> PathBuf {
+        let engine = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/engine.cjs");
+        let path = fixture.dir.join("descriptor-wrapper.cjs");
+        let source = r#"'use strict';
+const fs = require('node:fs');
+const engine = __ENGINE__;
+const observed = {};
+for (const [name, fd, sentinel] of [
+  ['stdout', 1000, 'unsupported stdout alias\n'],
+  ['stderr', 1001, 'unsupported stderr alias\n'],
+]) {
+  try {
+    fs.writeSync(fd, sentinel);
+    observed[name] = 'open';
+  } catch (error) {
+    observed[name] = error.code;
+  }
+}
+fs.writeFileSync(process.env.CAWS_NATIVE_TEST_ALIAS_MARKER, JSON.stringify(observed),
+  { flag: 'wx', mode: 0o600 });
+if (observed.stdout !== 'EBADF' || observed.stderr !== 'EBADF') process.exit(77);
+// Validate the actual known wrapper argv through ps while retaining all
+// original fixture topology checks for the required engine module.
+const topology = require(require('node:path').join(
+  require('node:path').dirname(engine), 'engine-topology.cjs'));
+const observeTopology = topology.observeTopology;
+topology.observeTopology = expected =>
+  observeTopology({ ...expected, engine: __filename });
+require(engine);
+"#;
+        fs::write(
+            &path,
+            source.replace("__ENGINE__", &serde_json::to_string(engine).unwrap()),
+        )
+        .unwrap();
+        path
+    }
+
+    fn marker(path: &std::path::Path) -> serde_json::Value {
+        serde_json::from_slice(&fs::read(path).unwrap()).unwrap()
+    }
+
+    let shared = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/null")
+        .unwrap();
+    let shared_fd = shared.as_raw_fd();
+    assert!(![STDOUT_ALIAS, STDERR_ALIAS].contains(&shared_fd));
+    let parent_flags = flags(shared_fd);
+    let standard_flags = [flags(libc::STDOUT_FILENO), flags(libc::STDERR_FILENO)];
+
+    // A missing Node or ineffective alias fixture cannot satisfy this control:
+    // real Node must write through both unsupported aliases and reject them.
+    let control = Fixture::new();
+    let control_wrapper = wrapper(&control);
+    let control_marker = control.dir.join("alias-control.json");
+    let mut command = Command::new(&control.node);
+    command
+        .arg(&control_wrapper)
+        .env("CAWS_NATIVE_TEST_ALIAS_MARKER", &control_marker);
+    let output = execute(aliases(command, shared_fd, parent_flags.0), Vec::new());
+    assert_eq!(output.status.code(), Some(77));
+    assert_eq!(output.stdout, b"unsupported stdout alias\n");
+    assert_eq!(output.stderr, b"unsupported stderr alias\n");
+    assert_eq!(
+        marker(&control_marker),
+        serde_json::json!({"stdout":"open","stderr":"open"})
+    );
+    assert_eq!(flags(shared_fd), parent_flags);
+
+    for (mode, event) in [("exact", "pre_tool_use"), ("binary", "post_tool_use")] {
+        let fixture = Fixture::new();
+        let engine_wrapper = wrapper(&fixture);
+        let alias_marker = fixture.dir.join("alias-native.json");
+        let template = fixture.command(mode, event, "3000");
+        let mut args: Vec<_> = template.get_args().map(|arg| arg.to_os_string()).collect();
+        assert_eq!(args[1], "--engine");
+        args[2] = engine_wrapper.into_os_string();
+        let mut command = Command::new(template.get_program());
+        command
+            .args(args)
+            .env("CAWS_NATIVE_TEST_ALIAS_MARKER", &alias_marker);
+        for (name, value) in template.get_envs() {
+            if let Some(value) = value {
+                command.env(name, value);
+            } else {
+                command.env_remove(name);
+            }
+        }
+        let output = execute(aliases(command, shared_fd, parent_flags.0), b"{}".to_vec());
+        assert_eq!(
+            marker(&alias_marker),
+            serde_json::json!({"stdout":"EBADF","stderr":"EBADF"})
+        );
+        assert_eq!(output.status.code(), Some(7), "{mode}: {output:?}");
+        if mode == "binary" {
+            assert_eq!(output.stdout, [0xff, 0x00, 0x61]);
+            assert_eq!(output.stderr, (0..=255).collect::<Vec<u8>>());
+        } else {
+            assert_eq!(output.stdout, "native\n雪\0exact".as_bytes());
+            assert_eq!(output.stderr, b"diagnostic\nexact\n");
+        }
+        assert_eq!(fixture.requests().len(), 1);
+        let topology: serde_json::Value = serde_json::from_str(
+            fs::read_to_string(fixture.dir.join("topology.jsonl"))
+                .unwrap()
+                .trim(),
+        )
+        .unwrap();
+        assert_eq!(
+            topology["kind"],
+            if cfg!(target_os = "macos") {
+                "custodied"
+            } else {
+                "direct"
+            }
+        );
+        assert_eq!(
+            flags(shared_fd),
+            parent_flags,
+            "child isolation changed parent FD/OFD flags"
+        );
+        assert_eq!(
+            [flags(libc::STDOUT_FILENO), flags(libc::STDERR_FILENO)],
+            standard_flags
+        );
+    }
+}
+
+#[test]
 fn exact_native_result_and_original_payload_are_delivered_without_path_interpreters() {
     let fixture = Fixture::new();
     let output = execute(
@@ -1894,8 +2066,8 @@ fn output_backpressure_is_bounded_and_never_claims_consumer_receipt() {
     fs::write(fixture.dir.join("stdout.bin"), &output.stdout).unwrap();
     fs::write(fixture.dir.join("stderr.bin"), &output.stderr).unwrap();
     assert!(
-        started.elapsed() < Duration::from_millis(3700),
-        "configured2000ms + delivery500ms + shared postproposal500ms + cleanup500ms + diagnostic100ms + scheduling allowance ceiling exceeded"
+        started.elapsed() < Duration::from_millis(2000),
+        "delivery, terminal settlement, frontend cleanup and diagnostics must share the original2000ms interval"
     );
     assert_eq!(output.status.code(), Some(2));
     assert!(
@@ -1930,8 +2102,8 @@ fn output_backpressure_is_bounded_and_never_claims_consumer_receipt() {
 }
 
 #[test]
-fn known_proposals_survive_late_engine_exit_or_settlement_past_request_deadline() {
-    for mode in ["nonzero", "late-post-proposal-hang"] {
+fn known_proposals_survive_nonzero_engine_exit_without_second_stdout() {
+    for mode in ["nonzero"] {
         let fixture = Fixture::new();
         let output = execute(
             fixture.command(mode, "pre_tool_use", "1000"),
@@ -1959,6 +2131,119 @@ fn known_proposals_survive_late_engine_exit_or_settlement_past_request_deadline(
         );
         assert_eq!(fixture.requests().len(), 1);
     }
+}
+
+#[test]
+fn processing_reserve_rejects_late_proposal_without_renewing_terminal_time() {
+    let fixture = Fixture::new();
+    let started = Instant::now();
+    let output = execute(
+        fixture.command("late-post-proposal-hang", "pre_tool_use", "2000"),
+        b"{}".to_vec(),
+    );
+    assert!(started.elapsed() < Duration::from_millis(2000));
+    assert_eq!(output.status.code(), Some(2));
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(response["decision"], "block");
+    assert!(
+        response["reason"]
+            .as_str()
+            .unwrap()
+            .contains("Checks did not complete")
+    );
+    assert!(
+        !output
+            .stdout
+            .windows(b"native".len())
+            .any(|bytes| bytes == b"native")
+    );
+    assert_eq!(fixture.requests().len(), 1, "no engine replay");
+    let events = fs::read_to_string(fixture.dir.join("events.jsonl")).unwrap();
+    assert!(
+        !events
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            .any(|row| row["schema"] == "caws.runtime.handoff.v2")
+    );
+}
+
+#[test]
+fn late_partial_stdout_and_stderr_leave_no_second_result_or_new_grace() {
+    let fixture = Fixture::new();
+    // A real fixture engine proposes near the processing cutoff, fills both
+    // native output channels, then keeps the engine alive after the negative ACK.
+    let topology = serde_json::to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/engine-topology.cjs"
+    ))
+    .unwrap();
+    let mut engine = include_str!("fixtures/engine.cjs")
+        .replace("require('./engine-topology.cjs')", &format!("require({topology})"))
+        .replace("if (mode === 'late-post-proposal-hang')",
+            "if (mode === 'late-post-proposal-hang' || mode === 'large-native-result')")
+        .replace("request.deadlineEpochMs - Date.now() - 150",
+            "request.deadlineEpochMs - Date.now() - 1100")
+        .replace("if (mode === 'post-proposal-hang' || mode === 'late-post-proposal-hang')",
+            "if (mode === 'post-proposal-hang' || mode === 'late-post-proposal-hang' || mode === 'large-native-result')");
+    engine = engine.replace(
+        "answer.result.stdoutBase64 = Buffer.alloc(1_000_000, 0x78).toString('base64');",
+        "{ answer.result.stdoutBase64 = Buffer.alloc(1_000_000, 0x78).toString('base64'); answer.result.stderrBase64 = Buffer.alloc(1_000_000, 0x79).toString('base64'); }");
+    let engine_path = fixture.dir.join("terminal-deadline-engine.cjs");
+    fs::write(&engine_path, engine).unwrap();
+    let base = fixture.command("large-native-result", "pre_tool_use", "2000");
+    let mut args: Vec<std::ffi::OsString> = base.get_args().map(ToOwned::to_owned).collect();
+    let index = args.iter().position(|arg| arg == "--engine").unwrap() + 1;
+    args[index] = engine_path.into_os_string();
+    let mut command = Command::new(base.get_program());
+    command.args(args);
+    for (name, value) in base.get_envs() {
+        match value {
+            Some(value) => {
+                command.env(name, value);
+            }
+            None => {
+                command.env_remove(name);
+            }
+        }
+    }
+    let mut child = command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(b"{}").unwrap();
+    let started = Instant::now();
+    // Both pipes remain unread until frontend exit; this is real backpressure.
+    let output = captured(&mut child);
+    assert!(
+        started.elapsed() < Duration::from_millis(2000),
+        "native terminal work added time after the original deadline"
+    );
+    assert_eq!(output.status.code(), Some(2));
+    assert!(!output.stdout.is_empty() && output.stdout.len() < 1_000_000);
+    assert!(
+        output.stdout.iter().all(|byte| *byte == b'x'),
+        "no fallback stdout after partial proposal"
+    );
+    assert!(!output.stderr.is_empty() && output.stderr.len() < 1_000_000);
+    assert!(
+        output.stderr.iter().all(|byte| *byte == b'y'),
+        "full stderr cannot receive a renewed diagnostic window"
+    );
+    let events: Vec<serde_json::Value> = fs::read_to_string(fixture.dir.join("events.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let handoffs: Vec<_> = events
+        .iter()
+        .filter(|row| row["schema"] == "caws.runtime.handoff.v2")
+        .collect();
+    assert_eq!(handoffs.len(), 1);
+    assert_eq!(handoffs[0]["success"], false);
+    assert!(!events.iter().any(|row| row["settled"] == true));
+    assert_eq!(fixture.requests().len(), 1);
 }
 
 #[test]

@@ -17,7 +17,7 @@ mod stop_git;
 mod stop_profile;
 
 use caws_native::monotonic_deadline::MonotonicDeadline;
-use caws_native::stop_budget::{BudgetIdentity, Charge, StopBudget};
+use caws_native::stop_budget::{BudgetDeadline, BudgetIdentity, Charge, StopBudget};
 use std::time::{Duration, Instant};
 
 #[cfg(feature = "sqlite-store")]
@@ -50,6 +50,7 @@ fn retain_store_result(
 
 struct Failure<'deadline> {
     original_stop: Option<runner::OriginalStopPreparation<'deadline>>,
+    terminal_code: Option<u8>,
     stop_git_custody: stop_git::FailureCustody,
     dispatched: bool,
     ready: Option<Box<protocol::Ready>>,
@@ -64,6 +65,7 @@ impl<'deadline> Failure<'deadline> {
     fn configuration(message: String) -> Self {
         Self {
             original_stop: None,
+            terminal_code: None,
             stop_git_custody: stop_git::FailureCustody::default(),
             dispatched: false,
             ready: None,
@@ -93,16 +95,29 @@ fn retain_observed_stop_terminal<'deadline, T>(
     }
 }
 
-fn budget(ready: &protocol::Ready, expires: Instant) -> Result<StopBudget, String> {
+fn budget(
+    ready: &protocol::Ready,
+    original: &MonotonicDeadline,
+    expires: Instant,
+) -> Result<StopBudget, String> {
     let identity =
         BudgetIdentity::resolve(ready.session_id.as_deref(), ready.project_digest.as_deref())
             .map_err(|e| e.to_string())?;
-    StopBudget::open(&ready.budget_home, identity, expires).map_err(|e| e.to_string())
+    StopBudget::open(
+        &ready.budget_home,
+        identity,
+        BudgetDeadline::original(original, expires),
+    )
+    .map_err(|e| e.to_string())
 }
-fn charge(ready: Option<&protocol::Ready>, expires: Instant) -> Result<Charge, String> {
+fn charge(
+    ready: Option<&protocol::Ready>,
+    original: &MonotonicDeadline,
+    expires: Instant,
+) -> Result<Charge, String> {
     let ready = ready.ok_or("Stop budget unavailable: no validated project context")?;
-    budget(ready, expires)?
-        .charge(expires)
+    budget(ready, original, expires)?
+        .charge(BudgetDeadline::original(original, expires))
         .map_err(|e| e.to_string())
 }
 fn execute<'deadline>(
@@ -147,6 +162,8 @@ fn execute<'deadline>(
         progress.mark("completed");
         runner::write_diagnostic(
             format!("CAWS native progress {}\n", progress.snapshot()).as_bytes(),
+            original_deadline,
+            original_deadline.expires(),
         );
     }
     outcome
@@ -207,13 +224,16 @@ fn execute_observed<'deadline>(
     original_deadline: &'deadline MonotonicDeadline,
     progress: &mut InvocationProgress,
 ) -> Result<u8, Failure<'deadline>> {
-    let deadline = original_deadline.expires();
+    let bounds = runner::CallbackBounds::original(original_deadline);
+    let deadline = bounds.processing;
     let (payload, input_json) = runner::read_payload(deadline).map_err(Failure::configuration)?;
     original_deadline
         .check()
         .map_err(|error| Failure::configuration(error.to_string()))?;
-    let mut request = protocol::Request::new(config, payload, input_json, deadline)
-        .map_err(Failure::configuration)?;
+    runner::isolate_invoke_descriptors(original_deadline).map_err(Failure::configuration)?;
+    let mut request =
+        protocol::Request::new(config, payload, input_json, original_deadline.expires())
+            .map_err(Failure::configuration)?;
     // The optional candidate observes original inputs before Node. It neither
     // selects the native Stop route nor grants any prefix/publication effects.
     let generation_receipt_revalidations = progress.generation_receipt_revalidations.clone();
@@ -229,7 +249,10 @@ fn execute_observed<'deadline>(
                 config,
                 original_deadline,
                 generation_receipt_revalidations.clone(),
-                cancellation::check,
+                || {
+                    cancellation::check()?;
+                    runner::check_until(original_deadline, deadline)
+                },
             )
             .map_err(Failure::configuration)?,
         )
@@ -371,7 +394,12 @@ fn execute_observed<'deadline>(
                             // No optional native capture is retried or upgraded.
                             // Unsupported/failed candidates keep the existing
                             // compatibility project's own context observation.
-                            session.run_context_git(&mut context_git, &frame, deadline)?;
+                            session.run_context_git_until(
+                                &mut context_git,
+                                &frame,
+                                original_deadline,
+                                deadline,
+                            )?;
                         }
                     }
                     protocol::EngineFrame::StopLeaseContextRequest(_) => {
@@ -865,11 +893,12 @@ fn execute_observed<'deadline>(
         let (token, result, containment) = match stop_git_custody.preserve(proposal) {
             Ok(value) => value,
             Err(mut message) => {
-                if let Err(error) = session.cleanup() {
+                if let Err(error) = session.cleanup_until(original_deadline, bounds.cleanup) {
                     message.push_str(&format!("; cleanup: {error}"));
                 }
                 return Err(Failure {
                     original_stop: None,
+                    terminal_code: None,
                     stop_git_custody: stop_git::FailureCustody::default(),
                     dispatched,
                     ready: ready.map(Box::new),
@@ -885,6 +914,11 @@ fn execute_observed<'deadline>(
         // A valid protective result survives invalid/held effects and late failures.
         // No path through this terminal phase can ask the engine for more work.
         let mut post_errors = Vec::new();
+        if let Err(error) = runner::check_until(original_deadline, bounds.terminal) {
+            post_errors.push(format!(
+                "original callback deadline: {error}; no renewed terminal allowance"
+            ));
+        }
         if let Some(diagnostic) = session.render_diagnostic() {
             post_errors.push(diagnostic);
         }
@@ -932,40 +966,69 @@ fn execute_observed<'deadline>(
                 }
             }
         };
-        // TS's wire phase has an 1100ms budget. Share one terminal budget across
-        // output (<=500ms), reobservation/effect (<=250ms), and receipt settlement.
-        let terminal_deadline = Instant::now() + Duration::from_millis(1000);
+        // Terminal work consumes the reserve inside the original interval.
+        // The TS wire timer cannot grant this frontend extra time.
+        let terminal_deadline = bounds.terminal;
+        let delivery_deadline = runner::cap_until(
+            original_deadline,
+            terminal_deadline,
+            runner::DELIVERY_BUDGET,
+        );
         let delivered = if let Some(target) = target {
             session.begin_terminal_containment(&target);
-            let delivered = runner::write_terminal_native(&result.stdout, &result.stderr, &target);
-            receipt = Some(
-                target.attempt(terminal_deadline.min(Instant::now() + Duration::from_millis(250))),
+            let delivered = runner::write_terminal_native(
+                &result.stdout,
+                &result.stderr,
+                &target,
+                original_deadline,
+                delivery_deadline,
             );
+            receipt = Some(target.attempt_until(
+                original_deadline,
+                runner::cap_until(
+                    original_deadline,
+                    terminal_deadline,
+                    Duration::from_millis(250),
+                ),
+            ));
             delivered
         } else {
-            runner::write_native(&result.stdout, &result.stderr)
+            runner::write_native(
+                &result.stdout,
+                &result.stderr,
+                original_deadline,
+                delivery_deadline,
+            )
         };
-        let post_deadline = terminal_deadline.min(Instant::now() + Duration::from_millis(500));
+        let post_deadline = runner::cap_until(
+            original_deadline,
+            terminal_deadline,
+            Duration::from_millis(500),
+        );
         if delivered.is_ok() && dispatched && config.event == "stop" && result.exit_code == 0 {
             // Unavailable may already have committed. Never retry this transaction.
             if let Some(context) = ready.as_ref()
-                && let Err(error) = budget(context, post_deadline)
-                    .and_then(|state| state.reset(post_deadline).map_err(|e| e.to_string()))
+                && let Err(error) =
+                    budget(context, original_deadline, post_deadline).and_then(|state| {
+                        state
+                            .reset(BudgetDeadline::original(original_deadline, post_deadline))
+                            .map_err(|e| e.to_string())
+                    })
             {
                 post_errors.push(format!("Stop reset: {error}; not retried"));
             }
         }
         let ack = protocol::handoff(&request, &token, delivered.is_ok(), receipt.as_ref())
-            .and_then(|bytes| session.send(&bytes, post_deadline));
+            .and_then(|bytes| session.send_until(&bytes, original_deadline, post_deadline));
         if let Err(error) = ack {
             post_errors.push(format!("handoff ACK: {error}; settlement unconfirmed"));
         }
-        if let Err(error) = session.settle(post_deadline) {
+        if let Err(error) = session.settle_until(original_deadline, post_deadline) {
             post_errors.push(format!(
                 "engine settlement: {error}; settlement unconfirmed"
             ));
         }
-        if let Err(error) = session.cleanup() {
+        if let Err(error) = session.cleanup_until(original_deadline, bounds.cleanup) {
             post_errors.push(format!("cleanup: {error}"));
         }
         let mut code = result.exit_code;
@@ -975,7 +1038,15 @@ fn execute_observed<'deadline>(
             // A valid refusal never charges/resets the infrastructure counter, even
             // when its native output could not be fully handed off.
             if dispatched && config.event == "stop" && result.exit_code != 2 {
-                match charge(ready.as_ref(), Instant::now() + Duration::from_millis(100)) {
+                match charge(
+                    ready.as_ref(),
+                    original_deadline,
+                    runner::cap_until(
+                        original_deadline,
+                        bounds.terminal,
+                        Duration::from_millis(100),
+                    ),
+                ) {
                     Ok(Charge::Refuse) => {}
                     Ok(Charge::Release) => {
                         code = 0;
@@ -998,6 +1069,8 @@ fn execute_observed<'deadline>(
                     post_errors.join("; ")
                 )
                 .as_bytes(),
+                original_deadline,
+                original_deadline.expires(),
             );
         }
         // Keep the resident record correlation through final frontend output.
@@ -1006,6 +1079,7 @@ fn execute_observed<'deadline>(
             &mut stop_git_custody,
             Failure {
                 original_stop: None,
+                terminal_code: Some(code),
                 stop_git_custody: stop_git::FailureCustody::default(),
                 dispatched,
                 ready: ready.map(Box::new),
@@ -1020,8 +1094,9 @@ fn execute_observed<'deadline>(
     })();
     match outcome {
         Ok(code) => {
-            if let Err(error) = original_stop.retry_cleanup() {
-                runner::write_diagnostic(format!("CAWS optional original Stop discovery retains native cleanup custody: {error}; no native retry or publication.\n").as_bytes());
+            if let Err(error) = original_stop.retry_cleanup_until(original_deadline, bounds.cleanup)
+            {
+                runner::write_diagnostic(format!("CAWS optional original Stop discovery retains native cleanup custody: {error}; no native retry or publication.\n").as_bytes(), original_deadline, original_deadline.expires());
             }
             Ok(code)
         }
@@ -1035,14 +1110,27 @@ fn execute_observed<'deadline>(
         }
     }
 }
-fn fallback(mut error: Failure<'_>, pre: bool, stop: bool) -> u8 {
+fn fallback(
+    mut error: Failure<'_>,
+    pre: bool,
+    stop: bool,
+    original: Option<&MonotonicDeadline>,
+) -> u8 {
     // Keep the actual optional capture and any RemoteFailure through fallback
     // output. Retry only cleanup; its original request clock is never renewed.
-    let stop_git_cleanup = error.stop_git_custody.settle_cleanup();
-    let original_cleanup = error
-        .original_stop
-        .as_mut()
-        .and_then(|owner| owner.retry_cleanup().err());
+    let bounds = original.map(runner::CallbackBounds::original);
+    let stop_git_cleanup = original.and_then(|clock| {
+        error
+            .stop_git_custody
+            .settle_cleanup_until(clock, bounds.as_ref().unwrap().processing)
+    });
+    let original_cleanup = error.original_stop.as_mut().and_then(|owner| {
+        original.and_then(|clock| {
+            owner
+                .retry_cleanup_until(clock, bounds.as_ref().unwrap().processing)
+                .err()
+        })
+    });
     let _session_settlement = error.session_settlement.as_ref();
     // Frontend failure retains finite metadata; the resident owns SQL cleanup.
     #[cfg(feature = "sqlite-store")]
@@ -1067,6 +1155,15 @@ fn fallback(mut error: Failure<'_>, pre: bool, stop: bool) -> u8 {
     if let Some(cleanup) = original_cleanup {
         reason.push_str(&format!(" Original project native custodian retains cleanup: {cleanup}; native candidate was not retried."));
     }
+    // A known refusal never charges infrastructure, including after partial
+    // output. Other retained failures keep the event-specific failure policy;
+    // prior native output forbids another stdout result.
+    if error.terminal_code == Some(2) {
+        if let Some(clock) = original {
+            runner::write_diagnostic(format!("{reason}\n").as_bytes(), clock, clock.expires());
+        }
+        return 2;
+    }
     let mut block = pre || error.dispatched;
     #[cfg(feature = "sqlite-store")]
     if let Some(outcome) = error
@@ -1088,7 +1185,20 @@ fn fallback(mut error: Failure<'_>, pre: bool, stop: bool) -> u8 {
         #[cfg(feature = "sqlite-store")]
         let budget_ready = budget_ready
             .filter(|_| !matches!(error.store_project_binding, StoreProjectBinding::Unbound));
-        match charge(budget_ready, Instant::now() + Duration::from_millis(100)) {
+        let charged = original
+            .ok_or_else(|| "Stop budget unavailable: original clock unavailable".to_owned())
+            .and_then(|clock| {
+                charge(
+                    budget_ready,
+                    clock,
+                    runner::cap_until(
+                        clock,
+                        bounds.as_ref().unwrap().terminal,
+                        Duration::from_millis(100),
+                    ),
+                )
+            });
+        match charged {
             Ok(Charge::Refuse) => {}
             Ok(Charge::Release) => {
                 block = false;
@@ -1102,7 +1212,9 @@ fn fallback(mut error: Failure<'_>, pre: bool, stop: bool) -> u8 {
             }
         }
     }
-    let stdout = if block {
+    let stdout = if error.terminal_code.is_some() {
+        Vec::new()
+    } else if block {
         format!(
             "{}\n",
             serde_json::json!({"decision":"block","reason":reason})
@@ -1113,8 +1225,24 @@ fn fallback(mut error: Failure<'_>, pre: bool, stop: bool) -> u8 {
     } else {
         Vec::new()
     };
-    if let Err(write) = runner::write_native(&stdout, format!("{reason}\n").as_bytes()) {
-        runner::write_diagnostic(format!("{reason}\nCAWS native output delivery failed: {write}. Output may be partial; consumer receipt is unconfirmed.\n").as_bytes());
+    let stderr = format!("{reason}\n");
+    let delivered = match original {
+        Some(clock) => runner::write_native(
+            &stdout,
+            stderr.as_bytes(),
+            clock,
+            runner::cap_until(
+                clock,
+                bounds.as_ref().unwrap().terminal,
+                runner::DELIVERY_BUDGET,
+            ),
+        ),
+        None => runner::write_unclocked_configuration(&stdout, stderr.as_bytes()),
+    };
+    if let Err(write) = delivered {
+        if let Some(clock) = original {
+            runner::write_diagnostic(format!("{reason}\nCAWS native output delivery failed: {write}. Output may be partial; consumer receipt is unconfirmed.\n").as_bytes(), clock, clock.expires());
+        }
         return if !block { 0 } else { 2 };
     }
     if block { 2 } else { 0 }
@@ -1290,6 +1418,7 @@ fn main() {
             Failure::configuration(error),
             event("pre_tool_use"),
             event("stop"),
+            None,
         ),
         Ok(cli::Invocation {
             route,
@@ -1297,7 +1426,7 @@ fn main() {
             deadline,
         }) => match execute(route, &config, &deadline) {
             Ok(code) => code,
-            Err(error) => fallback(error, event("pre_tool_use"), event("stop")),
+            Err(error) => fallback(error, event("pre_tool_use"), event("stop"), Some(&deadline)),
         },
     };
     std::process::exit(code.into());
@@ -1434,6 +1563,7 @@ mod stop_terminal_context_tests {
             };
             let observed = Failure {
                 original_stop: None,
+                terminal_code: None,
                 stop_git_custody: stop_git::FailureCustody::default(),
                 dispatched,
                 ready: Some(ready),

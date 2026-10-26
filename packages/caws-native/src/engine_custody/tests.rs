@@ -269,9 +269,17 @@ fn cached_abnormal_custodian_exit_cannot_turn_into_success_on_a_second_join() {
         assert!(first.contains("custodian exited abnormally"), "{first}");
         let second = fixture
             .owner
-            .join_terminal(Instant::now())
+            .join_terminal(Instant::now() + Duration::from_secs(1))
             .expect_err("a repeated join must retain the original abnormal-exit refusal");
         assert_eq!(second, first);
+        assert!(
+            fixture
+                .owner
+                .join_terminal(Instant::now() - Duration::from_millis(1))
+                .unwrap_err()
+                .contains("deadline expired"),
+            "cached terminal state cannot bypass an expired frontend bound"
+        );
         assert_eq!(fixture.owner.custodian_exit.unwrap().into_raw(), raw_status);
         assert!(fixture.owner.child.is_none());
         assert!(fixture.owner.control.is_none());
@@ -289,7 +297,7 @@ fn successful_no_child_cleanup_does_not_claim_an_engine_exit() {
         .expect("a successful no-child custodian has nothing left to clean up");
     let error = fixture
         .owner
-        .finish(Instant::now())
+        .finish(Instant::now() + Duration::from_secs(1))
         .expect_err("cleanup success cannot invent an engine that never spawned");
     assert!(error.starts_with("engine not spawned:"), "{error}");
     fixture
@@ -544,6 +552,198 @@ impl DescriptorFixture {
                 panic!("unsafe custody descriptors unexpectedly admitted");
             }
         }
+    }
+}
+
+#[test]
+fn expired_frontend_reserve_refuses_complete_journal_before_read_with_live_original_mate() {
+    use std::{cell::Cell, os::unix::fs::FileExt};
+    let mut fixture = JournalFixture::new();
+    fixture.append(&complete_receipt(1));
+    fixture.owner.custodian_exit = Some(ExitStatus::from_raw(0));
+    let original = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+    let expired = Instant::now() - Duration::from_millis(1);
+    let error = fixture.owner.cleanup_until(&original, expired).unwrap_err();
+    assert_eq!(
+        error,
+        "engine cleanup deadline expired; custodian retains Child"
+    );
+    assert!(
+        original.check().is_ok(),
+        "only the earlier frontend reserve is exhausted"
+    );
+    assert!(fixture.owner.latest.is_none());
+    assert_eq!(fixture.owner.observed_length, 0);
+    assert!(fixture.owner.observed_prefix.is_empty());
+
+    let reads = Cell::new(0);
+    let error = fixture
+        .owner
+        .refresh_checked_with(
+            &mut || Owner::check_frontend_until(&original, expired),
+            |file, bytes, offset| {
+                reads.set(reads.get() + 1);
+                file.read_at(bytes, offset)
+            },
+        )
+        .unwrap_err();
+    assert_eq!(
+        error,
+        "engine cleanup deadline expired; custodian retains Child"
+    );
+    assert_eq!(
+        reads.get(),
+        0,
+        "expired reserve must refuse before the first journal read"
+    );
+    assert!(fixture.owner.latest.is_none());
+    assert_eq!(fixture.owner.observed_length, 0);
+
+    // The identical complete journal is acceptable under its still-live bound.
+    // This distinguishes deadline refusal from blanket journal rejection.
+    let status = fixture
+        .owner
+        .finish_until(&original, original.expires())
+        .unwrap();
+    assert!(status.success());
+    assert_eq!(
+        fixture.owner.latest.as_ref().unwrap().state,
+        ReceiptState::Complete
+    );
+    assert!(fixture.owner.observed_length > 0);
+}
+
+#[test]
+fn journal_partial_read_and_interrupted_retry_recheck_before_accepting_terminal_state() {
+    use std::{cell::Cell, os::unix::fs::FileExt};
+    for interrupted in [false, true] {
+        let mut fixture = JournalFixture::new();
+        fixture.append(&complete_receipt(1));
+        fixture.owner.custodian_exit = Some(ExitStatus::from_raw(0));
+        let original = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+        let reads = Cell::new(0);
+        let clock_failure = "controlled CLOCK_MONOTONIC failure after first read attempt";
+        let error = fixture
+            .owner
+            .refresh_checked_with(
+                &mut || {
+                    if reads.get() > 0 {
+                        Err(clock_failure.to_owned())
+                    } else {
+                        Owner::check_frontend_until(&original, original.expires())
+                    }
+                },
+                |file, bytes, offset| {
+                    reads.set(reads.get() + 1);
+                    if interrupted {
+                        Err(io::Error::from(io::ErrorKind::Interrupted))
+                    } else {
+                        let length = bytes.len().min(8);
+                        file.read_at(&mut bytes[..length], offset)
+                    }
+                },
+            )
+            .unwrap_err();
+        assert_eq!(error, clock_failure);
+        assert_eq!(
+            reads.get(),
+            1,
+            "a partial read or EINTR cannot hide another unchecked retry"
+        );
+        assert!(
+            fixture.owner.latest.is_none(),
+            "complete journal must remain unaccepted"
+        );
+        assert_eq!(fixture.owner.observed_length, 0);
+        assert!(fixture.owner.observed_prefix.is_empty());
+        assert!(
+            fixture
+                .owner
+                .finish_until(&original, original.expires())
+                .unwrap()
+                .success()
+        );
+    }
+}
+
+#[test]
+fn bounded_cleanup_retains_original_custodian_and_passive_drop_without_terminal_receipt() {
+    let mut fixture = JournalFixture::new();
+    let mut child = Command::new("/bin/cat")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let release = child.stdin.take().unwrap();
+    let pid = child.id();
+    let (control, mut peer) = UnixStream::pair().unwrap();
+    control.set_nonblocking(true).unwrap();
+    peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+    fixture.owner.child = Some(child);
+    fixture.owner.custodian_pid = pid;
+    fixture.owner.control = Some(control);
+    let original = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+    let until = Instant::now() + Duration::from_millis(10);
+    let error = fixture.owner.cleanup_until(&original, until).unwrap_err();
+    assert!(error.contains("custodian retains Child"));
+    assert!(
+        original.check().is_ok(),
+        "caller reserve cannot become a fresh wait"
+    );
+    assert_eq!(fixture.owner.child.as_ref().unwrap().id(), pid);
+    assert!(
+        fixture.owner.latest.is_none(),
+        "waiting cannot manufacture a receipt"
+    );
+    assert!(
+        fixture.owner.control.is_none(),
+        "cancel endpoint is consumed once"
+    );
+    let mut cancellation = Vec::new();
+    peer.read_to_end(&mut cancellation).unwrap();
+    assert_eq!(cancellation, b"S");
+    assert!(fixture.owner.cleanup_until(&original, until).is_err());
+    assert!(fixture.owner.child.is_some());
+    drop(fixture);
+    let mut information = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+    assert_eq!(
+        unsafe {
+            libc::waitid(
+                libc::P_PID,
+                pid,
+                information.as_mut_ptr(),
+                libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+            )
+        },
+        0
+    );
+    assert_eq!(unsafe { information.assume_init().si_pid() }, 0);
+    drop(release);
+    let join_until = Instant::now() + Duration::from_secs(1);
+    loop {
+        let mut information = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+        let result = unsafe {
+            libc::waitid(
+                libc::P_PID,
+                pid,
+                information.as_mut_ptr(),
+                libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+            )
+        };
+        if result < 0 {
+            assert_eq!(
+                io::Error::last_os_error().raw_os_error(),
+                Some(libc::ECHILD)
+            );
+            break;
+        }
+        assert_eq!(result, 0);
+        assert!(
+            Instant::now() < join_until,
+            "passive custodian Child was not reaped"
+        );
+        std::thread::sleep(Duration::from_millis(1));
     }
 }
 

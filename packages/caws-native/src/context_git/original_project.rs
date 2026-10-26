@@ -123,6 +123,34 @@ impl RemoteFailure {
     }
     /// Settlement only: retry cannot upgrade a failed/pending capture to success
     /// or launch a second query. Its independent cleanup wait renews no request.
+    /// Bounded frontend observation only; this cannot renew capture or Git work.
+    pub fn retry_cleanup_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        let Some(pending) = self.pending.as_mut() else {
+            return Ok(());
+        };
+        if pending.settled() {
+            return Ok(());
+        }
+        pending.cancel();
+        let until = until.min(original.expires());
+        loop {
+            frontend_cleanup_check(original, until)?;
+            pending.advance_checked(|| frontend_cleanup_check(original, until).map(|_| ()))?;
+            if pending.settled() {
+                return Ok(());
+            }
+            let mut fds = [libc::pollfd {
+                fd: pending.control.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            }];
+            frontend_cleanup_poll(original, until, &mut fds)?;
+        }
+    }
     pub fn retry_cleanup(&mut self) -> Result<(), String> {
         let Some(p) = self.pending.as_mut() else {
             return Ok(());
@@ -462,12 +490,17 @@ struct Pending {
     eof: bool,
     exited_successfully: bool,
     aborted_configuration: bool,
+    cancel_requested: bool,
     configuration: Configuration,
     payload: Box<RawValue>,
     protocol_error: Option<String>,
 }
 impl Pending {
     fn cancel(&mut self) {
+        if self.cancel_requested {
+            return;
+        }
+        self.cancel_requested = true;
         if self.written < self.input.len() {
             self.aborted_configuration = true;
             self.input.truncate(self.written);
@@ -498,8 +531,16 @@ impl Pending {
         }]);
     }
     fn advance(&mut self) -> Result<(), String> {
+        self.advance_checked(|| Ok(()))
+    }
+    fn advance_checked(
+        &mut self,
+        mut check: impl FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
+        check()?;
         // Bounded work per call keeps the original deadline/cancellation live.
         for _ in 0..8 {
+            check()?;
             if self.written == self.input.len() {
                 break;
             }
@@ -512,6 +553,7 @@ impl Pending {
             }
         }
         for _ in 0..8 {
+            check()?;
             if self.eof {
                 break;
             }
@@ -538,6 +580,7 @@ impl Pending {
                         if end > MAX_REPLY {
                             return Err("private original-project frame exceeds bound".into());
                         }
+                        check()?;
                         let r: Reply = serde_json::from_slice(&self.output[..end])
                             .map_err(|e| e.to_string())?;
                         validate_reply(&r, &self.configuration, &self.payload)?;
@@ -592,6 +635,7 @@ impl Pending {
                 Err(e) => return Err(e.to_string()),
             }
         }
+        check()?;
         if self.eof && !self.output.is_empty() {
             return Err("incomplete private original-project frame".into());
         }
@@ -727,6 +771,7 @@ pub fn capture(
         eof: false,
         exited_successfully: false,
         aborted_configuration: false,
+        cancel_requested: false,
         configuration: c,
         payload,
         protocol_error: None,
@@ -1407,6 +1452,7 @@ mod tests {
                     eof: false,
                     exited_successfully: true,
                     aborted_configuration: false,
+                    cancel_requested: false,
                     configuration: c,
                     payload,
                     protocol_error: None,
