@@ -1,10 +1,190 @@
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const yaml = require('js-yaml');
+const fixtures = require('../helpers/git-repo-factory');
+const { initProject } = require('../../dist/store/init-store');
+const { loadSpecs } = require('../../dist/store/specs-store');
 const {
   decodePreparationGitBatch,
   preparationCommitTree,
   decodePreparationGitTree,
   planPreparationGitExport,
+  inspectPreparationWriteAuthority,
 } = require('../../dist/tooling/native-qualification-prepare');
+
+describe('native preparation actual worktree output authority reader', () => {
+  let root;
+  let lane;
+  let spec;
+  let registry;
+  let selection;
+  let caller;
+  let calls;
+  const owner = 'preparation-fixture-owner';
+  function saveSpec() {
+    fs.writeFileSync(path.join(root, '.caws/specs/PREP-001.yaml'), yaml.dump(spec));
+  }
+  function saveRegistry() {
+    fs.writeFileSync(path.join(root, '.caws/worktrees.json'), JSON.stringify(registry));
+  }
+  function canonicalBytes() {
+    return Object.fromEntries(
+      ['policy.yaml', 'worktrees.json', 'specs/PREP-001.yaml'].map((file) => [
+        file,
+        fs.readFileSync(path.join(root, '.caws', file)),
+      ])
+    );
+  }
+  beforeEach(() => {
+    root = fs.realpathSync(fixtures.makeTempRepo());
+    const initialized = initProject(root);
+    if (!initialized.ok) throw new Error(JSON.stringify(initialized.errors));
+    lane = path.join(root, '.caws/worktrees/prep');
+    fixtures.git(root, ['worktree', 'add', '--detach', lane, 'HEAD']);
+    fs.writeFileSync(path.join(lane, '.gitignore'), 'tmp/prepare/\n');
+    registry = {
+      prep: { path: lane, specId: 'PREP-001', owner: { session_id: owner, platform: 'codex' } },
+    };
+    spec = {
+      id: 'PREP-001',
+      title: 'Preparation authority fixture',
+      mode: 'feature',
+      lifecycle_state: 'active',
+      worktree: 'prep',
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      blast_radius: { modules: ['fixture'], data_migration: false },
+      operational_rollback_slo: '5m',
+      scope: { in: ['tmp/prepare/'], out: ['tmp/prepare/run/private'] },
+      invariants: ['Only owned fixture output is admitted.'],
+      non_functional: { security: ['Reject foreign ownership and unscoped output.'] },
+      acceptance: [
+        { id: 'A1', given: 'owned fixture', when: 'read authority', then: 'actual scope decides' },
+      ],
+      contracts: [],
+    };
+    saveSpec();
+    expect(loadSpecs(path.join(root, '.caws')).diagnostics).toEqual([]);
+    saveRegistry();
+    selection = {
+      outputRoot: path.join(lane, 'tmp/prepare/run'),
+      writePaths: [path.join(lane, 'tmp/prepare/run/source/file.ts')],
+    };
+    calls = [];
+    caller = {
+      cwd: lane,
+      environment: { CAWS_AGENT_SURFACE: 'codex', CODEX_THREAD_ID: owner },
+      git: (args, options) => {
+        calls.push({ args: [...args], cwd: options.cwd });
+        return fixtures.git(options.cwd, args);
+      },
+    };
+  });
+  afterEach(() => fixtures.cleanupAll());
+
+  test('reads real linked-worktree ownership and explicit relative scope without writes', () => {
+    const before = canonicalBytes();
+    expect(inspectPreparationWriteAuthority(selection, caller)).toEqual({
+      repoRoot: root,
+      cawsDir: path.join(root, '.caws'),
+      worktreeRoot: lane,
+      worktreeName: 'prep',
+      specId: 'PREP-001',
+      sessionId: owner,
+      checkedRelativePaths: ['tmp/prepare/run', 'tmp/prepare/run/source/file.ts'],
+    });
+    expect(canonicalBytes()).toEqual(before);
+    expect(fs.existsSync(selection.outputRoot)).toBe(false);
+    expect(calls).toEqual([
+      { args: ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd: lane },
+      { args: ['rev-parse', '--show-toplevel'], cwd: lane },
+      { args: ['check-ignore', '--quiet', '--no-index', '--', 'tmp/prepare/run'], cwd: lane },
+    ]);
+  });
+
+  test('refuses a different caller despite valid scope and existing owner records', () => {
+    caller.environment.CODEX_THREAD_ID = 'another-fixture-owner';
+    const before = canonicalBytes();
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow('another caller');
+    expect(canonicalBytes()).toEqual(before);
+    expect(fs.existsSync(selection.outputRoot)).toBe(false);
+  });
+
+  test('does not acquire an identity from the registered owner when caller identity is absent', () => {
+    caller.environment = {};
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow(
+      'identity unavailable'
+    );
+    expect(fs.existsSync(path.join(root, '.caws/sessions'))).toBe(false);
+  });
+
+  test.each(['draft', 'closed', 'archived'])(
+    'refuses a %s spec even with matching ownership',
+    (state) => {
+      spec.lifecycle_state = state;
+      if (state === 'closed' || state === 'archived') spec.resolution = 'completed';
+      saveSpec();
+      expect(loadSpecs(path.join(root, '.caws')).diagnostics).toEqual([]);
+      expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow(
+        'spec must be active'
+      );
+    }
+  );
+
+  test('refuses one-sided binding rather than borrowing another spec', () => {
+    spec.worktree = 'different';
+    saveSpec();
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow('bidirectional');
+  });
+
+  test('uses actual Git checkout rather than a claimant path or canonical infrastructure exemption', () => {
+    spec.scope.in = ['elsewhere/'];
+    saveSpec();
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow(
+      'explicit scope admission: tmp/prepare/run'
+    );
+    caller.cwd = root;
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow(
+      'owned linked worktree'
+    );
+  });
+
+  test('refuses registry disagreement and duplicate physical checkout claims', () => {
+    registry.prep.path = root;
+    saveRegistry();
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow(
+      'exactly one registry'
+    );
+    registry.prep.path = lane;
+    registry.duplicate = { ...registry.prep };
+    saveRegistry();
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow(
+      'exactly one registry'
+    );
+  });
+
+  test('refuses missing policy, output escapes and exclusions within otherwise admitted output', () => {
+    selection.writePaths = [path.join(lane, 'tmp/prepare/run/private/key')];
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow(
+      'explicit scope admission'
+    );
+    selection.writePaths = [path.join(root, 'foreign-output')];
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow(
+      'escapes selected output'
+    );
+    selection.writePaths = [];
+    fs.unlinkSync(path.join(root, '.caws/policy.yaml'));
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow('policy unavailable');
+  });
+
+  test('requires actual ignored output and refuses control-plane paths', () => {
+    fs.writeFileSync(path.join(lane, '.gitignore'), '');
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow('must be ignored');
+    selection = { outputRoot: path.join(lane, '.caws/prepared'), writePaths: [] };
+    expect(() => inspectPreparationWriteAuthority(selection, caller)).toThrow('control-plane');
+  });
+});
 
 function object(kind, body, format = 'sha1') {
   const bytes = Buffer.from(body);

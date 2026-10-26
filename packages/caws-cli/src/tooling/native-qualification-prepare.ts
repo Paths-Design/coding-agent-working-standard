@@ -1,4 +1,12 @@
 import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { assertOwnership, deriveBindingState, evaluatePath } from '../kernel';
+import { resolveRepoRoot, type GitRunner } from '../store/repo-root';
+import { loadPolicy } from '../store/policy-store';
+import { loadSpecs } from '../store/specs-store';
+import { loadWorktrees } from '../store/worktrees-store';
+import { resolveCallerSession } from '../shell/session/resolve-session';
 
 /** Object identities are storage-format identities, never revision expressions. */
 export type PreparationObjectFormat = 'sha1' | 'sha256';
@@ -28,12 +36,173 @@ export interface PreparationExportPlan {
   files: PreparationExportFile[];
 }
 
+export interface PreparationWriteSelection {
+  outputRoot: string;
+  /** Complete actual destinations for this phase, including new directories. */
+  writePaths: readonly string[];
+}
+export interface PreparationCallerContext {
+  /** Process context supplied by the maintained caller, never request JSON. */
+  cwd: string;
+  environment: Readonly<NodeJS.ProcessEnv>;
+  /** The maintained caller supplies the independently pinned, bounded runner. */
+  git: GitRunner;
+}
+export interface PreparationWriteObservation {
+  repoRoot: string;
+  cawsDir: string;
+  worktreeRoot: string;
+  worktreeName: string;
+  specId: string;
+  sessionId: string;
+  checkedRelativePaths: string[];
+}
+
 const MAX_OBJECT_BYTES = 16 * 1024 * 1024;
 const MAX_BATCH_BYTES = 512 * 1024 * 1024;
 const MAX_OBJECTS = 50000;
 
 function requireCondition(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
+}
+
+function normalizedAbsolute(value: string): void {
+  requireCondition(
+    typeof value === 'string' &&
+      value.length <= 4096 &&
+      !value.includes('\0') &&
+      path.isAbsolute(value) &&
+      path.resolve(value) === value,
+    'Expected a normalized absolute preparation path'
+  );
+}
+
+function descendant(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return (
+    relative !== '' &&
+    relative !== '..' &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+}
+
+/**
+ * Read live canonical ownership and scope for actual planned destinations.
+ * This result is an observation, not a reusable capability. The effecting
+ * caller must recheck it and enforce exclusive physical custody separately.
+ * It grants no source-read, executable-startup, or candidate-build standing.
+ */
+export function inspectPreparationWriteAuthority(
+  selection: PreparationWriteSelection,
+  caller: PreparationCallerContext
+): PreparationWriteObservation {
+  normalizedAbsolute(caller.cwd);
+  normalizedAbsolute(selection.outputRoot);
+  requireCondition(
+    Array.isArray(selection.writePaths) && selection.writePaths.length <= MAX_OBJECTS,
+    'Preparation destination count exceeds bound'
+  );
+  const resolved = resolveRepoRoot(caller.cwd, { git: caller.git, requireCawsDir: true });
+  requireCondition(resolved.ok, 'Cannot resolve canonical preparation project');
+  const { repoRoot, cawsDir } = resolved.value;
+  const worktreeRoot = caller.git(['rev-parse', '--show-toplevel'], { cwd: caller.cwd });
+  normalizedAbsolute(worktreeRoot);
+  requireCondition(
+    fs.realpathSync(worktreeRoot) === worktreeRoot && fs.realpathSync(repoRoot) === repoRoot,
+    'Preparation project paths must be physical'
+  );
+  requireCondition(
+    caller.cwd === worktreeRoot || descendant(worktreeRoot, caller.cwd),
+    'Actual caller is outside selected Git worktree'
+  );
+  requireCondition(worktreeRoot !== repoRoot, 'Preparation requires an owned linked worktree');
+  const registry = loadWorktrees(cawsDir);
+  requireCondition(registry.ok, 'Cannot load canonical worktree registry');
+  const matches = Object.entries(registry.value).filter(
+    ([, record]) => record?.path === worktreeRoot
+  );
+  requireCondition(
+    matches.length === 1,
+    'Actual Git worktree must match exactly one registry entry'
+  );
+  const [worktreeName, record] = matches[0]!;
+  const specs = loadSpecs(cawsDir);
+  requireCondition(
+    !specs.diagnostics.some((item) => item.severity === 'error'),
+    'Canonical spec load failed'
+  );
+  const spec = specs.specs.find((item) => item.id === record.specId);
+  requireCondition(spec?.lifecycle_state === 'active', 'Preparation spec must be active');
+  const binding = deriveBindingState(spec, registry.value, worktreeName);
+  requireCondition(binding.kind === 'bound', 'Preparation binding must be bidirectional');
+  const session = resolveCallerSession({
+    cawsDir,
+    worktreeRoot,
+    env: { ...caller.environment },
+    allowMint: false,
+    agentPidWalkFn: () => null,
+  });
+  requireCondition(session.ok, 'Preparation caller identity unavailable');
+  const ownership = assertOwnership(
+    registry.value,
+    worktreeName,
+    session.value.identity,
+    { takeover: false },
+    new Date()
+  );
+  requireCondition(
+    ownership.ok && ownership.value === null,
+    'Preparation worktree belongs to another caller'
+  );
+  const policy = loadPolicy(cawsDir);
+  requireCondition(
+    policy.policy && policy.errors.length === 0,
+    'Canonical preparation policy unavailable'
+  );
+  requireCondition(
+    descendant(worktreeRoot, selection.outputRoot),
+    'Preparation output must be inside the actual worktree'
+  );
+  const relativeRoot = path.relative(worktreeRoot, selection.outputRoot).split(path.sep).join('/');
+  requireCondition(
+    !relativeRoot
+      .split('/')
+      .some((part) => part === '.git' || part === '.caws' || part === '.claude'),
+    'Preparation output cannot be control-plane state'
+  );
+  const checkedRelativePaths: string[] = [];
+  for (const destination of new Set([selection.outputRoot, ...selection.writePaths])) {
+    normalizedAbsolute(destination);
+    requireCondition(
+      destination === selection.outputRoot || descendant(selection.outputRoot, destination),
+      'Preparation destination escapes selected output'
+    );
+    const relative = path.relative(worktreeRoot, destination).split(path.sep).join('/');
+    const decision = evaluatePath(relative, binding, policy.policy);
+    requireCondition(
+      decision.kind === 'admit' && decision.rule === 'scope.admit.scope_in',
+      `Preparation destination needs explicit scope admission: ${relative}`
+    );
+    checkedRelativePaths.push(relative);
+  }
+  // Ignored is an operational constraint, never a substitute for scope above.
+  try {
+    caller.git(['check-ignore', '--quiet', '--no-index', '--', relativeRoot], {
+      cwd: worktreeRoot,
+    });
+  } catch {
+    throw new Error('Preparation output must be ignored by the actual worktree');
+  }
+  return {
+    repoRoot,
+    cawsDir,
+    worktreeRoot,
+    worktreeName,
+    specId: spec.id,
+    sessionId: session.value.identity.session_id,
+    checkedRelativePaths,
+  };
 }
 
 function oidWidth(format: PreparationObjectFormat): number {
