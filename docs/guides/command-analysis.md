@@ -350,11 +350,14 @@ Native `exec_command`/`shell_command` inputs require an explicit supported
 shell; native Bash also requires `login:false`. Native `workdir` is the
 execution cwd, resolved against the caller's base cwd; conflicting command
 fields are unresolved. The normalized name `Bash` alone does not establish a
-native command's dialect. `CAWS_BIN` and the pin environment are trusted
-launcher configuration; validating a response schema does not authenticate a
-malicious replacement CLI. Known inherited POSIX/keyword settings are refused.
-Their assignment rules can change the executable or Git environment selected by
-later source. The
+native command's dialect. The mandatory bridge selects `${CAWS_BIN:-caws}`; its
+inherited executable and `PATH` are host assumptions. A response schema does not
+authenticate the analyzer. Native adoption must bind both the Node executable
+and analyzer CLI bytes to the selected generation and retain that identity
+through the handler, bridge and child launch. Pointing `CAWS_BIN` at a CLI
+script alone leaves its interpreter selection unbound. Known inherited
+POSIX/keyword settings are refused. Their assignment rules can change the
+executable or Git environment selected by later source. The
 [Bash mode contract](https://www.gnu.org/s/bash/manual/html_node/Bash-POSIX-Mode.html)
 and
 [environment rules](https://www.gnu.org/software/bash/manual/html_node/Environment.html)
@@ -369,13 +372,14 @@ data. See the
 
 The assumptions have different evidence:
 
-| Dependency                                                                                      | Status and decisive check                                                                                                                                                                                                        |
-| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Submitted expansions remain inert during analysis.                                              | Established for the exercised corpus by compiled-consumer, installed-handler and packaged sentinel checks; unsupported syntax stays unresolved.                                                                                  |
-| Git discovery matches the pin's reciprocal metadata.                                            | Established for real linked-worktree, unmapped, forged, nested-foreign and source-visible mapping-change fixtures; concurrent replacement remains outside the host contract.                                                     |
-| Argument roles distinguish options from data.                                                   | Established only for the declared closed profiles and paired fixtures. Unknown options are unresolved; `uniq`'s second operand is an output, and ripgrep decompression is outside the reader profile.                            |
-| Bash startup state, executable identity and repository configuration satisfy the host contract. | Assumed, not established by source analysis. Native adoption must verify or enforce these properties.                                                                                                                            |
-| The actual executor receives the checked command and cwd.                                       | The matching Codex release source omits actual shell, startup mode and per-call cwd from the hook projection. Complete execution binding is not established by this adapter. Later transformations also require reauthorization. |
+| Dependency                                                                                      | Status and decisive check                                                                                                                                                                                                            |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Submitted expansions remain inert during analysis.                                              | Established for the exercised corpus by compiled-consumer, installed-handler and packaged sentinel checks; unsupported syntax stays unresolved.                                                                                      |
+| Git discovery matches the pin's reciprocal metadata.                                            | Established for real linked-worktree, unmapped, forged, nested-foreign and source-visible mapping-change fixtures; concurrent replacement remains outside the host contract.                                                         |
+| Argument roles distinguish options from data.                                                   | Established only for the declared closed profiles and paired fixtures. Unknown options are unresolved; `uniq`'s second operand is an output, and ripgrep decompression is outside the reader profile.                                |
+| Bash startup state, executable identity and repository configuration satisfy the host contract. | Assumed, not established by source analysis. Native adoption must verify or enforce these properties.                                                                                                                                |
+| The selected generation supplies the analyzer's Node executable and CLI bytes through launch.   | Unqualified: the handler environment and mandatory bridge retain inherited `CAWS_BIN` or `PATH` selection. Native generation identity must reach this consumer; schema validation does not establish it.                             |
+| The actual executor receives the checked command and cwd.                                       | Validated host `execution_workdir` establishes a directory coordinate. The known reduced Codex command projection does not bind complete shell, startup or final launch context. Later transformations also require reauthorization. |
 
 Git subcommand options use closed argument-role profiles. An option such as
 `--grep` consumes its data operand; identical bytes in an executable option

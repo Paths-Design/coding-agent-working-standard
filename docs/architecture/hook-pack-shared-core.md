@@ -282,9 +282,20 @@ dedicated `lib/agent-surface.sh`):
 | updatedInput rewrite      | yes                              | yes                                            | no (no documented contract; quiet-merge passes through)                    | no on the plain-CLI path (0.21.4 and 0.21.11 alike); the ACP/daemon surface applies it as of 0.21.11 — quiet-merge still passes through        | yes, via the bridge shim re-wrapping dispatcher output                                                                        | yes — `plugin.ts` mutates `output.args.command` before the tool runs                                                           |
 | non-2 non-zero hook exit  | warning (max returned)           | warning (max returned)                         | promoted to blocking exit 2 — Kimi does not enforce exit 1 (verified live) | warning (max returned) — Qwen enforces exit 2 blocking and treats exit 1 as a non-blocking error, same contract as Claude Code (verified live) | N/A — ZCode's hook runner requires strict JSON on stdout; the bridge re-wraps every shared-dispatcher exit into that contract | N/A — opencode interposition is in-process; `plugin.ts` throws directly rather than relying on a process exit code             |
 
-Backward-compatibility: the resolver falls back to the legacy env var
-(`CLAUDE_PROJECT_DIR` / `CODEX_PROJECT_DIR`) when `CAWS_PROJECT_DIR` is unset,
-so a not-yet-migrated wiring keeps working during the transition.
+The resolver preserves a nonempty `CAWS_PROJECT_DIR` verbatim. Otherwise it
+normalizes the legacy `CLAUDE_PROJECT_DIR` or `CODEX_PROJECT_DIR` candidate to
+its Git root, retaining the candidate if Git discovery fails. Git path readers
+remove one trailing record delimiter and preserve newlines belonging to the path
+itself.
+
+`worktree-guard.sh` queries canonical registry authority only after lexical
+projection finds a protected operation. An empty protected-operation view
+returns 0; nested executable Git commands remain subject to the guard. Required
+root helpers or unreadable or malformed registry JSON refuse with exit 2. The
+opt-in `stop-worktree-check.sh` instead diagnoses unavailable activity and
+returns 0. Registry readers distinguish a flat entry named `worktrees` from a
+legacy envelope by entry marker fields; this compatibility rule does not
+validate every registry field.
 
 ## Payload `cwd` contract
 
@@ -318,12 +329,12 @@ retains its declared Bash assumption when no shell is supplied, except for the
 known incompatible Codex producer. That profile does not establish another
 harness's normalization or effective executor settings.
 
-| Surface                   | Coordinate evidence                                                                             | Execution boundary                                                                                            |
-| ------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Claude Code               | Native payload declares a base `cwd`                                                            | The compatibility profile does not by itself qualify final shell, startup or rewritten source.                |
-| Codex                     | The known producer supplies reduced metadata; a turn directory does not bind per-call execution | Native envelopes are held as `execution-contract` unresolved, including caller-added shell fields or aliases. |
-| OpenCode                  | The plugin derives a coordinate from the Bash call's workdir or its native directory            | Adapter coordinate construction is separate from complete native launch qualification.                        |
-| Qwen, Kimi, ZCode and DSH | Their adapters define payload transport with different documented or unverified cwd coverage    | A surface label or canonical-root fallback does not establish effective execution context.                    |
+| Surface                   | Coordinate evidence                                                                                            | Execution boundary                                                                                                                                                               |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code               | Native payload declares a base `cwd`                                                                           | The compatibility profile does not by itself qualify final shell, startup or rewritten source.                                                                                   |
+| Codex                     | A host `execution_workdir` can establish a directory when emitted and validated; a turn directory alone cannot | The known reduced command projection remains `execution-contract` unresolved, including caller-added shell fields or aliases. Complete native launch qualification remains open. |
+| OpenCode                  | The plugin derives a coordinate from the Bash call's workdir or its native directory                           | Adapter coordinate construction is separate from complete native launch qualification.                                                                                           |
+| Qwen, Kimi, ZCode and DSH | Their adapters define payload transport with different documented or unverified cwd coverage                   | A surface label or canonical-root fallback does not establish effective execution context.                                                                                       |
 
 The trusted launcher identifies the Codex producer through `CAWS_AGENT_SURFACE`;
 literal diagnostic analysis cannot lift that native restriction. Protective
@@ -545,8 +556,10 @@ changes only a vendor tree does not contend for the shared version.
 - Idempotent: a byte-identical re-run reports unchanged and writes nothing.
 - Non-destructive: the settings.json / hooks.json merge preserves user-authored
   content; managed drift refuses by default (adopt/overwrite to override).
-- Fail-open dispatcher: a parser crash or missing lib in the shared core exits 0
-  rather than blocking the tool call.
+- Shared PreToolUse dispatch refuses missing required core libraries with
+  exit 2. A malformed payload rejected by `parse_hook_input` after library
+  loading returns 0; that transient parse failure has a different contract from
+  absent enforcement infrastructure.
 - The hooks.json placeholder substitution (absolute dispatcher command paths)
   continues to run at install for the codex wiring; the substituted command now
   points at `.caws/hooks/dispatch/<event>.sh`.
