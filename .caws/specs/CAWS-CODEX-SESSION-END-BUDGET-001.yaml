@@ -1,0 +1,36 @@
+id: CAWS-CODEX-SESSION-END-BUDGET-001
+title: 'Align Codex SessionEnd registration with the host teardown budget'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-26T22:01:42.796Z'
+updated_at: '2026-10-26T22:01:42.796Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Codex native registration generation and reconciliation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/system-runtime.ts'
+    - 'packages/caws-cli/src/init/native-hook-identification.ts'
+    - 'packages/caws-cli/tests/adapter/native-entry-registration.test.js'
+  out: []
+invariants:
+  - 'The existing original installed invocation deadline remains 30000ms; supported Codex SessionEnd registration is bounded by the actual host maximum of three seconds without modifying the host or foreign hooks'
+  - 'Normalize only recognized historical stock ten-second Codex SessionEnd registrations; preserve valid custom supported budgets, foreign registrations, other surfaces and their units, and refuse unsupported custom authority rather than silently broadening it'
+acceptance:
+  - id: A1
+    given: 'fresh Codex native configuration'
+    when: 'generated registration is inspected and qualified'
+    then: 'SessionEnd declares three seconds and other event and harness budgets retain their existing semantics'
+  - id: A2
+    given: 'recognized historical stock10, valid supported custom budgets and foreign or unsupported hooks'
+    when: 'supported configure reconciliation runs'
+    then: 'stock10 becomes3 idempotently, supported values and foreign hooks remain exact, and unsupported custom registrations refuse before enabling state'
+  - id: A3
+    given: 'committed reviewed source and matching compiled consumer'
+    when: 'existing focused registration checks gates and doctor run'
+    then: 'configuration assertions pass with retained raw output while actual host discovery and SessionEnd sealing remain explicit runtime obligations of the Parent'
+non_functional: {}
+contracts: []
