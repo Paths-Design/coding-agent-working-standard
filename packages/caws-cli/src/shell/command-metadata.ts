@@ -1531,6 +1531,47 @@ export const HOOKS_COMMAND_META: GroupCommandMeta = {
   subcommands: [
     {
       kind: 'leaf',
+      name: 'mutation-view',
+      description:
+        'Project bounded shell tokens for the write guard without execution. Reads {command} JSON on stdin. Facts confer no write authority. Exits 0 for a valid projection (including unresolved issues), 2 for unavailable analysis.',
+      options: [
+        { flag: '--cwd <path>', description: 'Actual absolute execution directory' },
+        {
+          flag: '--cwd-unresolved',
+          description: 'Retain unknown coordinates; cwd is only a syntax-traversal placeholder',
+        },
+        { flag: '--project <path>', description: 'Absolute project root supplied by the guard' },
+        { flag: '--shell <shell>', description: 'Declared shell (supported: bash)' },
+        {
+          flag: '--json',
+          description: 'Emit tokens, interpreter provenance and unresolved issues',
+        },
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'analyze',
+      description:
+        'Analyze Bash command effects without executing the command. Reads a JSON request or native tool payload from stdin unless --command is supplied. Exits 0 for allow, 1 for deny and 2 for unresolved.',
+      options: [
+        {
+          flag: '--command <command>',
+          description: 'Analyze these exact command bytes instead of stdin',
+        },
+        { flag: '--cwd <path>', description: 'Override the request working directory' },
+        {
+          flag: '--worktree <path>',
+          description: 'Trusted worktree pin; overrides the payload worktree',
+        },
+        { flag: '--shell <shell>', description: 'Override the declared shell (supported: bash)' },
+        {
+          flag: '--json',
+          description: 'Emit the stable decision, source-positioned reasons and trace',
+        },
+      ],
+    },
+    {
+      kind: 'leaf',
       name: 'list',
       description:
         'Show the effective handler chain per event, each row tagged with the tier that put it there (stock, repo-policy, machine-policy). Shells the launcher so what it prints is what executes. Always exits 0.',

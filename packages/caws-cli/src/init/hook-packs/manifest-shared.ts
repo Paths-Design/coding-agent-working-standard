@@ -628,7 +628,13 @@ import { isAdapterCoveredSurface } from './types';
 // require validated host command-directory context; missing context retains
 // unavailable-native-context instead of an inferred ownership decision.
 // v112: the stock reprieve consult uses a generated standalone typed reader.
-export const SHARED_PACK_VERSION = 113;
+// v114: bounded mutation analysis and checked path identity share the guard boundary.
+// v115: registry consumers preserve canonical path bytes and diagnose unavailable readers.
+// v116: protected-operation selection and a lane named worktrees retain their meaning.
+// v117: complete typed copy roles replace the source-byte destination heuristic.
+// Removal entries and registered physical roots retain distinct ownership checks;
+// observed registry or contained-scope failures cannot become empty admission.
+export const SHARED_PACK_VERSION = 117;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -848,6 +854,18 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/lib/bash-mutation-targets.sh',
       sourcePath: 'lib/bash-mutation-targets.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/bash-mutation-analysis.sh',
+      sourcePath: 'lib/bash-mutation-analysis.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/copy-roles.sh',
+      sourcePath: 'lib/copy-roles.sh',
       executable: false,
       managed: true,
     },

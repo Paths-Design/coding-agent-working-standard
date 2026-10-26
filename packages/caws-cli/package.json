@@ -42,6 +42,7 @@
     "mutation:run:kernel": "node scripts/run-mutation.mjs --surface kernel",
     "mutation:run:store": "node scripts/run-mutation.mjs --surface store",
     "mutation:run:shell": "node scripts/run-mutation.mjs --surface shell",
+    "mutation:run:analysis": "node scripts/run-mutation.mjs --surface analysis",
     "test:mutation": "npm run mutation:run:store",
     "test:axe": "npm run test:prepare && jest --testPathPatterns=axe && npm run test:cleanup",
     "test:watch": "npm run test:prepare && jest --watch",
@@ -89,13 +90,15 @@
     "access": "public"
   },
   "dependencies": {
+    "acorn": "8.15.0",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "chalk": "4.1.2",
     "commander": "^11.0.0",
     "fs-extra": "^11.0.0",
     "js-yaml": "4.3.2",
-    "picomatch": "4.0.4"
+    "picomatch": "4.0.4",
+    "unbash": "6.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
