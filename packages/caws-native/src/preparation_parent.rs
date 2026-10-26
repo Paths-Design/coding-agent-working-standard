@@ -601,18 +601,24 @@ impl OwnedChild {
             {
                 owned_group::GroupSettlement::Exited { .. } if self.out_eof && self.err_eof => {
                     checked(deadline)?;
-                    let status = self
-                        .child
-                        .as_mut()
-                        .unwrap()
-                        .wait()
-                        .map_err(|e| e.to_string())?;
-                    self.child = None;
-                    return Ok(status.code().unwrap_or(-1));
+                    return self.reap_observed_child(deadline);
                 }
                 _ => pause(deadline)?,
             }
         }
+    }
+    fn reap_observed_child(&mut self, deadline: &MonotonicDeadline) -> Result<i32> {
+        // Called only after group settlement and both output EOFs. Keep the
+        // actual reap fact even if scheduling or the syscall crosses expiry.
+        let status = self
+            .child
+            .as_mut()
+            .ok_or("Already reaped child")?
+            .wait()
+            .map_err(|e| e.to_string())?;
+        self.child = None;
+        checked(deadline)?;
+        Ok(status.code().unwrap_or(-1))
     }
 }
 // Do not implement Drop that signals/reaps or starts a renewed cleanup budget.
@@ -825,6 +831,22 @@ struct SourceGit {
     git_dir: PathBuf,
     common: PathBuf,
     pins: Vec<MetadataPin>,
+}
+fn admitted_metadata_roots(
+    cwd: &Path,
+    caller: SourceGit,
+    source: &SourceGit,
+    canonical: SourceGit,
+) -> BTreeMap<PathBuf, SourceGit> {
+    // The caller, source and canonical observations have already been checked
+    // against the same physical common store. The fixed ignore query uses the
+    // caller's worktree root even when the process starts in a subdirectory.
+    BTreeMap::from([
+        (caller.top.clone(), caller.clone()),
+        (cwd.to_path_buf(), caller),
+        (source.top.clone(), source.clone()),
+        (canonical.top.clone(), canonical),
+    ])
 }
 fn locate_git(cwd: &Path, deadline: &MonotonicDeadline) -> Result<SourceGit> {
     physical(cwd)?;
@@ -1616,10 +1638,7 @@ fn execute_with_deadline(
         "Canonical store mismatch",
     )
     .map_err(failure)?;
-    let mut roots = BTreeMap::new();
-    roots.insert(cwd.clone(), caller);
-    roots.insert(source.top.clone(), source.clone());
-    roots.insert(canonical, canonical_git);
+    let roots = admitted_metadata_roots(&cwd, caller, &source, canonical_git);
     let (parent, child_socket) = UnixStream::pair().map_err(|e| failure(e.to_string()))?;
     let fd = unsafe { libc::fcntl(child_socket.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 64) };
     require(fd >= 64, "Cannot reserve inherited parent descriptor").map_err(failure)?;
@@ -1717,6 +1736,10 @@ pub fn run_stdin() -> std::result::Result<PreparationCompletion, PreparationFail
     let deadline = MonotonicDeadline::capture(Duration::from_millis(pins.timeout_ms))
         .map_err(|e| failure(e.to_string()))?;
     let original = deadline.envelope();
+    // Reject a known unsupported CLI receipt sink before input, children or
+    // materialization. The sink-independent library execute API does not own
+    // its caller's eventual delivery choice.
+    terminal_sink(1).map_err(|e| timed_failure(failure(e), original))?;
     let input = read_request(&deadline).map_err(|e| timed_failure(failure(e), original))?;
     let request = validate_request(&input).map_err(|e| timed_failure(failure(e), original))?;
     execute_with_deadline(&input, request, pins, deadline).map_err(|e| timed_failure(e, original))
@@ -2067,6 +2090,47 @@ mod tests {
     }
     #[cfg(target_os = "macos")]
     #[test]
+    fn expiry_between_settlement_and_reap_keeps_fact_without_success() {
+        let mut owner = fixture("exit");
+        let pid = owner.child.as_ref().unwrap().id();
+        let setup = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        loop {
+            owner.drain(METADATA).unwrap();
+            if matches!(
+                owned_group::settlement_before_reap(owner.child.as_ref().unwrap()).unwrap(),
+                owned_group::GroupSettlement::Exited { .. }
+            ) && owner.out_eof
+                && owner.err_eof
+            {
+                break;
+            }
+            pause(&setup).unwrap();
+        }
+        let deadline = MonotonicDeadline::capture(Duration::from_millis(20)).unwrap();
+        checked(&deadline).unwrap();
+        // Model descheduling after the last pre-reap check. This is the same
+        // original interval; the real child is reaped by the production method.
+        thread::sleep(Duration::from_millis(30));
+        assert!(
+            owner
+                .reap_observed_child(&deadline)
+                .unwrap_err()
+                .contains("expired")
+        );
+        assert!(owner.child.is_none());
+        assert!(owner.out_eof && owner.err_eof);
+        let mut status = 0;
+        assert_eq!(
+            unsafe { libc::waitpid(pid as i32, &mut status, libc::WNOHANG) },
+            -1
+        );
+        assert_eq!(
+            io::Error::last_os_error().raw_os_error(),
+            Some(libc::ECHILD)
+        );
+    }
+    #[cfg(target_os = "macos")]
+    #[test]
     fn inherited_output_fd_and_live_group_cannot_publish_success() {
         let mut owner = fixture("held-output");
         let setup = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
@@ -2123,6 +2187,35 @@ mod tests {
             "Source configuration changed"
         );
         fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn nested_caller_admits_its_own_root_without_admitting_other_worktrees() {
+        let common = PathBuf::from("/canonical/.git");
+        let observation = |top: &str, git_dir: &str| SourceGit {
+            top: PathBuf::from(top),
+            git_dir: PathBuf::from(git_dir),
+            common: common.clone(),
+            pins: vec![],
+        };
+        let caller = observation("/owned", "/canonical/.git/worktrees/owned");
+        let source = observation("/source", "/canonical/.git/worktrees/source");
+        let canonical = observation("/canonical", "/canonical/.git");
+        let roots = admitted_metadata_roots(
+            Path::new("/owned/packages/caws-cli"),
+            caller,
+            &source,
+            canonical,
+        );
+        assert_eq!(roots.len(), 4);
+        let cwd = roots.get(Path::new("/owned/packages/caws-cli")).unwrap();
+        let ignore = roots.get(Path::new("/owned")).unwrap();
+        assert_eq!(ignore.top, Path::new("/owned"));
+        assert_eq!(ignore.git_dir, cwd.git_dir);
+        assert_eq!(ignore.common, cwd.common);
+        assert!(roots.contains_key(Path::new("/source")));
+        assert!(roots.contains_key(Path::new("/canonical")));
+        assert!(!roots.contains_key(Path::new("/unrelated")));
+        assert!(!roots.contains_key(Path::new("/owned/arbitrary-child")));
     }
     #[cfg(target_os = "macos")]
     #[test]
