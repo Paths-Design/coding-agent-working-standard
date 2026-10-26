@@ -28,14 +28,10 @@
 #   remove/move/copy rm FILE   mv SRC DST   cp SRC DST   dd of=FILE
 #   git path-restore git restore FILE   git checkout -- FILE
 #                    git reset -- FILE   git clean
-#   interpreter      python / node: write targets appearing as path literals in
-#                    inline -c/-e code, heredoc bodies, or the content of a
-#                    script file named on the command line (write-verb +
-#                    path-literal co-occurrence —
-#                    CAWS-BASH-GUARD-INTERPRETER-WRITE-01). These reach the
-#                    cross-repository check only; they never enter the
-#                    worktree-claim oracle, because a literal is evidence of a
-#                    target, not proof of one.
+#   interpreter      Explicit readonly / finite-writes / unresolved effects
+#                    from bounded Node/Python profiles. Proven write operands
+#                    reach both repository and worktree ownership checks.
+#                    File-entry scripts and unmodeled effects remain held.
 
 set -euo pipefail
 
@@ -53,6 +49,34 @@ if ! { [[ -f "$SCRIPT_DIR/lib/caws-state.sh" ]] && source "$SCRIPT_DIR/lib/caws-
   printf '{"decision":"block","reason":"CAWS bash-write-guard: cannot load lib/caws-state.sh, so Bash-mutation worktree isolation cannot be evaluated. Failing closed. Restore the hook pack: caws init adapters install"}\n'
   exit 2
 fi
+# Ownership and containment below compare normalized paths. A path that cannot
+# be normalized is refused here: compared unresolved, a foreign target can read
+# as this session's own (CAWS-DEFECT-REALPATH-PYTHON-ABSENT-FAIL-OPEN-01).
+_bwg_normalize_refuse() {
+  echo "[bash-write-guard] cannot normalize the $1 path '$2', so Bash-mutation ownership cannot be evaluated. Failing CLOSED. Restore a working python3 on PATH." >&2
+  printf '{"decision":"block","reason":"CAWS bash-write-guard: a path could not be normalized, so Bash-mutation ownership cannot be evaluated. Failing closed. Restore a working python3 on PATH."}\n'
+  exit 2
+}
+_bwg_git_failed_refuse() {
+  echo "[bash-write-guard] git could not determine the repository for $(printf '%q' "$1") although a .git entry exists at $(printf '%q' "$2"), so the canonical checkout and worktree ownership cannot be determined. Failing CLOSED. Repair the repository or worktree (git worktree repair, or prune and recreate it)." >&2
+  printf '{"decision":"block","reason":"CAWS bash-write-guard: git could not determine the repository although a .git entry exists, so the canonical checkout and worktree ownership cannot be determined. Failing closed."}\n'
+  exit 2
+}
+# Usage: _bwg_resolve_refuse <status> <start>: the canonical root could not be
+# resolved. Status 3 means git did not answer although a .git entry exists.
+_bwg_resolve_refuse() {
+  local evidence=""
+  if [[ "$1" == 3 ]]; then
+    caws_git_evidence_dir_into evidence "${_BWG_START_PHYSICAL:-}" || evidence="$2"
+    _bwg_git_failed_refuse "$2" "$evidence/.git"
+  fi
+  _bwg_normalize_refuse "project root" "$2"
+}
+_bwg_git_refuse() {
+  echo "[bash-write-guard] git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing CLOSED. Restore git on PATH." >&2
+  printf '{"decision":"block","reason":"CAWS bash-write-guard: git is not available on PATH, so the canonical checkout and worktree ownership cannot be determined. Failing closed. Restore git on PATH."}\n'
+  exit 2
+}
 # shellcheck source=lib/agent-surface.sh
 # Provides CAWS_PROJECT_DIR and caws_source_lib — load-bearing. Guard the source
 # (a fatal `source <missing>` is not caught by `|| true` under set -e) and fail
@@ -108,26 +132,86 @@ caws_source_lib heredoc.sh 2>/dev/null || true
 TOOL_NAME="$HOOK_TOOL_NAME"
 COMMAND="$HOOK_COMMAND"
 
-# Self-filter: Bash only.
-if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
-  exit 0
+# Parsed exports are observations, not a replacement execution envelope. In a
+# dispatcher child the original stdin is replayed even when parsing fast-paths;
+# a standalone parser instead keeps the full local JSON or its transport file.
+if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then
+  if [[ ! -f "$HOOK_PAYLOAD_FILE" || ! -r "$HOOK_PAYLOAD_FILE" ]]; then
+    echo '[bash-write-guard] UNRESOLVED: original payload transport file is unavailable.' >&2
+    exit 2
+  fi
+elif [[ -z "${HOOK_INPUT_JSON:-}" ]]; then
+  HOOK_INPUT_JSON="$(cat)" || exit 2
+  export -n HOOK_INPUT_JSON 2>/dev/null || true
 fi
+original_payload() {
+  if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then cat "$HOOK_PAYLOAD_FILE"
+  else printf '%s' "${HOOK_INPUT_JSON:-}"; fi
+}
+ORIGINAL_TOOL="$(original_payload | node -e '
+const fs = require("node:fs");
+try {
+  const value = JSON.parse(fs.readFileSync(0, "utf8"));
+  if (!value || typeof value.tool_name !== "string" || !value.tool_name) process.exit(1);
+  process.stdout.write(value.tool_name);
+} catch { process.exit(1); }
+' 2>/dev/null)" || {
+  echo '[bash-write-guard] UNRESOLVED: original tool metadata is missing or malformed.' >&2
+  exit 2
+}
+case "$ORIGINAL_TOOL" in
+  Bash|exec_command|functions.exec_command|shell_command|functions.shell_command) ;;
+  *) exit 0 ;;
+esac
 
 CAWS_CLAIM_ORACLE="$SCRIPT_DIR/lib/worktree-claim-oracle.cjs"
-[[ -f "$CAWS_CLAIM_ORACLE" ]] || exit 0
-command -v node >/dev/null 2>&1 || exit 0
 
-# Resolve canonical root.
-if command -v resolve_canonical_dir >/dev/null 2>&1; then
-  PROJECT_DIR="$(resolve_canonical_dir "${CAWS_PROJECT_DIR:-.}")"
-else
-  PROJECT_DIR="${CAWS_PROJECT_DIR:-.}"
+# Git is how this guard finds the canonical checkout and which session owns a
+# linked worktree. Without it a worktree reads as an ungoverned directory, and
+# a foreign mutation would be admitted at the governance check below.
+command -v git >/dev/null 2>&1 || _bwg_git_refuse
+
+# Resolve canonical root. Path identity is compared byte for byte, and a
+# legitimate root may end in a line feed that command substitution would
+# strip; the stripped root names no directory, so the governance check below
+# would find no .caws and admit. Every path is therefore assigned through the
+# out-parameter helpers in lib/caws-state.sh.
+_BWG_START="${CAWS_PROJECT_DIR:-.}"
+# No answer from git means "not a repository" only where no .git entry exists
+# on the directory or any ancestor. Otherwise git failed (a broken worktree, a
+# failing binary) and the directory must not be read as ungoverned.
+caws_physical_dir_into _BWG_START_PHYSICAL "$_BWG_START" || _BWG_START_PHYSICAL=""
+if ! caws_git_path_into _BWG_GIT_DIR "$_BWG_START" --git-dir &&
+    caws_git_evidence_dir_into _BWG_GIT_EVIDENCE "$_BWG_START_PHYSICAL"; then
+  _bwg_git_failed_refuse "$_BWG_START" "$_BWG_GIT_EVIDENCE/.git"
 fi
+caws_resolve_canonical_dir_into _BWG_PROJECT_RAW "$_BWG_START" || _bwg_resolve_refuse "$?" "$_BWG_START"
 # Compare the same physical identity used by abspath for mutation targets.
 # A logical alias such as /tmp or a symlinked project root is still this repo.
-PROJECT_DIR="$(_realpath "$PROJECT_DIR")"
+caws_guard_realpath_into PROJECT_DIR "$_BWG_PROJECT_RAW" || _bwg_normalize_refuse "project root" "$_BWG_PROJECT_RAW"
 
-[[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] || exit 0
+# The command analysis transport (caws.shell_mutation_view.v2) carries the
+# operating directory as a coordinate that cannot hold a carriage return, line
+# feed or tab. The operating directory is the payload's cwd when it names a
+# directory, otherwise the project root (see _CWD_RESOLVED below), and the
+# analyzer resolves it to its physical path, so an ordinary alias of such a
+# directory reaches the same limit. It is refused here, before the governance
+# check, rather than reaching the analyzer as an invalid contract.
+_BWG_TRANSPORT_CWD="$PROJECT_DIR"
+if [[ -n "${HOOK_CWD:-}" && -d "$HOOK_CWD" ]]; then
+  caws_physical_dir_into _BWG_TRANSPORT_CWD "$HOOK_CWD" || _BWG_TRANSPORT_CWD="$HOOK_CWD"
+fi
+if [[ "$_BWG_TRANSPORT_CWD" == *[$'\r\n\t']* ]]; then
+  echo "[bash-write-guard] the operating directory's physical path $(printf '%q' "$_BWG_TRANSPORT_CWD") contains a carriage return, line feed or tab, which the command mutation analysis transport cannot carry as a coordinate, so this command's write targets cannot be established. Failing CLOSED." >&2
+  printf '{"decision":"block","reason":"CAWS bash-write-guard: the operating directory contains a carriage return, line feed or tab, which the command mutation analysis transport cannot carry, so write targets cannot be established. Failing closed."}\n'
+  exit 2
+fi
+
+[[ -d "$PROJECT_DIR/.caws" ]] || exit 0
+if [[ ! -f "$CAWS_CLAIM_ORACLE" ]] || ! command -v node >/dev/null 2>&1; then
+  echo '[bash-write-guard] Ownership infrastructure unavailable in a governed project; failing closed. Restore the shared runtime with caws init adapters install.' >&2
+  exit 2
+fi
 
 AGENT_CWD="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 
@@ -144,13 +228,13 @@ AGENT_CWD="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 # surface whose contract is unverified, an absent cwd is the normal case, and
 # asking would refuse every relative write (a false refusal, ranked worse than
 # the narrow fail-open), so those keep the prior behavior of resolving against
-# the guess. Adding a surface whose payload is verified to carry `cwd` (zcode,
-# dsh) is a one-word change to this list.
-_CWD_CONTRACT_SURFACES=" claude-code codex opencode qwen-code kimi-code "
+# the guess. The surface list lives in caws_payload_carries_cwd
+# (lib/caws-state.sh), shared with worktree-write-guard so a relative Write and
+# a relative Bash mutation get the same answer.
 # CAWS_AGENT_SURFACE is set by lib/agent-surface.sh (sourced above), which
 # defaults an unset value to claude-code.
 _CWD_CONTRACT=0
-[[ -n "${CAWS_AGENT_SURFACE:-}" && "$_CWD_CONTRACT_SURFACES" == *" $CAWS_AGENT_SURFACE "* ]] && _CWD_CONTRACT=1
+caws_payload_carries_cwd && _CWD_CONTRACT=1
 _CWD_RESOLVED=0
 [[ -n "${HOOK_CWD:-}" && -d "$HOOK_CWD" ]] && _CWD_RESOLVED=1
 # Codex session cwd anchors governance but does not identify the Bash command
@@ -199,7 +283,7 @@ foreign_repo_root() {
 # recognizer without sourcing this guard (which parses input, resolves session
 # state and then invokes the ownership oracle). The guard keeps its own
 # fail-CLOSED posture on a missing lib; CASR keeps its fail-open posture. The
-# consumer loop below is unchanged, so candidate sequences are identical.
+# AST-required mode supplies typed expansions to the existing utility-role rules.
 # Governance: CASR-CONTEXT-DELIVERED-BY-TOOL-NAME-NOT-WRITE-TARGET-01.
 if [[ -r "$SCRIPT_DIR/lib/bash-mutation-targets.sh" ]]; then
   # shellcheck source=lib/bash-mutation-targets.sh
@@ -214,7 +298,7 @@ fi
 # entry point above resolves, the guard runs, and the cross-repo arm silently
 # adjudicates nothing — a fail-OPEN that no output reports. Each function this
 # guard depends on is therefore checked by name, not inferred from one.
-for _fn in caws_foreign_repo_root caws_bash_interpreter_write_literals; do
+for _fn in caws_foreign_repo_root caws_bash_mutation_effects; do
   if ! declare -F "$_fn" >/dev/null 2>&1; then
     echo "[bash-write-guard] CAWS hook infrastructure incomplete: lib/bash-mutation-targets.sh loaded but does not provide $_fn — the cross-repository arm cannot run. Failing CLOSED. Update the shared hook libs with: caws init adapters install" >&2
     printf '{"decision":"block","reason":"CAWS bash-write-guard: lib/bash-mutation-targets.sh is present but stale (missing %s), so the cross-repository boundary cannot be adjudicated. Failing closed. Update the hook pack: caws init adapters install"}\n' "$_fn"
@@ -222,76 +306,93 @@ for _fn in caws_foreign_repo_root caws_bash_interpreter_write_literals; do
   fi
 done
 
+# The analyzer supplies syntax observations. Existing mutation policies decide.
+CAWS_BASH_ANALYSIS_REQUIRED=1
+if [[ ! -r "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" ]] ||
+    ! source "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" ||
+    ! declare -F caws_bash_prepare_analysis >/dev/null 2>&1 ||
+    ! caws_bash_prepare_analysis "$COMMAND" "$AGENT_CWD" "$PROJECT_DIR"; then
+  echo "[bash-write-guard] UNRESOLVED: ${CAWS_BASH_ANALYSIS_ERROR:-command mutation analysis bridge is unavailable}. Failing CLOSED; no legacy fallback." >&2
+  exit 2
+fi
+
+CAWS_COPY_FINAL_SYMLINK=''
+if [[ ! -r "$SCRIPT_DIR/lib/copy-roles.sh" ]] ||
+    ! source "$SCRIPT_DIR/lib/copy-roles.sh" ||
+    ! caws_copy_role_paths "$PROJECT_DIR"; then
+  echo '[bash-write-guard] copy-role path infrastructure is unavailable; failing closed.' >&2
+  exit 2
+fi
+if [[ "$CAWS_COPY_CANONICAL" == 1 ]]; then
+  echo 'BLOCKED: Copying files from a worktree to the main repo is forbidden.' >&2
+  exit 2
+fi
+case "${CAWS_COPY_FINAL_SYMLINK:-}" in
+  0|1) ;;
+  *) echo '[bash-write-guard] copy-role final-entry observation is unavailable; failing closed.' >&2; exit 2 ;;
+esac
 extract_targets() {
-  # Two channels, both consumed, because an ownership gate wants every path a
-  # command might touch:
-  #   file operands -> unchanged, the sequence this guard has always seen.
-  #   broad roots   -> `git clean` rooted at AGENT_CWD, adjudicated exactly as
-  #                    before this split. A prefix test is what "might this
-  #                    touch a claimed path?" wants, so the conservative root is
-  #                    the right answer HERE even though CASR declines it.
-  # The shared library reads no ambient state; this call site is the only place
-  # AGENT_CWD enters extraction, so the guard's posture stays the guard's own
-  # decision rather than a hidden property of the library.
-  caws_bash_mutation_candidates "$1"
+  # Preserve per-operand effects; equal path spellings can have different roles.
+  # Interpreter/copy/broad paths keep their existing referent interpretation.
+  local effects paths candidate
+  effects="$(caws_bash_mutation_effects "$1")" || return 2
+  [[ -z "$effects" ]] || printf '%s\n' "$effects"
+  paths="$(caws_bash_analysis_interpreter_writes "$1")" || return 2
+  while IFS= read -r candidate; do
+    [[ -z "$candidate" ]] || printf 'referent\t%s\n' "$candidate"
+  done <<< "$paths"
+  for candidate in ${CAWS_COPY_WRITE_TARGET[@]+"${CAWS_COPY_WRITE_TARGET[@]}"}; do
+    printf 'referent\t%s\n' "$candidate"
+  done
   if declare -F caws_bash_broad_mutations >/dev/null 2>&1; then
     # Do not turn a cwd-relative broad mutation into a guessed absolute path.
     local broad_base="$AGENT_CWD"
     [[ "$_CODEX_EXECUTION_CWD_UNAVAILABLE" == "1" ]] && broad_base="."
-    caws_bash_broad_mutations "$1" "$broad_base" | cut -f2
+    paths="$(caws_bash_broad_mutations "$1" "$broad_base" | cut -f2)" || return 2
+    while IFS= read -r candidate; do
+      [[ -z "$candidate" ]] || printf 'referent\t%s\n' "$candidate"
+    done <<< "$paths"
   fi
+  return 0
 }
 
-abspath() {
-  local p="$1"
-  case "$p" in
-    /*) _realpath "$p" ;;
-    *)  _realpath "$AGENT_CWD/$p" ;;
+# abspath_into <var> <path>: caws_guard_realpath_into's status; every caller
+# refuses on failure.
+abspath_into() {
+  case "$2" in
+    /*) caws_guard_realpath_into "$1" "$2" ;;
+    *)  caws_guard_realpath_into "$1" "$AGENT_CWD/$2" ;;
   esac
 }
 
-# --- interpreter write-target scan (NARROW) ----------------------------------
-# CAWS-BASH-GUARD-INTERPRETER-WRITE-01: a mutation performed INSIDE an
-# interpreter names no write target on the shell command line, so the
-# recognizer above extracts nothing and the guard adjudicates an empty
-# candidate set. Writing the scratch script is permitted by design (see the
-# /tmp rationale on caws_foreign_repo_root); running it was never adjudicated
-# at all. That pair is a complete cross-repo write channel, and it is the one
-# session 1aa3f0bd used: `cat > /tmp/apply-fix.mjs` carrying a sibling-repo
-# path, then `node /tmp/apply-fix.mjs`, both exit 0.
-#
-# The scan closes the detectable half: write targets that appear as PATH
-# LITERALS inside the interpreter's payload. It lives in
-# lib/bash-mutation-targets.sh (caws_bash_interpreter_write_literals, with the
-# co-occurrence rationale) so block-dangerous reads the SAME answer when it
-# chooses which remediation to print
-# (CAWS-GUARD-REMEDIATION-CROSS-REPO-CONSISTENCY-01). The wrapper below adds
-# only the sentinel the decide loop dispatches on.
-#
-# Interpreter candidates are adjudicated at the CROSS-REPOSITORY boundary ONLY
-# and never enter the worktree-claim oracle. A literal in a script body is
-# evidence that the script may write there, not proof that it will; feeding
-# that to the ownership oracle would turn any in-project path merely MENTIONED
-# in a script into a claim conflict. The spec's invariant is that existing
-# behavior is unchanged everywhere else, so the high-confidence predicate is
-# the only one that acts on this weaker evidence.
-#
-# What it cannot see: a target COMPUTED at runtime — concatenated from shell
-# variables, read out of a config file, or piped in via `python3 -`. That is a
-# real residual, named honestly in scope-guard's refusal rather than papered
-# over, and it is never an admitted route.
-scan_interpreter_targets() {
-  local frag
-  while IFS= read -r frag; do
-    [[ -z "$frag" ]] && continue
-    printf '__INTERP__%s\n' "$frag"
-  done < <(caws_bash_interpreter_write_literals "$1" "$AGENT_CWD")
+# A remove operation unlinks a literal final symlink, not its referent.
+# Physical ancestors still determine entry ownership and repository membership.
+mutation_target_into() {
+  local _effect_role="$3" _effect_candidate="$4"
+  local _effect_full _effect_parent _effect_leaf
+  case "$_effect_candidate" in
+    /*) _effect_full="$_effect_candidate" ;;
+    *) _effect_full="$AGENT_CWD/$_effect_candidate" ;;
+  esac
+  _effect_leaf="${_effect_full##*/}"
+  if [[ "$_effect_role" == unlink-entry* && -n "$_effect_leaf" &&
+        "$_effect_leaf" != . && "$_effect_leaf" != .. && -L "$_effect_full" ]]; then
+    _effect_parent="${_effect_full%/*}"
+    [[ -n "$_effect_parent" ]] || _effect_parent=/
+    caws_physical_dir_into _effect_parent "$_effect_parent" || return 1
+    printf -v "$1" '%s/%s' "${_effect_parent%/}" "$_effect_leaf"
+    printf -v "$2" '%s' "$_effect_parent"
+  else
+    abspath_into "$1" "$_effect_candidate" || return 1
+    printf -v "$2" '%s' "${!1}"
+  fi
 }
 
 # --- decide -----------------------------------------------------------------
 WORST="pass"
 WORST_DETAIL=""
 WORST_KIND=""
+_BWG_REMOVE_UNRESOLVED=0
 
 escalate() {
   local rank_new rank_cur
@@ -302,17 +403,33 @@ escalate() {
   fi
 }
 
-while IFS= read -r cand; do
-  [[ -z "$cand" ]] && continue
-  # CAWS-BASH-GUARD-INTERPRETER-WRITE-01: candidates from the interpreter scan
-  # carry a sentinel prefix. They are weaker evidence than a named operand — a
-  # path literal in a script body, not a target the shell will definitely write
-  # — so they are adjudicated at the cross-repository boundary only and are
-  # dropped before the allowlist and the claim oracle.
-  _INTERP=0
-  case "$cand" in
-    __INTERP__*) _INTERP=1; cand="${cand#__INTERP__}" ;;
+if [[ -n "$CAWS_COPY_UNRESOLVED" ]]; then
+  escalate ask "$CAWS_COPY_UNRESOLVED" ask_copy_paths
+fi
+
+if ! _BWG_EFFECTS="$(extract_targets "$COMMAND")"; then
+  _bwg_normalize_refuse 'mutation effect stream' "$COMMAND"
+fi
+while IFS= read -r effect; do
+  [[ -z "$effect" ]] && continue
+  if [[ "$effect" != *$'\t'* ]]; then
+    _bwg_normalize_refuse 'mutation effect record' "$effect"
+  fi
+  effect_role="${effect%%$'\t'*}"
+  cand="${effect#*$'\t'}"
+  case "$effect_role" in
+    referent|unlink-entry|unlink-entry-unresolved) ;;
+    *) _bwg_normalize_refuse 'mutation effect role' "$effect_role" ;;
   esac
+  if [[ -z "$cand" || "$cand" == *$'\t'* ]]; then
+    _bwg_normalize_refuse 'mutation effect path' "$cand"
+  fi
+  if [[ "$effect_role" == unlink-entry* ]]; then
+    case "$effect_role:$cand" in
+      unlink-entry-unresolved:*|*:*/|*:*/.|*:*/..|*:'.'|*:'..')
+        _BWG_REMOVE_UNRESOLVED=1 ;;
+    esac
+  fi
   # Candidates arrive byte-faithful. The recognizer's lexer consumes syntactic
   # quote delimiters as it scans and never introduces a sentinel, so a quoted
   # operand already reads as the path it names and `rm "harness/wire/some
@@ -328,7 +445,14 @@ while IFS= read -r cand; do
       *) escalate ask "$cand" "unavailable_native_context"; continue ;;
     esac
   fi
-  abs="$(abspath "$cand")"
+  if [[ "$_CWD_RESOLVED" != 1 && "$_CWD_CONTRACT" == 1 && "$cand" != /* ]]; then
+    # Relative bytes carry no filesystem coordinate, including when the
+    # registry has no active worktrees. Never resolve them against a guess.
+    escalate ask "cwd-unresolved:$cand" "ask_uncertain"
+    continue
+  fi
+  mutation_target_into abs _FOREIGN_PROBE "$effect_role" "$cand" ||
+    _bwg_normalize_refuse "mutation target" "$cand"
   # CAWS-GUARD-ALLOWLIST-SYNC-001 + CAWS-GUARD-SCOPE-PRIORITY-001: record
   # whether this target is on the unconditional allowlist (docs/*, .caws/*
   # minus payload, .tmp/*, .github/*, vendor dir, instruction files,
@@ -341,35 +465,12 @@ while IFS= read -r cand; do
   # Cross-repo is adjudicated BEFORE the allowlist and the claim oracle: the
   # allowlist names paths relative to THIS project, so applying it to a sibling
   # repo's tree would admit its docs/, tests/ and .caws/ wholesale.
-  # An interpreter literal may be composed relative to $HOME rather than the
-  # agent cwd — `Path.home() / "Desktop/Projects/<sibling>/..."` was the shape
-  # in the field — so a non-absolute interpreter candidate is resolved against
-  # BOTH roots and blocks if EITHER resolution lands in a different repository.
-  _FOREIGN_REPO=""
-  if [[ "$_INTERP" == "1" ]]; then
-    _RES_CANDS=("$abs")
-    case "$cand" in
-      /*) ;;
-      ~*) _RES_CANDS+=("${HOME:-/nonexistent-home}/${cand#\~}") ;;
-      *)  _RES_CANDS+=("${HOME:-/nonexistent-home}/$cand") ;;
-    esac
-    for _res in "${_RES_CANDS[@]}"; do
-      _FR="$(foreign_repo_root "$_res")"
-      [[ -n "$_FR" ]] && _FOREIGN_REPO="$_FR"
-    done
-  else
-    _FOREIGN_REPO="$(foreign_repo_root "$abs")"
-  fi
+  _FOREIGN_REPO="$(foreign_repo_root "$_FOREIGN_PROBE"; printf x)"
+  _FOREIGN_REPO="${_FOREIGN_REPO%x}"
   if [[ -n "$_FOREIGN_REPO" ]]; then
     escalate block "$_FOREIGN_REPO" "block_foreign_repo"
     continue
   fi
-  # Interpreter candidates stop here: the ownership oracle answers a question
-  # ("does an active worktree claim this path?") that a mere literal cannot
-  # support, and running it would make any in-project path named in a script
-  # a claim conflict.
-  [[ "$_INTERP" == "1" ]] && continue
-
   _CAND_ALLOWLISTED=0
   if declare -F caws_is_write_allowlisted >/dev/null 2>&1; then
     if caws_is_write_allowlisted "$abs" "$PROJECT_DIR"; then
@@ -384,7 +485,12 @@ while IFS= read -r cand; do
       *) _ORACLE_PATH="$cand"; _CWD_UNRESOLVED=1 ;;
     esac
   fi
-  out="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
+  _REMOVE_TREE=0
+  if [[ "$effect_role" == unlink-entry* && -d "$abs" && ! -L "$abs" ]]; then
+    _REMOVE_TREE=1
+  fi
+  out="$(CAWS_ORACLE_OPERATION=file CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
+    CAWS_ORACLE_REMOVE_TREE="$_REMOVE_TREE" \
     CAWS_ORACLE_CURRENT_BRANCH="" \
     CAWS_ORACLE_REL_PATH="$_ORACLE_PATH" \
     CAWS_ORACLE_CWD_UNRESOLVED="$_CWD_UNRESOLVED" \
@@ -410,21 +516,102 @@ while IFS= read -r cand; do
     degraded_no_yaml) _DEGRADED_NO_YAML=1 ;;
     block_foreign_worktree|block_claimed) escalate block "$detail" "$outcome" ;;
     ask_uncertain|error_fail_closed)
-      # CAWS-GUARD-SCOPE-PRIORITY-001: an allowlisted path defers to the
-      # allowlist on non-claim verdicts — a toolchain fault or uncertain
-      # ownership must not block a docs/** or .caws/** coordination edit.
-      # Only a positive claim (block_claimed/block_foreign_worktree, handled
-      # above) overrides the allowlist. Non-allowlisted paths escalate normally.
-      # An unresolved cwd is the exception: the allowlist names paths relative
-      # to the project, which a guessed root cannot establish.
-      if [[ "$_CAND_ALLOWLISTED" == "1" && "$detail" != cwd-unresolved:* ]]; then
+      if [[ "$detail" == remove-tree-* ||
+            ( "$_REMOVE_TREE" == 1 && "$outcome" == error_fail_closed ) ]]; then
+        _BWG_REMOVE_UNRESOLVED=1
+        continue
+      fi
+      # Coordination allowlists tolerate canonical scope-tool faults, but
+      # cannot establish cwd or registered payload ownership. Those specific
+      # uncertainties survive even under docs/** and .caws/** custom roots.
+      if [[ "$_CAND_ALLOWLISTED" == "1" && "$detail" != cwd-unresolved:* &&
+            "$detail" != worktree-container-* && "$detail" != worktree-payload-* &&
+            "$detail" != worktree-ownership-* ]]; then
         :
       else
         escalate ask "$detail" "$outcome"
       fi
       ;;
   esac
-done < <(extract_targets "$COMMAND"; scan_interpreter_targets "$COMMAND")
+done <<< "$_BWG_EFFECTS"
+
+# Git add/commit write Git metadata rather than a payload FILE. Validate both
+# metadata roots at the repository boundary, then query the actual worktree's
+# owner through a distinct, capability-namespaced oracle operation.
+_GM_INDEX=0; _GM_SEEN_CONTEXTS=()
+while [[ $_GM_INDEX -lt ${#CAWS_AST_GIT_WORKTREE[@]} ]]; do
+  _GM_WORKTREE="${CAWS_AST_GIT_WORKTREE[$_GM_INDEX]}"
+  _GM_DIRECTORY="${CAWS_AST_GIT_DIRECTORY[$_GM_INDEX]}"
+  _GM_COMMON="${CAWS_AST_GIT_COMMON[$_GM_INDEX]}"
+  _GM_FOREIGN=''
+  for _GM_PATH in "$_GM_DIRECTORY" "$_GM_COMMON"; do
+    # An absent coordinate stays an uncertainty for approval; a coordinate that
+    # cannot be normalized is refused like every other ownership path.
+    if [[ -z "$_GM_PATH" ]]; then
+      escalate ask metadata-path-unresolved ask_git_metadata
+      continue
+    fi
+    caws_guard_realpath_into _GM_PHYSICAL "$_GM_PATH" || _bwg_normalize_refuse "git metadata" "$_GM_PATH"
+    if [[ "$_GM_PHYSICAL" != /* ]]; then
+      escalate ask metadata-path-unresolved ask_git_metadata
+      continue
+    fi
+    if [[ "$_GM_PHYSICAL" == *$'\n'* || "$_GM_PHYSICAL" == *$'\r'* || "$_GM_PHYSICAL" == *$'\t'* ]]; then
+      escalate ask metadata-path-unrepresentable ask_git_metadata
+      continue
+    fi
+    _GM_REPO="$(foreign_repo_root "$_GM_PHYSICAL"; printf x)"
+    _GM_REPO="${_GM_REPO%x}"
+    [[ -z "$_GM_REPO" ]] || _GM_FOREIGN="$_GM_REPO"
+    case "$_GM_PHYSICAL" in
+      "$PROJECT_DIR"|"${PROJECT_DIR%/}/"*) ;;
+      *) escalate ask metadata-outside-project ask_git_metadata ;;
+    esac
+  done
+  _GM_INDEX=$((_GM_INDEX+1))
+  if [[ -n "$_GM_FOREIGN" ]]; then
+    escalate block "$_GM_FOREIGN" block_foreign_repo
+    continue
+  fi
+  _GM_SEEN=0
+  _GM_KEY="${#_GM_DIRECTORY}:$_GM_DIRECTORY${#_GM_COMMON}:$_GM_COMMON${#_GM_WORKTREE}:$_GM_WORKTREE"
+  for _GM_PRIOR in ${_GM_SEEN_CONTEXTS[@]+"${_GM_SEEN_CONTEXTS[@]}"}; do
+    [[ "$_GM_PRIOR" != "$_GM_KEY" ]] || _GM_SEEN=1
+  done
+  [[ $_GM_SEEN == 0 ]] || continue
+  _GM_SEEN_CONTEXTS+=( "$_GM_KEY" )
+  _GM_STATUS=0
+  _GM_OUT="$(CAWS_ORACLE_OPERATION=git-metadata CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
+    CAWS_ORACLE_CURRENT_BRANCH='' CAWS_ORACLE_REL_PATH='' \
+    CAWS_ORACLE_GIT_WORKTREE="$_GM_WORKTREE" CAWS_ORACLE_GIT_DIRECTORY="$_GM_DIRECTORY" \
+    CAWS_ORACLE_GIT_COMMON="$_GM_COMMON" CAWS_ORACLE_SESSION_ID="$CAWS_ORACLE_SESSION_ID" \
+    node "$CAWS_CLAIM_ORACLE" 2>&1)" || _GM_STATUS=$?
+  _GM_FIRST="${_GM_OUT%%$'\n'*}"
+  if [[ "$_GM_FIRST" != git_metadata:* || "$_GM_FIRST" == *$'\r'* || "$_GM_FIRST" == *$'\t'* ]]; then
+    escalate ask git-metadata-oracle-protocol ask_git_metadata
+    continue
+  fi
+  _GM_VERDICT="${_GM_FIRST#git_metadata:}"
+  _GM_OUTCOME="${_GM_VERDICT%%:*}"; _GM_DETAIL="${_GM_VERDICT#*:}"
+  case "$_GM_OUTCOME" in
+    block_foreign_worktree)
+      case "$_GM_DETAIL" in
+        ?*:?*) escalate block "$_GM_DETAIL" block_git_metadata ;;
+        *) escalate ask git-metadata-oracle-protocol ask_git_metadata ;;
+      esac ;;
+    pass)
+      if [[ $_GM_STATUS != 0 || "$_GM_OUT" != "$_GM_FIRST" ]]; then
+        escalate ask git-metadata-oracle-protocol ask_git_metadata
+      else
+        case "$_GM_DETAIL" in
+          git-canonical-metadata|owner-self:?*) ;;
+          *) escalate ask git-metadata-oracle-protocol ask_git_metadata ;;
+        esac
+      fi ;;
+    ask_uncertain|error_fail_closed) escalate ask "$_GM_DETAIL" ask_git_metadata ;;
+    *) escalate ask git-metadata-oracle-protocol ask_git_metadata ;;
+  esac
+done
 
 # --- DYNAMIC operands -------------------------------------------------------
 # A dynamic operand (rm core/*.py) names a file-scoped mutation whose target
@@ -486,7 +673,7 @@ if declare -F caws_bash_dynamic_mutations >/dev/null 2>&1; then
       escalate ask "$_pat (${_reskind:-runtime}-resolved; no lexically proven prefix, so no region is proven admissible)" "ask_dynamic_unconfined"
       continue
     fi
-    _pabs="$(abspath "$_prefix")"
+    abspath_into _pabs "$_prefix" || _bwg_normalize_refuse "dynamic mutation prefix" "$_prefix"
     _dout="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
       CAWS_ORACLE_CURRENT_BRANCH="" \
       CAWS_ORACLE_REL_PATH="$_pabs" \
@@ -538,8 +725,28 @@ fi
 _BG_ID="CAWS bash-write-guard"
 command -v guard_identity >/dev/null 2>&1 && _BG_ID="$(guard_identity bash-write-guard)"
 
+# Keep an already observed ownership block; unresolved removal is a hard hold
+# even when following an ambiguous final component happened to find an owner.
+if [[ "$_BWG_REMOVE_UNRESOLVED" == 1 ]]; then
+  escalate block 'unresolved remove options or final component' block_remove_unresolved
+fi
+
+# Preserve known ownership violations before refusing this unmodeled entry
+# operation. An ask response cannot confine cp's failed-open unlink fallback.
+if [[ "$CAWS_COPY_FINAL_SYMLINK" == 1 ]]; then
+  escalate block final-destination-symlink block_copy_final_symlink
+fi
+
 case "$WORST" in
   block)
+    if [[ "$WORST_KIND" == "block_remove_unresolved" ]]; then
+      echo "[$_BG_ID] BLOCKED: unresolved remove options or final component; entry effects cannot be authorized." >&2
+      exit 2
+    fi
+    if [[ "$WORST_KIND" == "block_copy_final_symlink" ]]; then
+      echo "[$_BG_ID] BLOCKED: copy final destination symlink entry semantics are unmodeled; approval cannot authorize this operation." >&2
+      exit 2
+    fi
     if [[ "$WORST_KIND" == "block_foreign_repo" ]]; then
       echo "[$_BG_ID] BLOCKED: this Bash command mutates a file inside a DIFFERENT repository ($WORST_DETAIL), not this session's project ($PROJECT_DIR)." >&2
       echo "  A session may READ sibling repos freely but must not WRITE into one from here — the same boundary scope-guard applies to Write/Edit." >&2
@@ -548,7 +755,11 @@ case "$WORST" in
       echo "  Do NOT edit ${CAWS_HOOKS_DIR:-.caws/hooks}/ or guard state to bypass this." >&2
       exit 2
     fi
-    if [[ "$WORST_KIND" == "block_foreign_worktree" ]]; then
+    if [[ "$WORST_KIND" == "block_git_metadata" ]]; then
+      _OWN_WT="${WORST_DETAIL%%:*}"
+      echo "[$_BG_ID] BLOCKED: this Bash command writes Git metadata for worktree '$_OWN_WT', owned by a DIFFERENT session." >&2
+      echo '  Run the operation through the session that owns that worktree.' >&2
+    elif [[ "$WORST_KIND" == "block_foreign_worktree" ]]; then
       _OWN_WT="$(printf '%s' "$WORST_DETAIL" | cut -d: -f1)"
       echo "[$_BG_ID] BLOCKED: this Bash command mutates worktree '$_OWN_WT''s payload (.caws/worktrees/$_OWN_WT/...), owned by a DIFFERENT session." >&2
       echo "  A Bash mutation of another session's worktree files is the same isolation breach as a foreign Write/Edit — it is blocked at the same boundary." >&2
@@ -576,6 +787,8 @@ case "$WORST" in
     exit 2 ;;
   ask)
     case "$WORST_KIND" in
+      ask_copy_paths)
+        _REASON="[$_BG_ID] Copy or move write paths could not be established ($WORST_DETAIL). This filesystem relation was not authorized; approve only if every affected path belongs to this session." ;;
       unavailable_native_context)
         _REASON="[$_BG_ID] unavailable-native-context: Codex did not provide a validated host command directory for relative target '$WORST_DETAIL'. Session cwd anchors the project but does not identify command execution cwd. No ownership conclusion was made. Supply native execution_workdir or use an absolute target." ;;
       ask_uncertain)
@@ -599,6 +812,8 @@ case "$WORST" in
         _REASON="[$_BG_ID] ask_unsupported_nesting: $WORST_DETAIL. The nested command is outside this recognizer's parser envelope, so any write it performs was never adjudicated. Approve only if you know what the nested command writes." ;;
       ask_dynamic_unconfined|ask_dynamic_unresolved)
         _REASON="[$_BG_ID] $WORST_KIND: $WORST_DETAIL. The target is resolved at EXECUTION time, so ownership cannot be decided from the command text. Approve only if every path it can resolve to is yours to mutate." ;;
+      ask_git_metadata)
+        _REASON="[$_BG_ID] Git metadata ownership could not be established ($WORST_DETAIL). Approve only if the repository metadata and working tree belong to this session." ;;
       *)
         _REASON="[$_BG_ID] This Bash command targets a worktree-claimed or worktree-payload path and ownership could not be confirmed ($WORST_KIND:$WORST_DETAIL). Approve only if you own the target worktree; otherwise route the mutation through the owning worktree's session." ;;
     esac

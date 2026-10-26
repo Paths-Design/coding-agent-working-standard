@@ -60,6 +60,7 @@ const distDir = path.join(pkgRoot, 'dist');
  * or by something on this list (transitively).
  */
 const JS_ALLOWLIST = [
+  'shell/analysis/load-parser.js',
   'index.js',
   'config/index.js',
   'error-handler.js',

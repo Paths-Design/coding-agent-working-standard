@@ -522,9 +522,9 @@ describe('mutation policy topology contract', () => {
     expect(result.status).toBe(0);
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
-    // The source inventory includes the mutation-gated renderer-calendar adapter.
-    expect(result.stdout).toMatch(/^PASS: 194 source files accounted for exactly once$/m);
-    expect(result.stdout).toMatch(/^PASS: 22 mutation targets across 3 surfaces$/m);
+    // The inventory includes bounded analysis and the renderer-calendar adapter.
+    expect(result.stdout).toMatch(/^PASS: 203 source files accounted for exactly once$/m);
+    expect(result.stdout).toMatch(/^PASS: 28 mutation targets across 4 surfaces$/m);
   });
 
   test('session seal preparation is classified as behavioral parsing and rendering', () => {
@@ -682,7 +682,51 @@ describe('mutation policy topology contract', () => {
     );
   });
 
-  test.each(['kernel', 'store', 'shell'])(
+  test('analysis mutations select the child-consumer contracts without file-name test filters', () => {
+    const config = require(path.join(PACKAGE_ROOT, 'stryker.analysis.conf.js'));
+    expect(config.mutate).toEqual([
+      'src/shell/analysis/analyze.ts',
+      'src/shell/analysis/git-context.ts',
+      'src/shell/analysis/interpreter-effects.ts',
+      'src/shell/analysis/mutation-view.ts',
+      'src/shell/analysis/policies.ts',
+      'src/shell/analysis/words.ts',
+    ]);
+    expect(config.incremental).toBe(false);
+    expect(config.coverageAnalysis).toBe('off');
+    expect(config).not.toHaveProperty('testFiles');
+    expect(config.jest.config.testMatch).toEqual([
+      '<rootDir>/tests/shell/command-analysis.test.js',
+      '<rootDir>/tests/shell/interpreter-effects.test.js',
+      '<rootDir>/tests/shell/mutation-view.test.js',
+    ]);
+    const names = new RegExp(config.jest.config.testNamePattern);
+    expect(names.test('bounded shell analysis contract profile-git-status')).toBe(true);
+    expect(names.test('bounded shell analysis contract semantic mutation in policies')).toBe(false);
+  });
+
+  test.each([
+    [
+      'multiline benign source',
+      'bounded interpreter source effects admits only modeled benign source: // writeFileSync("/foreign", "x")\nconsole.log("write /foreign/output");',
+      true,
+    ],
+    [
+      'control words inside benign source',
+      'bounded interpreter source effects admits only modeled benign source: console.log("semantic mutation in data");',
+      true,
+    ],
+    [
+      'multiline control payload',
+      'bounded shell analysis contract semantic mutation in policies\nsource payload',
+      false,
+    ],
+  ])('analysis name selection handles %s', (_label, name, selected) => {
+    const config = require(path.join(PACKAGE_ROOT, 'stryker.analysis.conf.js'));
+    expect(new RegExp(config.jest.config.testNamePattern).test(name)).toBe(selected);
+  });
+
+  test.each(['kernel', 'store', 'shell', 'analysis'])(
     '%s sandbox excludes sibling runs while retaining source and tests',
     (surface) => {
       expect(createStrykerConfig(surface).jest.config.setupFiles).toEqual([
@@ -698,6 +742,7 @@ describe('mutation policy topology contract', () => {
         '.stryker-kernel-tmp/sandbox/temporary.ts',
         '.stryker-store-tmp/sandbox/temporary.ts',
         '.stryker-shell-tmp/sandbox/temporary.ts',
+        '.stryker-analysis-123-tmp/sandbox/temporary.ts',
         'reports/mutation-store/mutation-report.json',
         'coverage/coverage.json',
         '.license-transport.json',
@@ -1558,7 +1603,18 @@ describe('active workflow topology contract', () => {
     );
 
     expect(workflow).not.toContain('packages/caws-kernel');
-    expect(workflow).toMatch(/surface:\s*\[kernel, store, shell\]/);
+    const parsed = yaml.load(workflow);
+    const surfaces = ['kernel', 'store', 'shell', 'analysis'];
+    expect(parsed.jobs.harness_integrity.strategy.matrix.surface).toEqual(surfaces);
+    expect(parsed.jobs.mutation.strategy.matrix.surface).toEqual(surfaces);
+    const scripts = JSON.parse(
+      fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8')
+    ).scripts;
+    for (const surface of surfaces) {
+      const script = scripts[`mutation:run:${surface}`];
+      expect(script).toContain(`--surface ${surface}`);
+      expect(script.match(/--surface /g)).toHaveLength(1);
+    }
     expect(workflow).toContain('mutation:dry-run');
     expect(workflow).toContain('actions/upload-artifact@v4');
     expect(workflow).toContain('GITHUB_STEP_SUMMARY');

@@ -52,6 +52,27 @@
 #       Best-effort realpath (python3-backed, falls back to the input).
 #       Resolves the existing prefix even when the leaf does not exist.
 #
+#   caws_guard_realpath_into <var> <path>
+#       Checked realpath for authority decisions. Assigns the resolved path,
+#       byte for byte, to the caller's variable <var>; on any failure assigns
+#       nothing, names the cause on stderr and returns 2. Never falls back to
+#       the unresolved input.
+#
+#   caws_physical_dir_into <var> <dir>
+#   caws_git_path_into <var> <dir> <rev-parse-option>
+#   caws_resolve_canonical_dir_into <var> <start-dir>
+#       Byte-faithful forms of `cd -P && pwd -P`, `git rev-parse <option>` and
+#       resolve_canonical_dir for guards that compare path identity. Each
+#       assigns <var> and returns 0, or assigns nothing and returns non-zero.
+#
+#   caws_git_evidence_dir_into <var> <dir>
+#       Assigns the nearest of <dir> and its ancestors holding a .git entry;
+#       returns 1 when none does.
+#
+#   Out-parameters (<var>) must be shell identifiers. Each helper refuses a
+#   name under its own local prefix (_caws_rp_, _caws_pd_, _caws_gp_,
+#   _caws_cd_, _caws_ge_); callers should keep their names outside _caws_.
+#
 #   caws_current_branch [dir]
 #       Prints the current branch of the checkout at [dir] (default cwd),
 #       or "unknown" if git is unavailable.
@@ -214,6 +235,172 @@ _realpath() {
   fi
 }
 
+# _caws_outparam_ok <name> <helper-local-prefix>
+#   An out-parameter is assigned with printf -v, which writes the nearest
+#   variable of that name in scope. A name shared with one of the helper's own
+#   locals would assign the local and leave the caller's variable untouched.
+#   Each helper keeps its locals under its own prefix and refuses
+#   out-parameters that use it.
+_caws_outparam_ok() {
+  [[ "${1:-}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -n "${2:-}" && "$1" != "$2"* ]]
+}
+
+# caws_payload_carries_cwd [surface]
+#   Succeeds when the hook payload contract of [surface] (default
+#   CAWS_AGENT_SURFACE) carries `cwd` (decision recorded in
+#   CAWS-DEFECT-CLAIM-ORACLE-CWD-RELATIVE-PATH-01). There a missing cwd is a
+#   degraded payload, so a relative write target is asked about instead of
+#   resolved against a guessed root. On a surface whose contract is unverified
+#   an absent cwd is the normal case. Adding a surface whose payload is verified
+#   to carry cwd (zcode, dsh) is a one-word change to this list.
+caws_payload_carries_cwd() {
+  local surface="${1-${CAWS_AGENT_SURFACE:-}}"
+  [[ -n "$surface" && " claude-code codex opencode qwen-code kimi-code " == *" $surface "* ]]
+}
+
+# caws_guard_realpath_into <var> <path>
+#   Checked normalization for ownership and containment decisions
+#   (CAWS-DEFECT-REALPATH-PYTHON-ABSENT-FAIL-OPEN-01). Paths are compared as
+#   exact bytes, and a legitimate path may end in a line feed, which a caller's
+#   command substitution would strip. So the result is assigned to <var>
+#   rather than printed: python3 writes the path's filesystem bytes followed
+#   by one line feed record delimiter, the status sentinel keeps every byte
+#   and the producer's exit status, and exactly that one delimiter is removed.
+#   When the path cannot be normalized, <var> is not assigned, the cause is
+#   named on stderr and the status is 2: a write guard that compared the
+#   unresolved input instead would miss every prefix arm and admit the write.
+#   Causes: invalid-out-parameter, empty-path, python3-unavailable,
+#   python3-exit-<status>, no-record-delimiter, empty-result and
+#   non-absolute-result.
+caws_guard_realpath_into() {
+  local _caws_rp_var="${1:-}" _caws_rp_path="${2:-}" _caws_rp_out _caws_rp_status
+  if ! _caws_outparam_ok "$_caws_rp_var" _caws_rp_; then
+    printf '[caws-guard-realpath] cannot normalize: invalid-out-parameter\n' >&2
+    return 2
+  fi
+  if [[ -z "$_caws_rp_path" ]]; then
+    printf '[caws-guard-realpath] cannot normalize: empty-path\n' >&2
+    return 2
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf '[caws-guard-realpath] cannot normalize: python3-unavailable\n' >&2
+    return 2
+  fi
+  # The && / || list keeps a failing interpreter from tripping an inherited
+  # errexit before its status is recorded; in it $? is the interpreter's own.
+  _caws_rp_out="$(python3 -c 'import os, sys; sys.stdout.buffer.write(os.fsencode(os.path.realpath(sys.argv[1])) + b"\n")' "$_caws_rp_path" 2>/dev/null &&
+    printf 'x0' || printf 'x%s' "$?")"
+  _caws_rp_status="${_caws_rp_out##*x}"
+  _caws_rp_out="${_caws_rp_out%x*}"
+  if [[ "$_caws_rp_status" != 0 ]]; then
+    printf '[caws-guard-realpath] cannot normalize: python3-exit-%s\n' "$_caws_rp_status" >&2
+    return 2
+  fi
+  if [[ "$_caws_rp_out" != *$'\n' ]]; then
+    printf '[caws-guard-realpath] cannot normalize: no-record-delimiter\n' >&2
+    return 2
+  fi
+  _caws_rp_out="${_caws_rp_out%$'\n'}"
+  if [[ -z "$_caws_rp_out" ]]; then
+    printf '[caws-guard-realpath] cannot normalize: empty-result\n' >&2
+    return 2
+  fi
+  if [[ "$_caws_rp_out" != /* ]]; then
+    printf '[caws-guard-realpath] cannot normalize: non-absolute-result\n' >&2
+    return 2
+  fi
+  printf -v "$_caws_rp_var" '%s' "$_caws_rp_out"
+}
+
+# caws_physical_dir_into <var> <dir>
+#   Assign the physical (symlink-free) path of directory <dir>. `cd -P` sets
+#   PWD to that path, which is printed with a sentinel and no delimiter, so no
+#   byte is stripped. Returns 1 when <dir> cannot be entered, 2 for an invalid
+#   out-parameter; <var> is assigned only on success.
+caws_physical_dir_into() {
+  local _caws_pd_var="${1:-}" _caws_pd_dir="${2:-}" _caws_pd_out
+  _caws_outparam_ok "$_caws_pd_var" _caws_pd_ || return 2
+  [[ -n "$_caws_pd_dir" ]] || return 1
+  _caws_pd_out="$(CDPATH='' cd -P -- "$_caws_pd_dir" 2>/dev/null && printf '%sx' "$PWD")" || return 1
+  [[ "$_caws_pd_out" == /*x ]] || return 1
+  printf -v "$_caws_pd_var" '%s' "${_caws_pd_out%x}"
+}
+
+# caws_git_path_into <var> <dir> <rev-parse-option>
+#   Assign the path `git rev-parse <option>` prints from <dir>, removing
+#   exactly the one line feed that ends git's record. Returns 1 when git
+#   fails or its output is not one non-empty record, 2 for an invalid
+#   out-parameter; <var> is assigned only on success.
+caws_git_path_into() {
+  local _caws_gp_var="${1:-}" _caws_gp_dir="${2:-}" _caws_gp_option="${3:-}" _caws_gp_out
+  _caws_outparam_ok "$_caws_gp_var" _caws_gp_ || return 2
+  [[ -n "$_caws_gp_dir" ]] || return 1
+  _caws_gp_out="$(CDPATH='' cd -- "$_caws_gp_dir" 2>/dev/null &&
+    git rev-parse "$_caws_gp_option" 2>/dev/null && printf 'x0' || printf 'x%s' "$?")"
+  [[ "${_caws_gp_out##*x}" == 0 ]] || return 1
+  _caws_gp_out="${_caws_gp_out%x*}"
+  [[ "$_caws_gp_out" == *$'\n' ]] || return 1
+  _caws_gp_out="${_caws_gp_out%$'\n'}"
+  [[ -n "$_caws_gp_out" ]] || return 1
+  printf -v "$_caws_gp_var" '%s' "$_caws_gp_out"
+}
+
+# caws_git_evidence_dir_into <var> <dir>
+#   Assign the nearest of <dir> and its ancestors that holds a .git entry
+#   (a repository directory or a linked worktree's gitfile). Returns 1 when
+#   none does or <dir> is not absolute, 2 for an invalid out-parameter; <var>
+#   is assigned only on success. Parents are taken by string operations, never
+#   through a capture, so every component keeps its bytes. A guard uses this to
+#   tell a directory outside every repository (ungoverned) from one where git
+#   failed to answer (a project that cannot be adjudicated).
+caws_git_evidence_dir_into() {
+  local _caws_ge_var="${1:-}" _caws_ge_dir="${2:-}"
+  _caws_outparam_ok "$_caws_ge_var" _caws_ge_ || return 2
+  [[ "$_caws_ge_dir" == /* ]] || return 1
+  while :; do
+    if [[ -e "$_caws_ge_dir/.git" || -L "$_caws_ge_dir/.git" ]]; then
+      printf -v "$_caws_ge_var" '%s' "$_caws_ge_dir"
+      return 0
+    fi
+    [[ "$_caws_ge_dir" == / ]] && return 1
+    _caws_ge_dir="${_caws_ge_dir%/*}"
+    [[ -n "$_caws_ge_dir" ]] || _caws_ge_dir=/
+  done
+}
+
+# caws_resolve_canonical_dir_into <var> <start-dir>
+#   resolve_canonical_dir's decision, assigned byte for byte: the canonical
+#   checkout containing .caws/ when <start-dir> is inside a linked worktree of
+#   one, otherwise <start-dir> itself. Git not answering means "not a linked
+#   worktree" only where neither <start-dir> nor an ancestor holds a .git
+#   entry; otherwise it returns 3. Returns 2 for an invalid out-parameter or a
+#   common directory that cannot be entered, and 0 when it assigns.
+caws_resolve_canonical_dir_into() {
+  local _caws_cd_var="${1:-}" _caws_cd_start="${2:-}" _caws_cd_common="" _caws_cd_candidate=""
+  local _caws_cd_physical="" _caws_cd_evidence=""
+  _caws_outparam_ok "$_caws_cd_var" _caws_cd_ || return 2
+  if [[ -n "$_caws_cd_start" ]]; then
+    if ! command -v git >/dev/null 2>&1 ||
+        ! caws_git_path_into _caws_cd_common "$_caws_cd_start" --git-common-dir; then
+      _caws_cd_common=""
+      if caws_physical_dir_into _caws_cd_physical "$_caws_cd_start" &&
+          caws_git_evidence_dir_into _caws_cd_evidence "$_caws_cd_physical"; then
+        return 3
+      fi
+    fi
+    if [[ -n "$_caws_cd_common" && "$_caws_cd_common" != .git ]]; then
+      _caws_cd_candidate="$(CDPATH='' cd -- "$_caws_cd_start" 2>/dev/null &&
+        CDPATH='' cd -- "$_caws_cd_common/.." 2>/dev/null && printf '%sx' "$PWD")" || return 2
+      _caws_cd_candidate="${_caws_cd_candidate%x}"
+      if [[ -n "$_caws_cd_candidate" && -d "$_caws_cd_candidate/.caws" ]]; then
+        printf -v "$_caws_cd_var" '%s' "$_caws_cd_candidate"
+        return 0
+      fi
+    fi
+  fi
+  printf -v "$_caws_cd_var" '%s' "$_caws_cd_start"
+}
+
 # caws_current_branch [dir]
 #   Print the current branch name of the git checkout at [dir] (default
 #   cwd), or "unknown" if git is unavailable / not a repo. Single source
@@ -373,8 +560,16 @@ caws_compose_risk() {
 # .name from the outer key where the entry lacks one.
 export CAWS_NODE_ENTRIES_OF='function entriesOf(r) {
   if (!r || typeof r !== "object") return [];
+  function isEntry(v) {
+    return v && typeof v === "object" && !Array.isArray(v) && (
+      typeof v.status === "string" || typeof v.spec_id === "string" ||
+      typeof v.specId === "string" || typeof v.path === "string" ||
+      typeof v.branch === "string" || typeof v.name === "string"
+    );
+  }
   // v10 envelope: { version, worktrees: { <name>: {...} } }
-  if (r.worktrees && typeof r.worktrees === "object") {
+  // A v11 lane can itself be named worktrees; entry markers take precedence.
+  if (r.worktrees && typeof r.worktrees === "object" && !isEntry(r.worktrees)) {
     var src = r.worktrees;
     var out0 = [];
     for (var k in src) if (Object.prototype.hasOwnProperty.call(src, k)) {
@@ -401,14 +596,7 @@ export CAWS_NODE_ENTRIES_OF='function entriesOf(r) {
   var out = [];
   for (var k2 in r) if (Object.prototype.hasOwnProperty.call(r, k2)) {
     var v2 = r[k2];
-    if (v2 && typeof v2 === "object" && !Array.isArray(v2) && (
-      typeof v2.status === "string" ||
-      typeof v2.spec_id === "string" ||
-      typeof v2.specId === "string" ||
-      typeof v2.path === "string" ||
-      typeof v2.branch === "string" ||
-      typeof v2.name === "string"
-    )) {
+    if (isEntry(v2)) {
       if (!v2.name) v2 = Object.assign({}, v2, { name: k2 });
       out.push(v2);
     }
@@ -422,22 +610,22 @@ export CAWS_NODE_ENTRIES_OF='function entriesOf(r) {
 # worktree) rather than iterating all entries.
 export CAWS_NODE_ENTRY_BY_NAME='function entryByName(r, name) {
   if (!r || typeof r !== "object" || !name) return null;
-  if (r.worktrees && typeof r.worktrees === "object") {
+  function isEntry(v) {
+    return v && typeof v === "object" && !Array.isArray(v) && (
+      typeof v.status === "string" || typeof v.spec_id === "string" ||
+      typeof v.specId === "string" || typeof v.path === "string" ||
+      typeof v.branch === "string" || typeof v.name === "string"
+    );
+  }
+  if (r.worktrees && typeof r.worktrees === "object" && !isEntry(r.worktrees)) {
     return r.worktrees[name] || null;
   }
   var v = r[name];
-  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
   // Per CAWS-1117-ENTRY-BY-NAME-V11-SHAPE-01: previous discriminator
   // rejected v11-CLI-created entries because caws-cli 11.1.7
   // worktree-create no longer emits status. Admit any object that
   // carries at least one v11/v10 marker field.
-  if (typeof v.status === "string") return v;
-  if (typeof v.spec_id === "string") return v;
-  if (typeof v.specId === "string") return v;
-  if (typeof v.path === "string") return v;
-  if (typeof v.branch === "string") return v;
-  if (typeof v.name === "string") return v;
-  return null;
+  return isEntry(v) ? v : null;
 }'
 
 # entrySpecId(entry) — extract the bound spec id from a registry entry,

@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        surface: [kernel, store, shell]
+        surface: [kernel, store, shell, analysis]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,7 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        surface: [kernel, store, shell]
+        surface: [kernel, store, shell, analysis]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

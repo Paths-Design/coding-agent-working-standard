@@ -26,11 +26,24 @@
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import * as nodePath from 'node:path';
 
+import { analyzeCommand } from '../analysis/analyze';
+import { projectMutationView } from '../analysis/mutation-view';
+import { loadParser } from '../analysis/load-parser';
+import type { Word, WordPart } from '../analysis/parser-types';
+import { WORKTREE_COMMAND_META } from '../command-metadata';
 import { isOk } from '../../kernel';
 import { resolveRepoRoot } from '../../store';
+import { resolveGitBinary } from '../../store/git-binary';
 import { machineHome } from '../../init/machine-adapters';
 import { planHookReconciliation, type ReconciliationPlan } from '../../init/hook-reconciliation';
 import {
@@ -96,6 +109,501 @@ function repoContext(cwd: string): RepoContext | { error: string } {
 }
 
 const isError = (v: RepoContext | { error: string }): v is { error: string } => 'error' in v;
+
+// ─── hooks analyze ─────────────────────────────────────────────────────────
+
+export interface HooksAnalyzeOptions {
+  readonly command?: string;
+  readonly cwd?: string;
+  /** A caller-supplied trusted pin overrides any payload worktree field. */
+  readonly worktree?: string;
+  readonly shell?: string;
+  readonly json?: boolean;
+}
+
+type CommandAnalysis = Awaited<ReturnType<typeof analyzeCommand>>;
+
+function unresolvedAnalysis(code: string, message: string): CommandAnalysis {
+  return {
+    decision: 'unresolved',
+    reasons: [{ code, message, start: 0, end: 0 }],
+    trace: [],
+  };
+}
+
+const MAX_EXECUTION_SOURCE_BYTES = 65536;
+const NATIVE_SHELL_TOOLS = new Set([
+  'exec_command',
+  'functions.exec_command',
+  'shell_command',
+  'functions.shell_command',
+]);
+interface ExecutionIssue {
+  code: string;
+  message: string;
+  start: number;
+  end: number;
+}
+interface DecodedExecution {
+  command: string;
+  cwd: string | null;
+  shell: 'bash';
+  issues: ExecutionIssue[];
+}
+interface ExecutionOptions {
+  cwd?: string;
+  cwdUnresolved?: boolean;
+  shell?: string;
+}
+const hasField = (input: Record<string, unknown>, field: string): boolean =>
+  Object.prototype.hasOwnProperty.call(input, field);
+const executionIssue = (code: string, message: string): ExecutionIssue => ({
+  code,
+  message,
+  start: 0,
+  end: 0,
+});
+const decodingError = (code: string, message: string): { error: ExecutionIssue } => ({
+  error: executionIssue(code, message),
+});
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+function existingAbsoluteDirectory(value: unknown): value is string {
+  if (typeof value !== 'string' || !value || value.includes('\0') || !nodePath.isAbsolute(value))
+    return false;
+  try {
+    return statSync(value).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function shellDialect(value: string): string {
+  return value === '/bin/bash' || value === '/usr/bin/bash' ? 'bash' : value;
+}
+
+/** Decode source and execution metadata without using CLI fallback as native evidence. */
+function decodeExecution(
+  input: unknown,
+  options: ExecutionOptions,
+  directMode: 'analyze' | 'mutation'
+): DecodedExecution {
+  if (!isRecord(input)) throw decodingError('invalid-input', 'Expected a JSON request object.');
+  const native = hasField(input, 'tool_input') || hasField(input, 'tool_name');
+  let source: unknown;
+  let nativeInput: Record<string, unknown> | undefined;
+  let nativeAlias = false;
+  if (native) {
+    if (typeof input.tool_name !== 'string' || !input.tool_name)
+      throw decodingError('invalid-tool', 'Native tool_name must identify a shell tool.');
+    nativeAlias = NATIVE_SHELL_TOOLS.has(input.tool_name);
+    if (input.tool_name !== 'Bash' && !nativeAlias)
+      throw decodingError('invalid-tool', 'The native tool has no declared shell input contract.');
+    if (!isRecord(input.tool_input))
+      throw decodingError('invalid-input', 'Native tool_input must be an object.');
+    nativeInput = input.tool_input;
+    for (const field of ['command', 'cmd']) {
+      if (hasField(nativeInput, field) && typeof nativeInput[field] !== 'string')
+        throw decodingError(
+          'invalid-input',
+          'Every supplied native source field must be a string.'
+        );
+    }
+    if (
+      hasField(nativeInput, 'command') &&
+      hasField(nativeInput, 'cmd') &&
+      nativeInput.command !== nativeInput.cmd
+    )
+      throw decodingError(
+        'conflicting-command-fields',
+        'Native command fields disagree; exact execution source is unproved.'
+      );
+    source = nativeAlias
+      ? hasField(nativeInput, 'command')
+        ? nativeInput.command
+        : nativeInput.cmd
+      : nativeInput.command;
+    if (hasField(input, 'command')) {
+      if (typeof input.command !== 'string')
+        throw decodingError('invalid-input', 'Every supplied source field must be a string.');
+      if (input.command !== source)
+        throw decodingError(
+          'conflicting-command-fields',
+          'Top-level and native command fields disagree.'
+        );
+    }
+  } else source = input.command;
+  if (typeof source !== 'string')
+    throw decodingError('invalid-input', 'The execution command must be a string.');
+  if (source.includes('\0') || Buffer.byteLength(source, 'utf8') > MAX_EXECUTION_SOURCE_BYTES)
+    throw decodingError('source-budget', 'Command exceeds 64 KiB or contains a NUL byte.');
+  // The trusted launcher identifies the producer. The matching Codex producer
+  // omits final launch parameters; tool labels or added caller fields cannot
+  // qualify that native contract. Literal read-only analysis remains available.
+  if (native && process.env.CAWS_AGENT_SURFACE === 'codex')
+    throw decodingError(
+      'execution-contract',
+      'The Codex native hook projection does not bind final shell, startup and execution cwd. Native admission requires a qualified producer or an owned execution boundary.'
+    );
+  if (nativeInput && ['cwd', 'env', 'environment'].some((field) => hasField(nativeInput, field)))
+    throw decodingError(
+      'unsupported-execution-context',
+      'Native tool_input.cwd, env and environment have no modeled execution contract.'
+    );
+
+  const shells: string[] = [];
+  for (const record of nativeInput ? [input, nativeInput] : [input]) {
+    if (!hasField(record, 'shell')) continue;
+    if (typeof record.shell !== 'string' || !record.shell || record.shell.includes('\0'))
+      throw decodingError(
+        'invalid-input',
+        'Every supplied shell declaration must be a nonempty string.'
+      );
+    shells.push(shellDialect(record.shell));
+  }
+  const originalShellSupplied = shells.length > 0;
+  if (options.shell !== undefined) {
+    if (!options.shell || options.shell.includes('\0'))
+      throw decodingError('invalid-input', 'The shell override must be a nonempty string.');
+    shells.push(shellDialect(options.shell));
+  }
+  if (new Set(shells).size > 1)
+    throw decodingError('conflicting-shell-fields', 'Supplied shell declarations disagree.');
+  // The literal Bash API retains its established protocol assumption. A native
+  // alias needs its own explicit shell metadata; the hook launcher is no proof.
+  if (nativeAlias && !originalShellSupplied)
+    throw decodingError('shell-dialect', 'The native execution shell is unknown.');
+  const shell = shells[0] ?? 'bash';
+  if (shell !== 'bash')
+    throw decodingError('shell-dialect', 'Only the declared Bash subset is supported.');
+  if (nativeInput) {
+    for (const record of [input, nativeInput]) {
+      if (hasField(record, 'login') && typeof record.login !== 'boolean')
+        throw decodingError('invalid-input', 'Every supplied startup flag must be boolean.');
+    }
+    if (
+      hasField(input, 'login') &&
+      hasField(nativeInput, 'login') &&
+      input.login !== nativeInput.login
+    )
+      throw decodingError('conflicting-startup-fields', 'Supplied shell startup flags disagree.');
+    if (
+      nativeInput.login === true ||
+      input.login === true ||
+      ((nativeAlias || originalShellSupplied) && nativeInput.login !== false)
+    )
+      throw decodingError(
+        'shell-startup',
+        'Explicit native Bash needs tool_input.login:false; startup effects are unproved.'
+      );
+  }
+
+  const issues: ExecutionIssue[] = [];
+  let cwd: string | null = null;
+  if (nativeInput) {
+    let base: string | null = null;
+    if (hasField(input, 'cwd')) {
+      if (existingAbsoluteDirectory(input.cwd)) base = input.cwd;
+      else
+        issues.push(
+          executionIssue(
+            'invalid-cwd',
+            'Supplied native cwd is not an existing absolute directory.'
+          )
+        );
+    }
+    if (hasField(nativeInput, 'workdir')) {
+      const workdir = nativeInput.workdir;
+      if (typeof workdir !== 'string' || !workdir || workdir.includes('\0')) {
+        issues.push(
+          executionIssue(
+            'invalid-workdir',
+            'Supplied native workdir must be a nonempty path string.'
+          )
+        );
+      } else {
+        // Do not normalize symlink/../ before the filesystem interprets it.
+        const candidate = nodePath.isAbsolute(workdir)
+          ? workdir
+          : base === null
+            ? null
+            : `${base}/${workdir}`;
+        if (candidate !== null && existingAbsoluteDirectory(candidate)) cwd = candidate;
+        else
+          issues.push(
+            executionIssue(
+              'invalid-workdir',
+              'Native workdir has no existing absolute execution coordinate.'
+            )
+          );
+      }
+    } else cwd = base;
+    if (issues.length) cwd = null;
+  } else {
+    const candidate =
+      directMode === 'mutation' ? options.cwd : (options.cwd ?? input.cwd ?? process.cwd());
+    if (!existingAbsoluteDirectory(candidate))
+      issues.push(
+        executionIssue('invalid-cwd', 'Execution cwd is not an existing absolute directory.')
+      );
+    else if (options.cwdUnresolved !== true) cwd = candidate;
+  }
+  if (cwd !== null) cwd = realpathSync(cwd);
+  return { command: source, cwd, shell, issues };
+}
+
+async function readExecutionRequest(): Promise<unknown> {
+  if (process.stdin.isTTY) return JSON.parse('') as unknown;
+  // Pipes may deliver one valid envelope across several asynchronous writes.
+  // Wait for EOF and retain UTF-8 decoder state between transport chunks.
+  process.stdin.setEncoding('utf8');
+  const chunks: string[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as string);
+  return JSON.parse(chunks.join('')) as unknown;
+}
+function caughtExecutionIssue(error: unknown): ExecutionIssue {
+  if (
+    isRecord(error) &&
+    isRecord(error.error) &&
+    typeof error.error.code === 'string' &&
+    typeof error.error.message === 'string'
+  )
+    return executionIssue(error.error.code, error.error.message);
+  return executionIssue('analysis-unavailable', 'Command input or analysis could not complete.');
+}
+
+async function analysisInput(
+  options: HooksAnalyzeOptions
+): Promise<{ command: string; cwd: string; worktree: string; shell: 'bash' } | CommandAnalysis> {
+  try {
+    const request =
+      options.command === undefined ? await readExecutionRequest() : { command: options.command };
+    const decoded = decodeExecution(request, options, 'analyze');
+    if (decoded.issues.length) {
+      const issue = decoded.issues[0]!;
+      return unresolvedAnalysis(issue.code, issue.message);
+    }
+    if (decoded.cwd === null)
+      return unresolvedAnalysis(
+        'invalid-cwd',
+        'Native execution cwd is unknown; CLI cwd is not execution evidence.'
+      );
+    const worktree = options.worktree ?? (isRecord(request) ? request.worktree : undefined);
+    if (typeof worktree !== 'string' || !worktree || worktree.includes('\0'))
+      return unresolvedAnalysis('invalid-input', 'worktree must be a nonempty path string.');
+    return { command: decoded.command, cwd: decoded.cwd, worktree, shell: decoded.shell };
+  } catch (error) {
+    const issue = caughtExecutionIssue(error);
+    return unresolvedAnalysis(issue.code, issue.message);
+  }
+}
+
+/** Read-only: submitted bytes are analyzed, never evaluated or logged. */
+export async function runHooksAnalyzeCommand(options: HooksAnalyzeOptions = {}): Promise<number> {
+  const input = await analysisInput(options);
+  let result: CommandAnalysis;
+  try {
+    result = 'decision' in input ? input : await analyzeCommand(input);
+  } catch {
+    // Exception text can contain submitted command bytes; do not expose it.
+    result = unresolvedAnalysis('analysis-unavailable', 'Command analysis could not complete.');
+  }
+  if (options.json === true) {
+    process.stdout.write(
+      `${JSON.stringify({
+        schema: 'caws.hooks_analyze.v1',
+        decision: result.decision,
+        reasons: result.reasons,
+        trace: result.trace,
+      })}\n`
+    );
+  } else {
+    process.stdout.write(`caws hooks analyze: ${result.decision}\n`);
+    for (const reason of result.reasons) {
+      process.stdout.write(`  ${reason.code} [${reason.start}:${reason.end}]: ${reason.message}\n`);
+    }
+  }
+  return result.decision === 'allow' ? 0 : result.decision === 'deny' ? 1 : 2;
+}
+
+export interface HooksMutationViewOptions {
+  readonly cwd?: string;
+  readonly cwdUnresolved?: boolean;
+  readonly project?: string;
+  readonly shell?: string;
+  readonly json?: boolean;
+}
+
+type MutationProjection = Awaited<ReturnType<typeof projectMutationView>>;
+type LifecycleFact = 'merge' | 'destroy' | null;
+type MutationCliView = MutationProjection & {
+  execution: { command: string; cwd: string | null } | null;
+  singleLifecycle: LifecycleFact;
+};
+function failedMutationView(issue: ExecutionIssue): MutationCliView {
+  return {
+    schema: 'caws.shell_mutation_view.v2',
+    tokens: [],
+    interpreters: [],
+    interpreterInvocations: [],
+    gitMetadata: [],
+    copyInvocations: [],
+    copyOperations: [],
+    issues: [issue],
+    execution: null,
+    singleLifecycle: null,
+  };
+}
+function literalWord(word: Word): string | null {
+  // Tilde expansion is represented as literal source by the pinned parser.
+  if (word.text.startsWith('~')) return null;
+  function literalPart(part: WordPart): string | null {
+    if (part.type === 'Literal' || part.type === 'SingleQuoted') return part.value;
+    if (part.type !== 'DoubleQuoted') return null;
+    let value = '';
+    for (const child of part.parts) {
+      const next = literalPart(child);
+      if (next === null) return null;
+      value += next;
+    }
+    return value;
+  }
+  if (!word.parts) return word.value;
+  let value = '';
+  for (const part of word.parts) {
+    const next = literalPart(part);
+    if (next === null) return null;
+    value += next;
+  }
+  return value;
+}
+function lifecycleHasName(verb: 'merge' | 'destroy', args: readonly string[]): boolean {
+  const meta = WORKTREE_COMMAND_META.subcommands.find((entry) => entry.name === verb);
+  if (!meta || meta.kind !== 'leaf') return false;
+  const options = new Map<string, boolean>();
+  for (const option of meta.options ?? []) {
+    const parts = option.flag.split(/\s+/);
+    if (!/^--[a-z][a-z-]*$/.test(parts[0]!)) return false;
+    options.set(parts[0]!, parts.length === 2 && /^<[^>]+>$/.test(parts[1]!));
+  }
+  let positional = 0;
+  let flags = true;
+  for (let index = 0; index < args.length; index++) {
+    const value = args[index]!;
+    if (flags && value === '--') {
+      flags = false;
+      continue;
+    }
+    if (flags && value.startsWith('-')) {
+      const equal = value.indexOf('=');
+      const flag = equal < 0 ? value : value.slice(0, equal);
+      const takesValue = options.get(flag);
+      if (takesValue === undefined) return false;
+      if (takesValue) {
+        if (equal < 0 && ++index >= args.length) return false;
+      } else if (equal >= 0) return false;
+    } else {
+      if (!value || ++positional > 1) return false;
+    }
+  }
+  return positional === 1;
+}
+/** A narrow syntax fact for a producer, never an admission or ownership verdict. */
+async function singleLiteralLifecycle(command: string): Promise<LifecycleFact> {
+  const { parse } = await loadParser();
+  const tree = parse(command);
+  if (tree.errors?.length || tree.commands.length !== 1) return null;
+  const statement = tree.commands[0]!;
+  const node = statement.command;
+  if (
+    statement.background ||
+    node.type !== 'Command' ||
+    !node.name ||
+    node.prefix.length ||
+    node.suffix.some((part) => part.type !== 'Word')
+  )
+    return null;
+  const words = [node.name, ...node.suffix.filter((part): part is Word => part.type === 'Word')];
+  const argv: string[] = [];
+  for (const word of words) {
+    const value = literalWord(word);
+    if (value === null) return null;
+    argv.push(value);
+  }
+  if (
+    tree.errors?.length ||
+    argv[0] !== 'caws' ||
+    argv[1] !== 'worktree' ||
+    (argv[2] !== 'merge' && argv[2] !== 'destroy')
+  )
+    return null;
+  return lifecycleHasName(argv[2], argv.slice(3)) ? argv[2] : null;
+}
+
+/** A rewrite must preserve the project the actual lifecycle CLI would select. */
+function lifecycleProjectMatches(cwd: string, project: string): boolean {
+  try {
+    const resolved = resolveRepoRoot(cwd, {
+      git: (args, options) =>
+        execFileSync(resolveGitBinary(), [...args], {
+          cwd: options.cwd,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 500,
+          maxBuffer: 65536,
+        }).trim(),
+    });
+    return resolved.ok && realpathSync(resolved.value.repoRoot) === realpathSync(project);
+  } catch {
+    return false;
+  }
+}
+
+/** Lexical facts for consumers; these fields never grant write authority. */
+export async function runHooksMutationViewCommand(
+  options: HooksMutationViewOptions = {}
+): Promise<number> {
+  let view: MutationCliView;
+  let status = 0;
+  try {
+    const decoded = decodeExecution(await readExecutionRequest(), options, 'mutation');
+    if (
+      typeof options.project !== 'string' ||
+      !nodePath.isAbsolute(options.project) ||
+      options.project.includes('\0')
+    )
+      throw decodingError('invalid-input', 'An absolute project root is required.');
+    const projection = await projectMutationView({
+      command: decoded.command,
+      cwd: decoded.cwd,
+      project: options.project,
+      shell: decoded.shell,
+    });
+    // A bounded projection can retain an independently observed violation
+    // before later uncertainty or exhaustion. Preserve those facts and issues.
+    view = {
+      ...projection,
+      issues: [...decoded.issues, ...projection.issues],
+      execution: { command: decoded.command, cwd: decoded.cwd },
+      singleLifecycle: null,
+    };
+    if (decoded.cwd !== null && view.issues.length === 0) {
+      const lifecycle = await singleLiteralLifecycle(decoded.command);
+      if (lifecycle && lifecycleProjectMatches(decoded.cwd, options.project))
+        view.singleLifecycle = lifecycle;
+    }
+  } catch (error) {
+    status = 2;
+    view = failedMutationView(caughtExecutionIssue(error));
+  }
+  if (options.json === true) process.stdout.write(`${JSON.stringify(view)}\n`);
+  else {
+    process.stdout.write(`caws hooks mutation-view: ${view.issues.length} unresolved issue(s)\n`);
+    for (const issue of view.issues)
+      process.stdout.write(`  ${issue.code} [${issue.start}:${issue.end}]: ${issue.message}\n`);
+  }
+  return status;
+}
 
 // ─── hooks list ────────────────────────────────────────────────────────────
 
