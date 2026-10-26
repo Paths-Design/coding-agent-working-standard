@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: execution-boundary
 created_at: '2026-10-19T02:30:42.300Z'
-updated_at: '2026-10-26T22:55:33.141Z'
+updated_at: '2026-10-26T23:17:35.117Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -71,6 +71,7 @@ scope:
     - packages/caws-cli/src/store/worktrees-writer.ts
     - packages/caws-cli/src/store/specs-writer.ts
     - packages/caws-cli/stryker.execution.conf.js
+    - packages/caws-cli/scripts/stryker-config.cjs
 invariants:
   - 'Analysis never executes submitted commands, expansions, scripts or redirections.'
   - 'Every possible shell-visible Git target and admitted execution-bearing argument satisfies the declared policy; unresolved syntax or values never become an allow proof.'
