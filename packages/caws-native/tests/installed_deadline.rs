@@ -407,7 +407,8 @@ fn installed_entry() -> Value {
 }
 
 // The actual frontend runs from its exact admitted generation. The pinned
-// shell is only the Node tripwire: it writes a marker and emits no protocol.
+// script adapter is only the Node tripwire: it writes a marker and emits no
+// protocol. This fixture does not qualify a production Node image.
 struct PublishedFixture {
     fixture: Fixture,
     home: PathBuf,
@@ -435,7 +436,10 @@ impl PublishedFixture {
                 "native/caws-hook-native".into(),
                 b"stable entry fixture identity\n".to_vec(),
             ),
-            ("native/node".into(), fs::read("/bin/sh").unwrap()),
+            (
+                "native/node".into(),
+                b"#!/bin/sh\nexec /bin/sh \"$@\"\n".to_vec(),
+            ),
             (
                 "engine.js".into(),
                 fs::read(fixture.root.join("engine.sh")).unwrap(),
@@ -496,6 +500,33 @@ impl PublishedFixture {
             json!({"version":1,"digest":"b".repeat(64)}).to_string(),
         )
         .unwrap();
+        // Validate the exact relocated tripwire executable as well as the
+        // system shell used by Fixture. A platform launcher may not relocate.
+        let probe = Command::new(runtime.join("native/node"))
+            .arg(runtime.join("engine.js"))
+            .env_clear()
+            .output()
+            .unwrap();
+        if fixture.retained {
+            fs::write(
+                fixture.root.join("relocated-tripwire.stderr"),
+                &probe.stderr,
+            )
+            .unwrap();
+            fs::write(
+                fixture.root.join("relocated-tripwire.json"),
+                json!({"exitCode":probe.status.code(),"signal":probe.status.signal(),
+                    "markerPresent":fixture.marker.exists(),"scope":"fixture setup, outside invocation"}).to_string(),
+            ).unwrap();
+        }
+        assert_eq!(
+            probe.status.code(),
+            Some(73),
+            "relocated tripwire: {}",
+            String::from_utf8_lossy(&probe.stderr)
+        );
+        assert_eq!(fs::read(&fixture.marker).unwrap(), b"started");
+        fs::remove_file(&fixture.marker).unwrap();
         Self {
             fixture,
             home,
