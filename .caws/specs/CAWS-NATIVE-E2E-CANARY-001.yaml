@@ -48,3 +48,9 @@ non_functional:
 contracts:
   - name: 'private-native-canary'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Runtime acceptance determined by direct inspection of raw commands/statuses and artifacts, not source-only citation verification. Pinned22 build02 exec69176 exit0; normal snapshot exec39474 exit0; native plan0 byte-identical/apply27348 exit0, pointercacfc51a/entryba00480 readback and global hashes OK. Exact artifactRoot /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/native-agent-workflow-01; candidate-observation-01.json, candidate-install-01.log, native-install-plan-01.json, native-install-apply-01.json, first-callback-result-01.json. CLI --verify verifies only cited commit existence; generated runtime receipts intentionally not committed, per repository contract. Diagnostic Parentaddc+Source8a only; no qualified Stop/domain/adoption."
+    recorded_at: "2026-10-26T22:01:16.268Z"
+    commit_sha: "3068e3b2f95d4161760aa0bc2f57c3a192c215c2"
