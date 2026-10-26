@@ -1348,26 +1348,90 @@ fn natural_terminal_queued_before_cutoff_survives_late_foreground_resume() {
             .and_then(|n| n.checked_add(nanos))
             .unwrap()
     }
+    const CLOCK_ALLOWANCE: Duration = Duration::from_millis(25);
+    fn elapsed_correlated(native: Duration, awake_min: Duration, awake_max: Duration) -> bool {
+        awake_min <= awake_max
+            && native.abs_diff(awake_min) <= CLOCK_ALLOWANCE
+            && native.abs_diff(awake_max) <= CLOCK_ALLOWANCE
+    }
     #[derive(Clone, Copy)]
     struct Stamp {
         native_ns: u64,
-        launch_elapsed: Duration,
+        instant_before: Instant,
+        instant_after: Instant,
+        launch_elapsed: Option<Duration>,
     }
     impl Stamp {
-        fn read(began: Instant) -> Self {
+        fn sample(began: Option<Instant>) -> Self {
+            let instant_before = Instant::now();
+            let native_ns = native_now();
+            let instant_after = Instant::now();
             Self {
-                native_ns: native_now(),
-                launch_elapsed: began.elapsed(),
+                native_ns,
+                instant_before,
+                instant_after,
+                launch_elapsed: began.map(|start| instant_after.duration_since(start)),
             }
         }
-        fn json(self, original_start: u64) -> serde_json::Value {
+        fn read(began: Instant) -> Self {
+            Self::sample(Some(began))
+        }
+        fn awake_bounds(self, reference: Self) -> (Duration, Duration) {
+            (
+                self.instant_before
+                    .saturating_duration_since(reference.instant_after),
+                self.instant_after
+                    .saturating_duration_since(reference.instant_before),
+            )
+        }
+        fn correlated(self, reference: Self) -> bool {
+            let Some(native) = self.native_ns.checked_sub(reference.native_ns) else {
+                return false;
+            };
+            let (awake_min, awake_max) = self.awake_bounds(reference);
+            self.instant_after.duration_since(self.instant_before) <= CLOCK_ALLOWANCE
+                && reference
+                    .instant_after
+                    .duration_since(reference.instant_before)
+                    <= CLOCK_ALLOWANCE
+                && elapsed_correlated(Duration::from_nanos(native), awake_min, awake_max)
+        }
+        fn json(self, original_start: u64, reference: Self) -> serde_json::Value {
+            let (awake_min, awake_max) = self.awake_bounds(reference);
+            let native_elapsed = self.native_ns.checked_sub(reference.native_ns);
             serde_json::json!({
                 "native_ns":self.native_ns.to_string(),
                 "native_original_elapsed_ns":self.native_ns.checked_sub(original_start).map(|n|n.to_string()),
-                "launch_elapsed_ns":self.launch_elapsed.as_nanos().to_string(),
+                "launch_elapsed_ns":self.launch_elapsed.map(|d|d.as_nanos().to_string()),
+                "instant_before_reference_ns":self.instant_before.saturating_duration_since(reference.instant_before).as_nanos().to_string(),
+                "instant_after_reference_ns":self.instant_after.saturating_duration_since(reference.instant_before).as_nanos().to_string(),
+                "pair_uncertainty_ns":self.instant_after.duration_since(self.instant_before).as_nanos().to_string(),
+                "native_reference_elapsed_ns":native_elapsed.map(|n|n.to_string()),
+                "awake_elapsed_lower_ns":awake_min.as_nanos().to_string(),
+                "awake_elapsed_upper_ns":awake_max.as_nanos().to_string(),
+                "native_awake_max_divergence_ns":native_elapsed.map(|n|
+                    Duration::from_nanos(n).abs_diff(awake_min).max(Duration::from_nanos(n).abs_diff(awake_max)).as_nanos().to_string()),
+                "clock_correlation_ok":self.correlated(reference),
             })
         }
     }
+    fn sampled_now(began: Instant, samples: &mut Vec<Stamp>) -> u64 {
+        let sample = Stamp::read(began);
+        samples.push(sample);
+        sample.native_ns
+    }
+    // Pure sensitivity examples for the same predicate used by actual paired
+    // observations; neither creates a deadline nor suspends the machine.
+    assert!(elapsed_correlated(
+        Duration::from_millis(950),
+        Duration::from_millis(949),
+        Duration::from_millis(951)
+    ));
+    assert!(!elapsed_correlated(
+        Duration::from_millis(950),
+        Duration::from_millis(649),
+        Duration::from_millis(651)
+    ));
     #[derive(Clone, Copy, serde::Serialize)]
     struct ProcessInfo {
         pid: u32,
@@ -1439,13 +1503,16 @@ fn natural_terminal_queued_before_cutoff_survives_late_foreground_resume() {
                 after,
             }
         }
-        fn json(&self, original_start: u64) -> serde_json::Value {
+        fn correlated(&self, reference: Stamp) -> bool {
+            self.before.correlated(reference) && self.after.correlated(reference)
+        }
+        fn json(&self, original_start: u64, reference: Stamp) -> serde_json::Value {
             serde_json::json!({
                 "actor":self.actor, "requested_pid":self.requested_pid,
                 "returned_bytes":self.bytes, "errno":self.errno,
                 "observation":if self.info.is_some() {"present"} else if self.absent {"absent"} else {"unknown"},
-                "process":self.info, "before":self.before.json(original_start),
-                "after":self.after.json(original_start),
+                "process":self.info, "before":self.before.json(original_start, reference),
+                "after":self.after.json(original_start, reference),
             })
         }
     }
@@ -1500,6 +1567,10 @@ printf '{"pid":%s,"ppid":%s,"pgid":%s,"code":37,"stdout_bytes":13}\n' "$$" "$PPI
 /bin/mv "$w/done.writing" "$w/done.json"
 exit 37
 "#,true,DESCRIBE_MS,0);
+    // Reference precedes fixture.spawn and the native original capture. This is
+    // paired test observation only, never a production deadline constructor.
+    let reference = Stamp::sample(None);
+    let mut clock_queries = Vec::new();
     let mut running = fixture.spawn("stop", true);
     let began = running.started;
     let foreground = running.child.id();
@@ -1528,6 +1599,9 @@ exit 37
     let selected_start = canonical_u64(&clock.selected.started_ns);
     let selected_expiry = canonical_u64(&clock.selected.expires_ns);
     assert!(original_start > 0);
+    let original_offset_from_reference = original_start
+        .checked_sub(reference.native_ns)
+        .expect("original capture preceded the pre-spawn reference");
     assert_eq!(
         original_expiry.checked_sub(original_start),
         Some(30_000_000_000)
@@ -1555,6 +1629,11 @@ exit 37
         foreground_upper.checked_sub(original_start),
         Some(1_100_000_000)
     );
+    let required_awake_elapsed = Duration::from_nanos(original_offset_from_reference)
+        .checked_add(Duration::from_nanos(execution_upper - original_start))
+        .unwrap()
+        .checked_add(CLOCK_ALLOWANCE)
+        .unwrap();
     let start_observed = Stamp::read(began);
     assert!(start_observed.native_ns >= original_start);
     let selected = fixture.witness("started");
@@ -1564,10 +1643,13 @@ exit 37
     let initial_foreground = ProcessObservation::read("foreground-initial", foreground, began);
     let initial_worker = ProcessObservation::read("worker-initial", worker, began);
     let initial_selected = ProcessObservation::read("selected-initial", selected_pid, began);
+    let mut process_pairs_correlated = initial_foreground.correlated(reference)
+        && initial_worker.correlated(reference)
+        && initial_selected.correlated(reference);
     let mut observations = vec![
-        initial_foreground.json(original_start),
-        initial_worker.json(original_start),
-        initial_selected.json(original_start),
+        initial_foreground.json(original_start, reference),
+        initial_worker.json(original_start, reference),
+        initial_selected.json(original_start, reference),
     ];
     fs::write(
         fixture.root.join("process-observations-before-pause.json"),
@@ -1597,15 +1679,19 @@ exit 37
     // Observe it within the same execution setup window before releasing work.
     while paused_foreground.info.is_some_and(|p| {
         foreground_birth.same_birth(p) && p.status != libc::SSTOP && p.status != libc::SZOMB
-    }) && native_now() < early_until
+    }) && sampled_now(began, &mut clock_queries) < early_until
         && began.elapsed() < FAST_LIMIT
     {
-        observations.push(paused_foreground.json(original_start));
+        process_pairs_correlated &= paused_foreground.correlated(reference);
+        observations.push(paused_foreground.json(original_start, reference));
         thread::sleep(Duration::from_millis(2));
         paused_foreground = ProcessObservation::read("foreground-paused", foreground, began);
     }
     let paused_worker = ProcessObservation::read("worker-before-release", worker, began);
     let paused_selected = ProcessObservation::read("selected-before-release", selected_pid, began);
+    process_pairs_correlated &= paused_foreground.correlated(reference)
+        && paused_worker.correlated(reference)
+        && paused_selected.correlated(reference);
     let foreground_stopped = paused_foreground
         .info
         .is_some_and(|p| foreground_birth.same_birth(p) && p.status == libc::SSTOP);
@@ -1616,26 +1702,34 @@ exit 37
         selected_birth.same_birth(p) && p.ppid == worker && p.pgid == selected_pid
     });
     observations.extend([
-        paused_foreground.json(original_start),
-        paused_worker.json(original_start),
-        paused_selected.json(original_start),
+        paused_foreground.json(original_start, reference),
+        paused_worker.json(original_start, reference),
+        paused_selected.json(original_start, reference),
     ]);
-    let release =
-        if foreground_stopped && worker_owned && selected_owned && native_now() < early_until {
-            fs::write(fixture.root.join("release-natural"), b"release\n").unwrap();
-            Some(Stamp::read(began))
-        } else {
-            None
-        };
+    let release = if foreground_stopped
+        && worker_owned
+        && selected_owned
+        && sampled_now(began, &mut clock_queries) < early_until
+    {
+        fs::write(fixture.root.join("release-natural"), b"release\n").unwrap();
+        Some(Stamp::read(began))
+    } else {
+        None
+    };
     let mut done_observed = None;
     let mut worker_terminal = None;
     let mut worker_terminal_state = None;
     let mut reused_birth_observed = false;
-    while release.is_some() && native_now() < early_until && began.elapsed() < FAST_LIMIT {
+    while release.is_some()
+        && sampled_now(began, &mut clock_queries) < early_until
+        && began.elapsed() < FAST_LIMIT
+    {
         if fixture.root.join("done.json").exists() {
             done_observed.get_or_insert_with(|| Stamp::read(began));
             let owner = ProcessObservation::read("foreground-still-paused", foreground, began);
             let terminal = ProcessObservation::read("worker-terminal", worker, began);
+            process_pairs_correlated &=
+                owner.correlated(reference) && terminal.correlated(reference);
             let stopped_same_owner = owner
                 .info
                 .is_some_and(|p| foreground_birth.same_birth(p) && p.status == libc::SSTOP);
@@ -1655,7 +1749,10 @@ exit 37
                     "SZOMB"
                 });
             }
-            observations.extend([owner.json(original_start), terminal.json(original_start)]);
+            observations.extend([
+                owner.json(original_start, reference),
+                terminal.json(original_start, reference),
+            ]);
             if worker_terminal.is_some() || reused_birth_observed {
                 break;
             }
@@ -1663,7 +1760,7 @@ exit 37
         thread::sleep(Duration::from_millis(2));
     }
     loop {
-        let now = native_now();
+        let now = sampled_now(began, &mut clock_queries);
         if now >= resume_target || began.elapsed() >= FAST_LIMIT {
             break;
         }
@@ -1673,32 +1770,74 @@ exit 37
     let resume_result = paused.resume();
     drop(paused);
     let resume_completed = Stamp::read(began);
+    let phase_samples = [
+        Some(reference),
+        Some(start_observed),
+        Some(pause_sent),
+        release,
+        done_observed,
+        worker_terminal,
+        Some(resume_sent),
+        Some(resume_completed),
+    ];
+    let phase_samples_complete = phase_samples.iter().all(Option::is_some);
+    let pre_finish_correlation_ok = phase_samples_complete
+        && process_pairs_correlated
+        && phase_samples
+            .into_iter()
+            .all(|sample| sample.is_some_and(|s| s.correlated(reference)))
+        && clock_queries.iter().all(|s| s.correlated(reference));
+    let (resume_awake_min, _) = resume_sent.awake_bounds(reference);
     fs::write(fixture.root.join("pause-resume.json"), serde_json::to_vec_pretty(&serde_json::json!({
         "clock_fragment":serde_json::from_slice::<serde_json::Value>(&clock_bytes).unwrap(),
+        "pre_spawn_clock_reference":reference.json(original_start, reference),
+        "clock_allowance_ns":CLOCK_ALLOWANCE.as_nanos().to_string(),
+        "clock_relation_assumption":"awake/stable native-uptime correlation, sampled bounds only",
+        "phase_samples_complete":phase_samples_complete,
+        "process_pairs_correlated":process_pairs_correlated, "pre_finish_correlation_ok":pre_finish_correlation_ok,
+        "clock_poll_samples":clock_queries.iter().map(|s|s.json(original_start, reference)).collect::<Vec<_>>(),
+        "original_offset_from_reference_ns":original_offset_from_reference.to_string(),
+        "required_awake_elapsed_ns":required_awake_elapsed.as_nanos().to_string(),
+        "resume_awake_min_ns":resume_awake_min.as_nanos().to_string(),
+        "resume_crossed_awake_bound":resume_awake_min > required_awake_elapsed,
         "foreground_pid":foreground, "worker_pid":worker, "selected_pid":selected_pid,
-        "selected_start_observed":start_observed.json(original_start),
-        "pause_sent":pause_sent.json(original_start), "release":release.map(|s|s.json(original_start)),
-        "done_observed":done_observed.map(|s|s.json(original_start)),
-        "worker_terminal":worker_terminal.map(|s|s.json(original_start)), "worker_terminal_state":worker_terminal_state,
+        "selected_start_observed":start_observed.json(original_start, reference),
+        "pause_sent":pause_sent.json(original_start, reference), "release":release.map(|s|s.json(original_start, reference)),
+        "done_observed":done_observed.map(|s|s.json(original_start, reference)),
+        "worker_terminal":worker_terminal.map(|s|s.json(original_start, reference)), "worker_terminal_state":worker_terminal_state,
         "foreground_stopped":foreground_stopped, "worker_owned":worker_owned, "selected_owned":selected_owned,
         "reused_birth_observed":reused_birth_observed, "process_observations":observations,
         "terminal_reserve_ns":terminal_reserve.to_string(), "returning_reserve_ns":returning_reserve.to_string(),
         "execution_envelope_upper_ns":execution_upper.to_string(),
         "foreground_envelope_upper_ns":foreground_upper.to_string(), "resume_target_ns":resume_target.to_string(),
-        "resume_sent":resume_sent.json(original_start), "resume_completed":resume_completed.json(original_start),
+        "resume_sent":resume_sent.json(original_start, reference), "resume_completed":resume_completed.json(original_start, reference),
         "resume_ok":resume_result.is_ok(), "direct_local_phase_capture":false,
     })).unwrap()).unwrap();
     // This unchanged collector samples ps only after SIGCONT, outside the pause.
     let result = running.finish(&fixture, Some(b""), true, true, FAST_LIMIT);
     let post_finish = Stamp::read(began);
     fs::write(fixture.root.join("natural-terminal-outcome.json"), serde_json::to_vec_pretty(&serde_json::json!({
-        "exit_code":result.status.code(), "post_finish":post_finish.json(original_start),
+        "exit_code":result.status.code(), "post_finish":post_finish.json(original_start, reference),
+        "pre_finish_correlation_ok":pre_finish_correlation_ok,
+        "post_finish_correlation_ok":post_finish.correlated(reference),
         "completion_launch_elapsed_ns":completion_elapsed(&result).as_nanos().to_string(),
         "stdout_eof_launch_elapsed_ns":result.stdout_eof_elapsed.map(|s|s.as_nanos().to_string()),
         "stderr_eof_launch_elapsed_ns":result.stderr_eof_elapsed.map(|s|s.as_nanos().to_string()),
         "post_finish_native_observation_upper_bounds_exit_and_both_eofs":result.out_eof && result.err_eof,
         "execution_cutoff_diagnostic_observed":String::from_utf8_lossy(&result.stderr).contains("compatibility execution cutoff reached"),
     })).unwrap()).unwrap();
+    assert!(
+        phase_samples_complete,
+        "setup gap: required phase observations are missing"
+    );
+    assert!(
+        pre_finish_correlation_ok && post_finish.correlated(reference),
+        "setup gap: sleep/divergence or sampling uncertainty invalidates the clock crossing"
+    );
+    assert!(
+        resume_awake_min > required_awake_elapsed,
+        "setup gap: minimum awake elapsed did not cross original offset +800ms + clock allowance"
+    );
     assert!(
         foreground_stopped && worker_owned && selected_owned,
         "setup gap: exact paused foreground/worker/selected ancestry unavailable"
@@ -1747,9 +1886,12 @@ exit 37
         "completion/EOF observation missed the same retained selected/foreground upper bounds"
     );
     assert_private_group_not_live(&fixture, &result, "started");
-    // Actual retained envelopes bound native-time comparisons. Production's
-    // conservatively captured local Instant limits can be earlier: these are
-    // envelope upper bounds, never direct observations of local phase capture.
+    // Apple Instant uses CLOCK_UPTIME_RAW (excludes system sleep), while native
+    // envelopes use CLOCK_MONOTONIC. During suspend, a local phase end can occur
+    // later in native time; an unconditional "only earlier" relation is invalid.
+    // This crossing is conditional on the recorded awake/stable correlation and
+    // minimum-awake inequality. Local phase capture remains unobserved; no
+    // deadline constructor or conversion grants this observer clock authority.
     // Terminal worker + source exit conditions infer a queued packet; this test
     // does not decode it. Kernel stalls can invalidate timing setup or collection.
 }
