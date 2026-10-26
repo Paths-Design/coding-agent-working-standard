@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-FROZEN-PREPARATION-001
 title: 'Prepare pinned native qualification inputs from admitted Git objects'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-frozen-preparation
 created_at: '2026-10-26T00:29:07.194Z'
-updated_at: '2026-10-26T00:29:07.194Z'
+updated_at: '2026-10-26T00:29:17.316Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
