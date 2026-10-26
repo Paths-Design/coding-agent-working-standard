@@ -629,7 +629,8 @@ import { isAdapterCoveredSurface } from './types';
 // unavailable-native-context instead of an inferred ownership decision.
 // v112: the stock reprieve consult uses a generated standalone typed reader.
 // v114: bounded mutation analysis and checked path identity share the guard boundary.
-export const SHARED_PACK_VERSION = 114;
+// v115: registry consumers preserve canonical path bytes and diagnose unavailable readers.
+export const SHARED_PACK_VERSION = 115;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

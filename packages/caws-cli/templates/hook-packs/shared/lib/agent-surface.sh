@@ -132,15 +132,20 @@ _CAWS_AGENT_SURFACE_SH_LOADED=1
 # ---------------------------------------------------------------------------
 # Resolve a candidate directory to its git repo root, cwd-independent. Prints
 # the root on success, nothing on failure (not a repo / git missing). Never
-# exits non-zero: callers treat empty output as "no root available".
+# Assign the exact Git path, removing only its one record delimiter. The
+# vendor fallback retains its raw candidate if Git cannot supply a root.
 _caws_to_git_root() {
-  local d="${1:-}"
-  [[ -z "$d" ]] && return 0
-  command -v git >/dev/null 2>&1 || return 0
-  local root
-  root="$(cd "$d" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || true)"
-  [[ -n "$root" ]] && printf '%s\n' "$root"
-  return 0
+  local d="${1:-}" _caws_vendor_root
+  [[ -n "$d" ]] || return 1
+  command -v git >/dev/null 2>&1 || return 1
+  _caws_vendor_root="$(CDPATH='' cd -- "$d" 2>/dev/null &&
+    git rev-parse --show-toplevel 2>/dev/null && printf x0 || printf 'x%s' "$?")"
+  [[ "${_caws_vendor_root##*x}" == 0 ]] || return 1
+  _caws_vendor_root="${_caws_vendor_root%x*}"
+  [[ "$_caws_vendor_root" == /*$'\n' ]] || return 1
+  _caws_vendor_root="${_caws_vendor_root%$'\n'}"
+  [[ -n "$_caws_vendor_root" ]] || return 1
+  printf -v "$2" '%s' "$_caws_vendor_root"
 }
 
 if [[ -z "${CAWS_PROJECT_DIR:-}" ]]; then
@@ -156,8 +161,8 @@ if [[ -z "${CAWS_PROJECT_DIR:-}" ]]; then
   if [[ -n "$_CAWS_VENDOR_DIR_CANDIDATE" ]]; then
     # Normalize the candidate to its git repo root (HOOK-PROJECT-DIR-ROOT-
     # NOT-CWD-01). On failure keep the raw candidate — fail-open.
-    _CAWS_NORMALIZED_ROOT="$(_caws_to_git_root "$_CAWS_VENDOR_DIR_CANDIDATE")"
-    if [[ -n "$_CAWS_NORMALIZED_ROOT" ]]; then
+    _CAWS_NORMALIZED_ROOT=""
+    if _caws_to_git_root "$_CAWS_VENDOR_DIR_CANDIDATE" _CAWS_NORMALIZED_ROOT; then
       CAWS_PROJECT_DIR="$_CAWS_NORMALIZED_ROOT"
     else
       CAWS_PROJECT_DIR="$_CAWS_VENDOR_DIR_CANDIDATE"

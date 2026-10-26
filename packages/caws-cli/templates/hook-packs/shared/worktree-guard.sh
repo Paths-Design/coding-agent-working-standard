@@ -24,15 +24,20 @@
 
 set -euo pipefail
 
+worktree_authority_unavailable() {
+  printf '[worktree-guard] authority unavailable: %s; blocked\n' "$1" >&2
+  exit 2
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
-source "$SCRIPT_DIR/lib/parse-input.sh"
+if [[ ! -f "$SCRIPT_DIR/lib/parse-input.sh" ]] || ! source "$SCRIPT_DIR/lib/parse-input.sh"; then
+  worktree_authority_unavailable hook-input
+fi
 # shellcheck source=lib/caws-state.sh
-# Guard the source: a fatal `source <missing>` under `set -euo pipefail` is NOT
-# caught by `|| true`. caws-state.sh is optional here (worktree-guard reads the
-# registry via node), so a missing file is non-fatal but must not abort the
-# guard (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001).
-[[ -f "$SCRIPT_DIR/lib/caws-state.sh" ]] && source "$SCRIPT_DIR/lib/caws-state.sh"
+if [[ ! -f "$SCRIPT_DIR/lib/caws-state.sh" ]] || ! source "$SCRIPT_DIR/lib/caws-state.sh"; then
+  worktree_authority_unavailable canonical-root
+fi
 # shellcheck source=lib/agent-surface.sh
 # Provides CAWS_PROJECT_DIR and caws_source_lib — load-bearing (caws_source_lib
 # is called below). Fail CLOSED if absent: a guard that blocks dangerous git ops
@@ -47,7 +52,7 @@ fi
 # shellcheck source=lib/emit.sh
 # Use caws_source_lib so a vendor override is preferred over the shared default.
 caws_source_lib emit.sh 2>/dev/null || true
-parse_hook_input
+parse_hook_input || worktree_authority_unavailable hook-input
 
 TOOL_NAME="$HOOK_TOOL_NAME"
 COMMAND="$HOOK_COMMAND"
@@ -67,8 +72,42 @@ else
   exit 2
 fi
 
-# Resolve main repo root (shared helper — HOOK-LIB-CONSOLIDATION-001 T2a).
-PROJECT_DIR="$(resolve_canonical_dir "${CAWS_PROJECT_DIR:-.}")"
+# Path identity is assigned, never captured through newline-stripping stdout.
+declare -F caws_resolve_canonical_dir_into >/dev/null &&
+  declare -F caws_physical_dir_into >/dev/null &&
+  declare -F caws_git_path_into >/dev/null || worktree_authority_unavailable canonical-root
+PROJECT_DIR=""
+if ! caws_resolve_canonical_dir_into PROJECT_DIR "${CAWS_PROJECT_DIR:-.}" ||
+    ! caws_physical_dir_into PROJECT_DIR "$PROJECT_DIR"; then
+  worktree_authority_unavailable canonical-root
+fi
+[[ -d "$PROJECT_DIR/.caws" ]] || exit 0
+WORKTREES_JSON="$PROJECT_DIR/.caws/worktrees.json"
+
+# The path is data in argv, not interpolated JavaScript. A failed reader must
+# not print an empty registry and thereby remove the guard's authority.
+worktree_registry_read_into() {
+  local _wt_var="$1" _wt_mode="$2" _wt_out
+  command -v node >/dev/null 2>&1 || return 1
+  _wt_out="$(node -e "
+    $CAWS_NODE_ENTRIES_OF
+    try {
+      var reg = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+      if (!reg || typeof reg !== 'object' || Array.isArray(reg)) process.exit(2);
+      var active = entriesOf(reg).filter(function(w) {
+        var s = w.status;
+        return s === 'active' || s === undefined || s === null || s === '';
+      });
+      var mode = process.argv[2];
+      var value = mode === 'count' ? String(active.length) :
+        active.length === 0 ? '' : mode === 'first' ? active[0].name : active[0].baseBranch || '';
+      if (typeof value !== 'string') process.exit(2);
+      process.stdout.write(value);
+    } catch(e) { process.exit(2); }
+  " "$WORKTREES_JSON" "$_wt_mode" 2>/dev/null && printf x0 || printf 'x%s' "$?")"
+  [[ "${_wt_out##*x}" == 0 ]] || return 1
+  printf -v "$_wt_var" '%s' "${_wt_out%x*}"
+}
 
 # Block sparse checkout (runs before "only check git commands" early-exit)
 if echo "$COMMAND" | grep -qE '^caws\s+(worktree\s+create|parallel\s+setup).*--scope'; then
@@ -264,22 +303,23 @@ if lockfile_only_restore "$COMMAND" "${HOOK_CWD:-$PROJECT_DIR}"; then
 fi
 # ─── /Sanctioned path restores ───────────────────────────────────────────
 
-CANONICAL_GUARD_CHECK_CWD="${HOOK_CWD:-$PROJECT_DIR}"
-if is_canonical_checkout "$CANONICAL_GUARD_CHECK_CWD"; then
-    WORKTREES_JSON="$PROJECT_DIR/.caws/worktrees.json"
-      if [[ -f "$WORKTREES_JSON" ]] && command -v node >/dev/null 2>&1; then
-        FIRST_ACTIVE_WT=$(node -e "
-          $CAWS_NODE_ENTRIES_OF
-          try {
-            var reg = JSON.parse(require('fs').readFileSync('$WORKTREES_JSON', 'utf8'));
-            var active = entriesOf(reg).filter(function(w) {
-              var s = w.status;
-              return s === 'active' || s === undefined || s === null || s === '';
-            });
-            if (active.length > 0) console.log(active[0].name);
-            else console.log('');
-          } catch(e) { console.log(''); }
-        " 2>/dev/null || echo "")
+CANONICAL_GUARD_CHECK_CWD=""
+CANONICAL_GUARD_GIT_DIR=""
+CANONICAL_GUARD_COMMON_DIR=""
+if ! caws_physical_dir_into CANONICAL_GUARD_CHECK_CWD "${HOOK_CWD:-$PROJECT_DIR}" ||
+    ! caws_git_path_into CANONICAL_GUARD_GIT_DIR "$CANONICAL_GUARD_CHECK_CWD" --git-dir ||
+    ! caws_git_path_into CANONICAL_GUARD_COMMON_DIR "$CANONICAL_GUARD_CHECK_CWD" --git-common-dir; then
+  worktree_authority_unavailable canonical-root
+fi
+[[ "$CANONICAL_GUARD_GIT_DIR" == /* ]] || CANONICAL_GUARD_GIT_DIR="$CANONICAL_GUARD_CHECK_CWD/$CANONICAL_GUARD_GIT_DIR"
+[[ "$CANONICAL_GUARD_COMMON_DIR" == /* ]] || CANONICAL_GUARD_COMMON_DIR="$CANONICAL_GUARD_CHECK_CWD/$CANONICAL_GUARD_COMMON_DIR"
+if ! caws_physical_dir_into CANONICAL_GUARD_GIT_DIR "$CANONICAL_GUARD_GIT_DIR" ||
+    ! caws_physical_dir_into CANONICAL_GUARD_COMMON_DIR "$CANONICAL_GUARD_COMMON_DIR"; then
+  worktree_authority_unavailable canonical-root
+fi
+if [[ "$CANONICAL_GUARD_GIT_DIR" == "$CANONICAL_GUARD_COMMON_DIR" ]]; then
+      if [[ -e "$WORKTREES_JSON" || -L "$WORKTREES_JSON" ]]; then
+        worktree_registry_read_into FIRST_ACTIVE_WT first || worktree_authority_unavailable worktrees-registry
         if [[ -n "$FIRST_ACTIVE_WT" ]]; then
           if echo "$COMMAND" | grep -qE '^git\s+checkout\s+[^[:space:]-]'; then
             # A non-flag argument is a ref (branch switch) or a path (restore
@@ -354,35 +394,33 @@ fi
 WORKTREES_ACTIVE=false
 PARALLEL_BASE=""
 
-if [[ -f "$PROJECT_DIR/.caws/parallel.json" ]] && command -v node >/dev/null 2>&1; then
-  PARALLEL_INFO=$(node -e "
+if [[ -e "$PROJECT_DIR/.caws/parallel.json" || -L "$PROJECT_DIR/.caws/parallel.json" ]]; then
+  command -v node >/dev/null 2>&1 || worktree_authority_unavailable parallel-registry
+  PARALLEL_INFO="$(node -e "
     try {
-      var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/parallel.json', 'utf8'));
+      var reg = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+      if (!reg || typeof reg !== 'object' || Array.isArray(reg) ||
+          (reg.agents !== undefined && !Array.isArray(reg.agents)) ||
+          (reg.baseBranch !== undefined && typeof reg.baseBranch !== 'string')) process.exit(2);
       var agents = (reg.agents || []).length;
-      console.log(agents + ':' + (reg.baseBranch || ''));
-    } catch(e) { console.log('0:'); }
-  " 2>/dev/null || echo "0:")
+      process.stdout.write(agents + ':' + (reg.baseBranch || ''));
+    } catch(e) { process.exit(2); }
+  " "$PROJECT_DIR/.caws/parallel.json" 2>/dev/null && printf x0 || printf 'x%s' "$?")"
+  [[ "${PARALLEL_INFO##*x}" == 0 ]] || worktree_authority_unavailable parallel-registry
+  PARALLEL_INFO="${PARALLEL_INFO%x*}"
 
-  AGENT_COUNT=$(echo "$PARALLEL_INFO" | cut -d: -f1)
-  PARALLEL_BASE=$(echo "$PARALLEL_INFO" | cut -d: -f2)
+  AGENT_COUNT="${PARALLEL_INFO%%:*}"
+  PARALLEL_BASE="${PARALLEL_INFO#*:}"
+  [[ "$AGENT_COUNT" =~ ^[0-9]+$ ]] || worktree_authority_unavailable parallel-registry
 
   if [[ "$AGENT_COUNT" -gt 0 ]] 2>/dev/null; then
     WORKTREES_ACTIVE=true
   fi
 fi
 
-if [[ "$WORKTREES_ACTIVE" != "true" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>&1; then
-  ACTIVE_COUNT=$(node -e "
-    $CAWS_NODE_ENTRIES_OF
-    try {
-      var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      var active = entriesOf(reg).filter(function(w) {
-        var s = w.status;
-        return s === 'active' || s === undefined || s === null || s === '';
-      });
-      console.log(active.length);
-    } catch(e) { console.log('0'); }
-  " 2>/dev/null || echo "0")
+if [[ "$WORKTREES_ACTIVE" != "true" ]] && [[ -e "$WORKTREES_JSON" || -L "$WORKTREES_JSON" ]]; then
+  worktree_registry_read_into ACTIVE_COUNT count || worktree_authority_unavailable worktrees-registry
+  [[ "$ACTIVE_COUNT" =~ ^[0-9]+$ ]] || worktree_authority_unavailable worktrees-registry
 
   if [[ "$ACTIVE_COUNT" -gt 0 ]] 2>/dev/null; then
     WORKTREES_ACTIVE=true
@@ -450,19 +488,8 @@ AGENT_DIR="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 CURRENT_BRANCH=$(caws_current_branch "$AGENT_DIR")  # HOOK-LIB-CONSOLIDATION-001 T2b
 
 BASE_BRANCH="$PARALLEL_BASE"
-if [[ -z "$BASE_BRANCH" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>&1; then
-  BASE_BRANCH=$(node -e "
-    $CAWS_NODE_ENTRIES_OF
-    try {
-      var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      var active = entriesOf(reg).filter(function(w) {
-        var s = w.status;
-        return s === 'active' || s === undefined || s === null || s === '';
-      });
-      if (active.length > 0) console.log(active[0].baseBranch || '');
-      else console.log('');
-    } catch(e) { console.log(''); }
-  " 2>/dev/null || echo "")
+if [[ -z "$BASE_BRANCH" ]] && [[ -e "$WORKTREES_JSON" || -L "$WORKTREES_JSON" ]]; then
+  worktree_registry_read_into BASE_BRANCH base || worktree_authority_unavailable worktrees-registry
 fi
 
 if [[ -n "$BASE_BRANCH" ]] && [[ "$CURRENT_BRANCH" == "$BASE_BRANCH" ]]; then
