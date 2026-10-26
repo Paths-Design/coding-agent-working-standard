@@ -19,8 +19,10 @@ invariants:
   - 'The unchanged 30000ms preparation and runtime invocation bounds, original caller identity and all foreign lanes remain preserved'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'ordinary Codex browser bridge metadata and a genuine caller identity'
+    when: 'the maintained preparation captures startup context'
+    then: >-
+      the inert digest metadata is discarded while the exact identity is retained
+      and no such variable reaches child startup
 non_functional: {}
 contracts: []
