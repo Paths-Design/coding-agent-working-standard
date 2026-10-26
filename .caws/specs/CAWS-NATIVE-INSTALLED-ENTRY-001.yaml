@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-installed-entry
 created_at: '2026-10-22T01:32:17.915Z'
-updated_at: '2026-10-25T22:58:47.191Z'
+updated_at: '2026-10-26T00:07:24.460Z'
 created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
 blast_radius:
   modules:
@@ -44,8 +44,16 @@ scope:
     - packages/caws-cli/templates/hook-packs/shared/lib/harness_kimi.py
     - packages/caws-cli/tests/hooks/pytest/test_template_annotation_compat.py
     - packages/caws-native/src/installed_generation.rs
+    - packages/caws-native/src/installed_compatibility.rs
+    - packages/caws-native/tests/installed_compatibility.rs
+    - packages/caws-cli/src/runtime/cli-identity-loader.ts
+    - packages/caws-cli/tests/runtime/cli-identity-loader.test.js
+    - packages/caws-cli/scripts/qualify-stop-profile.mjs
+    - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
   out: []
-  support: []
+  support:
+    - packages/caws-cli/src/tooling/native-sqlite-build.ts
+    - packages/caws-cli/tests/tooling/native-sqlite-build.test.js
 invariants:
   - 'Existing Python-readable bin/caws-hook and legacy registrations remain intact during staged installation; no native failure triggers legacy fallback'
   - 'Selected native image identities derive from one verified generation manifest; per-generation metadata contains no self-referential runtime digest'
