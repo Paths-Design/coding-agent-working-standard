@@ -82,8 +82,8 @@ contracts:
 evidence:
   - criterion_id: A2
     status: unchecked
-    evidence_ref: "Committed source29ea15f434ca3394e0456763527f863b3cac017d implements the closed preparation parent and pre-child private Git admission. Historical TS181 controls and parent21 units passed; initial real-entry run4 passed2 failed, followed by committed harness repair. Current25 parent units, six repaired real-entry cases and configured-parent startup remain unexecuted. No effectful source export or installed native adoption is established."
-    recorded_at: "2026-10-26T08:40:49.483Z"
+    evidence_ref: "Source ea51aeb3d734de6b6d0115397ef00f6e0604e57c: original 25-unit run at29ea recorded24 pass and1 fixture startup-environment failure; unchanged production plus repaired isolated include control passed one focused test with mandatory inner completion marker. Six actual-entry transport/refusal/reap controls passed at29ea. Raw parent-unit-02.log, parent-integration-02.log and parent-include-03.log retained with exact command events14039,14040,14047. Configured-parent startup with final joined pins, actual authority/export and installed guard behavior remain unexecuted; no acceptance pass or adoption."
+    recorded_at: "2026-10-26T09:34:13.741Z"
   - criterion_id: A5
     status: unchecked
     evidence_ref: "At ea51aeb3d734de6b6d0115397ef00f6e0604e57c, the actual normal-installer test file executed all 31 scenarios on Node 25.9.0 with exit 0, retaining complete positive inventories and hostile before/after observations in native-frozen-preparation-01/installer-scenarios-02; raw log installer-inventory-02.log SHA cd7ef861074121581d37050d1574b94b49955ee53fa0386987028e802821c3a3. Production installer remains 781ff28fc. Prior failed incomplete fixture is retained separately. Actual configured-parent consumption of the final joined installation and operator bootstrap remain unexecuted; no global activation or adoption."
