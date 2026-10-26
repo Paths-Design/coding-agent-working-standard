@@ -107,9 +107,6 @@ caws_copy_role_paths() {
       _caws_cr_checked=$((_caws_cr_checked + 1))
       _caws_cr_operand="${CAWS_AST_COPY_SOURCES[$((_caws_cr_offset + _caws_cr_index))]-}"
       _caws_cr_index=$((_caws_cr_index + 1))
-      if ! _caws_copy_nominal_into _caws_cr_source_nominal "$_caws_cr_operand" "$_caws_cr_cwd"; then
-        _caws_copy_hold 'copy source has no proven coordinate'; continue
-      fi
       _caws_cr_child="${_caws_cr_operand##*/}"
       _caws_cr_effective="$_caws_cr_destination"
       if [[ $_caws_cr_directory == 1 ]]; then
@@ -121,6 +118,9 @@ caws_copy_role_paths() {
         # unmodeled entry replacement, even through an approval response.
         CAWS_COPY_FINAL_SYMLINK=1
         _caws_copy_hold 'copy final destination symlink entry semantics are unmodeled'
+      fi
+      if ! _caws_copy_nominal_into _caws_cr_source_nominal "$_caws_cr_operand" "$_caws_cr_cwd"; then
+        _caws_copy_hold 'copy source has no proven coordinate'; continue
       fi
       if [[ -L "$_caws_cr_source_nominal" || ! -f "$_caws_cr_source_nominal" ]]; then
         _caws_copy_hold 'copy source is not a modeled regular file'; continue

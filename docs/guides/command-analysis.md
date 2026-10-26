@@ -60,20 +60,22 @@ not attest the executable selected by a native launcher.
 `lib/copy-roles.sh` resolves regular-file operands against each row's proven cwd
 and inspects at most 128 source/destination pairs. A missing cwd permits
 absolute operands but cannot resolve relative ones. Directory destinations use
-the original source operand's basename; the helper checks the resulting child. A
-copy's effective final symlink entry is a hard refusal, including without a
-force flag and when approval is available. The role projection does not retain
-force flags, and force-copy fallback can unlink that entry when opening its
-referent fails. Known canonical or foreign referent violations retain
-precedence. A destination-directory symlink alone remains supported when the
-final child is regular. Missing final-entry observations from an older helper
-fail closed. The helper permits only existing destination parents and holds
-unmodeled entries, move-destination symlinks and paths that cannot use the
-existing FILE transport. Existing destinations and move sources must be regular
-files with one hard link; unavailable link identity also holds. An external
-pathname cannot authorize a copy through an inode shared with a foreign payload.
-Copy-source reads retain their existing policy. These filesystem observations
-are a snapshot, not protection against a later filesystem race.
+the original source operand's basename; the helper checks the resulting child.
+An unknown source coordinate does not suppress the final-entry check for an
+absolute destination or its named child. A copy's effective final symlink entry
+is a hard refusal, including without a force flag and when approval is
+available. The role projection does not retain force flags, and force-copy
+fallback can unlink that entry when opening its referent fails. Known canonical
+or foreign referent violations retain precedence. A destination-directory
+symlink alone remains supported when the final child is regular. Missing
+final-entry observations from an older helper fail closed. The helper permits
+only existing destination parents and holds unmodeled entries, move-destination
+symlinks and paths that cannot use the existing FILE transport. Existing
+destinations and move sources must be regular files with one hard link;
+unavailable link identity also holds. An external pathname cannot authorize a
+copy through an inode shared with a foreign payload. Copy-source reads retain
+their existing policy. These filesystem observations are a snapshot, not
+protection against a later filesystem race.
 
 `worktree-guard.sh` replaces its whole-command copy heuristic with these roles
 for its selected copy calls. `bash-write-guard.sh` independently consumes the

@@ -492,6 +492,80 @@ test('copy destination policy does not borrow the session directory for a missin
   expect(fs.readdirSync(archive)).toEqual([]);
 });
 
+test.each(['direct', 'directory-child'])(
+  'unknown source coordinate cannot downgrade an absolute %s final symlink to approval',
+  (form) => {
+    const { archive } = copyPaths();
+    const referent = path.join(fx.linked, 'owned-target');
+    fs.writeFileSync(referent, 'owned unchanged', { mode: 0o444 });
+    const entry = path.join(archive, 'relative-source');
+    fs.symlinkSync(referent, entry);
+    const destination = form === 'direct' ? entry : archive;
+    const command = payload('cp -f -- relative-source ' + quote(destination));
+    const input = JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
+    for (const script of ['bash-write-guard.sh', 'worktree-guard.sh']) {
+      const result = invoke(script, fx.project, command, {
+        HOOK_INPUT_JSON: input,
+        CAWS_GUARD_NO_ASK: '0',
+      });
+      check(result, 2, 'final destination symlink');
+      expect(result.stdout.trim()).toBe('');
+    }
+    expect(fs.readlinkSync(entry)).toBe(referent);
+    expect(fs.statSync(referent).nlink).toBe(1);
+    expect(fs.readFileSync(referent, 'utf8')).toBe('owned unchanged');
+  }
+);
+
+test.each([
+  'relative copy source',
+  'symlink copy source',
+  'relative move destination',
+  'symlink move destination',
+  'missing move directory',
+])('known foreign role remains a hard refusal beside %s uncertainty', (relation) => {
+  const { sources, archive } = copyPaths();
+  const foreignTarget = path.join(fx.linked, 'foreign-target');
+  fs.writeFileSync(foreignTarget, 'foreign unchanged');
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/worktrees.json'),
+    JSON.stringify({ linked: { ...fx.entry, owner: { session_id: 'foreign' } } })
+  );
+  let source = sources[0],
+    destination = foreignTarget,
+    operation = 'cp';
+  const unknownCwd = relation.startsWith('relative');
+  if (relation === 'relative copy source') source = 'relative-source';
+  if (relation === 'symlink copy source') {
+    source = path.join(fx.base, 'source-alias');
+    fs.symlinkSync(sources[0], source);
+  }
+  if (relation.includes('move')) {
+    operation = 'mv';
+    destination = 'relative-output';
+    if (relation === 'symlink move destination') {
+      destination = path.join(fx.base, 'archive-alias');
+      fs.symlinkSync(archive, destination, 'dir');
+    } else if (relation === 'missing move directory')
+      destination = path.join(archive, 'absent') + '/';
+  }
+  const command = payload(operation + ' -- ' + quote(source) + ' ' + quote(destination));
+  const input = JSON.stringify({
+    tool_name: 'Bash',
+    ...(unknownCwd ? {} : { cwd: fx.project }),
+    tool_input: { command },
+  });
+  const result = invoke('bash-write-guard.sh', fx.project, command, {
+    HOOK_INPUT_JSON: input,
+    CAWS_GUARD_NO_ASK: '0',
+  });
+  check(result, 2, 'DIFFERENT session');
+  expect(result.stdout.trim()).toBe('');
+  expect(fs.readFileSync(foreignTarget, 'utf8')).toBe('foreign unchanged');
+  expect(fs.readFileSync(sources[0], 'utf8')).toBe('one.json');
+  expect(fs.readdirSync(archive)).toEqual([]);
+});
+
 test('mandatory copy roles preserve foreign source reads and refuse move-source deletion', () => {
   const { sources, archive } = copyPaths();
   fs.writeFileSync(
