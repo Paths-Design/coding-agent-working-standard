@@ -607,6 +607,75 @@ for (const [name, reason, mutate] of bootstrapFaults) {
   );
 }
 
+for (const fault of ['protected-env-name', 'non-utf8-name', 'member-count']) {
+  snapshotScenario(
+    `bootstrap ${fault} stops directory enumeration before any content read`,
+    `caws-cli-bootstrap-${fault}-`,
+    root => {
+      const options = bootstrapFixture(root);
+      const before = activationState(options.binPath);
+      const originalOpen = fs.openSync;
+      const originalOpendir = fs.opendirSync;
+      let retained,
+        supplied = 0,
+        closed = 0,
+        contentOpens = 0;
+      fs.openSync = function (file, ...args) {
+        if (retained && typeof file === 'string' && file.startsWith(retained + path.sep))
+          contentOpens++;
+        return originalOpen.call(fs, file, ...args);
+      };
+      fs.opendirSync = function (directory, ...args) {
+        if (!retained || directory !== path.join(retained, 'install'))
+          return originalOpendir.call(fs, directory, ...args);
+        return {
+          readSync() {
+            if (supplied >= (fault === 'member-count' ? 200001 : 1)) return null;
+            supplied++;
+            // Only inject names into the directory API; no environment file or
+            // protected content is created, opened or read by this fixture.
+            return {
+              name:
+                fault === 'non-utf8-name'
+                  ? Buffer.from([0xff])
+                  : Buffer.from(fault === 'protected-env-name' ? '.env' : `member-${supplied}`),
+            };
+          },
+          closeSync() {
+            closed++;
+          },
+        };
+      };
+      try {
+        atInventoryBoundary(
+          options,
+          release => {
+            retained = release;
+          },
+          () => {
+            const reason =
+              fault === 'protected-env-name'
+                ? /protected member name/
+                : fault === 'non-utf8-name'
+                  ? /invalid member name/
+                  : /member count\/name budget exceeded/;
+            assert.throws(() => installObserved(root, options), reason);
+          }
+        );
+      } finally {
+        fs.openSync = originalOpen;
+        fs.opendirSync = originalOpendir;
+      }
+      assert.equal(supplied, fault === 'member-count' ? 200000 : 1);
+      assert.equal(closed, 1);
+      assert.equal(contentOpens, 0);
+      assert.deepEqual(activationState(options.binPath), before);
+      assert.equal(fs.statSync(retained).isDirectory(), true);
+      assert.equal(fs.existsSync(`${options.binPath}.caws-install.lock`), false);
+    }
+  );
+}
+
 for (const fault of ['same-size-replacement', 'added-member', 'retargeted-link']) {
   snapshotScenario(
     `bootstrap ${fault} during hashing refuses activation and retains observed effects`,
