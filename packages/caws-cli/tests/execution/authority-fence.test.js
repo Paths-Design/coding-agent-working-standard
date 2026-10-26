@@ -136,6 +136,73 @@ test('dead aged holders recover while malformed and unknown owners fail closed',
   }
 });
 
+test('a dead owner is protected until the minimum recovery age', () => {
+  const dir = fixture();
+  const file = agedDeadLock(dir);
+  fs.utimesSync(file, new Date(), new Date());
+  const before = fs.readFileSync(file, 'utf8');
+  expect(acquire(dir, { staleThresholdMs: 60000 }).ok).toBe(false);
+  expect(fs.readFileSync(file, 'utf8')).toBe(before);
+  fs.utimesSync(file, new Date(0), new Date(0));
+  const recovered = acquire(dir, { staleThresholdMs: 60000 });
+  expect(recovered.ok).toBe(true);
+  releaseLifecycleLock(recovered.value);
+});
+
+test.each(['EPERM', undefined])('unobservable process liveness fails closed (%s)', (code) => {
+  const dir = fixture();
+  const file = agedDeadLock(dir);
+  const before = fs.readFileSync(file, 'utf8');
+  const spy = jest.spyOn(process, 'kill').mockImplementation(() => {
+    throw Object.assign(new Error('Process liveness unavailable'), code ? { code } : {});
+  });
+  try {
+    expect(acquire(dir).ok).toBe(false);
+    expect(fs.readFileSync(file, 'utf8')).toBe(before);
+    expect(fs.existsSync(`${file}.reclaim`)).toBe(false);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test.each(['writeFileSync', 'fsyncSync'])(
+  '%s failure cleans only its own acquisition',
+  (method) => {
+    const dir = fixture();
+    const file = path.join(dir, 'state.lock');
+    let failedFd;
+    const original = fs[method];
+    const spy = jest.spyOn(fs, method).mockImplementation((fd, ...args) => {
+      if (typeof fd !== 'number') return original(fd, ...args);
+      failedFd = fd;
+      throw Object.assign(new Error('Injected lock metadata I/O failure'), { code: 'EIO' });
+    });
+    try {
+      const result = acquire(dir);
+      expect(result.ok).toBe(false);
+      expect(result.errors[0].data.code).toBe('EIO');
+      expect(Number.isInteger(failedFd)).toBe(true);
+      expect(() => fs.fstatSync(failedFd)).toThrow();
+      expect(fs.existsSync(file)).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+    const next = acquire(dir);
+    expect(next.ok).toBe(true);
+    releaseLifecycleLock(next.value);
+  }
+);
+
+test('oversized metadata cannot enter dead-owner recovery', () => {
+  const dir = fixture();
+  const file = agedDeadLock(dir);
+  const bytes = fs.readFileSync(file, 'utf8') + ' '.repeat(8192);
+  fs.writeFileSync(file, bytes);
+  fs.utimesSync(file, new Date(0), new Date(0));
+  expect(acquire(dir).ok).toBe(false);
+  expect(fs.readFileSync(file, 'utf8')).toBe(bytes);
+});
+
 test('a prior handle cannot unlink a successor or close its reused descriptor', () => {
   const dir = fixture();
   const first = acquire(dir);

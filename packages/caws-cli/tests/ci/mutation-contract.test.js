@@ -607,20 +607,22 @@ describe('mutation policy topology contract', () => {
 
   test('store mutation recomputes evidence using in-process store and timestamp contracts', () => {
     const config = createStrykerConfig('store');
+    const testFiles = config.jest.config.testMatch.map((file) => file.replace(/^<rootDir>\//, ''));
 
     expect(config.incremental).toBe(false);
-    expect(config.testFiles).not.toHaveLength(0);
+    expect(config).not.toHaveProperty('testFiles');
+    expect(testFiles).not.toHaveLength(0);
     expect(
-      config.testFiles.every(
+      testFiles.every(
         (file) =>
           file.startsWith('tests/store/') ||
           file === 'tests/transcripts/store-timestamp.test.js' ||
           file === 'tests/transcripts/renderer-calendar-mutation.test.js'
       )
     ).toBe(true);
-    expect(config.testFiles).toContain('tests/store/messages-behavior-store.test.js');
-    expect(config.testFiles).toContain('tests/store/messages-dead-recipient-prune.test.js');
-    expect(config.testFiles).toContain('tests/transcripts/store-timestamp.test.js');
+    expect(testFiles).toContain('tests/store/messages-behavior-store.test.js');
+    expect(testFiles).toContain('tests/store/messages-dead-recipient-prune.test.js');
+    expect(testFiles).toContain('tests/transcripts/store-timestamp.test.js');
     expect(config.mutate).toContain('src/transcripts/store-timestamp.ts');
     expect(config.jest.config.testMatch).toContain(
       '<rootDir>/tests/transcripts/store-timestamp.test.js'
@@ -637,7 +639,7 @@ describe('mutation policy topology contract', () => {
       'src/transcripts/renderer-calendar.ts',
       'src/transcripts/store-timestamp.ts',
     ]);
-    expect(config.testFiles).toEqual([
+    expect(testFiles).toEqual([
       'tests/store/apply-patch.test.js',
       'tests/store/atomic-write-sweep.test.js',
       'tests/store/atomic-write.test.js',
@@ -732,6 +734,10 @@ describe('mutation policy topology contract', () => {
       expect(createStrykerConfig(surface).jest.config.setupFiles).toEqual([
         '<rootDir>/tests/helpers/isolate-session-env.js',
       ]);
+      expect(createStrykerConfig(surface)).not.toHaveProperty('testFiles');
+      expect(createStrykerConfig(surface).jest.config.testMatch).toEqual(
+        loadPolicy().surfaces[surface].tests.map((file) => `<rootDir>/${file}`)
+      );
       const dir = makeTempDir();
       const required = [
         'src/init/runtime.ts',
@@ -792,7 +798,7 @@ describe('mutation policy topology contract', () => {
         'scripts/build-cli.js',
         'tests/helpers/isolate-session-env.js',
       ];
-      const testFile = single ? 'tests/store/a.test.js' : config.testFiles[0];
+      const testFile = single ? 'tests/store/a.test.js' : loadPolicy().surfaces[surface].tests[0];
       protectedFiles.push(testFile);
       const originals = {};
       for (const file of [...targets, ...protectedFiles]) {
