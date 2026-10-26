@@ -170,6 +170,7 @@ mod real_entry {
             drop(child_socket);
             let stdout = child.stdout.take().unwrap();
             let stderr = child.stderr.take().unwrap();
+            parent.set_nonblocking(true).unwrap();
             nonblocking(stdout.as_raw_fd());
             nonblocking(stderr.as_raw_fd());
             Self {
@@ -192,23 +193,63 @@ mod real_entry {
         fn send(&mut self, value: Value) {
             let bytes = serde_json::to_vec(&value).unwrap();
             assert!(bytes.len() <= 16 * 1024 * 1024);
-            self.socket.set_write_timeout(Some(self.left())).unwrap();
-            self.socket
-                .write_all(&(bytes.len() as u32).to_be_bytes())
-                .unwrap();
-            self.socket.set_write_timeout(Some(self.left())).unwrap();
-            self.socket.write_all(&bytes).unwrap();
+            self.send_bytes(&(bytes.len() as u32).to_be_bytes());
+            self.send_bytes(&bytes);
+        }
+        fn pump(&mut self) {
+            self.left();
+            if !self.out_eof {
+                self.out_eof = drain(&mut self.stdout, &mut self.out);
+            }
+            if !self.err_eof {
+                self.err_eof = drain(&mut self.stderr, &mut self.err);
+            }
+        }
+        fn send_bytes(&mut self, bytes: &[u8]) {
+            let mut offset = 0;
+            while offset < bytes.len() {
+                self.pump();
+                match self
+                    .socket
+                    .write(&bytes[offset..(offset + 8192).min(bytes.len())])
+                {
+                    Ok(0) => panic!("fixture channel made no write progress"),
+                    Ok(n) => offset += n,
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(1))
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                    Err(e) => panic!("fixture channel write: {e}"),
+                }
+            }
+            self.left();
+        }
+        fn receive_bytes(&mut self, size: usize) -> Vec<u8> {
+            let mut bytes = vec![0; size];
+            let mut offset = 0;
+            while offset < size {
+                self.pump();
+                match self.socket.read(&mut bytes[offset..]) {
+                    Ok(0) => panic!(
+                        "fixture channel EOF before complete frame; stderr={}",
+                        String::from_utf8_lossy(&self.err)
+                    ),
+                    Ok(n) => offset += n,
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(1))
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                    Err(e) => panic!("fixture channel read: {e}"),
+                }
+            }
+            self.left();
+            bytes
         }
         fn receive(&mut self) -> Value {
-            self.socket.set_read_timeout(Some(self.left())).unwrap();
-            let mut header = [0; 4];
-            self.socket.read_exact(&mut header).unwrap();
+            let header: [u8; 4] = self.receive_bytes(4).try_into().unwrap();
             let length = u32::from_be_bytes(header) as usize;
             assert!((1..=16 * 1024 * 1024).contains(&length));
-            self.socket.set_read_timeout(Some(self.left())).unwrap();
-            let mut bytes = vec![0; length];
-            self.socket.read_exact(&mut bytes).unwrap();
-            serde_json::from_slice(&bytes).unwrap()
+            serde_json::from_slice(&self.receive_bytes(length)).unwrap()
         }
         fn start_frame(&self, request: Value, parent_pid: u32, remaining_ms: u64) -> Value {
             json!({"kind":"start","request":B64.encode(serde_json::to_vec(&request).unwrap()),
@@ -230,8 +271,25 @@ mod real_entry {
                     owned_group::settlement_before_reap(self.child.as_ref().unwrap()).unwrap();
                 if matches!(settled, GroupSettlement::Exited { .. }) && self.out_eof && self.err_eof
                 {
+                    let pid = self.child.as_ref().unwrap().id();
                     let status = self.child.as_mut().unwrap().wait().unwrap();
                     self.child = None;
+                    self.left();
+                    let mut observed = 0;
+                    assert_eq!(
+                        unsafe { libc::waitpid(pid as i32, &mut observed, libc::WNOHANG) },
+                        -1
+                    );
+                    assert_eq!(
+                        io::Error::last_os_error().raw_os_error(),
+                        Some(libc::ECHILD)
+                    );
+                    let mut trailing = [0];
+                    assert_eq!(
+                        self.socket.read(&mut trailing).unwrap(),
+                        0,
+                        "trailing private-channel bytes after result"
+                    );
                     return (
                         status.code().unwrap_or(-1),
                         std::mem::take(&mut self.out),
@@ -306,8 +364,8 @@ mod real_entry {
     #[ignore = "requires explicitly selected built fixed Node entry; no export authorized"]
     fn actual_entry_refuses_truncated_frame_and_reaps() {
         let mut entry = Entry::start();
-        entry.socket.write_all(&100u32.to_be_bytes()).unwrap();
-        entry.socket.write_all(b"{}").unwrap();
+        entry.send_bytes(&100u32.to_be_bytes());
+        entry.send_bytes(b"{}");
         entry.socket.shutdown(std::net::Shutdown::Write).unwrap();
         let (code, out, err) = entry.finish();
         assert_eq!(code, 2);
@@ -336,15 +394,36 @@ mod real_entry {
     #[ignore = "requires explicitly selected built fixed Node entry; no export authorized"]
     fn actual_entry_cannot_advance_after_parent_revokes_expired_checkpoint() {
         let mut entry = Entry::start();
-        entry.send(entry.start_frame(json!({}), std::process::id(), 30));
+        let root = fs::canonicalize(env::temp_dir())
+            .unwrap()
+            .join(format!("caws-fixed-entry-expired-{}", std::process::id()));
+        assert!(!root.exists());
+        let request = json!({"schema":"caws.frozen_source_preparation.v1","source":{"sourceRoot":"/unadmitted-source","commit":"a".repeat(40),"tree":"b".repeat(40),"objectFormat":"sha1"},"outputRoot":root,"futureBuildRoot":root.with_extension("build")});
+        entry.send(entry.start_frame(request, std::process::id(), 30));
         let frame = entry.receive();
         assert_eq!(frame, json!({"kind":"checkpoint","seq":1}));
         std::thread::sleep(Duration::from_millis(50));
-        entry.socket.shutdown(std::net::Shutdown::Both).unwrap();
+        // Revoke replies while retaining the read side to observe the child's
+        // semantic refusal. A valid request would otherwise advance to metadata.
+        entry.socket.shutdown(std::net::Shutdown::Write).unwrap();
+        let refusal = entry.receive();
+        assert_eq!(refusal["kind"], "result");
+        assert_eq!(refusal["seq"], 2);
+        assert_eq!(refusal["result"]["status"], "failed");
+        assert_eq!(refusal["result"]["adoption"], "NOT_ADOPTED");
+        assert_eq!(refusal["result"]["writerState"], "NOT_STARTED");
+        assert_eq!(refusal["result"]["phase"], "request");
+        assert!(
+            refusal["result"]["reason"]
+                .as_str()
+                .unwrap()
+                .contains("Preparation parent channel closed")
+        );
+        assert!(!root.exists());
+        assert!(!root.with_extension("build").exists());
         let (code, out, err) = entry.finish();
         assert_eq!(code, 2);
         assert!(out.is_empty());
-        let err = String::from_utf8(err).unwrap();
-        assert!(err.contains("closed") || err.contains("EPIPE"), "{err}");
+        assert!(err.is_empty());
     }
 }
