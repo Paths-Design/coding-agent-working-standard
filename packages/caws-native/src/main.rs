@@ -106,6 +106,7 @@ fn charge(ready: Option<&protocol::Ready>, expires: Instant) -> Result<Charge, S
         .map_err(|e| e.to_string())
 }
 fn execute<'deadline>(
+    route: cli::InvocationRoute,
     config: &cli::Config,
     original_deadline: &'deadline MonotonicDeadline,
 ) -> Result<u8, Failure<'deadline>> {
@@ -131,7 +132,7 @@ fn execute<'deadline>(
     };
     progress.mark("payload");
     let outcome =
-        execute_observed(config, original_deadline, &mut progress).map_err(|mut error| {
+        execute_observed(route, config, original_deadline, &mut progress).map_err(|mut error| {
             error
                 .message
                 .push_str(&format!("; native progress {}", progress.snapshot()));
@@ -201,6 +202,7 @@ impl InvocationProgress {
 }
 
 fn execute_observed<'deadline>(
+    route: cli::InvocationRoute,
     config: &cli::Config,
     original_deadline: &'deadline MonotonicDeadline,
     progress: &mut InvocationProgress,
@@ -215,10 +217,30 @@ fn execute_observed<'deadline>(
     // The optional candidate observes original inputs before Node. It neither
     // selects the native Stop route nor grants any prefix/publication effects.
     let generation_receipt_revalidations = progress.generation_receipt_revalidations.clone();
+    // Installed admission is mandatory for every event, before optional native
+    // discovery can execute a custodian. A refusal exits this invocation.
+    let supplied_generation = if route == cli::InvocationRoute::InstalledV1 {
+        progress.mark("installed-generation-capture");
+        let home = runner::OriginalStopPreparation::generation_home(&request)
+            .map_err(Failure::configuration)?;
+        Some(
+            native_generation::GenerationReceipt::capture_installed_with_diagnostics(
+                &home,
+                config,
+                original_deadline,
+                generation_receipt_revalidations.clone(),
+                cancellation::check,
+            )
+            .map_err(Failure::configuration)?,
+        )
+    } else {
+        None
+    };
     let mut original_stop = runner::OriginalStopPreparation::capture_with_diagnostics(
         config,
         &request,
         original_deadline,
+        supplied_generation,
         generation_receipt_revalidations,
         |phase| progress.mark(phase),
     );
@@ -298,6 +320,19 @@ fn execute_observed<'deadline>(
         )
         .map_err(Failure::configuration)?;
         progress.mark("engine-start");
+        if route == cli::InvocationRoute::InstalledV1 {
+            original_stop
+                .generation
+                .as_ref()
+                .ok_or_else(|| {
+                    Failure::configuration("missing mandatory installed generation".into())
+                })?
+                .revalidate(deadline, || {
+                    cancellation::check()?;
+                    original_deadline.check().map_err(|error| error.to_string())
+                })
+                .map_err(Failure::configuration)?;
+        }
         let mut session = runner::Session::start(config, &request.id, deadline)
             .map_err(Failure::configuration)?;
         let mut ready = None;
@@ -1256,7 +1291,11 @@ fn main() {
             event("pre_tool_use"),
             event("stop"),
         ),
-        Ok(cli::Invocation { config, deadline }) => match execute(&config, &deadline) {
+        Ok(cli::Invocation {
+            route,
+            config,
+            deadline,
+        }) => match execute(route, &config, &deadline) {
             Ok(code) => code,
             Err(error) => fallback(error, event("pre_tool_use"), event("stop")),
         },

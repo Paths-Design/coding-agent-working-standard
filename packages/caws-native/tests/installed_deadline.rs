@@ -4,8 +4,8 @@ use caws_native::monotonic_deadline::{DeadlineEnvelope, MonotonicDeadline};
 use serde_json::{Value, json};
 use std::{
     fs,
-    io::Read,
-    os::unix::process::ExitStatusExt,
+    io::{Read, Write},
+    os::unix::{fs::PermissionsExt, process::ExitStatusExt},
     path::PathBuf,
     process::{Child, Command, Output, Stdio},
     sync::atomic::{AtomicU64, Ordering},
@@ -384,5 +384,428 @@ fn direct_invoke_retains_its_existing_clock_and_ignores_ambient_deadline() {
     assert!(
         error.contains("native progress"),
         "ordinary execute did not run: {error}"
+    );
+}
+
+const INVOKE_EVENTS: [&str; 6] = [
+    "pre_tool_use",
+    "post_tool_use",
+    "session_start",
+    "stop",
+    "pre_compact",
+    "session_end",
+];
+
+fn installed_entry() -> Value {
+    json!({
+        "schema":"caws.runtime.native-entry.v2",
+        "nativeExecutable":"native/caws-native",
+        "nodeExecutable":"native/node",
+        "engineEntry":"engine.js", "describeEntry":"describe.js", "timeoutMs":30000,
+        "installedInvocation":{"protocol":"invoke-installed-v1","maxOriginalTimeoutMs":30000},
+    })
+}
+
+// The actual frontend runs from its exact admitted generation. The pinned
+// shell is only the Node tripwire: it writes a marker and emits no protocol.
+struct PublishedFixture {
+    fixture: Fixture,
+    home: PathBuf,
+    runtime: PathBuf,
+    digest: String,
+}
+impl PublishedFixture {
+    fn new(entry: Option<Value>) -> Self {
+        use sha2::{Digest, Sha256};
+        use std::collections::BTreeMap;
+        let fixture = Fixture::new();
+        let home = fixture.root.join("home");
+        let stage = home.join("lib/runtimes/stage");
+        fs::create_dir_all(stage.join("native")).unwrap();
+        let mut bodies = BTreeMap::from([
+            (
+                "launcher.py".to_owned(),
+                b"legacy fixture identity\n".to_vec(),
+            ),
+            (
+                "native/caws-native".into(),
+                fs::read(env!("CARGO_BIN_EXE_caws-native")).unwrap(),
+            ),
+            (
+                "native/caws-hook-native".into(),
+                b"stable entry fixture identity\n".to_vec(),
+            ),
+            ("native/node".into(), fs::read("/bin/sh").unwrap()),
+            (
+                "engine.js".into(),
+                fs::read(fixture.root.join("engine.sh")).unwrap(),
+            ),
+            (
+                "describe.js".into(),
+                b"fixture describe identity\n".to_vec(),
+            ),
+        ]);
+        if let Some(entry) = entry {
+            bodies.insert(
+                "native-entry.json".into(),
+                serde_json::to_vec(&entry).unwrap(),
+            );
+        } else {
+            // The legacy classification requires an authenticated bootstrap.
+            // It remains inert; this control must reach installed admission.
+            bodies.insert(
+                "bootstrap.py".into(),
+                b"legacy bootstrap fixture identity\n".to_vec(),
+            );
+        }
+        bodies.insert("native-modes.json".into(), Vec::new());
+        let modes: BTreeMap<_, _> = bodies
+            .keys()
+            .map(|name| {
+                (
+                    name.clone(),
+                    if name.starts_with("native/") {
+                        0o755
+                    } else {
+                        0o644
+                    },
+                )
+            })
+            .collect();
+        bodies.insert(
+            "native-modes.json".into(),
+            serde_json::to_vec(&modes).unwrap(),
+        );
+        let mut manifest = BTreeMap::new();
+        for (name, bytes) in bodies {
+            fs::write(stage.join(&name), &bytes).unwrap();
+            fs::set_permissions(stage.join(&name), fs::Permissions::from_mode(modes[&name]))
+                .unwrap();
+            manifest.insert(name, format!("{:x}", Sha256::digest(&bytes)));
+        }
+        let bytes = serde_json::to_vec(&manifest).unwrap();
+        let digest = format!("{:x}", Sha256::digest(&bytes));
+        fs::write(stage.join("manifest.json"), bytes).unwrap();
+        let runtime = home.join("lib/runtimes").join(&digest);
+        fs::rename(stage, &runtime).unwrap();
+        fs::create_dir_all(home.join("state")).unwrap();
+        // Selection is by the supplied digest; this unrelated pointer must not
+        // be consulted by the receiver, including its prelaunch revalidation.
+        fs::write(
+            home.join("state/adapter-runtime.json"),
+            json!({"version":1,"digest":"b".repeat(64)}).to_string(),
+        )
+        .unwrap();
+        Self {
+            fixture,
+            home,
+            runtime,
+            digest,
+        }
+    }
+    fn args(&self, event: &str) -> Vec<String> {
+        let mut args = self.fixture.args(event);
+        args[2] = self.runtime.join("engine.js").to_str().unwrap().into();
+        args[4] = self.runtime.join("native/node").to_str().unwrap().into();
+        args[10] = self.digest.clone();
+        let original = MonotonicDeadline::capture(Duration::from_secs(30))
+            .unwrap()
+            .envelope();
+        with_wire(
+            args,
+            json!({
+                "startedNs": original.started_ns.to_string(),
+                "expiresNs": original.expires_ns.to_string(),
+                "runtimeDigest": self.digest,
+            })
+            .to_string(),
+        )
+    }
+    fn run(&self, args: &[String], git: Option<&std::path::Path>) -> Output {
+        if self.fixture.marker.exists() {
+            fs::remove_file(&self.fixture.marker).unwrap();
+        }
+        let mut command = Command::new(self.runtime.join("native/caws-native"));
+        command
+            .args(args)
+            .current_dir(&self.fixture.root)
+            .env_clear()
+            .env("HOME", &self.fixture.root)
+            .env("CAWS_HOME", &self.home)
+            .env("PATH", "/usr/bin:/bin")
+            .env("CAWS_NATIVE_TRACE_PROGRESS", "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        if let Some(git) = git {
+            command.env("CAWS_GIT_BINARY", git).env(
+                "PATH",
+                format!("{}:/usr/bin:/bin", self.fixture.root.display()),
+            );
+        }
+        let mut child = OwnedChild(command.spawn().unwrap());
+        let payload = json!({
+            "session_id": "receiver-fixture-session",
+            "cwd": self.fixture.root,
+        })
+        .to_string();
+        child
+            .0
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(payload.as_bytes())
+            .unwrap();
+        let started = Instant::now();
+        let status = loop {
+            if let Some(status) = child.0.try_wait().unwrap() {
+                break status;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(35),
+                "receiver watchdog"
+            );
+            thread::sleep(Duration::from_millis(5));
+        };
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        child
+            .0
+            .stdout
+            .take()
+            .unwrap()
+            .read_to_end(&mut stdout)
+            .unwrap();
+        child
+            .0
+            .stderr
+            .take()
+            .unwrap()
+            .read_to_end(&mut stderr)
+            .unwrap();
+        if self.fixture.retained {
+            let observation = self.fixture.root.join(format!(
+                "published-observation-{}",
+                SERIAL.fetch_add(1, Ordering::Relaxed),
+            ));
+            fs::create_dir(&observation).unwrap();
+            fs::write(observation.join("stdout.bin"), &stdout).unwrap();
+            fs::write(observation.join("stderr.bin"), &stderr).unwrap();
+            fs::write(observation.join("result.json"), json!({
+                "binary":self.runtime.join("native/caws-native"),"argv":args,
+                "originalPayload":payload,
+                "exitCode":status.code(),"signal":status.signal(),
+                "generationDigest":self.digest,"engineMarkerPresent":self.fixture.marker.exists(),
+                "scope":"real frontend receiver in synthetic verified generation; no maintained engine or installed entry qualification",
+            }).to_string()).unwrap();
+        }
+        Output {
+            status,
+            stdout,
+            stderr,
+        }
+    }
+}
+
+fn invocation_progress(output: &Output) -> Value {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let suffix = stderr
+        .split_once("; native progress ")
+        .expect("execution progress")
+        .1;
+    serde_json::Deserializer::from_str(suffix)
+        .into_iter::<Value>()
+        .next()
+        .unwrap()
+        .unwrap()
+}
+
+#[test]
+fn installed_generation_positive_control_reaches_only_pinned_engine_for_all_events() {
+    let f = PublishedFixture::new(Some(installed_entry()));
+    for event in INVOKE_EVENTS {
+        let output = f.run(&f.args(event), None);
+        outcome(&output, event);
+        assert_eq!(fs::read(&f.fixture.marker).unwrap(), b"started", "{event}");
+        let progress = invocation_progress(&output);
+        assert_eq!(progress["generationReceiptRevalidations"]["count"], 2);
+        assert_eq!(progress["selectionAdvertised"], false);
+        assert_eq!(progress["originalRenderCaptured"], false);
+        assert_eq!(progress["dispatchGrantWritten"], false);
+    }
+}
+
+#[test]
+fn installed_generation_capability_refusals_never_reach_engine_for_all_events() {
+    let mut old = installed_entry();
+    old["schema"] = json!("caws.runtime.native-entry.v1");
+    old.as_object_mut().unwrap().remove("installedInvocation");
+    let mut missing = installed_entry();
+    missing
+        .as_object_mut()
+        .unwrap()
+        .remove("installedInvocation");
+    let mut null = installed_entry();
+    null["installedInvocation"] = Value::Null;
+    let mut wrong_protocol = installed_entry();
+    wrong_protocol["installedInvocation"]["protocol"] = json!("invoke-installed-v2");
+    let mut wrong_maximum = installed_entry();
+    wrong_maximum["installedInvocation"]["maxOriginalTimeoutMs"] = json!(30001);
+    let mut extra = installed_entry();
+    extra["installedInvocation"]["unknown"] = json!(true);
+    for (entry, diagnostic) in [
+        (None, "Exact generation has no native entry"),
+        (
+            Some(old),
+            "Selected generation does not support invoke-installed-v1",
+        ),
+        (Some(missing), "Malformed native entry:"),
+        (Some(null), "Malformed native entry:"),
+        (
+            Some(wrong_protocol),
+            "Unsupported native entry schema or timeout",
+        ),
+        (
+            Some(wrong_maximum),
+            "Unsupported native entry schema or timeout",
+        ),
+        (Some(extra), "Malformed native entry:"),
+    ] {
+        let f = PublishedFixture::new(entry);
+        for event in INVOKE_EVENTS {
+            let output = f.run(&f.args(event), None);
+            outcome(&output, event);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(stderr.contains(diagnostic), "{event}: {stderr}");
+            assert!(!f.fixture.marker.exists(), "{event}: {diagnostic}");
+            let progress = invocation_progress(&output);
+            assert_eq!(progress["phase"], "installed-generation-capture");
+            assert_eq!(progress["generationReceiptRevalidations"]["count"], 0);
+        }
+    }
+}
+
+#[test]
+fn direct_generation_keeps_v1_compatibility_for_all_events() {
+    let mut entry = installed_entry();
+    entry["schema"] = json!("caws.runtime.native-entry.v1");
+    entry.as_object_mut().unwrap().remove("installedInvocation");
+    let f = PublishedFixture::new(Some(entry));
+    for event in INVOKE_EVENTS {
+        let mut args = f.args(event);
+        args.truncate(15);
+        args[0] = "invoke".into();
+        let output = f.run(&args, None);
+        outcome(&output, event);
+        assert_eq!(fs::read(&f.fixture.marker).unwrap(), b"started");
+        assert_eq!(
+            invocation_progress(&output)["generationReceiptRevalidations"]["count"],
+            0
+        );
+    }
+}
+
+#[test]
+fn installed_generation_path_and_timeout_binding_refuse_before_engine_for_all_events() {
+    let f = PublishedFixture::new(Some(installed_entry()));
+    for event in INVOKE_EVENTS {
+        for index in [2, 4, 12] {
+            let mut args = f.args(event);
+            let expected = if index == 12 {
+                args[index] = "29999".into();
+                // Keep the received interval within the altered CLI timeout:
+                // this must reach generation timeout binding, not parse refusal.
+                let original = MonotonicDeadline::capture(Duration::from_millis(29999))
+                    .unwrap()
+                    .envelope();
+                args[16] = json!({"startedNs":original.started_ns.to_string(),
+                    "expiresNs":original.expires_ns.to_string(),"runtimeDigest":f.digest})
+                .to_string();
+                "Installed invocation timeout differs from selected generation"
+            } else {
+                args[index] = if index == 2 {
+                    f.fixture.root.join("engine.sh").to_str().unwrap().into()
+                } else {
+                    "/bin/sh".into()
+                };
+                "Invocation paths differ from admitted native generation"
+            };
+            let output = f.run(&args, None);
+            outcome(&output, event);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(stderr.contains(expected), "{event}/{index}: {stderr}");
+            assert!(!f.fixture.marker.exists());
+            assert_eq!(
+                invocation_progress(&output)["phase"],
+                "installed-generation-capture"
+            );
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn optional_original_capture_reuses_mandatory_receipt_and_mutation_blocks_launch() {
+    let f = PublishedFixture::new(Some(installed_entry()));
+    let mut args = f.args("stop");
+    args[6] = "opencode".into();
+    // With no project in this temporary directory, optional capture refuses.
+    // Its refusal must retain the supplied receipt and permit compatibility.
+    let output = f.run(&args, None);
+    outcome(&output, "stop");
+    assert_eq!(fs::read(&f.fixture.marker).unwrap(), b"started");
+    let progress = invocation_progress(&output);
+    assert_eq!(progress["generationReceiptRevalidations"]["count"], 2);
+    assert_eq!(progress["originalRenderCaptured"], false);
+    assert!(
+        progress["marks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|mark| mark[0] == "original-executor")
+    );
+    assert!(
+        !progress["marks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|mark| mark[0] == "generation-capture")
+    );
+
+    let quote = |path: PathBuf| path.to_str().unwrap().replace('\'', "'\\''");
+    let git = f.fixture.root.join("git");
+    let witness = f.fixture.root.join("mutation-witness");
+    // Original capture resolves payload.cwd, pins CAWS_GIT_BINARY and issues
+    // rev-parse before policy/governance admission. This first query mutates
+    // the retained generation and refuses; no Git repository is necessary.
+    fs::write(
+        &git,
+        format!(
+            "#!/bin/sh\nprintf changed > '{}'\nprintf witnessed > '{}'\nexit 91\n",
+            quote(f.runtime.join("engine.js")),
+            quote(witness.clone()),
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&git, fs::Permissions::from_mode(0o755)).unwrap();
+    // Refresh only the transport envelope for this separate invocation.
+    let mut args = f.args("stop");
+    args[6] = "opencode".into();
+    let output = f.run(&args, Some(&git));
+    outcome(&output, "stop");
+    assert_eq!(
+        fs::read(witness).unwrap(),
+        b"witnessed",
+        "mutation must actually execute before Node"
+    );
+    assert!(!f.fixture.marker.exists());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Admitted generation member changed"),
+        "{stderr}"
+    );
+    assert_eq!(
+        invocation_progress(&output)["generationReceiptRevalidations"]["count"],
+        2
     );
 }

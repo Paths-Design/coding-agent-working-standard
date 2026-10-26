@@ -1798,11 +1798,12 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
         config: &Config,
         request: &crate::protocol::Request,
         deadline: &'deadline caws_native::monotonic_deadline::MonotonicDeadline,
+        supplied_generation: Option<crate::native_generation::GenerationReceipt>,
         generation_receipt_revalidations: crate::native_generation::CheckTimings,
         mut phase: impl FnMut(&'static str),
     ) -> Self {
         let mut prepared = Self {
-            generation: None,
+            generation: supplied_generation,
             original: None,
             failure: None,
             refusal: None,
@@ -1811,36 +1812,33 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
         if !Self::candidate(config) {
             return prepared;
         }
-        let environment = request.caller_environment();
-        let home = match environment.get("CAWS_HOME").filter(|v| !v.is_empty()) {
-            Some(value) => std::path::PathBuf::from(value),
-            None => match environment.get("HOME") {
-                Some(value) if !value.is_empty() => std::path::PathBuf::from(value).join(".caws"),
-                _ => {
-                    prepared.refusal = Some("original machine home unavailable".into());
-                    return prepared;
+        let generation = match prepared.generation.take() {
+            Some(generation) => generation,
+            None => {
+                let home = match Self::generation_home(request) {
+                    Ok(home) => home,
+                    Err(error) => {
+                        prepared.refusal = Some(error);
+                        return prepared;
+                    }
+                };
+                phase("generation-capture");
+                match crate::native_generation::GenerationReceipt::capture_with_diagnostics(
+                    &home,
+                    config,
+                    deadline.expires(),
+                    generation_receipt_revalidations,
+                    || {
+                        crate::cancellation::check()?;
+                        deadline.check().map_err(|error| error.to_string())
+                    },
+                ) {
+                    Ok(generation) => generation,
+                    Err(error) => {
+                        prepared.refusal = Some(error);
+                        return prepared;
+                    }
                 }
-            },
-        };
-        if !home.is_absolute() {
-            prepared.refusal = Some("original machine home must be absolute".into());
-            return prepared;
-        }
-        phase("generation-capture");
-        let generation = match crate::native_generation::GenerationReceipt::capture_with_diagnostics(
-            &home,
-            config,
-            deadline.expires(),
-            generation_receipt_revalidations,
-            || {
-                crate::cancellation::check()?;
-                deadline.check().map_err(|e| e.to_string())
-            },
-        ) {
-            Ok(value) => value,
-            Err(error) => {
-                prepared.refusal = Some(error);
-                return prepared;
             }
         };
         phase("original-executor");
@@ -1876,6 +1874,26 @@ impl<'deadline> OriginalStopPreparation<'deadline> {
         }
         prepared
     }
+    pub(crate) fn generation_home(
+        request: &crate::protocol::Request,
+    ) -> Result<std::path::PathBuf, String> {
+        let environment = request.caller_environment();
+        let home = match environment
+            .get("CAWS_HOME")
+            .filter(|value| !value.is_empty())
+        {
+            Some(value) => std::path::PathBuf::from(value),
+            None => match environment.get("HOME").filter(|value| !value.is_empty()) {
+                Some(value) => std::path::PathBuf::from(value).join(".caws"),
+                None => return Err("original machine home unavailable".into()),
+            },
+        };
+        if !home.is_absolute() {
+            return Err("original machine home must be absolute".into());
+        }
+        Ok(home)
+    }
+
     pub fn cleanup_settled(&self) -> bool {
         self.failure.as_ref().is_none_or(|e| e.cleanup_settled()) && self.render.cleanup_settled()
     }
