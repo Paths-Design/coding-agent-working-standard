@@ -1052,6 +1052,49 @@ describe('native preparation actual worktree source and output observations', ()
     expect(fs.existsSync(request.outputRoot)).toBe(false);
   });
 
+  test.each(['reader', 'checkpoint'])(
+    'refuses a later blob group %s failure before creating any output',
+    (failure) => {
+      const { request, context } = frozenSourceFixture();
+      fs.mkdirSync(path.join(lane, 'docs'));
+      for (let i = 0; i < 63; i++) {
+        fs.writeFileSync(path.join(lane, `docs/group-${i}.md`), `selected ${i}`);
+      }
+      fixtures.git(lane, ['add', '--', 'docs']);
+      fixtures.git(lane, ['commit', '-m', 'record multi-group source fixture']);
+      request.source = sourceSelection();
+      const read = context.readObjects;
+      const groups = [];
+      let failCheckpoint = false;
+      context.readObjects = (selections) => {
+        if (selections[0].kind === 'blob') {
+          groups.push(selections.map((item) => ({ ...item })));
+          if (groups.length === 2 && failure === 'reader') {
+            throw new Error('later blob reader failed');
+          }
+        }
+        const bytes = read(selections);
+        if (groups.length === 2) failCheckpoint = true;
+        return bytes;
+      };
+      context.checkpoint = () => {
+        if (failCheckpoint) throw new Error('later blob checkpoint failed');
+      };
+      const before = canonicalBytes();
+      expect(prepareFrozenProductionSource(request, context)).toEqual({
+        status: 'failed',
+        adoption: 'NOT_ADOPTED',
+        writerState: 'NOT_STARTED',
+        phase: 'objects',
+        reason: `later blob ${failure} failed`,
+      });
+      expect(groups.map((group) => group.length)).toEqual([31, 31]);
+      expect(fs.existsSync(request.outputRoot)).toBe(false);
+      expect(fs.existsSync(request.futureBuildRoot)).toBe(false);
+      expect(canonicalBytes()).toEqual(before);
+    }
+  );
+
   test('refuses overlap and cancellation without object access or output mutation', () => {
     const { request, context, objectReads } = frozenSourceFixture();
     expect(
@@ -1405,11 +1448,13 @@ describe('native preparation profile before blob reads', () => {
     const commit = object('commit', `tree ${tree.oid}\n\nproduction snapshot`, format);
     index.set(commit.oid, commit);
     const calls = [];
+    const batches = [];
     const read = (selections) => {
       calls.push(...selections.map((value) => ({ ...value })));
+      batches.push(selections.map((value) => ({ ...value })));
       return Buffer.concat(selections.map(({ oid }) => framed(index.get(oid))));
     };
-    return { read, index, calls, blobs, commit, tree, format };
+    return { read, index, calls, batches, blobs, commit, tree, format };
   }
   const collect = (fixture) =>
     collectPreparationProductionSource(
@@ -1418,6 +1463,162 @@ describe('native preparation profile before blob reads', () => {
       fixture.tree.oid,
       fixture.format
     );
+  const selectedFiles = (count, bytes = (i) => `selected ${i}`) =>
+    Array.from({ length: count }, (_, i) => [
+      `docs/${String(i).padStart(3, '0')}.md`,
+      bytes(i),
+      i % 2 ? '100755' : '100644',
+    ]);
+  const blobBatches = (fixture) => fixture.batches.filter(([first]) => first.kind === 'blob');
+
+  test.each(['sha1', 'sha256'])(
+    'batches 32 unique %s blobs as 31 and 1 without losing sorted duplicate paths or modes',
+    (format) => {
+      const entries = selectedFiles(32);
+      entries.push(['docs/032-reused.md', entries[0][1], '100755']);
+      const fixture = graph([...entries].reverse(), format);
+      const result = collect(fixture);
+      expect(blobBatches(fixture).map((group) => group.length)).toEqual([31, 1]);
+      expect(
+        fixture.batches
+          .filter(([first]) => first.kind !== 'blob')
+          .every((group) => group.length === 1)
+      ).toBe(true);
+      expect(result.files).toEqual(
+        entries.map(([relativePath, body, mode]) => ({
+          relativePath,
+          oid: fixture.blobs[relativePath].oid,
+          mode,
+          bytes: Buffer.from(body),
+        }))
+      );
+      expect(result.directories).toEqual(['docs']);
+      expect(
+        fixture.calls.filter(({ oid }) => oid === fixture.blobs[entries[0][0]].oid)
+      ).toHaveLength(1);
+      result.files[0].bytes.fill(0);
+      expect(result.files.at(-1).bytes.toString()).toBe(entries[0][1]);
+    }
+  );
+
+  const invalidGroups = [
+    [
+      'corrupt',
+      (objects) => {
+        const bytes = Buffer.from(objects[1].bytes);
+        bytes[0] ^= 1;
+        objects[1] = { ...objects[1], bytes };
+        return Buffer.concat(objects.map(framed));
+      },
+      'content identity mismatch',
+    ],
+    [
+      'missing',
+      (objects) => Buffer.concat([framed(objects[0]), Buffer.from(`${objects[1].oid} missing\n`)]),
+      'Malformed or missing',
+    ],
+    [
+      'reordered',
+      (objects) => {
+        [objects[1], objects[2]] = [objects[2], objects[1]];
+        return Buffer.concat(objects.map(framed));
+      },
+      'selection mismatch',
+    ],
+    [
+      'duplicate',
+      (objects) => {
+        objects[1] = objects[0];
+        return Buffer.concat(objects.map(framed));
+      },
+      'selection mismatch',
+    ],
+    ['surplus', (objects) => Buffer.concat([...objects, objects[1]].map(framed)), 'Surplus'],
+    [
+      'wrong kind',
+      (objects) => {
+        objects[1] = { ...objects[1], kind: 'tree' };
+        return Buffer.concat(objects.map(framed));
+      },
+      'selection mismatch',
+    ],
+    [
+      'truncated',
+      (objects) => Buffer.concat(objects.slice(0, 2).map(framed)).subarray(0, -1),
+      'Truncated',
+    ],
+  ];
+  test.each([0, 1].flatMap((group) => invalidGroups.map((fault) => [group, ...fault])))(
+    'refuses group %i with a nonfirst %s object and makes no later request',
+    (badGroup, _name, change, diagnostic) => {
+      const fixture = graph(selectedFiles(63));
+      const read = fixture.read;
+      fixture.read = (selections) => {
+        const bytes = read(selections);
+        if (selections[0].kind === 'blob' && blobBatches(fixture).length === badGroup + 1) {
+          return change(selections.map(({ oid }) => fixture.index.get(oid)));
+        }
+        return bytes;
+      };
+      expect(() => collect(fixture)).toThrow(diagnostic);
+      expect(blobBatches(fixture).map((group) => group.length)).toEqual(
+        Array(badGroup + 1).fill(31)
+      );
+    }
+  );
+
+  // Exercise the built collector/decoder with smaller private capacities so
+  // cumulative-limit failures need kilobytes rather than half a gigabyte.
+  function scaledCollector(bounds) {
+    const filename = require.resolve('../../dist/tooling/native-qualification-prepare');
+    let source = fs.readFileSync(filename, 'utf8');
+    for (const [name, value] of Object.entries(bounds)) {
+      const declaration = new RegExp(`const ${name} = [^;]+;`, 'g');
+      expect(source.match(declaration)).toHaveLength(1);
+      source = source.replace(declaration, `const ${name} = ${value};`);
+    }
+    const module = { exports: {} };
+    require('node:vm').runInNewContext(
+      `(function(require, module, exports) { ${source}\n})`,
+      { Buffer, process, console },
+      { filename }
+    )(require('node:module').createRequire(filename), module, module.exports);
+    return (fixture) =>
+      module.exports.collectPreparationProductionSource(
+        fixture.read,
+        fixture.commit.oid,
+        fixture.tree.oid,
+        fixture.format
+      );
+  }
+
+  test('includes cached metadata in the cumulative object count before requesting a later group', () => {
+    const fixture = graph(selectedFiles(63));
+    const collectSmall = scaledCollector({ MAX_OBJECTS: 64 });
+    expect(() => collectSmall(fixture)).toThrow('Production object count exceeds bound');
+    expect(blobBatches(fixture).map((group) => group.length)).toEqual([31]);
+  });
+
+  test('carries object payload bytes across groups instead of resetting at each response', () => {
+    const fixture = graph(selectedFiles(33, (i) => Buffer.alloc(4096, i)));
+    const collectSmall = scaledCollector({ MAX_OBJECT_BYTES: 4096, MAX_BATCH_BYTES: 128 * 1024 });
+    expect(() => collectSmall(fixture)).toThrow('Production object bytes exceed bound');
+    expect(blobBatches(fixture).map((group) => group.length)).toEqual([31, 2]);
+  });
+
+  test('counts every materialized duplicate path after collecting multiple bounded groups', () => {
+    const entries = selectedFiles(32, (i) => Buffer.alloc(i === 0 ? 4096 : 1, i));
+    for (let i = 32; i < 64; i++) {
+      entries.push([`docs/${i}.md`, entries[0][1]]);
+    }
+    const fixture = graph(entries);
+    const collectSmall = scaledCollector({ MAX_OBJECT_BYTES: 4096, MAX_BATCH_BYTES: 128 * 1024 });
+    expect(() => collectSmall(fixture)).toThrow('Materialized source bytes exceed bound');
+    expect(blobBatches(fixture).map((group) => group.length)).toEqual([31, 1]);
+    expect(
+      fixture.calls.filter(({ oid }) => oid === fixture.blobs[entries[0][0]].oid)
+    ).toHaveLength(1);
+  });
 
   test.each(['sha1', 'sha256'])(
     'reads only selected %s blobs after completing the name inventory',
