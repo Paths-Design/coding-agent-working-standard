@@ -7,6 +7,8 @@ import { loadPolicy } from '../store/policy-store';
 import { loadSpecs } from '../store/specs-store';
 import { loadWorktrees } from '../store/worktrees-store';
 import { resolveCallerSession } from '../shell/session/resolve-session';
+import { nativeSqlitePreparationCustody, type ReviewedTree } from './native-sqlite-build';
+import type { ReviewedFile } from './sqlite-static-build';
 
 /** Object identities are storage-format identities, never revision expressions. */
 export type PreparationObjectFormat = 'sha1' | 'sha256';
@@ -70,6 +72,35 @@ export interface PreparationSourceObservation extends PreparationSourceSelection
   worktreeName: string | null;
   specId: string | null;
 }
+
+export interface FrozenSourcePreparationRequest {
+  schema: 'caws.frozen_source_preparation.v1';
+  source: PreparationSourceSelection;
+  outputRoot: string;
+  futureBuildRoot: string;
+}
+export interface FrozenSourcePreparationContext extends PreparationCallerContext {
+  /** Bound by the maintained caller to the selected project's object store. */
+  readObjects: PreparationObjectReader;
+  /** Maintained deadline/cancellation observation, never request JSON. */
+  checkpoint: () => void;
+}
+export type FrozenSourcePreparationResult =
+  | {
+      status: 'prepared';
+      adoption: 'NOT_ADOPTED';
+      source: PreparationSourceObservation;
+      sourceTree: ReviewedTree;
+      inventory: ReviewedFile;
+      futureBuildRoot: string;
+    }
+  | {
+      status: 'failed';
+      adoption: 'NOT_ADOPTED';
+      writerState: 'NOT_STARTED' | 'RETAINED_UNCERTAIN';
+      phase: string;
+      reason: string;
+    };
 
 const MAX_OBJECT_BYTES = 16 * 1024 * 1024;
 const MAX_BATCH_BYTES = 512 * 1024 * 1024;
@@ -566,6 +597,219 @@ export function inspectPreparationWriteAuthority(
     sessionId: session.value.identity.session_id,
     checkedRelativePaths,
   };
+}
+
+function exactObjectKeys(value: unknown, keys: readonly string[]): void {
+  requireCondition(
+    value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Object.keys(value).sort().join('\0') === [...keys].sort().join('\0'),
+    'Unexpected preparation request shape'
+  );
+}
+
+function requireAbsent(file: string): void {
+  try {
+    fs.lstatSync(file);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  throw new Error(`Preparation path already exists: ${file}`);
+}
+
+/**
+ * Materialize the fixed production profile into one exclusive ignored region.
+ * This API never launches a build, chooses a tool or grants future build
+ * authority. Its injected transports require independent maintained-entry
+ * admission. Files use private 0600/0700 modes, preserving Git executability.
+ * Custody is checked at operation boundaries; this is not a same-user race
+ * sandbox or a hard deadline for stalled filesystem I/O.
+ */
+export function prepareFrozenProductionSource(
+  input: FrozenSourcePreparationRequest,
+  context: FrozenSourcePreparationContext
+): FrozenSourcePreparationResult {
+  let phase = 'request';
+  let created = false;
+  try {
+    context.checkpoint();
+    exactObjectKeys(input, ['schema', 'source', 'outputRoot', 'futureBuildRoot']);
+    exactObjectKeys(input.source, ['sourceRoot', 'commit', 'tree', 'objectFormat']);
+    requireCondition(
+      input.schema === 'caws.frozen_source_preparation.v1',
+      'Unsupported preparation schema'
+    );
+    const request: FrozenSourcePreparationRequest = {
+      schema: input.schema,
+      source: {
+        sourceRoot: input.source.sourceRoot,
+        commit: input.source.commit,
+        tree: input.source.tree,
+        objectFormat: input.source.objectFormat,
+      },
+      outputRoot: input.outputRoot,
+      futureBuildRoot: input.futureBuildRoot,
+    };
+    normalizedAbsolute(request.outputRoot);
+    normalizedAbsolute(request.futureBuildRoot);
+    requireCondition(
+      request.outputRoot !== request.futureBuildRoot &&
+        !descendant(request.outputRoot, request.futureBuildRoot) &&
+        !descendant(request.futureBuildRoot, request.outputRoot),
+      'Preparation and future build roots must be disjoint'
+    );
+    const sourceRoot = path.join(request.outputRoot, 'source');
+    const inventoryPath = path.join(request.outputRoot, 'source-inventory.json');
+    const preliminaryWrites = {
+      outputRoot: request.outputRoot,
+      writePaths: [sourceRoot, inventoryPath],
+    };
+    phase = 'authority';
+    const output = inspectPreparationWriteAuthority(preliminaryWrites, context);
+    requireCondition(
+      descendant(output.worktreeRoot, request.futureBuildRoot),
+      'Future build root must be in the actual worktree; this does not grant build authority'
+    );
+    nativeSqlitePreparationCustody.realDirectories(path.dirname(request.outputRoot));
+    nativeSqlitePreparationCustody.realDirectories(path.dirname(request.futureBuildRoot));
+    requireAbsent(request.outputRoot);
+    requireAbsent(request.futureBuildRoot);
+    const source = inspectPreparationSourceStanding(request.source, context);
+    phase = 'objects';
+    const plan = collectPreparationProductionSource(
+      (selections) => {
+        context.checkpoint();
+        const bytes = context.readObjects(selections);
+        context.checkpoint();
+        return bytes;
+      },
+      source.commit,
+      source.tree,
+      source.objectFormat
+    );
+    const sourceTree: ReviewedTree = {
+      root: sourceRoot,
+      files: plan.files.map((file) => ({
+        relativePath: file.relativePath,
+        sizeBytes: file.bytes.length,
+        sha256: createHash('sha256').update(file.bytes).digest('hex'),
+        executable: file.mode === '100755',
+      })),
+    };
+    const writes: PreparationWriteSelection = {
+      outputRoot: request.outputRoot,
+      writePaths: [
+        ...preliminaryWrites.writePaths,
+        ...plan.directories.map((directory) => path.join(sourceRoot, directory)),
+        ...plan.files.map((file) => path.join(sourceRoot, file.relativePath)),
+      ],
+    };
+    const inventoryBytes = Buffer.from(
+      JSON.stringify(
+        {
+          schema: 'caws.frozen_source_inventory.v1',
+          adoption: 'NOT_ADOPTED',
+          source,
+          files: sourceTree.files.map((file, index) => ({
+            ...file,
+            gitObject: plan.files[index]!.oid,
+            gitMode: plan.files[index]!.mode,
+          })),
+          omitted: plan.omitted,
+          futureBuildRoot: request.futureBuildRoot,
+          limits: [
+            'Input identity and private custody only; no build or installation authority.',
+            'Private filesystem modes preserve executability, not the original permission bits.',
+            'Point-in-time checks do not exclude same-user races or bound stalled OS I/O.',
+          ],
+        },
+        null,
+        2
+      ) + '\n'
+    );
+    requireCondition(
+      inventoryBytes.length <= MAX_OBJECT_BYTES,
+      'Preparation inventory exceeds metadata bound'
+    );
+    phase = 'pre-write';
+    context.checkpoint();
+    inspectPreparationSourceStanding(request.source, context);
+    inspectPreparationWriteAuthority(writes, context);
+    nativeSqlitePreparationCustody.realDirectories(path.dirname(request.outputRoot));
+    requireAbsent(request.outputRoot);
+    requireAbsent(request.futureBuildRoot);
+    fs.mkdirSync(request.outputRoot, { mode: 0o700 });
+    created = true;
+    const ownedRoot = fs.lstatSync(request.outputRoot);
+    const checkRoot = (): void => {
+      context.checkpoint();
+      nativeSqlitePreparationCustody.realDirectories(request.outputRoot);
+      const current = fs.lstatSync(request.outputRoot);
+      requireCondition(
+        current.dev === ownedRoot.dev &&
+          current.ino === ownedRoot.ino &&
+          current.mode === ownedRoot.mode,
+        'Preparation root changed during custody'
+      );
+      requireAbsent(request.futureBuildRoot);
+    };
+    phase = 'source';
+    for (const directory of [
+      sourceRoot,
+      ...plan.directories.map((relative) => path.join(sourceRoot, relative)),
+    ]) {
+      checkRoot();
+      nativeSqlitePreparationCustody.realDirectories(path.dirname(directory));
+      fs.mkdirSync(directory, { mode: 0o700 });
+    }
+    for (const file of plan.files) {
+      checkRoot();
+      nativeSqlitePreparationCustody.exclusive(
+        path.join(sourceRoot, file.relativePath),
+        file.bytes,
+        file.mode === '100755'
+      );
+    }
+    phase = 'verify';
+    checkRoot();
+    nativeSqlitePreparationCustody.inspectTree(sourceTree, false, checkRoot);
+    requireCondition(
+      fs.readdirSync(request.outputRoot).sort().join('\0') === 'source',
+      'Unrepresented preparation root entry'
+    );
+    inspectPreparationSourceStanding(request.source, context);
+    inspectPreparationWriteAuthority(writes, context);
+    phase = 'inventory';
+    checkRoot();
+    nativeSqlitePreparationCustody.exclusive(inventoryPath, inventoryBytes);
+    const inventory = nativeSqlitePreparationCustody.fileIdentity(inventoryPath, MAX_OBJECT_BYTES);
+    checkRoot();
+    requireCondition(
+      fs.readdirSync(request.outputRoot).sort().join('\0') ===
+        ['source', 'source-inventory.json'].sort().join('\0'),
+      'Unrepresented preparation root entry'
+    );
+    return {
+      status: 'prepared',
+      adoption: 'NOT_ADOPTED',
+      source,
+      sourceTree,
+      inventory,
+      futureBuildRoot: request.futureBuildRoot,
+    };
+  } catch (error) {
+    // Never retry, adopt, remove, or write a failure marker after custody is
+    // uncertain. The caller retains this diagnostic and any exclusive output.
+    return {
+      status: 'failed',
+      adoption: 'NOT_ADOPTED',
+      writerState: created ? 'RETAINED_UNCERTAIN' : 'NOT_STARTED',
+      phase,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function oidWidth(format: PreparationObjectFormat): number {

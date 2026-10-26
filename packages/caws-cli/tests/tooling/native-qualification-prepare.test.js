@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const yaml = require('js-yaml');
+const children = require('node:child_process');
 const fixtures = require('../helpers/git-repo-factory');
 const { initProject } = require('../../dist/store/init-store');
 const { loadSpecs } = require('../../dist/store/specs-store');
@@ -14,6 +15,7 @@ const {
   preparationSourceDisposition,
   collectPreparationProductionSource,
   inspectPreparationSourceStanding,
+  prepareFrozenProductionSource,
 } = require('../../dist/tooling/native-qualification-prepare');
 
 describe('native preparation closed production input profile', () => {
@@ -162,6 +164,328 @@ describe('native preparation actual worktree source and output observations', ()
       objectFormat: 'sha1',
     };
   }
+
+  function frozenSourceFixture() {
+    // Byte-custody fixtures only: these bodies are never loaded or executed.
+    fs.mkdirSync(path.join(lane, 'scripts'));
+    fs.writeFileSync(path.join(lane, 'package.json'), '{"fixture":true}\n');
+    fs.writeFileSync(
+      path.join(lane, 'scripts/install-cli-snapshot.mjs'),
+      'fixture executable bytes\n',
+      { mode: 0o700 }
+    );
+    fixtures.git(lane, ['add', '--', 'package.json', 'scripts/install-cli-snapshot.mjs']);
+    fixtures.git(lane, ['commit', '-m', 'record fixture production bytes']);
+    fs.mkdirSync(path.dirname(selection.outputRoot), { recursive: true });
+    const request = {
+      schema: 'caws.frozen_source_preparation.v1',
+      source: sourceSelection(),
+      outputRoot: selection.outputRoot,
+      futureBuildRoot: path.join(lane, 'tmp/prepare/build'),
+    };
+    const objectReads = [];
+    const context = {
+      ...caller,
+      checkpoint: () => {},
+      readObjects: (selections) => {
+        objectReads.push(...selections.map((item) => ({ ...item })));
+        // Real raw Git objects exercise composition; this fixture transport is
+        // not the maintained pinned/closed production parent or bootstrap.
+        return children.execFileSync(
+          '/usr/bin/git',
+          ['--no-replace-objects', 'cat-file', '--batch'],
+          {
+            cwd: lane,
+            input: selections.map(({ oid }) => oid).join('\n') + '\n',
+            timeout: 5000,
+            maxBuffer: 32 * 1024 * 1024,
+          }
+        );
+      },
+    };
+    return { request, context, objectReads };
+  }
+
+  test('prepares exact private source bytes from real Git without building or changing governance', () => {
+    const { request, context, objectReads } = frozenSourceFixture();
+    const before = canonicalBytes();
+    const result = prepareFrozenProductionSource(request, context);
+    expect(result.status).toBe('prepared');
+    expect(result.adoption).toBe('NOT_ADOPTED');
+    expect(result.source).toEqual({
+      ...request.source,
+      repoRoot: root,
+      worktreeName: 'prep',
+      specId: 'PREP-001',
+    });
+    expect(
+      result.sourceTree.files.map(({ relativePath, executable }) => [relativePath, executable])
+    ).toEqual([
+      ['package.json', false],
+      ['scripts/install-cli-snapshot.mjs', true],
+    ]);
+    expect(fs.readFileSync(path.join(result.sourceTree.root, 'package.json'), 'utf8')).toBe(
+      '{"fixture":true}\n'
+    );
+    expect(
+      fs.readFileSync(path.join(result.sourceTree.root, 'scripts/install-cli-snapshot.mjs'), 'utf8')
+    ).toBe('fixture executable bytes\n');
+    expect(fs.statSync(path.join(result.sourceTree.root, 'package.json')).mode & 0o777).toBe(0o600);
+    expect(
+      fs.statSync(path.join(result.sourceTree.root, 'scripts/install-cli-snapshot.mjs')).mode &
+        0o777
+    ).toBe(0o700);
+    expect(fs.readdirSync(request.outputRoot).sort()).toEqual(['source', 'source-inventory.json']);
+    const inventoryBytes = fs.readFileSync(result.inventory.path);
+    expect(result.inventory).toEqual({
+      path: path.join(request.outputRoot, 'source-inventory.json'),
+      sizeBytes: inventoryBytes.length,
+      sha256: crypto.createHash('sha256').update(inventoryBytes).digest('hex'),
+    });
+    const inventory = JSON.parse(inventoryBytes);
+    expect(inventory.files.map(({ relativePath, gitMode }) => [relativePath, gitMode])).toEqual([
+      ['package.json', '100644'],
+      ['scripts/install-cli-snapshot.mjs', '100755'],
+    ]);
+    expect(inventory.adoption).toBe('NOT_ADOPTED');
+    expect(fs.existsSync(request.futureBuildRoot)).toBe(false);
+    expect(objectReads.filter(({ kind }) => kind === 'blob')).toHaveLength(2);
+    expect(canonicalBytes()).toEqual(before);
+  });
+
+  test('refuses unauthorized output before reading any source objects or writing files', () => {
+    const { request, context, objectReads } = frozenSourceFixture();
+    context.environment = { CAWS_AGENT_SURFACE: 'codex', CODEX_THREAD_ID: 'foreign-caller' };
+    const result = prepareFrozenProductionSource(request, context);
+    expect(result).toMatchObject({
+      status: 'failed',
+      writerState: 'NOT_STARTED',
+      phase: 'authority',
+    });
+    expect(result.reason).toContain('another caller');
+    expect(objectReads).toEqual([]);
+    expect(fs.existsSync(request.outputRoot)).toBe(false);
+  });
+
+  test('checks every actual destination before mutation, including excluded selected files', () => {
+    const { request, context } = frozenSourceFixture();
+    spec.scope.out.push('tmp/prepare/run/source/package.json');
+    saveSpec();
+    const result = prepareFrozenProductionSource(request, context);
+    expect(result).toMatchObject({
+      status: 'failed',
+      writerState: 'NOT_STARTED',
+      phase: 'pre-write',
+    });
+    expect(result.reason).toContain(
+      'explicit scope admission: tmp/prepare/run/source/package.json'
+    );
+    expect(fs.existsSync(request.outputRoot)).toBe(false);
+  });
+
+  test('refuses required protected source before any blob read or mutation', () => {
+    const { request, context, objectReads } = frozenSourceFixture();
+    fs.mkdirSync(path.join(lane, 'docs/credentials'), { recursive: true });
+    fs.writeFileSync(path.join(lane, 'docs/credentials/token.md'), 'do not export');
+    fixtures.git(lane, ['add', '--', 'docs/credentials/token.md']);
+    fixtures.git(lane, ['commit', '-m', 'record protected-name negative fixture']);
+    request.source = sourceSelection();
+    const result = prepareFrozenProductionSource(request, context);
+    expect(result).toMatchObject({
+      status: 'failed',
+      writerState: 'NOT_STARTED',
+      phase: 'objects',
+    });
+    expect(result.reason).toContain('Required production input is protected');
+    expect(objectReads.filter(({ kind }) => kind === 'blob')).toEqual([]);
+    expect(fs.existsSync(request.outputRoot)).toBe(false);
+  });
+
+  test('refuses an existing or aliased output and leaves foreign bytes unchanged', () => {
+    const { request, context, objectReads } = frozenSourceFixture();
+    const foreign = path.join(root, 'foreign-output');
+    fs.mkdirSync(foreign);
+    fs.writeFileSync(path.join(foreign, 'sentinel'), 'foreign bytes');
+    fs.symlinkSync(foreign, request.outputRoot);
+    const result = prepareFrozenProductionSource(request, context);
+    expect(result).toMatchObject({ status: 'failed', writerState: 'NOT_STARTED' });
+    expect(result.reason).toContain('already exists');
+    expect(fs.readFileSync(path.join(foreign, 'sentinel'), 'utf8')).toBe('foreign bytes');
+    expect(fs.readdirSync(foreign)).toEqual(['sentinel']);
+    expect(objectReads).toEqual([]);
+  });
+
+  test('retains uncertain source on an unrepresented file and refuses retry or adoption', () => {
+    const { request, context } = frozenSourceFixture();
+    const firstFile = path.join(request.outputRoot, 'source/package.json');
+    const extra = path.join(request.outputRoot, 'source/unrepresented');
+    context.checkpoint = () => {
+      if (fs.existsSync(firstFile) && !fs.existsSync(extra))
+        fs.writeFileSync(extra, 'unexpected bytes');
+    };
+    const result = prepareFrozenProductionSource(request, context);
+    expect(result).toMatchObject({
+      status: 'failed',
+      writerState: 'RETAINED_UNCERTAIN',
+      phase: 'verify',
+    });
+    expect(result.reason).toBe(`Unexpected tree entry: ${extra}`);
+    expect(fs.readFileSync(firstFile, 'utf8')).toBe('{"fixture":true}\n');
+    expect(fs.readFileSync(extra, 'utf8')).toBe('unexpected bytes');
+    expect(fs.existsSync(path.join(request.outputRoot, 'source-inventory.json'))).toBe(false);
+    expect(prepareFrozenProductionSource(request, context)).toMatchObject({
+      status: 'failed',
+      writerState: 'NOT_STARTED',
+      phase: 'authority',
+    });
+    expect(fs.readFileSync(extra, 'utf8')).toBe('unexpected bytes');
+    expect(fs.existsSync(request.futureBuildRoot)).toBe(false);
+  });
+
+  test('detects substituted root before writing through the replacement directory', () => {
+    const { request, context } = frozenSourceFixture();
+    const moved = path.join(lane, 'tmp/prepare/retained-original');
+    let replaced = false;
+    context.checkpoint = () => {
+      if (!replaced && fs.existsSync(path.join(request.outputRoot, 'source/package.json'))) {
+        replaced = true;
+        fs.renameSync(request.outputRoot, moved);
+        fs.mkdirSync(request.outputRoot, { mode: 0o700 });
+        fs.writeFileSync(path.join(request.outputRoot, 'foreign-sentinel'), 'preserve');
+      }
+    };
+    const result = prepareFrozenProductionSource(request, context);
+    expect(result).toMatchObject({
+      status: 'failed',
+      writerState: 'RETAINED_UNCERTAIN',
+      phase: 'source',
+    });
+    expect(result.reason).toContain('root changed during custody');
+    expect(fs.statSync(request.outputRoot).mode).toBe(fs.statSync(moved).mode);
+    expect(fs.statSync(request.outputRoot).dev).toBe(fs.statSync(moved).dev);
+    expect(fs.statSync(request.outputRoot).ino).not.toBe(fs.statSync(moved).ino);
+    expect(fs.readdirSync(request.outputRoot)).toEqual(['foreign-sentinel']);
+    expect(fs.readFileSync(path.join(request.outputRoot, 'foreign-sentinel'), 'utf8')).toBe(
+      'preserve'
+    );
+    expect(fs.readFileSync(path.join(moved, 'source/package.json'), 'utf8')).toBe(
+      '{"fixture":true}\n'
+    );
+    expect(fs.existsSync(request.futureBuildRoot)).toBe(false);
+  });
+
+  test('rechecks copied bytes rather than accepting only the planned file names', () => {
+    const { request, context } = frozenSourceFixture();
+    const firstFile = path.join(request.outputRoot, 'source/package.json');
+    let changed = false;
+    context.checkpoint = () => {
+      if (!changed && fs.existsSync(firstFile)) {
+        changed = true;
+        const bytes = fs.readFileSync(firstFile);
+        bytes[2] ^= 1;
+        fs.writeFileSync(firstFile, bytes);
+      }
+    };
+    const result = prepareFrozenProductionSource(request, context);
+    expect(result).toMatchObject({
+      status: 'failed',
+      writerState: 'RETAINED_UNCERTAIN',
+      phase: 'verify',
+    });
+    expect(result.reason).toBe(`Pin mismatch: ${firstFile}`);
+    expect(fs.statSync(firstFile).size).toBe(Buffer.byteLength('{"fixture":true}\n'));
+    expect(fs.existsSync(path.join(request.outputRoot, 'source-inventory.json'))).toBe(false);
+  });
+
+  test('refuses an existing future build root without reading objects or altering it', () => {
+    const { request, context, objectReads } = frozenSourceFixture();
+    fs.mkdirSync(request.futureBuildRoot);
+    fs.writeFileSync(path.join(request.futureBuildRoot, 'foreign-sentinel'), 'retain future root');
+    const result = prepareFrozenProductionSource(request, context);
+    expect(result).toMatchObject({
+      status: 'failed',
+      writerState: 'NOT_STARTED',
+      phase: 'authority',
+    });
+    expect(result.reason).toBe(`Preparation path already exists: ${request.futureBuildRoot}`);
+    expect(objectReads).toEqual([]);
+    expect(fs.existsSync(request.outputRoot)).toBe(false);
+    expect(fs.readdirSync(request.futureBuildRoot)).toEqual(['foreign-sentinel']);
+    expect(fs.readFileSync(path.join(request.futureBuildRoot, 'foreign-sentinel'), 'utf8')).toBe(
+      'retain future root'
+    );
+  });
+
+  test('retains uncertain output when the future build root appears during copying', () => {
+    const { request, context } = frozenSourceFixture();
+    context.checkpoint = () => {
+      if (
+        fs.existsSync(path.join(request.outputRoot, 'source/package.json')) &&
+        !fs.existsSync(request.futureBuildRoot)
+      ) {
+        fs.mkdirSync(request.futureBuildRoot);
+        fs.writeFileSync(path.join(request.futureBuildRoot, 'foreign-sentinel'), 'preserve');
+      }
+    };
+    const result = prepareFrozenProductionSource(request, context);
+    expect(result).toMatchObject({
+      status: 'failed',
+      writerState: 'RETAINED_UNCERTAIN',
+      phase: 'source',
+    });
+    expect(result.reason).toBe(`Preparation path already exists: ${request.futureBuildRoot}`);
+    expect(fs.readdirSync(request.futureBuildRoot)).toEqual(['foreign-sentinel']);
+    expect(fs.readFileSync(path.join(request.futureBuildRoot, 'foreign-sentinel'), 'utf8')).toBe(
+      'preserve'
+    );
+    expect(fs.existsSync(path.join(request.outputRoot, 'source-inventory.json'))).toBe(false);
+  });
+
+  test('rechecks source HEAD after object collection before creating output', () => {
+    const { request, context } = frozenSourceFixture();
+    const read = context.readObjects;
+    let changed = false;
+    context.readObjects = (selections) => {
+      const bytes = read(selections);
+      if (!changed && selections.some(({ kind }) => kind === 'blob')) {
+        changed = true;
+        fixtures.git(lane, ['commit', '--allow-empty', '-m', 'advance during observation']);
+      }
+      return bytes;
+    };
+    const result = prepareFrozenProductionSource(request, context);
+    expect(result).toMatchObject({
+      status: 'failed',
+      writerState: 'NOT_STARTED',
+      phase: 'pre-write',
+    });
+    expect(result.reason).toContain('not the current HEAD');
+    expect(fs.existsSync(request.outputRoot)).toBe(false);
+  });
+
+  test('refuses overlap and cancellation without object access or output mutation', () => {
+    const { request, context, objectReads } = frozenSourceFixture();
+    expect(
+      prepareFrozenProductionSource(
+        { ...request, futureBuildRoot: path.join(request.outputRoot, 'build') },
+        context
+      )
+    ).toMatchObject({
+      status: 'failed',
+      writerState: 'NOT_STARTED',
+      reason: 'Preparation and future build roots must be disjoint',
+    });
+    context.checkpoint = () => {
+      throw new Error('fixture deadline expired');
+    };
+    expect(prepareFrozenProductionSource(request, context)).toMatchObject({
+      status: 'failed',
+      writerState: 'NOT_STARTED',
+      reason: 'fixture deadline expired',
+    });
+    expect(objectReads).toEqual([]);
+    expect(fs.existsSync(request.outputRoot)).toBe(false);
+  });
 
   test.each(['canonical', 'bound lane'])(
     'observes exact current %s source without mutation',
