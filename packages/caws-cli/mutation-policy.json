@@ -10,7 +10,7 @@
     {
       "id": "mutation",
       "strategy": "mutation",
-      "command": "npm run mutation:run:kernel && npm run mutation:run:store && npm run mutation:run:shell && npm run mutation:run:analysis",
+      "command": "npm run mutation:run:kernel && npm run mutation:run:store && npm run mutation:run:shell && npm run mutation:run:analysis && npm run mutation:run:execution",
       "rationale": "Pure safety, authority, timestamp parsing, and arithmetic decisions are held to an explicit per-file mutation floor.",
       "files": [
         "src/kernel/evidence/canonical-json.ts",
@@ -37,6 +37,7 @@
         "src/store/apply-patch.ts",
         "src/store/atomic-write.ts",
         "src/store/events-store.ts",
+        "src/store/lifecycle-lock.ts",
         "src/store/messages-store.ts",
         "src/store/yaml-patch.ts",
         "src/transcripts/renderer-calendar.ts",
@@ -183,7 +184,6 @@
         "src/store/json-store.ts",
         "src/store/leases-store.ts",
         "src/store/legacy-adoption.ts",
-        "src/store/lifecycle-lock.ts",
         "src/store/lifecycle-transaction.ts",
         "src/store/policy-store.ts",
         "src/store/repo-root.ts",
@@ -244,6 +244,19 @@
     }
   ],
   "surfaces": {
+    "execution": {
+      "config": "stryker.execution.conf.js",
+      "reportDir": "reports/mutation-execution",
+      "threshold": 80,
+      "coverageAnalysis": "off",
+      "buildCommand": "node scripts/build-cli.js",
+      "targets": [
+        { "source": "src/store/lifecycle-lock.ts" }
+      ],
+      "tests": [
+        "tests/execution/authority-fence.test.js"
+      ]
+    },
     "analysis": {
       "config": "stryker.analysis.conf.js",
       "reportDir": "reports/mutation-analysis",

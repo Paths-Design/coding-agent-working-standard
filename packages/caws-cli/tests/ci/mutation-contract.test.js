@@ -524,7 +524,7 @@ describe('mutation policy topology contract', () => {
     // mutation target must reconcile policy AND this pin in the same change.
     // The inventory includes bounded analysis and the renderer-calendar adapter.
     expect(result.stdout).toMatch(/^PASS: 203 source files accounted for exactly once$/m);
-    expect(result.stdout).toMatch(/^PASS: 28 mutation targets across 4 surfaces$/m);
+    expect(result.stdout).toMatch(/^PASS: 29 mutation targets across 5 surfaces$/m);
   });
 
   test('session seal preparation is classified as behavioral parsing and rendering', () => {
@@ -726,7 +726,7 @@ describe('mutation policy topology contract', () => {
     expect(new RegExp(config.jest.config.testNamePattern).test(name)).toBe(selected);
   });
 
-  test.each(['kernel', 'store', 'shell', 'analysis'])(
+  test.each(['kernel', 'store', 'shell', 'analysis', 'execution'])(
     '%s sandbox excludes sibling runs while retaining source and tests',
     (surface) => {
       expect(createStrykerConfig(surface).jest.config.setupFiles).toEqual([
@@ -1604,7 +1604,7 @@ describe('active workflow topology contract', () => {
 
     expect(workflow).not.toContain('packages/caws-kernel');
     const parsed = yaml.load(workflow);
-    const surfaces = ['kernel', 'store', 'shell', 'analysis'];
+    const surfaces = ['kernel', 'store', 'shell', 'analysis', 'execution'];
     expect(parsed.jobs.harness_integrity.strategy.matrix.surface).toEqual(surfaces);
     expect(parsed.jobs.mutation.strategy.matrix.surface).toEqual(surfaces);
     const scripts = JSON.parse(

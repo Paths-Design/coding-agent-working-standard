@@ -570,6 +570,19 @@ child lifetime: a child lifecycle command may itself need the authority writer.
 Revocation after spawn can request cancellation but cannot undo effects already
 performed. These are separate promises and must have separate tests.
 
+The lifecycle lock protects live holders independently of lock-file age. Its
+recovery path requires an aged file with a demonstrably dead owner and
+serializes reclaimers through `.caws/state.lock.reclaim`. Unknown or malformed
+ownership remains held. A private acquisition handle releases only its own file
+and descriptor once. An abandoned reclaimer blocks recovery until quiescence has
+been established; it is not stolen by age. Older writers using age-only recovery
+cannot participate in this guarantee.
+
+This lock mechanism does not supply the execution join. Every authority writer
+that can affect admission must participate, and authoritative reads, validation
+and compensation must remain coherent with its critical section. The final
+launch owner and the joined writer contract require their own proof.
+
 The design also retains executable/path replacement and descendant-escape
 limits. Hashing a binary and then spawning its pathname is not atomic execution
 of those bytes. Physical cwd resolution does not freeze the filesystem. Process
