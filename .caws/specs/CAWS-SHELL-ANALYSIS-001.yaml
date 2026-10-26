@@ -122,6 +122,19 @@ acceptance:
       admission, or lifecycle rewrite; caller fields and CLI shell flags cannot
       override it, while literal diagnostic analysis remains usable with declared
       context
+  - id: A9
+    given: >-
+      A governed canonical root may contain LF, quotes or glob characters, with
+      normal aliases and linked worktrees plus active registry entries
+    when: >-
+      The worktree guard decides branch-switch or cleanup safety and the opt-in Stop
+      reminder reads activity through the canonical root
+    then: >-
+      Exact canonical path identity reaches registry reads without source
+      interpolation; the hard guard preserves protective refusals and refuses
+      unavailable authority while the reminder remains exit-zero and reports the
+      same active worktrees, with unsupported resolution diagnosed rather than
+      treated as an empty registry
 observability:
   - 'Structured verdict, reason codes and source-positioned decision trace distinguish allowed, denied and unresolved facts without claiming a general process sandbox.'
 rollback:
