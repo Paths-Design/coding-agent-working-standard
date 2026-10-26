@@ -516,7 +516,8 @@ while IFS= read -r effect; do
     degraded_no_yaml) _DEGRADED_NO_YAML=1 ;;
     block_foreign_worktree|block_claimed) escalate block "$detail" "$outcome" ;;
     ask_uncertain|error_fail_closed)
-      if [[ "$detail" == remove-tree-* ]]; then
+      if [[ "$detail" == remove-tree-* ||
+            ( "$_REMOVE_TREE" == 1 && "$outcome" == error_fail_closed ) ]]; then
         _BWG_REMOVE_UNRESOLVED=1
         continue
       fi

@@ -1021,6 +1021,23 @@ test('canonical directory removal holds unproved glob populations', () => {
   deletionDecision('rm -rf ' + quote(directory), 2, 'unresolved remove');
   expect(fs.lstatSync(directory).isDirectory()).toBe(true);
 });
+test.each(['malformed', 'unreadable'])(
+  'canonical directory removal holds %s active scope YAML under an allowlist',
+  (failure) => {
+    const directory = path.join(fx.project, 'docs/reports');
+    fs.mkdirSync(directory, { recursive: true });
+    const sentinel = path.join(directory, 'claimed.txt');
+    fs.writeFileSync(sentinel, 'unproved claim survives preflight\n');
+    const specPath = path.join(fx.project, '.caws/specs/CLAIM.yaml');
+    if (failure === 'malformed') fs.writeFileSync(specPath, 'scope: [unterminated\n');
+    else {
+      fs.unlinkSync(specPath);
+      fs.mkdirSync(specPath);
+    }
+    deletionDecision('rm -rf ' + quote(directory), 2, 'unresolved remove');
+    expect(fs.readFileSync(sentinel, 'utf8')).toBe('unproved claim survives preflight\n');
+  }
+);
 test('canonical directory removal admits a tree disjoint from literal claims', () => {
   const directory = path.join(fx.project, 'cache');
   fs.mkdirSync(directory);
