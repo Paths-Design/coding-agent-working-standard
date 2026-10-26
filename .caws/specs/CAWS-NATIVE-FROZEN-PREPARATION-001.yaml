@@ -82,8 +82,8 @@ contracts:
 evidence:
   - criterion_id: A2
     status: unchecked
-    evidence_ref: "Requirement reconciled with coordinator: malformed request/startup injection refuses before any child; fixed pinned read-only Node/Git preflight may derive actual source/ownership, before any mutation or unapproved child. Source153-control result is not actual host startup/guard proof. Private operator-reviewed preparation distribution and closed Rust parent remain unimplemented/unqualified; no effectful export run."
-    recorded_at: "2026-10-26T03:57:11.650Z"
+    evidence_ref: "Committed source29ea15f434ca3394e0456763527f863b3cac017d implements the closed preparation parent and pre-child private Git admission. Historical TS181 controls and parent21 units passed; initial real-entry run4 passed2 failed, followed by committed harness repair. Current25 parent units, six repaired real-entry cases and configured-parent startup remain unexecuted. No effectful source export or installed native adoption is established."
+    recorded_at: "2026-10-26T08:40:49.483Z"
   - criterion_id: A5
     status: unchecked
     evidence_ref: "Source candidate f6a35c12c049583741bf803674c75fe88d0d92fb adds optional normal-installer bootstrap inventory output; production source781ff28fc, 22 new semantic/hostile scenarios written. Independent source review and static gates completed; behavioral installer tests, actual configured-parent consumption and operator bootstrap are UNEXECUTED while guard mutation owns the CPU slot. No global mutation or adoption."
