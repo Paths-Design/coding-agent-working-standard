@@ -6,6 +6,30 @@ const {
 } = require('../../dist/runtime/json-custody');
 const equal = (a, b) => sameJsonSource(parseJsonSource(a), parseJsonSource(b));
 
+test('root-only duplicate refusal protects controls while preserving opaque nested values', () => {
+  for (const source of [
+    '{"capability":"bad","capability":"good"}',
+    String.raw`{"capability":"bad","\u0063apability":"good"}`,
+  ]) {
+    expect(() => parseJsonSource(source, 128, 100000, 'root')).toThrow(/Duplicate/);
+    expect(() => parseJsonSource(source, 128, 100000, true)).toThrow(/Duplicate/);
+    expect(() => parseJsonSource(source, 128, 100000, false)).not.toThrow();
+  }
+  const opaque =
+    '{"payload":{"a":9007199254740993,"a":18446744073709551617},"items":[{"b":1,"b":2}]}';
+  const source = parseJsonSource(opaque, 128, 100000, 'root');
+  expect(objectMemberJson(source, 'payload')).toBe(
+    '{"a":9007199254740993,"a":18446744073709551617}'
+  );
+  expect(
+    sameJsonSource(
+      source,
+      parseJsonSource('{"payload":{"a":18446744073709551617},"items":[{"b":2}]}')
+    )
+  ).toBe(true);
+  expect(() => parseJsonSource(opaque, 128, 100000, true)).toThrow(/Duplicate/);
+});
+
 test('compares keys and decoded strings while distinguishing exact numeric tokens', () => {
   expect(equal('{"a":"\\u0061","b":[true,null]}', '{"b":[true,null],"a":"a"}')).toBe(true);
   for (const [a, b] of [

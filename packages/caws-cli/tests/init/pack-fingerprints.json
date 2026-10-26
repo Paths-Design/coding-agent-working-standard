@@ -1,23 +1,23 @@
 {
   "shared": {
-    "version": 103,
-    "fingerprint": "150978348e1740fc81befa93d3928d621b3d16a040ee2491ef2268c420b8323b"
+    "version": 114,
+    "fingerprint": "5764a04a044faf8411aeae2250b70d481efda884c16b8fa9e08fe6c8ff77333d"
   },
   "claude-code": {
     "version": 25,
     "fingerprint": "ea39627b0c3d0a9d3737d2591a9671bd644dd851cac393e1e97a84c0c2f484ee"
   },
   "codex": {
-    "version": 26,
-    "fingerprint": "a8b3c8cdb90e46187f83cfdf8f326b2d5a74df25fb94addd6e87b8da31e9e567"
+    "version": 27,
+    "fingerprint": "6d6d43a9b20818c1aad2faf4a61e91645e89e4a6ba52e8ecf88cc28fc47ffd99"
   },
   "dsh": {
     "version": 3,
     "fingerprint": "e2c1aafe6f10ecb283c59e77888624bf69ecf5619cef2ae50dc992e46e498ca6"
   },
   "opencode": {
-    "version": 8,
-    "fingerprint": "538fea81df43ff817da8fbbe6286c69c1ca54a270aa4b95da1f662baa15c8605"
+    "version": 10,
+    "fingerprint": "3b55fa91bfc474a169823b212aebad27f229b01a2fb4d3771180480b337d2db0"
   },
   "zcode": {
     "version": 2,

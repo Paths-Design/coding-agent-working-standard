@@ -1,0 +1,51 @@
+id: CAWS-NATIVE-LEASE-STOP-LANDING-001
+title: 'Land shared lease stop and bounded typed adapter on main'
+mode: refactor
+lifecycle_state: active
+worktree: native-lease-stop-landing
+created_at: '2026-10-25T00:45:01.170Z'
+updated_at: '2026-10-25T15:01:22.167Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Shared CLI and typed stock lease stop, source landing and lead handoff'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/application/agent-stop.ts'
+    - 'packages/caws-cli/src/runtime/agent-stop.ts'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/shell/commands/agents.ts'
+    - 'packages/caws-cli/tests/runtime/agent-stop-typed.test.js'
+  out: []
+  support:
+    - docs/internal/caws-runtime-modernization.md
+invariants:
+  - 'Preserve CLI identity resolution, load/kernel/store error precedence and output; typed execution changes only the selected own lease after admitted native prefix and preserves custom shell fallback.'
+  - 'Component landing never establishes ordinary installed typed routing, Python retirement, replay, rollback, residency or parent cutover acceptance.'
+acceptance:
+  - id: A1
+    given: 'stock and hostile lease inputs and the existing CLI contract'
+    when: 'shared application CLI and typed adapter execute'
+    then: 'own-only lease changes no-op identity error output cancellation deadline and custom fallback behavior are preserved under focused tests and an inspected real filesystem scenario'
+  - id: A2
+    given: 'publication candidate 2d9676d5 and current main'
+    when: 'the bounded source candidate is built reviewed and checked'
+    then: 'only the five intended source/test files and tracker changes land with exact source identity and no older governance snapshot copied'
+  - id: A3
+    given: 'landed source and retained artifacts'
+    when: 'the lead transfers'
+    then: 'canonical tracker identifies actual evidence source limits remaining installed routing publication replay rollback residency obligations and their accepted incoming owner'
+observability:
+  - 'Retain commands revision exit status raw stdout stderr and before/after own and peer lease bytes outside the worktree.'
+rollback:
+  - 'Revert the bounded source changes through ordinary governed history; installed runtime remains separately selected.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: fail
+    evidence_ref: "Full typed substitution withheld: independent source trace shows native admission accepts arbitrary stable PATH Git and typed stop bypasses the later Node CLI Git lookup. Retained discriminating component check git-counterexample-01 executes one case and exits1: expected fallback null, actual exit0/stopped own-session with own lease changed. Source/test candidate e51d8e6a retains counterexample; real native-to-Node end-to-end wrapper execution remains unrun, causal reachability grounded invocation_project.rs629-715, context_git/original_project.rs777-790, stop_admission.rs270-291, engine.ts470-501. Historical186 passing tests did not cover this extension. Shared CLI extraction is separate CAWS-NATIVE-SHARED-STOP-001. Incoming lead01a17052 explicitly accepts remaining typed admission/installed Git contract; no machine-specific allowlist or unfenced child repair adopted."
+    recorded_at: "2026-10-25T01:06:25.657Z"
+    commit_sha: e51d8e6a

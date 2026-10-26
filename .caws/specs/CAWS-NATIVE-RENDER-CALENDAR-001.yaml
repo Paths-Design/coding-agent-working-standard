@@ -1,0 +1,55 @@
+id: CAWS-NATIVE-RENDER-CALENDAR-001
+title: 'Preserve renderer calendar semantics with original-native timezone observations'
+mode: feature
+lifecycle_state: active
+worktree: native-render-calendar
+created_at: '2026-10-23T12:54:38.086Z'
+updated_at: '2026-10-23T14:19:31.573Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Pure renderer calendar semantics and original frontend local-time observation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/renderer-calendar.ts'
+    - 'packages/caws-cli/tests/transcripts/renderer-calendar.test.ts'
+    - 'packages/caws-cli/tests/transcripts/run.cjs'
+    - 'packages/caws-native/src/renderer_calendar.rs'
+    - 'packages/caws-native/tests/renderer_calendar.rs'
+    - 'packages/caws-native/src/lib.rs'
+    - packages/caws-cli/tests/transcripts/renderer-calendar-mutation.test.js
+  out: []
+  support:
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+invariants:
+  - 'Duration and epoch sorting preserve distinct CPython 3.11.13 parser and failure semantics; no JS Date or null fixture substitute'
+  - 'Native timezone observations use untouched original process environment with exact invocation binding, deadline and typed failures; no shared owner environment mutation or helper subprocess'
+  - 'This source slice grants no production selection, publication or calendar carrier authority; root retains integrated ordinary consumption and activation'
+acceptance:
+  - id: A1
+    given: 'inspected reference grammar and exact datetime and rounding outputs'
+    when: 'pure calendar parsing arithmetic and local-time inversion execute'
+    then: 'supported ISO and fallback forms awareness invalid inputs rounding negative zero and DST decisions match retained reference evidence without changing acceptance to fit implementation'
+  - id: A2
+    given: 'original native invocations with absent empty and explicit TZ and hostile seconds or binding inputs'
+    when: 'bounded local-calendar observation executes'
+    then: >-
+      Exact calendar fields or typed errors are retained under captured unchanged
+      original TZ and TZDIR, with one explicit original-frontend libc timezone
+      initialization before engine launch, no environment mutation, no shared-owner
+      calendar execution and no helper subprocess
+  - id: A3
+    given: 'committed leaf source and exact retained checks'
+    when: 'cross-language observations and independent review challenge the boundary'
+    then: 'observations correlate to the original request and transport absence cancellation and OS failures cannot become valid timestamps or silent null defaults'
+observability:
+  - 'Exact interpreter and native source pins, raw reference outputs, timezone context, request bindings, errors and ordinary parity controls'
+rollback:
+  - 'Leave new components unselected until root integrates and qualifies the matched carrier and ordinary consumer'
+non_functional: {}
+contracts:
+  - name: 'renderer-calendar-observation'
+    type: behavior

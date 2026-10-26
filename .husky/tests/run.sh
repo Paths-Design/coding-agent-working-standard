@@ -135,7 +135,7 @@ t3_calls=$(wc -l < "$GITLOG" | tr -d ' ')
 # grep -c prints "0" AND exits 1 on no-match, so `|| echo 0` would append a
 # second line and make every numeric comparison below fail. Take grep's stdout
 # and normalise, never OR a fallback onto it.
-t3_stash=$(grep -c '^stash' "$GITLOG" 2>/dev/null)
+t3_stash=$(grep -cE '(^| )stash( |$)' "$GITLOG" 2>/dev/null)
 t3_stash=$(printf '%s' "${t3_stash:-0}" | head -1)
 
 if [ -n "$T3STAGED" ]; then
@@ -152,7 +152,7 @@ fi
 if [ "$t3_stash" = "0" ]; then
   ok "T3b pre-commit made 0 git-stash calls (shared refs/stash untouched)"
 else
-  bad "T3b pre-commit made 0 git-stash calls" "$t3_stash stash call(s): $(grep '^stash' "$GITLOG" | tr '\n' ';')"
+  bad "T3b pre-commit made 0 git-stash calls" "$t3_stash stash call(s): $(grep -E '(^| )stash( |$)' "$GITLOG" | tr '\n' ';')"
 fi
 printf '        pre-commit exit=%s, output at %s\n' "$t3_hook_exit" "$T3OUT"
 cp "$T3OUT" "${TMPDIR:-/tmp}/caws-hooktest-precommit.out" 2>/dev/null
@@ -167,10 +167,10 @@ else
   bad "T3e lint fixture removed from index and disk" "still present in git status"
 fi
 
-if grep -q -- '--no-stash' .husky/pre-commit; then
-  ok "T3c pre-commit invokes lint-staged with --no-stash"
+if grep -q 'node "\$STAGED_RUNNER"' .husky/pre-commit; then
+  ok "T3c pre-commit invokes the checked staged runner directly"
 else
-  bad "T3c pre-commit invokes lint-staged with --no-stash" "flag absent from the hook"
+  bad "T3c pre-commit invokes the checked staged runner directly" "runner invocation absent from the hook"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -891,19 +891,15 @@ fi
 #     advisory sizing goal needing no waiver — never a budget_limit waiver.
 #     Index-only: the fixture spec is a blob staged with update-index (the
 #     specs dir is sparse-excluded in lane checkouts, so the working tree is
-#     never touched) and is force-removed from the index afterwards. npx is
-#     stubbed so the control run's lint-staged stage cannot reformat anything.
+#     never touched) and is force-removed from the index afterwards.
 # ─────────────────────────────────────────────────────────────────────────
 t12_spec=".caws/specs/HOOK-TEST-GUARD3-FIXTURE.yaml"
-mkdir -p "$SCRATCH/bin-npx-noop"
-printf '#!/bin/sh\nexit 0\n' > "$SCRATCH/bin-npx-noop/npx"
-chmod +x "$SCRATCH/bin-npx-noop/npx"
 run_t12() {
   # $1 = fixture spec body; prints "<exit>|<hook output>"
   local blob out code
   blob=$(printf '%s' "$1" | git hash-object -w --stdin)
   git update-index --add --cacheinfo "100644,$blob,$t12_spec"
-  out=$(PATH="$SCRATCH/bin-npx-noop:$PATH" bash .husky/pre-commit 2>&1); code=$?
+  out=$(bash .husky/pre-commit 2>&1); code=$?
   git update-index --force-remove "$t12_spec"
   printf '%s|%s' "$code" "$out"
 }

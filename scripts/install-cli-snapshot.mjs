@@ -12,7 +12,7 @@ function run(command, args, cwd, env = process.env) {
   const result = spawnSync(command, args, { cwd, env, encoding: 'utf8' });
   if (result.status !== 0) {
     throw new Error(
-      `${command} ${args.join(' ')} failed: ${result.error?.message ?? result.stderr ?? result.stdout}`
+      `${command} ${args.join(' ')} failed (exit ${result.status}, signal ${result.signal ?? 'none'}): ${result.error?.message ?? ''}\nstdout: ${result.stdout ?? ''}\nstderr: ${result.stderr ?? ''}`
     );
   }
   return result.stdout;
@@ -24,6 +24,20 @@ export function installCliSnapshot({ packageRoot, cawsHome, binPath }) {
   binPath = path.resolve(binPath);
   const metadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
   if (metadata.name !== '@paths.design/caws-cli') throw new Error('Expected the CAWS CLI package');
+  // Packing below disables lifecycle scripts. Reject equally stale source and
+  // package projections before staging, locking or changing the active command.
+  const runtimeGenerator = path.join(packageRoot, 'scripts', 'generate-runtime-assets.mjs');
+  if (!fs.statSync(runtimeGenerator, { throwIfNoEntry: false })?.isFile())
+    throw new Error('Source runtime asset generator is required before CLI snapshot installation');
+  run(process.execPath, [runtimeGenerator, '--check'], packageRoot);
+  const stageDocs = path.join(packageRoot, 'scripts', 'stage-consumer-docs.mjs');
+  const cleanDocs = path.join(packageRoot, 'scripts', 'clean-staged-docs.mjs');
+  for (const script of [stageDocs, cleanDocs]) {
+    if (!fs.statSync(script, { throwIfNoEntry: false })?.isFile())
+      throw new Error(
+        `Source consumer transport script is required before CLI snapshot installation: ${script}`
+      );
+  }
   const previous = fs.lstatSync(binPath, { throwIfNoEntry: false });
   if (previous && !previous.isSymbolicLink())
     throw new Error(`Refusing to replace non-symlink ${binPath}`);
@@ -32,15 +46,42 @@ export function installCliSnapshot({ packageRoot, cawsHome, binPath }) {
   const lock = fs.openSync(lockPath, 'wx', 0o600);
   let stage;
   let temporaryLink;
+  let installed;
+  const failures = [];
+  const failedCleanup = (label, action) => {
+    try {
+      action();
+    } catch (error) {
+      failures.push(
+        new Error(`Snapshot cleanup failed (${label}): ${error.message}`, { cause: error })
+      );
+    }
+  };
   try {
     const releases = path.join(cawsHome, 'lib', 'cli');
     fs.mkdirSync(releases, { recursive: true });
     stage = fs.mkdtempSync(path.join(releases, '.install-'));
-    const stageDocs = path.join(packageRoot, 'scripts', 'stage-consumer-docs.mjs');
-    if (fs.existsSync(stageDocs)) run(process.execPath, [stageDocs], packageRoot);
-    const packed = JSON.parse(
-      run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', stage], packageRoot)
-    );
+    let packed;
+    const transportFailures = [];
+    try {
+      run(process.execPath, [stageDocs], packageRoot);
+      packed = JSON.parse(
+        run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', stage], packageRoot)
+      );
+    } catch (error) {
+      transportFailures.push(error);
+    } finally {
+      // --ignore-scripts skips postpack too. Finish source transport cleanup
+      // before installing, probing or activating any packed candidate.
+      try {
+        run(process.execPath, [cleanDocs], packageRoot);
+      } catch (error) {
+        transportFailures.push(
+          new Error(`Consumer transport cleanup failed: ${error.message}`, { cause: error })
+        );
+      }
+    }
+    if (transportFailures.length) throw combinedFailure(transportFailures);
     const tarball = path.join(stage, path.basename(packed[0].filename));
     const digest = crypto.createHash('sha256').update(fs.readFileSync(tarball)).digest('hex');
     const install = path.join(stage, 'install');
@@ -116,7 +157,7 @@ export function installCliSnapshot({ packageRoot, cawsHome, binPath }) {
     fs.symlinkSync(target, temporaryLink);
     fs.renameSync(temporaryLink, binPath);
     temporaryLink = undefined;
-    return {
+    installed = {
       release,
       binPath,
       target,
@@ -124,12 +165,25 @@ export function installCliSnapshot({ packageRoot, cawsHome, binPath }) {
       runtimeDigest: packagedRuntime.digest,
       version: metadata.version,
     };
+  } catch (error) {
+    failures.push(error);
   } finally {
-    if (temporaryLink) fs.rmSync(temporaryLink, { force: true });
-    if (stage) fs.rmSync(stage, { recursive: true, force: true });
-    fs.closeSync(lock);
-    fs.unlinkSync(lockPath);
+    // Each cleanup is independent: an abandoned link or stage must not prevent
+    // the lock descriptor and pathname from being released.
+    if (temporaryLink)
+      failedCleanup('temporary link', () => fs.rmSync(temporaryLink, { force: true }));
+    if (stage)
+      failedCleanup('installation stage', () => fs.rmSync(stage, { recursive: true, force: true }));
+    failedCleanup('lock descriptor', () => fs.closeSync(lock));
+    failedCleanup('lock pathname', () => fs.unlinkSync(lockPath));
   }
+  if (failures.length) throw combinedFailure(failures);
+  return installed;
+}
+
+function combinedFailure(errors) {
+  if (errors.length === 1) return errors[0];
+  return new AggregateError(errors, errors.map(error => error.message).join('\n'));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

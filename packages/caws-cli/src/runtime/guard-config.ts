@@ -1,125 +1,83 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseRepoHookPolicy, type GuardConfig } from '../init/repo-hook-policy';
+import { assertMachinePath } from '../init/machine-paths';
+import type { ActiveInvocationSelection } from './selection';
+import { loadGuardConfigurationEnvironment } from './guard-config-loader';
+export * from './guard-config-loader';
 
-export type GuardConfiguration =
-  | { status: 'ok'; guards: Record<string, GuardConfig> }
-  | { status: 'absent' | 'invalid'; guards: Record<string, never> };
+const STOCK_CONFIGURATION_SOURCES: Readonly<Record<string, string>> = Object.freeze({
+  'guard-config.sh': 'c3d9d5b0f6ffb4eb6add5a3f27b2d3d2bf7f46d86b39614c351e8b5bba06c73c',
+  'guard-config.cjs': 'b7947a24da1670613bb43a548be9951d7fe3be6d4be2f9418607a35dac945a85',
+});
 
-const object = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+/** Indexed assignments are private transport, not a caller policy API.
+ * Public controls, including ask incapability and parser selection, are not
+ * configuration assignments and must survive this boundary.
+ */
+export function clearGuardConfigurationTransport(environment: Record<string, string>): void {
+  for (const name of Object.keys(environment))
+    if (
+      name === 'CAWS_GUARD_CONFIG_STATUS' ||
+      name.startsWith('CAWS_GUARD_ZONE_') ||
+      name.startsWith('CAWS_GUARD_PREFIX_') ||
+      name.startsWith('CAWS_GUARD_THRESHOLD_')
+    )
+      delete environment[name];
+}
 
-/** Retains the optional guard loader's null-as-absent spelling, using the owning validator. */
-export function parseGuardConfiguration(text: string | null): GuardConfiguration {
-  if (text === null) return { status: 'absent', guards: {} };
-  let document: unknown;
-  try {
-    document = JSON.parse(text);
-  } catch {
-    return { status: 'invalid', guards: {} };
+/** Read once at dispatch for the reviewed stock loader/parser pair.
+ * Selected custom code and shell startup retain their compatibility parse.
+ */
+export function invocationGuardConfiguration(
+  selection: ActiveInvocationSelection,
+  environment: Readonly<Record<string, string>>
+): Readonly<Record<string, string>> {
+  const result = { ...environment };
+  clearGuardConfigurationTransport(result);
+  const startup = join(selection.runtimeDirectory, 'handler-env.sh');
+  if (
+    selection.configuration !== 'system' ||
+    Object.keys(selection.libraryOverrides).length > 0 ||
+    Object.values(selection.libraries).some(
+      (library) => library.kind === 'project' || library.kind === 'user'
+    ) ||
+    environment.CAWS_GUARD_CONFIG_PY ||
+    environment.CAWS_PRIOR_BASH_ENV ||
+    (environment.BASH_ENV && environment.BASH_ENV !== startup) ||
+    environment.ENV ||
+    Object.entries(environment).some(
+      ([name, value]) =>
+        value && (name.startsWith('BASH_FUNC_') || name === '_CAWS_GUARD_CONFIG_SH_SOURCED')
+    )
+  )
+    return Object.freeze(result);
+  for (const [name, expected] of Object.entries(STOCK_CONFIGURATION_SOURCES)) {
+    const selected = selection.libraries[name];
+    const file = join(selection.runtimeDirectory, 'lib', name);
+    if (
+      !selected ||
+      selected.kind !== 'shared' ||
+      selected.path !== file ||
+      selected.sha256 !== expected ||
+      selection.libraryOverrides[name]
+    )
+      return Object.freeze(result);
   }
-  if (!object(document)) return { status: 'invalid', guards: {} };
-  let guards = document.guards;
-  if (guards === null) guards = undefined;
-  if (object(guards)) {
-    guards = Object.fromEntries(
-      Object.entries(guards).map(([name, entry]) => {
-        if (!object(entry)) return [name, entry];
-        return [
-          name,
-          Object.fromEntries(
-            Object.entries(entry).filter(
-              ([key, value]) =>
-                value !== null || (key !== 'additional_allow_prefixes' && key !== 'thresholds')
-            )
-          ),
-        ];
-      })
+  try {
+    for (const [name, expected] of Object.entries(STOCK_CONFIGURATION_SOURCES)) {
+      const file = join(selection.runtimeDirectory, 'lib', name);
+      assertMachinePath(selection.runtimeDirectory, file);
+      if (createHash('sha256').update(readFileSync(file)).digest('hex') !== expected)
+        throw new Error('Selected guard configuration source changed after selection');
+    }
+  } catch {
+    throw new Error(
+      'Selected guard configuration source changed or became unavailable after selection'
     );
   }
-  const parsed = parseRepoHookPolicy(JSON.stringify({ version: 1, guards }));
-  return parsed.ok
-    ? { status: 'ok', guards: parsed.policy.guards }
-    : { status: 'invalid', guards: {} };
-}
-
-/** Legacy transport normalization only; this does not adjudicate kernel scope. */
-export function parseNonGovernedZones(text: string | null): string[] {
-  if (text === null) return [];
-  const zones: string[] = [];
-  let inside = false;
-  for (const line of text.split('\n')) {
-    if (/^non_governed_zones:[ \t]*$/.test(line)) {
-      inside = true;
-      continue;
-    }
-    if (inside && /^[^ \t#-]/.test(line)) inside = false;
-    if (!inside) continue;
-    const match = /^[ \t]+-[ \t]+(.*)$/.exec(line);
-    if (!match) continue;
-    let zone = (match[1] ?? '').replace(/[ \t]+#.*$/, '');
-    if (!zone) continue;
-    for (const quote of ['"', "'"]) {
-      if (zone.endsWith(quote)) zone = zone.slice(0, -1);
-      if (zone.startsWith(quote)) zone = zone.slice(1);
-    }
-    zone = zone.replace(/\/\*\*?$/, '');
-    if (zone) zones.push(zone.endsWith('/') ? zone : `${zone}/`);
-  }
-  return zones;
-}
-
-export function mangleGuardName(name: string): string {
-  return name.replace(/[^A-Za-z0-9]/g, '_').toUpperCase();
-}
-
-/** One request's assignment table; never mutates the process environment. */
-export function guardConfigurationEnvironment(
-  policy: string | null,
-  yaml: string | null
-): Record<string, string> {
-  const zones = parseNonGovernedZones(yaml);
-  const parsed = parseGuardConfiguration(policy);
-  const output: Record<string, string> = { CAWS_GUARD_ZONE_COUNT: String(zones.length) };
-  zones.forEach((zone, index) => {
-    output[`CAWS_GUARD_ZONE_${index}`] = zone;
-  });
-  output.CAWS_GUARD_CONFIG_STATUS = parsed.status;
-  if (parsed.status === 'ok') {
-    for (const [name, entry] of Object.entries(parsed.guards)) {
-      const key = mangleGuardName(name);
-      output[`CAWS_GUARD_PREFIX_COUNT_${key}`] = String(entry.additional_allow_prefixes.length);
-      entry.additional_allow_prefixes.forEach(({ prefix }, index) => {
-        output[`CAWS_GUARD_PREFIX_${key}_${index}`] = prefix;
-      });
-      for (const [threshold, value] of Object.entries(entry.thresholds)) {
-        output[`CAWS_GUARD_THRESHOLD_${key}_${mangleGuardName(threshold)}`] = String(value);
-      }
-    }
-  }
-  return output;
-}
-
-export function serializeGuardEnvironment(environment: Readonly<Record<string, string>>): string {
-  return Object.entries(environment)
-    .filter(([name, value]) => /^CAWS_GUARD_[A-Z0-9_]+$/.test(name) && !value.includes('\n'))
-    .map(([name, value]) => `${name}=${value}\n`)
-    .join('');
-}
-
-/** Filesystem failures retain the shipped defaults, matching the optional loader. */
-export function loadGuardConfigurationEnvironment(
-  projectDirectory: string
-): Record<string, string> {
-  const read = (relative: string): string | null => {
-    try {
-      return readFileSync(join(projectDirectory, relative), 'utf8');
-    } catch {
-      return null;
-    }
-  };
-  return guardConfigurationEnvironment(
-    read('.caws/hooks/hook-policy.json'),
-    read('.caws/policy.yaml')
-  );
+  const assignments = loadGuardConfigurationEnvironment(selection.checkout);
+  if (assignments.CAWS_GUARD_CONFIG_STATUS === 'unsupported') return Object.freeze(result);
+  Object.assign(result, assignments);
+  return Object.freeze(result);
 }

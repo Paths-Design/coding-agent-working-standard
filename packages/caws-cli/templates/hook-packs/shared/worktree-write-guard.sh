@@ -522,7 +522,13 @@ if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
   # refusal/advisory behavior below is unchanged.
   SPEC_CONTENTION_CHECK="unknown:caws-unavailable"
   if command -v caws >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-    _CONTENTION_JSON="$(caws scope contention "$REL_PATH" --json 2>/dev/null)"
+    # A CLI/parser failure is an unknown observation, not an early shell
+    # exit or a clear claim set. Continue through the existing allowlist and
+    # approval policy even when the command returns a JSON error envelope.
+    if ! _CONTENTION_JSON="$(caws scope contention "$REL_PATH" --json 2>/dev/null)"; then
+      SPEC_CONTENTION_CHECK="unknown:caws-failed"
+      _CONTENTION_JSON=""
+    fi
     if [[ -n "$_CONTENTION_JSON" ]] && printf '%s' "$_CONTENTION_JSON" | jq -e . >/dev/null 2>&1; then
       _CONTENTION_STATUS="$(printf '%s' "$_CONTENTION_JSON" | jq -r '.status // "unknown"')"
       case "$_CONTENTION_STATUS" in

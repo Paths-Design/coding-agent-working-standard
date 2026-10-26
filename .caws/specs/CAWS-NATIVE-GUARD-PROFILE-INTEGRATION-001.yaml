@@ -1,0 +1,57 @@
+id: CAWS-NATIVE-GUARD-PROFILE-INTEGRATION-001
+title: 'Admit reviewed guard-config CJS source cohort'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed exact reviewed de0e1b1c source cohort and lint repair; both bounded source-admission ACs dual-read back. Target all10 blobs and generated assets match. Full installed/native semantic qualification, supplied-native opt-in and cutover remain parent work.'
+created_at: '2026-10-25T01:24:58.081Z'
+updated_at: '2026-10-25T01:56:26.065Z'
+created_by_session: '01a170a8-414e-7a61-af97-58bae56f4c8f'
+blast_radius:
+  modules:
+    - 'Native Stop stock source selection'
+    - 'SessionEnd stock source selection'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/stop_admission.rs'
+    - 'packages/caws-native/tests/stock_stop_admission.rs'
+    - 'packages/caws-cli/src/runtime/session-cache-admission.ts'
+    - 'packages/caws-cli/tests/runtime/session-cache-admission.test.js'
+    - packages/caws-cli/src/runtime/guard-config-loader.ts
+    - packages/caws-cli/tests/runtime/guard-config-loader.test.js
+    - packages/caws-cli/templates/hook-packs/shared/lib/guard-config.cjs
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/src/runtime/guard-config.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+  out: []
+invariants:
+  - 'Source identity admission remains necessary only and preserves override, unsafe path, stale readset and cancellation refusal boundaries.'
+  - 'Guard prefix separator rejection and reason edge-padding codepoint length semantics are preserved by lint-safe generated projection.'
+acceptance:
+  - id: A1
+    given: 'the current reviewed repository stock source cohort'
+    when: 'Stop and SessionEnd source admission inspect actual bytes'
+    then: 'guard-config shell and required CJS helper are admitted without requiring the retired Python helper.'
+  - id: A2
+    given: 'missing or altered guard-config dependencies or higher-priority custom unsafe sources'
+    when: 'source admission executes'
+    then: 'admission refuses and retained stale-readset cancellation controls continue to refuse.'
+observability:
+  - 'Focused admission test output records actual source cohort and refusal results.'
+rollback:
+  - 'Revert the bounded profile integration commit; do not weaken source admission.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Source-cohort admission only: inspected exact committed de0e1b1c final-checks.json and raw final-focused-jest/native-source outputs under /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/native-guard-profile-integration/. Actual repository installable library bytes pass native validate_libraries (not complete StockStopSelection); both supported SessionEnd fixtures require current shell and CJS4065e9febf662dd9a3933b65926e913ecd50b3bca73a4192e44f1097cc982b11. Retired Python absent. All10 candidate blobs match checked source, pack110/fingerprint updated; build and full unchanged lint0. No full native/installed/semantic/30s cutover claim. CLI --verify below checks commit reachability only, not external logs or execution."
+    recorded_at: "2026-10-25T01:50:14.428Z"
+    commit_sha: de0e1b1c57f3d54c30e00c895c4f7ad709640c72
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected same committed raw controls: missing/changed/symlinked shell and CJS, unknown inventory, higher-priority adapters, custom Python selector in original/derived environments refuse. Native source10 cases and actual custodian stale-readset/cancellation1 case pass. Six Jest suites310 pass/1 explicit supplied-native-binary skip include separator/reason/assignment preservation; skip remains parent obligation. Baseline19 SessionEnd failures, inventory failure and3 lint errors preserved. No installed native effects qualification inferred. CLI --verify checks commit reachability only; raw external checks manually inspected, not rerun by evidence command."
+    recorded_at: "2026-10-25T01:50:23.774Z"
+    commit_sha: de0e1b1c57f3d54c30e00c895c4f7ad709640c72

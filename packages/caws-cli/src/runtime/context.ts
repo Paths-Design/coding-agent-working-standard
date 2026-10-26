@@ -1,9 +1,12 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { lstatSync, realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, resolve, join } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { resolveGitBinaryForEnvironment } from '../store/git-binary';
 import { repoRootFromGitCommonDir } from '../store/repo-root';
+import { isFatalContextGitError } from './context-git-wire';
+import { assertMachinePath } from '../init/machine-paths';
 
 export interface InvocationCaller {
   readonly cwd: string;
@@ -130,14 +133,123 @@ export function createContextGitPort(
   };
 }
 
+/** Only ENOENT proves absence. Dangling links and inaccessible metadata remain present/uncertain. */
+function entryRequiresResolution(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    return !(
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    );
+  }
+}
+
+/** Cache/runtime contents alone do not opt a directory into project governance. */
+function governanceRequiresResolution(directory: string): boolean {
+  try {
+    if (!lstatSync(directory).isDirectory()) return true;
+  } catch (error) {
+    return !(
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    );
+  }
+  return ['policy.yaml', 'specs', 'working-spec.yaml'].some((name) =>
+    entryRequiresResolution(join(directory, name))
+  );
+}
+
 function governedAncestor(candidate: string): boolean {
   let current = candidate;
   for (;;) {
-    if (existsSync(join(current, '.git')) || existsSync(join(current, '.caws'))) return true;
+    if (
+      entryRequiresResolution(join(current, '.git')) ||
+      governanceRequiresResolution(join(current, '.caws'))
+    )
+      return true;
     const parent = dirname(current);
     if (parent === current) return false;
     current = parent;
   }
+}
+
+/** Original session candidate; command context never rewrites the retained payload. */
+export function runtimeProjectCandidate(
+  payload: Readonly<Record<string, unknown>>,
+  caller: InvocationCaller,
+  executionWorkdir?: string
+): string {
+  const supplied = payload.cwd;
+  if (supplied !== undefined && supplied !== null && typeof supplied !== 'string')
+    throw new TypeError('Hook cwd must be a string when supplied.');
+  return resolve(
+    caller.cwd,
+    executionWorkdir ?? (supplied || caller.environment.CAWS_PROJECT_DIR || caller.cwd)
+  );
+}
+
+/** Presence and uncertainty require resolution; neither grants project authority.
+ * Failed Git checks physical ancestors. Successfully resolved canonical roots
+ * check their own project artifacts/adoption only: Git is not CAWS adoption. */
+export function runtimeProjectRequiresResolvedAuthority(
+  candidate: string,
+  home: string,
+  mode: 'failed-git' | 'resolved-canonical' = 'failed-git'
+): boolean {
+  let current: string;
+  try {
+    current = realpathSync(candidate);
+  } catch {
+    return true;
+  }
+  try {
+    assertMachinePath(home, join(home, 'state/projects'));
+  } catch {
+    return true;
+  }
+  const adopted = (root: string): boolean =>
+    entryRequiresResolution(
+      join(home, 'state/projects', createHash('sha256').update(root).digest('hex') + '.json')
+    );
+  // Retain an exact known registration even if its canonical spelling aliases
+  // the physical root. This is a protection, not an authority grant.
+  if (mode === 'resolved-canonical' && candidate !== current && adopted(candidate)) return true;
+  for (;;) {
+    if (
+      (mode === 'failed-git' && entryRequiresResolution(join(current, '.git'))) ||
+      governanceRequiresResolution(join(current, '.caws')) ||
+      adopted(current)
+    )
+      return true;
+    if (mode === 'resolved-canonical') return false;
+    const parent = dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
+
+/** Resolved Git coordinates cannot suppress redirected or malformed governance paths.
+ * Missing artifacts and normal cache/legacy directories retain policy selection's
+ * existing inactive outcomes; this validates paths, never activation or authority. */
+export function requireRuntimeProjectGovernancePaths(canonical: string): void {
+  const directory = join(canonical, '.caws');
+  assertMachinePath(canonical, directory);
+  try {
+    if (!lstatSync(directory).isDirectory())
+      throw new Error('Project governance path must be a normal directory');
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')
+      return;
+    throw error;
+  }
+  for (const artifact of ['policy.yaml', 'specs', 'working-spec.yaml'])
+    assertMachinePath(canonical, join(directory, artifact));
 }
 
 /** Actual checkout and canonical authority are separate, using the store's root mapping. */
@@ -145,21 +257,16 @@ export async function resolveRuntimeProject(
   payload: Readonly<Record<string, unknown>>,
   caller: InvocationCaller,
   deadlineEpochMs: number,
-  git: ContextGitPort = createContextGitPort(caller, deadlineEpochMs)
+  git: ContextGitPort = createContextGitPort(caller, deadlineEpochMs),
+  executionWorkdir?: string
 ): Promise<RuntimeProjectContext> {
-  const supplied = payload.cwd;
-  if (supplied !== undefined && supplied !== null && typeof supplied !== 'string') {
-    throw new TypeError('Hook cwd must be a string when supplied.');
-  }
-  const candidate = resolve(
-    caller.cwd,
-    supplied || caller.environment.CAWS_PROJECT_DIR || caller.cwd
-  );
+  const candidate = runtimeProjectCandidate(payload, caller, executionWorkdir);
   let checkout: string;
   try {
     checkout = await git.run(['rev-parse', '--show-toplevel'], candidate);
     if (!isAbsolute(checkout)) throw new Error('Git checkout must be absolute');
   } catch (error) {
+    if (isFatalContextGitError(error)) throw error;
     return Object.freeze({
       status: 'inactive',
       reason: 'outside a resolvable Git project',

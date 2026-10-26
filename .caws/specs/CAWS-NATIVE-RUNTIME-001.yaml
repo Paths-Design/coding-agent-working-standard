@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-19T06:28:53.089Z'
+updated_at: '2026-10-23T11:05:47.715Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -13,25 +13,270 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'packages/caws-native/'
-    - 'packages/caws-cli/src/runtime/'
-    - 'packages/caws-cli/tests/runtime/'
-    - 'packages/caws-cli/scripts/'
-    - 'packages/caws-cli/templates/hook-packs/'
-    - 'packages/caws-cli/src/init/'
-    - 'packages/caws-cli/src/store/'
-    - 'packages/caws-cli/tsconfig.vnext.json'
     - 'packages/caws-cli/package.json'
-    - 'scripts/'
-    - 'docs/architecture/caws-native-runtime.md'
-    - 'docs/internal/caws-runtime-modernization.md'
     - packages/caws-cli/tests/init/repo-hook-policy.test.js
     - packages/caws-cli/tsconfig.vnext.test.json
     - packages/caws-cli/eslint.config.js
     - packages/caws-cli/tests/hooks/bats/block-dangerous.bats
-  out: []
+    - packages/caws-cli/tests/init/gitignore-coverage.test.js
+    - packages/caws-cli/tests/hooks/bats/agent-surface.bats
+    - packages/caws-cli/tests/hooks/bats/run-handlers-advisory-budget.bats
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js
+    - packages/caws-cli/src/shell/binding/resolve-binding.ts
+    - packages/caws-cli/src/runtime/advisory-dedup.ts
+    - packages/caws-cli/src/runtime/advisory-truncate-entry.ts
+    - packages/caws-cli/src/runtime/classifier/adapters.ts
+    - packages/caws-cli/src/runtime/classifier/capabilities.ts
+    - packages/caws-cli/src/runtime/classifier/data.ts
+    - packages/caws-cli/src/runtime/classifier/filesystem-effects.ts
+    - packages/caws-cli/src/runtime/classifier/git-effects.ts
+    - packages/caws-cli/src/runtime/classifier/governed-families.ts
+    - packages/caws-cli/src/runtime/classifier/index.ts
+    - packages/caws-cli/src/runtime/classifier/lexer.ts
+    - packages/caws-cli/src/runtime/classifier/patterns.ts
+    - packages/caws-cli/src/runtime/classifier/ports.ts
+    - packages/caws-cli/src/runtime/classifier/types.ts
+    - packages/caws-cli/src/runtime/classifier/wrappers.ts
+    - packages/caws-cli/src/runtime/composer.ts
+    - packages/caws-cli/src/runtime/containment.ts
+    - packages/caws-cli/src/runtime/context.ts
+    - packages/caws-cli/src/runtime/eligibility.ts
+    - packages/caws-cli/src/runtime/engine-entry.ts
+    - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-cli/src/runtime/guard-config.ts
+    - packages/caws-cli/src/runtime/guard-utilities.ts
+    - packages/caws-cli/src/runtime/identity.ts
+    - packages/caws-cli/src/runtime/journal.ts
+    - packages/caws-cli/src/runtime/json-custody.ts
+    - packages/caws-cli/src/runtime/live-protocol.ts
+    - packages/caws-cli/src/runtime/native-response.ts
+    - packages/caws-cli/src/runtime/operational-files.ts
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/src/runtime/scheduler.ts
+    - packages/caws-cli/src/runtime/service-client.ts
+    - packages/caws-cli/src/runtime/service-image.ts
+    - packages/caws-cli/src/runtime/service-offer.ts
+    - packages/caws-cli/src/runtime/service-protocol.ts
+    - packages/caws-cli/src/runtime/types.ts
+    - packages/caws-cli/src/runtime/utf8.ts
+    - packages/caws-cli/tests/runtime/advisory-truncate-integration.test.js
+    - packages/caws-cli/tests/runtime/agent-stop-output.test.js
+    - packages/caws-cli/tests/runtime/classifier.test.js
+    - packages/caws-cli/tests/runtime/committed-turn-files.test.js
+    - packages/caws-cli/tests/runtime/composer.test.js
+    - packages/caws-cli/tests/runtime/containment.test.js
+    - packages/caws-cli/tests/runtime/context.test.js
+    - packages/caws-cli/tests/runtime/engine-core.test.js
+    - packages/caws-cli/tests/runtime/engine-routing.test.js
+    - packages/caws-cli/tests/runtime/generated-runtime-assets.test.js
+    - packages/caws-cli/tests/runtime/guard-config-integration.test.js
+    - packages/caws-cli/tests/runtime/guard-config.test.js
+    - packages/caws-cli/tests/runtime/guard-utilities.test.js
+    - packages/caws-cli/tests/runtime/json-custody.test.js
+    - packages/caws-cli/tests/runtime/native-response.test.js
+    - packages/caws-cli/tests/runtime/protocol.test.js
+    - packages/caws-cli/tests/runtime/render-session-evidence.test.js
+    - packages/caws-cli/tests/runtime/render-writer-client.test.js
+    - packages/caws-cli/tests/runtime/runtime-asset-fixture.js
+    - packages/caws-cli/tests/runtime/scheduler.test.js
+    - packages/caws-cli/tests/runtime/service-client.test.js
+    - packages/caws-cli/tests/runtime/service-image.test.js
+    - packages/caws-cli/tests/runtime/service-offer.test.js
+    - packages/caws-cli/tests/runtime/service-protocol.test.js
+    - packages/caws-cli/tests/runtime/stock-handlers.test.js
+    - packages/caws-cli/tests/runtime/utf8.test.js
+    - packages/caws-cli/src/runtime/session-cache-client.ts
+    - packages/caws-cli/tests/runtime/session-cache-client.test.js
+    - packages/caws-cli/tests/runtime/session-cache-admission.test.js
+    - packages/caws-cli/templates/hook-packs/runtime/service-image/
+    - packages/caws-cli/templates/hook-packs/shared/advisory_truncate.cjs
+    - packages/caws-cli/templates/hook-packs/shared/agent-stop.sh
+    - packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/session-render-service-client.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/session-render-writer.sh
+    - packages/caws-cli/templates/hook-packs/shared/session-log.sh
+    - packages/caws-cli/src/kernel/evidence/validate.ts
+    - packages/caws-cli/tests/kernel/unit/evidence-inherited-event-type.test.ts
+    - packages/caws-cli/src/transcripts/harness-qwen.ts
+    - packages/caws-cli/tests/transcripts/qwen.test.ts
+    - packages/caws-cli/src/transcripts/harness-kimi.ts
+    - packages/caws-cli/tests/transcripts/kimi.test.ts
+    - packages/caws-cli/src/transcripts/harness-opencode.ts
+    - packages/caws-cli/tests/transcripts/opencode.test.ts
+    - packages/caws-cli/src/transcripts/harness-zcode.ts
+    - packages/caws-cli/tests/transcripts/zcode.test.ts
+    - packages/caws-cli/src/tooling/sqlite-static-build.ts
+    - packages/caws-cli/tests/tooling/sqlite-static-build.test.js
+    - packages/caws-cli/tsconfig.vnext.json
+    - packages/caws-cli/src/tooling/ar-archive.ts
+    - packages/caws-cli/tests/tooling/ar-archive.test.js
+    - packages/caws-cli/src/transcripts/store-json.ts
+    - packages/caws-cli/tests/transcripts/store-json.test.js
+    - packages/caws-cli/src/tooling/native-sqlite-build.ts
+    - packages/caws-cli/src/tooling/native-sqlite-build-entry.ts
+    - packages/caws-cli/tests/tooling/native-sqlite-build.test.js
+    - packages/caws-cli/src/transcripts/store-projection.ts
+    - packages/caws-cli/tests/transcripts/store-projection.test.js
+    - packages/caws-cli/src/runtime/transcript-store-client.ts
+    - packages/caws-cli/tests/runtime/transcript-store-client.test.js
+    - packages/caws-cli/src/store/
+    - packages/caws-cli/src/transcripts/session-seal-prepare.ts
+    - packages/caws-cli/tests/transcripts/session-seal-prepare.test.ts
+  out:
+    - packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh
+    - packages/caws-cli/tests/hooks/bash-write-guard-interpreter-cross-repo.test.js
   support:
     - packages/caws-cli/reports/
+    - package.json
+    - package-lock.json
+    - docs/audits/hook-port-qualification.md
+    - docs/audits/sterling-hook-harvest.md
+    - packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts
+    - scripts/calculate-rule-tokens.mjs
+    - scripts/calculate-rule-tokens.py
+    - scripts/calculate-rule-tokens.test.mjs
+    - scripts/tsconfig.rule-tokens.json
+    - scripts/hook-harvest.mjs
+    - scripts/hook-harvest.py
+    - scripts/hook-harvest.test.mjs
+    - scripts/hook-harvest.test.py
+    - scripts/tsconfig.hook-harvest.json
+    - scripts/hook-experiments/sensitivity.mjs
+    - scripts/hook-experiments/sensitivity.py
+    - scripts/hook-experiments/sensitivity.test.mjs
+    - scripts/hook-experiments/tsconfig.sensitivity.json
+    - README.md
+    - packages/caws-cli/src/transcripts/harness-codex.ts
+    - packages/caws-cli/src/transcripts/harness-common.ts
+    - packages/caws-cli/src/transcripts/index.ts
+    - packages/caws-cli/src/transcripts/lossless-json.ts
+    - packages/caws-cli/src/transcripts/python-unicode.ts
+    - packages/caws-cli/src/transcripts/source-occurrence.ts
+    - packages/caws-cli/tests/transcripts/codex.test.ts
+    - packages/caws-cli/tests/transcripts/common.test.ts
+    - packages/caws-cli/tests/transcripts/lossless-json.test.ts
+    - packages/caws-cli/tests/transcripts/occurrence.test.ts
+    - packages/caws-cli/tests/transcripts/run.cjs
+    - packages/caws-cli/tests/transcripts/tsconfig.json
+    - packages/caws-cli/tests/transcripts/foundation.test.js
+    - scripts/hook-experiments/replay-terminal-corpus.py
+    - scripts/hook-experiments/test_replay_boundary.py
+    - scripts/hook-experiments/replay-terminal-corpus.mjs
+    - scripts/hook-experiments/replay-terminal-corpus.test.mjs
+    - scripts/hook-experiments/replay-classifier-worker.mjs
+    - scripts/hook-experiments/tsconfig.replay.json
+    - packages/caws-cli/src/transcripts/codepoint-text.ts
+    - packages/caws-cli/src/transcripts/python-unicode-profile.ts
+    - packages/caws-cli/src/transcripts/unicode14/LICENSE.txt
+    - packages/caws-cli/src/transcripts/unicode14/manifest.generated.ts
+    - packages/caws-cli/src/transcripts/unicode14/names.generated.ts
+    - packages/caws-cli/src/transcripts/unicode14/tables.generated.ts
+    - packages/caws-cli/tests/transcripts/codepoint-text.test.ts
+    - packages/caws-cli/tests/transcripts/unicode-profile.test.ts
+    - packages/caws-cli/tests/transcripts/unicode14/generate.mjs
+    - packages/caws-cli/tests/transcripts/unicode14/literal-fixtures.generated.ts
+    - packages/caws-cli/tests/transcripts/unicode14/sources.json
+    - packages/caws-cli/tests/shell/binding-resolve.test.js
+    - packages/caws-cli/tests/shell/worktree-review.test.js
+    - packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js
+    - packages/caws-cli/tests/hooks/bats/worktree-write-guard.bats
+    - packages/caws-cli/tests/shell/scope-contention.test.js
+    - packages/caws-cli/src/transcripts/harness-claude.ts
+    - packages/caws-cli/src/transcripts/python-html.ts
+    - packages/caws-cli/src/transcripts/html311/LICENSE.txt
+    - packages/caws-cli/src/transcripts/html311/entities.generated.ts
+    - packages/caws-cli/src/transcripts/html311/numeric.generated.ts
+    - packages/caws-cli/src/transcripts/html311/manifest.generated.ts
+    - packages/caws-cli/tests/transcripts/claude.test.ts
+    - packages/caws-cli/tests/transcripts/python-html.test.ts
+    - packages/caws-cli/tests/transcripts/html311/generate.mjs
+    - packages/caws-cli/tests/transcripts/html311/sources.json
+    - packages/caws-cli/tests/helpers/pytest-entrypoint-fixture.js
+    - packages/caws-cli/tests/hooks/pytest-entrypoint.test.js
+    - packages/caws-cli/tests/hooks/pytest/test_pytest_entrypoint.py
+    - packages/caws-cli/src/application/agent-heartbeat.ts
+    - packages/caws-cli/src/application/message-poll.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/shell/commands/message.ts
+    - packages/caws-cli/tests/application/agent-heartbeat.test.js
+    - packages/caws-cli/tests/application/message-poll.test.js
+    - packages/caws-cli/tests/runtime/agent-heartbeat.test.js
+    - packages/caws-cli/src/runtime/
+    - packages/caws-cli/tests/runtime/
+    - packages/caws-cli/templates/hook-packs/
+    - docs/internal/caws-runtime-modernization.md
+    - docs/architecture/caws-native-runtime.md
+    - packages/caws-native/
+    - packages/caws-cli/src/transcripts/harness-dsh.ts
+    - packages/caws-cli/tests/transcripts/dsh.test.ts
+    - packages/caws-cli/src/transcripts/registry.ts
+    - packages/caws-cli/tests/transcripts/registry.test.ts
+    - packages/caws-cli/src/transcripts/store-timestamp.ts
+    - packages/caws-cli/tests/transcripts/store-timestamp.test.js
+    - .gitignore
+    - packages/caws-cli/src/tooling/transcript-runtime-floor-entry.ts
+    - packages/caws-cli/src/tooling/transcript-runtime-floor.ts
+    - packages/caws-cli/tests/tooling/transcript-runtime-floor.test.js
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/tests/shell/worktree-merge-split-state.test.js
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-cli/tests/transcripts/exports.test.ts
+    - packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js
+    - packages/caws-cli/tests/hooks/pytest/test_worktree_claim_oracle.py
+    - packages/caws-cli/src/init/
+    - packages/caws-cli/src/runtime/selection.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/src/runtime/agent-heartbeat.ts
+    - packages/caws-cli/src/runtime/handler-executor.ts
+    - packages/caws-cli/src/runtime/stock-handlers.ts
+    - packages/caws-cli/src/runtime/session-cache-admission.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
+    - packages/caws-cli/tests/runtime/handler-executor.test.js
+    - packages/caws-cli/tests/adapter/machine-runtime.test.js
+    - packages/caws-cli/scripts/
+    - scripts/install-cli-snapshot.mjs
+    - scripts/install-cli-snapshot.test.mjs
+    - packages/caws-cli/.gitignore
+    - packages/caws-cli/tests/docs/package-license-transport.test.js
+    - packages/caws-cli/tests/runtime/selection.test.js
+    - docs/guides/sterling-machine-runtime-migration.md
+    - docs/agents/full-guide.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/failure-lineage.md
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/render/init-hook-pack.ts
+    - packages/caws-cli/src/transcripts/render-accumulator.ts
+    - packages/caws-cli/src/transcripts/render-artifacts.ts
+    - packages/caws-cli/src/transcripts/render-prepare.ts
+    - packages/caws-cli/src/transcripts/render-reader.ts
+    - packages/caws-cli/src/transcripts/render-values.ts
+    - packages/caws-cli/src/transcripts/transcript-json-profile.ts
+    - packages/caws-cli/tests/adapter/machine-adoption.test.js
+    - packages/caws-cli/tests/adapter/native-entry-registration.test.js
+    - packages/caws-cli/tests/adapter/native-runtime-entry.test.js
+    - packages/caws-cli/tests/adapter/system-runtime.test.js
+    - packages/caws-cli/tests/hooks/actor-context-rows.json
+    - packages/caws-cli/tests/hooks/bats/handler-stdin-feed.bats
+    - packages/caws-cli/tests/hooks/bats/handler-stdin-stage-lifetime.bats
+    - packages/caws-cli/tests/hooks/heartbeat-actor-custody.test.js
+    - packages/caws-cli/tests/hooks/pytest/test_template_annotation_compat.py
+    - packages/caws-cli/tests/init/claude-settings-merge.test.js
+    - packages/caws-cli/tests/init/init-hook-pack-render.test.js
+    - packages/caws-cli/tests/shell/init-plan.test.js
+    - packages/caws-cli/tests/transcripts/render-accumulator.test.ts
+    - packages/caws-cli/tests/transcripts/render-artifacts.test.ts
+    - packages/caws-cli/tests/transcripts/render-prepare.test.ts
+    - packages/caws-cli/tests/transcripts/render-reader.test.ts
+    - packages/caws-cli/tests/transcripts/render-values.test.ts
+    - packages/caws-cli/tests/transcripts/transcript-json-profile.test.ts
+    - packages/caws-cli/src/runtime/session-store-publication.ts
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
@@ -91,3 +336,36 @@ contracts:
     type: schema
   - name: 'governance-and-hook-parity'
     type: contract-test
+evidence:
+  - criterion_id: A5
+    status: unchecked
+    evidence_ref: "Prior dd27 source/raw12red427green and CLI configure plan/applyexit1 reconciliation retain bounded lazy-token discovery evidence, not actual effective harness/native execution. R01 bfb preserves unresolved unsupported-syntax second-handler preview; root owns genuine project+system same-event identity, exactly-one governed invocation plus guard journal or pre-adoption refusal, workdir/patch/rawmail consumers. Human requested Claude AIM direction: current sends to C4c0f2e0, dd67d988 and c843b9aa all refused exit1 recipient_not_live/stale; no delivery or accepted handoff. Prior C4 message7c8b03b3 and dd67 raw-carrier followup remain queued older than1h. Their read-only scoped assignments remain open under root accountability; realpath0a4 foreign-shell hold preserved. No force-dead resend, source takeover, configure/adoption or native probe inferred."
+    recorded_at: "2026-10-22T12:08:59.404Z"
+    commit_sha: "3f1a458747568f3404218dbcaa5e3d10d1fa9582"
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "R19 bounded reader source landed via8eb7811a1, exact27 product/tracker paths equal committed ac1ea80d9; child A1-A5dual-readback13754-13758 before close. Tracker qualifies36/37 partial implementation rows97.3percent, not completion. Direct current shell inventory15consumers18inline bodies7external sites and three remaining developer tools retain full production/dev/test retirement obligations. Parent stays0/8 and A2FAIL; no whole-row Python retirement or full inventory/consumer closure inferred."
+    recorded_at: "2026-10-25T20:38:00.651Z"
+    commit_sha: ac1ea80d98595e1c62afce27388581522043572e
+  - criterion_id: A4
+    status: unchecked
+    evidence_ref: "R19 consumed reprieve reader58ed/shared113 landed999c and published in9ff by normal push10 with complete hooks:370suites7679pass14skip622.043s plus typecheck/lint/audit/build. Root independently compared remote and fetched9ff. Failed push09 full tests then generated-CJS no-empty errors retained; source catch behavior repaired and child A1-A5 dualreadback13784-13788 before close. Final424focused,13actualdispatcher,6packed Python-free shell cases,10nativeStop8prefix controls remain bounded receipts, not complete Python-free package. Actual selected legacy runtime is scoped43f2 with old Python bootstrap, not shared113/native Caws adoption. Full15shellconsumers18inlinebodies7externalsites,186Pythonfiles/developer tooling and consumer retirement remain. Parent0/8 A2FAIL. --verify checks source reachability only; actual push/check receipts under Root reprieve-reader-01."
+    recorded_at: "2026-10-25T23:45:11.416Z"
+    commit_sha: "9ff69b39b8a6b14072370e0f61139d2f60726b72"
+  - criterion_id: A7
+    status: unchecked
+    evidence_ref: "Scoped43f2/c464 ordinary installed fixture A3pass13800 retained, not GUI selection. Launchd controller submit0 only registered job; actual preflight Errno1 hooks.json symlink Desktop read denial, receipt stopped_with_error23:56:07/57, repeated attempts before lease wait or SIGTERM. Dead/retrying job removed through normal launchctl and service absence verified. Root actual normal caws init adapters rollback --json EXIT0 retained at /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/rc-paired-activation-01/global-recovery-rollback.json; direct current408 previous43f2, old app27415/server27465 remainlive, CLIentry53ddd/launcher99bd/hooks4e200 unchanged. No rearm or alternate-context retry. Native/guard owners released for accepted source work, helper released bounded artifact-only43f2 reconstruction adaptation. RC retains concrete manual restart handoff, any activation requires fresh finite checkpoint window. Product9ff normalpush10/remoteverified. Full installed Rust scenario, original30000ms producer/mandatoryreceiver join, replay, native parity, noPython packaging and13session4repo fairness remain open; parent0/8 A2FAIL. Commitverify reachability only, not execution."
+    recorded_at: "2026-10-26T00:01:28.033Z"
+    command: caws init adapters rollback --json
+    exit_code: 0
+    commit_sha: "9ff69b39b8a6b14072370e0f61139d2f60726b72"
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Native SessionEnd publication source landed on local main6defc8aa through child1e88c3c9 and parent65a9c686; exact source commits and actual04 artifacts retained. Native original binding, semantic read before CONSUMED, release and unknown-fenced same-session hostile retry executed. This supersedes earlier source-absence observations only; SQL CLOSED-to-anchored-publication, warm Render A-seal-B, greater-than256 operations and full integrated hostile acceptance remain unchecked under root-owned CAWS-NATIVE-SESSION-PUBLICATION-001. Parent runtime remains active; no installed package/adoption/residency/cutover claim. Branch pipeline gates passed over50 changed paths; partial source landing is intentional."
+    recorded_at: "2026-10-23T09:39:22.293Z"
+    commit_sha: "6defc8aa44d296cda598a97cd7eee2f16a8a54d2"
+  - criterion_id: A2
+    status: fail
+    evidence_ref: "Combined source 55080eb1 fresh offline production prefix, fresh sqlite build and Node25 profile passed all30 component comparisons. Installed private pair: positive0 in14462.85ms, queued same-inode mutation refused2 in9219.18ms, each original30000ms; same owner57082 SQL opens0->1 and1->1; positive own lease stopped and peer active, negative both leases active/no stop command; durable CONSUMED and refused-before-reservation released records retained; owner exited0 naturally, socket absent, no outstanding originals or service signals. Manually inspected raw terminal/consumer/lease/status/cleanup artifacts at /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/combined-installed-01/post-build-04/pair/ and supervisor execution-post-build-04-pair/execution.json. A2 remains FAIL: explicit CAWS_BIN compatibility agent-stop is not typed native lease parity; E389 late-common-dir defect, actual harness delivery, authenticated same-original replay and other parent obligations remain. Historical holder is serial/unreviewed_prefix, no pack110 eligibility or Python retirement inferred. NOT_ADOPTED. The verify flag checks commit reachability only, not these external artifacts or execution."
+    recorded_at: "2026-10-25T05:47:46.582Z"
+    commit_sha: "55080eb1f62b87046e6ec43096ad671dacf3db82"

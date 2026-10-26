@@ -38,13 +38,22 @@ fn poll_with_cancellation(
     deadline: Instant,
     observe_cancellation: bool,
 ) -> Result<(), String> {
+    poll_with_max_wait(fds, deadline, observe_cancellation, 100)
+}
+
+fn poll_with_max_wait(
+    fds: &mut [libc::pollfd],
+    deadline: Instant,
+    observe_cancellation: bool,
+    max_wait_ms: i32,
+) -> Result<(), String> {
     if observe_cancellation {
         crate::cancellation::check()?;
     }
     let remaining = deadline
         .checked_duration_since(Instant::now())
         .ok_or("request deadline expired")?;
-    let timeout = remaining.as_millis().clamp(1, 100) as i32;
+    let timeout = (remaining.as_millis().clamp(1, 100) as i32).min(max_wait_ms);
     // SAFETY: fds points at an initialized writable array for its stated length.
     if unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, timeout) } < 0 {
         let error = io::Error::last_os_error();
@@ -119,45 +128,200 @@ pub fn read_payload(deadline: Instant) -> Result<(Box<RawValue>, String), String
     read
 }
 
+#[derive(Default)]
+struct CleanupState {
+    completed: Option<std::process::ExitStatus>,
+}
+impl CleanupState {
+    fn pending(&self) -> bool {
+        self.completed.is_none()
+    }
+
+    fn finish_with<E>(
+        &mut self,
+        attempt: impl FnOnce() -> Result<std::process::ExitStatus, E>,
+    ) -> Result<std::process::ExitStatus, E> {
+        if let Some(status) = self.completed {
+            return Ok(status);
+        }
+        let status = attempt()?;
+        self.completed = Some(status);
+        Ok(status)
+    }
+
+    fn cleanup_with<E>(
+        &mut self,
+        attempt: impl FnOnce() -> Result<std::process::ExitStatus, E>,
+    ) -> Result<(), E> {
+        self.finish_with(attempt).map(|_| ())
+    }
+}
+
+#[derive(Debug)]
+enum CleanupFailure {
+    Stop(caws_native::owned_group::StopError),
+    Reap(io::Error),
+    Deadline(caws_native::owned_group::GroupStop),
+}
+impl std::fmt::Display for CleanupFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Stop(error) => write!(f, "engine cleanup: {error}"),
+            Self::Reap(error) => write!(f, "engine reap: {error}"),
+            Self::Deadline(stop) => write!(
+                f,
+                "owned engine stop returned {stop:?} but the child could not be reaped within the 500ms cleanup budget"
+            ),
+        }
+    }
+}
+
+trait CleanupOperations {
+    fn stop(
+        &mut self,
+    ) -> Result<caws_native::owned_group::GroupStop, caws_native::owned_group::StopError>;
+    fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>>;
+    fn elapsed(&self) -> Duration;
+    fn pause(&mut self);
+}
+
+fn cleanup_attempt(
+    ops: &mut impl CleanupOperations,
+) -> Result<std::process::ExitStatus, CleanupFailure> {
+    // A refused stop must not reap the child that still pins group identity.
+    let stop = ops.stop().map_err(CleanupFailure::Stop)?;
+    let started = ops.elapsed();
+    loop {
+        if let Some(status) = ops.try_wait().map_err(CleanupFailure::Reap)? {
+            return Ok(status);
+        }
+        if ops.elapsed().saturating_sub(started) >= CLEANUP_BUDGET {
+            return Err(CleanupFailure::Deadline(stop));
+        }
+        ops.pause();
+    }
+}
+
+struct ChildCleanup<'a> {
+    child: &'a mut Child,
+    clock: Instant,
+}
+impl CleanupOperations for ChildCleanup<'_> {
+    fn stop(
+        &mut self,
+    ) -> Result<caws_native::owned_group::GroupStop, caws_native::owned_group::StopError> {
+        caws_native::owned_group::stop_before_reap(self.child)
+    }
+
+    fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
+        self.child.try_wait()
+    }
+
+    fn elapsed(&self) -> Duration {
+        self.clock.elapsed()
+    }
+
+    fn pause(&mut self) {
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
 struct OwnedGroup {
     child: Child,
-    cleanup_attempted: bool,
+    cleanup: CleanupState,
 }
 impl OwnedGroup {
-    fn finish(&mut self) -> Result<std::process::ExitStatus, String> {
-        self.cleanup_attempted = true;
-        // The direct child is deliberately NOT reaped before signaling: its PID
-        // pins the group identity, preventing a recycled PID from targeting others.
-        // SAFETY: pre_exec successfully made this child its own group leader.
-        unsafe {
-            libc::kill(-(self.child.id() as i32), libc::SIGKILL);
-        }
-        let deadline = Instant::now() + CLEANUP_BUDGET;
-        loop {
-            if let Some(status) = self
-                .child
-                .try_wait()
-                .map_err(|e| format!("engine reap: {e}"))?
-            {
-                return Ok(status);
-            }
-            if Instant::now() >= deadline {
-                return Err("owned engine was signaled but could not be reaped within the 500ms cleanup budget".into());
-            }
-            std::thread::sleep(Duration::from_millis(2));
-        }
+    fn finish(&mut self) -> Result<std::process::ExitStatus, CleanupFailure> {
+        self.cleanup
+            .finish_with(|| Self::finish_child(&mut self.child))
+    }
+
+    fn cleanup(&mut self) -> Result<(), CleanupFailure> {
+        self.cleanup
+            .cleanup_with(|| Self::finish_child(&mut self.child))
+    }
+
+    fn finish_child(child: &mut Child) -> Result<std::process::ExitStatus, CleanupFailure> {
+        cleanup_attempt(&mut ChildCleanup {
+            child,
+            clock: Instant::now(),
+        })
     }
 }
 impl Drop for OwnedGroup {
     fn drop(&mut self) {
-        if !self.cleanup_attempted {
-            let _ = self.finish();
+        if self.cleanup.pending() {
+            // One bounded best-effort attempt, including a retry after an earlier
+            // error. Failure remains unresolved; dropping this frontend cannot
+            // preserve Child ownership after exit. Durable custody needs a
+            // separate owner. Accepted stop plus leader reap is not proof that
+            // every nonleader has settled.
+            if let Err(error) = self.finish() {
+                eprintln!("owned engine cleanup unresolved during drop: {error}");
+            }
+        }
+    }
+}
+
+enum EngineOwner {
+    Direct(OwnedGroup),
+    #[cfg(target_os = "macos")]
+    Custodied(Box<crate::engine_custody::Owner>),
+}
+impl EngineOwner {
+    fn pre_creation_failure(&mut self) -> Result<Option<String>, String> {
+        match self {
+            #[cfg(target_os = "macos")]
+            Self::Custodied(owner) => owner.pre_creation_failure(),
+            Self::Direct(_) => Ok(None),
+        }
+    }
+    fn exit_observed(&mut self) -> Result<bool, String> {
+        match self {
+            #[cfg(target_os = "macos")]
+            Self::Custodied(owner) => owner.exit_observed(),
+            Self::Direct(group) => {
+                let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+                // Observe without reaping the original ownership anchor.
+                if unsafe {
+                    libc::waitid(
+                        libc::P_PID,
+                        group.child.id(),
+                        info.as_mut_ptr(),
+                        libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                    )
+                } != 0
+                {
+                    return Err(format!(
+                        "engine exit observation: {}",
+                        io::Error::last_os_error()
+                    ));
+                }
+                Ok(unsafe { info.assume_init().si_pid() } != 0)
+            }
+        }
+    }
+    fn finish(&mut self, deadline: Instant) -> Result<std::process::ExitStatus, String> {
+        match self {
+            #[cfg(target_os = "macos")]
+            Self::Custodied(owner) => owner.finish(deadline),
+            Self::Direct(group) => {
+                let _ = deadline;
+                group.finish().map_err(|error| error.to_string())
+            }
+        }
+    }
+    fn cleanup(&mut self) -> Result<(), String> {
+        match self {
+            #[cfg(target_os = "macos")]
+            Self::Custodied(owner) => owner.cleanup(),
+            Self::Direct(group) => group.cleanup().map_err(|error| error.to_string()),
         }
     }
 }
 
 pub struct Session {
-    group: OwnedGroup,
+    group: EngineOwner,
     stdin: ChildStdin,
     stdout: ChildStdout,
     stderr: ChildStderr,
@@ -167,13 +331,80 @@ pub struct Session {
     examined_bytes: usize,
     diagnostics: Vec<u8>,
     stdout_bytes: usize,
+    cache_control_credit: usize,
+    publication_control_credit: usize,
+    context_git_control_credit: usize,
+    stop_lease_context_used: bool,
+    stop_lease_context_control_credit: usize,
+    selection_control_credit: usize,
+    #[cfg(feature = "sqlite-store")]
+    store_control_credit: usize,
     out_done: bool,
     err_done: bool,
     terminal_containment: bool,
+    render_bank: Option<crate::render_bridge::DescriptorBank>,
+    render_bridge: Option<crate::render_bridge::Bridge>,
+}
+
+impl caws_native::session_publication::Transport for Session {
+    fn write(&mut self, bytes: &[u8], deadline: Instant) -> Result<(), String> {
+        self.send(bytes, deadline)
+    }
+    fn read(&mut self, deadline: Instant) -> Result<Vec<u8>, String> {
+        // frame() consumes exactly one LF and leaves an optional CR in the
+        // returned bytes. Restore that consumed delimiter for exact credit.
+        let mut bytes = self.frame(deadline)?;
+        bytes.push(b'\n');
+        Ok(bytes)
+    }
+    fn credit(&mut self, bytes: usize) -> Result<(), String> {
+        let credit = self
+            .publication_control_credit
+            .checked_add(bytes)
+            .ok_or("publication control credit overflow")?;
+        if bytes == 0
+            || credit
+                > caws_native::session_publication_wire::MAX_EXTRA_PUBLICATION_ENGINE_STDOUT_BYTES
+        {
+            return Err("publication control credit exceeds one finite operation".into());
+        }
+        self.publication_control_credit = credit;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "sqlite-store")]
+impl caws_native::transcript_store_wire::Transport for Session {
+    fn write(&mut self, bytes: &[u8], deadline: Instant) -> Result<(), String> {
+        self.send(bytes, deadline)
+    }
+    fn read(&mut self, deadline: Instant) -> Result<Vec<u8>, String> {
+        self.frame(deadline)
+    }
+    fn credit(&mut self, bytes: usize) -> Result<(), String> {
+        let credit = self
+            .store_control_credit
+            .checked_add(bytes)
+            .ok_or("store control credit overflow")?;
+        if credit > caws_native::transcript_store_wire::MAX_EXTRA_ENGINE_STDOUT_BYTES {
+            return Err("store control credit exceeds one finite acquisition".into());
+        }
+        self.store_control_credit = credit;
+        Ok(())
+    }
 }
 
 impl Session {
-    pub fn start(config: &Config, deadline: Instant) -> Result<Self, String> {
+    pub fn start(config: &Config, invocation_id: &str, deadline: Instant) -> Result<Self, String> {
+        Self::start_inner(config, invocation_id, deadline, cfg!(target_os = "macos"))
+    }
+
+    fn start_inner(
+        config: &Config,
+        invocation_id: &str,
+        deadline: Instant,
+        custody: bool,
+    ) -> Result<Self, String> {
         crate::cancellation::check()?;
         if Instant::now() >= deadline {
             return Err("request deadline expired before engine spawn".into());
@@ -184,24 +415,79 @@ impl Session {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        // SAFETY: setpgid is async-signal-safe and this closure performs no allocation.
-        unsafe {
-            command.pre_exec(|| {
-                if libc::setpgid(0, 0) == 0 {
-                    Ok(())
-                } else {
-                    Err(io::Error::last_os_error())
-                }
-            });
+        // Keep the raw snapshot in Request for admission, while preventing an
+        // ambient preload from replacing the pinned engine's Ready producer.
+        command.env_remove("NODE_OPTIONS").env_remove("NODE_PATH");
+        for (name, _) in std::env::vars_os() {
+            if name
+                .to_str()
+                .is_some_and(|s| s.starts_with("LD_") || s.starts_with("DYLD_"))
+            {
+                command.env_remove(name);
+            }
         }
-        let child = command.spawn().map_err(|e| format!("engine spawn: {e}"))?;
-        let mut group = OwnedGroup {
-            child,
-            cleanup_attempted: false,
+        let mut render_bank = if config.configuration == "system"
+            && config.surface == "codex"
+            && config.event == "stop"
+        {
+            Some(crate::render_bridge::DescriptorBank::new()?)
+        } else {
+            None
         };
-        let stdin = group.child.stdin.take().ok_or("missing engine stdin")?;
-        let stdout = group.child.stdout.take().ok_or("missing engine stdout")?;
-        let stderr = group.child.stderr.take().ok_or("missing engine stderr")?;
+        let render_sources = render_bank.as_ref().map(|bank| bank.child_sources());
+        #[cfg(target_os = "macos")]
+        let spawned = if custody {
+            let spawned =
+                crate::engine_custody::Owner::spawn(config, invocation_id, render_sources)?;
+            Some((
+                EngineOwner::Custodied(Box::new(spawned.owner)),
+                spawned.stdin,
+                spawned.stdout,
+                spawned.stderr,
+            ))
+        } else {
+            None
+        };
+        #[cfg(not(target_os = "macos"))]
+        let spawned: Option<(EngineOwner, ChildStdin, ChildStdout, ChildStderr)> = {
+            let _ = (invocation_id, custody);
+            None
+        };
+        let (group, stdin, stdout, stderr) = if let Some(spawned) = spawned {
+            spawned
+        } else {
+            // SAFETY: setpgid is async-signal-safe and this closure performs no allocation.
+            unsafe {
+                command.pre_exec(move || {
+                    if libc::setpgid(0, 0) != 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    if let Some(sources) = render_sources {
+                        for (source, target) in sources.into_iter().zip([3, 4, 5]) {
+                            if libc::dup2(source, target) < 0 {
+                                return Err(io::Error::last_os_error());
+                            }
+                        }
+                        // FD6 is never an engine capability. All original bank
+                        // descriptions are >=10 and close-on-exec.
+                        libc::close(6);
+                    }
+                    Ok(())
+                });
+            }
+            let child = command.spawn().map_err(|e| format!("engine spawn: {e}"))?;
+            let mut group = OwnedGroup {
+                child,
+                cleanup: CleanupState::default(),
+            };
+            let stdin = group.child.stdin.take().ok_or("missing engine stdin")?;
+            let stdout = group.child.stdout.take().ok_or("missing engine stdout")?;
+            let stderr = group.child.stderr.take().ok_or("missing engine stderr")?;
+            (EngineOwner::Direct(group), stdin, stdout, stderr)
+        };
+        if let Some(bank) = &mut render_bank {
+            bank.spawned();
+        }
         nonblocking(stdin.as_raw_fd())?;
         nonblocking(stdout.as_raw_fd())?;
         nonblocking(stderr.as_raw_fd())?;
@@ -216,16 +502,103 @@ impl Session {
             examined_bytes: 0,
             diagnostics: Vec::new(),
             stdout_bytes: 0,
+            cache_control_credit: 0,
+            publication_control_credit: 0,
+            context_git_control_credit: 0,
+            stop_lease_context_used: false,
+            stop_lease_context_control_credit: 0,
+            selection_control_credit: 0,
+            #[cfg(feature = "sqlite-store")]
+            store_control_credit: 0,
             out_done: false,
             err_done: false,
             terminal_containment: false,
+            render_bank,
+            render_bridge: None,
+        })
+    }
+
+    /// Starts/connects the independently provisioned owner while continuing to
+    /// drain engine output. No service read ever blocks the engine frame pump.
+    /// Returns a v2 dispatch frame only after native image/grant admission.
+    pub fn admit_render_offer(
+        &mut self,
+        config: &Config,
+        request: &crate::protocol::Request,
+        ready: &mut crate::protocol::Ready,
+        deadline: Instant,
+    ) -> Result<Option<Vec<u8>>, String> {
+        let Some(offer) = ready.service_offer.take() else {
+            if let Some(bank) = &mut self.render_bank {
+                bank.withdraw();
+            }
+            return Ok(None);
+        };
+        if self.render_bridge.is_some() {
+            return Err("render offer already admitted".into());
+        }
+        if self.render_bank.is_none() {
+            return Err("render offer has no native descriptor bank".into());
+        }
+        let preparation =
+            crate::render_bridge::prepare_offer(config, request, ready, *offer, deadline)?;
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        std::thread::Builder::new()
+            .name("caws-render-admission".into())
+            .spawn(move || {
+                let _ = sender.send(crate::render_bridge::connect(preparation, deadline));
+            })
+            .map_err(|e| format!("render admission thread: {e}"))?;
+        let admission = loop {
+            match receiver.try_recv() {
+                Ok(result) => break result?,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    return Err("render admission worker closed".into());
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    self.pump(None, deadline)?;
+                }
+            }
+        };
+        if Instant::now() >= deadline {
+            return Err("render admission exceeded native deadline".into());
+        }
+        let (bridge, dispatch) = crate::render_bridge::activate(
+            self.render_bank.as_mut().ok_or("render bank unavailable")?,
+            admission,
+            request,
+        )?;
+        self.render_bridge = Some(bridge);
+        Ok(Some(dispatch))
+    }
+
+    /// Diagnostic observation only: never substitutes for the engine proposal
+    /// or changes an already earned protective result.
+    pub fn render_diagnostic(&self) -> Option<String> {
+        self.render_bridge.as_ref().and_then(|bridge| {
+            self.render_bank
+                .as_ref()
+                .and_then(|bank| bridge.diagnostic(bank))
         })
     }
 
     // Every write also drains bounded engine output, so neither side can deadlock
     // by filling the opposite pipe. Request stdin remains open through handoff.
     fn pump(&mut self, write: Option<&[u8]>, deadline: Instant) -> Result<usize, String> {
-        let mut descriptors = [
+        self.pump_with_interests(write, deadline, &[], 100)
+    }
+
+    fn pump_with_interests(
+        &mut self,
+        write: Option<&[u8]>,
+        deadline: Instant,
+        extra: &[libc::pollfd],
+        max_wait_ms: i32,
+    ) -> Result<usize, String> {
+        if let Some(bridge) = &mut self.render_bridge {
+            bridge.tick();
+        }
+        let mut descriptors = vec![
             libc::pollfd {
                 fd: if write.is_some() {
                     self.stdin.as_raw_fd()
@@ -254,7 +627,16 @@ impl Session {
                 revents: 0,
             },
         ];
-        poll_with_cancellation(&mut descriptors, deadline, !self.terminal_containment)?;
+        if let Some(bridge) = &self.render_bridge {
+            descriptors.extend(bridge.interests());
+        }
+        descriptors.extend_from_slice(extra);
+        poll_with_max_wait(
+            &mut descriptors,
+            deadline,
+            !self.terminal_containment,
+            max_wait_ms,
+        )?;
         let mut written = 0;
         if let Some(bytes) = write
             && descriptors[0].revents != 0
@@ -281,7 +663,7 @@ impl Session {
             let before = self.buffered.len();
             self.out_done = read_chunk(self.stdout.as_raw_fd(), &mut self.buffered, MAX_FRAME)?;
             self.stdout_bytes += self.buffered.len() - before;
-            if self.stdout_bytes > MAX_FRAME + 16_384 {
+            if self.stdout_bytes > MAX_FRAME + 16_384 + self.control_credit() {
                 return Err("engine stream exceeded total byte budget".into());
             }
         }
@@ -292,6 +674,9 @@ impl Session {
                 MAX_ENGINE_STDERR,
             )?;
         }
+        if let Some(bridge) = &mut self.render_bridge {
+            bridge.tick();
+        }
         Ok(written)
     }
 
@@ -301,6 +686,281 @@ impl Session {
             offset += self.pump(Some(&bytes[offset..]), deadline)?;
         }
         Ok(())
+    }
+
+    /// Only one pre-Ready exchange is live. While Git runs, Node stderr is
+    /// drained and cancellation remains observable. Node stdout must remain
+    /// silent until the result: even a well-formed Failure is an overlapping
+    /// frame at this point. EOF is transport loss, not successful Git cleanup.
+    /// After result delivery the ordinary frame reader admits Failure normally.
+    pub fn run_context_git(
+        &mut self,
+        owner: &mut caws_native::context_git::ContextGitOwner,
+        frame: &[u8],
+        deadline: Instant,
+    ) -> Result<(), String> {
+        let mut pending = owner.begin(frame)?;
+        let exchange: Result<(), String> = (|| {
+            let credit = self
+                .context_git_control_credit
+                .checked_add(frame.len() + 1)
+                .ok_or("context Git control credit overflow")?;
+            if credit > owner.control_credit_limit() {
+                return Err("context Git control credit exceeds selected fixed profile".into());
+            }
+            self.context_git_control_credit = credit;
+            loop {
+                crate::cancellation::check()?;
+                // Check an already-buffered second frame/partial frame before
+                // advancing the new operation, including coalesced requests.
+                if !self.buffered.is_empty() {
+                    return Err("engine output overlapped pending context Git request".into());
+                }
+                let result = pending.advance()?;
+                self.pump_with_interests(
+                    None,
+                    deadline,
+                    &pending.interests(),
+                    if result.is_some() { 0 } else { 100 },
+                )?;
+                if !self.buffered.is_empty() {
+                    return Err("engine output overlapped pending context Git request".into());
+                }
+                if self.out_done {
+                    return Err(
+                        "engine stream closed during pending context Git request; cleanup required"
+                            .into(),
+                    );
+                }
+                if let Some(mut bytes) = result {
+                    bytes.push(b'\n');
+                    let mut offset = 0;
+                    while offset < bytes.len() {
+                        offset += self.pump(Some(&bytes[offset..]), deadline)?;
+                        if offset < bytes.len() && (!self.buffered.is_empty() || self.out_done) {
+                            return Err(
+                                "engine output overlapped partial context Git result".into()
+                            );
+                        }
+                    }
+                    // The final write can wake a legitimate second request or
+                    // Ready. Preserve those buffered bytes for the phase loop;
+                    // a post-final probe cannot establish an earlier overlap.
+                    return Ok(());
+                }
+            }
+        })();
+        match exchange {
+            Ok(()) => Ok(()),
+            Err(mut error) => {
+                if let Err(cleanup) = pending.cancel_and_settle(Instant::now() + CLEANUP_BUDGET) {
+                    error.push_str(&format!("; context Git cleanup: {cleanup}"));
+                }
+                // Dropping closes sole frontend control even on an uncertain
+                // attempt. The separate custodian retains the actual Git Child.
+                Err(error)
+            }
+        }
+    }
+
+    /// Respond using the actual pre-Node query observations. This path has no
+    /// process-spawn operation and cannot upgrade a failed optional candidate.
+    pub fn replay_context_git(
+        &mut self,
+        replay: &mut crate::protocol::CapturedContext,
+        frame: &[u8],
+        deadline: Instant,
+    ) -> Result<(), String> {
+        crate::cancellation::check()?;
+        let credit = self
+            .context_git_control_credit
+            .checked_add(frame.len() + 1)
+            .ok_or("context Git control credit overflow")?;
+        if credit > caws_native::context_git::MAX_EXTRA_ENGINE_STDOUT_BYTES {
+            return Err("context Git control credit exceeds two requests".into());
+        }
+        self.context_git_control_credit = credit;
+        if !self.buffered.is_empty() {
+            return Err("engine output overlapped captured context request".into());
+        }
+        let bytes = replay.response(frame)?;
+        self.pump_with_interests(None, deadline, &[], 0)?;
+        if !self.buffered.is_empty() || self.out_done {
+            return Err("engine output overlapped captured context request".into());
+        }
+        let mut offset = 0;
+        while offset < bytes.len() {
+            offset += self.pump(Some(&bytes[offset..]), deadline)?;
+            if offset < bytes.len() && (!self.buffered.is_empty() || self.out_done) {
+                return Err("engine output overlapped partial captured context result".into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Serial pre-Ready selection exchange on the existing sole reader. Only a
+    /// fully correlated and actually captured request receives bounded credit.
+    pub fn run_selection_observation(
+        &mut self,
+        owner: &mut crate::selection_observation::SelectionObservationOwner<'_>,
+        request: &crate::protocol::Request,
+        frame: &[u8],
+        deadline: Instant,
+    ) -> Result<(), String> {
+        crate::cancellation::check()?;
+        if !self.buffered.is_empty() {
+            return Err("engine output overlapped selection observation request".into());
+        }
+        let inner = request.selection_request(frame)?;
+        let sequence = inner.sequence;
+        let snapshot_id = inner.snapshot_id.clone();
+        let encoded = serde_json::to_vec(&serde_json::json!({"snapshotId":inner.snapshot_id,
+            "sequence":inner.sequence,"operation":inner.operation}))
+        .map_err(|e| e.to_string())?;
+        let mut reply = owner.capture_json(&encoded, crate::cancellation::check)?;
+        let credit = self
+            .selection_control_credit
+            .checked_add(frame.len() + 1)
+            .ok_or("selection control credit overflow")?;
+        if credit > request.selection_control_limit()? {
+            return Err("selection control credit exceeds native observation bound".into());
+        }
+        self.selection_control_credit = credit;
+        self.pump_with_interests(None, deadline, &[], 0)?;
+        if !self.buffered.is_empty() || self.out_done {
+            return Err("engine output overlapped selection observation request".into());
+        }
+        let byte_len = reply.byte_len();
+        let sha256 = reply.sha256(crate::cancellation::check)?;
+        let header = serde_json::json!({"schema":crate::protocol::SELECTION_OBSERVATION_RESULT,
+            "id":request.id,"runtimeDigest":request.runtime_digest,"snapshotId":snapshot_id,
+            "sequence":sequence,"byteLength":byte_len,"sha256":sha256});
+        self.send_selection_frame(&header, false, deadline)?;
+        let mut offset = 0usize;
+        while let Some(chunk) = reply.next_chunk(64 * 1024, crate::cancellation::check)? {
+            use base64::Engine as _;
+            let count = chunk.len();
+            let chunk_frame = serde_json::json!({"schema":crate::protocol::SELECTION_OBSERVATION_CHUNK,
+                "id":request.id,"runtimeDigest":request.runtime_digest,"snapshotId":snapshot_id,
+                "sequence":sequence,"offset":offset,
+                "base64":base64::engine::general_purpose::STANDARD.encode(chunk)});
+            offset = offset
+                .checked_add(count)
+                .ok_or("selection response offset overflow")?;
+            self.send_selection_frame(&chunk_frame, offset == byte_len, deadline)?;
+        }
+        if offset != byte_len {
+            return Err("selection response was not exhausted".into());
+        }
+        Ok(())
+    }
+    fn send_selection_frame(
+        &mut self,
+        frame: &serde_json::Value,
+        final_frame: bool,
+        deadline: Instant,
+    ) -> Result<(), String> {
+        let mut bytes = serde_json::to_vec(frame).map_err(|e| e.to_string())?;
+        bytes.push(b'\n');
+        let mut offset = 0;
+        while offset < bytes.len() {
+            offset += self.pump(Some(&bytes[offset..]), deadline)?;
+            // A legitimate next request may arrive after the last chunk's final
+            // write. Preserve that queued frame for the ordinary phase loop.
+            if (!final_frame || offset < bytes.len())
+                && (!self.buffered.is_empty() || self.out_done)
+            {
+                return Err("engine output overlapped partial selection observation result".into());
+            }
+        }
+        Ok(())
+    }
+
+    /// One dedicated late consumer request only. Generic context Git credit
+    /// and pre-Ready discovery admission remain unchanged.
+    pub(crate) fn begin_stop_lease_context(
+        &mut self,
+        validated_bytes: usize,
+    ) -> Result<(), String> {
+        if self.stop_lease_context_used {
+            return Err("Stop lease context request already consumed".into());
+        }
+        self.stop_lease_context_used = true;
+        if validated_bytes > crate::protocol::MAX_STOP_LEASE_CONTEXT_REQUEST + 1 {
+            return Err("Stop lease context control credit exceeds one request".into());
+        }
+        self.stop_lease_context_control_credit = validated_bytes;
+        Ok(())
+    }
+    /// Called by the actual synchronous Git owner's cancellation checkpoints.
+    /// Drain stderr and detect engine overlap while the original owner runs;
+    /// no Node frame supplies argv, a path, an environment, or a new deadline.
+    pub(crate) fn stop_lease_context_checkpoint(
+        &mut self,
+        deadline: Instant,
+    ) -> Result<(), String> {
+        crate::cancellation::check()?;
+        if Instant::now() >= deadline {
+            return Err("original Stop lease context deadline expired".into());
+        }
+        if !self.buffered.is_empty() || self.out_done {
+            return Err("engine output overlapped pending Stop lease context".into());
+        }
+        self.pump_with_interests(None, deadline, &[], 0)?;
+        if !self.buffered.is_empty() || self.out_done {
+            return Err("engine output overlapped pending Stop lease context".into());
+        }
+        Ok(())
+    }
+    pub(crate) fn finish_stop_lease_context(
+        &mut self,
+        bytes: &[u8],
+        deadline: Instant,
+    ) -> Result<(), String> {
+        self.stop_lease_context_checkpoint(deadline)?;
+        let mut offset = 0;
+        while offset < bytes.len() {
+            offset += self.pump(Some(&bytes[offset..]), deadline)?;
+            // After the final write a legitimate next phase may arrive.
+            if offset < bytes.len() && (!self.buffered.is_empty() || self.out_done) {
+                return Err("engine output overlapped partial Stop lease context result".into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Credit only exact, already validated one-shot cache control bytes.
+    /// The ordinary proposal frame and unclassified output budgets do not grow.
+    pub fn credit_session_cache_control(&mut self, bytes: usize) -> Result<(), String> {
+        let credit = self
+            .cache_control_credit
+            .checked_add(bytes)
+            .ok_or("cache control credit overflow")?;
+        if credit > caws_native::session_cache_wire::MAX_EXTRA_ENGINE_STDOUT_BYTES {
+            return Err("cache control credit exceeds one exchange".into());
+        }
+        self.cache_control_credit = credit;
+        Ok(())
+    }
+
+    fn control_credit(&self) -> usize {
+        #[cfg(feature = "sqlite-store")]
+        {
+            self.cache_control_credit
+                + self.context_git_control_credit
+                + self.stop_lease_context_control_credit
+                + self.selection_control_credit
+                + self.publication_control_credit
+                + self.store_control_credit
+        }
+        #[cfg(not(feature = "sqlite-store"))]
+        {
+            self.cache_control_credit
+                + self.context_git_control_credit
+                + self.stop_lease_context_control_credit
+                + self.selection_control_credit
+                + self.publication_control_credit
+        }
     }
 
     pub fn begin_terminal_containment(&mut self, _target: &crate::process_effect::ValidatedTarget) {
@@ -344,7 +1004,12 @@ impl Session {
                 return Ok(bytes);
             }
             if self.out_done {
-                return Err("engine stream closed before a complete frame".into());
+                let mut message = "engine stream closed before a complete frame".to_owned();
+                if let Some(cause) = self.group.pre_creation_failure()? {
+                    message.push_str("; ");
+                    message.push_str(&cause);
+                }
+                return Err(message);
             }
             self.pump(None, deadline)?;
         }
@@ -357,29 +1022,12 @@ impl Session {
             if !self.terminal_containment {
                 crate::cancellation::check()?;
             }
-            let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
-            // SAFETY: valid child PID and initialized writable siginfo storage.
-            let result = unsafe {
-                libc::waitid(
-                    libc::P_PID,
-                    self.group.child.id(),
-                    info.as_mut_ptr(),
-                    libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
-                )
-            };
-            if result != 0 {
-                return Err(format!(
-                    "engine exit observation: {}",
-                    io::Error::last_os_error()
-                ));
-            }
-            // SAFETY: waitid initialized this structure (zeroed when no child exited).
-            if unsafe { info.assume_init().si_pid() } != 0 {
+            if self.group.exit_observed()? {
                 break;
             }
             self.pump(None, deadline)?;
         }
-        let status = self.group.finish()?;
+        let status = self.group.finish(deadline)?;
         if !status.success() {
             return Err(format!(
                 "engine exited unsuccessfully after proposal ({status})"
@@ -389,10 +1037,7 @@ impl Session {
     }
 
     pub fn cleanup(&mut self) -> Result<(), String> {
-        if !self.group.cleanup_attempted {
-            self.group.finish()?;
-        }
-        Ok(())
+        self.group.cleanup()
     }
 }
 
@@ -505,7 +1150,211 @@ pub fn write_diagnostic(stderr: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use caws_native::owned_group::{GroupObservation, GroupStop, StopError, StopStage};
+    use std::{collections::VecDeque, os::unix::process::ExitStatusExt, path::PathBuf};
+
+    // Pure operations at the same seam used by ChildCleanup. No Child, waitid,
+    // signal, real sleep, or privileged fault injection is involved.
+    struct CleanupFixture {
+        stops: VecDeque<Result<GroupStop, StopError>>,
+        waits: VecDeque<io::Result<Option<std::process::ExitStatus>>>,
+        elapsed: Duration,
+        calls: Vec<&'static str>,
+    }
+    impl CleanupFixture {
+        fn new(
+            stops: Vec<Result<GroupStop, StopError>>,
+            waits: Vec<io::Result<Option<std::process::ExitStatus>>>,
+        ) -> Self {
+            Self {
+                stops: stops.into(),
+                waits: waits.into(),
+                elapsed: Duration::ZERO,
+                calls: Vec::new(),
+            }
+        }
+    }
+    impl CleanupOperations for CleanupFixture {
+        fn stop(&mut self) -> Result<GroupStop, StopError> {
+            self.calls.push("stop");
+            self.stops.pop_front().expect("unexpected extra stop")
+        }
+
+        fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
+            self.calls.push("wait");
+            self.waits.pop_front().unwrap_or(Ok(None))
+        }
+
+        fn elapsed(&self) -> Duration {
+            self.elapsed
+        }
+
+        fn pause(&mut self) {
+            self.calls.push("pause");
+            self.elapsed += Duration::from_millis(2);
+            assert!(
+                self.elapsed <= Duration::from_secs(1),
+                "injected cleanup exceeded its bound"
+            );
+        }
+    }
+
+    fn stop_refusal() -> StopError {
+        StopError {
+            stage: StopStage::ExitedGroup,
+            raw_errno: Some(libc::EIO),
+            signal_errno: Some(libc::EPERM),
+            observed_pid: Some(123),
+            observed_code: Some(libc::CLD_EXITED),
+            group: Some(GroupObservation {
+                reason: 4,
+                query_errno: libc::ENOMEM,
+                bytes: 64,
+                capacity: 64,
+                members: 2,
+                zombies: 1,
+                leaders: 1,
+            }),
+        }
+    }
+
+    #[test]
+    fn cleanup_state_failure_never_becomes_completion() {
+        let mut state = CleanupState::default();
+        let mut attempts = 0;
+        for _ in 0..2 {
+            let result: Result<(), String> = state.cleanup_with(|| {
+                attempts += 1;
+                Err("injected cleanup refusal".into())
+            });
+            assert_eq!(result, Err("injected cleanup refusal".into()));
+            assert!(
+                state.pending(),
+                "failed attempt must remain eligible for Drop cleanup"
+            );
+        }
+        assert_eq!(attempts, 2);
+    }
+
+    #[test]
+    fn cleanup_stop_refusal_preserves_all_fields_and_never_reaps() {
+        let expected = stop_refusal();
+        let mut ops =
+            CleanupFixture::new(vec![Err(expected.clone()), Err(expected.clone())], vec![]);
+        let mut state = CleanupState::default();
+        for _ in 0..2 {
+            let error = state.finish_with(|| cleanup_attempt(&mut ops)).unwrap_err();
+            assert_eq!(error.to_string(), format!("engine cleanup: {expected}"));
+            match error {
+                CleanupFailure::Stop(actual) => assert_eq!(actual, expected),
+                other => panic!("lost stop failure: {other:?}"),
+            }
+            assert!(state.pending());
+        }
+        assert_eq!(ops.calls, ["stop", "stop"]);
+        assert_eq!(ops.elapsed, Duration::ZERO);
+    }
+
+    #[test]
+    fn cleanup_reap_errors_stay_errors_on_retry() {
+        let mut ops = CleanupFixture::new(
+            vec![Ok(GroupStop::Signalled), Ok(GroupStop::Absent)],
+            vec![
+                Err(io::Error::from_raw_os_error(libc::EIO)),
+                Err(io::Error::from_raw_os_error(libc::ECHILD)),
+            ],
+        );
+        let mut state = CleanupState::default();
+        for expected in [libc::EIO, libc::ECHILD] {
+            match state
+                .cleanup_with(|| cleanup_attempt(&mut ops))
+                .unwrap_err()
+            {
+                CleanupFailure::Reap(error) => assert_eq!(error.raw_os_error(), Some(expected)),
+                other => panic!("lost reap failure: {other:?}"),
+            }
+            assert!(state.pending());
+        }
+        assert_eq!(ops.calls, ["stop", "wait", "stop", "wait"]);
+    }
+
+    #[test]
+    fn cleanup_retry_caches_actual_exit_without_second_stop_or_reap() {
+        let actual = std::process::ExitStatus::from_raw(42 << 8);
+        let mut ops = CleanupFixture::new(
+            vec![Ok(GroupStop::Signalled), Ok(GroupStop::Absent)],
+            vec![
+                Err(io::Error::from_raw_os_error(libc::EINTR)),
+                Ok(Some(actual)),
+            ],
+        );
+        let mut state = CleanupState::default();
+        assert!(matches!(
+            state.finish_with(|| cleanup_attempt(&mut ops)),
+            Err(CleanupFailure::Reap(_))
+        ));
+        assert!(state.pending());
+        let returned = state.finish_with(|| cleanup_attempt(&mut ops)).unwrap();
+        assert_eq!(returned, actual);
+        assert_eq!(returned.code(), Some(42));
+        assert!(!state.pending());
+        assert_eq!(
+            state.finish_with(|| cleanup_attempt(&mut ops)).unwrap(),
+            actual
+        );
+        state.cleanup_with(|| cleanup_attempt(&mut ops)).unwrap();
+        assert_eq!(ops.calls, ["stop", "wait", "stop", "wait"]);
+        assert!(ops.stops.is_empty());
+        assert!(ops.waits.is_empty());
+    }
+
+    #[test]
+    fn cleanup_timeout_remains_pending_at_unchanged_budget_then_can_retry() {
+        let mut ops = CleanupFixture::new(vec![Ok(GroupStop::Signalled)], vec![]);
+        let mut state = CleanupState::default();
+        assert!(matches!(
+            state.cleanup_with(|| cleanup_attempt(&mut ops)),
+            Err(CleanupFailure::Deadline(GroupStop::Signalled))
+        ));
+        assert!(state.pending());
+        assert_eq!(CLEANUP_BUDGET, Duration::from_millis(500));
+        assert_eq!(ops.elapsed, CLEANUP_BUDGET);
+        assert_eq!(ops.calls.iter().filter(|&&s| s == "stop").count(), 1);
+        assert_eq!(ops.calls.iter().filter(|&&s| s == "wait").count(), 251);
+        assert_eq!(ops.calls.iter().filter(|&&s| s == "pause").count(), 250);
+        ops.stops.push_back(Ok(GroupStop::Absent));
+        let actual = std::process::ExitStatus::from_raw(0);
+        ops.waits.push_back(Ok(Some(actual)));
+        assert_eq!(
+            state.finish_with(|| cleanup_attempt(&mut ops)).unwrap(),
+            actual
+        );
+        assert!(!state.pending());
+        assert_eq!(&ops.calls[ops.calls.len() - 2..], ["stop", "wait"]);
+    }
+
+    #[test]
+    fn cleanup_absent_and_exited_only_do_not_substitute_for_reap() {
+        let observation = GroupObservation {
+            members: 3,
+            zombies: 3,
+            leaders: 1,
+            bytes: 96,
+            capacity: 128,
+            ..GroupObservation::default()
+        };
+        for stop in [GroupStop::Absent, GroupStop::ExitedOnly { observation }] {
+            let mut ops = CleanupFixture::new(vec![Ok(stop)], vec![]);
+            let mut state = CleanupState::default();
+            match state.finish_with(|| cleanup_attempt(&mut ops)).unwrap_err() {
+                CleanupFailure::Deadline(actual) => assert_eq!(actual, stop),
+                other => panic!("stop observation lost: {other:?}"),
+            }
+            assert!(state.pending());
+            assert_eq!(ops.elapsed, CLEANUP_BUDGET);
+            assert!(ops.calls.contains(&"wait"));
+        }
+    }
 
     fn deadline() -> Instant {
         Instant::now() + Duration::from_secs(10)
@@ -521,7 +1370,9 @@ mod tests {
             digest: "a".repeat(64),
             timeout: Duration::from_secs(10),
         };
-        Session::start(&config, deadline()).unwrap()
+        // The unit-test executable is libtest, not the production custodian
+        // entrypoint. Actual custody is qualified through the built binary.
+        Session::start_inner(&config, "runner-unit", deadline(), false).unwrap()
     }
 
     #[test]
@@ -623,6 +1474,140 @@ mod tests {
     }
 
     #[test]
+    fn validated_control_credit_preserves_a_full_later_proposal_and_has_a_fixed_cap() {
+        let mut session = session("/dev/stdin");
+        let expires = deadline();
+        let mut control = vec![b'c'; 90_000];
+        control.push(b'\n');
+        session.send(&control, expires).unwrap();
+        assert_eq!(
+            session.frame(expires).unwrap(),
+            control[..control.len() - 1]
+        );
+        session.credit_session_cache_control(control.len()).unwrap();
+        let mut proposal = vec![b'p'; MAX_FRAME - 1];
+        proposal.push(b'\n');
+        session.send(&proposal, expires).unwrap();
+        assert_eq!(
+            session.frame(expires).unwrap(),
+            proposal[..proposal.len() - 1]
+        );
+        let remaining =
+            caws_native::session_cache_wire::MAX_EXTRA_ENGINE_STDOUT_BYTES - control.len();
+        session.credit_session_cache_control(remaining).unwrap();
+        assert_eq!(
+            session.credit_session_cache_control(1).unwrap_err(),
+            "cache control credit exceeds one exchange"
+        );
+    }
+
+    #[test]
+    fn late_stop_context_credit_is_dedicated_single_use_and_overlap_is_refused() {
+        let mut current = session("/dev/stdin");
+        current.begin_stop_lease_context(512).unwrap();
+        assert_eq!(current.stop_lease_context_control_credit, 512);
+        assert_eq!(current.context_git_control_credit, 0);
+        assert_eq!(current.cache_control_credit, 0);
+        assert_eq!(
+            current.begin_stop_lease_context(512).unwrap_err(),
+            "Stop lease context request already consumed"
+        );
+        current.buffered.extend_from_slice(b"forged next frame");
+        assert!(
+            current
+                .stop_lease_context_checkpoint(deadline())
+                .unwrap_err()
+                .contains("overlapped")
+        );
+        let mut oversized = session("/dev/stdin");
+        assert!(
+            oversized
+                .begin_stop_lease_context(crate::protocol::MAX_STOP_LEASE_CONTEXT_REQUEST + 2)
+                .is_err()
+        );
+        assert_eq!(oversized.stop_lease_context_control_credit, 0);
+        assert!(oversized.begin_stop_lease_context(1).is_err());
+    }
+
+    #[test]
+    fn uncredited_output_still_exhausts_the_original_total_budget() {
+        let mut session = session("/dev/stdin");
+        let expires = deadline();
+        let mut control = vec![b'c'; 90_000];
+        control.push(b'\n');
+        session.send(&control, expires).unwrap();
+        assert_eq!(session.frame(expires).unwrap().len(), 90_000);
+        let mut proposal = vec![b'p'; MAX_FRAME - 1];
+        proposal.push(b'\n');
+        let outcome = session
+            .send(&proposal, expires)
+            .and_then(|()| session.frame(expires).map(|_| ()));
+        assert_eq!(
+            outcome.unwrap_err(),
+            "engine stream exceeded total byte budget"
+        );
+    }
+
+    #[test]
+    fn publication_credit_preserves_raw_delimiters_and_separate_fixed_budget() {
+        use caws_native::session_publication::Transport;
+        let mut session = session("/dev/stdin");
+        let expires = deadline();
+        let mut bytes = vec![b'p'; 1024 * 1024];
+        bytes.extend_from_slice(b"\r\n");
+        for _ in 0..5 {
+            session.send(&bytes, expires).unwrap();
+            let received = Transport::read(&mut session, expires).unwrap();
+            assert_eq!(
+                received, bytes,
+                "credit must account for exact consumed CR/LF"
+            );
+            Transport::credit(&mut session, received.len()).unwrap();
+        }
+        assert_eq!(session.publication_control_credit, bytes.len() * 5);
+        assert_eq!(session.cache_control_credit, 0);
+        #[cfg(feature = "sqlite-store")]
+        assert_eq!(session.store_control_credit, 0);
+        assert!(Transport::credit(&mut session, 0).is_err());
+        let maximum =
+            caws_native::session_publication_wire::MAX_EXTRA_PUBLICATION_ENGINE_STDOUT_BYTES;
+        let remaining = maximum - session.publication_control_credit;
+        Transport::credit(&mut session, remaining).unwrap();
+        assert!(Transport::credit(&mut session, 1).is_err());
+        assert!(Transport::credit(&mut session, usize::MAX).is_err());
+        assert_eq!(session.publication_control_credit, maximum);
+        // Credit cannot enlarge a single frame even when the full operation
+        // allowance remains. Owner validation is exercised by owner tests.
+        let oversized = vec![b'x'; MAX_FRAME + 1];
+        let outcome = session
+            .send(&oversized, expires)
+            .and_then(|()| Transport::read(&mut session, expires).map(|_| ()));
+        assert_eq!(
+            outcome.unwrap_err(),
+            format!("pipe exceeded {MAX_FRAME} byte budget")
+        );
+    }
+
+    #[test]
+    fn cache_credit_does_not_enlarge_the_individual_frame_limit() {
+        let mut session = session("/dev/stdin");
+        let expires = deadline();
+        session
+            .credit_session_cache_control(
+                caws_native::session_cache_wire::MAX_EXTRA_ENGINE_STDOUT_BYTES,
+            )
+            .unwrap();
+        let wire = vec![b'x'; MAX_FRAME + 1];
+        let outcome = session
+            .send(&wire, expires)
+            .and_then(|()| session.frame(expires).map(|_| ()));
+        assert_eq!(
+            outcome.unwrap_err(),
+            format!("pipe exceeded {MAX_FRAME} byte budget")
+        );
+    }
+
+    #[test]
     fn waiting_for_a_frame_retains_the_request_deadline() {
         let mut session = session("/dev/stdin");
         assert_eq!(
@@ -632,5 +1617,568 @@ mod tests {
             "request deadline expired"
         );
         assert_eq!(session.examined_bytes, 0);
+    }
+}
+
+/// Original-frontend capabilities, captured before Node and activated only by
+/// the late Render phase. This owner remains outside each temporary transport
+/// wrapper so an interrupted Git query retains its actual cleanup custody.
+#[derive(Default)]
+pub(crate) struct OriginalRenderPreparation {
+    owner: Option<caws_native::render_observation::ObservationOwner>,
+    capture_failure: Option<Box<caws_native::render_observation::Failure>>,
+}
+impl OriginalRenderPreparation {
+    fn capture(
+        original: &caws_native::session_cache_wire::OriginalStopCapture<'_>,
+        executor: &caws_native::invocation_project::SelectedExecutable,
+    ) -> Self {
+        let cwd =
+            caws_native::invocation_project::payload_string(original.original_payload(), "cwd");
+        let result = (|| {
+            let cwd = cwd?
+                .filter(|value| !value.is_empty())
+                .ok_or("Original Render requires captured absolute payload cwd")?;
+            if !std::path::Path::new(&cwd).is_absolute()
+                || std::path::Path::new(&cwd) != original.query_cwds()[0]
+            {
+                return Err("Original Render cwd differs from original queried candidate".into());
+            }
+            Ok(cwd)
+        })();
+        match result {
+            Ok(cwd) => Self::capture_inputs(
+                original.id(),
+                original.runtime_digest(),
+                original.caller_cwd(),
+                &cwd,
+                original.caller_environment(),
+                &executor.path,
+                original.deadline().expires(),
+            ),
+            Err(diagnostic) => Self {
+                owner: None,
+                capture_failure: Some(Box::new(caws_native::render_observation::Failure {
+                    category: "capture",
+                    diagnostic,
+                    git: None,
+                    calendar: None,
+                })),
+            },
+        }
+    }
+    fn capture_inputs(
+        id: &str,
+        runtime_digest: &str,
+        caller_cwd: &str,
+        cwd: &str,
+        environment: &std::collections::BTreeMap<String, String>,
+        executor: &std::path::Path,
+        expires: Instant,
+    ) -> Self {
+        use caws_native::{
+            render_context as git, render_observation as observation, renderer_calendar as calendar,
+        };
+        let cancelled = || crate::cancellation::check().is_err();
+        let result = (|| {
+            let git = git::CapturedRenderContext::capture(
+                git::OriginalInvocation {
+                    id: id.into(),
+                    runtime_digest: runtime_digest.into(),
+                    caller_cwd: caller_cwd.into(),
+                    cwd: cwd.into(),
+                    environment: environment.clone(),
+                },
+                expires,
+                &cancelled,
+            )
+            .and_then(|captured| captured.custodied(executor, &cancelled))
+            .map_err(|failure| observation::Failure {
+                category: "capture",
+                diagnostic: failure.diagnostic.clone(),
+                git: Some(failure),
+                calendar: None,
+            })?;
+            let calendar = calendar::CapturedCalendar::capture(calendar::OriginalInvocation {
+                id: id.into(),
+                runtime_digest: runtime_digest.into(),
+                deadline: expires,
+                max_queries: calendar::MAX_TOTAL_QUERIES,
+            })
+            .map_err(|failure| observation::Failure {
+                category: "calendar",
+                diagnostic: failure.to_string(),
+                git: None,
+                calendar: Some(failure),
+            })?;
+            observation::ObservationOwner::new(git, calendar, expires)
+        })();
+        match result {
+            Ok(owner) => Self {
+                owner: Some(owner),
+                capture_failure: None,
+            },
+            Err(failure) => Self {
+                owner: None,
+                capture_failure: Some(Box::new(failure)),
+            },
+        }
+    }
+    pub(crate) fn available(&self) -> bool {
+        self.owner
+            .as_ref()
+            .is_some_and(|owner| owner.failure().is_none())
+            && self.capture_failure.is_none()
+    }
+    /// Missing original ownership cannot enter a native effect operation. The
+    /// returned error is terminal after dispatch; it never requests replay.
+    pub(crate) fn with_transport<T, R>(
+        &mut self,
+        inner: &mut T,
+        cancelled: &dyn Fn() -> bool,
+        operation: impl FnOnce(&mut caws_native::render_observation::ObservationTransport<'_, T>) -> R,
+    ) -> Result<R, String>
+    where
+        T: caws_native::session_publication::Transport,
+    {
+        if !self.available() {
+            return Err("Original Render ownership unavailable; native Stop cannot publish".into());
+        }
+        let owner = self
+            .owner
+            .as_mut()
+            .ok_or("Native Stop requires original Render observations")?;
+        Ok(operation(&mut owner.transport(inner, cancelled)))
+    }
+    fn cleanup_settled(&self) -> bool {
+        self.capture_failure
+            .as_ref()
+            .is_none_or(|failure| failure.cleanup_settled())
+            && self
+                .owner
+                .as_ref()
+                .is_none_or(|owner| owner.cleanup_settled())
+    }
+    fn retry_cleanup(&mut self) -> Result<(), String> {
+        // Evaluate both: the first failed cleanup must not strand another owner.
+        let capture = self
+            .capture_failure
+            .as_mut()
+            .map_or(Ok(()), |failure| failure.retry_cleanup());
+        let owner = self
+            .owner
+            .as_mut()
+            .map_or(Ok(()), |owner| owner.retry_cleanup());
+        match (capture, owner) {
+            (Err(first), Err(second)) => Err(format!("{first}; {second}")),
+            (Err(error), _) | (_, Err(error)) => Err(error),
+            _ => Ok(()),
+        }
+    }
+}
+
+/// Optional original observation, never publication eligibility. A failed
+/// preparation remains failed while the existing compatibility route may run.
+/// Keeping this owner through native output/fallback also keeps remote custody.
+pub struct OriginalStopPreparation<'deadline> {
+    pub generation: Option<crate::native_generation::GenerationReceipt>,
+    pub original: Option<caws_native::session_cache_wire::OriginalStopCapture<'deadline>>,
+    pub failure: Option<Box<caws_native::session_cache_wire::OriginalStopCaptureFailure>>,
+    pub refusal: Option<String>,
+    pub(crate) render: OriginalRenderPreparation,
+}
+impl<'deadline> OriginalStopPreparation<'deadline> {
+    pub fn candidate(config: &Config) -> bool {
+        cfg!(target_os = "macos")
+            && config.configuration == "system"
+            && config.surface == "opencode"
+            && config.event == "stop"
+    }
+    pub(crate) fn capture_with_diagnostics(
+        config: &Config,
+        request: &crate::protocol::Request,
+        deadline: &'deadline caws_native::monotonic_deadline::MonotonicDeadline,
+        generation_receipt_revalidations: crate::native_generation::CheckTimings,
+        mut phase: impl FnMut(&'static str),
+    ) -> Self {
+        let mut prepared = Self {
+            generation: None,
+            original: None,
+            failure: None,
+            refusal: None,
+            render: OriginalRenderPreparation::default(),
+        };
+        if !Self::candidate(config) {
+            return prepared;
+        }
+        let environment = request.caller_environment();
+        let home = match environment.get("CAWS_HOME").filter(|v| !v.is_empty()) {
+            Some(value) => std::path::PathBuf::from(value),
+            None => match environment.get("HOME") {
+                Some(value) if !value.is_empty() => std::path::PathBuf::from(value).join(".caws"),
+                _ => {
+                    prepared.refusal = Some("original machine home unavailable".into());
+                    return prepared;
+                }
+            },
+        };
+        if !home.is_absolute() {
+            prepared.refusal = Some("original machine home must be absolute".into());
+            return prepared;
+        }
+        phase("generation-capture");
+        let generation = match crate::native_generation::GenerationReceipt::capture_with_diagnostics(
+            &home,
+            config,
+            deadline.expires(),
+            generation_receipt_revalidations,
+            || {
+                crate::cancellation::check()?;
+                deadline.check().map_err(|e| e.to_string())
+            },
+        ) {
+            Ok(value) => value,
+            Err(error) => {
+                prepared.refusal = Some(error);
+                return prepared;
+            }
+        };
+        phase("original-executor");
+        let executor = match generation.selected_native_executor(deadline.expires(), || {
+            crate::cancellation::check()?;
+            deadline.check().map_err(|e| e.to_string())
+        }) {
+            Ok(value) => value,
+            Err(error) => {
+                prepared.generation = Some(generation);
+                prepared.refusal = Some(error);
+                return prepared;
+            }
+        };
+        phase("original-context-capture");
+        let result = caws_native::session_cache_wire::OriginalStopCapture::capture(
+            request.original_stop_input(),
+            &executor,
+            deadline,
+            crate::cancellation::check,
+        );
+        prepared.generation = Some(generation);
+        match result {
+            Ok(original) => {
+                phase("original-render-capture");
+                prepared.render = OriginalRenderPreparation::capture(&original, &executor);
+                prepared.original = Some(original);
+            }
+            Err(error) => {
+                prepared.refusal = Some(error.to_string());
+                prepared.failure = Some(Box::new(error));
+            }
+        }
+        prepared
+    }
+    pub fn cleanup_settled(&self) -> bool {
+        self.failure.as_ref().is_none_or(|e| e.cleanup_settled()) && self.render.cleanup_settled()
+    }
+    pub fn retry_cleanup(&mut self) -> Result<(), String> {
+        let original = self.failure.as_mut().map_or(Ok(()), |e| e.retry_cleanup());
+        let render = self.render.retry_cleanup();
+        match (original, render) {
+            (Err(first), Err(second)) => Err(format!("{first}; {second}")),
+            (Err(error), _) | (_, Err(error)) => Err(error),
+            _ => Ok(()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod original_stop_preparation_tests {
+    use super::*;
+    #[test]
+    fn optional_candidate_domain_excludes_custom_project_and_unsupported_surfaces() {
+        let mut config = Config {
+            engine: "/engine".into(),
+            node: "/node".into(),
+            surface: "opencode".into(),
+            event: "stop".into(),
+            configuration: "system".into(),
+            digest: "a".repeat(64),
+            timeout: Duration::from_secs(10),
+        };
+        assert_eq!(
+            OriginalStopPreparation::candidate(&config),
+            cfg!(target_os = "macos")
+        );
+        for (surface, event, configuration) in [
+            ("zcode", "stop", "system"),
+            ("opencode", "session_start", "system"),
+            ("opencode", "stop", "project"),
+            ("codex", "stop", "system"),
+        ] {
+            config.surface = surface.into();
+            config.event = event.into();
+            config.configuration = configuration.into();
+            assert!(!OriginalStopPreparation::candidate(&config));
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod original_render_join_tests {
+    use super::*;
+    use caws_native::{
+        render_observation as observation, session_publication::Transport,
+        session_publication_wire as wire,
+    };
+    use serde_json::{Value, json};
+    use sha2::{Digest, Sha256};
+    use std::{
+        cell::Cell,
+        collections::{BTreeMap, VecDeque},
+    };
+
+    const ID: &str = "original-render-preparation";
+    fn digest(bytes: &[u8]) -> String {
+        format!("{:x}", Sha256::digest(bytes))
+    }
+    fn frame(value: Value) -> Vec<u8> {
+        let mut bytes = serde_json::to_vec(&value).unwrap();
+        bytes.push(b'\n');
+        bytes
+    }
+    #[derive(Default)]
+    struct Recording {
+        writes: Vec<Value>,
+        reads: VecDeque<Vec<u8>>,
+    }
+    impl Transport for Recording {
+        fn write(&mut self, bytes: &[u8], _: Instant) -> Result<(), String> {
+            self.writes.push(serde_json::from_slice(bytes).unwrap());
+            Ok(())
+        }
+        fn read(&mut self, _: Instant) -> Result<Vec<u8>, String> {
+            self.reads.pop_front().ok_or("test EOF".into())
+        }
+        fn credit(&mut self, _: usize) -> Result<(), String> {
+            Ok(())
+        }
+    }
+    fn capture(cwd: &str, expires: Instant) -> OriginalRenderPreparation {
+        // Pinning this executable launches no custodian. This test deliberately
+        // never requests Git; real native-custodian execution remains integration.
+        OriginalRenderPreparation::capture_inputs(
+            ID,
+            &"a".repeat(64),
+            "/tmp",
+            cwd,
+            &BTreeMap::from([("PATH".into(), "/usr/bin:/bin".into())]),
+            &std::env::current_exe().unwrap(),
+            expires,
+        )
+    }
+    fn preparation(render: OriginalRenderPreparation) -> OriginalStopPreparation<'static> {
+        OriginalStopPreparation {
+            generation: None,
+            original: None,
+            failure: None,
+            refusal: None,
+            render,
+        }
+    }
+    #[test]
+    fn missing_original_render_never_enters_native_exchange() {
+        let mut render = OriginalRenderPreparation::default();
+        let mut recording = Recording::default();
+        let effects = Cell::new(0);
+        assert!(!render.available());
+        let result = render.with_transport(&mut recording, &|| false, |_| effects.set(1));
+        assert!(result.unwrap_err().contains("ownership unavailable"));
+        assert_eq!(
+            effects.get(),
+            0,
+            "missing ownership must refuse before native effects"
+        );
+        assert!(recording.writes.is_empty());
+    }
+    #[test]
+    fn refused_original_render_retains_typed_capture_failure_and_disables_exchange() {
+        let mut render = capture(
+            "relative-render-cwd",
+            Instant::now() + Duration::from_secs(10),
+        );
+        assert!(!render.available());
+        let failure = render.capture_failure.as_ref().unwrap();
+        assert_eq!(failure.category, "capture");
+        assert_eq!(failure.git.as_ref().unwrap().category, "unsupported");
+        assert!(failure.diagnostic.contains("CWD"));
+        let diagnostic = failure.diagnostic.clone();
+        let mut recording = Recording::default();
+        assert!(
+            render
+                .with_transport(&mut recording, &|| false, |_| panic!(
+                    "effect after refusal"
+                ))
+                .is_err()
+        );
+        render.retry_cleanup().unwrap();
+        assert_eq!(
+            render.capture_failure.as_ref().unwrap().diagnostic,
+            diagnostic
+        );
+        assert!(render.cleanup_settled());
+    }
+    #[test]
+    fn preparation_wraps_late_stop_ready_and_keeps_terminal_phase_failure_after_wrapper_drop() {
+        let expires = Instant::now() + Duration::from_secs(10);
+        let mut prepared = preparation(capture("/tmp", expires));
+        assert!(prepared.render.available());
+        let token = "original-token";
+        let catalog = json!({"schema":"caws.runtime.stop-render-sources.v1",
+            "transcriptPath":"/repo/.caws/sessions/s/.transcript-projection.jsonl",
+            "audit":{"path":"/repo/.opencode/logs/audit.log","disposition":"absent"},
+            "hookOutcomes":{"path":"/repo/.caws/sessions/s/hook-events.jsonl","disposition":"absent"},
+            "subagents":{"claudeCandidate":{"path":"/repo/.caws/sessions/s/s/subagents","kind":"absent"},
+            "qwenCandidate":{"path":"/repo/.caws/sessions/subagents/s","kind":"absent"}}});
+        let input_digest =
+            digest(&serde_json::to_vec(&json!({"files":[],"sourceCatalog":catalog})).unwrap());
+        let tuple = |schema: &str| {
+            json!({"schema":schema,"id":ID,"runtimeDigest":"a".repeat(64),
+            "token":token,"attempt":"attempt","kind":"render","observationId":"b".repeat(64),
+            "inputDigest":input_digest})
+        };
+        let prepare = json!({"schema":caws_native::session_publication::STOP_PREPARE,
+            "id":ID,"runtimeDigest":"a".repeat(64),"token":token,"attempt":"attempt","kind":"render",
+            "snapshot":{"observationId":"b".repeat(64),"inputDigest":input_digest,
+            "sessionId":"s","reason":"exit","endedAt":"2026-10-23T00:00:00Z",
+            "files":[],"priorInventory":[],"sourceCatalog":catalog}});
+        let ready = json!({"schema":wire::READY,"id":ID,"runtimeDigest":"a".repeat(64),
+            "token":token,"attempt":"attempt","kind":"render","direction":"inputs"});
+        let mut early_prepared = tuple(wire::PREPARED);
+        early_prepared["disposition"] = "ready".into();
+        early_prepared["artifacts"] = json!([]);
+        early_prepared["removals"] = json!([]);
+        let mut recording = Recording {
+            reads: VecDeque::from([frame(early_prepared)]),
+            ..Default::default()
+        };
+        let error = prepared
+            .render
+            .with_transport(&mut recording, &|| false, |transport| {
+                transport.write(&frame(prepare), expires).unwrap();
+                transport.write(&frame(ready), expires).unwrap();
+                transport.read(expires).unwrap_err()
+            })
+            .unwrap();
+        assert!(error.contains("before Git completion"), "{error}");
+        assert_eq!(recording.writes.len(), 3);
+        let binding = &recording.writes[2];
+        assert_eq!(binding["schema"], observation::STOP_BINDING);
+        assert_eq!(binding["cwd"], "/tmp");
+        assert_eq!(
+            binding["calendarContext"]["originalPid"],
+            std::process::id()
+        );
+        for (name, field) in [("TZ", "tz"), ("TZDIR", "tzdir")] {
+            let expected = match std::env::var(name) {
+                Ok(value) => json!({"kind":"present","value":value}),
+                Err(_) => json!({"kind":"absent"}),
+            };
+            assert_eq!(binding["calendarContext"][field], expected);
+        }
+        assert_eq!(binding["sourceCatalog"], catalog);
+        assert!(
+            !prepared.render.available(),
+            "failed owner cannot authorize another exchange"
+        );
+        let first = prepared
+            .render
+            .owner
+            .as_ref()
+            .unwrap()
+            .failure()
+            .unwrap()
+            .diagnostic
+            .clone();
+        prepared.retry_cleanup().unwrap();
+        assert!(prepared.cleanup_settled());
+        assert_eq!(
+            prepared
+                .render
+                .owner
+                .as_ref()
+                .unwrap()
+                .failure()
+                .unwrap()
+                .diagnostic,
+            first
+        );
+        let effects = Cell::new(0);
+        assert!(
+            prepared
+                .render
+                .with_transport(&mut recording, &|| false, |_| effects.set(1))
+                .is_err()
+        );
+        assert_eq!(
+            effects.get(),
+            0,
+            "terminal owner must not re-enter native exchange"
+        );
+    }
+    #[test]
+    fn preparation_cleanup_never_treats_unsettled_render_receipt_as_success() {
+        use caws_native::{
+            invocation_project::{ProjectFailure, ProjectPhase, QueryCleanup},
+            render_context,
+        };
+        // An adversarial retained cleanup receipt, not an actual child. This
+        // asserts the enclosing owner's propagation; real custody has its own tests.
+        let git = render_context::Failure {
+            category: "query",
+            diagnostic: "retained-original".into(),
+            completed: vec![],
+            stdout: b"partial-original".to_vec(),
+            stderr: vec![],
+            remote: None,
+            cause: Some(ProjectFailure {
+                first_phase: ProjectPhase::Cleanup,
+                first_message: "retained-original".into(),
+                retained: None,
+                cleanup: Box::new(QueryCleanup {
+                    pid: Some(123),
+                    ..Default::default()
+                }),
+            }),
+        };
+        let mut prepared = preparation(OriginalRenderPreparation {
+            owner: None,
+            capture_failure: Some(Box::new(observation::Failure {
+                category: "capture",
+                diagnostic: "retained-original".into(),
+                git: Some(git),
+                calendar: None,
+            })),
+        });
+        assert!(!prepared.cleanup_settled());
+        assert!(
+            prepared
+                .retry_cleanup()
+                .unwrap_err()
+                .contains("cleanup remains uncertain")
+        );
+        assert!(!prepared.cleanup_settled());
+        let retained = prepared
+            .render
+            .capture_failure
+            .as_ref()
+            .unwrap()
+            .git
+            .as_ref()
+            .unwrap();
+        assert_eq!(retained.stdout, b"partial-original");
+        assert_eq!(
+            retained.cause.as_ref().unwrap().first_message,
+            "retained-original"
+        );
+        assert!(!prepared.render.available());
     }
 }

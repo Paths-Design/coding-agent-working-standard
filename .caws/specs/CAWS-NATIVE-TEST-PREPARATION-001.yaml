@@ -1,0 +1,94 @@
+id: CAWS-NATIVE-TEST-PREPARATION-001
+title: 'Prepare native and qualification helper prerequisites for ordinary tests'
+mode: fix
+lifecycle_state: active
+created_at: '2026-10-23T06:26:43.506Z'
+updated_at: '2026-10-25T13:01:33.905Z'
+created_by_session: '01a166d3-36ad-71a3-83a1-a1b8a6e32a7c'
+blast_radius:
+  modules:
+    - 'CLI test execution, native test builds, and CI preparation'
+    - 'Completed Node test identity for acceptance re-derivation and ordinary CI wrappers'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'rust-toolchain.toml'
+    - 'turbo.json'
+    - '.github/workflows/pr-checks.yml'
+    - '.github/workflows/release-qualification.yml'
+    - 'packages/caws-cli/package.json'
+    - 'packages/caws-cli/scripts/run-tests.js'
+    - 'packages/caws-cli/scripts/prepare-test-prerequisites.js'
+    - 'packages/caws-cli/tsconfig.qualification-tests.json'
+    - 'packages/caws-cli/tests/runtime/render-session-evidence.test.js'
+    - 'packages/caws-cli/tests/shell/run-tests-exit-code.test.js'
+    - 'packages/caws-cli/tests/shell/prepare-test-prerequisites.test.js'
+    - 'packages/caws-cli/tests/ci/native-test-preparation.test.js'
+    - packages/caws-cli/scripts/qualify-context-git.cjs
+    - packages/caws-cli/scripts/clean-staged-docs.mjs
+    - packages/caws-cli/tests/docs/package-license-transport.test.js
+    - packages/caws-cli/src/store/evidence-rederive.ts
+    - packages/caws-cli/tests/store/evidence-rederive.test.js
+    - packages/caws-cli/tests/ci/release-qualification.test.js
+    - packages/caws-cli/tests/transcripts/foundation.test.js
+    - packages/caws-cli/jest.config.js
+  out: []
+  support:
+    - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
+    - packages/caws-cli/tests/adapter/machine-runtime.test.js
+invariants:
+  - 'Every ordinary full test route prepares current compiled helpers and a feature-off host native binary before Jest; preparation failure is never a skip or successful verdict.'
+  - 'Generic test preparation never uses SQLite qualification or adopts an existing binary after a failed build; macOS actual custody remains a mandatory separate qualification.'
+  - 'Qualification tests retain the fixed reviewed historical reference inventory; current candidate templates cannot regenerate or replace the oracle.'
+  - 'Node test verification requires an executed leaf result with unambiguous per-result identity; file wrappers, suite containers, deferred or ambiguous results cannot verify acceptance.'
+acceptance:
+  - id: A1
+    given: 'a checkout without generated qualification helpers or the native test binary'
+    when: 'ordinary package tests prepare their dependencies'
+    then: 'the declared TypeScript helpers and feature-off native binary are built from current source before Jest runs.'
+  - id: A2
+    given: 'prerequisite compilation or spawning fails or is interrupted'
+    when: 'the test runner executes'
+    then: 'it returns failure before running Jest and preserves the original diagnostic.'
+  - id: A3
+    given: 'PR and release qualification start from a clean hosted checkout'
+    when: 'CI prepares tests'
+    then: 'pinned Rust and locked Cargo dependencies precede offline test compilation, native and helper source changes invalidate test caches, and a mandatory macOS job executes actual context custody tests.'
+  - id: A4
+    given: >-
+      Node test citations with completed, failed, skipped, pending, container-only,
+      escaped-file-wrapper or ambiguous reporter results
+    when: 'evidence re-derivation runs tests using the executing Node runtime'
+    then: >-
+      only completed leaf tests can verify a citation; unsupported or ambiguous
+      result identity remains unavailable, and refusals preserve named-result,
+      failure and cancellation evidence without changing package engines.
+observability:
+  - 'Retain exact preparation commands, tool versions, selected artifact identities, test output and clean-checkout observations outside source control.'
+rollback:
+  - 'Revert the preparation implementation through a normal corrective commit while retaining failing prerequisite evidence and mandatory test obligations.'
+non_functional: {}
+contracts:
+  - name: 'test-prerequisites'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected fresh-dist/fresh-target ordinary npm test: normal CLI build, both helper outputs, offline feature-off Rust1.90 binary then37 consumer/routing cases. Separate actual custody16 pass. Source pins map to committed candidate except formatter-only run-tests wrapping replayed in committed33. Linked installed dependencies; hosted npm ci unverified. Retained external runtime evidence: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/testprep-ordinary-01/execution.json; --verify below checks commit existence only, not external artifact or execution."
+    recorded_at: "2026-10-23T08:32:32.391Z"
+    commit_sha: "74e174a54d27ff628e77b429f3ba8e096bfe9ee1"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Committed33 tests inspected and executed: compiler exits23/19, signal termination and ENOENT preserve diagnostics and prevent downstream execution despite stale outputs; missing artifacts and target symlink refuse. Source stable, no timeout or process residue. Retained external runtime evidence: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/native-test-preparation/testprep-committed-js-01/execution.json; --verify below checks commit existence only, not external artifact or execution."
+    recorded_at: "2026-10-23T08:32:34.235Z"
+    commit_sha: "74e174a54d27ff628e77b429f3ba8e096bfe9ee1"
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Root retains normal publication and hosted clean macOS/Ubuntu verification. Normal push01 failed Node25 reporter parsing; repairs ebbd789,ab2d529,1e3144573 now pass bounded rebuilt Node22/25 controls; full ordinary push rerun pending. Encountered production spawnBounded source evidence-rederive.ts:164-189 uses direct-child execFileSync SIGKILL; a deliberately unresolved Node test left grandchild81906 after120s. Raw tap-fix-node25.log,tap-orphan-before.txt,tap-orphans-after-first-cleanup.txt under /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/combined-source-01/ retained; Root individually terminated only verified own child and verified group empty. Corrected cancellation fixtures now abort deterministically and fail naturally, but generic production timeout descendant settlement remains unproven and Root-owned. Native runtime custody uses separate native owner and is not established by this executor. No closure or complete CI claim."
+    recorded_at: "2026-10-25T06:58:26.031Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Actual executing Node25.9 and22.19 rebuilt public executor: 3 suites86pass2unchanged Bats skips, logs /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/combined-source-01/tap-directive-node25-02.log and tap-directive-node22.log. Real empty/named/populated suites, escaped file wrappers, cancelled/skipped/pending cases refuse; completed leaf passes. Retained six pre-repair container failures and two unknown-directive nested YAML false-passes prove counterexamples. Per-result absent/duplicate/conflicting/nested/unclosed type unavailable. Unknown directive payload excluded before filtering. Independent peer findings discharged at actual source; no oldNode runtime execution claim. --verify commit checks reachability only; Root manually inspected source/raw checks; no installed cutover acceptance."
+    recorded_at: "2026-10-25T06:58:13.514Z"
+    commit_sha: "1e3144573"

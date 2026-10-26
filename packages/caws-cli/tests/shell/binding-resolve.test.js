@@ -2240,3 +2240,142 @@ describe('resolveBinding: bound / unbound / one_sided classification', () => {
     expect(r.binding.kind).toBe('unbound');
   });
 });
+
+describe('scope matcher consumer semantics', () => {
+  function spec(id, entries, support = []) {
+    return {
+      id,
+      worktree: `wt-${id}`,
+      lifecycle_state: 'active',
+      scope: { in: entries, support },
+    };
+  }
+
+  function resolve(specs, targetPath, { bridges, registry } = {}) {
+    return resolveBinding({
+      repoRoot: '/scope-matcher/repo',
+      cwd: '/scope-matcher/repo',
+      targetPath,
+      specs,
+      registry:
+        registry ??
+        Object.fromEntries(
+          specs.map((s) => [
+            s.worktree,
+            {
+              specId: s.id,
+              path: `/scope-matcher/lanes/${s.worktree}`,
+            },
+          ])
+        ),
+      gitWorktreeList: () => [],
+      ...(bridges === undefined ? {} : { bridges, sessionId: 'matcher-session' }),
+    });
+  }
+
+  test.each([
+    ['src/**/*.ts', 'src/direct.ts', true],
+    ['src/**/*.ts', 'src/deep/file.ts', true],
+    ['src/**/*.ts', 'src/direct.js', false],
+    ['packages/*', 'packages/a', true],
+    ['packages/*', 'packages/a/b.ts', false],
+    ['docs/{api,agents}/cli.md', 'docs/api/cli.md', true],
+    ['docs/{api,agents}/cli.md', 'docs/other/cli.md', false],
+    ['src/[abc]/x.ts', 'src/a/x.ts', true],
+    ['src/[abc]/x.ts', 'src/z/x.ts', false],
+    ['src/**/*.ts', 'src/.hidden.ts', true],
+  ])('worktree claim %s against %s is %s', (entry, target, claims) => {
+    const owner = spec('MATCHER-001', [entry]);
+    const result = resolve([owner], target);
+    expect(result.binding.kind).toBe(claims ? 'bound' : 'unbound');
+    expect(result.source).toBe(claims ? 'target_scope_in_claim' : 'none');
+    if (claims) expect(result.binding.spec.id).toBe(owner.id);
+  });
+
+  test('overlapping globstar and brace claimants refuse selection and name both owners', () => {
+    const globstar = spec('MATCHER-001', ['src/**/*.ts']);
+    const braces = spec('MATCHER-002', ['src/{direct,other}.ts']);
+    const result = resolve([globstar, braces], 'src/direct.ts');
+    expect(result.binding.kind).toBe('unbound');
+    expect(result.ambiguous).toEqual({
+      targetPath: 'src/direct.ts',
+      claimants: [
+        {
+          specId: globstar.id,
+          worktreeName: globstar.worktree,
+          matchedScopeInEntry: 'src/**/*.ts',
+        },
+        {
+          specId: braces.id,
+          worktreeName: braces.worktree,
+          matchedScopeInEntry: 'src/{direct,other}.ts',
+        },
+      ],
+    });
+  });
+
+  test('multiple bridges choose the real globstar claimant and exclude a separator-crossing star', () => {
+    const owner = spec('MATCHER-001', ['packages/**/*.ts']);
+    const unrelated = spec('MATCHER-002', ['packages/*']);
+    const bridges = {
+      [owner.id]: { session_id: 'matcher-session' },
+      [unrelated.id]: { session_id: 'matcher-session' },
+    };
+    const options = { bridges, registry: {} };
+    const result = resolve([owner, unrelated], 'packages/a/b.ts', options);
+    expect(result.binding.kind).toBe('bridged');
+    expect(result.binding.spec.id).toBe(owner.id);
+    expect(result.source).toBe('bridge_claim');
+    expect(resolve([owner, unrelated], 'elsewhere/x.ts', options).binding.kind).toBe('unbound');
+  });
+
+  test('multiple bridge claimants remain unbound; support never becomes a claimant', () => {
+    const owner = spec('MATCHER-001', ['src/**/*.ts']);
+    const other = spec('MATCHER-002', ['src/{direct,other}.ts'], ['docs/**/*.md']);
+    const bridges = {
+      [owner.id]: { session_id: 'matcher-session' },
+      [other.id]: { session_id: 'matcher-session' },
+    };
+    expect(resolve([owner, other], 'src/direct.ts', { bridges, registry: {} }).binding.kind).toBe(
+      'unbound'
+    );
+    expect(resolve([owner, other], 'docs/direct.md', { bridges, registry: {} }).binding.kind).toBe(
+      'unbound'
+    );
+    expect(resolve([owner, other], 'docs/direct.md').binding.kind).toBe('unbound');
+  });
+
+  test('oversized scope entry claims no worktree while a valid second owner remains selectable', () => {
+    const oversized = '[' + 'a'.repeat(65536);
+    const invalid = spec('MATCHER-OVERSIZED-001', [oversized]);
+    const valid = spec('MATCHER-VALID-002', ['src/**/*.ts']);
+    const refused = resolve([invalid], 'src/direct.ts');
+    expect(refused.binding.kind).toBe('unbound');
+    expect(refused.source).toBe('none');
+    const selected = resolve([invalid, valid], 'src/direct.ts');
+    expect(selected.binding.kind).toBe('bound');
+    expect(selected.binding.spec.id).toBe(valid.id);
+    expect(selected.worktreeName).toBe(valid.worktree);
+    expect(selected.source).toBe('target_scope_in_claim');
+  });
+
+  test('oversized entry grants no multi-bridge claim and preserves an independently valid bridge', () => {
+    const oversized = '[' + 'a'.repeat(65536);
+    const invalid = spec('MATCHER-OVERSIZED-001', [oversized]);
+    const unrelated = spec('MATCHER-OTHER-002', ['docs']);
+    const valid = spec('MATCHER-VALID-003', ['src/**/*.ts']);
+    const bridges = {
+      [invalid.id]: { session_id: 'matcher-session' },
+      [unrelated.id]: { session_id: 'matcher-session' },
+      [valid.id]: { session_id: 'matcher-session' },
+    };
+    const options = { bridges, registry: {} };
+    const refused = resolve([invalid, unrelated], 'src/direct.ts', options);
+    expect(refused.binding.kind).toBe('unbound');
+    expect(refused.source).toBe('none');
+    const selected = resolve([invalid, unrelated, valid], 'src/direct.ts', options);
+    expect(selected.binding.kind).toBe('bridged');
+    expect(selected.binding.spec.id).toBe(valid.id);
+    expect(selected.source).toBe('bridge_claim');
+  });
+});

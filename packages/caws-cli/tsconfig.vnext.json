@@ -37,6 +37,8 @@
     "rootDir": "src",
     "types": ["node"]
   },
+  // Staged init, runtime, transcript and tooling modules are included explicitly,
+  // so package emission does not depend on a production consumer importing them.
   // src/init is included EXPLICITLY, not left to transitive reachability.
   // tsc emits an init module only when something under store/shell/kernel
   // imports it, so a module staged ahead of its consumers — the normal shape
@@ -48,6 +50,8 @@
     "src/shell/**/*.ts",
     "src/kernel/**/*.ts",
     "src/init/**/*.ts",
-    "src/runtime/**/*.ts"
+    "src/runtime/**/*.ts",
+    "src/transcripts/**/*.ts",
+    "src/tooling/**/*.ts"
   ]
 }

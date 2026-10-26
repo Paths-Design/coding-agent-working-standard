@@ -372,6 +372,22 @@ rollback. Never edit snapshot bytes. An interrupted install leaves
 owning process and partial bytes before removing a stale lock and retrying.
 Rollback refuses to overwrite a concurrent edit.
 
+Rollback verifies the selected target generation before changing the pointer. An
+existing native registration can continue through a verified legacy generation
+when its stable entry matches a retained manifest-bound entry identity. This
+compatibility check verifies manifest integrity, supported hashed metadata and
+the retained launcher's regular-file, single-link, byte and executable-mode
+identity under machine-home custody. It does not qualify unused native image
+payloads or authenticate publisher history. Fresh native opt-in, native
+selection and rollback into a native generation require full image verification.
+
+Observation requires the matching stable entry to have mode `0755` and never
+repairs it. Explicit installation or rollback can restore a missing stable entry
+from validated retained bytes or repair the mode of recognized bytes; unknown
+bytes, symbolic links and multiple links refuse before pointer publication.
+Native dispatch failures never trigger legacy fallback. Filesystem checks and
+fixture tests do not establish native harness execution or adoption.
+
 ## Human latch recovery
 
 From the canonical project checkout, a human can run the reset helper from the

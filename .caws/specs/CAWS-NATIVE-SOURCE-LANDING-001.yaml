@@ -1,0 +1,391 @@
+id: CAWS-NATIVE-SOURCE-LANDING-001
+title: 'Reconcile matched native runtime source and package contracts onto main'
+mode: refactor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded coherent source delivery completed at c41ee44b with code c61ad087: matched native/CLI/package build, exact private installed native cache and guard controls, corruption refusal and native-to-legacy rollback. A1-A3 recorded/read back with full-basis gates and independent review. Full runtime modernization remains active under CAWS-NATIVE-RUNTIME-001 and CAWS-NATIVE-SESSION-PUBLICATION-001: ordinary Stop integration/admission, deep deadline effect checks, in-process parity, Python retirement, harness delivery, residency/fairness, active-owner upgrades and actual machine adoption. No parent completion or local cutover is claimed.'
+created_at: '2026-10-22T22:51:57.793Z'
+updated_at: '2026-10-24T00:56:00.797Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Matched opt-in native frontend, typed runtime, image tooling and shared ordinary consumers'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+    - packages/caws-cli/templates/hook-packs/shared/audit.sh
+    - packages/caws-cli/tests/hooks/bats/audit-jsonl.bats
+    - packages/caws-cli/tests/hooks/bats/guard-config.bats
+  out: []
+  support:
+    - .gitignore
+    - README.md
+    - docs/agents/full-guide.md
+    - docs/architecture/caws-native-runtime.md
+    - docs/failure-lineage.md
+    - package-lock.json
+    - packages/caws-cli/.gitignore
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/package.json
+    - packages/caws-cli/scripts/assert-mutation-report.mjs
+    - packages/caws-cli/scripts/build-cli.js
+    - packages/caws-cli/scripts/clean-staged-docs.mjs
+    - packages/caws-cli/scripts/committed-turn-files.ts
+    - packages/caws-cli/scripts/generate-runtime-assets.mjs
+    - packages/caws-cli/scripts/mutation-input-identity.mjs
+    - packages/caws-cli/scripts/qualify-advisory-truncate.mjs
+    - packages/caws-cli/scripts/qualify-guard-config.ts
+    - packages/caws-cli/scripts/qualify-native-containment.ts
+    - packages/caws-cli/scripts/qualify-native-heartbeat.ts
+    - packages/caws-cli/scripts/qualify-native-services.ts
+    - packages/caws-cli/scripts/qualify-native-substitution.ts
+    - packages/caws-cli/scripts/qualify-plan-snapshots.ts
+    - packages/caws-cli/scripts/qualify-render-advisory.ts
+    - packages/caws-cli/scripts/qualify-render-legacy.ts
+    - packages/caws-cli/scripts/qualify-render-lifecycle.ts
+    - packages/caws-cli/scripts/qualify-render-load.ts
+    - packages/caws-cli/scripts/qualify-render-owner.ts
+    - packages/caws-cli/scripts/qualify-render-pending.ts
+    - packages/caws-cli/scripts/qualify-render-plan-snapshots.ts
+    - packages/caws-cli/scripts/render-qualification-harness.ts
+    - packages/caws-cli/scripts/render-request-custody.test.ts
+    - packages/caws-cli/scripts/render-request-custody.ts
+    - packages/caws-cli/scripts/render-request-topology.test.ts
+    - packages/caws-cli/scripts/render-request-topology.ts
+    - packages/caws-cli/scripts/run-mutation.mjs
+    - packages/caws-cli/scripts/stage-consumer-docs.mjs
+    - packages/caws-cli/scripts/stryker-config.cjs
+    - packages/caws-cli/src/application/agent-heartbeat.ts
+    - packages/caws-cli/src/application/message-poll.ts
+    - packages/caws-cli/src/init/gitignore-drift.ts
+    - packages/caws-cli/src/init/gitignore-manage.ts
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/init/hook-packs/managed-header.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/src/init/machine-adapter-policy.ts
+    - packages/caws-cli/src/init/machine-adapters.ts
+    - packages/caws-cli/src/init/machine-runtime-state.ts
+    - packages/caws-cli/src/init/native-hook-identification.ts
+    - packages/caws-cli/src/init/native-runtime-entry.ts
+    - packages/caws-cli/src/init/system-runtime.ts
+    - packages/caws-cli/src/kernel/evidence/validate.ts
+    - packages/caws-cli/src/runtime/actor-context.ts
+    - packages/caws-cli/src/runtime/advisory-truncate-entry.ts
+    - packages/caws-cli/src/runtime/agent-heartbeat.ts
+    - packages/caws-cli/src/runtime/describe-entry.ts
+    - packages/caws-cli/src/runtime/engine-entry.ts
+    - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-cli/src/runtime/guard-config.ts
+    - packages/caws-cli/src/runtime/handler-executor.ts
+    - packages/caws-cli/src/runtime/json-custody.ts
+    - packages/caws-cli/src/runtime/live-protocol.ts
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/src/runtime/selection.ts
+    - packages/caws-cli/src/runtime/service-client.ts
+    - packages/caws-cli/src/runtime/service-image.ts
+    - packages/caws-cli/src/runtime/service-offer.ts
+    - packages/caws-cli/src/runtime/service-protocol.ts
+    - packages/caws-cli/src/runtime/session-cache-client.ts
+    - packages/caws-cli/src/runtime/stock-handlers.ts
+    - packages/caws-cli/src/runtime/transcript-store-client.ts
+    - packages/caws-cli/src/shell/binding/resolve-binding.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/src/shell/commands/message.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/render/init-hook-pack.ts
+    - packages/caws-cli/src/store/system-runtime-observation.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/tooling/ar-archive.ts
+    - packages/caws-cli/src/tooling/native-sqlite-build-entry.ts
+    - packages/caws-cli/src/tooling/native-sqlite-build.ts
+    - packages/caws-cli/src/tooling/sqlite-static-build.ts
+    - packages/caws-cli/src/tooling/transcript-runtime-floor-entry.ts
+    - packages/caws-cli/src/tooling/transcript-runtime-floor.ts
+    - packages/caws-cli/src/transcripts/harness-claude.ts
+    - packages/caws-cli/src/transcripts/harness-codex.ts
+    - packages/caws-cli/src/transcripts/harness-common.ts
+    - packages/caws-cli/src/transcripts/index.ts
+    - packages/caws-cli/src/transcripts/registry.ts
+    - packages/caws-cli/src/transcripts/render-accumulator.ts
+    - packages/caws-cli/src/transcripts/render-artifacts.ts
+    - packages/caws-cli/src/transcripts/render-prepare.ts
+    - packages/caws-cli/src/transcripts/render-reader.ts
+    - packages/caws-cli/src/transcripts/render-values.ts
+    - packages/caws-cli/src/transcripts/source-occurrence.ts
+    - packages/caws-cli/src/transcripts/store-projection.ts
+    - packages/caws-cli/src/transcripts/store-timestamp.ts
+    - packages/caws-cli/src/transcripts/transcript-json-profile.ts
+    - packages/caws-cli/templates/hook-packs/runtime/service-image/caws.sh
+    - packages/caws-cli/templates/hook-packs/runtime/service-image/codex-parser-runtime.sh
+    - packages/caws-cli/templates/hook-packs/runtime/service-image/dispatch.sh
+    - packages/caws-cli/templates/hook-packs/runtime/service-image/execute-handler.sh
+    - packages/caws-cli/templates/hook-packs/runtime/service-image/git.sh
+    - packages/caws-cli/templates/hook-packs/runtime/service-image/handler-env.sh
+    - packages/caws-cli/templates/hook-packs/runtime/service-image/handler-routes.sh
+    - packages/caws-cli/templates/hook-packs/runtime/service-image/libraries.sh
+    - packages/caws-cli/templates/hook-packs/runtime/service-image/parse-input.sh
+    - packages/caws-cli/templates/hook-packs/runtime/service-image/plan-transcript-finalize.sh
+    - packages/caws-cli/templates/hook-packs/runtime/service-image/tool.sh
+    - packages/caws-cli/templates/hook-packs/shared/advisory_truncate.cjs
+    - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
+    - packages/caws-cli/templates/hook-packs/shared/agent-stop.sh
+    - packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/parse-input.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/session-render-service-client.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/session-render-writer.sh
+    - packages/caws-cli/templates/hook-packs/shared/session-log.sh
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - packages/caws-cli/tests/adapter/machine-adoption.test.js
+    - packages/caws-cli/tests/adapter/native-entry-registration.test.js
+    - packages/caws-cli/tests/adapter/native-runtime-entry.test.js
+    - packages/caws-cli/tests/adapter/system-runtime.test.js
+    - packages/caws-cli/tests/application/agent-heartbeat.test.js
+    - packages/caws-cli/tests/application/message-poll.test.js
+    - packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-cli/tests/docs/package-license-transport.test.js
+    - packages/caws-cli/tests/hooks/actor-context-rows.json
+    - packages/caws-cli/tests/hooks/bats/agent-surface.bats
+    - packages/caws-cli/tests/hooks/bats/block-dangerous.bats
+    - packages/caws-cli/tests/hooks/bats/handler-stdin-feed.bats
+    - packages/caws-cli/tests/hooks/bats/handler-stdin-stage-lifetime.bats
+    - packages/caws-cli/tests/hooks/bats/run-handlers-advisory-budget.bats
+    - packages/caws-cli/tests/hooks/bats/worktree-write-guard.bats
+    - packages/caws-cli/tests/hooks/heartbeat-actor-custody.test.js
+    - packages/caws-cli/tests/hooks/pytest-entrypoint.test.js
+    - packages/caws-cli/tests/init/claude-settings-merge.test.js
+    - packages/caws-cli/tests/init/gitignore-coverage.test.js
+    - packages/caws-cli/tests/init/init-hook-pack-render.test.js
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/kernel/unit/evidence-inherited-event-type.test.ts
+    - packages/caws-cli/tests/runtime/actor-context.test.js
+    - packages/caws-cli/tests/runtime/advisory-truncate-integration.test.js
+    - packages/caws-cli/tests/runtime/agent-heartbeat.test.js
+    - packages/caws-cli/tests/runtime/agent-stop-output.test.js
+    - packages/caws-cli/tests/runtime/committed-turn-files.test.js
+    - packages/caws-cli/tests/runtime/engine-routing.test.js
+    - packages/caws-cli/tests/runtime/generated-runtime-assets.test.js
+    - packages/caws-cli/tests/runtime/guard-config-integration.test.js
+    - packages/caws-cli/tests/runtime/guard-config.test.js
+    - packages/caws-cli/tests/runtime/protocol.test.js
+    - packages/caws-cli/tests/runtime/render-session-evidence.test.js
+    - packages/caws-cli/tests/runtime/render-writer-client.test.js
+    - packages/caws-cli/tests/runtime/runtime-asset-fixture.js
+    - packages/caws-cli/tests/runtime/selection.test.js
+    - packages/caws-cli/tests/runtime/service-client.test.js
+    - packages/caws-cli/tests/runtime/service-image.test.js
+    - packages/caws-cli/tests/runtime/service-offer.test.js
+    - packages/caws-cli/tests/runtime/service-protocol.test.js
+    - packages/caws-cli/tests/runtime/session-cache-client.test.js
+    - packages/caws-cli/tests/runtime/stock-handlers.test.js
+    - packages/caws-cli/tests/runtime/transcript-store-client.test.js
+    - packages/caws-cli/tests/shell/binding-resolve.test.js
+    - packages/caws-cli/tests/shell/init-plan.test.js
+    - packages/caws-cli/tests/shell/scope-contention.test.js
+    - packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js
+    - packages/caws-cli/tests/shell/worktree-merge-split-state.test.js
+    - packages/caws-cli/tests/shell/worktree-review.test.js
+    - packages/caws-cli/tests/store/worktree-reconciliation.test.js
+    - packages/caws-cli/tests/tooling/ar-archive.test.js
+    - packages/caws-cli/tests/tooling/native-sqlite-build.test.js
+    - packages/caws-cli/tests/tooling/transcript-runtime-floor.test.js
+    - packages/caws-cli/tests/transcripts/exports.test.ts
+    - packages/caws-cli/tests/transcripts/foundation.test.js
+    - packages/caws-cli/tests/transcripts/occurrence.test.ts
+    - packages/caws-cli/tests/transcripts/registry.test.ts
+    - packages/caws-cli/tests/transcripts/render-accumulator.test.ts
+    - packages/caws-cli/tests/transcripts/render-artifacts.test.ts
+    - packages/caws-cli/tests/transcripts/render-prepare.test.ts
+    - packages/caws-cli/tests/transcripts/render-reader.test.ts
+    - packages/caws-cli/tests/transcripts/render-values.test.ts
+    - packages/caws-cli/tests/transcripts/run.cjs
+    - packages/caws-cli/tests/transcripts/store-projection.test.js
+    - packages/caws-cli/tests/transcripts/store-timestamp.test.js
+    - packages/caws-cli/tests/transcripts/transcript-json-profile.test.ts
+    - packages/caws-native/Cargo.lock
+    - packages/caws-native/Cargo.toml
+    - packages/caws-native/build.rs
+    - packages/caws-native/examples/process-comm-ancestor-compare.rs
+    - packages/caws-native/examples/process-comm-compare.rs
+    - packages/caws-native/examples/process-comm-vis-oracle.c
+    - packages/caws-native/examples/service-custody-observer.rs
+    - packages/caws-native/examples/service-journal-observer.rs
+    - packages/caws-native/examples/service-journal-root-replacement.rs
+    - packages/caws-native/src/engine_custody.rs
+    - packages/caws-native/src/engine_custody/tests.rs
+    - packages/caws-native/src/engine_custody/worker.rs
+    - packages/caws-native/src/engine_custody/worker/tests.rs
+    - packages/caws-native/src/installed_entry.rs
+    - packages/caws-native/src/installed_entry_main.rs
+    - packages/caws-native/src/invocation_project.rs
+    - packages/caws-native/src/lib.rs
+    - packages/caws-native/src/main.rs
+    - packages/caws-native/src/owned_group.rs
+    - packages/caws-native/src/owned_group/tests.rs
+    - packages/caws-native/src/owned_group_macos.c
+    - packages/caws-native/src/plan_snapshots.rs
+    - packages/caws-native/src/plan_snapshots/tests.rs
+    - packages/caws-native/src/process_comm_macos.c
+    - packages/caws-native/src/process_comm_macos.rs
+    - packages/caws-native/src/process_effect.rs
+    - packages/caws-native/src/protocol.rs
+    - packages/caws-native/src/render_bridge.rs
+    - packages/caws-native/src/render_owner.rs
+    - packages/caws-native/src/render_owner/observations.rs
+    - packages/caws-native/src/render_owner/pending.rs
+    - packages/caws-native/src/render_owner/store.rs
+    - packages/caws-native/src/render_owner/store/tests.rs
+    - packages/caws-native/src/render_owner/tests.rs
+    - packages/caws-native/src/render_writer.rs
+    - packages/caws-native/src/renderer_backend.rs
+    - packages/caws-native/src/renderer_backend/entry.rs
+    - packages/caws-native/src/renderer_backend/tests.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/src/service_git_view.rs
+    - packages/caws-native/src/service_image.rs
+    - packages/caws-native/src/service_image/prefix-profile.json
+    - packages/caws-native/src/service_image/prefix.rs
+    - packages/caws-native/src/service_image/prefix/tests.rs
+    - packages/caws-native/src/service_image/tests.rs
+    - packages/caws-native/src/service_journal.rs
+    - packages/caws-native/src/service_journal/custody.rs
+    - packages/caws-native/src/service_journal/tests.rs
+    - packages/caws-native/src/service_protocol.rs
+    - packages/caws-native/src/service_protocol/fixtures.json
+    - packages/caws-native/src/service_protocol/generate-fixtures.cjs
+    - packages/caws-native/src/service_protocol/tests.rs
+    - packages/caws-native/src/session_cache.rs
+    - packages/caws-native/src/session_cache/tests.rs
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/session_cache_wire/contract.json
+    - packages/caws-native/src/session_cache_wire/tests.rs
+    - packages/caws-native/src/sqlite_build_identity.rs
+    - packages/caws-native/src/stop_budget.rs
+    - packages/caws-native/src/transcript_store.rs
+    - packages/caws-native/src/transcript_store_wire.rs
+    - packages/caws-native/tests/engine_custody.rs
+    - packages/caws-native/tests/fixtures/custody-engine.cjs
+    - packages/caws-native/tests/fixtures/engine-topology.cjs
+    - packages/caws-native/tests/fixtures/engine-topology.test.cjs
+    - packages/caws-native/tests/fixtures/engine.cjs
+    - packages/caws-native/tests/fixtures/store-engine.cjs
+    - packages/caws-native/tests/fixtures/terminal-caller.rs
+    - packages/caws-native/tests/fixtures/terminal-engine.cjs
+    - packages/caws-native/tests/installed_entry.rs
+    - packages/caws-native/tests/invoke.rs
+    - packages/caws-native/tests/invoke/collector.rs
+    - packages/caws-native/tests/invoke/session_cache.rs
+    - packages/caws-native/tests/invoke/store_settlement.rs
+    - packages/caws-native/tests/sqlite_identity.rs
+    - scripts/install-cli-snapshot.mjs
+    - scripts/install-cli-snapshot.test.mjs
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/guides/sterling-machine-runtime-migration.md
+    - packages/caws-cli/src/runtime/session-cache-admission.ts
+    - packages/caws-cli/src/transcripts/harness-dsh.ts
+    - packages/caws-cli/src/transcripts/harness-kimi.ts
+    - packages/caws-cli/src/transcripts/harness-opencode.ts
+    - packages/caws-cli/src/transcripts/harness-qwen.ts
+    - packages/caws-cli/src/transcripts/harness-zcode.ts
+    - packages/caws-cli/src/transcripts/lossless-json.ts
+    - packages/caws-cli/src/transcripts/store-json.ts
+    - packages/caws-cli/templates/hook-packs/shared/advisory_truncate.py
+    - packages/caws-cli/templates/hook-packs/shared/lib/harness_kimi.py
+    - packages/caws-cli/tests/adapter/machine-runtime.test.js
+    - packages/caws-cli/tests/hooks/pytest/test_template_annotation_compat.py
+    - packages/caws-cli/tests/hooks/pytest/test_worktree_claim_oracle.py
+    - packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js
+    - packages/caws-cli/tests/runtime/session-cache-admission.test.js
+    - packages/caws-cli/tests/tooling/sqlite-static-build.test.js
+    - packages/caws-cli/tests/transcripts/dsh.test.ts
+    - packages/caws-cli/tests/transcripts/kimi.test.ts
+    - packages/caws-cli/tests/transcripts/lossless-json.test.ts
+    - packages/caws-cli/tests/transcripts/opencode.test.ts
+    - packages/caws-cli/tests/transcripts/qwen.test.ts
+    - packages/caws-cli/tests/transcripts/store-json.test.js
+    - packages/caws-cli/tests/transcripts/zcode.test.ts
+    - packages/caws-cli/tsconfig.vnext.json
+    - packages/caws-cli/tests/runtime/fixtures/agent-surface-json-lookup.sh
+    - .github/workflows/release-qualification.yml
+    - scripts/ci-governance-artifacts.test.mjs
+    - packages/caws-cli/tests/ci/release-qualification.test.js
+    - packages/caws-cli/scripts/qualify-session-publication.cjs
+    - packages/caws-cli/tests/runtime/qualify-render-owner.test.js
+    - packages/caws-cli/src/runtime/session-store-publication.ts
+    - packages/caws-cli/tests/runtime/session-store-publication.test.js
+    - packages/caws-cli/src/init/machine-paths.ts
+    - packages/caws-cli/src/init/selection-read-io.ts
+    - packages/caws-cli/src/init/system-project-policy.ts
+    - packages/caws-cli/src/init/system-surface-settings.ts
+    - packages/caws-cli/src/runtime/render-observation-client.ts
+    - packages/caws-cli/src/runtime/render-observation-wire.ts
+    - packages/caws-cli/src/runtime/selection-observation.ts
+    - packages/caws-cli/src/runtime/session-publication-client.ts
+    - packages/caws-cli/src/transcripts/python-html.ts
+    - packages/caws-cli/src/transcripts/renderer-calendar.ts
+    - packages/caws-cli/tests/init/selection-read-io.test.js
+    - packages/caws-cli/tests/runtime/render-observation-client.test.js
+    - packages/caws-cli/tests/runtime/selection-observation.test.js
+    - packages/caws-cli/tests/transcripts/claude.test.ts
+    - packages/caws-cli/tests/transcripts/python-html.test.ts
+    - packages/caws-cli/tests/transcripts/renderer-calendar.test.ts
+    - packages/caws-cli/tests/transcripts/store-sql-profile.test.js
+    - packages/caws-native/src/context_git.rs
+    - packages/caws-native/src/context_git/render.rs
+    - packages/caws-native/src/installed_generation.rs
+    - packages/caws-native/src/native_generation.rs
+    - packages/caws-native/src/render_context.rs
+    - packages/caws-native/src/render_observation.rs
+    - packages/caws-native/src/render_owner/session.rs
+    - packages/caws-native/src/render_owner/session/tests.rs
+    - packages/caws-native/src/renderer_calendar.rs
+    - packages/caws-native/tests/context_git.rs
+    - packages/caws-native/tests/render_context.rs
+    - packages/caws-native/tests/render_observation.rs
+    - packages/caws-native/tests/renderer_calendar.rs
+invariants:
+  - 'Preserve main fixes and matched producer/consumer/build contracts; preserve foreign worktrees and all parent publication, residency and machine-cutover obligations'
+  - 'A coherent source landing does not accept full runtime cutover, first-party Python retirement, ordinary publication or thirteen-session four-repository qualification'
+acceptance:
+  - id: A1
+    given: 'frozen integration 7195f14f and current main source'
+    when: 'the owned lane reconciles the actual ten conflict paths'
+    then: 'main fixes and the matched native/TS/package dependency closure remain with no unresolved conflict or unrelated authored changes'
+  - id: A2
+    given: 'the committed resolved source candidate'
+    when: 'fresh matched build, focused changed-interface checks and actual isolated native image consumer controls run'
+    then: 'bounded source behavior is supported and failed attempts plus unverified production scope remain explicit'
+  - id: A3
+    given: 'the exact committed source and raw checks'
+    when: 'doctor, full-basis gates and independent completion review run'
+    then: 'existing documentation and owed-work tracking match the bounded landing and every consequential finding has a source-grounded disposition'
+observability:
+  - 'Commit parents and exact conflict resolutions, original inputs, raw exits, immutable artifact identities and owner-specific remaining work'
+rollback:
+  - 'Use a normal corrective or revert commit while preserving existing selected machine runtime and all retained failed/successful evidence'
+non_functional: {}
+contracts:
+  - name: 'matched-native-source-landing'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Direct parent/diff/conflict inspection at c9b919e6 preserves main7d4 Handlebar4.7.10 lock, rollback pointer semantics, both unrelated test repairs and matched C7195 native/typed contracts; no .caws delta and clean source. Independent read-only completion review inspected exact source coordinates and raw new-candidate checks, finding no consequential merge-loss counterexample. Native source diff C..c9 empty; all1260 fresh builtmembers inspected,1257 exact and3 manifest history-comment/maps differences. This verifies source reconciliation, not native execution or cutover."
+    recorded_at: "2026-10-22T23:33:52.190Z"
+    commit_sha: c9b919e64f9149a09e2e9fff62f40cfdf141d1a8
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Bounded source criterion only. Fresh matched native coordinator, CLI build and pack at c61ad087 exit0 with unchanged source pins and empty owned groups. publication-integration/combined-package-01 retains tar SHA c0bbdf4b1023163e68d201059f681350f377b84902ddcf2bf7505a78c95fdc2c, exact prefix inspection and descriptor-preparation-05. combined-installed-image-01 executes actual private install/configure/init; clean-child native Bash journals show captured envelope and exits0/read,2/specific force-push block. Corrupted native-entry.json actual launcher exits2 with member-specific integrity failure and unchanged project snapshot; restored bytes retained. Packaged rollback exits0, restores baseline0c5bf4be, same stable launcher then exits0. E310-E312 retain executed selector, SQL profile and metadata hostile checks with failures. E314 at f2a3934b adds only ledger text. Manually inspected external commands/logs/state/hashes; verify checks commit existence, not execution. No vendor callback delivery, whole native chain, ordinary SQL Stop, no-Python, fairness, active-owner native upgrade or machine adoption claim. Deadline3bc555cb is excluded."
+    recorded_at: "2026-10-24T00:54:16.561Z"
+    commit_sha: c61ad0876bce08ffcc50a7d93ab5c3e939a7df98
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Independent read-only GPT6.1Sol completion review inspected f2a3934b against cc20be3b, original A1-A3/E298-E314, source interfaces and raw exact-image producer/consumer receipts; no actionable cross-component defect found within bounded landing. Root independently inspected absent ordinary store production caller, native-cache journals with child execution and delivery:not_observed, actual member-corruption stderr, rollback pointer and post-rollback invocation, plan state equality, package SHA and source identities. c41ee44b changes only next-check table wording after review; executable bytes remain c61ad087. Doctor0E/4W/5I; full branch/staged gates at c41ee44b evaluate54files and all5pass. Existing E313/E314 and owner table retain ordinary SQL Stop admission, full native chain, no-Python, residency/fairness, harness enforcement, active-owner upgrade and machine adoption with root. Later deadline3bc555cb is explicitly separate and requires deep effect-boundary repair. Commit verification is identity only; raw external artifacts were manually inspected. No parent acceptance is inferred."
+    recorded_at: "2026-10-24T00:55:39.068Z"
+    commit_sha: c41ee44bced6ae40c99251e1eaa79dee4247107a

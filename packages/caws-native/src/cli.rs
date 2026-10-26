@@ -1,3 +1,5 @@
+use caws_native::monotonic_deadline::{DeadlineEnvelope, MonotonicDeadline};
+use serde::Deserialize;
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 pub const EVENTS: &[&str] = &[
@@ -93,6 +95,88 @@ impl Config {
     }
 }
 
+/// A single invocation clock. Installed transport restricts timing and binds
+/// the selected generation; this data never grants origin or dispatch authority.
+pub struct Invocation {
+    pub config: Config,
+    pub deadline: MonotonicDeadline,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct InstalledDeadline {
+    started_ns: String,
+    expires_ns: String,
+    runtime_digest: String,
+}
+
+fn canonical_u64(value: &str) -> Result<u64, String> {
+    if value.is_empty()
+        || value.len() > 20
+        || (value.len() > 1 && value.starts_with('0'))
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return Err("installed original deadline requires canonical decimal strings".into());
+    }
+    value
+        .parse()
+        .map_err(|_| "installed original deadline integer overflow".into())
+}
+
+impl Invocation {
+    pub fn parse(args: &[String]) -> Result<Self, String> {
+        if args.first().map(String::as_str) != Some("invoke-installed-v1") {
+            let config = Config::parse(args)?;
+            let deadline = MonotonicDeadline::capture(config.timeout).map_err(|e| e.to_string())?;
+            return Ok(Self { config, deadline });
+        }
+        if args.len() != 17 {
+            return Err("invoke-installed-v1 requires the existing invoke flags and one --original-deadline".into());
+        }
+        let mut ordinary = vec!["invoke".to_owned()];
+        let mut original = None;
+        for pair in args[1..].chunks_exact(2) {
+            if pair[0] == "--original-deadline" {
+                if original.replace(pair[1].as_str()).is_some() {
+                    return Err("duplicate installed --original-deadline".into());
+                }
+            } else {
+                ordinary.extend_from_slice(pair);
+            }
+        }
+        let original = original.ok_or("missing installed --original-deadline")?;
+        if original.len() > 512 {
+            return Err("installed original deadline exceeds 512 bytes".into());
+        }
+        let config = Config::parse(&ordinary)?;
+        if config.timeout > Duration::from_millis(30_000) {
+            return Err("installed timeout exceeds 30000ms".into());
+        }
+        let value: InstalledDeadline = serde_json::from_str(original)
+            .map_err(|e| format!("invalid installed original deadline: {e}"))?;
+        if value.runtime_digest != config.digest {
+            return Err("installed original deadline runtime digest differs".into());
+        }
+        let envelope = DeadlineEnvelope {
+            started_ns: canonical_u64(&value.started_ns)?,
+            expires_ns: canonical_u64(&value.expires_ns)?,
+        };
+        let interval = envelope
+            .expires_ns
+            .checked_sub(envelope.started_ns)
+            .filter(|value| *value > 0)
+            .ok_or("installed original deadline interval must be positive")?;
+        if Duration::from_nanos(interval) > config.timeout {
+            return Err("installed original deadline interval exceeds configured timeout".into());
+        }
+        // Receive exactly once. Invalid, expired or future input never selects
+        // capture(), and ambient environment never supplies a missing handoff.
+        let deadline = MonotonicDeadline::receive(envelope)
+            .map_err(|e| format!("invalid installed original deadline: {e}"))?;
+        Ok(Self { config, deadline })
+    }
+}
+
 pub fn valid_digest(value: &str) -> bool {
     value.len() == 64
         && value
@@ -148,5 +232,101 @@ mod tests {
         let mut project = args();
         project[14] = "project".into();
         assert_eq!(Config::parse(&project).unwrap().configuration, "project");
+    }
+}
+
+#[cfg(test)]
+mod installed_deadline_tests {
+    use super::*;
+    use caws_native::monotonic_deadline::{DeadlineEnvelope, MonotonicDeadline};
+    use std::time::{Duration, Instant};
+
+    fn args(envelope: DeadlineEnvelope, timeout: u64) -> Vec<String> {
+        let original = serde_json::json!({
+            "startedNs": envelope.started_ns.to_string(),
+            "expiresNs": envelope.expires_ns.to_string(),
+            "runtimeDigest": "a".repeat(64),
+        })
+        .to_string();
+        [
+            "invoke-installed-v1",
+            "--engine",
+            "/engine.js",
+            "--node",
+            "/node",
+            "--surface",
+            "codex",
+            "--event",
+            "pre_tool_use",
+            "--runtime-digest",
+            &"a".repeat(64),
+            "--timeout-ms",
+            &timeout.to_string(),
+            "--configuration",
+            "system",
+            "--original-deadline",
+            &original,
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+    }
+
+    #[test]
+    fn installed_receive_preserves_exact_envelope_and_consumes_transit() {
+        let original = MonotonicDeadline::capture(Duration::from_secs(30))
+            .unwrap()
+            .envelope();
+        let envelope = DeadlineEnvelope {
+            started_ns: original.started_ns - 1_000_000_000,
+            expires_ns: original.expires_ns - 1_000_000_000,
+        };
+        let received = Invocation::parse(&args(envelope, 30_000)).unwrap();
+        assert_eq!(received.deadline.envelope(), envelope);
+        assert_eq!(received.config.timeout, Duration::from_secs(30));
+        received.deadline.check().unwrap();
+        assert!(
+            received.deadline.expires().duration_since(Instant::now()) <= Duration::from_secs(29)
+        );
+    }
+
+    #[test]
+    fn installed_interval_is_exact_nanoseconds_not_rounded_milliseconds() {
+        let original = MonotonicDeadline::capture(Duration::from_secs(1))
+            .unwrap()
+            .envelope();
+        assert!(Invocation::parse(&args(original, 1000)).is_ok());
+        let larger = DeadlineEnvelope {
+            expires_ns: original.expires_ns + 1,
+            ..original
+        };
+        assert!(
+            Invocation::parse(&args(larger, 1000))
+                .err()
+                .unwrap()
+                .contains("interval exceeds configured timeout")
+        );
+    }
+
+    #[test]
+    fn canonical_integer_domain_keeps_u64_exact_without_whitespace_or_signs() {
+        assert_eq!(canonical_u64("0").unwrap(), 0);
+        assert_eq!(canonical_u64("18446744073709551615").unwrap(), u64::MAX);
+        for bad in [
+            "",
+            "00",
+            "01",
+            "+1",
+            "-1",
+            " 1",
+            "1 ",
+            "1\n",
+            "1.0",
+            "1e3",
+            "１２",
+            "18446744073709551616",
+        ] {
+            assert!(canonical_u64(bad).is_err(), "{bad:?}");
+        }
     }
 }

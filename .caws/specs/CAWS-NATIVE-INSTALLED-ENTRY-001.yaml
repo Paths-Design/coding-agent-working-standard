@@ -1,0 +1,130 @@
+id: CAWS-NATIVE-INSTALLED-ENTRY-001
+title: 'Integrate staged native installed entry with generation selection and rollback'
+mode: feature
+lifecycle_state: active
+worktree: native-installed-entry
+created_at: '2026-10-22T01:32:17.915Z'
+updated_at: '2026-10-26T00:07:24.460Z'
+created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
+blast_radius:
+  modules:
+    - 'Staged native hook entry, immutable generation installation and registration compatibility'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/installed_entry.rs'
+    - 'packages/caws-native/tests/installed_entry.rs'
+    - 'packages/caws-native/Cargo.toml'
+    - 'packages/caws-cli/src/init/native-runtime-entry.ts'
+    - 'packages/caws-cli/tests/adapter/native-runtime-entry.test.js'
+    - 'packages/caws-cli/tests/adapter/native-entry-registration.test.js'
+    - 'packages/caws-cli/src/init/machine-runtime-state.ts'
+    - 'packages/caws-cli/src/init/native-hook-identification.ts'
+    - 'packages/caws-cli/src/init/machine-adapter-policy.ts'
+    - 'packages/caws-cli/src/init/system-runtime.ts'
+    - 'packages/caws-cli/src/runtime/selection.ts'
+    - 'packages/caws-cli/src/runtime/describe-entry.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - packages/caws-native/src/installed_entry_main.rs
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/init/machine-adapters.ts
+    - packages/caws-cli/tests/runtime/selection.test.js
+    - packages/caws-cli/src/store/system-runtime-observation.ts
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/tests/init/claude-settings-merge.test.js
+    - packages/caws-cli/tests/shell/init-plan.test.js
+    - packages/caws-cli/tests/adapter/machine-adoption.test.js
+    - packages/caws-cli/src/init/hook-packs/managed-header.ts
+    - packages/caws-cli/tests/init/init-hook-pack-render.test.js
+    - packages/caws-cli/templates/hook-packs/shared/lib/session-render-writer.sh
+    - packages/caws-cli/src/shell/render/init-hook-pack.ts
+    - packages/caws-cli/tests/adapter/system-runtime.test.js
+    - packages/caws-cli/templates/hook-packs/shared/lib/harness_kimi.py
+    - packages/caws-cli/tests/hooks/pytest/test_template_annotation_compat.py
+    - packages/caws-native/src/installed_generation.rs
+    - packages/caws-native/src/installed_compatibility.rs
+    - packages/caws-native/tests/installed_compatibility.rs
+    - packages/caws-cli/src/runtime/cli-identity-loader.ts
+    - packages/caws-cli/tests/runtime/cli-identity-loader.test.js
+    - packages/caws-cli/scripts/qualify-stop-profile.mjs
+    - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
+  out: []
+  support:
+    - packages/caws-cli/src/tooling/native-sqlite-build.ts
+    - packages/caws-cli/tests/tooling/native-sqlite-build.test.js
+invariants:
+  - 'Existing Python-readable bin/caws-hook and legacy registrations remain intact during staged installation; no native failure triggers legacy fallback'
+  - 'Selected native image identities derive from one verified generation manifest; per-generation metadata contains no self-referential runtime digest'
+  - 'Resident acquisition main and worker ownership, frozen guard sources and unrelated machine configuration remain untouched'
+acceptance:
+  - id: A1
+    given: 'a staged generation and actual native registration'
+    when: 'the installed entry consumes hook bytes'
+    then: 'the actual native and typed-engine path produces observed outputs with original caller context and no caller-selected image override'
+  - id: A2
+    given: 'malformed invocation or configuration and each supported lifecycle event'
+    when: 'the installed entry refuses before dispatch'
+    then: 'argument errors exit 2, PreToolUse configuration failure blocks, and other lifecycle configuration faults remain diagnostic and released'
+  - id: A3
+    given: 'changed entry or generation, interrupted activation and tampered image'
+    when: 'upgrade, selection race, rollback or repeat-install executes'
+    then: 'one actual selected image is observed, rollback history survives and no failed native dispatch falls back to legacy'
+  - id: A4
+    given: 'legacy registration and scoped native matcher coverage'
+    when: 'actual project and user registration precedence is evaluated'
+    then: 'supported matching commands neither duplicate nor skip governance, and unsupported coverage is explicitly refused'
+  - id: A5
+    given: 'final committed source and exact packaged image'
+    when: 'private integrated controls and independent review run'
+    then: 'commands, statuses, artifacts and identities are retained, remaining compatibility limits are explicit, and no machine adoption is inferred'
+  - id: A6
+    given: >-
+      A configured native or legacy system surface and absent, disabled, restricted,
+      mixed, conditional or tampered registration controls
+    when: >-
+      Read-only system observation and the shared init/configure validator inspect
+      the same private configuration
+    then: >-
+      Valid transports agree, unsupported registration is diagnosed without changing
+      configuration, and absent or disabled surfaces remain inactive
+  - id: A7
+    given: 'A supported Claude Code PreToolUse CAWS registration using either native or legacy transport'
+    when: 'Configure creates or reviews new and existing managed handlers'
+    then: >-
+      New and absent-field handlers require onFailure block, existing block is
+      idempotent, explicit continue or invalid policy refuses before writes, foreign
+      handlers stay unchanged, and other events and harnesses gain no unsupported
+      field
+observability:
+  - 'Raw commands and entry stdout/stderr/status, selected engine/handler execution witness, pointer/manifest/images before-after hashes and retained upgrade/rollback state'
+rollback:
+  - 'Revert owned source normally; retain both transport entries and verified prior generations; no selected-machine installation in this slice'
+non_functional: {}
+contracts:
+  - name: 'native-entry-v1'
+    type: schema
+evidence:
+  - criterion_id: A4
+    status: unchecked
+    evidence_ref: "R01 A4 remains UNCHECKED; bounded discovery/configuration component implemented and verified, not native cutover. Final committed255b4b3900784daf54aa736c9b25ddfd715bc917 (six source commits since integratedaea8dcda) repairs known literal producers after operators/comments and one literal shell-c payload, preserves complete multiline printf/echo data, decodes nested escaped-backticks before rejection, drops continuation-only nonwords while retaining quoted-empty programs, retains conservative hints only for opaque remainders, excludes examined plain/encoded/nested/continued comments. Hints confer no ownership, execution or PATH resolution; exec argv is separate. Exact raw evidence root /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/a4-literal-discovery. Normal review-build46726 exit0; sourceSHA75d9a5c6af591fe7818bf0b8668f8c40f1f0c189303d72a3137be0400701c11d, moduleSHA572ae3635579e37b0d2ddb5fe45106fe42f609d22ea58c478733278a465d603b,1149files retained review-dist/review-build-dist.json and all unchanged after execution. Final review-ten-files52118 exit0 actually9suites626pass (filename does not establish count); accidentally omitted machine-runtime neighbor separately review-machine-runtime36796 exit0 55pass; actual10suites681pass0fail0skip, including448 three-consumer checks/118A4 controls. No repeated9suite run. Full argv/cwd/revision/PID/status/stdout/stderr/JestJSON retained. Seven pure helper scripts per pinnedNode18.0.0 and22.22.2 all14commands exit0,62actual cases; review-runtime-readback.json includes raw case counts and command refs. Actual public rebuilt-source CLI init adapters configure --agent-surface claude-code --entry legacy [--plan] --json:40 private plan/apply scenarios,20unsupported child1 exact reconciliation/zero stdout/full54-member maps unchanged;20foreign data/comment child0, plans no writes, applies preserve original complete hook/onFailure continue and add exact expected block-managed hook, only six normal settings/dir paths plus one backup change. Direct independent os.walk/lstat readback matches all40 physical fixtures to retained aftermaps, reconstructs initial expectedJSON hashes, rawstatuses/stderr, exact proposed/applied groups and changedpaths; public-witness-executed absent. Node18 continued-shell applyPID19605 actual1; Node22 plain-comment applyPID27534 actual0 and original printf x # caws-hook-native retained. Public logs/maps/proposedsettings and actual fixture user/.claude/settings.json retained review-green-public-*. Source/private inert legacy image only, not freshly installed package/native callbacks. Neighbor suites do execute private legacy Python adapter controls, separate from inert public hook specimens. review-lint29591/doctor30522/gates31099 all0; doctor0E3W4I; five gatesPASS on4files/head255/basef5ad036e, not test proof. Independent same-provider GPT6.1Sol read-only peer inspected committed source plus all40 rawpublic/maps/settings, Jest terminals and Node helpers; prior questions grounded/repaired by actual controls, no new consequential mechanism reported; peer feedback is not acceptance. Preserve failed artifacts: baseline330 missed30 initial controls; later multiline12/nested10/continuation6 failures; red-opaque-discovery and red-opaque-three-files15fail plus opaque-red-public wrong managedappends despite priorgreens. Opaque425 green missed examined-comment false refusal; frozen opaque-before-comment-dist and comment-red-node18/22 retain that defect. comment-three-files72169 exit1 429pass2fail/431 was NEW oracle expectation repaired:[]; hook-install.ts1644 optional/1801 omission when no repairs justifies only test-line removal. Positive external-driver oracle bug word-red wrongly accepted child1 data refusal; original records and positive-driver-oracle-failure.json retained, corrected driver frozen264 word-red-oracle rejects it. Independent596 review then found plain-comment raw shortcut and continuedsh empty discovery token; actual review-red-node18/22 both1 retain five failing cases, corrected final helpers/consumers pass. Strongest falsegreen risk remains grammar/test-oracle bounds and indirect producer execution; neither candidatefalse nor test totals establish foreign ownership/exactly-once governance. Actual harness precedence/callbacks/guarded-write prevention, aliases/computed names/arbitrary wrappers/full shell, fresh integrated installed package and native-ready v2 verified build receipt/imageproducer, real selected-image dispatch and A-B-A-B-C-B upgrade/rollback/race/no-fallback matrix remain OWED. Root01a15a2a owns imageproducer/parent acceptance and native allocation; no global install/adoption performed. Current source clean; heavy slot released bf0982f8. Normal merge dryrun --no-close exit0 review-merge-preview.json; actual source landing PENDING root exact-parent reservation. Active unit A1-A7 stay unchecked; rebind remaining work after merge, do not leave activeunbound or infer closure. --verify here checks reachable commit only; --command context is recorded, not reexecuted by writer."
+    recorded_at: "2026-10-22T17:17:14.590Z"
+    command: "Pinned Node22.22.2 serial Jest review-ten-files + review-machine-runtime; Node18/22 helpers/public CLI; see review-runtime-readback.json"
+    exit_code: 0
+    commit_sha: "255b4b3900784daf54aa736c9b25ddfd715bc917"
+  - criterion_id: A5
+    status: unchecked
+    evidence_ref: "R01 A5 remains UNCHECKED. Reopened native producer/generation work is accepted by actual owner01a15984 with incoming lead01a17052 and independent prefix/rollback helper01a171b1; coordination grants no foreign write authority. Own caws/native-installed-entry normally fast-forwarded from7195 to pinned main9ff69b39b8a6b14072370e0f61139d2f60726b72; current tracked status and candidate diff against9ff are EMPTY. Recorded modernization base03997170dc413aac54f146c602e5ed9089a9a1ff stays retained; do not merge the main refresh wholesale into that old parent. Normal supported scope amendment adds installed_generation.rs; no manual governance writes. Baseline command cargo test --manifest-path packages/caws-native/Cargo.toml --locked -j2 --test installed_entry -- --nocapture --test-threads=1 uses OWN external CARGO_TARGET_DIR under /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/deadline-producer-20261025/target and retained fixture root. Actual primary terminal64bfc0 exit0:13passed/0failed/0ignored/1.47s, compile24.90s; raw stdout/stderr/fixtures/binary pins retained in /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/deadline-producer-20261025/restart-checkpoint-01.json SHA4c4cf98b92041f805aed91ceb413e56cd7b2bb85db432331f8a2c60de1faf83a. These non-SQLite tests exercise identity/mutation/no-retry/legacy/checkpoint boundaries but DO NOT cover original-deadline renewal; unchanged source still has120s stable selection followed by ordinaryinvoke fresh timeout. Entry SHA f44fb117916c65cf23d66b7136faa64938019a70788b035e8110cc23c15779cf and generation SHA8126ff66fa6b7a532358e38f9c5d08db35ced407daffa34f0e801a59bd58c9c6 unchanged. Root proposal395b0ca3929e1c6a299d5515c20ad3b43be06600db499f7ff3d6e718bee68c63 is INSPECTED/UNAPPLIED, not implementation. Concrete pending contracts: capability must be earned from exact pinned selected receiver diagnostic, not receiptv2 alone; proposed diagnostic-v2/native-entry-v2 installedInvocation tag/max30000 awaits coordinator agreement. InstalledV1 receiver route must survive parse and require generation/digest/path/capability admission beforeNode for every installed event, not optional Stop-only preparation. Legacy408 cannot consume deadline argv; Python and describe exec abandon clock ownership. A proposed stable-entry Rust compatibility supervisor needs explicit PID/ancestry/streaming/cleanup/failure semantics and hostile qualification; no implicit ordinaryinvoke or legacy retry. Original max30000 is unchanged; smaller policy only restricts original start, never renews. Prior bounded C7195 package/publicCLI artifacts and A5event11854 remain historical and do not qualify9ff/new source. No qualified SQLite native image, actual installedcallback/publication/admission/harness/replay/workload/rollback/parity/globalcutover proof from this baseline. Paired scoped RC legacy-consumer/Codex-producer activation is a separate human-approved operation owned by lead/RCroot; I completed atomic baseline and hold new longjobs until coordinator resume, with no globalinstall/configure/trust/restart by this owner. Commit verification below establishes reachability only, not tests or runtime proof."
+    recorded_at: "2026-10-25T23:04:28.467Z"
+    commit_sha: "9ff69b39b8a6b14072370e0f61139d2f60726b72"
+  - criterion_id: A6
+    status: unchecked
+    evidence_ref: "Bounded recovery contract implemented in bfb548e65ee6fc73f6a1bbc620dcb6791acfb468: shared retained manifest-bound entry identity under machine-home custody aligns installer and observer without qualifying unused native payload. Full selected target/native image and fresh opt-in verification retained. TEN suites563/0 exit0 and direct source API observations /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/rollback-identity/source-api-node18.json and source-api-node22.json show same verified legacyA a3686243..., retained B entry accepted while full B verification and explicit freshnative optin refuse, configureplan changedfalse, enabledtrue, observer digestA,343 file/directory hashes/modes/nlinks unchanged. Prior mismatched recovery and unsafe metadata/link admissions have retained semanticRED controls. Unsupported earlier-syntax candidate discovery/effective registration boundary remains unresolved under A4; no claim every arbitrary conditional/foreign hook is diagnosed. Actual native/harness activation not established. This records component progress without promoting the whole criterion; commit existence verification only."
+    recorded_at: "2026-10-22T11:32:34.206Z"
+    commit_sha: bfb548e65ee6fc73f6a1bbc620dcb6791acfb468
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Source bfb548e65ee6fc73f6a1bbc620dcb6791acfb468 and retained inert API fixtures implement valid legacy recovery with shared entry identity, pre-pointer refusal of invalid metadata/linked entries and dangling native markers, preserved predecessor and explicit known-byte mode repair. See /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/rollback-identity/final-native-fixtures and final-qualified-jest.json; direct Node18/22 source observations retain selectedA/previousB and unchanged maps. Two real private Python SessionStart consumers and rendered turn/audit artifacts succeed after reconciling existing main8a758936 dependency. Native fixture launchers are inert and never executed; actual compiled entry upgrade/selection race/rollback/repeat-install and no-postdispatch-fallback runtime matrix remains unqualified. Exact coherent package, genuine caller/owner and harness receipts required before A3 pass. --verify checks commit reachability, not execution."
+    recorded_at: "2026-10-22T11:32:42.712Z"
+    commit_sha: bfb548e65ee6fc73f6a1bbc620dcb6791acfb468

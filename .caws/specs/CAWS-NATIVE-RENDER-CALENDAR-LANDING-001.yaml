@@ -1,0 +1,67 @@
+id: CAWS-NATIVE-RENDER-CALENDAR-LANDING-001
+title: 'Integrate calendar source and hostile-boundary checks on current main'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed exact seven-file checked calendar source through CAWS; preserved current render accessors and repaired hostile array descriptor consumption. A1-A3 evidence recorded and read back; strict compiler, calendar/native controls, retained reference replay, and unchanged per-file mutation floor verified. Original parent retains ordinary carrier and installed native cutover obligations.'
+created_at: '2026-10-25T00:51:37.243Z'
+updated_at: '2026-10-25T01:12:48.227Z'
+created_by_session: '01a17088-afcc-7970-aaeb-8c980680cb01'
+blast_radius:
+  modules:
+    - 'Renderer calendar source and native original-process observation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/renderer-calendar.ts'
+    - 'packages/caws-cli/tests/transcripts/renderer-calendar.test.ts'
+    - 'packages/caws-cli/tests/transcripts/renderer-calendar-mutation.test.js'
+    - 'packages/caws-cli/mutation-policy.json'
+    - 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+    - 'packages/caws-native/src/renderer_calendar.rs'
+    - 'packages/caws-native/tests/renderer_calendar.rs'
+  out: []
+invariants:
+  - 'Preserve exact request binding, typed failures, original timezone environment and existing render-observation accessors'
+  - 'Pure parsing and arithmetic retain CPython semantics and unchanged per-file mutation floor; no production selection or native cutover claim'
+acceptance:
+  - id: A1
+    given: 'current-main calendar consumers and hostile request/reply inputs'
+    when: 'integrated calendar tests and native observation tests execute'
+    then: 'typed refusals, parser arithmetic and original-process local calendar behavior satisfy the original calendar source contract and current render consumer compiles'
+  - id: A2
+    given: 'renderer calendar mutation tests and complete current source inventory'
+    when: 'mutation policy and focused per-file mutation checks execute'
+    then: 'all 194 sources remain classified exactly once and 22 targets retain the 80 percent renderer calendar floor'
+  - id: A3
+    given: 'The exact seven-file checked calendar source candidate e5af425a'
+    when: 'CAWS lands the child into current main'
+    then: >-
+      All seven target Git blobs equal the checked source candidate and the child
+      lane binding is removed; no production selection or installed native cutover
+      is inferred
+observability:
+  - 'Retain baseline, exact command exit logs, native timezone observation artifacts and checked revision outside the disposable lane'
+rollback:
+  - 'Revert the landing source commit through a governed fix; retain original lane and parent native-cutover obligations'
+non_functional: {}
+contracts:
+  - name: 'renderer-calendar-observation'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/calendar-landing: committed-source-join.json, repaired/typescript.json exit0, repaired-calendar-02.log28cases, repaired/jest.json108cases, native unit6/integration6/doc2 rawlogs and reference-comparison zero failures. Native source bytes unchanged at e5af425a. MacOS source qualification only; no live carrier activation, full timezone resource closure, or native cutover. CLI verify checks commit existence only; raw checks were independently inspected."
+    recorded_at: "2026-10-25T01:11:24.071Z"
+    commit_sha: e5af425ad32d5accea34411b89bb09378959e996
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/calendar-landing/mutation-policy.log194sources22targets; repaired/mutation.json exit0 unchanged source pins; repaired/score.json unchanged80floor:1197detected/1393valid=85.929648percent,179survived17uncovered. Calendar-only mutation run; other store targets unexecuted. CLI verify checks commit existence only; raw reports were independently inspected."
+    recorded_at: "2026-10-25T01:11:25.349Z"
+    commit_sha: e5af425ad32d5accea34411b89bb09378959e996
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Inspected /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/calendar-landing/landed-target-validation.json: all seven main Git blobs and checkout SHA256 digests equal checked e5af425a; candidate is an ancestor of main; child directory and registry binding absent after merge416c82f6. Exact source landing only; no target test rerun, production selection, deployment, or native cutover. CLI verify checks cited merge existence only; target comparison was independently executed."
+    recorded_at: "2026-10-25T01:12:46.444Z"
+    commit_sha: "416c82f61627f90c44b24764e00568bb139d2af2"

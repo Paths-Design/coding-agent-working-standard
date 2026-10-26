@@ -1,0 +1,72 @@
+id: CAWS-SPARSE-STAGED-RUNNER-001
+title: 'Preserve sparse staged governance and commit failure fidelity'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Integrated real merge-hook fixture dependency and positive formatter/index proof at703bb30. Original guard assertions and four runner criteria remain accepted; root grounded independent review in hook/runner/config and checked exact tested bytes. Focused Jest5/hooks57 and gates pass. Full normal push and runtime cutover remain parent obligations.'
+created_at: '2026-10-23T09:19:46.467Z'
+updated_at: '2026-10-23T10:35:40.224Z'
+created_by_session: '01a166d3-36ad-71a3-83a1-a1b8a6e32a7c'
+blast_radius:
+  modules:
+    - 'Repository pre-commit staged formatting and spec validation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.husky/pre-commit'
+    - 'scripts/run-staged-checks.cjs'
+    - 'scripts/run-staged-checks.test.cjs'
+    - 'packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js'
+    - '.husky/tests/run.sh'
+    - 'package.json'
+    - packages/caws-cli/tests/hooks/merge-main-in-conclusion.test.js
+  out: []
+invariants:
+  - 'No stash or hidden backup is created and absent governance blobs are never materialized or rewritten.'
+  - 'Formatter and Git failures or signals produce a nonzero hook verdict.'
+  - 'Only staged eligible materialized paths are formatted and restaged with literal filename handling.'
+acceptance:
+  - id: A1
+    given: 'a sparse checkout with a valid staged-only spec and eligible source'
+    when: 'the staged runner executes'
+    then: 'staged spec bytes and absence are preserved while eligible formatting is restaged successfully'
+  - id: A2
+    given: 'invalid staged spec bytes even when working bytes differ or are absent'
+    when: 'the staged runner validates'
+    then: 'the hook refuses before formatting without rewriting the spec'
+  - id: A3
+    given: 'formatter or Git restaging failure or termination'
+    when: 'the staged runner executes'
+    then: 'the original nonzero verdict is surfaced and commit is refused without stash or rollback'
+  - id: A4
+    given: 'ordinary and partially staged eligible files plus unusual filenames and formatting fences'
+    when: 'the runner executes'
+    then: 'formatting preserves the existing whole-file restage semantics and fences with literal paths'
+rollback:
+  - 'Revert the owned source commit through a new reviewed commit; preserve staged data and sparse governance.'
+non_functional: {}
+contracts:
+  - name: 'staged-commit-checks'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Clean committed Node17 at38691bc2: valid staged-only sparse spec remains absent, skip-worktree and index bytes unchanged; real source formatting/restaging succeeds. Read exact test assertions and retained fixture/log receipt. Normal candidate commit uses unchanged hook. No absent ordinary source is silently skipped; explicit refusal covered."
+    recorded_at: "2026-10-23T10:04:37.526Z"
+    commit_sha: "38691bc25be1dfe3ad74f216baf224576c936cee"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Actual CLI validates staged blob bytes through fixed private path, invalid sparse and materialized staged specs refuse before formatting even when working bytes differ. Kernel sourcePath is diagnostics only; actual valid/invalid fixed-vs-ID-basename controls agree. Governance blobs never formatted/restaged/materialized."
+    recorded_at: "2026-10-23T10:04:46.918Z"
+    commit_sha: "38691bc25be1dfe3ad74f216baf224576c936cee"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Inspected committed17 hostile tests: actual index.lock makes Git add return128 after formatting, retained working bytes remain unstaged and no stash/rollback; formatter syntax failure, signal, spawn failure and Git read failure all refuse. Final Node execution0 with unchanged pins/residueempty. Five focusedJest cases and57 hook fixtures also passed on candidate byte pins; original swallowed Git failure retained."
+    recorded_at: "2026-10-23T10:04:56.047Z"
+    commit_sha: "38691bc25be1dfe3ad74f216baf224576c936cee"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Retains original38691 runner17 and actual legacy/new partial-stage parity. Push02 exposed missing fixture dependency;703bb30 installs real .husky runner, actual installed formatter/config chain and valid JS fixture, preserves every Guard2 assertion and asserts changed working/index/HEAD bytes. Focused actual Jest5 and hooks57 exit0, checked source SHA matches703 despite precommit receipt HEAD85b, unchanged source and emptygroups. Root inspected complete hook/runner/config/fulltest: checkout-root cwd and nonsymlink staged inputs constrain formatter targets, Guard2 precedes runner, no missing sourced hook dependency. Independent diff-only review limitations retained; concerns grounded directly. Receipts sparse-staged-runner/merge-fixture-jest-01 and merge-fixture-hooks-01; full normal push remains separate."
+    recorded_at: "2026-10-23T10:35:00.712Z"
+    commit_sha: "703bb30a20754b826cc82d83c08cf9152d02d401"

@@ -5,8 +5,8 @@
 #
 # Two properties carry the whole design and both are pinned here:
 #
-#   1. The PARSE and the ACCESSORS agree. `guard-config.py` writes variable
-#      names through its `mangle()`, and `guard-config.sh` reads them back
+#   1. The PARSE and the ACCESSORS agree. `guard-config.cjs` writes variable
+#      names through its typed mangler, and `guard-config.sh` reads them back
 #      through `caws_guard_mangle`. A divergence between the two is SILENT —
 #      every lookup misses, every guard quietly reverts to its shipped table,
 #      and nothing reports it. So the parity is asserted directly.
@@ -31,7 +31,7 @@ teardown_file() {
   caws_teardown_pack
 }
 
-GUARD_CONFIG_PY() { printf '%s' "$CAWS_TEST_HOOKS_DIR/lib/guard-config.py"; }
+GUARD_CONFIG_CJS() { printf '%s' "$CAWS_TEST_HOOKS_DIR/lib/guard-config.cjs"; }
 GUARD_CONFIG_SH() { printf '%s' "$CAWS_TEST_HOOKS_DIR/lib/guard-config.sh"; }
 
 write_policy() {
@@ -53,12 +53,11 @@ accessor() {
   local fn="$1"; shift
   bash -c '
     set -euo pipefail
-    export CAWS_GUARD_CONFIG_PY="$1"
     source "$2"
     caws_guard_config_load "$3"
     fn="$4"; shift 4
     "$fn" "$@"
-  ' _ "$(GUARD_CONFIG_PY)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO" "$fn" "$@"
+  ' _ "$(GUARD_CONFIG_CJS)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO" "$fn" "$@"
 }
 
 REASON='the Rust core lives under native/ and this repo has no src/ directory'
@@ -66,32 +65,25 @@ REASON='the Rust core lives under native/ and this repo has no src/ directory'
 # ── the lib is installed at all ────────────────────────────────────────────
 
 @test "both halves of the loader are installed by the shared pack" {
-  [ -f "$(GUARD_CONFIG_PY)" ]
+  [ -f "$(GUARD_CONFIG_CJS)" ]
   [ -f "$(GUARD_CONFIG_SH)" ]
+  [ ! -e "$CAWS_TEST_HOOKS_DIR/lib/guard-config.py" ]
 }
 
 @test "the emitter and the accessor agree on variable naming" {
   # A silent divergence here disables every configured entry without a word.
-  local from_py from_sh
-  from_py="$(python3 -c '
-import sys
-sys.path.insert(0, sys.argv[1])
-import importlib.util
-spec = importlib.util.spec_from_file_location("gc", sys.argv[2])
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-print(mod.mangle("scope-guard.sh"))
-print(mod.mangle("god-object-check.sh"))
-print(mod.mangle("loc"))
-' "$CAWS_TEST_HOOKS_DIR/lib" "$(GUARD_CONFIG_PY)")"
-  from_sh="$(bash -c '
+  write_policy '{"guards":{"scope-guard.sh":{"additional_allow_prefixes":[{"prefix":"native/","reason":"Generated native sources"}]},"god-object-check.sh":{"thresholds":{"loc":2500}}}}'
+  run node "$(GUARD_CONFIG_CJS)" "$CAWS_TEST_REPO"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"CAWS_GUARD_PREFIX_SCOPE_GUARD_SH_0=native/"* ]]
+  [[ "$output" == *"CAWS_GUARD_THRESHOLD_GOD_OBJECT_CHECK_SH_LOC=2500"* ]]
+  run bash -c '
     source "$1"
     caws_guard_mangle "scope-guard.sh"; echo
     caws_guard_mangle "god-object-check.sh"; echo
     caws_guard_mangle "loc"; echo
-  ' _ "$(GUARD_CONFIG_SH)")"
-  [ "$from_py" = "$from_sh" ]
-  [ "$from_py" = "SCOPE_GUARD_SH
+  ' _ "$(GUARD_CONFIG_SH)"
+  [ "$output" = "SCOPE_GUARD_SH
 GOD_OBJECT_CHECK_SH
 LOC" ]
 }
@@ -139,10 +131,9 @@ workbench/" ]
   [ "$status" -eq 0 ]
   [ -z "$output" ]
   run bash -c '
-    export CAWS_GUARD_CONFIG_PY="$1"
     source "$2"; caws_guard_config_load "$3"
     printf "%s" "$CAWS_GUARD_CONFIG_STATUS"
-  ' _ "$(GUARD_CONFIG_PY)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO"
+  ' _ "$(GUARD_CONFIG_CJS)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO"
   [ "$output" = "invalid" ]
 }
 
@@ -181,10 +172,9 @@ workbench/" ]
 @test "an absent policy is 'absent', which is NOT the same state as 'invalid'" {
   clear_policy
   run bash -c '
-    export CAWS_GUARD_CONFIG_PY="$1"
     source "$2"; caws_guard_config_load "$3"
     printf "%s" "$CAWS_GUARD_CONFIG_STATUS"
-  ' _ "$(GUARD_CONFIG_PY)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO"
+  ' _ "$(GUARD_CONFIG_CJS)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO"
   [ "$output" = "absent" ]
 }
 
@@ -207,8 +197,8 @@ workbench/" ]
   clear_policy
   local absent unavailable
   absent="$(bash -c '
-    export CAWS_GUARD_CONFIG_PY="$1"; source "$2"; caws_guard_config_load "$3"
-    printf "%s" "$CAWS_GUARD_CONFIG_STATUS"' _ "$(GUARD_CONFIG_PY)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO")"
+    source "$2"; caws_guard_config_load "$3"
+    printf "%s" "$CAWS_GUARD_CONFIG_STATUS"' _ "$(GUARD_CONFIG_CJS)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO")"
   unavailable="$(bash -c '
     export CAWS_GUARD_CONFIG_PY="/nonexistent"; source "$1"; caws_guard_config_load "$2"
     printf "%s" "$CAWS_GUARD_CONFIG_STATUS"' _ "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO")"
@@ -220,12 +210,11 @@ workbench/" ]
   # Second load points at a BROKEN parser. If it re-ran, the status would flip
   # to unavailable and the prefix would vanish; idempotence keeps both.
   run bash -c '
-    export CAWS_GUARD_CONFIG_PY="$1"
     source "$2"; caws_guard_config_load "$3"
     export CAWS_GUARD_CONFIG_PY="/nonexistent"
     caws_guard_config_load "$3"
     printf "%s|" "$CAWS_GUARD_CONFIG_STATUS"; caws_guard_prefixes scope-guard.sh
-  ' _ "$(GUARD_CONFIG_PY)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO"
+  ' _ "$(GUARD_CONFIG_CJS)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO"
   [ "$output" = "ok|native/" ]
 }
 
@@ -308,18 +297,20 @@ gates:
 
 # ── bash 3.2 (what macOS actually ships) ───────────────────────────────────
 
-@test "the accessors work under /bin/bash 3.2, not merely under a modern bash" {
+@test "the accessors work under system /bin/bash (3.2 on macOS)" {
   # The suite normally runs under whatever `bash` is on PATH (often Homebrew
   # bash 5). The guards do not: on macOS they run under /bin/bash 3.2, which
   # has no associative arrays and no `${var^^}`. Asserting only under bash 5
   # would prove the wrong thing about the shipping environment.
   [ -x /bin/bash ]
+  local system_major
+  system_major=$(/bin/bash -c 'printf "%s" "${BASH_VERSION%%.*}"')
+  if [ "$(uname -s)" = Darwin ]; then [ "$system_major" = 3 ]; fi
   write_policy '{"version":1,"surfaces":{},"guards":{"scope-guard.sh":{"additional_allow_prefixes":[{"prefix":"native/","reason":"'"$REASON"'"}]},"god-object-check.sh":{"thresholds":{"loc":2500}}}}'
   write_yaml_policy 'non_governed_zones:
   - vendor/**
 '
   run /bin/bash -c '
-    export CAWS_GUARD_CONFIG_PY="$1"
     source "$2"
     caws_guard_config_load "$3"
     printf "%s|" "${BASH_VERSION%%.*}"
@@ -327,7 +318,7 @@ gates:
     printf "%s|" "$(caws_guard_prefixes scope-guard.sh)"
     printf "%s|" "$(caws_guard_threshold god-object-check.sh loc 2000)"
     printf "%s" "$(caws_guard_zones)"
-  ' _ "$(GUARD_CONFIG_PY)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO"
+  ' _ "$(GUARD_CONFIG_CJS)" "$(GUARD_CONFIG_SH)" "$CAWS_TEST_REPO"
   [ "$status" -eq 0 ]
-  [ "$output" = "3|SCOPE_GUARD_SH|native/|2500|vendor/" ]
+  [ "$output" = "$system_major|SCOPE_GUARD_SH|native/|2500|vendor/" ]
 }

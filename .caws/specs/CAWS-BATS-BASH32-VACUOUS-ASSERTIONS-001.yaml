@@ -1,0 +1,65 @@
+id: CAWS-BATS-BASH32-VACUOUS-ASSERTIONS-001
+title: 'Make standalone [[ assertions in hook bats suites fail under bash 3.2'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'All 61 standalone [[ statements in nine hook bats suites rewritten so a false assertion fails under bash 3.2 regardless of position; predicates preserved; 33 of 33 mutants red, 179 tests identical baseline vs rewritten, inventory 0 rows; merged as 9c31e931 into native-runtime-modernization. Evidence re-recorded with commit citations after the close advisory.'
+created_at: '2026-10-22T21:39:10.320Z'
+updated_at: '2026-10-23T03:23:31.597Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/tests/hooks/bats'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/hooks/bats/block-dangerous.bats'
+    - 'packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats'
+    - 'packages/caws-cli/tests/hooks/bats/kimi-surface.bats'
+    - 'packages/caws-cli/tests/hooks/bats/parse-input.bats'
+    - 'packages/caws-cli/tests/hooks/bats/quiet-merge.bats'
+    - 'packages/caws-cli/tests/hooks/bats/qwen-surface.bats'
+    - 'packages/caws-cli/tests/hooks/bats/reset-strikes.bats'
+    - 'packages/caws-cli/tests/hooks/bats/scan-secrets.bats'
+    - 'packages/caws-cli/tests/hooks/bats/scope-guard.bats'
+    - 'packages/caws-cli/tests/hooks/bats/helpers.bash'
+  out: []
+invariants:
+  - 'No file outside packages/caws-cli/tests/hooks/bats changes; hook pack templates, manifest version and fingerprints are untouched'
+  - 'Every rewritten assertion keeps its original predicate; only the statement form changes so a false predicate fails the test under bash 3.2'
+acceptance:
+  - id: A1
+    given: 'the 33 non-last standalone [[ statements listed in inventory.tsv across the nine suites'
+    when: 'each one is negated in turn in a mirrored copy and its test runs under /bin/bash 3.2.57 with bats-core 1.13.0'
+    then: 'the containing test reports not ok for every one of the 33, with the TAP output retained'
+  - id: A2
+    given: 'the rewritten nine suites unmodified'
+    when: 'bats runs each file under /bin/bash 3.2 from the lane'
+    then: 'every test passes with the same test count as before the rewrite'
+  - id: A3
+    given: 'the inventory classifier inventory.awk'
+    when: 'it runs over packages/caws-cli/tests/hooks/bats on the lane head'
+    then: 'it reports zero non-last standalone [[ rows'
+observability:
+  - 'TAP output per mutant and per unmodified suite retained under ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-bash32-inventory/'
+rollback:
+  - 'revert the lane merge commit; no runtime or pack bytes are affected'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "33 of 33 non-last rows negated in a mirrored copy of fb1ba781 each report not ok at the declared predicate or helper call; identical-copy control stays ok. Artifacts outside the repo, retained: /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-bash32-inventory/repair/mutants.tsv and mutants/. Runs 21:57 to 22:03Z 2026-10-22, /bin/bash 3.2.57, bats-core 1.13.0, unallocated by root; dist was the native-runtime-modernization worktree build; TMPDIR system tmp; no PGID receipts; Linux not run. Re-recorded with the commit as citation."
+    recorded_at: "2026-10-23T03:23:22.890Z"
+    commit_sha: fb1ba781ff093cad38a8823a416ff6cccf3521f4
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Per file, <file>-baseline.tap from git show 7195f14f and <file>-rewritten.tap from fb1ba781 carry the same 1..N and ok lines: 179 tests, all ok, exit 0 both sides. Artifacts outside the repo, retained: /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-bash32-inventory/repair/run-all.log, baseline/, rewritten/. Same pins and non-claims as A1; dbg scope-guard attempts retained, not counted. Re-recorded with the commit as citation."
+    recorded_at: "2026-10-23T03:23:25.393Z"
+    commit_sha: fb1ba781ff093cad38a8823a416ff6cccf3521f4
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "awk -f inventory.awk over packages/caws-cli/tests/hooks/bats/*.bats at fb1ba781 prints 0 rows (my run before 22:17Z and root's independent run at 22:21:13Z, exit 0) versus 61 rows, 33 non-last, at 7195f14f. Classifier outside the repo, retained: /Users/darianrosebrook/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-bash32-inventory/inventory.awk; limits: a [[ followed only by else or fi counts as last, multi-line [[ not matched. Re-recorded with the commit as citation."
+    recorded_at: "2026-10-23T03:23:27.920Z"
+    commit_sha: fb1ba781ff093cad38a8823a416ff6cccf3521f4

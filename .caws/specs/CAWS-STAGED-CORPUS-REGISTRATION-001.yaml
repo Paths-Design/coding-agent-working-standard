@@ -1,0 +1,42 @@
+id: CAWS-STAGED-CORPUS-REGISTRATION-001
+title: 'Run the staged-check corpus as individually bounded Jest cases'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Shared registration preserves all17 original Node cases in direct Jest registration; Node17 and Jest21 executions passed and executed names matched. Cross-realm backup-array comparison expresses exact zero entries. Independent committed review grounded fidelity; CAWS whole-file citation executed21 tests at957ea834. Production runner and30s subprocess cap unchanged. Normal integrated push remains parent work.'
+created_at: '2026-10-24T22:21:20.412Z'
+updated_at: '2026-10-24T22:54:49.766Z'
+created_by_session: '01a16c43-8af5-79e3-9535-9df94edfc037'
+blast_radius:
+  modules:
+    - 'Staged-check verification entry points'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/run-staged-checks.test.cjs'
+    - 'packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js'
+  out: []
+invariants:
+  - 'All standalone staged-runner cases retain their real formatter, Git, sparse-index, filename and failure assertions; per-operation timeout and production staged runner behavior remain unchanged'
+acceptance:
+  - id: A1
+    given: 'the existing seventeen staged-runner cases'
+    when: 'the standalone Node entry point and ordinary Jest entry point execute'
+    then: 'both execute the complete same corpus and reject sparse, formatter, Git, signal and filename counterexamples without an aggregate nested-process deadline'
+observability:
+  - 'Retain standalone TAP and Jest raw logs with executed test counts and exits'
+rollback:
+  - 'Revert the test registration adapter through an authorized lane if standalone or Jest semantics differ'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Standalone Node passed17 cases exit0 in /private/tmp/caws-staged-corpus-node-verified-20261024.log; direct Jest passed21 exit0 in /private/tmp/caws-staged-corpus-jest-verified-20261024.log with actual JSON alongside. Parsed executed names match all17 original cases exactly; other4 hook cases passed. Source review grounded retained counterexamples, exact backup absence count0 and unchanged30s subprocess cap. Imported individual case names are absent from wrapper source, so the corrected citation selects the actual whole Jest wrapper file, which executes all21 cases. Full integrated push remains parent work."
+    recorded_at: "2026-10-24T22:53:04.781Z"
+    test_nodeid: packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js
+    command: node --test scripts/run-staged-checks.test.cjs
+    exit_code: 0
+    commit_sha: "957ea83490e751f21d5af64980e605e23a0ca7d2"
+    test_verified_at: "957ea83490e751f21d5af64980e605e23a0ca7d2"
