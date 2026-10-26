@@ -1,0 +1,48 @@
+id: CAWS-NATIVE-E2E-CANARY-001
+title: 'Capture the first real Codex callback on a private joined native candidate'
+mode: chore
+lifecycle_state: draft
+created_at: '2026-10-26T21:12:21.075Z'
+updated_at: '2026-10-26T21:12:21.075Z'
+created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
+blast_radius:
+  modules:
+    - 'Private native candidate installation and real Codex callback canary'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/'
+    - 'packages/caws-native/'
+    - 'docs/'
+    - 'scripts/install-cli-snapshot.mjs'
+    - '.github/workflows/mutation.yml'
+    - 'package-lock.json'
+  out: []
+invariants:
+  - 'Preserve foreign work, failed histories, global runtime and authentication state; install only under an owned private home.'
+  - 'No caller field, surface relabeling, guard exception or trust bypass may turn missing execution authority into admission.'
+  - 'A captured refusal is diagnostic evidence and does not establish full workflow or cutover acceptance.'
+acceptance:
+  - id: A1
+    given: 'immutable parent addc3190 and source 8a964035 with known remaining shell controls'
+    when: 'an owned integration candidate is built and privately installed'
+    then: 'exact source, native member set, build, CLI and selected runtime identities are retained without merging foreign dirty work or changing the global runtime'
+  - id: A2
+    given: 'the identified private candidate and normally trusted hooks'
+    when: 'a fresh real Codex session attempts one harmless local command'
+    then: 'raw callback bytes, producing hook result, native journal and observed tool outcome are correlated and the actual first blocking boundary is identified without replay or invented execution facts'
+  - id: A3
+    given: 'the canary invocation and retained task fixture'
+    when: 'the attempt settles'
+    then: 'original function tests and protected sentinel remain unchanged, owned processes are settled or their uncertainty is retained, and the remaining full-workflow obligation is explicit'
+observability:
+  - 'Retain original commands and exit statuses, raw hook input and hashes, actual native journals, Codex events, selected artifact identities and before/after task state.'
+rollback:
+  - 'Stop only positively owned canary processes; preserve failed roots and all foreign branches; leave the global runtime unchanged.'
+non_functional:
+  security:
+    - 'Use ordinary authentication and exact-definition hook trust; never copy authentication contents into evidence or weaken required enforcement.'
+contracts:
+  - name: 'private-native-canary'
+    type: behavior
