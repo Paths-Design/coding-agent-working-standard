@@ -1,0 +1,36 @@
+id: CAWS-NATIVE-WORKDIR-PUBLICATION-001
+title: 'Publish verified execution-workdir closure without later source'
+mode: chore
+lifecycle_state: active
+worktree: workdir-closure-publication
+created_at: '2026-10-26T09:48:17.058Z'
+updated_at: '2026-10-26T09:49:56.879Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Verified workdir evidence and remote main publication'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-native/target
+  out: []
+invariants:
+  - 'Publish only the verified fast-forward prefix ending 73e0f31f0645d9472af99a0d9317c4fe52ee7982; preserve unrelated work and normal hooks; no source edits, force operations, bypasses or closed-spec reopening'
+acceptance:
+  - id: A1
+    given: 'origin/main contains the delivered execution-workdir source but not its earned closure'
+    when: 'a normal fast-forward push publishes the pinned verified prefix'
+    then: 'independent remote ref and spec readback show the exact closed workdir spec with A1-A4 pass and no later unqualified source'
+  - id: A2
+    given: 'the verification checkout has product bytes equal to the published prefix and isolated generated outputs'
+    when: 'the normal pre-push hook runs'
+    then: 'typecheck lint audit build and full tests pass or the push remains refused with raw failures retained, while existing source and machine selection stay preserved'
+observability:
+  - 'Root external publication logs and independently read remote main/spec'
+rollback:
+  - 'Stop on a changed remote or failed check; use a later ordinary corrective commit if needed, never rewrite the remote history'
+non_functional: {}
+contracts:
+  - name: 'workdir-closure-publication'
+    type: behavior

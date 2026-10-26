@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-frozen-preparation
 created_at: '2026-10-26T00:29:07.194Z'
-updated_at: '2026-10-26T04:08:05.081Z'
+updated_at: '2026-10-26T07:11:23.457Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
@@ -19,16 +19,20 @@ scope:
     - packages/caws-native/src/preparation_parent.rs
     - packages/caws-native/src/bin/caws-prepare-source.rs
     - packages/caws-native/tests/preparation_parent.rs
+    - .native-preparation-tests-01a171b1-01.tmp
   out: []
   support:
     - packages/caws-cli/src/tooling/native-sqlite-build.ts
     - packages/caws-native/src/lib.rs
+    - scripts/install-cli-snapshot.mjs
+    - scripts/install-cli-snapshot.test.mjs
 invariants:
   - 'Preparation uses exact admitted commit and tree identities and enumerated blobs; no implicit working-tree source, replace refs, hooks, filters or arbitrary commands.'
   - 'Source and tool pins are provenance only. The actual maintained operation must verify independent source standing and exclusive output authority.'
   - 'Input byte inventories and modes are complete; link graphs are explicit and closed; foreign and protected inputs remain unchanged.'
   - 'Preparation output and still-absent future build output are distinct. Exclusive no-follow custody rejects overlap and root substitution; uncertain partial outputs are retained without retry or adoption.'
   - 'Only the independently reviewed pinned Node preparation entry and fixed pinned read-only Git operations may launch. Node startup is closed before launch; Cargo, npm, compiler and native candidate execution are forbidden during preparation.'
+  - 'Bootstrap inventories are optional identity data emitted by the existing normal installer, not source-export or write authority. Default behavior is unchanged; no observer manifest is stored inside either inventoried root; failed inventory never activates or automatically rolls back a retained release.'
 acceptance:
   - id: A1
     given: 'admitted immutable source and pinned tool inputs with an authorized absent output'
@@ -50,6 +54,19 @@ acceptance:
     given: 'the supported entry and actual guard consumer'
     when: 'valid and hostile preparation requests are submitted'
     then: 'admitted effects match execution while opaque scripts and foreign writes remain refused'
+  - id: A5
+    given: >-
+      The normal standalone CLI installer is explicitly asked for bootstrap
+      inventory v1 of a retained private installation.
+    when: >-
+      It captures the complete CLI prefix and private probe Git view after final
+      rename and chmod but before changing the command symlink.
+    then: >-
+      Its ordinary success JSON carries exact closed parent-consumable inventories
+      with canonical entries, full modes, finite stable files and admitted relative
+      bin links; protected credential paths or changed/special/unbounded members
+      refuse before activation and retain any already-renamed unselected release,
+      with the previous command unchanged.
 observability:
   - 'Bounded receipts retain request/source/tree identities, Git command results, byte inventories and failure phase without claiming adoption.'
 rollback:
@@ -65,5 +82,9 @@ contracts:
 evidence:
   - criterion_id: A2
     status: unchecked
-    evidence_ref: "Requirement reconciled with coordinator: malformed request/startup injection refuses before any child; fixed pinned read-only Node/Git preflight may derive actual source/ownership, before any mutation or unapproved child. Source153-control result is not actual host startup/guard proof. Private operator-reviewed preparation distribution and closed Rust parent remain unimplemented/unqualified; no effectful export run."
-    recorded_at: "2026-10-26T03:57:11.650Z"
+    evidence_ref: "Source ea51aeb3d734de6b6d0115397ef00f6e0604e57c: original 25-unit run at29ea recorded24 pass and1 fixture startup-environment failure; unchanged production plus repaired isolated include control passed one focused test with mandatory inner completion marker. Six actual-entry transport/refusal/reap controls passed at29ea. Raw parent-unit-02.log, parent-integration-02.log and parent-include-03.log retained with exact command events14039,14040,14047. Configured-parent startup with final joined pins, actual authority/export and installed guard behavior remain unexecuted; no acceptance pass or adoption."
+    recorded_at: "2026-10-26T09:34:13.741Z"
+  - criterion_id: A5
+    status: unchecked
+    evidence_ref: "At ea51aeb3d734de6b6d0115397ef00f6e0604e57c, the actual normal-installer test file executed all 31 scenarios on Node 25.9.0 with exit 0, retaining complete positive inventories and hostile before/after observations in native-frozen-preparation-01/installer-scenarios-02; raw log installer-inventory-02.log SHA cd7ef861074121581d37050d1574b94b49955ee53fa0386987028e802821c3a3. Production installer remains 781ff28fc. Prior failed incomplete fixture is retained separately. Actual configured-parent consumption of the final joined installation and operator bootstrap remain unexecuted; no global activation or adoption."
+    recorded_at: "2026-10-26T09:11:53.832Z"

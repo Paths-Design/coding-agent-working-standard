@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-installed-entry
 created_at: '2026-10-22T01:32:17.915Z'
-updated_at: '2026-10-26T02:47:13.190Z'
+updated_at: '2026-10-26T08:10:05.227Z'
 created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
 blast_radius:
   modules:
@@ -51,11 +51,37 @@ scope:
     - packages/caws-cli/scripts/qualify-stop-profile.mjs
     - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
     - packages/caws-cli/tests/runtime/describe-entry.test.js
+    - packages/caws-cli/tests/adapter/opencode-project-registration.test.js
   out: []
   support:
     - packages/caws-cli/src/tooling/native-sqlite-build.ts
     - packages/caws-cli/tests/tooling/native-sqlite-build.test.js
     - packages/caws-native/src/lib.rs
+    - docs/internal/caws-runtime-modernization.md
+    - packages/caws-native/src/cli.rs
+    - packages/caws-native/src/context_git.rs
+    - packages/caws-native/src/context_git/original_project.rs
+    - packages/caws-native/src/context_git/render.rs
+    - packages/caws-native/src/context_git/stop.rs
+    - packages/caws-native/src/engine_custody.rs
+    - packages/caws-native/src/engine_custody/tests.rs
+    - packages/caws-native/src/engine_custody/worker.rs
+    - packages/caws-native/src/engine_custody/worker/tests.rs
+    - packages/caws-native/src/main.rs
+    - packages/caws-native/src/monotonic_deadline.rs
+    - packages/caws-native/src/native_generation.rs
+    - packages/caws-native/src/process_effect.rs
+    - packages/caws-native/src/render_context.rs
+    - packages/caws-native/src/render_observation.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/sqlite_build_identity.rs
+    - packages/caws-native/src/stop_budget.rs
+    - packages/caws-native/src/stop_git.rs
+    - packages/caws-native/tests/engine_custody.rs
+    - packages/caws-native/tests/installed_deadline.rs
+    - packages/caws-native/tests/invoke.rs
+    - packages/caws-native/tests/sqlite_identity.rs
 invariants:
   - 'Existing Python-readable bin/caws-hook and legacy registrations remain intact during staged installation; no native failure triggers legacy fallback'
   - 'Selected native image identities derive from one verified generation manifest; per-generation metadata contains no self-referential runtime digest'
@@ -117,9 +143,9 @@ evidence:
     commit_sha: "255b4b3900784daf54aa736c9b25ddfd715bc917"
   - criterion_id: A5
     status: unchecked
-    evidence_ref: "R01 A5 remains UNCHECKED; event13932 and13926 retain prior history. FD/mask commit51f53cbf0 independently reviewed and directly grounded: actualalias128 is absent from selectedchild while hostEOFtrue with liveworker89411/zombieleader89412/escapedprivateholder89413. This establishes host-handle isolation, not cleanup. Phase source and entrywiring applied UNCOMMITTED: retains original+policyrefs, E=minexpiry, q=clamp(T/4,1,500ms), r=clamp(T/8,1,100ms), executionE-q-r/foregroundE-r; privateCANCEL distinct EOF; ordinarycutoff retainsChild/pipeEOF/settlement/reap; lateCANCEL cannot discard already-reaped residualoutput. Rawroot /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/deadline-producer-20261025. strict-integrated-green-01 actual101 preserved:11binaryunitsPASS incl8phaseallocators and3verificationcheckpoints;14compatPASS+1FAIL; entrytarget notrun aftercompatfailure. Actualstrictcompletion afterforeground+bothEOF: legacy29411ms<30000 with raw LEGACY STARTED newline/status2/rawsignal9 cutoffdiagnostic; stdout/stderrbackpressure1109/1106ms<1200; pendingstdin820ms; no watchdog. This run pins all sourceinputs and actualbinarybefore-after; inspect terminal.json not directoryname green. New rawsignal residual-loss defect demonstrated signalled-delivery-red-02 actual101: childproduced131072 eachstream, hostqueued65536 each, collectorwithheld100ms fromobservedstart520ms; oldsource delivered only65536 each. First signalled-delivery-red-01 actual101 is SETUP GAP with childnotstarted by255ms and laterfullbytes, not semanticfailure. Phase drains full131072 each at316ms but newtest stillfails: expectedbounded raw15diagnostic missing because oneattemptstderr write encounteredfull hostpipe. Root contract question3f2d82ee proposes boundedretry min(now+100ms,foreground_end) onlyretainedliveclocks; no repair/oracleweakening beforecontractsettled. Ordinarycleanup testfilter strengthened to includeactualworkerPID/PGID as well as selectedchildgroup; unrun afterchange. Fullslot terminal42.04s/releasedguard2ebd7f99; no jobsactive. Final committedsource/review/newstrictchecks, entry21 rerun, remainingfaultinjection and exactjoinedpackagednative+Node18/22/privateB-A-B/registration/harness/noPython/fullworkload remain owed. Localoldbasegates foreignscopefailure unchanged; mainintegration/propergates Root-owned; no globaloperation/cutover. Prior Node18/22 TS and capabilityevidence unchanged and not freshcombinedpackageproof. No criterionpass/closure inferred."
-    recorded_at: "2026-10-26T04:26:05.445Z"
-    commit_sha: "51f53cbf0"
+    evidence_ref: "R01 A5 UNCHECKED at clean committed 3d36bb19f3acc5a8cfb66580e2129181150b363c. Prior event13990 preserves failed and historical controls. Source680b separates execution stop request from infrastructure failure; cfc4441 forwards original caller into OpenCode Stop selection and adds three actual CLI controls; 4415d24 adds inert exact retained decimal deadlineObservation in existing overwritten describe context; 3d36bb1 adds paired native CLOCK_MONOTONIC/Rust Instant correlation, max25ms uncertainty/divergence and minimum awake threshold to reject native950/awake650 false green. No new clock, authority, timeout extension or environment selector. All new runtime UNEXECUTED; historical383 suite13bin+15compat+31entry/32invocations is not current-source proof. Both natural-terminal-red-01 and natural-terminal-fixed-01 actual101 remain SETUP FAILURES, actual37/EOF/empty diagnostics, not semantic RED/GREEN. Artifact root /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/deadline-producer-20261025 retains original commands/statuses/source pins/output. Required next finite sequence after explicit slot release: direct clock controls; surgical valid-NATURAL-after-stop mutant MUST emit unique sensitivity marker, then exact source restoration/rebuild and positive control; old compiled describe94619e6c baseline must fail new OpenCode controls, rebuilt exact candidate on actualNode18.0 and22.22.2 must meet exact selection/error/maps; final native target only if ready. Missing marker means setup gap, never equivalent mutant. Actual authored-gates log head3d36/basec496d279/mergebase16f44e53 evaluates16paths all5PASS0violations; authored-doctor0E5W6I, not behavior proof. Independent source reviews ground exact caller contract and inert context; custody peer clock-domain objection repaired in source, renewed bounded read-only review pending. Corrected grandchild observation ba0908bd syntax-only0 remains UNRUN; original440bd072 source preserved, old probe failed before kqueue registration on Python missing EV_RECEIPT, not OS ineligibility. Actual caller death/foreground SIGKILL, native exit observation, forced panic/settlement refusal and escaped-descendant cleanup remain owed. Guard1898dc871 frozen six-file mutation owns CPU; ordered guard bounded attempt then ONE R01 j2 sequence pass-or-fail release to helper, no retries under mutation. Root01a17052 owns coherent receiver+finalR01+helper+guard source join before actual privateprefix/SQLite/public installed Node18/22/rollback; no stale slice substitution. Metadata-v1 diagnostic only; v2 exact maxOriginalTimeoutMs30000 capability; rollback retains immutable legacy408 under candidate broker, no postdispatch fallback. Global pointer last read selected43f2b11c previous408c06a7; no install/adoption performed. A4 full carrier and feature parity, exact joined package B-A-B, harness/native lifecycle, full workload, no-Python and cutover remain OPEN. Commit verification here establishes reachable source only; it runs no tests."
+    recorded_at: "2026-10-26T07:31:30.855Z"
+    commit_sha: "3d36bb19f3acc5a8cfb66580e2129181150b363c"
   - criterion_id: A6
     status: unchecked
     evidence_ref: "Bounded recovery contract implemented in bfb548e65ee6fc73f6a1bbc620dcb6791acfb468: shared retained manifest-bound entry identity under machine-home custody aligns installer and observer without qualifying unused native payload. Full selected target/native image and fresh opt-in verification retained. TEN suites563/0 exit0 and direct source API observations /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/rollback-identity/source-api-node18.json and source-api-node22.json show same verified legacyA a3686243..., retained B entry accepted while full B verification and explicit freshnative optin refuse, configureplan changedfalse, enabledtrue, observer digestA,343 file/directory hashes/modes/nlinks unchanged. Prior mismatched recovery and unsafe metadata/link admissions have retained semanticRED controls. Unsupported earlier-syntax candidate discovery/effective registration boundary remains unresolved under A4; no claim every arbitrary conditional/foreign hook is diagnosed. Actual native/harness activation not established. This records component progress without promoting the whole criterion; commit existence verification only."
