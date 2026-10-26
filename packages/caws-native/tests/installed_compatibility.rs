@@ -9,7 +9,7 @@ use std::{
     io::{self, Read, Write},
     os::{
         fd::{AsRawFd, OwnedFd},
-        unix::{fs::PermissionsExt, net::UnixStream},
+        unix::{fs::PermissionsExt, net::UnixStream, process::CommandExt},
     },
     path::PathBuf,
     process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, ExitStatus, Stdio},
@@ -29,6 +29,13 @@ const EVENTS: [&str; 6] = [
 ];
 const DESCRIBE_MS: u64 = 1200;
 const FAST_LIMIT: Duration = Duration::from_secs(4);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChildSetup {
+    Inherit,
+    DuplicateStdout,
+    BlockSigterm,
+}
 
 struct Fixture {
     root: PathBuf,
@@ -53,6 +60,15 @@ impl Fixture {
         }
     }
     fn install(&self, body: &str, describe: bool) {
+        self.install_with_policy(body, describe, DESCRIBE_MS, 0);
+    }
+    fn install_with_policy(
+        &self,
+        body: &str,
+        describe: bool,
+        timeout_ms: u64,
+        engine_padding: usize,
+    ) {
         let source = format!(
             "#!/usr/bin/env python3\nimport os, sys, json, time, signal\nfrom pathlib import Path\nw = Path(os.environ['CAWS_COMPATIBILITY_WITNESS'])\ndef witness(name, **extra):\n    data = dict(pid=os.getpid(), ppid=os.getppid(), pgid=os.getpgid(0), sid=os.getsid(0), monotonic_ns=time.monotonic_ns(), **extra)\n    temporary = w / (name + '.writing')\n    temporary.write_text(json.dumps(data))\n    temporary.rename(w / (name + '.json'))\nsignal.alarm(5)\n{body}\n"
         );
@@ -68,16 +84,26 @@ impl Fixture {
             ),
         ]);
         if describe {
+            let native = if engine_padding == 0 {
+                b"#!/bin/sh\nexit 77\n".to_vec()
+            } else {
+                b"#!/bin/sh\nprintf 'NATIVE DISPATCHED\\n' > \"$CAWS_COMPATIBILITY_WITNESS/native-started.bin\"\nexit 77\n".to_vec()
+            };
+            let engine = if engine_padding == 0 {
+                b"throw Error('engine must not run during describe');\n".to_vec()
+            } else {
+                vec![b' '; engine_padding]
+            };
             files.extend([
-                ("native/caws-native".into(), b"#!/bin/sh\nexit 77\n".to_vec()),
+                ("native/caws-native".into(), native),
                 ("native/caws-hook-native".into(), b"fixture identity only\n".to_vec()),
                 ("native/node".into(), source.into_bytes()),
-                ("engine.js".into(), b"throw Error('engine must not run during describe');\n".to_vec()),
+                ("engine.js".into(), engine),
                 ("describe.js".into(), b"fixture describe argv member\n".to_vec()),
                 ("native-entry.json".into(), serde_json::to_vec(&serde_json::json!({
                     "schema":"caws.runtime.native-entry.v2", "nativeExecutable":"native/caws-native",
                     "nodeExecutable":"native/node", "engineEntry":"engine.js", "describeEntry":"describe.js",
-                    "timeoutMs":DESCRIBE_MS,
+                    "timeoutMs":timeout_ms,
                     "installedInvocation":{"protocol":"invoke-installed-v1","maxOriginalTimeoutMs":30000}
                 })).unwrap()),
                 ("native-modes.json".into(), Vec::new()),
@@ -136,12 +162,22 @@ impl Fixture {
         self.spawn_with_stdin(event, describe, Stdio::piped())
     }
     fn spawn_with_stdin(&self, event: &str, describe: bool, stdin: Stdio) -> Running {
+        self.spawn_with_setup(event, describe, stdin, ChildSetup::Inherit)
+    }
+    fn spawn_with_setup(
+        &self,
+        event: &str,
+        describe: bool,
+        stdin: Stdio,
+        setup: ChildSetup,
+    ) -> Running {
         let mut args = vec!["codex", event, "--system"];
         if describe {
             args.push("--describe");
         }
         let started = Instant::now();
-        let mut child = Command::new(env!("CARGO_BIN_EXE_caws-hook-native"))
+        let mut command = Command::new(env!("CARGO_BIN_EXE_caws-hook-native"));
+        command
             .args(&args)
             .env("CAWS_HOME", &self.root)
             .env("CAWS_COMPATIBILITY_WITNESS", &self.root)
@@ -149,9 +185,79 @@ impl Fixture {
             .current_dir(&self.root)
             .stdin(stdin)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+            .stderr(Stdio::piped());
+        let receipt = if setup == ChildSetup::Inherit {
+            None
+        } else {
+            Some(fs::File::create(self.root.join("pre-exec-facts.bin")).unwrap())
+        };
+        if let Some(receipt) = &receipt {
+            let receipt_fd = receipt.as_raw_fd();
+            // These are actual child-side inherited process attributes, set
+            // after Command has installed its stdout and before the stable exec.
+            // The closure uses only libc operations and stack-owned values.
+            unsafe {
+                command.pre_exec(move || {
+                    let mut facts = [libc::getpid(), 0, 0, 0];
+                    match setup {
+                        ChildSetup::DuplicateStdout => {
+                            let alias = libc::fcntl(1, libc::F_DUPFD, 128);
+                            if alias < 0 {
+                                return Err(io::Error::last_os_error());
+                            }
+                            facts[1] = alias;
+                            facts[2] = libc::fcntl(alias, libc::F_GETFD);
+                            facts[3] = libc::fcntl(alias, libc::F_GETFL);
+                            if facts[2] < 0 || facts[3] < 0 {
+                                return Err(io::Error::last_os_error());
+                            }
+                        }
+                        ChildSetup::BlockSigterm => {
+                            let mut mask: libc::sigset_t = std::mem::zeroed();
+                            if libc::sigemptyset(&mut mask) != 0
+                                || libc::sigaddset(&mut mask, libc::SIGTERM) != 0
+                                || libc::sigprocmask(libc::SIG_BLOCK, &mask, std::ptr::null_mut())
+                                    != 0
+                            {
+                                return Err(io::Error::last_os_error());
+                            }
+                            let mut observed: libc::sigset_t = std::mem::zeroed();
+                            if libc::sigprocmask(libc::SIG_BLOCK, std::ptr::null(), &mut observed)
+                                != 0
+                            {
+                                return Err(io::Error::last_os_error());
+                            }
+                            facts[1] = libc::SIGTERM;
+                            facts[2] = libc::sigismember(&observed, libc::SIGTERM);
+                        }
+                        ChildSetup::Inherit => (),
+                    }
+                    let size = std::mem::size_of_val(&facts);
+                    if libc::write(receipt_fd, facts.as_ptr().cast(), size) != size as isize {
+                        return Err(io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
+        }
+        let mut child = command.spawn().unwrap();
+        if receipt.is_some() {
+            let bytes = fs::read(self.root.join("pre-exec-facts.bin")).unwrap();
+            assert_eq!(bytes.len(), 4 * std::mem::size_of::<i32>());
+            let facts: Vec<_> = bytes
+                .chunks_exact(4)
+                .map(|bytes| i32::from_ne_bytes(bytes.try_into().unwrap()))
+                .collect();
+            fs::write(
+                self.root.join("pre-exec-facts.json"),
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "setup":format!("{setup:?}"), "pid":facts[0], "descriptor_or_signal":facts[1],
+                    "descriptor_flags_or_blocked":facts[2], "open_flags":facts[3],
+                }))
+                .unwrap(),
+            )
             .unwrap();
+        }
         let input = child.stdin.take();
         let output = child.stdout.take().unwrap();
         let error = child.stderr.take().unwrap();
@@ -173,7 +279,7 @@ impl Fixture {
         fs::write(self.root.join("invocation.json"), serde_json::to_vec_pretty(&serde_json::json!({
             "binary":env!("CARGO_BIN_EXE_caws-hook-native"),
             "binary_sha256":format!("{:x}",Sha256::digest(fs::read(env!("CARGO_BIN_EXE_caws-hook-native")).unwrap())),
-            "argv":args,"foreground_pid":child.id(),"cwd":self.root,"machine_home":self.root
+            "argv":args,"foreground_pid":child.id(),"cwd":self.root,"machine_home":self.root,"child_setup":format!("{setup:?}")
         })).unwrap()).unwrap();
         Running {
             child,
@@ -768,4 +874,153 @@ fn legacy_execution_uses_original_thirty_second_deadline() {
         "legacy exceeded original deadline: {:?}",
         result.elapsed
     );
+}
+
+#[test]
+fn inherited_stdout_alias_cannot_keep_harness_output_open_during_private_pipe_uncertainty() {
+    let fixture = Fixture::new("inherited-stdout-alias");
+    // Close the specifically controlled alias in the selected process itself.
+    // Thus its escaped holder retains only the child's private stdio, and an
+    // inherited harness alias retained by the worker is independently observable.
+    fixture.install("facts=(w/'pre-exec-facts.bin').read_bytes()\nalias=int.from_bytes(facts[4:8],sys.byteorder,signed=True)\ntry:\n    os.fstat(alias)\n    alias_was_open=True\n    os.close(alias)\nexcept OSError as error:\n    if error.errno!=9:\n        raise\n    alias_was_open=False\nwitness('started',alias=alias,alias_was_open=alias_was_open)\nread_fd,write_fd=os.pipe()\npid=os.fork()\nif pid==0:\n    os.close(read_fd)\n    os.setsid()\n    witness('escaped-holder')\n    os.write(write_fd,b'R')\n    os.close(write_fd)\n    time.sleep(3)\n    os._exit(0)\nos.close(write_fd)\nassert os.read(read_fd,1)==b'R'\nos.close(read_fd)\nwitness('leader',holder=pid)\nos.write(1,b'LEADER WITH ESCAPED HOLDER\\n')\nos._exit(37)",true);
+    let mut running =
+        fixture.spawn_with_setup("stop", true, Stdio::piped(), ChildSetup::DuplicateStdout);
+    let foreground = running.child.id();
+    running.wait_for_witness(&fixture, "leader");
+    let leader = fixture.witness("leader");
+    let holder = fixture.witness("escaped-holder");
+    let selected = leader["pid"].as_u64().unwrap() as u32;
+    let worker = leader["ppid"].as_u64().unwrap() as u32;
+    let holder_pid = holder["pid"].as_u64().unwrap() as u32;
+    let before = fixture.sample("escaped-holder-before-foreground-exit");
+    assert_eq!(leader["holder"], holder["pid"]);
+    assert_eq!(holder["ppid"], selected);
+    assert_eq!(holder["pgid"], holder_pid);
+    assert_eq!(holder["sid"], holder_pid);
+    assert_ne!(holder["pgid"], leader["pgid"]);
+    assert!(before.iter().any(|process| process.pid == selected
+        && process.ppid == worker
+        && process.pgid == selected));
+    assert!(
+        before
+            .iter()
+            .any(|process| process.pid == worker && process.ppid == foreground)
+    );
+    assert!(
+        before
+            .iter()
+            .any(|process| process.pid == holder_pid && !process.state.starts_with('Z'))
+    );
+    let result = running.finish(&fixture, Some(b""), true, true, FAST_LIMIT);
+    expect_code(&result, 2);
+    assert_no_synthesized_stdout(&result, b"LEADER WITH ESCAPED HOLDER\n");
+    assert!(result.elapsed < Duration::from_millis(DESCRIBE_MS + 700));
+    let inherited = fixture.witness("pre-exec-facts");
+    assert_eq!(inherited["pid"], foreground);
+    assert_eq!(inherited["setup"], "DuplicateStdout");
+    let alias = inherited["descriptor_or_signal"].as_i64().unwrap();
+    assert!(alias >= 128);
+    assert_eq!(
+        inherited["descriptor_flags_or_blocked"].as_i64().unwrap() & i64::from(libc::FD_CLOEXEC),
+        0
+    );
+    assert_eq!(fixture.witness("started")["alias"], alias);
+    assert_eq!(fixture.witness("started")["alias_was_open"], false);
+    let after = fixture.sample("escaped-holder-after-foreground-exit");
+    assert!(
+        after.iter().any(|process| process.pid == holder_pid
+            && process.pgid == holder_pid
+            && !process.state.starts_with('Z')),
+        "the private pipe holder must remain live when harness output EOF is observed"
+    );
+    // The holder self-expires after three seconds. It is outside the original
+    // private group; this test neither signals it nor claims it has been cleaned.
+}
+
+#[test]
+fn inherited_blocked_sigterm_does_not_delay_foreground_cancellation_until_expiry() {
+    let fixture = Fixture::new("inherited-blocked-sigterm");
+    fixture.install(
+        "witness('started')\nos.write(1,b'BEFORE MASKED TERM\\n')\ntime.sleep(4)",
+        true,
+    );
+    let mut running =
+        fixture.spawn_with_setup("stop", true, Stdio::piped(), ChildSetup::BlockSigterm);
+    let foreground = running.child.id();
+    running.wait_for_witness(&fixture, "started");
+    running.wait_for_stdout(b"BEFORE MASKED TERM\n");
+    fixture.sample("before-masked-term");
+    let inherited = fixture.witness("pre-exec-facts");
+    assert_eq!(inherited["pid"], foreground);
+    assert_eq!(inherited["setup"], "BlockSigterm");
+    assert_eq!(inherited["descriptor_or_signal"], libc::SIGTERM);
+    assert_eq!(inherited["descriptor_flags_or_blocked"], 1);
+    let signal_started = Instant::now();
+    let signal_result = unsafe { libc::kill(running.child.id() as i32, libc::SIGTERM) };
+    fs::write(
+        fixture.root.join("signal-sent.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "foreground_pid":foreground, "signal":libc::SIGTERM, "result":signal_result,
+            "elapsed_before_signal_ms":running.started.elapsed().as_millis(),
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(signal_result, 0);
+    let result = running.finish(&fixture, Some(b""), true, true, FAST_LIMIT);
+    let cancellation_elapsed = signal_started.elapsed();
+    fs::write(fixture.root.join("signal-observed.json"), serde_json::to_vec_pretty(&serde_json::json!({
+        "foreground_exit_code":result.status.code(), "cancellation_elapsed_ms":cancellation_elapsed.as_millis(),
+    })).unwrap()).unwrap();
+    expect_code(&result, 2);
+    assert_no_synthesized_stdout(&result, b"BEFORE MASKED TERM\n");
+    assert!(String::from_utf8_lossy(&result.stderr).contains("raw signal 15"));
+    assert!(
+        cancellation_elapsed < Duration::from_millis(500),
+        "blocked inherited SIGTERM was not handled promptly: {cancellation_elapsed:?}"
+    );
+}
+
+#[test]
+fn selected_policy_expiry_during_generation_verification_does_not_borrow_original_delivery_time() {
+    const PADDING: usize = 32 * 1024 * 1024;
+    for (event, describe, expected) in [
+        ("pre_tool_use", false, 2),
+        ("stop", false, 0),
+        ("stop", true, 2),
+    ] {
+        let fixture = Fixture::new(&format!("selection-expiry-{event}-{describe}"));
+        // Always install a native generation. The engine is a valid declared
+        // whitespace member; its full hash precedes selected-policy derivation.
+        fixture.install_with_policy("witness('started')\nsys.exit(76)", true, 1, PADDING);
+        fs::write(
+            fixture.root.join("selection-policy.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "timeout_ms":1, "declared_engine_padding_bytes":PADDING,
+                "event":event, "describe":describe, "expected_code":expected,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let result =
+            fixture
+                .spawn(event, describe)
+                .finish(&fixture, Some(b""), true, true, FAST_LIMIT);
+        expect_code(&result, expected);
+        assert!(
+            result.stdout.is_empty(),
+            "expired selected policy authorized stdout delivery"
+        );
+        assert!(
+            result.stderr.is_empty(),
+            "original clock authorized diagnostics after selected policy expired"
+        );
+        assert!(!fixture.root.join("started.json").exists());
+        assert!(!fixture.root.join("native-started.bin").exists());
+        assert!(result.elapsed > Duration::from_millis(1));
+        assert!(result.elapsed < Duration::from_secs(30));
+    }
+    // This fixture requires actual verification to consume the 1ms budget on the
+    // executing host. Without phase instrumentation, wall time alone cannot prove
+    // the precise internal expiry checkpoint on arbitrarily faster hardware.
 }

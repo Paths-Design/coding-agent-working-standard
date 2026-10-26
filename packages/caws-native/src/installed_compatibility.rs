@@ -37,24 +37,47 @@ const SIGNALLED: u8 = 6;
 // Darwin has signals 1..31; stopped/continued statuses are never terminal.
 const MAX_SIGNAL: u32 = 31;
 const PACKET: usize = 5;
+const MANAGED_SIGNALS: [i32; 5] = [
+    libc::SIGTERM,
+    libc::SIGINT,
+    libc::SIGHUP,
+    libc::SIGPIPE,
+    libc::SIGCHLD,
+];
+// This caps inventory memory/work, not the numeric value of an inherited fd.
+// An over-cap inventory refuses dispatch and exits the worker before any child.
+const MAX_FD_ENTRIES: usize = 65_536;
 static SIGNAL: AtomicI32 = AtomicI32::new(0);
 
 extern "C" fn interrupted(signal: libc::c_int) {
     SIGNAL.store(signal, Ordering::Relaxed);
 }
 
-struct Signals(Vec<(i32, libc::sigaction)>);
+struct Signals {
+    actions: Vec<(i32, libc::sigaction)>,
+    original_mask: libc::sigset_t,
+}
 impl Signals {
     fn install() -> io::Result<Self> {
         SIGNAL.store(0, Ordering::Relaxed);
-        let mut installed = Self(Vec::new());
-        for signal in [
-            libc::SIGTERM,
-            libc::SIGINT,
-            libc::SIGHUP,
-            libc::SIGPIPE,
-            libc::SIGCHLD,
-        ] {
+        let mut original_mask = unsafe { std::mem::zeroed() };
+        // pthread_sigmask returns its error directly, rather than through errno.
+        let result = unsafe {
+            libc::pthread_sigmask(libc::SIG_SETMASK, std::ptr::null(), &mut original_mask)
+        };
+        if result != 0 {
+            return Err(io::Error::from_raw_os_error(result));
+        }
+        let mut installed = Self {
+            actions: Vec::new(),
+            original_mask,
+        };
+        let mut managed = unsafe { std::mem::zeroed() };
+        unsafe { libc::sigemptyset(&mut managed) };
+        for signal in MANAGED_SIGNALS {
+            if unsafe { libc::sigaddset(&mut managed, signal) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
             // SAFETY: both structures are initialized for sigaction. The handler
             // performs only an atomic store; installation precedes the fork.
             let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
@@ -69,14 +92,25 @@ impl Signals {
             if unsafe { libc::sigaction(signal, &action, &mut previous) } != 0 {
                 return Err(io::Error::last_os_error());
             }
-            installed.0.push((signal, previous));
+            installed.actions.push((signal, previous));
+        }
+        // An inherited blocked TERM/INT/HUP/PIPE must not defeat cancellation;
+        // CHLD is also unblocked without changing any unrelated signal's mask.
+        let result =
+            unsafe { libc::pthread_sigmask(libc::SIG_UNBLOCK, &managed, std::ptr::null_mut()) };
+        if result != 0 {
+            return Err(io::Error::from_raw_os_error(result));
         }
         Ok(installed)
     }
 }
 impl Drop for Signals {
     fn drop(&mut self) {
-        for (signal, action) in self.0.iter().rev() {
+        // Reblock signals the caller had blocked before restoring its actions.
+        unsafe {
+            libc::pthread_sigmask(libc::SIG_SETMASK, &self.original_mask, std::ptr::null_mut())
+        };
+        for (signal, action) in self.actions.iter().rev() {
             // SAFETY: restore the actions returned by successful installation.
             unsafe { libc::sigaction(*signal, action, std::ptr::null_mut()) };
         }
@@ -670,6 +704,140 @@ fn foreground_failure(
     policy(event)
 }
 
+#[cfg(target_os = "macos")]
+struct DescriptorDirectory(*mut libc::DIR);
+#[cfg(target_os = "macos")]
+impl DescriptorDirectory {
+    fn close(mut self) -> io::Result<()> {
+        // closedir owns both its DIR allocation and descriptor, including fd 0
+        // when opendir reused the raw stdio slot closed immediately after fork.
+        let raw = std::mem::replace(&mut self.0, std::ptr::null_mut());
+        if unsafe { libc::closedir(raw) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+}
+#[cfg(target_os = "macos")]
+impl Drop for DescriptorDirectory {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe { libc::closedir(self.0) };
+        }
+    }
+}
+
+/// Inventory the single-threaded worker's own stable descriptor table. Numeric
+/// descriptor values have no assumed maximum beyond RawFd's representable range;
+/// exceeding the inventory's work/memory cap fails closed before child creation.
+#[cfg(target_os = "macos")]
+fn close_inherited_descriptors(
+    channels: &Channels,
+    deadline: &MonotonicDeadline,
+) -> io::Result<()> {
+    check(deadline)?;
+    let keep = [
+        channels.control.as_raw_fd(),
+        channels.input.as_raw_fd(),
+        channels.output.as_raw_fd(),
+        channels.error.as_raw_fd(),
+        channels.status.as_raw_fd(),
+    ];
+    if keep.iter().any(|fd| *fd <= 2) {
+        return Err(io::Error::other("private descriptor overlaps closed stdio"));
+    }
+    // /dev/fd is the trusted OS view of this worker, not a foreign PID lookup.
+    let directory = DescriptorDirectory(unsafe { libc::opendir(c"/dev/fd".as_ptr()) });
+    if directory.0.is_null() {
+        return Err(io::Error::last_os_error());
+    }
+    let inventory_fd = unsafe { libc::dirfd(directory.0) };
+    if inventory_fd < 0 || keep.contains(&inventory_fd) {
+        return Err(io::Error::other(
+            "descriptor inventory identity unavailable",
+        ));
+    }
+    let mut descriptors = Vec::<RawFd>::new();
+    let mut seen_private = [false; 5];
+    let mut entries = 0;
+    loop {
+        check(deadline)?;
+        if SIGNAL.load(Ordering::Relaxed) != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "descriptor isolation interrupted",
+            ));
+        }
+        // POSIX readdir uses errno to distinguish a complete EOF from failure.
+        // Darwin exposes this calling thread's errno slot through __error().
+        let entry = unsafe {
+            *libc::__error() = 0;
+            libc::readdir(directory.0)
+        };
+        if entry.is_null() {
+            let error = unsafe { *libc::__error() };
+            if error != 0 {
+                return Err(io::Error::from_raw_os_error(error));
+            }
+            break;
+        }
+        // SAFETY: successful readdir returns a live, NUL-terminated d_name until
+        // the next readdir call. No reference survives this iteration.
+        let name = unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) }.to_bytes();
+        if name == b"." || name == b".." {
+            continue;
+        }
+        if name.is_empty() || entries == MAX_FD_ENTRIES {
+            return Err(io::Error::other(
+                "descriptor inventory incomplete or over cap",
+            ));
+        }
+        entries += 1;
+        let mut fd: RawFd = 0;
+        for digit in name {
+            if !digit.is_ascii_digit() {
+                return Err(io::Error::other("unexpected descriptor inventory entry"));
+            }
+            fd = fd
+                .checked_mul(10)
+                .and_then(|fd| fd.checked_add(RawFd::from(*digit - b'0')))
+                .ok_or_else(|| io::Error::other("descriptor inventory value out of range"))?;
+        }
+        if let Some(index) = keep.iter().position(|private| *private == fd) {
+            seen_private[index] = true;
+        } else if fd != inventory_fd {
+            descriptors
+                .try_reserve(1)
+                .map_err(|_| io::Error::other("descriptor inventory allocation refused"))?;
+            descriptors.push(fd);
+        }
+    }
+    if !seen_private.into_iter().all(|seen| seen) {
+        return Err(io::Error::other(
+            "descriptor inventory omitted a private channel",
+        ));
+    }
+    // Do not change the enumerated table while readdir is in progress. Close the
+    // temporary DIR first; no descriptor-creating operation follows this point.
+    directory.close()?;
+    for fd in descriptors {
+        check(deadline)?;
+        if unsafe { libc::close(fd) } != 0 {
+            // In particular, do not retry close after EINTR using a potentially
+            // reused number. Refuse dispatch; _exit releases every remaining fd.
+            return Err(io::Error::last_os_error());
+        }
+    }
+    check(deadline)
+}
+#[cfg(not(target_os = "macos"))]
+fn close_inherited_descriptors(_: &Channels, _: &MonotonicDeadline) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "descriptor isolation requires macOS",
+    ))
+}
+
 fn isolate_host() -> io::Result<()> {
     if unsafe { libc::setsid() } < 0 {
         return Err(io::Error::last_os_error());
@@ -727,7 +895,11 @@ fn terminal_status(status: ExitStatus) -> Option<(u8, u32)> {
 }
 
 fn worker_main(command: &mut Command, deadline: &MonotonicDeadline, channels: Channels) -> ! {
-    if isolate_host().is_err() || !allowed(deadline) || SIGNAL.load(Ordering::Relaxed) != 0 {
+    if close_inherited_descriptors(&channels, deadline).is_err()
+        || isolate_host().is_err()
+        || !allowed(deadline)
+        || SIGNAL.load(Ordering::Relaxed) != 0
+    {
         no_child(&channels, deadline);
     }
     let mut control = Queue::default();
@@ -744,16 +916,18 @@ fn worker_main(command: &mut Command, deadline: &MonotonicDeadline, channels: Ch
             if libc::setpgid(0, 0) != 0 {
                 return Err(io::Error::last_os_error());
             }
-            for signal in [
-                libc::SIGTERM,
-                libc::SIGINT,
-                libc::SIGHUP,
-                libc::SIGPIPE,
-                libc::SIGCHLD,
-            ] {
+            let mut managed = std::mem::zeroed();
+            libc::sigemptyset(&mut managed);
+            for signal in MANAGED_SIGNALS {
                 if libc::signal(signal, libc::SIG_DFL) == libc::SIG_ERR {
                     return Err(io::Error::last_os_error());
                 }
+                if libc::sigaddset(&mut managed, signal) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+            }
+            if libc::sigprocmask(libc::SIG_UNBLOCK, &managed, std::ptr::null_mut()) != 0 {
+                return Err(io::Error::last_os_error());
             }
             Ok(())
         });
