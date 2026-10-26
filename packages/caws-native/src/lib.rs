@@ -1,5 +1,7 @@
 //! Native transport support components. These modules do not confer project authority.
 
+extern crate self as caws_native;
+
 pub mod agent_pid_cache;
 pub mod context_git;
 mod installed_generation;
