@@ -86,3 +86,10 @@ evidence:
     command: node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/bridge-store.test.js tests/shell/claim-bridge.test.js tests/shell/binding-bridge-resolve.test.js tests/shell/claim-release-preview.test.js tests/shell/worktree-group-prune-handoff.test.js tests/shell/worktree-prune-status-alias.test.js tests/store/worktree-reconciliation.test.js
     exit_code: 0
     commit_sha: e9c5d70e62cb5d7525be9b7bdbfea051ed458f13
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Actual runWorktreePruneCommand text and JSON RED returned0 under held lock. Repaired command returns1, JSONokfalse and typed lock_contention, preserves bridge/events; preview/receiptOnly controls and existing prune/reconciliation consumers pass. Raw checks: /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/bridge-lifecycle-lock-01/{checks.json,candidate-checks.json,prune-consumer-checks.json}. Tests manually inspected/run in lane packages/caws-cli; --verify here re-derives commit existence only, not runtime execution. No full authority snapshot, host cutover or installed rollback claim."
+    recorded_at: "2026-10-26T23:07:22.126Z"
+    command: node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/bridge-store.test.js tests/shell/claim-bridge.test.js tests/shell/binding-bridge-resolve.test.js tests/shell/claim-release-preview.test.js tests/shell/worktree-group-prune-handoff.test.js tests/shell/worktree-prune-status-alias.test.js tests/store/worktree-reconciliation.test.js
+    exit_code: 0
+    commit_sha: e9c5d70e62cb5d7525be9b7bdbfea051ed458f13
