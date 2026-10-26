@@ -17,6 +17,43 @@ const {
   inspectPreparationSourceStanding,
   prepareFrozenProductionSource,
 } = require('../../dist/tooling/native-qualification-prepare');
+const {
+  executeFrozenSourcePreparation,
+} = require('../../dist/tooling/native-qualification-prepare-entry');
+
+describe('native preparation bounded request handler', () => {
+  test.each([
+    [Buffer.alloc(0), 'Expected bounded UTF-8 JSON request bytes'],
+    [Buffer.alloc(65537, 32), 'Expected bounded UTF-8 JSON request bytes'],
+    [Buffer.from([0xff]), 'Preparation request must be valid UTF-8'],
+    [Buffer.from('{'), 'Preparation request is not valid JSON'],
+    [Buffer.from('{}\0'), 'Preparation request is not valid JSON'],
+  ])('refuses invalid request bytes without invoking parent effects', (bytes, reason) => {
+    const checkpoint = jest.fn();
+    const git = jest.fn();
+    const readObjects = jest.fn();
+    expect(executeFrozenSourcePreparation(bytes, { checkpoint, git, readObjects })).toEqual({
+      status: 'failed',
+      adoption: 'NOT_ADOPTED',
+      writerState: 'NOT_STARTED',
+      phase: 'input',
+      reason,
+    });
+    expect(checkpoint).not.toHaveBeenCalled();
+    expect(git).not.toHaveBeenCalled();
+    expect(readObjects).not.toHaveBeenCalled();
+  });
+
+  test('has no implicit production parent or request-provided capability', () => {
+    expect(executeFrozenSourcePreparation(Buffer.from('{"approved":true}'), undefined)).toEqual({
+      status: 'failed',
+      adoption: 'NOT_ADOPTED',
+      writerState: 'NOT_STARTED',
+      phase: 'parent',
+      reason: 'An independently admitted maintained parent is required',
+    });
+  });
+});
 
 describe('native preparation closed production input profile', () => {
   test.each([
@@ -209,7 +246,7 @@ describe('native preparation actual worktree source and output observations', ()
   test('prepares exact private source bytes from real Git without building or changing governance', () => {
     const { request, context, objectReads } = frozenSourceFixture();
     const before = canonicalBytes();
-    const result = prepareFrozenProductionSource(request, context);
+    const result = executeFrozenSourcePreparation(Buffer.from(JSON.stringify(request)), context);
     expect(result.status).toBe('prepared');
     expect(result.adoption).toBe('NOT_ADOPTED');
     expect(result.source).toEqual({
@@ -263,6 +300,22 @@ describe('native preparation actual worktree source and output observations', ()
       phase: 'authority',
     });
     expect(result.reason).toContain('another caller');
+    expect(objectReads).toEqual([]);
+    expect(fs.existsSync(request.outputRoot)).toBe(false);
+  });
+
+  test('rejects request capability flags instead of allowing them to supply standing', () => {
+    const { request, context, objectReads } = frozenSourceFixture();
+    const result = executeFrozenSourcePreparation(
+      Buffer.from(JSON.stringify({ ...request, approved: true, parent: { trusted: true } })),
+      context
+    );
+    expect(result).toMatchObject({
+      status: 'failed',
+      writerState: 'NOT_STARTED',
+      phase: 'request',
+      reason: 'Unexpected preparation request shape',
+    });
     expect(objectReads).toEqual([]);
     expect(fs.existsSync(request.outputRoot)).toBe(false);
   });
