@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const vm = require('node:vm');
 const { execFileSync, spawnSync } = require('node:child_process');
 const SHARED = path.resolve(__dirname, '../../templates/hook-packs/shared');
 const quote = (value) => "'" + value.replace(/'/g, "'\\''") + "'";
@@ -208,6 +209,50 @@ test('a flat lane named worktrees is an entry rather than a legacy envelope', ()
   expect(oracle.signal).toBeNull();
   expect(oracle.status).toBe(0);
   expect(oracle.stdout.trim()).toBe('block_foreign_worktree:worktrees:foreign');
+});
+
+test('entryByName preserves a colliding flat lane and legacy map identity', () => {
+  fixture('project\n', true, 'worktrees');
+  const env = { ...process.env };
+  delete env.BASH_ENV;
+  delete env.ENV;
+  const exported = spawnSync(
+    '/bin/bash',
+    [
+      '-c',
+      'source "$1"; printf \'%s\' "${CAWS_NODE_ENTRY_BY_NAME:?}"',
+      'reader-fixture',
+      path.join(fx.hooks, 'lib/caws-state.sh'),
+    ],
+    {
+      encoding: 'utf8',
+      timeout: 15000,
+      env,
+    }
+  );
+  expect(exported.error).toBeUndefined();
+  expect(exported.signal).toBeNull();
+  expect(exported.status).toBe(0);
+  expect(exported.stderr).toBe('');
+  expect(exported.stdout).toMatch(/^function entryByName\(/);
+  const entry = { ...fx.entry };
+  delete entry.name;
+  const other = { branch: 'other', path: path.join(fx.project, 'other') };
+  const lookup = (registry, target) =>
+    vm.runInNewContext(
+      exported.stdout + '; entryByName(registry, target)',
+      { registry, target },
+      { timeout: 1000 }
+    );
+  for (const registry of [
+    { worktrees: entry, other },
+    { worktrees: { worktrees: entry, other } },
+  ]) {
+    expect(lookup(registry, 'worktrees')).toBe(entry);
+    expect(lookup(registry, 'other')).toBe(other);
+    expect(lookup(registry, 'missing')).toBeNull();
+  }
+  expect(fs.existsSync(fx.marker)).toBe(false);
 });
 
 test.each(['{broken', '[]', 'null'])(
