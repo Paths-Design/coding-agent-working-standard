@@ -1,9 +1,10 @@
 id: CAWS-SPEC-AMEND-CAS-001
 title: 'Reject stale scope and body amendment plans under the authority lock'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: spec-amend-cas
 created_at: '2026-10-26T23:41:53.211Z'
-updated_at: '2026-10-26T23:41:53.211Z'
+updated_at: '2026-10-26T23:42:01.747Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
