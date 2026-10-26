@@ -235,7 +235,20 @@ fi
 # their ownership before any allowlist or operating-worktree early return.
 # Canonical scope policy remains with its existing session/branch logic below.
 if [[ -n "$FILE_PATH" ]]; then
-  command -v node >/dev/null 2>&1 || _wwg_node_refuse
+  if ! command -v node >/dev/null 2>&1; then
+    # An unavailable reader is not an empty registry. A successful, bounded
+    # directory census can nevertheless prove the ungoverned base state.
+    # No pathname parsing is needed: a matching entry only makes this nonempty.
+    command -v find >/dev/null 2>&1 || _wwg_node_refuse
+    [[ -d "$PROJECT_DIR" ]] || _wwg_node_refuse
+    _WWG_STATE_ENTRY="$(find -H "$PROJECT_DIR" -mindepth 1 -maxdepth 1 -name .caws -print 2>/dev/null)" || _wwg_node_refuse
+    [[ -z "$_WWG_STATE_ENTRY" ]] && exit 0
+    if [[ -d "$PROJECT_DIR/.caws" && ! -L "$PROJECT_DIR/.caws" ]]; then
+      _WWG_REGISTRY_ENTRY="$(find "$PROJECT_DIR/.caws" -mindepth 1 -maxdepth 1 -name worktrees.json -print 2>/dev/null)" || _wwg_node_refuse
+      [[ -z "$_WWG_REGISTRY_ENTRY" ]] && exit 0
+    fi
+    _wwg_node_refuse
+  fi
   if [[ ! -f "$CAWS_CLAIM_ORACLE" ]]; then
     echo '[worktree-write-guard] ownership oracle unavailable; blocked' >&2
     exit 2
@@ -248,7 +261,9 @@ if [[ -n "$FILE_PATH" ]]; then
     pass:owner-self:*) exit 0 ;;
     pass:*) ;;
     block_foreign_worktree:*)
-      echo "[worktree-write-guard] BLOCKED: worktree '${_OWNERSHIP_OUT#*:}' is owned by a DIFFERENT session." >&2
+      _OWNERSHIP_NAME="${_OWNERSHIP_OUT#*:}"
+      _OWNERSHIP_NAME="${_OWNERSHIP_NAME%%:*}"
+      echo "[worktree-write-guard] BLOCKED: this is a write into worktree '$_OWNERSHIP_NAME''s payload, which is owned by a DIFFERENT session." >&2
       exit 2 ;;
     *)
       echo "[worktree-write-guard] registered path ownership could not be established ($_OWNERSHIP_OUT); blocked" >&2

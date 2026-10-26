@@ -166,9 +166,9 @@ SHIM
   sed 's/^ensure_hook_runtime_path() {$/ensure_hook_runtime_path() { return 0/' \
     "$(guard_dir)/runtime-paths.sh" > "$CAWS_TEST_HOME/node-hidden/runtime-paths.sh"
 
-  # Identity-drop control: the guard tree under test with the checked
-  # normalizer replaced by the best-effort one. It must reproduce the
-  # unrepaired admission, or the refusal assertions below prove nothing.
+  # Identity-drop control: replace the checked shell normalizer with the
+  # best-effort reader. Its unresolved result is checked directly; the
+  # independent ownership oracle must retain the foreign-write refusal.
   cp -R "$(guard_dir)" "$CAWS_TEST_HOME/identity-drop"
   printf '\ncaws_guard_realpath_into() { printf -v "$1" "%%s" "$(_realpath "$2")"; }\n' \
     >> "$CAWS_TEST_HOME/identity-drop/lib/caws-state.sh"
@@ -859,6 +859,38 @@ rp_no_node() {
   refute_output --partial "node is not available"
 }
 
+@test "node unavailable: an empty state directory preserves the no-registry base state" {
+  local root="$BATS_TEST_TMPDIR/empty-state"
+  mkdir -p "$root/.caws"
+  rp_no_node worktree-write-guard.sh "$root" "$root" Write "$root/notes.txt"
+  [ "$status" -eq 0 ]
+  refute_output --partial "node is not available"
+}
+
+@test "node unavailable: an inaccessible state directory cannot prove registry absence" {
+  local root="$BATS_TEST_TMPDIR/opaque-state"
+  mkdir -p "$root/.caws"
+  printf '{}\n' > "$root/.caws/worktrees.json"
+  chmod 000 "$root/.caws"
+  rp_no_node worktree-write-guard.sh "$root" "$root" Write "$root/notes.txt"
+  chmod 700 "$root/.caws"
+  [ "$status" -eq 2 ]
+  assert_output --partial "$RP_NODE_REFUSAL"
+  [[ -f "$root/.caws/worktrees.json" ]]
+}
+
+@test "node unavailable: a failed directory census cannot become an empty allow" {
+  local probe="$BATS_TEST_TMPDIR/failing-find"
+  mkdir "$probe"
+  printf '#!/bin/sh\nexit 7\n' > "$probe/find"
+  chmod +x "$probe/find"
+  CAWS_GUARD_REALPATH_DIR="$CAWS_TEST_HOME/node-hidden" \
+    RP_ID_PATH="$probe:$CAWS_TEST_HOME/no-node" \
+    id_guard worktree-write-guard.sh "$RP_NONREPO" "$RP_NONREPO" Write "$RP_NONREPO/notes.txt"
+  [ "$status" -eq 2 ]
+  assert_output --partial "$RP_NODE_REFUSAL"
+}
+
 @test "relative target: worktree-write-guard resolves a relative Write against the payload cwd before adjudicating ownership" {
   local repo="$RP_PLAIN_REPO" self="$RP_PLAIN_REPO/.caws/worktrees/s-wt"
   # Control: the absolute spelling of the foreign target is refused.
@@ -1054,15 +1086,60 @@ rp_no_node() {
   assert_output --partial '{"decision":"block"'
 }
 
-@test "worktree-write-guard identity-drop control: unchecked normalization admits the foreign write" {
+@test "identity-drop control: the legacy reader returns an unresolved spelling with success" {
+  run env PATH="$CAWS_TEST_HOME/failing-python:$PATH" bash -c '
+    source "$1/lib/caws-state.sh"
+    caws_guard_realpath_into value "$2"
+    printf "%s" "$value"' _ "$CAWS_TEST_HOME/identity-drop" "$RP_DOTDOT_TARGET"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "$RP_DOTDOT_TARGET" ]]
+  [[ "$output" != "$RP_TARGET" ]]
+}
+
+@test "worktree-write-guard identity-drop control: the independent oracle retains foreign ownership" {
   rp_guard "$CAWS_TEST_HOME/identity-drop" worktree-write-guard.sh \
     "$CAWS_TEST_HOME/failing-python:$PATH" rp-session-s "$(write_payload "$RP_TARGET")"
-  [ "$status" -eq 0 ]
-  refute_output --partial "BLOCKED"
+  [ "$status" -eq 2 ]
+  assert_output --partial "owned by a DIFFERENT session"
   rp_guard "$CAWS_TEST_HOME/identity-drop" worktree-write-guard.sh \
     "$CAWS_TEST_HOME/no-python" rp-session-s "$(write_payload "$RP_TARGET")"
+  [ "$status" -eq 2 ]
+  assert_output --partial "owned by a DIFFERENT session"
+}
+
+rp_leaf_identity_control() {
+  local guard="$1" tool="$2" link="$RP_SELF/src/$2-identity-link" argument
+  local reference_before reference_after
+  mkdir -p "$RP_SELF/src" "$(dirname "$RP_TARGET")"
+  printf 'referent-control\n' > "$RP_TARGET"
+  ln -s "$RP_TARGET" "$link"
+  reference_before="$("$RP_REAL_PYTHON" -c 'import os,sys; s=os.stat(sys.argv[1]); print(s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns)' "$RP_TARGET")"
+  if [[ "$tool" == Write ]]; then
+    argument="$(write_payload "$link")"
+  else
+    argument="$(bash_payload "touch \"$link\"")"
+  fi
+  rp_guard "$(guard_dir)" "$guard" "$PATH" rp-session-s "$argument"
+  [ "$status" -eq 2 ]
+  assert_output --partial "owned by a DIFFERENT session"
+  # The file oracle preserves final entries intentionally. A referent-write
+  # consumer therefore still needs its own checked normalization of this leaf.
+  rp_guard "$CAWS_TEST_HOME/identity-drop" "$guard" \
+    "$CAWS_TEST_HOME/failing-python:$PATH" rp-session-s "$argument"
   [ "$status" -eq 0 ]
   refute_output --partial "BLOCKED"
+  rp_guard "$CAWS_TEST_HOME/identity-drop" "$guard" \
+    "$CAWS_TEST_HOME/no-python" rp-session-s "$argument"
+  [ "$status" -eq 0 ]
+  refute_output --partial "BLOCKED"
+  [[ -L "$link" ]]
+  [[ "$(cat "$RP_TARGET")" == referent-control ]]
+  reference_after="$("$RP_REAL_PYTHON" -c 'import os,sys; s=os.stat(sys.argv[1]); print(s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns)' "$RP_TARGET")"
+  [[ "$reference_after" == "$reference_before" ]]
+}
+
+@test "worktree-write-guard identity-drop leaf control: unchecked referent normalization admits the foreign write" {
+  rp_leaf_identity_control worktree-write-guard.sh Write
 }
 
 @test "worktree-write-guard sweep: each normalization on the foreign-payload path refuses when it alone fails" {
@@ -1110,15 +1187,19 @@ rp_no_node() {
   assert_output --partial '{"decision":"block"'
 }
 
-@test "bash-write-guard identity-drop control: unchecked normalization admits the foreign mutation" {
+@test "bash-write-guard identity-drop control: the independent oracle retains foreign ownership" {
   rp_guard "$CAWS_TEST_HOME/identity-drop" bash-write-guard.sh \
     "$CAWS_TEST_HOME/failing-python:$PATH" rp-session-s "$(bash_payload "touch $RP_DOTDOT_TARGET")"
-  [ "$status" -eq 0 ]
-  refute_output --partial "BLOCKED"
+  [ "$status" -eq 2 ]
+  assert_output --partial "owned by a DIFFERENT session"
   rp_guard "$CAWS_TEST_HOME/identity-drop" bash-write-guard.sh \
     "$CAWS_TEST_HOME/no-python" rp-session-s "$(bash_payload "touch $RP_DOTDOT_TARGET")"
-  [ "$status" -eq 0 ]
-  refute_output --partial "BLOCKED"
+  [ "$status" -eq 2 ]
+  assert_output --partial "owned by a DIFFERENT session"
+}
+
+@test "bash-write-guard identity-drop leaf control: unchecked referent normalization admits the foreign mutation" {
+  rp_leaf_identity_control bash-write-guard.sh Bash
 }
 
 @test "bash-write-guard sweep: the static mutation target refuses when its normalization alone fails" {

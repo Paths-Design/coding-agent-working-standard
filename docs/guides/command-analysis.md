@@ -121,7 +121,10 @@ observed registry must be a readable regular file with an object or array
 container. Read, parse or type failures, a directory in its place, and dangling
 links retain ownership uncertainty before either consumer's path allowlists.
 File ownership retains LF characters in its environment-coordinate channel; Git
-metadata and mutation projection fields keep their separate transport limits.
+metadata and mutation projection fields keep their separate transport limits. If
+Node is unavailable, Write/Edit permits the ungoverned base state only after a
+successful bounded directory census proves the state directory or registry
+absent. Existing, inaccessible or unobserved authority remains held.
 
 The CLI response adds `execution: {command, cwd}` and `singleLifecycle` to the
 projection. The bridge requires the exact decoded source to match all supplied
