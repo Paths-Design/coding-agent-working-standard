@@ -86,5 +86,5 @@ evidence:
     recorded_at: "2026-10-26T08:40:49.483Z"
   - criterion_id: A5
     status: unchecked
-    evidence_ref: "Source candidate f6a35c12c049583741bf803674c75fe88d0d92fb adds optional normal-installer bootstrap inventory output; production source781ff28fc, 22 new semantic/hostile scenarios written. Independent source review and static gates completed; behavioral installer tests, actual configured-parent consumption and operator bootstrap are UNEXECUTED while guard mutation owns the CPU slot. No global mutation or adoption."
-    recorded_at: "2026-10-26T06:48:18.873Z"
+    evidence_ref: "At ea51aeb3d734de6b6d0115397ef00f6e0604e57c, the actual normal-installer test file executed all 31 scenarios on Node 25.9.0 with exit 0, retaining complete positive inventories and hostile before/after observations in native-frozen-preparation-01/installer-scenarios-02; raw log installer-inventory-02.log SHA cd7ef861074121581d37050d1574b94b49955ee53fa0386987028e802821c3a3. Production installer remains 781ff28fc. Prior failed incomplete fixture is retained separately. Actual configured-parent consumption of the final joined installation and operator bootstrap remain unexecuted; no global activation or adoption."
+    recorded_at: "2026-10-26T09:11:53.832Z"
