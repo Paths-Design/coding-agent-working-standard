@@ -9,6 +9,7 @@ created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
     - 'Typed shell parsing, bounded abstract values, utility effects and worktree-isolation analysis; CLI explanation and installed guard consumer'
+    - 'CAWS-owned prepared execution, native host routing, single-use launch authority and bounded process lifecycle'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -162,6 +163,18 @@ acceptance:
       refused, foreign source reads retain existing policy, and incomplete roles,
       rewrites or symlink relations cannot grant admission; source fixture proof
       does not qualify installed runtime adoption
+  - id: A11
+    given: >-
+      An authenticated host association and a fully owned executable, argv, physical
+      cwd, environment, stdin, startup mode, effect profile and authority revision
+    when: >-
+      CAWS prepares and analyzes the invocation without submitted execution, then
+      consumes admission under the authority fence
+    then: >-
+      The same owner launches exactly the admitted record once; unsupported
+      profiles, authority revocation, altered fields, expiry, cancellation, replay
+      and malformed or timed-out analysis produce zero user launches, with bounded
+      cleanup and truthful partial outcomes
 observability:
   - 'Structured verdict, reason codes and source-positioned decision trace distinguish allowed, denied and unresolved facts without claiming a general process sandbox.'
 rollback:
