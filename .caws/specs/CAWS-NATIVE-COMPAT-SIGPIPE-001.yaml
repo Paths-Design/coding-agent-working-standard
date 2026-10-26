@@ -42,7 +42,7 @@ contracts:
     type: behavior
 evidence:
   - criterion_id: A1
-    status: unchecked
-    evidence_ref: "Candidate committed; restored actual installed compatibility late-natural control passes and original 30s bounds unchanged. Independent review feedback received; Root raw-artifact discharge pending. No integration, full installed scenario or machine adoption claim."
-    recorded_at: "2026-10-26T10:57:05.061Z"
-    commit_sha: d9feda882dff7a4b4d784edbe7e6e649c5b114b3
+    status: pass
+    evidence_ref: "Root inspected baseline valid late-natural failure2/rawcaller13 vs restored37, exact NATURAL DONE newline13bytes, stderr0, bothEOFs977ms/no watchdog and correlated postfinish bound1006.9ms. restored-01.log actual0 bin16/compat18/entry34; unchanged original30000ms/selected1200ms/calculations. Source/artifact peer claims grounded directly. Compiled fixture proof, not completeinstalled or cutover. Raw artifacts: /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/native-private-signals-01. CLI --verify checks citedcommit existence only; Root directly inspected runtime evidence. External absolute artifact citation was refused as non-repository-relative; no source copy or claimed test reexecution."
+    recorded_at: "2026-10-26T11:04:23.775Z"
+    commit_sha: "0ae7969c5900c535821690d8fffed2b25180f78a"
