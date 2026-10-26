@@ -137,6 +137,22 @@ acceptance:
       unavailable authority while the reminder remains exit-zero and reports the
       same active worktrees, with unsupported resolution diagnosed rather than
       treated as an empty registry
+  - id: A10
+    given: >-
+      Supported Bash copy or move invocations contain separately proven source and
+      destination operands, or unresolved options, values, working directories or
+      filesystem relations
+    when: >-
+      The bounded parser projects complete per-invocation roles and the copy guard
+      plus mandatory write oracle evaluate the actual destination relation and
+      move-source effects
+    then: >-
+      Multiple owned source files may be copied to an external artifact directory
+      without fabricating a canonical destination from source bytes; real
+      worktree-to-canonical destinations and foreign destination writes remain
+      refused, foreign source reads retain existing policy, and incomplete roles,
+      rewrites or symlink relations cannot grant admission; source fixture proof
+      does not qualify installed runtime adoption
 observability:
   - 'Structured verdict, reason codes and source-positioned decision trace distinguish allowed, denied and unresolved facts without claiming a general process sandbox.'
 rollback:
