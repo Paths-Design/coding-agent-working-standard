@@ -1,9 +1,10 @@
 id: CAWS-BRIDGE-LIFECYCLE-LOCK-001
 title: 'Serialize bridge mutations under the lifecycle lock'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: bridge-lifecycle-lock
 created_at: '2026-10-26T22:42:32.159Z'
-updated_at: '2026-10-26T22:42:32.159Z'
+updated_at: '2026-10-26T22:42:46.931Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
