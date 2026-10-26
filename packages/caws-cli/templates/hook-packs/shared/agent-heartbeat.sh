@@ -56,7 +56,76 @@ source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 # Use caws_source_lib so a vendor override (e.g. codex ask->deny) is
 # preferred over the shared default when present.
 caws_source_lib emit.sh 2>/dev/null || true
-parse_hook_input || exit 0
+# Mirrors src/runtime/actor-context.ts; the custody tests compare them row by row.
+_hb_classify_actor() {
+  node -e '
+    const chunks = [];
+    process.stdin.on("data", (c) => { chunks.push(c); });
+    process.stdin.on("end", () => {
+      let payload;
+      try {
+        const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+        payload = JSON.parse(text.decode(Buffer.concat(chunks)));
+      } catch { payload = undefined; }
+      let actor = "uncertain";
+      if (typeof payload === "object" && payload !== null && !Array.isArray(payload)) {
+        const id = payload.agent_id;
+        if (!Object.prototype.hasOwnProperty.call(payload, "agent_id")) actor = "main";
+        else if (typeof id === "string" && /^[A-Za-z0-9_.:-]{1,128}$/.test(id)) actor = "subagent";
+      }
+      process.stdout.write(actor);
+    });
+  ' 2>/dev/null
+}
+
+# Mail custody is decided from the bytes this handler received on stdin, before the
+# parser runs: the parser repairs control bytes and undecodable text, so its output
+# can lack an agent_id the received bytes never validly carried. A preset
+# HOOK_TOOL_NAME means a dispatcher already parsed and piped the payload here, so
+# stdin is classified directly and nothing is written. Without it, the same bytes
+# feed the parser through a trapped capture file. A preset HOOK_INPUT_JSON there
+# would become the parsed identity although this handler never received it; that, a
+# TTY, or a failed capture stays uncertain.
+_HB_FAST_PATH=0
+[[ -n "${HOOK_TOOL_NAME+set}" ]] && _HB_FAST_PATH=1
+_HB_ACTOR=uncertain
+_HB_INGRESS=""
+if [[ -t 0 ]]; then
+  :
+elif [[ "$_HB_FAST_PATH" == 1 ]]; then
+  _HB_ACTOR="$(_hb_classify_actor)"
+elif [[ -z "${HOOK_INPUT_JSON:-}" ]]; then
+  _HB_INGRESS="$(mktemp "${TMPDIR:-/tmp}/caws-heartbeat-ingress-XXXXXX" 2>/dev/null)" || _HB_INGRESS=""
+  if [[ -n "$_HB_INGRESS" ]]; then
+    trap 'rm -f "$_HB_INGRESS"' EXIT
+    cat > "$_HB_INGRESS" 2>/dev/null && _HB_ACTOR="$(_hb_classify_actor < "$_HB_INGRESS")"
+  fi
+fi
+case "$_HB_ACTOR" in
+  main | subagent) ;;
+  *) _HB_ACTOR=uncertain ;;
+esac
+# The parser installs its own EXIT trap, replacing the capture's, so the capture is
+# opened on a descriptor and unlinked before parsing; once unlinked, no interruption can
+# leave it on disk. If it cannot be opened or unlinked, exit while the capture's own
+# trap is still installed rather than parse with the payload still named on disk.
+if [[ -n "$_HB_INGRESS" ]]; then
+  if ! { exec 9<"$_HB_INGRESS"; } 2>/dev/null; then
+    exit 0
+  fi
+  rm -f "$_HB_INGRESS" 2>/dev/null
+  if [[ -e "$_HB_INGRESS" ]]; then
+    exec 9<&-
+    exit 0
+  fi
+  parse_hook_input <&9
+  _HB_PARSED=$?
+  exec 9<&-
+else
+  parse_hook_input
+  _HB_PARSED=$?
+fi
+[[ "$_HB_PARSED" == 0 ]] || exit 0
 
 if [[ -z "${HOOK_SESSION_ID:-}" || "$HOOK_SESSION_ID" == "unknown" ]]; then
   exit 0
@@ -252,7 +321,13 @@ _HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" no
 # FAIL-CLOSED-NON-BLOCKING: any error (CLI absent/erroring, malformed JSON, no
 # message) emits nothing and never blocks the tool call. Independent of the peer
 # notice above — both can fire on the same call.
-if [[ -n "${CAWS_HANDLER_OFFER_FILE:-}" ]]; then
+#
+# Custody: a subagent's hooks carry the parent's session id, so polling there
+# would reserve and settle the parent's mail into a context the parent never
+# reads. Mail stays queued unless the ingress is main-thread (_HB_ACTOR above).
+if [[ "$_HB_ACTOR" != "main" ]]; then
+  _MSG_OUT=""
+elif [[ -n "${CAWS_HANDLER_OFFER_FILE:-}" ]]; then
   _MSG_OUT="$(
     caws_run_cli message poll \
       --me "$HOOK_SESSION_ID" \
@@ -326,7 +401,7 @@ if [[ -n "$_MSG_OUT" ]]; then
         const sender = e.sender || null;
         const bits = [];
         if (sender && sender.worktree) bits.push("worktree " + sender.worktree);
-        if (sender && sender.spec_id) bits.push("spec " + sender.spec_id);
+        if (sender && sender.specId) bits.push("spec " + sender.specId);
         return bits.length > 0 ? " (" + bits.join(", ") + ")" : "";
       };
       let ctx = "";

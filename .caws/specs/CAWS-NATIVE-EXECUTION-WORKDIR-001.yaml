@@ -1,0 +1,111 @@
+id: CAWS-NATIVE-EXECUTION-WORKDIR-001
+title: 'Preserve host-resolved Bash command directory through CAWS policy selection'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'All A1-A4 are supported and dual-read back: native installed fixture plus current consumer controls and exact native hostile-profile test. Source landed/published in9ff; original scoped candidate43f2 was actually installed/exercised, then normal public rollback408 completed after separate GUI launchd preflight TCC failure. Closure covers authored command-directory transport and its authority boundary, not GUI engine activation, child actor projection repair, full typed native image or parent runtime cutover. Parent and Root receiver/other owners retain all remaining obligations. Actual source gates13682-13686, independent peer feedback grounded before landing, normal push10 checks, fresh doctor0E5W7I retained.'
+created_at: '2026-10-25T08:16:54.609Z'
+updated_at: '2026-10-26T00:20:56.741Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Host-owned native Bash execution directory, legacy launcher and typed runtime policy routing'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/runtime/caws-hook.py'
+    - 'packages/caws-cli/templates/hook-packs/codex/hooks/lib/parse-input.sh'
+    - 'packages/caws-cli/src/runtime/execution-workdir.ts'
+    - 'packages/caws-cli/tests/runtime/execution-workdir.test.js'
+    - 'packages/caws-cli/tests/hooks/pytest/test_hook_execution_diagnostics.py'
+    - packages/caws-native/src/invocation_project.rs
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
+    - packages/caws-cli/tests/hooks/codex-bash-write-execution-context.test.js
+  out: []
+  support:
+    - packages/caws-cli/src/runtime/handler-executor.ts
+    - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-native/src/protocol.rs
+    - packages/caws-native/src/main.rs
+    - packages/caws-cli/src/runtime/stock-handlers.ts
+    - packages/caws-cli/src/runtime/context.ts
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/context_git/original_project.rs
+    - packages/caws-cli/src/runtime/journal.ts
+    - packages/caws-cli/src/runtime/context-git-client.ts
+    - packages/caws-cli/src/runtime/context-git-wire.ts
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/src/runtime/engine-entry.ts
+    - packages/caws-cli/tests/runtime/context-git-client.test.js
+    - packages/caws-cli/tests/runtime/engine-entry.test.js
+    - packages/caws-cli/tests/runtime/protocol.test.js
+    - packages/caws-native/src/context_git.rs
+    - packages/caws-native/src/context_git/tests.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-cli/tests/runtime/context.test.js
+    - packages/caws-cli/tests/adapter/machine-runtime.test.js
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-codex.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/src/runtime/session-cache-admission.ts
+    - packages/caws-cli/tests/runtime/session-cache-admission.test.js
+    - packages/caws-cli/tests/runtime/engine-routing.test.js
+    - packages/caws-cli/tests/runtime/session-seal-routing.test.js
+invariants:
+  - 'Session cwd and original tool/session/turn identifiers are preserved; only explicit host-resolved execution_workdir selects command directory and never grants ownership or scope'
+  - 'Malformed, conflicting, missing-target and foreign authority coordinates fail closed; absent unsupported native transport is distinct from resolved context'
+  - 'Existing context-git v1 remains limited to two fixed queries; only independently native-validated Bash pre/post host context may advertise a separate four-query execution-workdir profile, with no caller count override or deadline renewal'
+  - 'Valid ungoverned command contexts retain inactive behavior; Git presence alone does not opt into CAWS. An ungoverned origin resolves the actual command target, while failed resolution cannot erase governed, adopted or unresolved authority.'
+  - 'Only a fully decoded, fully settled nonzero Git exit may consume its fixed ordinal and continue within the validated-host four-query profile; ordinary two-query failure poisoning, fatal-error refusal, token and executable binding, pair cwd binding and the original absolute deadline remain unchanged.'
+acceptance:
+  - id: A1
+    given: 'native Bash events with session cwd and host execution_workdir'
+    when: 'CAWS resolves policy and relative target context'
+    then: >-
+      the actual physical command directory is selected with raw session identifiers
+      preserved, and lifecycle or non-Bash coordinates remain unchanged
+  - id: A2
+    given: >-
+      null, non-string, empty, relative, NUL, nonexistent, non-directory or
+      conflicting explicit directories and foreign worktrees
+    when: 'native Bash context is consumed'
+    then: >-
+      invalid supplied context refuses and owner, canonical, foreign-worktree and
+      cross-repository checks retain their authority boundaries
+  - id: A3
+    given: 'the actual current native producer and authored upstream command-directory transport repair'
+    when: 'ordinary native calls are exercised after coordinated installation'
+    then: >-
+      real emitted execution_workdir agrees with actual command cwd and CAWS policy
+      decisions; synthetic fixtures alone cannot establish installed completion
+  - id: A4
+    given: 'ordinary two-query native context and validated-host four-query execution context'
+    when: 'session governing authority is joined to actual command checkout'
+    then: >-
+      old third and new fifth queries refuse, native profile cannot be selected by
+      aliases or payload flags, and active session authority cannot fall inactive or
+      cross canonical repositories
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Inspected external runtime evidence: /Users/darianrosebrook/.codex/artifacts/01a171eb-7902-72a0-99d5-3c63ab05451d/native-workdir/installed-native-proof.json and authentic actor01a17282 journals positive pre00a4/post a4a7, negative pre a187. Producer c464 and installed43f2: positive exact printf creates verified-native-workdir newline in owned physical W, shell/guard0; canonical same-command guard2 before execution, marker absent. Inspected installed launcher.py609-635 validates exact top-level physical execution_workdir string; supplied_context658 records resolution;659-660 unavailable describes absent legacy aliases. Raw session cwd stays canonical, actual tool IDs retained. Native run exit0. Full raw JSON/negative turn value not retained, no payload replay claim. GUI selection, typed image integration and full Rust cutover remain unverified. A3 bounded ordinary installed producer/consumer pass; A1 A2 A4 separately owned, spec remains active. Prior absolute artifact citation refused without writes because verifier accepts repo-relative only; this supported commit citation checks reachability only. Behavioral conclusion derives from direct journal/source/effect inspection, not --verify execution."
+    recorded_at: "2026-10-25T23:42:34.711Z"
+    commit_sha: "4cc5e68c97730b0b5943cb464cc1699966347ef2"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Root inspected current source and external workdir-acceptance-01/python-focused-identity.json plus python-focused.log:5 exact maintained cases exit0 at14aa4558 metadata-only successor of product9ff. Actual isolated installed bootstrap executes real ignored-staging guard in physical command directory with no next-handler marker/Git index, preserves raw session/tool identities and input digest while handler PWD/HOOK_CWD use physical command cwd. Current full normal-push10 log lists execution-workdir suite PASS4650, guard suite2261, context-client7876, no skip for unconditional selected Stop parser test.each203-282; inspected assertions preserve session envelope/caller/peer bytes and no command-directory cache for undefined/null/missing/conflicting irrelevant fields. Current resolver/lifecycle/non-Bash assertions and native same-source named controls retain original bytes/identity. Synthetic component checks plus separately earned authentic installed A3; no raw-native replay or GUI-selection claim. External logs inspected directly; --verify only source reachability."
+    recorded_at: "2026-10-26T00:10:48.490Z"
+    commit_sha: "9ff69b39b8a6b14072370e0f61139d2f60726b72"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Root inspected five fresh named maintained Python diagnostics cases at14aa4558 product9ff: invalid explicit null/nonstring/empty/relative/NUL/missing/nondirectory context refuses pre+post before dispatch or journal; each alias must agree; scratch/foreign contexts cannot erase governed session authority. Raw workdir-acceptance-01/python-focused.log exit0/5run6.626s, identity/hashes retained; synthetic payload/isolated install limit explicit. Full normal-push10 current product guard suitePASS and retained governance-coordinates/root-jest named owned-relative allow, foreign/absoluteforeign/canonicalclaimed refuse, unclaimedcanonical allow with actual exit assertions. Native invocation_project/protocol/context_git source unchanged4ce437..9ff, retained native-execution/protocol named host/alias/no-borrow controls inspected through source mapping. A3 authentic installed positive and canonical negative independently inspected, current live machine rolled back408 after GUI controller TCC preflight failure; no full native image/GUI cutover claim. --verify only commit reachability."
+    recorded_at: "2026-10-26T00:10:57.985Z"
+    commit_sha: "9ff69b39b8a6b14072370e0f61139d2f60726b72"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Root actual maintained Cargo --locked --lib exact context_git::tests::frame_fields_cannot_upgrade_an_ordinary_profile_or_change_fixed_order executed1pass0ignored exit0,15.71s compile, raw workdir-acceptance-01/native-frame-profile.log. Current canonicalHEADd6fceb native source equals9ff by empty gitdiff. Source assertions enforce ordinary profile cannot upgrade from frame flags, fixed command order/token and settled cleanup. This closes the previously unselected hostile-frame control. Retained native-execution-01 named fixed_profiles_refuse_old_third_and_execution_fifth_without_renewing_deadline and native-protocol-02 trusted-constructor selector controls exercised; context_git/protocol/invocation_project source unchanged4ce437..9ff. Current normal-push10 context-git-client suitePASS plus inspected correlated four-query/fifth and ordinary poisoning/cancellation assertions, fresh5case Python governed/scratch/foreign refusal prove authority cannot disappear/cross repositories. Fixed-limit expired-clock test alone is not successful-child proof; client successful-pair controls supply that distinct behavior. No alias/payload flag authority, count override or renewed deadline. Actual source gates13682-13686 and full normalpush10 retained; no new code changed. --verify only commit reachability; parentfullnativeparity remains open."
+    recorded_at: "2026-10-26T00:20:23.517Z"
+    commit_sha: "9ff69b39b8a6b14072370e0f61139d2f60726b72"

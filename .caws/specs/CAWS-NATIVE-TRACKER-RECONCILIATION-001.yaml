@@ -1,0 +1,42 @@
+id: CAWS-NATIVE-TRACKER-RECONCILIATION-001
+title: 'Reconcile native migration tracker with published source and installed boundaries'
+mode: doc
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'The canonical tracker identifies the current coordinator and published source, grounds35/37 partial coverage in bootstrap and native installation components, preserves historical evidence and records remaining Python, genuine entry, rollback and cutover obligations. Documentation A1/A2 are supported by direct source/receipt audit,13 compiled-entry fixture tests and successful metadata/consumer checks; the denied optional combined verifier remains unexecuted. This closes only the documentation slice. Parent acceptance remains0/8 and selected machine runtime/CLI are unchanged.'
+created_at: '2026-10-25T15:01:23.308Z'
+updated_at: '2026-10-25T15:49:51.708Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Native migration status, ownership and package boundaries'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Historical failures, all parent A1-A8 obligations, original 30000ms invocation deadline and unchanged installed runtime remain explicit; source or component success never implies cutover.'
+acceptance:
+  - id: A1
+    given: 'current worktree ownership and published native source'
+    when: 'the canonical tracker is read'
+    then: 'it names the current coordinator and accurately distinguishes the reviewed native entry, guard configuration, host workdir and CLI package components from remaining Python and installed obligations'
+  - id: A2
+    given: 'the unchanged selected runtime and maintainer-only tracker'
+    when: 'progress and package boundaries are checked'
+    then: 'parent acceptance stays 0/8 with actual installed and rollback gaps visible, and the tracker remains outside the consumer package input set'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Direct manual audit of committed tracker742972dea against live Root-owned registry, installed_entry.rs and installed_generation.rs, generated TypeScript guard-config sources, host workdir consumers and actual retained installation evidence. The targeted Cargo installed_entry suite exits0 with13 tests, retained under Root tracker-reconciliation/native-entry-tests.log and native-entry-observations; fixture assets do not prove genuine-image delivery. Rehashed pair-probe4eb38099 and descriptor/result pins plus three actual post-build04 receipts prove a bounded native-image installation; pair-probe496 calls public installMachineRuntime and192-194 directly executes the frontend, not the stable entry. The written standalone-component rule therefore supports35/37 partial rows, with parent0/8 and all complete retirement/adoption gaps preserved. Independent read-only peer742972 findings were grounded on these coordinates. The optional combined Node verifier was blocked by the deployed guard and did not execute; it is not used as proof. Commit verification establishes reachability only."
+    recorded_at: "2026-10-25T15:44:52.123Z"
+    commit_sha: "742972dea946ae637927c3531fd7aa6cade26260"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Successful baseline-doc-check.log and changed-doc-check.log validate frontmatter and derive the exact10-document consumer set17d0db9612272c40f4d6d8c5b2f5f546041554101362c4775cb827dd9f9c3af9, excluding this maintainer tracker. Subsequent edits affect only body/coverage; current leading audience:maintainer header and stage-consumer-docs audienceOf/extractFrontMatter were inspected directly, so body changes cannot change membership. The blocked combined verifier remains unexecuted and supplies no evidence. Direct current parent-spec read retains uncheckedA1/A7, failA2 and zero accepted of eight criteria; selected runtime408 and CLI89061 are unchanged. Actual byte comparison preserves historical E ledger hashfdcf79cf0d0d8fbaf7fbd950d3d87a05176966c3aff9ceef9f1e27de38a79269. Prettier check, five CAWS gates and doctor0E pass; no runtime/package source or consumer documentation changes. This records only the bounded documentation criterion, not any parent acceptance."
+    recorded_at: "2026-10-25T15:44:53.081Z"
+    commit_sha: "742972dea946ae637927c3531fd7aa6cade26260"

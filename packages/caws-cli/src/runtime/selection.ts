@@ -1,8 +1,21 @@
-import * as fs from 'node:fs';
+import {
+  liveSelectionReadIo,
+  missingSelectionObservation,
+  type SelectionReadIo,
+} from '../init/selection-read-io';
 import * as path from 'node:path';
 import { assertMachinePath } from '../init/machine-paths';
-import { sha, verifyRuntime } from '../init/machine-runtime-state';
-import { isCawsNativeCommand, MACHINE_EVENTS } from '../init/native-hook-identification';
+import { sha, ensureRuntimeVerified, readManifest } from '../init/machine-runtime-state';
+import {
+  isCawsNativeCommand,
+  classifyCawsProducerHook,
+  isCawsProducerHookCandidate,
+  machineCommand,
+  universalEventMatcher,
+  unconditionalCommandHook,
+  qualifiedHookTimeout,
+  MACHINE_EVENTS,
+} from '../init/native-hook-identification';
 import {
   effectiveRepoSurfacePolicy,
   parseRepoHookPolicy,
@@ -12,8 +25,14 @@ import { validateSystemPolicy, type SystemSurfacePolicy } from '../init/system-p
 import { readSystemSurfaceSettings } from '../init/system-surface-settings';
 import type { AgentSurface } from '../init/hook-packs/types';
 import type { HookEvent } from './types';
+import {
+  OPENCODE_PROJECT_TRANSPORT,
+  validateObservedOpenCodeNativeRegistration,
+  type OpenCodeRegistrationCaller,
+} from '../init/opencode-project-registration';
 
 export interface SelectionOptions {
+  readonly io?: SelectionReadIo;
   readonly checkout: string;
   readonly canonical: string;
   readonly home: string;
@@ -21,6 +40,8 @@ export interface SelectionOptions {
   readonly surface: AgentSurface;
   readonly event: HookEvent;
   readonly system: boolean;
+  /** Original native caller; never reconstructed from ambient engine roots. */
+  readonly caller?: OpenCodeRegistrationCaller;
 }
 type Tier = 'stock' | 'repo-policy' | 'machine-policy';
 export interface SelectedSource {
@@ -63,27 +84,30 @@ export type InvocationSelection =
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
-function confined(root: string, relative: string): string {
-  if (path.isAbsolute(relative) || relative.split('/').includes('..')) {
-    throw new Error(`Path escapes root: ${relative}`);
-  }
-  const target = path.join(root, relative);
-  assertMachinePath(root, target);
-  return target;
-}
-function isFile(file: string): boolean {
-  try {
-    return fs.statSync(file).isFile();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    throw error;
-  }
-}
-function readJson(file: string): unknown {
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
-}
-function source(file: string): SelectedSource {
-  return Object.freeze({ path: file, sha256: sha(fs.readFileSync(file)) });
+function selectionReads(io: SelectionReadIo) {
+  return {
+    confined(root: string, relative: string): string {
+      if (path.isAbsolute(relative) || relative.split('/').includes('..'))
+        throw new Error(`Path escapes root: ${relative}`);
+      const target = path.join(root, relative);
+      assertMachinePath(root, target, io);
+      return target;
+    },
+    isFile(file: string): boolean {
+      try {
+        return io.stat(file).kind === 'file';
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+        throw error;
+      }
+    },
+    readJson(file: string): unknown {
+      return JSON.parse(io.readFile(file).toString('utf8'));
+    },
+    source(file: string): SelectedSource {
+      return Object.freeze({ path: file, sha256: sha(io.readFile(file)) });
+    },
+  };
 }
 function inactive(reason: string): InvocationSelection {
   return Object.freeze({ status: 'inactive', reason });
@@ -92,44 +116,141 @@ function emptyMachinePolicy(): SystemSurfacePolicy {
   return { disabled: {}, extensions: {}, handlers: {}, libraries: {} };
 }
 
-/** Event-scoped duplicate avoidance; disabled native registrations do not select a chain. */
+function verifiedProjectMachineEntry(command: string, options: SelectionOptions): void {
+  const io = options.io ?? liveSelectionReadIo;
+  const { confined, isFile } = selectionReads(io);
+  const legacy = path.join(options.home, 'bin/caws-hook');
+  const native = path.join(options.home, 'bin/caws-hook-native');
+  // Coverage requires the producer's exact command. Decoding shell words loses
+  // assignment syntax: a quoted CAWS_HOME word is a command, not an assignment.
+  // Missing assignments, wrappers, --system and --describe establish no coverage.
+  const interpreter = command === machineCommand(options.home, options.surface, options.event);
+  if (
+    !interpreter &&
+    command !== machineCommand(options.home, options.surface, options.event, 'native')
+  )
+    throw new Error('Project CAWS invocation requires native-harness reconciliation');
+  const entry = interpreter ? legacy : native;
+  assertMachinePath(options.home, entry, io);
+  if (!isFile(entry) || (!interpreter && (io.stat(entry).mode & 0o111) === 0))
+    throw new Error('Project CAWS entry is missing or nonexecutable; requires reconciliation');
+  const identity = sha(io.readFile(entry));
+  const member = entry === native ? 'native/caws-hook-native' : 'bootstrap.py';
+  const runtimes = confined(options.home, 'lib/runtimes');
+  const known = io.readDirectory(runtimes).some((digest) => {
+    try {
+      const manifest = readManifest(options.home, digest, io);
+      return (
+        manifest[member] === identity ||
+        (entry === legacy && manifest['launcher.py'] === identity && !manifest['bootstrap.py'])
+      );
+    } catch (error) {
+      if (missingSelectionObservation(error)) throw error;
+      return false;
+    }
+  });
+  if (!known)
+    throw new Error('Project CAWS entry identity is not retained; requires reconciliation');
+}
+
+/** Only one understood universal project registration can suppress the system
+ * chain. Restricted matchers and additive local/checkout layers require explicit
+ * harness reconciliation; treating their mere presence as coverage skips guards.
+ */
 function legacyRegistered(options: SelectionOptions): boolean {
+  const io = options.io ?? liveSelectionReadIo;
+  const { confined, isFile, readJson } = selectionReads(io);
+  if (options.surface === 'opencode') {
+    if (options.event !== 'stop')
+      throw new Error('OpenCode project-native transport supports only Stop');
+    if (!options.caller) throw new Error('OpenCode registration requires original native caller');
+    const settings = readSystemSurfaceSettings(options.home, 'opencode', io);
+    if (!settings?.enabled || settings.transport !== OPENCODE_PROJECT_TRANSPORT)
+      throw new Error('OpenCode project-native Stop is not explicitly configured');
+    const project = readJson(
+      confined(options.home, 'state/projects/' + sha(options.canonical) + '.json')
+    );
+    if (
+      !object(project) ||
+      project.version !== 1 ||
+      project.root !== options.canonical ||
+      !object(project.surfaces) ||
+      !object(project.surfaces.opencode)
+    )
+      throw new Error('OpenCode project requires explicit policy migration');
+    validateObservedOpenCodeNativeRegistration({
+      checkout: options.checkout,
+      caller: options.caller,
+      home: options.home,
+      runtimeDigest: options.runtimeDigest,
+      io,
+    });
+    return false;
+  }
   const vendors: Partial<Record<AgentSurface, string>> = {
     codex: '.codex',
     'claude-code': '.claude',
     'qwen-code': '.qwen',
   };
   const vendor = vendors[options.surface];
-  if (!vendor) return false;
-  const file = confined(
-    options.canonical,
-    vendor + (options.surface === 'codex' ? '/hooks.json' : '/settings.json')
-  );
-  if (!isFile(file)) return false;
-  const config = readJson(file);
-  if (!object(config) || (config.hooks !== undefined && !object(config.hooks))) {
-    throw new Error('Malformed legacy native registration');
+  if (!vendor)
+    throw new Error('Native system registration requires a qualified JSON harness adapter');
+  const primary = vendor + (options.surface === 'codex' ? '/hooks.json' : '/settings.json');
+  let selected = 0;
+  for (const root of new Set([options.canonical, options.checkout])) {
+    const toml = confined(root, vendor + '/config.toml');
+    if (isFile(toml) && isCawsNativeCommand(io.readFile(toml).toString('utf8')))
+      throw new Error('Inline project CAWS hooks require native-harness reconciliation');
+    for (const relative of [primary, vendor + '/settings.local.json']) {
+      const file = confined(root, relative);
+      if (!isFile(file)) continue;
+      const config = readJson(file);
+      if (!object(config) || (config.hooks !== undefined && !object(config.hooks)))
+        throw new Error('Malformed legacy native registration');
+      if (config.disableAllHooks === true)
+        throw new Error('Disabled project hooks require native-harness reconciliation');
+      const groups = object(config.hooks)
+        ? (config.hooks[MACHINE_EVENTS[options.event]] ?? [])
+        : [];
+      if (!Array.isArray(groups)) throw new Error('Malformed legacy native registration');
+      for (const group of groups) {
+        if (!object(group) || !Array.isArray(group.hooks))
+          throw new Error('Malformed legacy native hook group');
+        if (group.enabled === false) continue;
+        for (const hook of group.hooks) {
+          if (!object(hook) || hook.enabled === false || !isCawsProducerHookCandidate(hook))
+            continue;
+          const ownership = classifyCawsProducerHook(hook, options.surface, options.event);
+          if (ownership.kind === 'foreign') continue;
+          if (ownership.kind === 'unresolved' || typeof hook.command !== 'string')
+            throw new Error('Project CAWS producer registration requires reconciliation');
+          if (
+            root !== options.canonical ||
+            relative !== primary ||
+            !universalEventMatcher(options.surface, options.event, group.matcher) ||
+            !unconditionalCommandHook(group, hook, options.surface, options.event) ||
+            !qualifiedHookTimeout(options.surface, options.event, hook.timeout)
+          )
+            throw new Error(
+              'Restricted or additive project CAWS registration requires native-harness reconciliation'
+            );
+          // Only the exact producer command establishes understood event coverage.
+          verifiedProjectMachineEntry(hook.command, options);
+          selected++;
+        }
+      }
+    }
   }
-  const groups = object(config.hooks) ? (config.hooks[MACHINE_EVENTS[options.event]] ?? []) : [];
-  if (!Array.isArray(groups)) throw new Error('Malformed legacy native registration');
-  for (const group of groups) {
-    if (!object(group) || !Array.isArray(group.hooks))
-      throw new Error('Malformed legacy native hook group');
-    if (group.enabled === false) continue;
-    if (
-      group.hooks.some(
-        (hook: unknown) =>
-          object(hook) && hook.enabled !== false && isCawsNativeCommand(hook.command)
-      )
-    )
-      return true;
-  }
-  return false;
+  if (selected > 1)
+    throw new Error('Duplicate project CAWS registrations require native-harness reconciliation');
+  return selected === 1;
 }
 
 function legacyPolicy(
   options: SelectionOptions
 ): { hooks: string; entries: string[]; libraries: Record<string, string> } | null {
+  const io = options.io ?? liveSelectionReadIo;
+  const { confined, isFile, readJson } = selectionReads(io);
   const file = confined(options.canonical, '.caws/hooks/adapter-policy.json');
   if (!isFile(file))
     throw new Error(
@@ -174,16 +295,18 @@ function legacyPolicy(
 
 /** Per-call policy selection. Explicit roots are resolved by the owning Git context port. */
 export function resolveInvocationSelection(options: SelectionOptions): InvocationSelection {
+  const io = options.io ?? liveSelectionReadIo;
+  const { confined, isFile, readJson, source } = selectionReads(io);
   for (const root of [options.home, options.canonical, options.checkout]) {
     if (!path.isAbsolute(root)) throw new Error('Selection roots must be absolute');
-    assertMachinePath(root, root);
+    assertMachinePath(root, root, io);
   }
   // Preserve the current immutable-snapshot integrity contract, including launcher.py.
-  verifyRuntime(options.home, options.runtimeDigest);
+  ensureRuntimeVerified(options.home, options.runtimeDigest, io);
   const runtime = confined(options.home, 'lib/runtimes/' + options.runtimeDigest);
   const projectFile = confined(options.home, 'state/projects/' + sha(options.canonical) + '.json');
-  const known = fs.existsSync(projectFile);
-  if (!fs.existsSync(confined(options.canonical, '.caws'))) {
+  const known = io.exists(projectFile);
+  if (!io.exists(confined(options.canonical, '.caws'))) {
     if (known) throw new Error('Adopted project governance is missing');
     return inactive('project governance is absent');
   }
@@ -191,12 +314,12 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
     return inactive('legacy native registration remains selected');
   const governanceReady =
     isFile(confined(options.canonical, '.caws/policy.yaml')) &&
-    fs.existsSync(confined(options.canonical, '.caws/specs')) &&
-    fs.statSync(confined(options.canonical, '.caws/specs')).isDirectory() &&
-    !fs.existsSync(confined(options.canonical, '.caws/working-spec.yaml'));
+    io.exists(confined(options.canonical, '.caws/specs')) &&
+    io.stat(confined(options.canonical, '.caws/specs')).kind === 'directory' &&
+    !io.exists(confined(options.canonical, '.caws/working-spec.yaml'));
   if (options.system && !known && !governanceReady)
     return inactive('project governance requires migration');
-  const settings = readSystemSurfaceSettings(options.home, options.surface);
+  const settings = readSystemSurfaceSettings(options.home, options.surface, io);
   let machine: SystemSurfacePolicy | null = null;
   if (settings?.enabled) {
     machine = emptyMachinePolicy();
@@ -214,7 +337,7 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
       if (!(options.surface in project.surfaces))
         throw new Error('System project requires migration for ' + options.surface);
       machine = project.surfaces[options.surface] as SystemSurfacePolicy;
-    } else if (fs.existsSync(confined(options.canonical, '.caws/hooks'))) {
+    } else if (io.exists(confined(options.canonical, '.caws/hooks'))) {
       if (isFile(confined(options.canonical, '.caws/hooks/adapter-policy.json'))) machine = null;
       else
         throw new Error(
@@ -236,7 +359,7 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
   if (machine !== null) {
     if (!governanceReady)
       throw new Error('Project governance requires migration before system hooks can run');
-    validateSystemPolicy(options.canonical, machine);
+    validateSystemPolicy(options.canonical, machine, undefined, io);
     const defaults = readJson(confined(runtime, 'system-policy.json'));
     if (
       !object(defaults) ||
@@ -251,7 +374,9 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
       throw new Error('Malformed system default policy');
     }
     const repoFile = confined(options.canonical, '.caws/hooks/hook-policy.json');
-    const parsed = parseRepoHookPolicy(isFile(repoFile) ? fs.readFileSync(repoFile, 'utf8') : null);
+    const parsed = parseRepoHookPolicy(
+      isFile(repoFile) ? io.readFile(repoFile).toString('utf8') : null
+    );
     if (!parsed.ok) throw new Error(parsed.error);
     const repo = effectiveRepoSurfacePolicy(parsed.policy, options.surface);
     const resolved = resolveChain({ stock, event: options.event, repo, machine });
@@ -281,7 +406,7 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
     const [name, ...args] = entry.split(' ') as [string, ...string[]];
     const target = overrides[name] ?? confined(hooks, name);
     if (!isFile(target)) throw new Error('Required handler missing or not executable: ' + target);
-    fs.accessSync(target, fs.constants.X_OK);
+    io.requireExecutable(target);
     return Object.freeze({
       ...source(target),
       entry,
@@ -306,8 +431,8 @@ export function resolveInvocationSelection(options: SelectionOptions): Invocatio
   const shared = confined(runtime, 'lib');
   const names = new Set(Object.keys(libraryPaths));
   for (const directory of [shared, surface, user]) {
-    if (!fs.existsSync(directory)) continue;
-    for (const name of fs.readdirSync(directory)) {
+    if (!io.exists(directory)) continue;
+    for (const name of io.readDirectory(directory)) {
       const target = confined(directory, name);
       if (isFile(target)) names.add(name);
       else if (directory === user) throw new Error('Invalid user adapter library: ' + target);

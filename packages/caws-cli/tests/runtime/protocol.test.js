@@ -33,6 +33,115 @@ const request = (changes = {}) => ({
 const decode = (changes) => decodeRuntimeRequest(JSON.stringify(request(changes)), now);
 
 describe('native runtime protocol', () => {
+  test('full SessionEnd prefix capability is distinct from cache and publication authority', () => {
+    expect(decode().sessionEndPrefix).toBeUndefined();
+    const result = decode({ sessionEndPrefix: 'caws.runtime.session-end-prefix.v1' });
+    expect(result.sessionEndPrefix).toBe('caws.runtime.session-end-prefix.v1');
+    expect(result.sessionCache).toBeUndefined();
+    expect(result.sessionPublication).toBeUndefined();
+    for (const sessionEndPrefix of [
+      null,
+      false,
+      true,
+      '',
+      [],
+      {},
+      'caws.runtime.session-cache.v1',
+      'caws.runtime.session-end-prefix.v2',
+    ])
+      expect(() => decode({ sessionEndPrefix })).toThrow(/SessionEnd prefix capability/);
+    const frame = JSON.stringify(
+      request({ sessionEndPrefix: 'caws.runtime.session-end-prefix.v1' })
+    );
+    expect(() =>
+      decodeRuntimeRequest(
+        frame.replace('{', '{"sessionEndPrefix":"caws.runtime.session-end-prefix.v2",'),
+        now
+      )
+    ).toThrow();
+  });
+  test('preserves the exact publication capability independently of cache and store', () => {
+    expect(decode().sessionPublication).toBeUndefined();
+    const decoded = decode({ sessionPublication: 'caws.runtime.session-publication.v1' });
+    expect(decoded.sessionPublication).toBe('caws.runtime.session-publication.v1');
+    expect(decoded.sessionCache).toBeUndefined();
+    expect(decoded.sessionStore).toBeUndefined();
+    for (const sessionPublication of [
+      null,
+      false,
+      true,
+      '',
+      [],
+      {},
+      'caws.runtime.session-publication.v2',
+    ])
+      expect(() => decode({ sessionPublication })).toThrow(/session publication capability/);
+  });
+  test('escaped top-level capability and identity duplicates refuse without changing opaque payload semantics', () => {
+    const frame = JSON.stringify(
+      request({ sessionEndPrefix: 'caws.runtime.session-end-prefix.v1' })
+    );
+    for (const duplicate of [
+      String.raw`"\u0073essionEndPrefix":"caws.runtime.session-end-prefix.v2",`,
+      String.raw`"\u0069d":"foreign",`,
+      '"runtimeDigest":"' + 'b'.repeat(64) + '",',
+    ])
+      expect(() => decodeRuntimeRequest(frame.replace('{', '{' + duplicate), now)).toThrow(
+        /Duplicate/
+      );
+    const inputJson =
+      '{"unused":9007199254740993,"unused":18446744073709551617,"nested":{"value":1e400,"value":1e401},"text":"sessionEndPrefix"}';
+    const opaque = JSON.stringify(
+      request({ inputJson, payload: {}, sessionEndPrefix: 'caws.runtime.session-end-prefix.v1' })
+    ).replace('"payload":{}', '"payload":' + inputJson);
+    const decoded = decodeRuntimeRequest(opaque, now);
+    expect(decoded.inputJson).toBe(inputJson);
+    expect(decoded.sessionEndPrefix).toBe('caws.runtime.session-end-prefix.v1');
+    expect(decoded.payload).toEqual(JSON.parse(inputJson));
+  });
+  test('context Git capability is optional, exact, and independent of other capabilities', () => {
+    expect(Object.hasOwn(decode(), 'contextGit')).toBe(false);
+    const decoded = decode({ contextGit: 'caws.runtime.context-git.v1' });
+    expect(decoded.contextGit).toBe('caws.runtime.context-git.v1');
+    expect(decoded.sessionCache).toBeUndefined();
+    expect(decoded.sessionStore).toBeUndefined();
+    expect(
+      decode({
+        contextGit: 'caws.runtime.context-git.v1',
+        sessionCache: 'caws.runtime.session-cache.v1',
+        sessionStore: 'caws.runtime.transcript-store.v1',
+      })
+    ).toMatchObject({
+      contextGit: 'caws.runtime.context-git.v1',
+      sessionCache: 'caws.runtime.session-cache.v1',
+      sessionStore: 'caws.runtime.transcript-store.v1',
+    });
+    for (const contextGit of [null, false, true, '', 'caws.runtime.context-git.v2', {}, []])
+      expect(() => decode({ contextGit })).toThrow(/context Git capability/);
+    expect(() => decode({ contextGitExtra: 'caws.runtime.context-git.v1' })).toThrow(
+      /request envelope/
+    );
+  });
+  test('preserves the optional native store capability without borrowing cache authority', () => {
+    expect(decode().sessionStore).toBeUndefined();
+    expect(decode({ sessionStore: 'caws.runtime.transcript-store.v1' }).sessionStore).toBe(
+      'caws.runtime.transcript-store.v1'
+    );
+    expect(
+      decode({ sessionStore: 'caws.runtime.transcript-store.v1' }).sessionCache
+    ).toBeUndefined();
+    for (const sessionStore of [null, false, true, '', 'caws.runtime.transcript-store.v2', {}])
+      expect(() => decode({ sessionStore })).toThrow(/transcript store capability/);
+  });
+  test('preserves an explicit native cache capability and rejects unsupported spellings', () => {
+    expect(decode().sessionCache).toBeUndefined();
+    expect(decode({ sessionCache: 'caws.runtime.session-cache.v1' }).sessionCache).toBe(
+      'caws.runtime.session-cache.v1'
+    );
+    for (const sessionCache of [null, false, true, '', 'caws.runtime.session-cache.v2', {}])
+      expect(() => decode({ sessionCache })).toThrow(/session cache capability/);
+  });
+
   test('rejects fractional or exponent control tokens even when JavaScript rounds to a valid integer', () => {
     for (const token of ['123.00000000000000001', '2147483647.00000001', '1.23e2', '123.0', '-0']) {
       const frame = JSON.stringify(request()).replace('"processId":123', '"processId":' + token);
@@ -326,4 +435,43 @@ describe('native runtime protocol', () => {
     expect(Buffer.byteLength(frame)).toBeLessThan(MAX_RESPONSE_BYTES);
     expect(decodeRuntimeResponse(frame, identity).result).toEqual(result);
   });
+});
+
+test('optional native selection advertisement preserves exact native limits without admission flags', () => {
+  const advertisement = {
+    schema: 'caws.runtime.selection-observation.v1',
+    snapshotId: 'selection-native-1',
+    limits: { maximumObservations: 4096, maximumBytes: 64 * 1024 * 1024, maximumPathBytes: 16384 },
+  };
+  expect(decode().selectionObservation).toBeUndefined();
+  const decoded = decode({ selectionObservation: advertisement });
+  expect(decoded.selectionObservation).toEqual(advertisement);
+  expect(Object.isFrozen(decoded.selectionObservation.limits)).toBe(true);
+  expect(decoded.selectionObservation).not.toHaveProperty('qualified');
+  for (const selectionObservation of [
+    null,
+    {},
+    { ...advertisement, qualified: true },
+    { ...advertisement, snapshotId: '' },
+    { ...advertisement, schema: 'caws.runtime.selection-observation.v2' },
+    { ...advertisement, limits: { ...advertisement.limits, maximumBytes: 64 * 1024 * 1024 + 1 } },
+    { ...advertisement, limits: { ...advertisement.limits, maximumObservations: 0 } },
+  ])
+    expect(() => decode({ selectionObservation })).toThrow();
+  const text = JSON.stringify(request({ selectionObservation: advertisement }));
+  expect(() =>
+    decodeRuntimeRequest(text.replace('"maximumBytes":', '"maximumBytes":1,"maximumBytes":'), now)
+  ).toThrow('Duplicate');
+});
+
+test('native request preserves the exact execution-workdir Git profile without upgrading ordinary profile', () => {
+  expect(decode({ contextGit: 'caws.runtime.context-git.execution-workdir.v1' }).contextGit).toBe(
+    'caws.runtime.context-git.execution-workdir.v1'
+  );
+  expect(decode({ contextGit: 'caws.runtime.context-git.v1' }).contextGit).toBe(
+    'caws.runtime.context-git.v1'
+  );
+  expect(() => decode({ contextGit: 'caws.runtime.context-git.execution-workdir.v2' })).toThrow(
+    /context Git capability/
+  );
 });

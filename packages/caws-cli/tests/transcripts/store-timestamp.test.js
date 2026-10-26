@@ -1,11 +1,22 @@
 'use strict';
-const {
-  STORE_TIMESTAMP_PROFILE,
+let STORE_TIMESTAMP_PROFILE,
   prepareStoreTimestamp,
   finishStoreTimestamp,
   StoreTimestampReferenceError,
-  StoreTimestampContractError,
-} = require('../../dist/transcripts/store-timestamp');
+  StoreTimestampContractError;
+// Observe module initialization inside each test's execution and coverage.
+// An unloadable mutant must fail tests, not abort collection or leave static
+// bounds unexercised. Preparation and finishing share one instance per test.
+beforeEach(() => {
+  jest.resetModules();
+  ({
+    STORE_TIMESTAMP_PROFILE,
+    prepareStoreTimestamp,
+    finishStoreTimestamp,
+    StoreTimestampReferenceError,
+    StoreTimestampContractError,
+  } = require('../../dist/transcripts/store-timestamp'));
+});
 const prepare = (cell) => prepareStoreTimestamp(STORE_TIMESTAMP_PROFILE, cell);
 const real = (value) => prepare({ storageClass: 'real', value });
 const integer = (value) => prepare({ storageClass: 'integer', value });
@@ -108,6 +119,35 @@ describe('explicit SQL timestamp preparation', () => {
       expect(prepared.quotientBinary64Hex).not.toBe(bits(Number(value) / 1000));
     }
   );
+  // At 2**50, binary64 values are 0.25 apart. These exact i64/1000
+  // rationals are halfway on opposite mantissa parities; expectations follow
+  // nearest-even arithmetic, not a new Python/native oracle execution.
+  test.each([
+    [1125899906842624125n, '4310000000000000', 0],
+    [1125899906842624375n, '4310000000000002', 500000],
+  ])(
+    'INTEGER binary64 division rounds the exact halfway rational %s to even',
+    (value, hex, micros) => {
+      expect(integer(value)).toMatchObject({
+        quotientBinary64Hex: hex,
+        seconds: 1125899906842624n,
+        microseconds: micros,
+      });
+    }
+  );
+  test.each([
+    [7n, '3f7cac083126e979', 0n, 7000],
+    [1003n, '3ff00c49ba5e353f', 1n, 3000],
+  ])(
+    'INTEGER division retains small rational %s across binade selection',
+    (value, hex, seconds, micros) => {
+      expect(integer(value)).toMatchObject({
+        quotientBinary64Hex: hex,
+        seconds,
+        microseconds: micros,
+      });
+    }
+  );
   test('INTEGER zero and REAL signed zero preserve quotient distinction and normalize the pair', () => {
     expect(integer(0n).quotientBinary64Hex).toBe('0000000000000000');
     expect(real(-0).quotientBinary64Hex).toBe('8000000000000000');
@@ -206,6 +246,53 @@ describe('supplied UTC calendar finishing', () => {
     expect(err.errno).toBe(84);
     expect(getter).not.toHaveBeenCalled();
   });
+  test.each([1.5, 2147483648])('malformed errno %s cannot become a reference OS error', (errno) => {
+    const prepared = integer(0n);
+    contract(
+      () =>
+        finishStoreTimestamp(prepared, {
+          kind: 'os_error',
+          seconds: prepared.seconds,
+          errno,
+          message: 'supplied failure',
+        }),
+      'calendar_result',
+      'invalid_os_error'
+    );
+  });
+  test('the valid signed C-int errno endpoint is retained without calendar interpretation', () => {
+    const prepared = integer(0n);
+    const err = reference(
+      () =>
+        finishStoreTimestamp(prepared, {
+          kind: 'os_error',
+          seconds: prepared.seconds,
+          errno: 2147483647,
+          message: 'supplied boundary failure',
+        }),
+      'OSError',
+      'supplied boundary failure'
+    );
+    expect(err.errno).toBe(2147483647);
+  });
+  test('complete calendar fields cannot mask an unknown result discriminator', () => {
+    const prepared = integer(0n);
+    contract(
+      () => finishStoreTimestamp(prepared, calendar(prepared, { kind: 'other' })),
+      'calendar_result',
+      'unknown_result'
+    );
+  });
+  test('a missing calendar field retains calendar-result provenance', () => {
+    const prepared = integer(0n);
+    const result = calendar(prepared);
+    delete result.tmYear;
+    contract(
+      () => finishStoreTimestamp(prepared, result),
+      'calendar_result',
+      'missing_or_accessor_tmYear'
+    );
+  });
   test.each(['transport', 'cancelled', 'callback'])(
     'port failure %s stays separate from reference errors',
     (category) => {
@@ -284,18 +371,55 @@ describe('supplied UTC calendar finishing', () => {
           'invalid_' + key
         );
   });
-  test('extreme C-int year-addition band is explicitly unqualified', () => {
+  // Literal expectations for the reviewed image's 32-bit add, not a second
+  // implementation of its wrap operation. Earlier profile exclusions remain
+  // historical; this extends the reviewed arithmetic/error domain.
+  test.each([
+    [-2147483648, 'year -2147481748 is out of range'],
+    [2147481747, 'year 2147483647 is out of range'],
+    [2147481748, 'year -2147483648 is out of range'],
+    [2147483646, 'year -2147481750 is out of range'],
+    [2147483647, 'year -2147481749 is out of range'],
+  ])('reviewed signed year addition preserves reference error for tmYear %s', (tmYear, message) => {
     const prepared = integer(0n);
-    for (const tmYear of [2 ** 31 - 1900, 2 ** 31 - 1])
-      contract(
-        () => finishStoreTimestamp(prepared, calendar(prepared, { tmYear })),
-        'unqualified_profile',
-        'year_addition_band'
-      );
     reference(
-      () => finishStoreTimestamp(prepared, calendar(prepared, { tmYear: 2 ** 31 - 1901 })),
+      () => finishStoreTimestamp(prepared, calendar(prepared, { tmYear })),
       'ValueError',
-      'year 2147483647 is out of range'
+      message
+    );
+  });
+  test('wrapped year failure precedes other calendar ranges but not raw field validation', () => {
+    const prepared = integer(0n);
+    const result = calendar(prepared, {
+      tmYear: 2147483647,
+      tmMon: -1,
+      tmMday: 0,
+      tmHour: 99,
+    });
+    reference(
+      () => finishStoreTimestamp(prepared, result),
+      'ValueError',
+      'year -2147481749 is out of range'
+    );
+    contract(
+      () => finishStoreTimestamp(prepared, { ...result, tmSec: NaN }),
+      'calendar_result',
+      'invalid_tmSec'
+    );
+  });
+  test.each([
+    [-1899, '0001-01-01T00:00:00+00:00'],
+    [8099, '9999-01-01T00:00:00+00:00'],
+  ])('valid year boundary tmYear %s remains representable', (tmYear, expected) => {
+    const prepared = integer(0n);
+    expect(finishStoreTimestamp(prepared, calendar(prepared, { tmYear }))).toBe(expected);
+  });
+  test('malformed years cannot be wrapped into a valid reference year', () => {
+    const prepared = integer(0n);
+    contract(
+      () => finishStoreTimestamp(prepared, calendar(prepared, { tmYear: 4294967366 })),
+      'calendar_result',
+      'invalid_tmYear'
     );
   });
   test.each([

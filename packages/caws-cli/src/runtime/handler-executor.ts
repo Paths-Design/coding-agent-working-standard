@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { resolveExecutionWorkdir } from './execution-workdir';
 import { createHash } from 'node:crypto';
 import {
   constants,
@@ -19,9 +20,17 @@ import { MACHINE_EVENTS } from '../init/native-hook-identification';
 import { assertMachinePath } from '../init/machine-paths';
 import type { ComposerDependencies, HandlerResult, OfferReference } from './composer';
 import type { RuntimeRequest } from './protocol';
+import type { MatchedCliIdentityReceipt } from './cli-identity';
+import type { NativeStopLeaseContextPort } from './stop-lease-context';
 import type { ActiveInvocationSelection, SelectedHandler } from './selection';
-import { tryExecuteStockHandler } from './stock-handlers';
+import { tryExecuteStockHandler, type NativeSessionSealExecution } from './stock-handlers';
 import { CONTAINMENT_ENV, createContainmentCapability } from './containment';
+import {
+  claimNativeRenderAdmission,
+  disposeNativeRenderAdmission,
+  type AdmittedServiceExecution,
+  type NativeRenderAdmission,
+} from './service-image';
 import {
   enrichObjectJson,
   objectMemberJson,
@@ -37,6 +46,17 @@ export interface HandlerExecutorOptions {
   readonly selection: ActiveInvocationSelection;
   readonly environment: Readonly<Record<string, string>>;
   readonly signal: AbortSignal;
+  /** Internal native-issued capability; never populated from caller environment. */
+  readonly nativeRenderAdmission?: NativeRenderAdmission;
+  /** Supplied only after the actual native full-prefix terminal was accepted. */
+  readonly nativeSessionSeal?: NativeSessionSealExecution;
+  readonly nativeStopLeaseContext?: NativeStopLeaseContextPort;
+  readonly nativeStopCliIdentity?: MatchedCliIdentityReceipt;
+  /** Request-local execution, supplied only after native Stop prefix completion. */
+  readonly nativeStopPublication?: {
+    readonly loggerIndex: 2;
+    execute(): Promise<HandlerResult>;
+  };
 }
 export interface CompatibilityDispatchResult extends HandlerResult {
   readonly offerReceipts: Uint8Array;
@@ -159,6 +179,7 @@ function childEnvironment(
     : 131072;
   const inline = Buffer.byteLength(payload) < threshold;
   const startup = join(selection.runtimeDirectory, 'handler-env.sh');
+  const execution = resolveExecutionWorkdir(request.payload, request.event);
   Object.assign(env, {
     CAWS_PROJECT_DIR: selection.checkout,
     CAWS_MACHINE_POLICY_ROOT: selection.canonical,
@@ -196,7 +217,10 @@ function childEnvironment(
     HOOK_TOOL_NAME: scalar(request.payload.tool_name),
     HOOK_FILE_PATH: scalar(tool.file_path),
     HOOK_COMMAND: scalar(tool.command),
-    HOOK_CWD: scalar(request.payload.cwd),
+    HOOK_SESSION_CWD: scalar(request.payload.cwd),
+    HOOK_CWD: execution.status === 'resolved' ? execution.path : scalar(request.payload.cwd),
+    HOOK_EXECUTION_WORKDIR_STATUS: execution.status,
+    HOOK_EXECUTION_WORKDIR: execution.status === 'resolved' ? execution.path : '',
     HOOK_SESSION_ID: scalar(request.payload.session_id, 'unknown'),
     HOOK_TRANSCRIPT_PATH: scalar(request.payload.transcript_path),
     HOOK_EVENT_NAME: MACHINE_EVENTS[request.event],
@@ -236,9 +260,11 @@ async function runChild(
   command: { path: string; args: readonly string[] },
   options: HandlerExecutorOptions,
   compatibility: boolean,
-  selectedHandler?: SelectedHandler
+  selectedHandler?: SelectedHandler,
+  serviceExecution?: AdmittedServiceExecution
 ): Promise<CompatibilityDispatchResult> {
   const { selection, request, signal } = options;
+  const execution = resolveExecutionWorkdir(request.payload, request.event);
   const temporaryRoot = options.environment.TMPDIR || '/tmp';
   if (!isAbsolute(temporaryRoot))
     throw new HandlerExecutionError('Handler temporary directory must be absolute');
@@ -264,6 +290,7 @@ async function runChild(
       executionFile,
       compatibility
     );
+    if (serviceExecution) Object.assign(env, serviceExecution.environment);
     const containment =
       !compatibility && selectedHandler
         ? createContainmentCapability({ ...options, handler: selectedHandler }, directory)
@@ -286,16 +313,18 @@ async function runChild(
           command.path,
           [...command.args, ...(containment ? [CONTAINMENT_FD_ARGUMENT] : [])],
           {
-            cwd: selection.checkout,
+            cwd: execution.status === 'resolved' ? execution.path : selection.checkout,
             env,
-            stdio:
-              containmentFd === undefined
+            stdio: serviceExecution
+              ? [inputFd!, 'pipe', 'pipe', ...serviceExecution.descriptors]
+              : containmentFd === undefined
                 ? [inputFd!, 'pipe', 'pipe']
                 : [inputFd!, 'pipe', 'pipe', containmentFd],
             detached: false,
           }
         );
       } finally {
+        serviceExecution?.close();
         // spawn duplicates the owned descriptor into child fd 3.
         if (containmentFd !== undefined) {
           const fd = containmentFd;
@@ -405,6 +434,7 @@ async function runChild(
     if (error instanceof HandlerExecutionError) throw error;
     throw new HandlerExecutionError(`Handler setup failed: ${errorText(error)}`);
   } finally {
+    serviceExecution?.close();
     // Covers setup failure after opening the receipt but before spawn.
     if (containmentFd !== undefined) closeSync(containmentFd);
     if (inputFd !== undefined) closeSync(inputFd);
@@ -419,6 +449,10 @@ async function runChild(
 export function createHandlerExecutor(
   options: HandlerExecutorOptions
 ): ComposerDependencies['execute'] {
+  if (options.nativeRenderAdmission) {
+    disposeNativeRenderAdmission(options.nativeRenderAdmission);
+    throw new HandlerExecutionError('Native render admission requires compatibility dispatch');
+  }
   const environment = Object.freeze(
     Object.fromEntries(
       Object.entries(options.environment).filter(
@@ -447,7 +481,21 @@ export function createHandlerExecutor(
     if (Date.now() >= owned.request.deadlineEpochMs)
       throw new HandlerExecutionError('Handler deadline expired');
     verifyHandler(expected, owned.selection);
-    const result = tryExecuteStockHandler(expected, owned);
+    if (owned.nativeStopPublication && selectedIndex === owned.nativeStopPublication.loggerIndex) {
+      if (
+        owned.request.configuration !== 'system' ||
+        owned.request.surface !== 'opencode' ||
+        owned.request.event !== 'stop' ||
+        expected.kind !== 'stock' ||
+        expected.name !== 'session-log.sh' ||
+        expected.entry !== 'session-log.sh' ||
+        expected.args.length !== 0 ||
+        expected.path !== join(owned.selection.runtimeDirectory, 'session-log.sh')
+      )
+        throw new HandlerExecutionError('Native Stop logger differs from ordered selection');
+      return owned.nativeStopPublication.execute();
+    }
+    const result = await tryExecuteStockHandler(expected, owned);
     return result ?? runChild({ path: expected.path, args: expected.args }, owned, false, expected);
   };
 }
@@ -456,32 +504,47 @@ export function createHandlerExecutor(
 export async function executeCompatibilityDispatch(
   options: HandlerExecutorOptions
 ): Promise<CompatibilityDispatchResult> {
-  if (options.signal.aborted) throw new HandlerExecutionError('Handler invocation cancelled');
-  if (Date.now() >= options.request.deadlineEpochMs)
-    throw new HandlerExecutionError('Handler deadline expired');
-  if (
-    options.request.surface !== options.selection.surface ||
-    options.request.event !== options.selection.event ||
-    options.request.runtimeDigest !== options.selection.runtimeDigest
-  )
-    throw new HandlerExecutionError('Invocation selection does not match request');
-  for (const handler of options.selection.handlers) verifyHandler(handler, options.selection);
-  const dispatcher = join(options.selection.runtimeDirectory, 'dispatch.sh');
-  assertMachinePath(options.selection.runtimeDirectory, dispatcher);
-  if (!lstatSync(dispatcher).isFile())
-    throw new HandlerExecutionError('Required compatibility dispatcher is missing');
-  return runChild(
-    {
-      path: '/bin/bash',
-      args: [
-        dispatcher,
-        options.selection.surface,
-        options.selection.event,
-        options.selection.hooksDirectory,
-        ...options.selection.handlers.map((handler) => handler.entry),
-      ],
-    },
-    { ...options, environment: Object.freeze({ ...options.environment }) },
-    true
-  );
+  let serviceExecution: AdmittedServiceExecution | undefined;
+  try {
+    if (options.nativeRenderAdmission)
+      serviceExecution = claimNativeRenderAdmission(
+        options.nativeRenderAdmission,
+        options.request,
+        options.selection,
+        options.environment
+      );
+    if (options.signal.aborted) throw new HandlerExecutionError('Handler invocation cancelled');
+    if (Date.now() >= options.request.deadlineEpochMs)
+      throw new HandlerExecutionError('Handler deadline expired');
+    if (
+      options.request.surface !== options.selection.surface ||
+      options.request.event !== options.selection.event ||
+      options.request.runtimeDigest !== options.selection.runtimeDigest
+    )
+      throw new HandlerExecutionError('Invocation selection does not match request');
+    for (const handler of options.selection.handlers) verifyHandler(handler, options.selection);
+    const dispatcher =
+      serviceExecution?.dispatcher ?? join(options.selection.runtimeDirectory, 'dispatch.sh');
+    if (!serviceExecution) assertMachinePath(options.selection.runtimeDirectory, dispatcher);
+    if (!lstatSync(dispatcher).isFile())
+      throw new HandlerExecutionError('Required compatibility dispatcher is missing');
+    return await runChild(
+      {
+        path: '/bin/bash',
+        args: [
+          dispatcher,
+          options.selection.surface,
+          options.selection.event,
+          options.selection.hooksDirectory,
+          ...options.selection.handlers.map((handler) => handler.entry),
+        ],
+      },
+      { ...options, environment: Object.freeze({ ...options.environment }) },
+      true,
+      undefined,
+      serviceExecution
+    );
+  } finally {
+    if (options.nativeRenderAdmission) disposeNativeRenderAdmission(options.nativeRenderAdmission);
+  }
 }

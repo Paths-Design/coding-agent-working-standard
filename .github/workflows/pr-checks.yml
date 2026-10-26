@@ -102,6 +102,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Prepare pinned Rust and locked Cargo dependencies
+        run: |
+          rustup toolchain install 1.90.0 --profile minimal
+          cargo +1.90.0 fetch --locked --manifest-path packages/caws-native/Cargo.toml
+
       - name: Unit tests with coverage
         # The root `test:unit` script is `turbo run test`. Flags after the
         # script name belong to Jest, not to Turbo. Invoking Turbo directly

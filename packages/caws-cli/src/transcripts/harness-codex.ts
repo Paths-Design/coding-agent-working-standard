@@ -16,6 +16,7 @@ import {
   type CodepointText,
 } from './codepoint-text';
 import { PYTHON_WHITESPACE_PATTERN } from './source-occurrence';
+import { parseTranscriptJson, type TranscriptJsonNumericProfile } from './transcript-json-profile';
 import {
   getMember,
   hasMember,
@@ -37,6 +38,7 @@ import {
   pythonStrip,
   type CanonicalEvent,
   type LocatedEvent,
+  type NormalizationContext,
   type TranscriptAdapter,
 } from './harness-common';
 
@@ -194,13 +196,17 @@ function stringField(source: string, field: string): CodepointText | null {
   ).exec(source);
   return match ? decodeJsString(match[1]!) : null;
 }
-export function decodeMapping(value: JsonValue | undefined): JsonObject {
+export function decodeMapping(
+  value: JsonValue | undefined,
+  profile?: TranscriptJsonNumericProfile
+): JsonObject {
   if (isJsonObject(value)) return value;
   if (typeof value === 'string') {
     try {
-      const parsed = parsePythonJson(value);
+      const parsed = parseTranscriptJson(value, profile);
       if (isJsonObject(parsed)) return parsed;
-    } catch {
+    } catch (error) {
+      if (profile !== undefined && !(error instanceof SyntaxError)) throw error;
       /* Invalid JSON remains the original string, as in the reference. */
     }
     return jsonObject([['raw', value]]);
@@ -423,7 +429,11 @@ export function serializeCodexInnerActions(
   );
 }
 
-export function codexOutputIsError(raw: string, decoded: string): boolean {
+export function codexOutputIsError(
+  raw: string,
+  decoded: string,
+  profile?: TranscriptJsonNumericProfile
+): boolean {
   const status = new RegExp('Process exited with code (' + PYTHON_DECIMAL_PATTERN + '+)', 'u').exec(
     raw
   );
@@ -431,7 +441,7 @@ export function codexOutputIsError(raw: string, decoded: string): boolean {
   const lowered = pythonStrip(decoded || raw).toLowerCase();
   if (lowered.startsWith('script failed') || lowered.startsWith('tool failed')) return true;
   try {
-    const value = parsePythonJson(raw),
+    const value = parseTranscriptJson(raw, profile),
       items: readonly JsonValue[] = Array.isArray(value) ? value : [value];
     return items.some(
       (item) =>
@@ -475,7 +485,8 @@ function located(
 /** Pure transaction: the caller's state and lossless row are never mutated. */
 export function normalizeCodexRow(
   row: JsonObject,
-  previous: CodexState
+  previous: CodexState,
+  context?: NormalizationContext
 ): { state: CodexState; events: readonly LocatedEvent[] } {
   let state = cloneCodexState(previous);
   const events: LocatedEvent[] = [],
@@ -615,7 +626,8 @@ export function normalizeCodexRow(
         input = decodeMapping(
           hasMember(payload, 'arguments')
             ? getMember(payload, 'arguments')
-            : getMember(payload, 'input')
+            : getMember(payload, 'input'),
+          context?.numericProfile
         );
       if (
         ['exec_command', 'functions.exec_command', 'shell_command'].some((value) => value === name)
@@ -644,7 +656,11 @@ export function normalizeCodexRow(
             ev: 'tool_result',
             id,
             content: output,
-            is_error: codexOutputIsError(output, decodeStructuredTextPayload(output)),
+            is_error: codexOutputIsError(
+              output,
+              decodeStructuredTextPayload(output, context?.numericProfile),
+              context?.numericProfile
+            ),
             ts,
           },
           'payload'

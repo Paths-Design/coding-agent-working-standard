@@ -6,7 +6,12 @@ import {
   registerTranscriptAdapter,
   type TranscriptHarnessModule,
 } from '../../src/transcripts/registry';
-import { type TranscriptAdapter } from '../../src/transcripts/harness-common';
+import {
+  type TranscriptAdapter,
+  type NormalizationContext,
+} from '../../src/transcripts/harness-common';
+import { TranscriptJsonNumericConversionError } from '../../src/transcripts/transcript-json-profile';
+import { PythonHtmlDecimalDigitLimitError } from '../../src/transcripts/python-html';
 import {
   decodeOccurrence,
   type OccurrenceCoordinates,
@@ -486,4 +491,189 @@ test('the selected DSH decoder actually receives arguments and its non-syntax fa
   );
   assert.equal(valid.selectedAdapter!.id, 'dsh');
   assert.equal(valid.commitAllowed, true);
+});
+
+const numericProfile = { id: 'selected-json-4300', integerMaxDigits: 4300 };
+const overlongInteger = '1'.repeat(4301);
+
+test('selected registry profile is frozen data, passed as actual context, and mismatches on identity or limit', () => {
+  let received: NormalizationContext | undefined;
+  const base = counter('context-observer');
+  const adapter: TranscriptAdapter<Counter> = {
+    ...base,
+    normalize(raw, state, context) {
+      received = context;
+      return base.normalize(raw, state);
+    },
+  };
+  const supplied = { ...numericProfile };
+  const modules = [contribution(adapter)];
+  const registry = createTranscriptRegistry(modules, { numericProfile: supplied });
+  supplied.id = 'changed';
+  supplied.integerMaxDigits = 0;
+  const checkpoint = initial(registry);
+  assert.equal(
+    registry.normalize(row('{}'), checkpoint).events[0]!.event.text,
+    'context-observer:1:safe'
+  );
+  assert.equal(received, registry.context);
+  assert.deepEqual(registry.context.numericProfile, numericProfile);
+  assert.equal(Object.isFrozen(registry.context.numericProfile), true);
+  for (const changed of [
+    { ...numericProfile, id: 'other' },
+    { ...numericProfile, integerMaxDigits: 0 },
+  ]) {
+    const other = createTranscriptRegistry(modules, { numericProfile: changed });
+    assert.equal(other.normalize(row('{}'), checkpoint).disposition, 'context_mismatch');
+  }
+  const historical = createTranscriptRegistry(modules);
+  assert.equal(historical.normalize(row('{}'), checkpoint).disposition, 'context_mismatch');
+});
+
+test('default registry accepts exactly one shared numeric policy or historical custom DSH decoder', () => {
+  const selectedInput = { ...numericProfile };
+  const selected = createDefaultTranscriptRegistry({ numericProfile: selectedInput });
+  selectedInput.integerMaxDigits = 0;
+  assert.deepEqual(selected.context.numericProfile, numericProfile);
+  assert.equal(
+    createDefaultTranscriptRegistry({ dshProfile: profile }).context.numericProfile,
+    undefined
+  );
+  assert.throws(
+    // @ts-expect-error Both forms are also rejected for untyped runtime callers.
+    () => createDefaultTranscriptRegistry({ numericProfile, dshProfile: profile }),
+    /not both/
+  );
+  const parsed = row(
+    JSON.stringify({
+      type: 'tool/call',
+      data: { name: 'Read', arguments: `{"n":${overlongInteger}}` },
+    })
+  );
+  assert.equal(parsed.disposition, 'parsed');
+  assert.throws(
+    () => selected.normalize(parsed, initial(selected)),
+    TranscriptJsonNumericConversionError
+  );
+});
+
+for (const [id, nativeRow] of [
+  [
+    'codex',
+    (embedded: string) => ({
+      type: 'response_item',
+      payload: { type: 'function_call', name: 'Read', call_id: 'c', arguments: embedded },
+    }),
+  ],
+  [
+    'dsh',
+    (embedded: string) => ({
+      type: 'tool/call',
+      data: { name: 'Read', callId: 'd', arguments: embedded },
+    }),
+  ],
+] as const)
+  test(`selected ${id} mapping conversion is fatal after quoted outer admission, while syntax falls back`, () => {
+    const selected = createDefaultTranscriptRegistry({ numericProfile });
+    const embedded = `{"n":${overlongInteger},"n":0}`;
+    const parsed = row(JSON.stringify(nativeRow(embedded)));
+    assert.equal(parsed.disposition, 'parsed');
+    const checkpoint = initial(selected);
+    assert.throws(
+      () => selected.normalize(parsed, checkpoint),
+      TranscriptJsonNumericConversionError
+    );
+    const malformed = selected.normalize(row(JSON.stringify(nativeRow('{invalid'))), checkpoint);
+    assert.equal(malformed.selectedAdapter!.id, id);
+    assert.equal(getMember(malformed.events[0]!.event.input, 'raw'), '{invalid');
+    const historical = createDefaultTranscriptRegistry({ dshProfile: profile });
+    const historicalResult = historical.normalize(parsed, initial(historical));
+    assert.equal(historicalResult.selectedAdapter!.id, id);
+    assert.deepEqual(getMember(historicalResult.events[0]!.event.input, 'n'), jsonNumber('0'));
+  });
+
+test('selected Claude hook stdout conversion is fatal after quoted outer admission and syntax remains ignorable', () => {
+  const selected = createDefaultTranscriptRegistry({ numericProfile });
+  const nativeRow = (stdout: string) => ({
+    type: 'attachment',
+    attachment: { type: 'hook_success', stdout, hookName: 'fixture' },
+  });
+  const stdout = `{"ignored":${overlongInteger},"hookSpecificOutput":{"additionalContext":"retained"}}`;
+  const parsed = row(JSON.stringify(nativeRow(stdout)));
+  assert.equal(parsed.disposition, 'parsed');
+  const checkpoint = initial(selected);
+  assert.throws(() => selected.normalize(parsed, checkpoint), TranscriptJsonNumericConversionError);
+  const malformed = selected.normalize(row(JSON.stringify(nativeRow('{invalid'))), checkpoint);
+  assert.equal(malformed.selectedAdapter!.id, 'claude');
+  assert.deepEqual(malformed.events, []);
+  const historical = createDefaultTranscriptRegistry({ dshProfile: profile });
+  const result = historical.normalize(parsed, initial(historical));
+  assert.equal(result.events[0]!.event.additional_context, 'retained');
+});
+
+test('actual stock registry applies selected zero and 640 numeric policies to Claude shell HTML', () => {
+  const minimum = createDefaultTranscriptRegistry({
+    numericProfile: { id: 'registry-html-640', integerMaxDigits: 640 },
+  });
+  const unlimited = createDefaultTranscriptRegistry({
+    numericProfile: { id: 'registry-html-unlimited', integerMaxDigits: 0 },
+  });
+  for (const [tag, expected] of [
+    ['bash-input', { ev: 'user_shell', command: 'A', ts: null }],
+    ['bash-stdout', { ev: 'user_shell', stdout: 'A', stderr: '', ts: null }],
+    ['bash-stderr', { ev: 'user_shell', stdout: '', stderr: 'A', ts: null }],
+  ] as const) {
+    for (const blocks of [false, true]) {
+      const parsed = (reference: string) => {
+        const text = `<${tag}>${reference}</${tag}>`;
+        const occurrence = row(
+          JSON.stringify({
+            type: 'user',
+            message: { content: blocks ? [{ type: 'text', text }] : text },
+          })
+        );
+        assert.equal(occurrence.disposition, 'parsed');
+        return occurrence;
+      };
+      const checkpoint = initial(minimum);
+      assert.throws(
+        () => minimum.normalize(parsed('&#' + '0'.repeat(639) + '65;'), checkpoint),
+        (error: unknown) =>
+          error instanceof PythonHtmlDecimalDigitLimitError &&
+          error.limit === 640 &&
+          error.digits === 641
+      );
+      for (const [registry, selectedCheckpoint, reference] of [
+        [minimum, checkpoint, '&#' + '0'.repeat(638) + '65;'],
+        [minimum, checkpoint, '&#x' + '0'.repeat(10000) + '41;'],
+        [unlimited, initial(unlimited), '&#' + '0'.repeat(4299) + '65;'],
+      ] as const) {
+        const result = registry.normalize(parsed(reference), selectedCheckpoint);
+        assert.equal(result.commitAllowed, true);
+        assert.equal(result.selectedAdapter?.id, 'claude');
+        assert.deepEqual(
+          result.events.map(({ event }) => event),
+          [expected]
+        );
+      }
+    }
+  }
+});
+
+test('selected Codex tool output threads the policy to structured text and error classification fallbacks', () => {
+  const output = `[{"text":"tool failed: embedded","is_error":true,"n":${overlongInteger}}]`;
+  const parsed = row(
+    JSON.stringify({
+      type: 'response_item',
+      payload: { type: 'function_call_output', call_id: 'c', output },
+    })
+  );
+  assert.equal(parsed.disposition, 'parsed');
+  const selected = createDefaultTranscriptRegistry({ numericProfile });
+  const result = selected.normalize(parsed, initial(selected));
+  assert.equal(result.selectedAdapter!.id, 'codex');
+  assert.equal(result.events[0]!.event.content, output);
+  assert.equal(result.events[0]!.event.is_error, false);
+  const historical = createDefaultTranscriptRegistry({ dshProfile: profile });
+  assert.equal(historical.normalize(parsed, initial(historical)).events[0]!.event.is_error, true);
 });

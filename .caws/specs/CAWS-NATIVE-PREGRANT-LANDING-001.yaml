@@ -1,0 +1,60 @@
+id: CAWS-NATIVE-PREGRANT-LANDING-001
+title: 'Land shared pure Stop admission verification with exact-owner checks'
+mode: refactor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Reviewed exact-owner pure admission bracket delivered with focused falsifiers, actual positive Stop0 within original30s, exact source blob checks and preserved dependent lanes. Both paired runs fail before hostile launch; full publication, restart, rollback, load and selected-machine acceptance remain open with root.'
+created_at: '2026-10-24T19:27:06.577Z'
+updated_at: '2026-10-24T19:32:22.665Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native Stop admission and effect-free validation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/main.rs'
+    - 'packages/caws-native/src/selection_observation.rs'
+    - 'packages/caws-native/src/stop_admission.rs'
+    - 'packages/caws-native/src/stop_execution.rs'
+    - 'packages/caws-native/tests/stock_stop_admission.rs'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Preserve fresh full generation brackets exact receipt owner original clock and every effect queue and service-offer boundary'
+acceptance:
+  - id: A1
+    given: 'the reviewed committed admission candidate'
+    when: 'focused controls and exact-image Stop execute'
+    then: 'pure phases share two full checks while wrong-owner invalidation and cancellation refuse and all four positive handlers complete within the unchanged 30 second deadline'
+  - id: A2
+    given: 'canonical main and existing dependent worktrees'
+    when: 'the bounded source is integrated'
+    then: 'exact reviewed source bytes land with scoped gates and existing branch registry spec and machine selection state preserved'
+  - id: A3
+    given: 'the retained failed paired attempts'
+    when: 'the landing is reported'
+    then: 'the tracker identifies unexecuted hostile restart rollback load and machine adoption obligations without claiming whole migration acceptance'
+observability:
+  - 'Pinned raw check outputs actual positive terminal session publication files and failed pair artifacts outside the worktree'
+rollback:
+  - 'Revert source through ordinary governed history without changing selected runtime or terminal custody'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Bounded source criterion only. All native/package source blobs equal reviewed 3cd741fd (tracker4deb0537); composition.json retains six exact blobs. Retained pregrant-bin-01 exit0:188pass1ignored; original production-constructor control exit0 with2fullchecks unsupported, stale refusal and cancellation; exact-owner mutation Cargo101 restored to115passing source pins; feature-off compile0. Exact fresh12 positive terminal0 at27949.56925ms, original30000ms, all4handlers0 and32fullchecks; actual turn/index/projection hashes, ordinary consumer, durable CONSUMED and natural owner exit inspected under publication-integration/production-stop-12-paired-01. Second positive0 at27890.102ms. Both outer paired attempts exit1 before hostile launch: unsupported environment, then tool source ancestor mode refusal. No hostile, load, restart, rollback, application or machine proof inferred. Verification establishes commit identity; raw artifacts independently inspected."
+    recorded_at: "2026-10-24T19:30:37.329Z"
+    commit_sha: "5d5ac7fe2fdbab9ec8bc7787f61f37b46ab0aadc"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Tracker E375/E376 preserves exact tests, first failed paired attempt and positive artifacts, distinguishes partial coverage33/37 from parent0/8, leaves negative/restart/rollback/load/application/machine obligations with root. Second corrected fixture attempt production-stop-12-paired-02 outer1: positive0, native held-image refusal unsafe_path due group-writable /opt/homebrew/Cellar; no negative launch. Actual stage sealed0500/0555/0400; no permission guard or source checks weakened. Existing selected runtime408c06a7 unchanged. This criterion accepts truthful bounded reporting, not runtime migration. Independent review load-bearing owner, closing-bracket, effect and fallback claims grounded at source and raw artifact pins."
+    recorded_at: "2026-10-24T19:30:38.469Z"
+    commit_sha: "5d5ac7fe2fdbab9ec8bc7787f61f37b46ab0aadc"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Normal CAWS merge2272353010e9d5b9b6c006f2140fa7ca0518098d lands composition5d5ac7fe. Retained pregrant-source-landing-01/composition.json and postmerge.json independently compare all six blobs and all packages/docs bytes to4deb0537 (native source3cd741fd). Scoped gates5PASS over6files, doctor0, review2commits/allpaths admitted. All11 prior registry entries branch tips and physical directories, parent/publication spec bytes and selected machine pointer SHA f8a3627299bc8c3d325eb42472f889b43e7c26c8a4e4c02996091867cb9f4f7e remain exact. Only disposable landing branch/directory removed; foreign untracked message archive preserved. Source landing only: paired hostile path, restart, rollback, load and machine cutover remain parent obligations."
+    recorded_at: "2026-10-24T19:32:21.266Z"
+    commit_sha: "2272353010e9d5b9b6c006f2140fa7ca0518098d"

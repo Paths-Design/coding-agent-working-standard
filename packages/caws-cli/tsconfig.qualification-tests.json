@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.vnext.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../caws-native/target/qualification-tools",
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["scripts/committed-turn-files.ts", "scripts/render-qualification-harness.ts"]
+}

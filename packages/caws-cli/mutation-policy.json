@@ -3,14 +3,15 @@
   "sourceRoots": [
     "src/kernel",
     "src/store",
-    "src/shell"
+    "src/shell",
+    "src/transcripts"
   ],
   "proofGroups": [
     {
       "id": "mutation",
       "strategy": "mutation",
       "command": "npm run mutation:run:kernel && npm run mutation:run:store && npm run mutation:run:shell",
-      "rationale": "Pure safety and authority decisions are held to an explicit per-file mutation floor.",
+      "rationale": "Pure safety, authority, timestamp parsing, and arithmetic decisions are held to an explicit per-file mutation floor.",
       "files": [
         "src/kernel/evidence/canonical-json.ts",
         "src/kernel/evidence/rederive.ts",
@@ -31,7 +32,9 @@
         "src/store/atomic-write.ts",
         "src/store/events-store.ts",
         "src/store/messages-store.ts",
-        "src/store/yaml-patch.ts"
+        "src/store/yaml-patch.ts",
+        "src/transcripts/renderer-calendar.ts",
+        "src/transcripts/store-timestamp.ts"
       ]
     },
     {
@@ -77,7 +80,9 @@
         "src/store/index.ts",
         "src/store/migration-versions.ts",
         "src/store/rules.ts",
-        "src/store/types.ts"
+        "src/store/types.ts",
+        "src/transcripts/index.ts",
+        "src/transcripts/python-unicode.ts"
       ]
     },
     {
@@ -188,7 +193,44 @@
         "src/store/worktrees-store.ts",
         "src/store/worktrees-writer.ts",
         "src/store/yaml-evidence-spans.ts",
-        "src/store/yaml-store.ts"
+        "src/store/yaml-store.ts",
+        "src/transcripts/codepoint-text.ts",
+        "src/transcripts/harness-claude.ts",
+        "src/transcripts/harness-codex.ts",
+        "src/transcripts/harness-common.ts",
+        "src/transcripts/harness-dsh.ts",
+        "src/transcripts/harness-kimi.ts",
+        "src/transcripts/harness-opencode.ts",
+        "src/transcripts/harness-qwen.ts",
+        "src/transcripts/harness-zcode.ts",
+        "src/transcripts/lossless-json.ts",
+        "src/transcripts/python-html.ts",
+        "src/transcripts/python-unicode-profile.ts",
+        "src/transcripts/registry.ts",
+        "src/transcripts/render-accumulator.ts",
+        "src/transcripts/render-artifacts.ts",
+        "src/transcripts/render-prepare.ts",
+        "src/transcripts/render-reader.ts",
+        "src/transcripts/render-values.ts",
+        "src/transcripts/session-seal-prepare.ts",
+        "src/transcripts/source-occurrence.ts",
+        "src/transcripts/store-json.ts",
+        "src/transcripts/store-projection.ts",
+        "src/transcripts/transcript-json-profile.ts"
+      ]
+    },
+    {
+      "id": "transcript-generated-behavior",
+      "strategy": "behavioral",
+      "command": "npm test",
+      "rationale": "Generated Unicode and HTML tables and manifests have independent consumer output digests, representative provenance assertions, and runtime immutability checks. These behavioral checks do not establish full generated-byte reproduction or generator correctness; regeneration requires pinned external source inputs and separate generator --check commands.",
+      "files": [
+        "src/transcripts/html311/entities.generated.ts",
+        "src/transcripts/html311/manifest.generated.ts",
+        "src/transcripts/html311/numeric.generated.ts",
+        "src/transcripts/unicode14/manifest.generated.ts",
+        "src/transcripts/unicode14/names.generated.ts",
+        "src/transcripts/unicode14/tables.generated.ts"
       ]
     }
   ],
@@ -262,6 +304,12 @@
         },
         {
           "source": "src/store/yaml-patch.ts"
+        },
+        {
+          "source": "src/transcripts/renderer-calendar.ts"
+        },
+        {
+          "source": "src/transcripts/store-timestamp.ts"
         }
       ],
       "tests": [
@@ -272,7 +320,9 @@
         "tests/store/messages-behavior-store.test.js",
         "tests/store/messages-dead-recipient-prune.test.js",
         "tests/store/messages-store.test.js",
-        "tests/store/yaml-patch.test.js"
+        "tests/store/yaml-patch.test.js",
+        "tests/transcripts/renderer-calendar-mutation.test.js",
+        "tests/transcripts/store-timestamp.test.js"
       ]
     },
     "shell": {

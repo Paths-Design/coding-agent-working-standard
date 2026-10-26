@@ -1,0 +1,73 @@
+id: CAWS-NATIVE-INGRESS-DEADLINE-LANDING-001
+title: 'Land bounded native deadline and OpenCode ingress corrections'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded ingress/deadline source integrated with all3 ACs recorded and read back. Exact native and CLI source pins match executed candidate2448b992; actual payload/files and hostile failures retained. Parent/publication remain active for ordinary producer/prefix/profile/consumer wiring, Python retirement, supported harness delivery, residency/fairness, upgrades and machine cutover. Installed selection unchanged.'
+created_at: '2026-10-24T01:52:01.740Z'
+updated_at: '2026-10-24T01:56:15.096Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'OpenCode callback identity and native store deadline propagation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+  support:
+    - packages/caws-cli/src/init/hook-packs/manifest-opencode.ts
+    - packages/caws-cli/templates/hook-packs/opencode/plugin.ts
+    - packages/caws-cli/tests/hooks/opencode-plugin-payload-cwd.test.js
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-native/src/lib.rs
+    - packages/caws-native/src/main.rs
+    - packages/caws-native/src/monotonic_deadline.rs
+    - packages/caws-native/src/render_owner.rs
+    - packages/caws-native/src/render_owner/store.rs
+    - packages/caws-native/src/render_owner/store/tests.rs
+    - packages/caws-native/src/render_writer.rs
+    - packages/caws-native/src/service_journal.rs
+    - packages/caws-native/src/service_journal/custody.rs
+    - packages/caws-native/src/session_publication.rs
+invariants:
+  - 'Preserve original project/session identity and original native expiry through checked effects; retain partial publication uncertainty'
+  - 'Keep ordinary Stop, full lifecycle parity, production profile admission, Python retirement, residency and machine cutover owned by active parent/publication specs'
+acceptance:
+  - id: A1
+    given: 'committed publication candidate 2448b992 and current main'
+    when: 'an owned main-based lane integrates the candidate'
+    then: 'executable source matches the tested candidate and current canonical governance is preserved'
+  - id: A2
+    given: 'exact integrated source and retained positive and hostile execution artifacts'
+    when: 'identity routing, original-deadline propagation and partial publication results are inspected'
+    then: 'bounded corrections are supported by actual payloads and filesystem states with false-confidence limits retained'
+  - id: A3
+    given: 'committed integration and existing independent reviews'
+    when: 'full-basis gates, doctor and provenance review run'
+    then: 'the bounded source is landable and existing ledger preserves explicit owners and all unearned parent acceptance'
+observability:
+  - 'Retained execution receipts, source hashes, dispatched payloads, publication files, mutation failures and exact restoration'
+rollback:
+  - 'Normal corrective or revert commit; do not alter installed machine selection'
+non_functional: {}
+contracts:
+  - name: 'native-ingress-deadline'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Normal merges d97f33b3 and8cefd13b integrate2448b992 onto current main with no conflicts. source-evidence-binding.json retains git diff2448..HEAD packages exit0/empty and main..HEAD .caws exit0/empty, clean status, all99 native pins in six execution receipts and all395 final OpenCode pins equal. Canonical A7 and active landing governance preserved. This is source identity, not installed execution."
+    recorded_at: "2026-10-24T01:55:16.158Z"
+    commit_sha: "8cefd13b409c1b4eee38cf1af236dfa4aa13da7e"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Manually inspected raw publication-integration/effect-deadline-{writer,journal,publication,store}-host-clock-01 receipts exit0 plus native/feature-off checks0, with same source pins and no owned residue. Actual metadata old before refused rename; changed after rename with uncertain=true and absent marker; live positive retains matching marker digest. Eight effect-negative-*-02 controls exit101 for behavioral violations and exactRestore=true. opencode-corrective-final-01 exit0 retains host-only routing and session-a actual SDK arguments; unconditional fallback mutant exits1 in all3 controls. Initial weak ancestry fixture and failed metadata oracle attempts retained in E317/E318. Source exact8cefd13b. No installed callback, ordinary Stop, full lifecycle deadline, atomic syscall exclusion or cutover claim."
+    recorded_at: "2026-10-24T01:55:17.179Z"
+    commit_sha: "8cefd13b409c1b4eee38cf1af236dfa4aa13da7e"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Independent read-only GPT6.1Sol reviews of committed6064daa7 and2448b992 inspected original requirements, code and raw hostile/positive artifacts. Root grounded identity source and actual callback payloads, propagated original deadline at Store actor through writer/custody/journal/publication, and actual partial-effect metadata/marker states. Normal integration changes no executable bytes; source binding artifact verifies this. Doctor exit0 with0E4W5I retains installed hook drift; full branch gates at8cefd13b evaluate15files and5PASS; provenance review all imported paths admitted. Existing E317/E318 and three-outcome table retain root ownership of producer/prefix/profile/consumer integration, residency, Python retirement and machine adoption; parent0/8. --verify confirms commit existence only; external execution artifacts manually inspected."
+    recorded_at: "2026-10-24T01:55:18.191Z"
+    commit_sha: "8cefd13b409c1b4eee38cf1af236dfa4aa13da7e"

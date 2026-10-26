@@ -8,11 +8,33 @@ const {
   serializeGuardEnvironment,
   loadGuardConfigurationEnvironment,
   mangleGuardName,
+  clearGuardConfigurationTransport,
 } = require('../../dist/runtime/guard-config');
 const policy = (guards) => JSON.stringify({ guards });
 const prefix = (value) => ({ prefix: value, reason: 'Generated build artifacts' });
 
 describe('runtime guard configuration', () => {
+  test('clears indexed configuration grants while preserving public guard controls', () => {
+    const environment = {
+      CAWS_GUARD_CONFIG_STATUS: 'ok',
+      CAWS_GUARD_ZONE_COUNT: '1',
+      CAWS_GUARD_ZONE_0: '/',
+      CAWS_GUARD_PREFIX_COUNT_SCOPE_GUARD_SH: '1',
+      CAWS_GUARD_PREFIX_SCOPE_GUARD_SH_0: '/',
+      CAWS_GUARD_THRESHOLD_GOD_OBJECT_CHECK_SH_LOC: '100000',
+      CAWS_GUARD_CONFIG_PY: '/selected/parser.py',
+      CAWS_GUARD_NO_ASK: '1',
+      CAWS_GUARD_CUSTOM_CONTROL: 'selected-extension-control',
+      PATH: '/private/bin',
+    };
+    clearGuardConfigurationTransport(environment);
+    expect(environment).toEqual({
+      CAWS_GUARD_CONFIG_PY: '/selected/parser.py',
+      CAWS_GUARD_NO_ASK: '1',
+      CAWS_GUARD_CUSTOM_CONTROL: 'selected-extension-control',
+      PATH: '/private/bin',
+    });
+  });
   test('distinguishes absence, malformed input and valid empty documents', () => {
     expect(parseGuardConfiguration(null)).toEqual({ status: 'absent', guards: {} });
     for (const value of ['{', '[]', 'null', 'true']) {

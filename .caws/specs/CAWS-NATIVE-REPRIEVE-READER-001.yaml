@@ -1,0 +1,112 @@
+id: CAWS-NATIVE-REPRIEVE-READER-001
+title: 'Replace the embedded reprieve reader with a consumed typed runtime asset'
+mode: refactor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Final reader source58ed781a8 repairs generated lint failure through authoritative TS/catch regeneration, shared113 and literal6f source identities. A1-A5 manual spec/event readback13784-13788 complete; full lint/build/typecheck/doctor/gates,424focused checks,13actual dispatcher cases, six actual final packed/Python-free shell cases and fresh native10Stop8prefix controls pass. Independent committed-candidate feedback grounded; earlier short-year grant finding repaired. Push09full370suites7679pass14skip is retained as failed publication due lint, not relabeled success; normal publication rerun remains required. Parent0/8A2fail, original30000ms, held native prep/foreign installed producer/fullscenario/replay/rollback/Python/workload/cutover unchanged; no global runtime/trust/registration or reprieve changes.'
+created_at: '2026-10-25T18:44:20.579Z'
+updated_at: '2026-10-25T20:57:19.556Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Session-scoped human reprieve reading, dispatcher consumption and runtime packaging'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/reprieve-reader.ts'
+    - 'packages/caws-cli/src/runtime/reprieve-entry.ts'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/reprieve.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/reprieve-reader.cjs'
+    - packages/caws-cli/src/shell/commands/reprieve.ts
+  out: []
+  support:
+    - packages/caws-cli/scripts/generate-runtime-assets.mjs
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/templates/hook-packs/shared/advisory_truncate.cjs
+    - packages/caws-cli/templates/hook-packs/shared/lib/guard-config.cjs
+    - packages/caws-cli/tests/runtime/reprieve-reader.test.js
+    - packages/caws-cli/tests/runtime/generated-runtime-assets.test.js
+    - packages/caws-cli/tests/adapter/reprieve-roundtrip.test.js
+    - docs/internal/caws-runtime-modernization.md
+    - packages/caws-cli/tests/shell/reprieve-relative-expiry.test.js
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/src/runtime/eligibility.ts
+    - packages/caws-cli/src/runtime/session-cache-admission.ts
+    - packages/caws-cli/src/runtime/guard-config.ts
+    - packages/caws-cli/tests/runtime/session-cache-admission.test.js
+    - packages/caws-cli/tests/runtime/eligibility.test.js
+    - packages/caws-cli/tests/runtime/session-seal-routing.test.js
+    - packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js
+    - packages/caws-native/src/stop_admission.rs
+    - packages/caws-native/src/service_image/prefix.rs
+    - packages/caws-native/src/service_image/prefix/tests.rs
+    - packages/caws-native/src/service_image/prefix-profile.json
+    - packages/caws-cli/tests/runtime/execution-workdir.test.js
+invariants:
+  - 'No actual reprieve grant, revoke, global runtime installation, registration or trust change occurs'
+  - 'Malformed, unavailable, expired, revoked or mismatched reprieve data leaves guards executing and cannot create authority'
+  - 'Session, handler, canonical repo reach, global shadowing, symlink refusal and compatible human-approved expiry behavior follow the inspected writer and legacy reader contracts'
+  - 'Reviewed source cohort updates preserve literal admission identities, override refusal and dependency closure; the original30000ms deadline and full parent acceptance are not weakened or inferred from reader replacement'
+acceptance:
+  - id: A1
+    given: 'legitimate private reprieve records and hostile session/handler/repo/expiry/revocation/filesystem controls'
+    when: 'the existing shell function and actual dispatcher consume the typed reader'
+    then: 'valid grants skip only the named matching guard and retain its required record while invalid or unavailable data leaves the guard running with globals reset'
+  - id: A2
+    given: 'the generated standalone reader and actual shell consumer'
+    when: 'source generation, package installation and detached controls execute without Python available to the reader'
+    then: 'the reader asset is shipped and consumed with exact provenance, expiry/reason transport and fail-closed error behavior, eliminating this embedded Python implementation'
+  - id: A3
+    given: 'committed source, retained legacy comparisons and raw component/dispatcher checks'
+    when: 'policy checks, meaningful negative controls and independent peer review complete'
+    then: 'earned reader evidence and remaining R19/parent/native-adoption obligations are recorded without claiming whole-dispatcher or Python retirement'
+  - id: A4
+    given: 'writer expiry spellings and legacy stored records with independently inspected reader semantics'
+    when: 'grant validation and show/list status interpret expiry'
+    then: >-
+      new grants cannot report success for consumed-reader-invalid expiry; existing
+      valid legacy formats retain their interpretation and conservative millisecond
+      comparison never grants after expiry
+  - id: A5
+    given: 'actual typed eligibility and the reviewed Stop/SessionEnd/prefix source closure'
+    when: 'legacy-compatible records and altered, missing or omitted source dependencies are presented'
+    then: >-
+      expiry and output decisions agree within the preserved bounded
+      operational-reader domain, reprieved effects are skipped after mandatory
+      prefixes, and unreviewed source never earns native or isolated-prefix
+      admission
+observability:
+  - 'Raw expiry/binding outcomes, installed dispatcher guard effects and execution records, generated-asset pins and retained failures'
+rollback:
+  - 'Revert the owned source unit normally; selected shared runtime and actual reprieve records remain unchanged'
+non_functional: {}
+contracts:
+  - name: 'reprieve-reader-compatibility'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Final reader source58ed: inspected focused-04.log424pass0skip and bats-03.log13actual private dispatcher cases, covering named skip/log/records, worktree/canonical reach, expiry/revocation/session/repo/UTF8 refusal, missing tooling/asset and cleared globals. New reader6f170576...c286ab differs from checked d95 only explicit equivalent catch assignments plus source provenance; parser unchanged, so prior6355CPython3.11/97record/348byte/30entry comparison remains bounded prior evidence, not relabeled a fresh comparison. No real reprieve changed; final source/pack checks explicitly referenced. Commit verify proves reachability only."
+    recorded_at: "2026-10-25T20:56:42.853Z"
+    commit_sha: "58ed781a854b1fd8fe42592d7f765441b672aa2c"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Final shared113reader6f17057670c52b95dba845c21f8378e15c9508864e90b7406cc481a056c286ab: normal npm pack/offline production install packed-03 and actual installMachineRuntime produce private runtimeaa9d0a8c...da473f. Six installed-shell cases under Python-free PATH and hostile Nodepreload/search controls preserve exact bytes/status/record state, including revoked/expired/foreign/missingasset/missingNode refusals. Manifest installs CJS non-executable; generator checks builtins-only/provenance; focused04includesactual76file fingerprint113. Complete source lint includes CJS. No whole-package noPython or native-image claim; Node25.9 tested. CLI verification is source reachability only."
+    recorded_at: "2026-10-25T20:56:43.880Z"
+    commit_sha: "58ed781a854b1fd8fe42592d7f765441b672aa2c"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Reopened unit resolves actual push09 generated no-empty errors through authoritative TS explicit equivalent assignments and regeneration, no asset hand-edit. Complete npm run lint exit0 at lint-full-02; build05/typecheck02/doctor03/gates04exit0; focused04424pass, bats0313pass, native-stop0210pass/native-prefix038pass inspected. Independent peer inspected committed58ed9filefix and actual regenerated source/header/3literalpins; direct diff/tests establish preservation. Prior independent grant finding repaired/reproduced at ac1. Prior push09full370suites7679pass14skip633.122s remains failed publicationexit1 due lint, not relabeled success; next normal publication pending. Manual session/revoke/expiry/UTF8 mutants retained. Optional comparator/readback collectors denied by deployed guard remain unexecuted, no retries/bypass. Parent0/8/fullcutover holds remain. CLIverify establishes commit reachability only."
+    recorded_at: "2026-10-25T20:56:44.897Z"
+    commit_sha: "58ed781a854b1fd8fe42592d7f765441b672aa2c"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Final58ed inherits inspected ac1 consumedExpiry futurity repair unchanged; focused04includes actual private grant/show/list and exact short-year0049/0048 refusal-before-state controls plus valid relative/absolute and legacy-status formats. Original private0049 grant reported0 in red; consumed year0049 expired while Date meant2049. Final writer compares exact consumed microseconds to reader conservative millisecond boundary and stores approved spelling; invalid calendar/rollover/lowercase rejected. New reader catches preserve this behavior; tests424pass and currentpacked six cases inspected. No real grants/revokes. Commit verification is reachability only."
+    recorded_at: "2026-10-25T20:56:45.913Z"
+    commit_sha: "58ed781a854b1fd8fe42592d7f765441b672aa2c"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Final literal6f reader cohort rerun after prior fullsuite exited, avoiding shared native cache mutation during active tests. native-stop02 actual10admission tests and native-prefix03 actual8complete-repository-library discriminator tests pass; missing/mutation/symlink/override/metadata omission controls retained. focused04exercises current TSsource admission and actual typed record/composition: bounded64KiB nofollow/ownership/mode/link policies retained, mandatory prefixes once, skipped publication/Git/lease/seal effects and positive controls, postprefix reader mutation fatal/no fallback/retry. Previouslyqualified Stopparser65controls and individuallyinspected priorprofile changes remain bounded lineage; foreignSterling unchanged. Prefix/publication ports are doubles, not installedSQLite/freshnativeimage/fullfilesystemharness parity. Source reachability only is CLIverified."
+    recorded_at: "2026-10-25T20:56:46.932Z"
+    commit_sha: "58ed781a854b1fd8fe42592d7f765441b672aa2c"

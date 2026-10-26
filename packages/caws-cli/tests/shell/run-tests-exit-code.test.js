@@ -5,7 +5,7 @@
  * whether the suite passed.
  *
  * These tests pin the mapping from spawnSync results to that verdict. They run
- * the real control flow (build -> jest -> cleanup, with the precedence rules)
+ * the real control flow (prerequisites -> jest -> cleanup, with the precedence rules)
  * against injected spawn results, so a mapping that is correct in isolation but
  * never reached by main() still fails here.
  *
@@ -144,20 +144,20 @@ test('a green run exits 0', () => {
   expect(err.text()).toBe('');
 });
 
-test('a build failure short-circuits: jest never runs and the code is non-zero', () => {
+test('a prerequisite failure short-circuits: jest never runs and the code is non-zero', () => {
   const err = makeErr();
   const run = makeRun([{ status: 2, signal: null }, OK, OK]);
 
   expect(main({ run, err, argv: [] })).toBe(2);
-  expect(run.calls).toEqual(['npm run build']);
+  expect(run.calls).toEqual(['npm run test:prepare']);
 });
 
-test('a build killed by a signal short-circuits with a non-zero code', () => {
+test('a prerequisite killed by a signal short-circuits with a non-zero code', () => {
   const err = makeErr();
   const run = makeRun([KILLED, OK, OK]);
 
   expect(main({ run, err, argv: [] })).not.toBe(0);
-  expect(run.calls).toEqual(['npm run build']);
+  expect(run.calls).toEqual(['npm run test:prepare']);
   expect(err.text()).toMatch(/SIGKILL/);
 });
 

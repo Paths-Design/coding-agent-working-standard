@@ -52,6 +52,383 @@ class HookExecutionDiagnostics(unittest.TestCase):
         self.config['handlers'][name] = '.caws/hooks/' + name
         self.configure()
 
+    def test_installed_entry_applies_real_ignored_staging_guard_in_command_directory(self):
+        command_dir = self.repo / 'nested'
+        command_dir.mkdir()
+        (command_dir / '.gitignore').write_text('*.generated\n')
+        (command_dir / 'private.generated').write_text('nested fixture\n')
+        (self.repo / 'private.generated').write_text('root fixture\n')
+        policy = self.root / 'utility-policy.json'
+        policy.write_text(json.dumps({'version': 1, 'ignored_staging': True}))
+        self.env['CAWS_OPTIONAL_HOOK_POLICY'] = str(policy)
+        self.config['extensions']['pre_tool_use'].append(
+            {'handler': 'hook-utilities.sh', 'before': 'marker.sh'})
+        self.configure()
+        command = {'command': 'git add -f private.generated'}
+        legacy = self.invoke('legacy-session-directory', self.payload(tool_input=command))
+        self.assertEqual(legacy.returncode, 0, legacy.stderr)
+        marker_before = (self.repo / 'marker.log').read_bytes()
+        raw = self.payload(execution_workdir=str(command_dir), tool_input=command)
+        result = self.invoke('real-command-directory', raw)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn(b'Consumer ignored-staging policy: private.generated', result.stdout)
+        self.assertEqual((self.repo / 'marker.log').read_bytes(), marker_before)
+        self.assertFalse((self.repo / '.git/index').exists())
+        command_rows = [self.rows(path)[0] for path in self.journals()
+                        if self.rows(path)[0]['supplied_context']['execution_workdir_resolution']['status'] == 'resolved']
+        self.assertEqual(len(command_rows), 1)
+        self.assertEqual(command_rows[0]['dispatch_cwd'], str(command_dir))
+        self.assertEqual(raw['cwd'], str(self.repo))
+        self.assertEqual(raw['tool_use_id'], 'tool-1')
+
+    def test_scratch_and_foreign_command_contexts_cannot_disable_session_governance(self):
+        scratch, foreign = self.root / 'scratch', self.root / 'foreign'
+        scratch.mkdir()
+        foreign.mkdir()
+        init = subprocess.run(['git', 'init', '-q', str(foreign)], env=self.env, capture_output=True)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        target = self.repo / 'must-not-be-written'
+        for label, directory in [('scratch', scratch), ('foreign', foreign)]:
+            result = self.invoke(label + '-context', self.payload(execution_workdir=str(directory),
+                tool_input={'command': 'printf unsafe > ' + str(target)}))
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn(b'execution directory', result.stderr)
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertFalse(target.exists())
+        self.assertEqual(self.journals(), [])
+
+    def test_installed_dispatch_keeps_session_identity_and_uses_physical_command_cwd(self):
+        command_dir = self.repo / 'nested'
+        command_dir.mkdir()
+        self.marker.write_text('#!/bin/bash\nprintf "%s\\n" "$PWD" "$HOOK_CWD" '
+                               '"$HOOK_SESSION_CWD" "$HOOK_SESSION_ID" "$HOOK_TOOL_USE_ID" '
+                               '"$HOOK_COMMAND" > "$CAWS_PROJECT_DIR/marker.log"\n')
+        raw = self.payload(execution_workdir=str(command_dir), turn_id='original-turn',
+                           tool_input={'command': 'echo unchanged'})
+        result = self.invoke('command-process-cwd', raw)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.repo / 'marker.log').read_text().splitlines(),
+                         [str(command_dir), str(command_dir), str(self.repo),
+                          'selection-session', 'tool-1', 'echo unchanged'])
+        row = self.rows(self.journals()[0])[0]
+        self.assertEqual(row['dispatch_cwd'], str(command_dir))
+        self.assertEqual(row['supplied_context']['session_cwd'], str(self.repo))
+        self.assertEqual(row['input_sha256'], hashlib.sha256(json.dumps(raw).encode()).hexdigest())
+
+    def test_inherited_status_and_tool_alias_do_not_mint_host_execution_context(self):
+        nested = self.repo / 'nested'
+        nested.mkdir()
+        self.env['HOOK_EXECUTION_WORKDIR_STATUS'] = 'resolved'
+        self.env['HOOK_EXECUTION_WORKDIR'] = str(nested)
+        self.env['HOOK_CWD'] = str(nested)
+        self.marker.write_text('#!/bin/bash\nprintf "%s\\n" "$HOOK_EXECUTION_WORKDIR_STATUS" '
+                               '"$HOOK_CWD" > "$CAWS_PROJECT_DIR/marker.log"\n')
+        result = self.invoke('forged-status', self.payload(tool_input={
+            'command': 'echo unchanged', 'workdir': str(nested)}))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.repo / 'marker.log').read_text().splitlines(),
+                         ['unavailable', str(self.repo)])
+
+    def test_unrelated_unadopted_directories_remain_inactive_with_valid_host_context(self):
+        scratch = self.root / 'ordinary-directory'
+        other_scratch = self.root / 'other-ordinary-directory'
+        plain_git = self.root / 'unadopted-project'
+        scratch.mkdir()
+        other_scratch.mkdir()
+        plain_git.mkdir()
+        init = subprocess.run(['git', 'init', '-q', str(plain_git)], env=self.env, capture_output=True)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        for label, session_dir in [('same-nongit-directory', scratch),
+                                   ('different-nongit-directory', other_scratch),
+                                   ('unadopted-git-to-nongit', plain_git)]:
+            raw = self.payload(cwd=str(session_dir), execution_workdir=str(scratch),
+                               tool_input={'command': 'echo unchanged'})
+            for event in ('pre_tool_use', 'post_tool_use'):
+                self.event = event
+                with self.subTest(label=label, event=event):
+                    result = self.invoke(label + event, raw)
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (0, b'', b''))
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+        self.event = 'pre_tool_use'
+        malformed = self.invoke('ordinary-directory-malformed-host', self.payload(
+            cwd=str(scratch), execution_workdir=None, tool_input={'command': 'echo unchanged'}))
+        self.assertEqual(malformed.returncode, 2)
+        self.assertIn(b'execution_workdir', malformed.stderr)
+
+    def test_nongit_session_selects_successful_target_policy(self):
+        scratch, plain_git = self.root / 'nongit-session', self.root / 'plain-target'
+        scratch.mkdir()
+        plain_git.mkdir()
+        init = subprocess.run(['git', 'init', '-q', str(plain_git)], env=self.env, capture_output=True)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        for event in ('pre_tool_use', 'post_tool_use'):
+            self.event = event
+            result = self.invoke('nongit-to-plain-' + event, self.payload(cwd=str(scratch),
+                execution_workdir=str(plain_git), tool_input={'command': 'echo unchanged'}))
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b'', b''))
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
+        # The same nongit session reaches the actual adopted target's shipped guard.
+        nested = self.repo / 'nested'
+        nested.mkdir()
+        (nested / '.gitignore').write_text('*.generated\n')
+        (nested / 'private.generated').write_text('target sentinel\n')
+        policy = self.root / 'target-utility-policy.json'
+        policy.write_text(json.dumps({'version': 1, 'ignored_staging': True}))
+        self.env['CAWS_OPTIONAL_HOOK_POLICY'] = str(policy)
+        self.config['extensions']['pre_tool_use'].append(
+            {'handler': 'hook-utilities.sh', 'before': 'marker.sh'})
+        self.configure()
+        self.event = 'pre_tool_use'
+        raw = self.payload(cwd=str(scratch), execution_workdir=str(nested), turn_id='original-turn',
+                           tool_input={'command': 'git add -f private.generated'})
+        result = self.invoke('nongit-to-governed-target', raw)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn(b'Consumer ignored-staging policy: private.generated', result.stdout)
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertFalse((self.repo / '.git/index').exists())
+        row = self.rows(self.journals()[0])[0]
+        self.assertEqual(row['dispatch_cwd'], str(nested))
+        self.assertEqual(row['supplied_context']['session_cwd'], str(scratch))
+        self.assertEqual(row['input_sha256'], hashlib.sha256(json.dumps(raw).encode()).hexdigest())
+
+    def test_host_context_common_directory_failure_refuses_both_tool_events(self):
+        actual_git = __import__('shutil').which('git', path=self.env['PATH'])
+        self.assertIsNotNone(actual_git)
+        wrapper_dir = self.root / 'faulted-git-bin'
+        wrapper_dir.mkdir()
+        wrapper = wrapper_dir / 'git'
+        wrapper.write_text('#!/bin/sh\nfor arg in "$@"; do\n'
+                           '  if [ "$arg" = "--git-common-dir" ]; then\n'
+                           '    printf "fixture common-dir failure\\n" >&2\n    exit 128\n  fi\ndone\n'
+                           'exec ' + __import__('shlex').quote(actual_git) + ' "$@"\n')
+        wrapper.chmod(0o755)
+        self.env['PATH'] = str(wrapper_dir) + os.pathsep + self.env['PATH']
+        for event in ('pre_tool_use', 'post_tool_use'):
+            self.event = event
+            with self.subTest(event=event):
+                result = self.invoke('host-common-failure-' + event, self.payload(
+                    execution_workdir=str(self.repo), tool_input={'command': 'echo unchanged'}))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(b'Host execution directory could not be resolved', result.stderr)
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
+    def test_uncertain_adoption_namespace_refuses_both_tool_events(self):
+        projects = self.home / 'state/projects'
+        retained = self.root / 'retained-project-registrations'
+        projects.rename(retained)
+        projects.symlink_to(self.root / 'missing-project-registrations', target_is_directory=True)
+        scratch = self.root / 'ordinary-adoption-probe'
+        scratch.mkdir()
+        try:
+            for event in ('pre_tool_use', 'post_tool_use'):
+                self.event = event
+                with self.subTest(event=event):
+                    result = self.invoke('uncertain-adoption-' + event, self.payload(
+                        cwd=str(scratch), execution_workdir=str(scratch),
+                        tool_input={'command': 'echo unchanged'}))
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn(b'Host execution context requires a resolvable session project', result.stderr)
+            self.assertFalse((self.repo / 'marker.log').exists())
+            self.assertEqual(self.journals(), [])
+        finally:
+            projects.unlink()
+            retained.rename(projects)
+
+    def test_runtime_home_and_cache_only_ancestors_do_not_opt_in_to_project_governance(self):
+        user = self.root / 'user'
+        user.mkdir()
+        machine = user / '.caws'
+        self.home.rename(machine)
+        self.home = machine
+        self.env['HOME'], self.env['CAWS_HOME'] = str(user), str(machine)
+        self.runtime = machine / 'lib/runtimes' / self.runtime.name
+        self.project_file = machine / 'state/projects' / (hashlib.sha256(str(self.repo).encode()).hexdigest() + '.json')
+        first, second, plain = user / '.codex/artifacts/first', user / '.codex/artifacts/second', user / 'plain'
+        first.mkdir(parents=True)
+        second.mkdir(parents=True)
+        plain.mkdir()
+        # Another ancestor has only a session cache; its name alone does not opt in.
+        (user / '.codex/.caws/sessions').mkdir(parents=True)
+        init = subprocess.run(['git', 'init', '-q', str(plain)], env=self.env, capture_output=True)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        for label, target in [('equal', first), ('different', second), ('plain-git', plain)]:
+            for event in ('pre_tool_use', 'post_tool_use'):
+                self.event = event
+                raw = self.payload(cwd=str(first), execution_workdir=str(target), turn_id='original-turn',
+                                   tool_input={'command': 'echo unchanged'})
+                result = self.invoke('runtime-home-' + label + '-' + event, raw)
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b'', b''))
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
+        # Cache-only origin can reach the actual adopted target's real shipped guard.
+        nested = self.repo / 'nested'
+        nested.mkdir()
+        (nested / '.gitignore').write_text('*.generated\n')
+        (nested / 'private.generated').write_text('target sentinel\n')
+        policy = self.root / 'runtime-home-utility-policy.json'
+        policy.write_text(json.dumps({'version': 1, 'ignored_staging': True}))
+        self.env['CAWS_OPTIONAL_HOOK_POLICY'] = str(policy)
+        self.config['extensions']['pre_tool_use'].append({'handler': 'hook-utilities.sh', 'before': 'marker.sh'})
+        self.configure()
+        self.event = 'pre_tool_use'
+        raw = self.payload(cwd=str(first), execution_workdir=str(nested), turn_id='original-turn',
+                           tool_input={'command': 'git add -f private.generated'})
+        result = self.invoke('runtime-home-governed-target', raw)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn(b'Consumer ignored-staging policy: private.generated', result.stdout)
+        row = self.rows(self.journals()[0])[0]
+        self.assertEqual(row['supplied_context']['session_cwd'], str(first))
+        self.assertEqual(row['dispatch_cwd'], str(nested))
+        self.assertEqual(row['input_sha256'], hashlib.sha256(json.dumps(raw).encode()).hexdigest())
+        self.assertFalse((self.repo / '.git/index').exists())
+
+    def test_dangling_origin_target_and_resolved_anchor_metadata_never_disappears(self):
+        scratch = self.root / 'clean-origin'
+        scratch.mkdir()
+        def dangling(directory, kind):
+            if kind == 'adoption':
+                key = hashlib.sha256(str(directory).encode()).hexdigest()
+                record = self.home / 'state/projects' / (key + '.json')
+                record.symlink_to(self.root / 'missing-adoption')
+            else:
+                (directory / kind).symlink_to(self.root / 'missing-marker')
+        for kind in ('.git', '.caws', 'adoption'):
+            origin = self.root / ('dangling-origin-' + kind.replace('.', ''))
+            origin.mkdir()
+            dangling(origin, kind)
+            target = self.root / ('dangling-target-' + kind.replace('.', ''))
+            target.mkdir()
+            dangling(target, kind)
+            for event in ('pre_tool_use', 'post_tool_use'):
+                self.event = event
+                result = self.invoke('dangling-origin-' + kind + event, self.payload(
+                    cwd=str(origin), execution_workdir=str(self.repo), tool_input={'command': 'echo unchanged'}))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(b'requires a resolvable session project', result.stderr)
+                result = self.invoke('dangling-target-' + kind + event, self.payload(
+                    cwd=str(scratch), execution_workdir=str(target), tool_input={'command': 'echo unchanged'}))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(b'execution directory cannot deactivate', result.stderr)
+        for kind in ('.caws', 'adoption'):
+            origin = self.root / ('resolved-origin-' + kind.replace('.', ''))
+            origin.mkdir()
+            init = subprocess.run(['git', 'init', '-q', str(origin)], env=self.env, capture_output=True)
+            self.assertEqual(init.returncode, 0, init.stderr)
+            dangling(origin, kind)
+            for event in ('pre_tool_use', 'post_tool_use'):
+                self.event = event
+                result = self.invoke('resolved-dangling-origin-' + kind + event, self.payload(
+                    cwd=str(origin), execution_workdir=str(self.repo), tool_input={'command': 'echo unchanged'}))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(b'foreign canonical project', result.stderr)
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
+    def test_resolved_host_adoption_namespace_file_is_not_missing_metadata(self):
+        target = self.root / 'resolved-adoption-namespace-target'
+        target.mkdir()
+        init = subprocess.run(['git', 'init', '-q', str(target)], env=self.env, capture_output=True)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        projects = self.home / 'state/projects'
+        retained = self.root / 'retained-adoption-namespace-directory'
+        projects.rename(retained)
+        projects.write_text('not a directory\n')
+        try:
+            for event in ('pre_tool_use', 'post_tool_use'):
+                self.event = event
+                result = self.invoke('resolved-adoption-namespace-file-' + event, self.payload(
+                    cwd=str(target), execution_workdir=str(target), tool_input={'command': 'echo unchanged'}))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(b'Host execution governance paths are unresolved', result.stderr)
+                self.assertIn(str(projects).encode(), result.stderr)
+            for tool, event in [('Read', 'pre_tool_use'), ('Read', 'post_tool_use'),
+                                ('Bash', 'session_start'), ('Bash', 'stop'),
+                                ('Bash', 'session_end'), ('Bash', 'pre_compact')]:
+                self.event = event
+                with self.subTest(tool=tool, event=event):
+                    result = self.invoke('unchanged-namespace-' + tool + '-' + event, self.payload(
+                        cwd=str(target), execution_workdir=None, tool_name=tool,
+                        tool_input={'command': 'echo unchanged'}))
+                    self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b'', b''))
+            self.assertFalse((self.repo / 'marker.log').exists())
+            self.assertEqual(self.journals(), [])
+        finally:
+            projects.unlink()
+            retained.rename(projects)
+
+    def test_resolved_host_target_governance_links_refuse_before_inactive_return(self):
+        scratch = self.root / 'resolved-target-clean-origin'
+        scratch.mkdir()
+        for index, marker in enumerate(('.caws', '.caws/policy.yaml', '.caws/specs', '.caws/working-spec.yaml')):
+            target = self.root / ('resolved-link-target-' + str(index))
+            target.mkdir()
+            init = subprocess.run(['git', 'init', '-q', str(target)], env=self.env, capture_output=True)
+            self.assertEqual(init.returncode, 0, init.stderr)
+            path = target / marker
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.symlink_to(self.root / 'missing-governance-target')
+            for origin_name, origin in [('same-canonical', target), ('nongit', scratch)]:
+                for event in ('pre_tool_use', 'post_tool_use'):
+                    self.event = event
+                    with self.subTest(marker=marker, origin=origin_name, event=event):
+                        result = self.invoke('resolved-link-' + str(index) + origin_name + event,
+                            self.payload(cwd=str(origin), execution_workdir=str(target),
+                                         tool_input={'command': 'echo unchanged'}))
+                        self.assertEqual(result.returncode, 2, result.stderr)
+                        self.assertIn(b'Host execution governance paths are unresolved', result.stderr)
+                        self.assertIn(str(path).encode(), result.stderr)
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
+    def test_normal_legacy_suppression_remains_inactive_with_resolved_host_context(self):
+        target = self.root / 'legacy-target'
+        target.mkdir()
+        init = subprocess.run(['git', 'init', '-q', str(target)], env=self.env, capture_output=True)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        (target / '.caws').mkdir()
+        (target / '.caws/working-spec.yaml').write_text('legacy fixture\n')
+        for event in ('pre_tool_use', 'post_tool_use'):
+            self.event = event
+            result = self.invoke('normal-legacy-' + event, self.payload(cwd=str(target),
+                execution_workdir=str(target), tool_input={'command': 'echo unchanged'}))
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b'', b''))
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
+    def test_present_invalid_execution_context_refuses_before_dispatch(self):
+        file = self.root / 'file-context'
+        file.write_text('not a directory')
+        alias = self.root / 'symlink-context'
+        alias.symlink_to(self.repo, target_is_directory=True)
+        values = [None, '', 0, False, {}, [], 'relative', str(file), str(alias),
+                  str(self.root / 'missing'), 'bad\0path', str(self.repo) + '/.']
+        for event in ('pre_tool_use', 'post_tool_use'):
+            self.event = event
+            for index, value in enumerate(values):
+                with self.subTest(event=event, value=value):
+                    result = self.invoke(event + '-invalid-execution-' + str(index),
+                                         self.payload(execution_workdir=value))
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn(b'execution_workdir', result.stderr)
+        self.assertFalse((self.repo / 'marker.log').exists())
+        self.assertEqual(self.journals(), [])
+
+    def test_host_execution_context_requires_every_alias_to_agree(self):
+        nested = self.repo / 'nested'
+        nested.mkdir()
+        for alias in ('workdir', 'cwd'):
+            result = self.invoke('disagree-' + alias, self.payload(
+                execution_workdir=str(nested), tool_input={alias: str(self.repo)}))
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(b'disagrees with execution_workdir', result.stderr)
+        self.assertFalse((self.repo / 'marker.log').exists())
+
     def test_normal_journal_binds_supplied_context_without_command_capture(self):
         payload = self.payload(tool_input={'command': 'SECRET_COMMAND_SENTINEL',
                                           'workdir': str(self.repo / 'explicit'),

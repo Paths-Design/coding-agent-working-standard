@@ -1,0 +1,68 @@
+id: CAWS-STOP-CONSUMER-LANDING-001
+title: 'Land bounded Stop profile comparison and ordinary consumer adapter'
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded fixed-reference component comparison and ordinary Stop consumer adapter landed from c8b12630 with retained runtime artifacts, hostile controls, source-pin joins, independent review and A1-A3 evidence. Root retains full native eligibility, prefix/acquisition join, actual provider/calendar/consumer integration, residency and machine cutover in CAWS-NATIVE-SESSION-PUBLICATION-001 and CAWS-NATIVE-RUNTIME-001. Selected runtime and parent acceptance unchanged.'
+created_at: '2026-10-24T05:06:03.309Z'
+updated_at: '2026-10-24T05:10:14.472Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Controlled Stop component comparison and publication consumption adapter'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/qualify-stop-profile.mjs'
+    - 'packages/caws-cli/tests/tooling/qualify-stop-profile.test.js'
+    - 'packages/caws-cli/src/runtime/session-store-publication.ts'
+    - 'packages/caws-cli/tests/runtime/ordinary-stop-publication.test.js'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Component comparison and fixture-backed consumer evidence confer no native admission or parent cutover acceptance'
+  - 'Prepared bytes are independently reopened and compared before acknowledgement; failures never cause replay'
+acceptance:
+  - id: A1
+    given: 'the fixed reviewed stock reference and corpus'
+    when: 'pinned controlled SQL and renderer comparisons execute'
+    then: 'all thirty required cases match and substituted oracle inventories and false failure dispositions refuse'
+  - id: A2
+    given: 'fixture SQL and native observations with actual renderer and filesystem reader'
+    when: 'the ordinary Stop adapter publishes or receives corrupt output'
+    then: 'original metadata and user text are consumed while incoherent and self-consistent substituted generations refuse acknowledgement with retained artifacts'
+  - id: A3
+    given: 'the independently reviewed committed candidate'
+    when: 'governed landing completes'
+    then: 'main contains the exact source candidate while selected runtime and parent acceptance remain unchanged'
+observability:
+  - 'Retained commands, exit statuses, exact source pins, scenario state, projections, turns, index and publication markers'
+rollback:
+  - 'Use a normal source revert; retain scenario evidence and the existing selected runtime'
+non_functional:
+  security:
+    - 'No profile authority from caller-supplied qualification JSON or a component comparison result'
+contracts:
+  - name: 'stop-consumer'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "c8b12630 source joined to stop-profile-comparison-execution-05 exit0 and exact current driver pin; fixed 30 comparisons all equal under controlled CPython 3.11.13 and Node22.22.2. Manually rehashed all233 artifactPins; zero mismatches. Code-owned complete75-file stock inventory digest9976411f31abc0c6249433c79a45e6e556901ebcc9ae948218416fc9a92eaad8 matches actual source and rejects substituted/deleted oracle files. tests-03 includes five structural controls with explicit tooling-test-pin-03 ff5c83ed9f9fa69bf95d390c82e1e53b35e9fa1aa83ea02d59ec5e7554ae4347. Independent review findings grounded and repaired. Artifact base /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration. --verify checks commit existence, not these executions. Controlled component comparison only; no native profile authority, ambient startup or bundled engine equivalence."
+    recorded_at: "2026-10-24T05:08:07.244Z"
+    command: "env -i PATH=/usr/bin:/bin LANG=C LC_ALL=C TZ=UTC0 pinned-node scripts/qualify-stop-profile.mjs stop-profile-components-controlled-05.request.json"
+    exit_code: 0
+    commit_sha: c8b1263084626734d630e18300ed77d7da708161
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "c8b12630 adapter source matches ordinary-stop-adapter-build-02 pins, build exit0; ordinary-stop-adapter-tests-03 exit0 with52 cases and stable source. Actual retained turn, index, projection and marker show original metadata and actual SQL user before ordinary reader consumption. Same-length corruption refuses at reader digest; self-consistent forged generation refuses specifically at adapter expected-byte comparison: test-artifacts/ordinary-stop-publication-tqY3UC/scenario.json has rowsCalls1 continuationCalls1 outcomeCalls[] consumedfalse and retained forged turn/marker. Paired acquisition/cleanup errors preserve both original objects without replay. Artifact base /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/ordinary-stop-adapter-tests-03. SQL/native observation ports are fixtures, calendarCalls0; actual native acquisition/admission and installed invocation excluded. Commit existence verification is separate from inspected executions."
+    recorded_at: "2026-10-24T05:08:08.576Z"
+    command: pinned-node node_modules/jest/bin/jest.js --runInBand --runTestsByPath tests/runtime/ordinary-stop-publication.test.js tests/runtime/session-store-publication.test.js tests/tooling/qualify-stop-profile.test.js
+    exit_code: 0
+    commit_sha: c8b1263084626734d630e18300ed77d7da708161
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Governed main landing c6b2a0a6e6a0c7a88d7b7a2e30d91fc4f13325ec contains reviewed c8b12630. Retained stop-consumer-landing-01/landed-state.json: git merge-base --is-ancestor exits0; git diff c8b12630 main -- packages docs/internal/caws-runtime-modernization.md exits0 empty. Selected runtime bytes unchanged SHA256 f8a3627299bc8c3d325eb42472f889b43e7c26c8a4e4c02996091867cb9f4f7e; parent spec bytes unchanged SHA256 0c11d997c2dfbc9187a21c19d85267525b7632dc344d77269e6ecf7cb51f719f. Temporary landing worktree removed. Full-basis publication gates121paths and landing gates5paths each fivePASS; doctor0E4W5I. Independent review at c8b12630 grounded oracle and coherent-forgery repairs. No native admission, installation or cutover acceptance claimed. Verification checks commit existence, behavioral evidence separately inspected."
+    recorded_at: "2026-10-24T05:10:11.886Z"
+    commit_sha: c6b2a0a6e6a0c7a88d7b7a2e30d91fc4f13325ec

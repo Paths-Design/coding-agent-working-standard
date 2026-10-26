@@ -6,7 +6,10 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const childProcess = require('node:child_process');
-const { qualifiesForNativeSessionCache } = require('../../dist/runtime/session-cache-admission');
+const {
+  qualifiesForNativeSessionCache,
+  qualifiesForNativeSessionEndPrefix,
+} = require('../../dist/runtime/session-cache-admission');
 const templates = path.resolve(__dirname, '../../templates/hook-packs');
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const libraryKinds = {
@@ -167,6 +170,199 @@ afterEach(() => {
   jest.restoreAllMocks();
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+function sessionEnd(surface = 'codex') {
+  selection.surface = request.surface = surface;
+  selection.event = request.event = 'session_end';
+  payload({ session_id: 'original', cwd: checkout, reason: 'clear' });
+  for (const name of [
+    'agent-pid.sh',
+    'parse-input.sh',
+    'emit.sh',
+    'run-handlers.sh',
+    'reprieve.sh',
+    'reprieve-reader.cjs',
+    'guard-config.sh',
+    'guard-config.cjs',
+  ]) {
+    const kind =
+      surface === 'codex' && ['parse-input.sh', 'emit.sh', 'run-handlers.sh'].includes(name)
+        ? 'surface'
+        : 'shared';
+    const file = path.join(runtime, kind === 'shared' ? 'lib' : 'surfaces/codex/lib', name);
+    selection.libraries[name] = { path: file, sha256: sha(fs.readFileSync(file)), kind };
+  }
+  const file = path.join(runtime, 'session-log.sh');
+  selection.handlers = [
+    {
+      name: 'session-log.sh',
+      entry: 'session-log.sh',
+      args: [],
+      path: file,
+      sha256: sha(fs.readFileSync(file)),
+      tier: 'stock',
+      kind: 'stock',
+    },
+  ];
+}
+const qualifyEnd = (sessionId = 'original') =>
+  qualifiesForNativeSessionEndPrefix({
+    request,
+    selection,
+    environment,
+    sessionId,
+  });
+
+test.each(['codex', 'claude-code'])(
+  'complete reviewed SessionEnd source profile qualifies for %s',
+  (surface) => {
+    sessionEnd(surface);
+    const before = snapshot(root);
+    expect(qualifyEnd()).toBe(true);
+    expect(snapshot(root)).toEqual(before);
+    expect(fs.existsSync(path.join(checkout, '.caws/sessions'))).toBe(false);
+  }
+);
+
+test.each([
+  'session-log.sh',
+  'dispatch.sh',
+  'handler-env.sh',
+  'runtime-paths.sh',
+  'lib/parse-input.sh',
+  'lib/agent-surface.sh',
+  'lib/session-cache.sh',
+  'lib/agent-pid.sh',
+  'lib/run-handlers.sh',
+  'lib/reprieve.sh',
+  'lib/reprieve-reader.cjs',
+  'lib/guard-config.sh',
+  'lib/guard-config.cjs',
+  'lib/session-id.sh',
+  'surfaces/codex/lib/parse-input.sh',
+  'surfaces/codex/lib/emit.sh',
+  'surfaces/codex/lib/run-handlers.sh',
+])('SessionEnd source mutation declines before effects: %s', (relative) => {
+  sessionEnd();
+  expect(qualifyEnd()).toBe(true);
+  fs.appendFileSync(path.join(runtime, relative), '\n# unreviewed source\n');
+  expect(qualifyEnd()).toBe(false);
+});
+
+test.each(['codex', 'claude-code'])(
+  'SessionEnd requires actual selected reprieve/config helpers and refuses custom parser for %s',
+  (surface) => {
+    sessionEnd(surface);
+    expect(fs.existsSync(path.join(runtime, 'lib/guard-config.py'))).toBe(false);
+    expect(qualifyEnd()).toBe(true);
+    for (const name of ['guard-config.cjs', 'guard-config.sh', 'reprieve-reader.cjs']) {
+      const file = path.join(runtime, 'lib', name);
+      const original = fs.readFileSync(file);
+      const selected = selection.libraries[name];
+      delete selection.libraries[name];
+      expect(qualifyEnd()).toBe(false);
+      selection.libraries[name] = selected;
+      for (const change of [
+        { kind: 'surface' },
+        { kind: 'project' },
+        { path: path.join(runtime, 'redirected', name) },
+        { sha256: '0'.repeat(64) },
+      ]) {
+        selection.libraries[name] = { ...selected, ...change };
+        expect(qualifyEnd()).toBe(false);
+      }
+      selection.libraries[name] = selected;
+      fs.rmSync(file);
+      expect(qualifyEnd()).toBe(false);
+      fs.symlinkSync(path.join(runtime, 'lib/session-id.sh'), file);
+      expect(qualifyEnd()).toBe(false);
+      fs.rmSync(file);
+      fs.writeFileSync(file, original);
+      expect(qualifyEnd()).toBe(true);
+      for (const base of [home, runtime]) {
+        const override = path.join(base, 'surfaces', surface, 'lib', name);
+        fs.mkdirSync(path.dirname(override), { recursive: true });
+        fs.writeFileSync(override, original);
+        expect(qualifyEnd()).toBe(false);
+        fs.rmSync(override);
+        expect(qualifyEnd()).toBe(true);
+      }
+    }
+    const custom = path.join(root, 'custom.py');
+    fs.writeFileSync(custom, "raise Exception('must not execute')\n");
+    for (const selectedEnvironment of [request.caller.environment, environment]) {
+      selectedEnvironment.CAWS_GUARD_CONFIG_PY = custom;
+      const before = snapshot(root);
+      expect(qualifyEnd()).toBe(false);
+      expect(snapshot(root)).toEqual(before);
+      delete selectedEnvironment.CAWS_GUARD_CONFIG_PY;
+      expect(qualifyEnd()).toBe(true);
+    }
+    expect(fs.existsSync(path.join(checkout, '.caws/sessions'))).toBe(false);
+  }
+);
+
+test.each(['foreign', null, '', 'unknown', '../escape'])(
+  'independent SessionEnd identity must match original %#',
+  (sid) => {
+    sessionEnd();
+    expect(qualifyEnd(sid)).toBe(false);
+  }
+);
+
+test('SessionEnd finite profile refuses extensions, argument variants, overrides and custom startup', () => {
+  sessionEnd();
+  const selected = selection.handlers[0];
+  for (const change of [
+    { args: ['ignored'] },
+    { kind: 'project-override' },
+    { sha256: 'b'.repeat(64) },
+    { path: path.join(runtime, 'elsewhere') },
+    { entry: 'session-log.sh x' },
+  ]) {
+    selection.handlers = [{ ...selected, ...change }];
+    expect(qualifyEnd()).toBe(false);
+  }
+  selection.handlers = [selected, selected];
+  expect(qualifyEnd()).toBe(false);
+  selection.handlers = [];
+  expect(qualifyEnd()).toBe(false);
+  selection.handlers = [selected];
+  selection.overrides = { 'session-log.sh': selected.path };
+  expect(qualifyEnd()).toBe(false);
+  selection.overrides = {};
+  selection.libraryOverrides = { unused: '/unreviewed' };
+  expect(qualifyEnd()).toBe(false);
+  selection.libraryOverrides = {};
+  environment.BASH_ENV = '/custom/startup';
+  expect(qualifyEnd()).toBe(false);
+  delete environment.BASH_ENV;
+  environment.CAWS_PRIOR_BASH_ENV = '/custom/startup';
+  expect(qualifyEnd()).toBe(false);
+});
+
+test.each(['codex', 'claude-code'])(
+  'new higher-priority library, direct-source symlink or path routing mismatch refuses %s',
+  (surface) => {
+    sessionEnd(surface);
+    const dir = path.join(home, 'surfaces', surface, 'lib');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'agent-pid.sh'), '# unreviewed');
+    expect(qualifyEnd()).toBe(false);
+    fs.rmSync(path.join(dir, 'agent-pid.sh'));
+    expect(qualifyEnd()).toBe(true);
+    const file = path.join(runtime, 'lib/parse-input.sh'),
+      retained = fs.readFileSync(file);
+    fs.rmSync(file);
+    fs.symlinkSync(path.join(runtime, 'lib/session-cache.sh'), file);
+    expect(qualifyEnd()).toBe(false);
+    fs.rmSync(file);
+    fs.writeFileSync(file, retained);
+    expect(qualifyEnd()).toBe(true);
+    environment.CAWS_AGENT_SURFACE = 'other';
+    expect(qualifyEnd()).toBe(false);
+  }
+);
 
 test('actual stock prefix qualifies with an empty chain and no session identity', () => {
   expect(qualify()).toBe(true);
@@ -648,3 +844,155 @@ test('qualification does not mutate frozen inputs, write cache state or spawn a 
     sessionsDirectoryExists: false,
   };
 });
+
+test('only the reviewed host-workdir Codex parser identity qualifies', () => {
+  const parser = selection.libraries['parse-input.sh'];
+  expect(sha(fs.readFileSync(parser.path))).toBe(
+    'c33d320efef119f826de58b145344288264b985f10d911b435645f6d851444fc'
+  );
+  expect(qualify()).toBe(true);
+  parser.sha256 = '04a21ee0cd24d917bbee4c63f9285a2a867f2f9a08a9cdf2f9a78d3400a73c61';
+  expect(qualify()).toBe(false);
+});
+test('validated nested host context qualifies without changing raw session coordinates or identity', () => {
+  const nested = path.join(checkout, 'host nested');
+  fs.mkdirSync(nested);
+  payload({
+    tool_name: 'Bash',
+    cwd: checkout,
+    execution_workdir: nested,
+    session_id: 'original',
+    tool_use_id: 'original-tool',
+    turn_id: 'original-turn',
+    tool_input: { command: 'echo unchanged', cwd: nested, workdir: nested },
+  });
+  const input = request.inputJson;
+  const before = snapshot(root);
+  expect(qualify()).toBe(true);
+  expect(request.inputJson).toBe(input);
+  expect(request.payload.cwd).toBe(checkout);
+  expect(snapshot(root)).toEqual(before);
+});
+test('a real linked checkout permits nested host context only with raw cwd inside that checkout', () => {
+  const git = (args, cwd = checkout) => {
+    const result = childProcess.spawnSync('/usr/bin/git', args, {
+      cwd,
+      env: request.caller.environment,
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(0);
+  };
+  git(['init', '-q']);
+  git([
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '--allow-empty',
+    '-qm',
+    'fixture',
+  ]);
+  const linked = path.join(root, 'linked-checkout');
+  git(['worktree', 'add', '-q', '-b', 'cache-linked', linked]);
+  const nested = path.join(linked, 'nested');
+  fs.mkdirSync(nested);
+  selection.checkout = linked;
+  request.caller.cwd = linked;
+  payload({
+    tool_name: 'Bash',
+    cwd: linked,
+    execution_workdir: nested,
+    tool_input: { command: 'echo unchanged' },
+  });
+  expect(selection.canonical).toBe(checkout);
+  expect(qualify()).toBe(true);
+  payload({ ...request.payload, cwd: checkout });
+  expect(qualify()).toBe(false);
+});
+test.each([null, '', false, 0, {}, [], 'relative', '/missing-host-context', 'bad\0host'])(
+  'present invalid host execution directory declines native cache: %p',
+  (execution_workdir) => {
+    payload({
+      tool_name: 'Bash',
+      cwd: checkout,
+      execution_workdir,
+      tool_input: { command: 'echo unchanged' },
+    });
+    expect(qualify()).toBe(false);
+  }
+);
+test('stale, symlinked, nonphysical, outside and nondirectory host contexts decline', () => {
+  const nested = path.join(checkout, 'nested');
+  fs.mkdirSync(nested);
+  const stale = path.join(checkout, 'stale');
+  fs.mkdirSync(stale);
+  fs.rmdirSync(stale);
+  const link = path.join(checkout, 'host-link');
+  fs.symlinkSync(nested, link);
+  const file = path.join(checkout, 'file');
+  fs.writeFileSync(file, 'fixture');
+  for (const execution_workdir of [stale, link, nested + '/.', nested + '/', root, file]) {
+    payload({
+      tool_name: 'Bash',
+      cwd: checkout,
+      execution_workdir,
+      tool_input: { command: 'echo unchanged' },
+    });
+    expect(qualify()).toBe(false);
+  }
+});
+test.each(['workdir', 'cwd'])(
+  'host context requires valid agreeing explicit tool_input.%s',
+  (alias) => {
+    const nested = path.join(checkout, 'nested');
+    fs.mkdirSync(nested);
+    const link = path.join(checkout, 'alias');
+    fs.symlinkSync(nested, link);
+    payload({
+      tool_name: 'Bash',
+      cwd: checkout,
+      execution_workdir: nested,
+      tool_input: { command: 'echo unchanged', [alias]: link },
+    });
+    expect(qualify()).toBe(true);
+    for (const value of [checkout, null, 'relative', path.join(checkout, 'missing')]) {
+      payload({ ...request.payload, tool_input: { command: 'echo unchanged', [alias]: value } });
+      expect(qualify()).toBe(false);
+    }
+  }
+);
+test('absent host field retains old raw-cwd semantics without promoting diagnostic aliases', () => {
+  payload({
+    tool_name: 'Bash',
+    cwd: checkout,
+    tool_input: { command: 'echo unchanged', workdir: root, cwd: null },
+  });
+  expect(qualify()).toBe(true);
+  payload({ ...request.payload, cwd: root });
+  expect(qualify()).toBe(false);
+});
+test('a validated host inside checkout never relaxes the existing outside raw-cwd restriction', () => {
+  const nested = path.join(checkout, 'nested');
+  fs.mkdirSync(nested);
+  payload({
+    tool_name: 'Bash',
+    cwd: root,
+    execution_workdir: nested,
+    tool_input: { command: 'echo unchanged' },
+  });
+  expect(qualify()).toBe(false);
+});
+test.each([null, 'relative', '/missing-unused-host'])(
+  'SessionEnd ignores unused host context and aliases (%p)',
+  (execution_workdir) => {
+    sessionEnd('codex');
+    payload({
+      ...request.payload,
+      tool_name: 'Bash',
+      execution_workdir,
+      tool_input: { workdir: null, cwd: 'relative' },
+    });
+    expect(qualifyEnd()).toBe(true);
+  }
+);

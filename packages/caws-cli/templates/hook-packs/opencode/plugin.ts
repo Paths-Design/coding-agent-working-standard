@@ -52,14 +52,9 @@ import * as fs from 'node:fs';
 
 const SURFACE = 'opencode';
 const UNKNOWN_ROOT = '';
-
-let cachedRoot: string | null = null;
-let warnedMissing = false;
-let currentSessionId: string | null = null;
-
-// Context stashed by tool.execute.before, consumed (and cleared) by the next
-// experimental.chat.system.transform firing.
-let pendingContext: string | null = null;
+// Explicit machine migration renders this one binding in a generation member.
+// Project-pack installation remains on its existing transport until migration.
+const NATIVE_STOP_HOME: string | null = null;
 
 interface ProjectRoot {
   worktree?: string | null;
@@ -68,18 +63,17 @@ interface ProjectRoot {
 }
 
 function resolveProjectRoot(ctx: ProjectRoot): string {
-  if (cachedRoot !== null) return cachedRoot;
-  const seeds: string[] = [];
-  if (ctx.worktree) seeds.push(ctx.worktree);
-  if (ctx.directory) seeds.push(ctx.directory);
-  if (ctx.project?.path) seeds.push(ctx.project.path);
-  if (process.cwd()) seeds.push(process.cwd());
+  const seeds = [ctx.worktree, ctx.directory, ctx.project?.path].filter(
+    (seed): seed is string => typeof seed === 'string' && seed.length > 0
+  );
+  // Supplied plugin context cannot borrow another project's host cwd when it
+  // has no governance. Ambient cwd is only the context-free compatibility path.
+  if (seeds.length === 0) seeds.push(process.cwd());
   for (const seed of seeds) {
     let dir = path.resolve(seed);
     for (let i = 0; i < 24; i++) {
       try {
         if (fs.existsSync(path.join(dir, '.caws'))) {
-          cachedRoot = dir;
           return dir;
         }
       } catch {
@@ -90,8 +84,7 @@ function resolveProjectRoot(ctx: ProjectRoot): string {
       dir = parent;
     }
   }
-  cachedRoot = UNKNOWN_ROOT;
-  return cachedRoot;
+  return UNKNOWN_ROOT;
 }
 
 function mapToolName(opencodeTool: string): string {
@@ -125,13 +118,21 @@ interface DispatchResult {
   stderr: string;
 }
 
-function dispatch(root: string, dispatcher: string, payload: string): DispatchResult {
-  const script = path.join(root, '.caws', 'hooks', 'dispatch', dispatcher);
+function dispatch(root: string, dispatcher: string, payload: string,
+  nativeDirectory?: string): DispatchResult {
+  const nativeHome = dispatcher === 'stop.sh' ? NATIVE_STOP_HOME : null;
+  const script = nativeHome !== null
+    ? path.join(nativeHome, 'bin/caws-hook-native')
+    : path.join(root, '.caws', 'hooks', 'dispatch', dispatcher);
+  const args = nativeHome !== null ? [SURFACE, 'stop', '--system'] : [];
+  if (nativeHome !== null && (!nativeDirectory || !path.isAbsolute(nativeDirectory)))
+    return { exitCode: 2, stdout: '', stderr: 'Native Stop requires own absolute plugin directory' };
   try {
-    const res = spawnSync(script, [], {
-      cwd: root,
+    const res = spawnSync(script, args, {
+      cwd: nativeHome !== null ? (nativeDirectory ?? root) : root,
       input: payload,
-      env: { ...process.env, CAWS_AGENT_SURFACE: SURFACE, CAWS_PROJECT_DIR: root },
+      env: { ...process.env, CAWS_AGENT_SURFACE: SURFACE, CAWS_PROJECT_DIR: root,
+        ...(nativeHome !== null ? { CAWS_HOME: nativeHome } : {}) },
       encoding: 'utf8',
       timeout: 45000,
       maxBuffer: 8 * 1024 * 1024,
@@ -211,8 +212,10 @@ function readDecision(stdout: string, exitCode: number): Decision {
     const reason =
       firstString(obj.reason, hso?.permissionDecisionReason) ||
       'CAWS guard blocked this operation.';
-    if (decision === 'block') return { block: true, reason, warn: '', context: '', updatedInput: null };
-    if (perm === 'ask' || perm === 'deny') return { block: true, reason, warn: '', context: '', updatedInput: null };
+    if (decision === 'block')
+      return { block: true, reason, warn: '', context: '', updatedInput: null };
+    if (perm === 'ask' || perm === 'deny')
+      return { block: true, reason, warn: '', context: '', updatedInput: null };
     const advisory = typeof obj.advisory === 'string' ? obj.advisory : '';
     if (decision === 'warn' || advisory) {
       empty.warn = advisory || reason;
@@ -252,7 +255,9 @@ interface ToolInput {
 
 interface CawsClient {
   app?: {
-    log?: (args: { body: { level: string; message: string; service?: string } }) => Promise<unknown>;
+    log?: (args: {
+      body: { level: string; message: string; service?: string };
+    }) => Promise<unknown>;
   };
 }
 
@@ -287,6 +292,25 @@ function extractSessionId(obj: unknown): string | null {
     if (typeof c === 'string' && c.length > 0 && c !== 'unknown') return c;
   }
   return null;
+}
+
+/** Lifecycle identities belong to this event, never a preceding tool/session.
+ * SDK EventSessionCreated declares properties.info.id; idle and compacted
+ * declare properties.sessionID. Explicit session-named aliases remain supported.
+ */
+function lifecycleSessionId(type: string, properties: unknown): string | null {
+  const props = asRecord(properties);
+  if (!props) return null;
+  const candidates = [props.sessionID, props.sessionId, asRecord(props.session)?.id];
+  if (type === 'session.created') candidates.push(asRecord(props.info)?.id, props.id);
+  let identity: string | null = null;
+  for (const value of candidates) {
+    if (value === undefined) continue;
+    if (typeof value !== 'string' || value.length === 0 || value === 'unknown') return null;
+    if (identity !== null && identity !== value) return null;
+    identity = value;
+  }
+  return identity;
 }
 
 interface CawsPluginCtx {
@@ -324,13 +348,14 @@ function resolveAgentCwd(
 function buildPayload(
   toolName: string,
   toolInput: Record<string, unknown>,
-  cwd: string | null
+  cwd: string | null,
+  sessionId: string | null
 ): string {
   const payload: Record<string, unknown> = {
     tool_name: toolName,
     tool_input: toolInput,
     tool_use_id: '',
-    session_id: currentSessionId || '',
+    session_id: sessionId || '',
   };
   if (cwd) payload.cwd = cwd;
   return JSON.stringify(payload);
@@ -346,14 +371,26 @@ async function advisoryLog(client: CawsClient | undefined, message: string) {
 }
 
 export const CawsPlugin = async (ctx: CawsPluginCtx) => {
+  let cachedRoot: string | null = null;
+  let warnedMissing = false;
+  let currentSessionId: string | null = null;
+  // Context is consumed only by this instance's next system transform.
+  let pendingContext: string | null = null;
+  const projectRoot = (): string => {
+    if (cachedRoot === null) cachedRoot = resolveProjectRoot(ctx);
+    return cachedRoot;
+  };
   return {
     'tool.execute.before': async (input: ToolInput, output: { args: Record<string, unknown> }) => {
       try {
         const sidFromInput = extractSessionId(input);
         if (sidFromInput) currentSessionId = sidFromInput;
 
-        const root = resolveProjectRoot(ctx);
-        if (root === UNKNOWN_ROOT || !fs.existsSync(path.join(root, '.caws', 'hooks', 'dispatch'))) {
+        const root = projectRoot();
+        if (
+          root === UNKNOWN_ROOT ||
+          !fs.existsSync(path.join(root, '.caws', 'hooks', 'dispatch'))
+        ) {
           if (!warnedMissing) {
             warnedMissing = true;
             await advisoryLog(
@@ -366,7 +403,12 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
 
         const toolName = mapToolName(input?.tool || '');
         const toolInput = normalizeArgs(output?.args);
-        const payload = buildPayload(toolName, toolInput, resolveAgentCwd(ctx, toolName, toolInput));
+        const payload = buildPayload(
+          toolName,
+          toolInput,
+          resolveAgentCwd(ctx, toolName, toolInput),
+          currentSessionId
+        );
 
         const res = dispatch(root, 'pre_tool_use.sh', payload);
         const decision = readDecision(res.stdout, res.exitCode);
@@ -388,13 +430,44 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
       }
     },
 
-    'tool.execute.after': async (input: ToolInput, output: { args: Record<string, unknown> }) => {
+    'tool.execute.after': async (
+      input: ToolInput & { args?: unknown },
+      output: {
+        title?: string;
+        output?: string;
+        metadata?: unknown;
+        args?: Record<string, unknown>;
+      }
+    ) => {
       try {
-        const root = resolveProjectRoot(ctx);
+        // SDK after callbacks carry sessionID and args on input; a preceding
+        // lifecycle/tool callback cannot supply this completed call's identity.
+        const sid = input?.sessionID;
+        if (typeof sid !== 'string' || sid.length === 0 || sid === 'unknown') return;
+        const hasInputArgs = Object.prototype.hasOwnProperty.call(input, 'args');
+        // Retain the older output.args-only shape only when it is unambiguous.
+        // Present-but-invalid SDK args never fall back to a different carrier.
+        const legacyOutputArgs =
+          !hasInputArgs &&
+          output &&
+          Object.prototype.hasOwnProperty.call(output, 'args') &&
+          !['title', 'output', 'metadata'].some((key) =>
+            Object.prototype.hasOwnProperty.call(output, key)
+          );
+        const args = asRecord(
+          hasInputArgs ? input.args : legacyOutputArgs ? output.args : undefined
+        );
+        if (!args || Array.isArray(args)) return;
+        const root = projectRoot();
         if (root === UNKNOWN_ROOT) return;
         const toolName = mapToolName(input?.tool || '');
-        const toolInput = normalizeArgs(output?.args);
-        const payload = buildPayload(toolName, toolInput, resolveAgentCwd(ctx, toolName, toolInput));
+        const toolInput = normalizeArgs(args);
+        const payload = buildPayload(
+          toolName,
+          toolInput,
+          resolveAgentCwd(ctx, toolName, toolInput),
+          sid
+        );
         const res = dispatch(root, 'post_tool_use.sh', payload);
         const decision = readDecision(res.stdout, res.exitCode);
         const combined = [decision.warn, decision.context].filter(Boolean).join('\n\n');
@@ -423,19 +496,25 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
       try {
         const type = ev?.event?.type;
         const props = ev?.event?.properties;
-        if (type && String(type).startsWith('session.')) {
-          const sid = extractSessionId(props) || extractSessionId(asRecord(props)?.session);
-          if (sid) currentSessionId = sid;
-        }
         if (!type) return;
-        const root = resolveProjectRoot(ctx);
-        if (root === UNKNOWN_ROOT) return;
         let dispatcher: string | null = null;
         if (type === 'session.created') dispatcher = 'session_start.sh';
         else if (type === 'session.idle') dispatcher = 'stop.sh';
         else if (type === 'session.compacted') dispatcher = 'pre_compact.sh';
-        if (!dispatcher) return;
-        dispatch(root, dispatcher, JSON.stringify({ session_id: currentSessionId || '' }));
+        if (!dispatcher) {
+          if (type.startsWith('session.')) {
+            const sid = extractSessionId(props) || extractSessionId(asRecord(props)?.session);
+            if (sid) currentSessionId = sid;
+          }
+          return;
+        }
+        const sid = lifecycleSessionId(type, props);
+        if (!sid) return;
+        currentSessionId = sid;
+        const root = projectRoot();
+        if (root === UNKNOWN_ROOT) return;
+        dispatch(root, dispatcher, JSON.stringify({ session_id: sid }),
+          typeof ctx.directory === 'string' ? ctx.directory : undefined);
       } catch {
         // lifecycle hooks are advisory
       }

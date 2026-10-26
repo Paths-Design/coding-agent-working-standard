@@ -5,6 +5,8 @@ import {
   pointerPath,
   readPointer,
   readManifest,
+  readNativeEntryFileIdentity,
+  readRetainedNativeEntryIdentity,
   verifyRuntime,
   type RuntimePointer,
 } from './machine-runtime-state';
@@ -16,11 +18,18 @@ import { randomUUID } from 'node:crypto';
 import { IMPLEMENTED_SURFACES, resolveHookPack } from './hook-packs/register';
 import { extractMachineHandlers } from './machine-handler-policy';
 import { SHARED_PACK } from './hook-packs/manifest-shared';
+import { readNativeImage } from './native-runtime-entry';
+import {
+  OPENCODE_NATIVE_PLUGIN_MEMBER,
+  renderOpenCodeNativePlugin,
+} from './opencode-native-plugin';
 
 export interface MachineRuntimeOptions {
   readonly home?: string;
   readonly templatesRoot?: string;
   readonly plan?: boolean;
+  /** Explicit local, pinned production image; installation never opts a harness in. */
+  readonly nativeImage?: string;
 }
 
 export interface MachineRuntimeResult {
@@ -30,6 +39,7 @@ export interface MachineRuntimeResult {
   readonly changed: boolean;
   readonly launcher: string;
   readonly files: readonly string[];
+  readonly nativeLauncher?: string;
 }
 
 export function machineHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -49,6 +59,9 @@ export function atomicMachineWrite(
   const temporary = `${file}.tmp.${randomUUID()}`;
   try {
     fs.writeFileSync(temporary, bytes, { flag: 'wx', mode });
+    // Creation modes are filtered by umask. Apply the declared final mode
+    // before publication, including exact executable-mode repairs.
+    fs.chmodSync(temporary, mode);
     fs.renameSync(temporary, file);
   } finally {
     if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
@@ -113,21 +126,120 @@ function needsBootstrap(home: string, pointer: RuntimePointer | null, bootstrap:
   throw new Error('Unmanaged machine launcher exists; refusing to overwrite it');
 }
 
+function needsNativeEntry(home: string, bytes: Buffer): boolean {
+  const target = path.join(home, 'bin/caws-hook-native');
+  assertMachinePath(home, target);
+  if (!fs.existsSync(target)) return true;
+  const installed = readNativeEntryFileIdentity(home, target);
+  if (installed.sha256 === sha(bytes)) return installed.mode !== 0o755;
+  const runtimes = path.join(home, 'lib/runtimes');
+  assertMachinePath(home, runtimes);
+  const recognized =
+    fs.existsSync(runtimes) &&
+    fs.readdirSync(runtimes).some((digest) => {
+      try {
+        return readRetainedNativeEntryIdentity(home, digest).sha256 === installed.sha256;
+      } catch {
+        return false;
+      }
+    });
+  if (!recognized)
+    throw new Error(
+      'Native machine entry matches no verified retained entry identity; preserve and reconcile local growth'
+    );
+  return true;
+}
+
+/** Cached native registrations outlive a rollback to a legacy generation.
+ * Repair only a manifest-bound retained entry identity under machine-home
+ * custody; never invent a fallback or overwrite unrecognized operator bytes.
+ */
+function legacyCompatibilityEntry(
+  home: string,
+  preferred: string | undefined
+): { bytes: Buffer; install: boolean } | undefined {
+  const runtimes = path.join(home, 'lib/runtimes');
+  assertMachinePath(home, runtimes);
+  const stable = path.join(home, 'bin/caws-hook-native');
+  assertMachinePath(home, stable);
+  const candidates = [
+    ...new Set([
+      ...(preferred ? [preferred] : []),
+      ...(fs.existsSync(runtimes) ? fs.readdirSync(runtimes).sort() : []),
+    ]),
+  ];
+  const retained = candidates.flatMap((digest) => {
+    try {
+      return [readRetainedNativeEntryIdentity(home, digest)];
+    } catch {
+      // A corrupt candidate cannot vouch for entry bytes. Other retained
+      // identities may still provide the existing catalogue fallback.
+      return [];
+    }
+  });
+  if (!retained.length) {
+    const unverifiedNative =
+      fs.existsSync(stable) ||
+      candidates.some((digest) => {
+        if (!/^[a-f0-9]{64}$/.test(digest)) return false;
+        if (
+          fs.lstatSync(path.join(runtimes, digest, 'native-entry.json'), {
+            throwIfNoEntry: false,
+          }) ||
+          fs.lstatSync(path.join(runtimes, digest, 'native/caws-hook-native'), {
+            throwIfNoEntry: false,
+          })
+        )
+          return true;
+        try {
+          const manifest = readManifest(home, digest);
+          return (
+            Object.hasOwn(manifest, 'native-entry.json') ||
+            Object.hasOwn(manifest, 'native/caws-hook-native')
+          );
+        } catch {
+          return false;
+        }
+      });
+    if (unverifiedNative)
+      throw new Error(
+        'Native compatibility identity cannot be verified; preserve runtime state and reconcile before legacy selection'
+      );
+    return undefined; // Legacy-only homes have no native obligation.
+  }
+  if (fs.existsSync(stable)) {
+    const installed = readNativeEntryFileIdentity(home, stable);
+    if (!retained.some(({ sha256 }) => installed.sha256 === sha256))
+      throw new Error('Native compatibility entry has local growth; refusing legacy selection');
+    return { bytes: installed.bytes, install: installed.mode !== 0o755 };
+  }
+  return { bytes: retained[0]!.bytes, install: true };
+}
+
 function activateRuntime(
   home: string,
-  pointer: RuntimePointer,
+  pointer: RuntimePointer | null,
   bootstrap: Buffer,
-  installBootstrap: boolean
+  installBootstrap: boolean,
+  nativeEntry?: { readonly bytes: Buffer; readonly install: boolean }
 ): void {
   // During first-install/legacy migration, the bootstrap can run the old
   // snapshot or fail safely until a pointer exists. Retry recognizes these
   // exact bytes. All subsequent updates and rollbacks have ONE commit point.
+  // A null pointer means the generation is already selected and only the
+  // stable entry is repaired: the pointer's previous_digest is the rollback
+  // target, so it is left untouched rather than rewritten to point at itself.
+  // Publish the parallel entry before the pointer. Every supported entry must
+  // understand native-entry.v1 and positively recognized legacy compatibility.
+  // Legacy bootstrap selection occurs later and is never attested by this write.
+  if (nativeEntry?.install)
+    atomicMachineWrite(home, path.join(home, 'bin/caws-hook-native'), nativeEntry.bytes, 0o755);
   if (installBootstrap)
     atomicMachineWrite(home, path.join(home, 'bin/caws-hook'), bootstrap, 0o755);
-  atomicMachineWrite(home, pointerPath(home), JSON.stringify(pointer));
+  if (pointer) atomicMachineWrite(home, pointerPath(home), JSON.stringify(pointer));
 }
 
-function runtimeFiles(templatesRoot: string): Map<string, Buffer> {
+function runtimeFiles(templatesRoot: string, home: string): Map<string, Buffer> {
   const files = new Map<string, Buffer>();
   const add = (dest: string, source: string): void => {
     assertMachinePath(templatesRoot, source);
@@ -148,6 +260,12 @@ function runtimeFiles(templatesRoot: string): Map<string, Buffer> {
       }
     }
   }
+  const opencodePlugin = path.join(templatesRoot, 'opencode/plugin.ts');
+  assertMachinePath(templatesRoot, opencodePlugin);
+  files.set(
+    OPENCODE_NATIVE_PLUGIN_MEMBER,
+    renderOpenCodeNativePlugin(fs.readFileSync(opencodePlugin), home)
+  );
   const defaults: Record<string, string[]> = {};
   for (const event of [
     'pre_tool_use',
@@ -219,7 +337,30 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   const home = path.resolve(options.home ?? machineHome());
   const templatesRoot =
     options.templatesRoot ?? path.resolve(__dirname, '../../templates/hook-packs');
-  const files = runtimeFiles(templatesRoot);
+  const files = runtimeFiles(templatesRoot, home);
+  const executablePaths = new Set([...files.keys()].filter((relative) => relative.endsWith('.sh')));
+  const native = options.nativeImage ? readNativeImage(options.nativeImage) : undefined;
+  if (native) {
+    for (const relative of native.executablePaths) executablePaths.add(relative);
+    for (const [relative, bytes] of native.files) {
+      if (files.has(relative)) throw new Error(`Native runtime destination collision: ${relative}`);
+      files.set(relative, bytes);
+    }
+    // Bind the complete generation's executable membership, including legacy
+    // compatibility assets, using ordinary manifest-hashed metadata.
+    files.set(
+      'native-modes.json',
+      Buffer.from(
+        JSON.stringify(
+          Object.fromEntries(
+            [...files.keys()]
+              .sort()
+              .map((relative) => [relative, executablePaths.has(relative) ? 0o755 : 0o644])
+          )
+        )
+      )
+    );
+  }
   const manifest = JSON.stringify(
     Object.fromEntries(
       [...files].sort(([a], [b]) => a.localeCompare(b)).map(([p, b]) => [p, sha(b)])
@@ -233,13 +374,20 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   for (const file of [launcher, snapshot, pointerPath(home)]) assertMachinePath(home, file);
   const bootstrap = files.get('bootstrap.py') as Buffer;
   const installBootstrap = needsBootstrap(home, prior, bootstrap);
+  const nativeEntry = native
+    ? { bytes: native.stableEntry, install: needsNativeEntry(home, native.stableEntry) }
+    : legacyCompatibilityEntry(home, prior?.digest);
+  // Selecting the generation that is already current only repairs the entry;
+  // its rollback history is whatever the pointer already records.
+  const reselect = prior?.digest !== digest;
   const result: MachineRuntimeResult = {
     home,
     digest,
-    previousDigest: prior?.digest ?? null,
-    changed: prior?.digest !== digest || installBootstrap,
+    previousDigest: reselect ? (prior?.digest ?? null) : (prior?.previous_digest ?? null),
+    changed: reselect || installBootstrap || nativeEntry?.install === true,
     launcher,
     files: [...files.keys()],
+    ...(nativeEntry ? { nativeLauncher: path.join(home, 'bin/caws-hook-native') } : {}),
   };
   if (options.plan || !result.changed) return result;
 
@@ -254,19 +402,26 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
           home,
           path.join(temporary, relative),
           bytes,
-          relative.endsWith('.sh') ? 0o755 : 0o600
+          executablePaths.has(relative) ? 0o755 : native ? 0o644 : 0o600
         );
-      atomicMachineWrite(home, path.join(temporary, 'manifest.json'), manifest);
+      atomicMachineWrite(
+        home,
+        path.join(temporary, 'manifest.json'),
+        manifest,
+        native ? 0o644 : 0o600
+      );
       fs.renameSync(temporary, snapshot);
     } finally {
       if (fs.existsSync(temporary)) fs.rmSync(temporary, { recursive: true });
     }
   }
+  verifyRuntime(home, digest);
   activateRuntime(
     home,
-    { version: 1, digest, previous_digest: prior?.digest ?? null },
+    reselect ? { version: 1, digest, previous_digest: prior?.digest ?? null } : null,
     bootstrap,
-    installBootstrap
+    installBootstrap,
+    nativeEntry
   );
   return result;
 }
@@ -282,6 +437,13 @@ function rollbackRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   const home = path.resolve(options.home ?? machineHome());
   const current = readPointer(home);
   if (!current?.previous_digest) throw new Error('No previous machine runtime to restore');
+  // A pointer that names its own generation as the predecessor has no rollback
+  // target; reselecting it would report a rollback that changed nothing.
+  if (current.previous_digest === current.digest)
+    throw new Error(
+      `No previous machine runtime to restore: the recorded previous runtime is the current one (${current.digest}). ` +
+        'Select the intended runtime by running caws init adapters install from its CLI package.'
+    );
   const digest = current.previous_digest;
   const files = verifyRuntime(home, digest);
   const launcher = path.join(home, 'bin/caws-hook');
@@ -291,12 +453,19 @@ function rollbackRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   assertMachinePath(templatesRoot, bootstrapPath);
   const bootstrap = fs.readFileSync(bootstrapPath);
   const installBootstrap = needsBootstrap(home, current, bootstrap);
+  const nativeBytes = files['native-entry.json']
+    ? readRetainedNativeEntryIdentity(home, digest).bytes
+    : undefined;
+  const nativeEntry = nativeBytes
+    ? { bytes: nativeBytes, install: needsNativeEntry(home, nativeBytes) }
+    : legacyCompatibilityEntry(home, current.digest);
   if (!options.plan) {
     activateRuntime(
       home,
       { version: 1, digest, previous_digest: current.digest },
       bootstrap,
-      installBootstrap
+      installBootstrap,
+      nativeEntry
     );
   }
   return {
@@ -306,5 +475,6 @@ function rollbackRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
     changed: true,
     launcher,
     files: Object.keys(files),
+    ...(nativeEntry ? { nativeLauncher: path.join(home, 'bin/caws-hook-native') } : {}),
   };
 }

@@ -1,0 +1,38 @@
+{
+  "capability": "caws.runtime.session-cache.v1",
+  "surface": "codex",
+  "event": "pre_tool_use",
+  "configuration": "system",
+  "machineEvent": "PreToolUse",
+  "token": "canonical-lowercase-uuid-v4",
+  "frames": {
+    "request": {
+      "schema": "caws.runtime.session-cache.request.v1",
+      "requiredKeys": ["schema", "id", "runtimeDigest", "token", "canonicalRoot"],
+      "maxBodyBytes": 32768
+    },
+    "previous": {
+      "schema": "caws.runtime.session-cache.previous.v1",
+      "requiredKeys": ["schema", "id", "runtimeDigest", "token", "existingBase64"],
+      "maxBodyBytes": 90112
+    },
+    "decision": {
+      "schema": "caws.runtime.session-cache.decision.v1",
+      "requiredKeys": ["schema", "id", "runtimeDigest", "token", "action", "createdUnits"],
+      "maxBodyBytes": 394240
+    },
+    "result": {
+      "schema": "caws.runtime.session-cache.result.v1",
+      "requiredKeys": ["schema", "id", "runtimeDigest", "token", "status", "envelopePublished", "diagnostic"],
+      "maxBodyBytes": 32768
+    }
+  },
+  "maxExistingBytes": 65536,
+  "maxCreatedUnits": 65536,
+  "maxDiagnosticUtf8Bytes": 4096,
+  "maxExtraEngineStdoutBytesIncludingLf": 427010,
+  "actions": ["capture", "decline"],
+  "statuses": ["captured", "skipped", "declined", "unavailable"],
+  "declineReasons": ["DecoderDeclined", "ExistingTooLarge", "UnsupportedExistingFile", "OriginalPayloadProfileUnsupported"],
+  "fallback": "Only a fully received correlated declined result with envelopePublished=false; lost/unknown/unavailable/partial results never replay."
+}

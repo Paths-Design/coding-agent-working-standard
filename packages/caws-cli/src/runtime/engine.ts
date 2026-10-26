@@ -1,9 +1,23 @@
 import { createHash } from 'node:crypto';
+import { realpathSync } from 'node:fs';
+import { resolveExecutionWorkdir } from './execution-workdir';
 import { isAbsolute, join } from 'node:path';
 import { TextDecoder } from 'node:util';
 import type { AgentSurface } from '../init/hook-packs/types';
 import { settleMessageOffer } from '../store/messages-store';
-import { invocationEnvironment, resolveRuntimeProject } from './context';
+import {
+  invocationEnvironment,
+  resolveRuntimeProject,
+  runtimeProjectCandidate,
+  runtimeProjectRequiresResolvedAuthority,
+  requireRuntimeProjectGovernancePaths,
+  type ContextGitPort,
+} from './context';
+import {
+  CONTEXT_GIT_CAPABILITY,
+  ContextGitError,
+  EXECUTION_WORKDIR_CONTEXT_GIT_CAPABILITY,
+} from './context-git-wire';
 import {
   composeHandlers,
   ComposerExecutionError,
@@ -18,12 +32,62 @@ import {
 } from './handler-executor';
 import { handlerEligibility } from './eligibility';
 import { resolveInvocationIdentity } from './identity';
+import { clearGuardConfigurationTransport, invocationGuardConfiguration } from './guard-config';
 import { InvocationJournal } from './journal';
 import { AdvisoryDedup } from './advisory-dedup';
 import { normalizeNativeResult } from './native-response';
-import { resolveInvocationSelection, type ActiveInvocationSelection } from './selection';
-import { encodeRuntimeResponse, type RuntimeRequest } from './protocol';
+import {
+  resolveInvocationSelection,
+  type ActiveInvocationSelection,
+  type InvocationSelection,
+  type SelectionOptions,
+} from './selection';
+import {
+  encodeRuntimeResponse,
+  SESSION_CACHE_CAPABILITY,
+  SESSION_END_PREFIX_CAPABILITY,
+  SESSION_PUBLICATION_CAPABILITY,
+  STOP_PREFIX_CAPABILITY,
+  TRANSCRIPT_STORE_CAPABILITY,
+  MAX_JSON_DEPTH,
+  type RuntimeRequest,
+} from './protocol';
+import {
+  qualifiesForNativeSessionCache,
+  qualifiesForNativeSessionEndPrefix,
+} from './session-cache-admission';
+import {
+  sessionCacheInputSupported,
+  type NativeSessionCachePort,
+  type NativeSessionEndPrefixPort,
+  type NativeStopPrefixPort,
+} from './session-cache-client';
+import { assertMatchedCliIdentityReceipt, type MatchedCliIdentityReceipt } from './cli-identity';
+import type { NativeStopLeaseContextPort } from './stop-lease-context';
+import type { NativeSessionSealPort } from './session-publication-client';
+import { executeNativeSessionSeal } from './session-seal-runtime';
+import type { NativeSessionSealExecution } from './stock-handlers';
 import type { NativeResult } from './types';
+import type { NativeStopAdmission } from './live-protocol';
+import {
+  executeNativeStopPublication,
+  type NativeStopPublicationOptions,
+} from './session-store-publication';
+import {
+  MAX_ROWS,
+  MAX_CELL_BYTES,
+  MAX_TOTAL_CELL_BYTES,
+  type NativeTranscriptStorePublicationPort,
+} from './transcript-store-client';
+import {
+  MAX_PUBLICATION_ARTIFACT_BYTES,
+  MAX_PUBLICATION_TOTAL_BYTES,
+  MAX_PUBLICATION_ARTIFACTS,
+  MAX_PUBLICATION_SNAPSHOT_BYTES,
+} from './session-publication-wire';
+import { MAX_LOCAL_CALENDAR_QUERIES } from '../transcripts/renderer-calendar';
+import { prepareNativeRenderOffer, type NativeRenderOffer } from './service-offer';
+import { type NativeRenderAdmission, disposeNativeRenderAdmission } from './service-image';
 import {
   CONTAINMENT_ENV,
   containmentWire,
@@ -92,15 +156,53 @@ export function capturedRefusal(error: unknown): NativeResult | null {
   };
 }
 
+/** Resource refusals are explicit failures, never truncation or compatibility retries.
+ * Bound each retained dimension by an existing transport/resource envelope. */
+export const NATIVE_STOP_PRODUCTION_LIMITS = Object.freeze({
+  storeLimits: Object.freeze({
+    json: Object.freeze({
+      maxInputBytes: MAX_CELL_BYTES,
+      maxDecodedCodepoints: MAX_CELL_BYTES,
+      maxNodes: MAX_CELL_BYTES,
+      maxDepth: MAX_JSON_DEPTH,
+      maxStringCodepoints: MAX_CELL_BYTES,
+      maxNumberChars: MAX_CELL_BYTES,
+    }),
+    maxRows: MAX_ROWS,
+    // One tool part can produce a call and result; text parts produce at most one.
+    maxEvents: MAX_ROWS * 2,
+    maxCodepoints: MAX_PUBLICATION_ARTIFACT_BYTES,
+  }),
+  rendererLimits: Object.freeze({
+    maximumInputBytes: MAX_PUBLICATION_SNAPSHOT_BYTES,
+    maximumArtifactBytes: MAX_PUBLICATION_ARTIFACT_BYTES,
+    maximumTotalArtifactBytes: MAX_PUBLICATION_TOTAL_BYTES,
+    maximumArtifacts: MAX_PUBLICATION_ARTIFACTS,
+  }),
+  maximumProjectionBytes: MAX_PUBLICATION_ARTIFACT_BYTES,
+  calendarLimits: Object.freeze({
+    maximumTimestampBytes: MAX_TOTAL_CELL_BYTES,
+    maximumQueries: MAX_LOCAL_CALENDAR_QUERIES,
+  }),
+});
+
+function priorBashEnvironment(
+  selection: ActiveInvocationSelection,
+  environment: Readonly<Record<string, string>>
+): string | undefined {
+  const startup = join(selection.runtimeDirectory, 'handler-env.sh');
+  return (
+    environment.CAWS_PRIOR_BASH_ENV ||
+    (environment.BASH_ENV !== startup ? environment.BASH_ENV : '')
+  );
+}
+
 function compatibilityRequired(
   request: RuntimeRequest,
   selection: ActiveInvocationSelection,
   environment: Readonly<Record<string, string>>
 ): boolean {
-  const startup = join(selection.runtimeDirectory, 'handler-env.sh');
-  const prior =
-    environment.CAWS_PRIOR_BASH_ENV ||
-    (environment.BASH_ENV !== startup ? environment.BASH_ENV : '');
+  const prior = priorBashEnvironment(selection, environment);
   // Canonical Bash is the first native parser/consumer slice. Other payload
   // adapters retain their full dispatcher until their normalization is ported.
   return (
@@ -183,15 +285,33 @@ export interface PreparedRuntimeInvocation {
   readonly budgetHome: string;
   readonly projectDigest: string | null;
   readonly sessionId: string | null;
-  dispatch(): Promise<PreparedDispatchResult>;
+  readonly serviceOffer?: NativeRenderOffer;
+  dispatch(
+    admission?: NativeRenderAdmission,
+    nativeStop?: NativeStopAdmission
+  ): Promise<PreparedDispatchResult>;
   acknowledgeHandoff(success: boolean, containment?: ContainmentReceipt | null): Promise<string>;
 }
 
 export async function prepareRuntimeInvocation(
   request: RuntimeRequest,
-  signal: AbortSignal
+  signal: AbortSignal,
+  nativeSessionCache?: NativeSessionCachePort,
+  contextGit?: ContextGitPort,
+  nativeSessionSeal?: NativeSessionSealPort,
+  nativeSessionEndPrefix?: NativeSessionEndPrefixPort,
+  selectionResolver?: (options: SelectionOptions) => Promise<InvocationSelection>,
+  nativeStopPrefix?: NativeStopPrefixPort,
+  nativeStopStore?: NativeTranscriptStorePublicationPort,
+  nativeStopLeaseContext?: NativeStopLeaseContextPort,
+  nativeStopCliIdentity?: MatchedCliIdentityReceipt
 ): Promise<PreparedRuntimeInvocation> {
+  if (nativeStopCliIdentity)
+    assertMatchedCliIdentityReceipt(nativeStopCliIdentity, request, signal);
+  if (request.contextGit !== undefined && !contextGit)
+    throw new Error('Native context Git capability requires its request-owned port');
   const environment = invocationEnvironment(request.caller);
+  clearGuardConfigurationTransport(environment);
   for (const name of [
     'CAWS_HOOK_INVOCATION_FILE',
     'CAWS_HOOK_INVOCATION_METADATA',
@@ -206,14 +326,19 @@ export async function prepareRuntimeInvocation(
   if (!home || !isAbsolute(home))
     throw new Error('Runtime requires an absolute caller machine home');
   environment.CAWS_HOME = home;
-  const context = await resolveRuntimeProject(
-    request.payload,
-    request.caller,
-    request.deadlineEpochMs
-  );
-  const selection =
+  const executionWorkdir = resolveExecutionWorkdir(request.payload, request.event);
+  if (executionWorkdir.status === 'resolved' && request.contextGit === CONTEXT_GIT_CAPABILITY)
+    throw new Error('Native context Git does not support host execution-workdir resolution');
+  if (
+    request.contextGit === EXECUTION_WORKDIR_CONTEXT_GIT_CAPABILITY &&
+    executionWorkdir.status !== 'resolved'
+  )
+    throw new Error('Execution-workdir context Git requires resolved host command context');
+  const select = async (
+    context: Awaited<ReturnType<typeof resolveRuntimeProject>>
+  ): Promise<InvocationSelection> =>
     context.status === 'resolved'
-      ? resolveInvocationSelection({
+      ? await (selectionResolver ?? resolveInvocationSelection)({
           checkout: context.checkout,
           canonical: context.canonical,
           home,
@@ -221,8 +346,77 @@ export async function prepareRuntimeInvocation(
           surface: request.surface,
           event: request.event,
           system: request.configuration === 'system',
+          caller: request.caller,
         })
       : { status: 'inactive' as const, reason: context.reason };
+  // Session authority is resolved first. The additive directory cannot turn an
+  // active session into an inactive invocation or borrow another project's policy.
+  let context = await resolveRuntimeProject(
+    request.payload,
+    request.caller,
+    request.deadlineEpochMs,
+    contextGit
+  );
+  let selection = await select(context);
+  if (executionWorkdir.status === 'resolved') {
+    if (context.status !== 'resolved') {
+      const candidate = runtimeProjectCandidate(request.payload, request.caller);
+      if (runtimeProjectRequiresResolvedAuthority(candidate, home))
+        throw new Error('Host execution context requires a resolvable session project');
+      if (realpathSync(candidate) !== executionWorkdir.path) {
+        if (request.contextGit === EXECUTION_WORKDIR_CONTEXT_GIT_CAPABILITY) {
+          // The first checkout failed without known/uncertain authority. Consume
+          // its fixed commonDir slot at that same cwd before the target pair.
+          try {
+            await contextGit!.run(
+              ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+              candidate
+            );
+          } catch (error) {
+            if (!(error instanceof ContextGitError) || error.category !== 'git_exit') throw error;
+          }
+        }
+        context = await resolveRuntimeProject(
+          request.payload,
+          request.caller,
+          request.deadlineEpochMs,
+          contextGit,
+          executionWorkdir.path
+        );
+        if (
+          context.status !== 'resolved' &&
+          runtimeProjectRequiresResolvedAuthority(executionWorkdir.path, home)
+        )
+          throw new Error('Host execution directory cannot deactivate session governance');
+        selection = await select(context);
+      }
+    } else {
+      const anchor = context;
+      const anchorWasActive = selection.status === 'active';
+      const anchorGoverned =
+        anchorWasActive ||
+        runtimeProjectRequiresResolvedAuthority(anchor.canonical, home, 'resolved-canonical');
+      context = await resolveRuntimeProject(
+        request.payload,
+        request.caller,
+        request.deadlineEpochMs,
+        contextGit,
+        executionWorkdir.path
+      );
+      if (
+        context.status !== 'resolved' &&
+        (anchorGoverned || runtimeProjectRequiresResolvedAuthority(executionWorkdir.path, home))
+      )
+        throw new Error('Host execution directory cannot deactivate session governance');
+      if (anchorGoverned && context.status === 'resolved' && context.canonical !== anchor.canonical)
+        throw new Error('Host execution directory belongs to a foreign canonical project');
+      selection = await select(context);
+      if (anchorWasActive && selection.status !== 'active')
+        throw new Error('Host execution directory cannot deactivate session governance');
+    }
+  }
+  if (executionWorkdir.status === 'resolved' && context.status === 'resolved')
+    requireRuntimeProjectGovernancePaths(context.canonical);
   if (signal.aborted) throw signal.reason;
   if (selection.status === 'inactive') {
     let used = false;
@@ -231,7 +425,12 @@ export async function prepareRuntimeInvocation(
       budgetHome: home,
       projectDigest: null,
       sessionId: null,
-      async dispatch() {
+      async dispatch(admission, nativeStop) {
+        if (nativeStop) throw new Error('Inactive invocation cannot accept native Stop routing');
+        if (admission) {
+          disposeNativeRenderAdmission(admission);
+          throw new Error('Inactive invocation cannot accept service admission');
+        }
         if (used) throw new Error('Invocation dispatch is single-use');
         used = true;
         return {
@@ -264,7 +463,13 @@ export async function prepareRuntimeInvocation(
     );
   const journal = new InvocationJournal(request, selection, identity.sessionId);
   const dedup = new AdvisoryDedup(home, selection.canonical, identity.sessionId, environment);
-  const options = { request, selection, environment: Object.freeze(environment), signal };
+  const serviceOffer = prepareNativeRenderOffer(
+    request,
+    selection,
+    environment,
+    identity.sessionId,
+    home
+  );
   let dispatched = false,
     acknowledged = false,
     result: NativeResult | null = null;
@@ -275,6 +480,7 @@ export async function prepareRuntimeInvocation(
     active: true,
     budgetHome: home,
     projectDigest: digest(selection.canonical),
+    ...(serviceOffer ? { serviceOffer } : {}),
     sessionId:
       identity.sessionId &&
       identity.sessionId !== 'unknown' &&
@@ -282,15 +488,217 @@ export async function prepareRuntimeInvocation(
       !identity.sessionId.includes('\0')
         ? identity.sessionId
         : null,
-    async dispatch() {
+    async dispatch(admission, nativeStop) {
+      if (nativeStop && (serviceOffer || admission))
+        throw new Error('Native Stop routing cannot coexist with service admission');
+      if (Boolean(serviceOffer) !== Boolean(admission)) {
+        if (admission) disposeNativeRenderAdmission(admission);
+        throw new Error('Native render admission must match the prepared service offer');
+      }
+      // A routing selector cannot replace the actual CLI content owner.
+      // OpenCode Stop already selects compatibilityRequired=true; discard only
+      // this optional native route before any prefix request or other effect.
+      if (nativeStop && !nativeStopCliIdentity) nativeStop = undefined;
       if (dispatched || acknowledged)
         throw new Error('Invocation dispatch is single-use and cannot resume after settlement');
       if (signal.aborted) throw signal.reason;
       dispatched = true;
       journal.append('dispatch_started');
+      let cacheDiagnostic = '';
       try {
-        if (compatibilityRequired(request, selection, environment)) {
-          const completed = await executeCompatibilityDispatch(options);
+        const options = {
+          request,
+          selection,
+          environment: invocationGuardConfiguration(selection, environment),
+          signal,
+        };
+        let compatibility = compatibilityRequired(request, selection, environment);
+        let sessionSeal: NativeSessionSealExecution | undefined;
+        let stopLeaseContext: NativeStopLeaseContextPort | undefined;
+        let stopPublication:
+          | { readonly loggerIndex: 2; execute(): Promise<import('./composer').HandlerResult> }
+          | undefined;
+        if (nativeStop) {
+          const sid = request.payload.session_id;
+          const logger = selection.handlers[nativeStop.loggerIndex];
+          // A disagreement with native routing fails before the mandatory prefix.
+          if (
+            !nativeStopPrefix ||
+            !nativeStopStore ||
+            !nativeStopLeaseContext ||
+            serviceOffer ||
+            request.configuration !== 'system' ||
+            selection.configuration !== 'system' ||
+            request.surface !== 'opencode' ||
+            selection.surface !== 'opencode' ||
+            request.event !== 'stop' ||
+            selection.event !== 'stop' ||
+            selection.runtimeDigest !== request.runtimeDigest ||
+            selection.hooksDirectory !== selection.runtimeDirectory ||
+            request.stopPrefix !== STOP_PREFIX_CAPABILITY ||
+            request.sessionStore !== TRANSCRIPT_STORE_CAPABILITY ||
+            request.sessionPublication !== SESSION_PUBLICATION_CAPABILITY ||
+            Boolean(priorBashEnvironment(selection, environment)) ||
+            typeof sid !== 'string' ||
+            sid !== identity.sessionId ||
+            !sid ||
+            sid === 'unknown' ||
+            sid === '.' ||
+            sid === '..' ||
+            Buffer.byteLength(sid) > 128 ||
+            !/^[A-Za-z0-9_.@:-]+$/.test(sid) ||
+            typeof request.payload.cwd !== 'string' ||
+            !isAbsolute(request.payload.cwd) ||
+            nativeStop.loggerIndex !== 2 ||
+            !logger ||
+            logger.kind !== 'stock' ||
+            logger.name !== 'session-log.sh' ||
+            logger.entry !== 'session-log.sh' ||
+            logger.args.length ||
+            logger.path !== join(selection.runtimeDirectory, 'session-log.sh') ||
+            Object.keys(selection.overrides).length ||
+            Object.keys(selection.libraryOverrides).length ||
+            selection.handlers.some((handler) => handler.kind !== 'stock') ||
+            Object.values(selection.libraries).some(
+              (library) => !['shared', 'surface'].includes(library.kind)
+            )
+          )
+            throw new Error('Native Stop grant disagrees with active invocation selection');
+          assertMatchedCliIdentityReceipt(nativeStopCliIdentity, request, signal);
+          const cli = nativeStopCliIdentity;
+          if (!cli) throw new Error('Native Stop requires its actual CLI identity owner');
+          await cli.revalidate();
+          if (signal.aborted) throw signal.reason;
+          const prefix = await nativeStopPrefix.capture(selection.canonical);
+          journal.append('stop_prefix_completed', {
+            status: prefix.status,
+            prefix_complete: prefix.prefixComplete,
+            envelope_published: prefix.envelopePublished,
+            pointer_published: prefix.pointerPublished,
+            agent_pid: prefix.agentPid,
+            reap: prefix.reap,
+          });
+          if (signal.aborted) throw signal.reason;
+          if (!prefix.prefixComplete || !['completed', 'unavailable'].includes(prefix.status))
+            throw new Error('Native Stop prefix incomplete; compatibility replay refused');
+          compatibility = false;
+          stopLeaseContext = nativeStopLeaseContext;
+          if (prefix.status === 'unavailable')
+            cacheDiagnostic = '[caws runtime] ' + prefix.diagnostic + '\n';
+          const publicationOptions: NativeStopPublicationOptions = {
+            ...NATIVE_STOP_PRODUCTION_LIMITS,
+            port: nativeStopStore,
+            canonicalRoot: selection.canonical,
+            sessionId: sid,
+            signal,
+            deadlineEpochMs: request.deadlineEpochMs,
+            sqlProfile: nativeStop.sqlProfile,
+            rendererProfile: {
+              id: nativeStop.rendererProfile,
+              integerMaxDigits: nativeStop.rendererIntegerMaxDigits,
+            },
+            observe: (fields) => journal.append('stop_publication_consumer_completed', fields),
+          };
+          stopPublication = Object.freeze({
+            loggerIndex: 2 as const,
+            execute: () => executeNativeStopPublication(publicationOptions),
+          });
+        } else if (
+          nativeSessionSeal &&
+          nativeSessionEndPrefix &&
+          request.sessionPublication === SESSION_PUBLICATION_CAPABILITY &&
+          request.sessionEndPrefix === SESSION_END_PREFIX_CAPABILITY &&
+          sessionCacheInputSupported(request.inputJson) &&
+          qualifiesForNativeSessionEndPrefix({
+            request,
+            selection,
+            environment,
+            sessionId: identity.sessionId,
+          })
+        ) {
+          // This mandatory parser prefix precedes discretionary handler admission,
+          // including a reprieved logger. Only its explicit no-effect decline can
+          // return to full compatibility; no uncertain operation is replayed.
+          const prefix = await nativeSessionEndPrefix.capture(selection.canonical);
+          // Preserve a received effects observation even if cancellation won
+          // after capture. This journal is diagnostic, not publication authority.
+          journal.append('session_end_prefix_completed', {
+            status: prefix.status,
+            prefix_complete: prefix.prefixComplete,
+            envelope_published: prefix.envelopePublished,
+            pointer_published: prefix.pointerPublished,
+            agent_pid: prefix.agentPid,
+            reap: prefix.reap,
+          });
+          if (signal.aborted) throw signal.reason;
+          if (prefix.status === 'declined') {
+            if (
+              prefix.prefixComplete ||
+              prefix.envelopePublished ||
+              prefix.pointerPublished ||
+              prefix.agentPid !== 'not_run' ||
+              prefix.reap !== 'not_run'
+            )
+              throw new Error(
+                'Native SessionEnd decline has effects; compatibility replay refused'
+              );
+            compatibility = true;
+          } else {
+            if (!prefix.prefixComplete || !['completed', 'unavailable'].includes(prefix.status))
+              throw new Error('Native SessionEnd prefix incomplete; compatibility replay refused');
+            compatibility = false;
+            if (prefix.status === 'unavailable')
+              cacheDiagnostic = '[caws runtime] ' + prefix.diagnostic + '\n';
+            const sessionId = identity.sessionId!;
+            sessionSeal = Object.freeze({
+              sessionId,
+              execute: () =>
+                executeNativeSessionSeal({
+                  port: nativeSessionSeal,
+                  canonicalRoot: selection.canonical,
+                  sessionId,
+                  signal,
+                  observe: (fields) => journal.append('session_seal_consumer_completed', fields),
+                }),
+            });
+          }
+        } else if (!compatibility) {
+          const sid = request.payload.session_id;
+          // Unsafe/non-string identity retains the complete parser's diagnostic
+          // behavior. Resolved fallback identity must never select cache writes.
+          const supportedSid =
+            sid === undefined ||
+            (typeof sid === 'string' &&
+              (sid === '' ||
+                sid === 'unknown' ||
+                (sid !== '.' && sid !== '..' && /^[A-Za-z0-9_.@:-]+$/.test(sid))));
+          if (
+            !nativeSessionCache ||
+            request.sessionCache !== SESSION_CACHE_CAPABILITY ||
+            !supportedSid ||
+            !sessionCacheInputSupported(request.inputJson) ||
+            !qualifiesForNativeSessionCache({ request, selection, environment })
+          ) {
+            compatibility = true;
+          } else {
+            // Ready and the native dispatch grant precede this awaited prefix.
+            // It also runs for empty or entirely reprieved handler selections.
+            const cache = await nativeSessionCache.capture(selection.canonical);
+            if (signal.aborted) throw signal.reason;
+            journal.append('session_cache_completed', {
+              status: cache.status,
+              envelope_published: cache.envelopePublished,
+            });
+            if (cache.status === 'declined') compatibility = true;
+            else if (cache.status === 'unavailable')
+              cacheDiagnostic = '[caws runtime] ' + cache.diagnostic + '\n';
+          }
+        }
+        if (compatibility) {
+          const completed = await executeCompatibilityDispatch({
+            ...options,
+            ...(admission ? { nativeRenderAdmission: admission } : {}),
+          });
           result = completed;
           try {
             offers = compatibilityOffers(completed.offerReceipts);
@@ -320,7 +728,17 @@ export async function prepareRuntimeInvocation(
                 : 32768,
             },
             {
-              execute: createHandlerExecutor(options),
+              execute: createHandlerExecutor({
+                ...options,
+                ...(sessionSeal ? { nativeSessionSeal: sessionSeal } : {}),
+                ...(stopPublication ? { nativeStopPublication: stopPublication } : {}),
+                ...(stopLeaseContext && nativeStopCliIdentity
+                  ? {
+                      nativeStopLeaseContext: stopLeaseContext,
+                      nativeStopCliIdentity,
+                    }
+                  : {}),
+              }),
               record: (observation) => journal.record(observation),
               eligibility: (handler) =>
                 handlerEligibility(handler, {
@@ -365,7 +783,7 @@ export async function prepareRuntimeInvocation(
           ...result,
           stderr: Buffer.concat([
             result.stderr,
-            Buffer.from(identity.diagnostic + journal.takeDiagnostics()),
+            Buffer.from(cacheDiagnostic + identity.diagnostic + journal.takeDiagnostics()),
           ]),
         })
       );

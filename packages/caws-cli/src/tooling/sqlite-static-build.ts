@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { inspectBsdAr } from './ar-archive';
 
 /** This tooling receipt grants no package, prefix, release or runtime adoption. */
 export interface ReviewedFile {
@@ -174,49 +175,27 @@ async function artifact(file: string): Promise<ReviewedFile> {
   const bytes = await bytesAt(file, 32 * 1024 * 1024);
   return { path: file, sizeBytes: bytes.length, sha256: sha(bytes) };
 }
-/** Parse the BSD ar container, including its padded extended member names. */
+/** Apply this recipe's object/index contract to byte-exact BSD framing. */
 function verifyArchive(bytes: Buffer, object: Buffer): void {
-  if (bytes.subarray(0, 8).toString('ascii') !== '!<arch>\n')
-    throw new Error('Not a static ar archive');
-  let cursor = 8;
+  const inventory = inspectBsdAr(bytes, {
+    maxArchiveBytes: 32 * 1024 * 1024,
+    maxMembers: 2,
+    maxMemberBytes: 32 * 1024 * 1024,
+    maxNameBytes: 256,
+  });
   let objects = 0;
   let indexes = 0;
-  while (cursor < bytes.length) {
-    const header = bytes.subarray(cursor, cursor + 60);
-    if (header.length !== 60 || header.subarray(58).toString('ascii') !== '`\n')
-      throw new Error('Invalid ar member header');
-    const sizeText = header.subarray(48, 58).toString('ascii').trim();
-    if (!/^\d+$/.test(sizeText)) throw new Error('Invalid ar member size');
-    const size = Number(sizeText);
-    cursor += 60;
-    if (!Number.isSafeInteger(size) || size <= 0 || cursor + size > bytes.length)
-      throw new Error('Invalid ar member bounds');
-    let content = bytes.subarray(cursor, cursor + size);
-    let name = header.subarray(0, 16).toString('ascii').trim();
-    if (name.startsWith('#1/')) {
-      const lengthText = name.slice(3);
-      if (!/^\d+$/.test(lengthText)) throw new Error('Invalid ar extended name');
-      const length = Number(lengthText);
-      if (length <= 0 || length > content.length)
-        throw new Error('Invalid ar extended name bounds');
-      name = content.subarray(0, length).toString('ascii').replace(/\0+$/, '');
-      content = content.subarray(length);
-    } else {
-      name = name.replace(/\/$/, '');
-    }
+  for (const member of inventory.members) {
+    const { name } = member;
     if (name === 'sqlite3.o') {
       objects++;
+      const content = Buffer.from(inventory.copyBytes(member.index, 'payload'));
       if (!content.equals(object)) throw new Error('Archive object differs from compiled object');
     } else if (name === '__.SYMDEF SORTED' || name === '__.SYMDEF') {
       indexes++;
     } else throw new Error(`Unexpected archive member: ${name}`);
-    cursor += size;
-    if (size % 2) {
-      if (bytes[cursor] !== 10) throw new Error('Invalid ar padding');
-      cursor++;
-    }
   }
-  if (cursor !== bytes.length || objects !== 1 || indexes !== 1)
+  if (objects !== 1 || indexes !== 1)
     throw new Error('Expected one SQLite object and one archive symbol index');
 }
 

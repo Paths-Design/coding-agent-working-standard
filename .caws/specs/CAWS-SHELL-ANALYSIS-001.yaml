@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: shell-analysis
 created_at: '2026-10-19T02:30:42.300Z'
-updated_at: '2026-10-21T21:21:38.108Z'
+updated_at: '2026-10-26T00:56:12.313Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -29,27 +29,36 @@ scope:
     - packages/caws-cli/stryker.analysis.conf.js
     - packages/caws-cli/tests/ci/mutation-contract.test.js
     - .github/workflows/mutation.yml
-    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-analysis.sh
     - packages/caws-cli/tests/shell/mutation-view.test.js
     - packages/caws-cli/tests/hooks/bash-write-guard-analysis.test.js
-    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
     - packages/caws-cli/tests/hooks/bats/helpers.bash
     - packages/caws-cli/tests/hooks/bash-write-guard-interpreter-cross-repo.test.js
     - packages/caws-cli/tests/hooks/scope-priority-over-allowlist.test.js
     - packages/caws-cli/tests/hooks/guard-allowlist-sync.test.js
     - packages/caws-cli/docs/command-reference.md
-    - packages/caws-cli/tests/init/pack-fingerprints.json
     - packages/caws-cli/tests/hooks/bats/bash-write-guard.bats
     - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
     - packages/caws-cli/templates/hook-packs/shared/quiet-merge.sh
     - packages/caws-cli/tests/hooks/bats/quiet-merge.bats
     - packages/caws-cli/tests/shell/interpreter-effects.test.js
+    - packages/caws-cli/templates/hook-packs/shared/worktree-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/stop-worktree-check.sh
+    - packages/caws-cli/tests/hooks/guard-path-identity.test.js
   out: []
   support:
     - docs/guides/command-analysis.md
     - docs/guides/hook-packs.md
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/caws-state.sh
+    - packages/caws-cli/tests/hooks/bats/guard-realpath-python-absent.bats
+    - README.md
+    - docs/architecture/hook-pack-shared-core.md
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
 invariants:
   - 'Analysis never executes submitted commands, expansions, scripts or redirections.'
   - 'Every possible shell-visible Git target and admitted execution-bearing argument satisfies the declared policy; unresolved syntax or values never become an allow proof.'
@@ -114,6 +123,19 @@ acceptance:
       admission, or lifecycle rewrite; caller fields and CLI shell flags cannot
       override it, while literal diagnostic analysis remains usable with declared
       context
+  - id: A9
+    given: >-
+      A governed canonical root may contain LF, quotes or glob characters, with
+      normal aliases and linked worktrees plus active registry entries
+    when: >-
+      The worktree guard decides branch-switch or cleanup safety and the opt-in Stop
+      reminder reads activity through the canonical root
+    then: >-
+      Exact canonical path identity reaches registry reads without source
+      interpolation; the hard guard preserves protective refusals and refuses
+      unavailable authority while the reminder remains exit-zero and reports the
+      same active worktrees, with unsupported resolution diagnosed rather than
+      treated as an empty registry
 observability:
   - 'Structured verdict, reason codes and source-positioned decision trace distinguish allowed, denied and unresolved facts without claiming a general process sandbox.'
 rollback:
@@ -147,9 +169,9 @@ evidence:
     commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
   - criterion_id: A5
     status: unchecked
-    evidence_ref: "Current owned source candidate7c362c826e4ee9913d9d5b8b25c8933c19f59f28,caws/shell-analysis; committed clean,test-only changes from56ec1372. No merge/install/publish/nativecutover. Scoped A6 private-package functionality remains historical56ec PASS(event10273),production bytes unchanged; isolated tarballSHA91b4e390fbafc4291777018f0463f434447fa6a459e7f08ab14ac6ddc8564a62. New57 role/data cases plus sort-anchor negative control: declared3suite1672passed0failed/pending,exit0; all7 pristine-copy controls require exact altered allow. Failed initial test arity attempt retained, corrected beforecommit. Read-only peer found invalid transport-slot oracle; source/Git-help grounded and fixture corrected to repository operand after--. Lint/diffcheck0,strictTS previoussameproduction0,doctor0E3W4I,gates5PASS. Oldpolicies run completed:1432mutants,1112Killed320Survived0timeouts,77.65below80; actualStrykerexit0isnotqualitypass. Rawstartup-env-mutation/policies/mutation-report.json SHA4c876050be61045f143079794cadd3de1ba576e5b253aa2e087dfe379be55221 retained untouched. Its private config selected onlycommand-analysis,omitting2declaredconsumer suites; it is a failed narrowed diagnostic,not wholedeclaredtopology measurement. Metadata-range diagnostic preserves3suite topology and kills7of8formerly-survivingmutants;87.5range score is notfull-filefloor. Root accepted consequential quality repair back from authorizedparent01a15a2a-5057-75d0-a7e5-69d676673add. Newfullpolicies.ts run launched withpolicy-derived3suite topology andexistingpristine-copy exclusion,concurrency2(parentauthorized sharedceiling3 includingtimestamp1),1432mutants. Artifacts /Users/darianrosebrook/.codex/artifacts/01a151c0-4722-76a0-9814-eb680a4be9b2/guard-coordination-20261021/policies-declared-topology/,PID70572,toolsession56457. Root retainsrun/report/repair ownership pending completedactualexit,per-file>=80,embeddedsource==Git,meaningfulsurvivorinspection,and before/after inputidentitycomparison. Beforepins read-only transcript:1175trackedfiles976distfiles492resolvedinstalledpackages14788files,completeDigest40fab4fe4661594c98d7dc1df93b16d7812593054fd4701fe47a96107e9a63e4; selectedenvironment/tool identities included; no OS-library/arbitrary-dynamic-import/launchcustody claim. Evidence-helper file creation was blocked bydeployedcarrier; refusedwrite not retried;read-only stdoutpinning used instead. Projection83.35andprofile92.59historicalfull-fileproofsretained; no freshwhole6-filegate or qualitycompletion. A7 remainsunchecked: qualifying trustedhost final-launchidentity/completeeffectivecontext/allrouting/rewritecustody/full-chainnativecanary/whole-machinerollback unproved. Syntheticpackagecontext isnotnativeproducerproof; reducedCodexprojectionheld,deployed408c06a7unchanged. Typed CAWS execution boundary isdesignonly; noexecutor implementation claimed. Parent retains combinedintegration/nativequalification; no source-write/worktree/takeover/deletionauthority transferred. Accepted finite documentation handoff remainsparent-owned aftercoherentsourcelanding: docs/architecture/hook-pack-shared-core.md decodedexecution-cwd/knownreducedCodexcontract; docs/guides/hook-packs.md mandatorywriteguard versusoptionalpin/adoptionhold; README.md command-specificanalysisexitsemantics(doctorwarningdistinctionalreadycorrectcanonical); docs/guides/command-analysis.md exactstartupwording andeffect/profile/mandatoryconsumer/package/full6fileverificationrecipe. No newdocument/duplicateprogressledger. No doc editsoradoption establishedbyhandoff. This record isunchecked; --verify checkscommitidentity only. Accepted handoff update: authorized parent01a15a2a-5057-75d0-a7e5-69d676673add explicitly accepted eventual terminal-report inspection for this NEW PID70572 run at7c362c82, distinct from fulfilled oldsubsetinspection. Parent owns terminalprocess/report+actualexit,wholepolicies80floor underdeclared3suites,embeddedsource identity andmeaningfulsurvivorinspection; root retains consequential source/test repair,sourceworktree/ACauthority andbefore/afterinputcomparison. Parent will request root attention onterminalstatus; no stable-inputclaim before root repeats pins. Timestamp slot returned; parent permits only1rootnative/TScheck alongside2guardworkers,max3testworkers; noperformancequalification underload. No processkill/restart dueobservationtimeout,merge/install/adoption. Failedaritybaseline,repairedbaseline,exact0e2baseline,finaltransportbaseline,linter/doctor/gates copiedinto newprivateartifactdir; oldsubset/rangediagnosticretaineduntouched. Documentationprecision: mutation-view0meansnormalprojectionreturn evenwhenissuesincludeanalysis-failure;2meansdecode/outercommandexception,notallparserfailures. analyze maps unresolvedto2. Consumer mustinspectissues/effects/schema; zeroaloneisnotpermission. CanonicalREADMEdoctorwarningdistinctionalreadycorrect."
-    recorded_at: "2026-10-21T20:36:09.365Z"
-    commit_sha: "7c362c826e4ee9913d9d5b8b25c8933c19f59f28"
+    evidence_ref: "Resumed source checkpoint df2a922c after merged R19 b5b9cc6. Clean owned shell-analysis lane; four files committed, no main landing. LF foreign-repository ancestry uses byte-preserving parent operations and both mandatory guard root captures retain trailing LF. Five selected synthetic checks passed actual tool0 in4.981s at b5b plus owned pre-format delta: LF walker exact bytes, alias-to-LF sibling refusal after ordinary control, executable pathname READ allow versus actual foreignWRITE refusal, and opaque file-entry read held as unresolved without fabricated foreign target. Fixture executable bytes unchanged and payload output absent. Scoped formatter/lint-staged/Bash syntax/diff checks0; test formatting was applied at commit, no full rebuild or fresh whole-suite claim. Retained guard-resume-20261025/checkpoint.json, raw focused JSON/log, source-checkpoint.patch and committed.patch under /Users/darianrosebrook/.codex/artifacts/01a151c0-4722-76a0-9814-eb680a4be9b2/. Focused JSON SHA48611301f87aecf8506eeb3f088cf007773aeec44a3fca4ef1acfb00bc5ee7d5. Initial41-line test preimage reconstructed and verified Gitblobb75030c226af3a99253fd3603862ca1ed8959c92, SHA335f599f175654abfeff9fffe9f9837d11c129c6b8f888589bcfce93b793c238; saved separately. Installed408 helper independently hash3b40bcc29a9793c85c7db4f01c0e4650429be46db504df774e3ff95d6ab8f6ac; source promotes all slash fragments after any write verb, including reads. Mandatory v2 source bridge replaces that path, not a blanket exemption. Full file-entry and Python preparation programs remain unexecuted/held; executable source/final-launch custody is not established. Read-only current-main9ff consumer trace: native engine executes selected Bash guard, current port/native Stop hash pins and generation-selected CAWS_BIN need coordinated review. Next obligations: admitted worktree-guard and Stop reminder caller repair, remaining reached captures, reconcile current main/paired producer contract and package metadata, four-doc refresh in same source landing, fresh build/private package/consumer checks, canonical six-file per-file80 qualification, committed completion peer and final AC/gates. Previous policies84.22 remains historical, not fullsix. Root01a17052 accepts coordination and native parent outcome; native adoption stays unqualified. No runtime, registration, trust, reprieve, restart or shared dependency/build writes by this lane. Paired activation checkpoint requested; no running owned test/mutation jobs. --verify here checks commit reachability only."
+    recorded_at: "2026-10-25T23:14:06.255Z"
+    commit_sha: df2a922c
   - criterion_id: A6
     status: pass
     evidence_ref: "Scoped installed-private-package PASS at clean56ec137241f15ea8bc649b0dbc95e8a299b6a753, lineage089cab6f effect contract /cc96f991 option custody /cd1035b7 startup effects /56ec1372 assertion correction. Exact rebuilt8suite command exit0:1889passed,0failed/pending. Actual npm-packed isolated installation fixture exit0, tarballSHA91b4e390fbafc4291777018f0463f434447fa6a459e7f08ab14ac6ddc8564a62; Acorn8.15/unbash6/loader/docs shipped. Benign quoted arrow0,then-read0,quotedsearch0; same-project foreign Nodewrite2,other-repo Nodewrite2,nested shellwrite2; foreignread+ownedwrite0. Rebound initially-exported-empty coverage2,inactive emptycoverage0; trailingstartup/replacementsource/ambiguousprint2; option-boundary data0; malformed/unavailablebackend2. Lifecyclefixedstand-inexit23preserved. No submittedpayloadexecuted/sentinelsabsent. Rawcurrent+failedattempts and21source/976compiled hashes retained at /Users/darianrosebrook/.codex/artifacts/01a151c0-4722-76a0-9814-eb680a4be9b2/guard-coordination-20261021/candidate-56ec1372/inventory.json. Exact projection full-file mutation83.35%,891killed/178survived/0timeouts,report source==HEAD; unchanged classifier607mutants92.59% source==HEAD. Policies full-file mutation stillrunning: no quality completion or freshwhole6-filegate claimed. Doctor0E/3W/4I,gates5pass; independent read-only committed-candidate feedback grounded in predicate/consumer/tests, no peer-verdict authority. --verify selectedtest execution andcommit identity do not establish wholeAC or nativeproof. syntheticExecutionContext=true/nativeProducerVerified=false; deployed408c06a7 unchanged. A5/A7 remainunchecked: final-launch identity/context/routing/custody,full-chain nativecanary andwhole-machine rollback unproved; boundary is design only, no merge/install/cutover. Root retains pending policies quality check in owned shell-analysis; parent01a15a2a owns combined native integration."

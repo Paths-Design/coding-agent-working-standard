@@ -1,0 +1,68 @@
+id: CAWS-NATIVE-STOP-CATALOG-LANDING-001
+title: 'Land the native Stop source catalog and typed consumer'
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed exact reviewed E343 source catalog and typed consumer with retained runtime capture/replay evidence and postmerge identity checks. Full parent runtime, production activation, publication/release, Python retirement, fairness and local cutover remain owned and unfinished.'
+created_at: '2026-10-24T10:39:32.747Z'
+updated_at: '2026-10-24T10:46:46.376Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native publication source capture and typed observation consumer'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+    - 'packages/caws-cli/src/runtime/render-observation-client.ts'
+    - 'packages/caws-cli/src/runtime/render-observation-wire.ts'
+    - 'packages/caws-cli/src/runtime/session-publication-client.ts'
+    - 'packages/caws-cli/src/runtime/session-store-publication.ts'
+    - 'packages/caws-cli/tests/runtime/ordinary-stop-publication.test.js'
+    - 'packages/caws-cli/tests/runtime/render-observation-client.test.js'
+    - 'packages/caws-native/src/render_observation.rs'
+    - 'packages/caws-native/src/render_owner/store.rs'
+    - 'packages/caws-native/src/session_publication.rs'
+    - 'packages/caws-native/tests/render_observation.rs'
+  out: []
+invariants:
+  - 'Captured bytes, absence and inventories remain bound to the native observation lease; caller source assertions confer no authority.'
+  - 'This source landing does not activate production Stop or discharge parent runtime cutover acceptance.'
+acceptance:
+  - id: A1
+    given: 'the reviewed E343 candidate and retained executed capture and consumer controls'
+    when: 'the landing candidate is composed'
+    then: 'all ten source/test files and relevant dependency inputs match the tested source, with byte substitution and observation changes rejected in the retained controls.'
+  - id: A2
+    given: 'the bounded landing and complete parent obligations'
+    when: 'source and tracker are reviewed and policy checks run'
+    then: 'source catalog behavior is accurately scoped, compilation and gates are accounted for, and production activation, Python retirement and selected cutover remain unclaimed.'
+  - id: A3
+    given: 'the clean reviewed lane'
+    when: 'governed merge completes'
+    then: 'local main contains the exact ten source/test blobs and the parent acceptance and selected machine generation remain unchanged.'
+observability:
+  - 'Retained raw Rust capture, typed replay and source-identity artifacts outside worktrees.'
+rollback:
+  - 'Revert the bounded landing through a new governed commit; do not rewrite history or change the selected machine generation.'
+non_functional: {}
+contracts:
+  - name: 'stop-source-catalog'
+    type: contract-test
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Candidate6c3a71bf ten source/test blobs exactly equal reviewed d66b99e5. Root verifies all436 TS and108 native check inputs against landing tree; source stable and residue empty in retained executed controls. stop-source-catalog-native-02 actual six capture/refusal controls exit0; wire-01 ten controls exit0; ts-01 187 controls exit0. cross-runtime-02 consumes five actual retained Rust captures in compiled TS: matching digests, tool-one maps agent-one.jsonl and agent_type review, both byte-bearing captures reject substitution; three absence-only captures do not claim byte substitution. Captured input hashes rechecked. Retained checks reused, not fresh execution. Artifacts in publication-integration/stop-source-catalog-{native-02,wire-01,ts-01,cross-runtime-02} and landing-01/input-correspondence.json. No SQL or installed production claim."
+    recorded_at: "2026-10-24T10:44:39.509Z"
+    commit_sha: "6c3a71bf26d647949a72eeeadba4242765a646b7"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Candidate6c3a71bf scoped eleven-path gates exit0 fivePASS and doctor0 0E4W5I retained in stop-source-catalog-landing-01. Matching source historical build0, package-scoped lint0, SQLite-feature check0; compilation is not SQL publication. Commit-hook TS lint ignored and is not lint evidence. Same-provider independent read-only composition review returns no actionable defect, grounded by root exact source/input correspondence, actual replay contents and production inertness: old main StoreAcquire::capture gives publication:false and no engine caller of executeNativeStopPublication. E343 tracker and this slice explicitly retain registration/profile/dispatch, full parent acceptance, all Python retirement and machine cutover. No selected state writes."
+    recorded_at: "2026-10-24T10:44:40.532Z"
+    commit_sha: "6c3a71bf26d647949a72eeeadba4242765a646b7"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Governed merge exit0 bbe4b3895c53348da4d2703a486b8cabe79cb7d8; root postmerge inspection verifies all ten main source/test blobs equal reviewed candidate, merge/candidate ancestry exit0, temporary lane removed. Parent CAWS-NATIVE-RUNTIME-001 and selected adapter-runtime.json exact hashes unchanged from before landing. Main dirty state only pre-existing foreign untracked .caws/messages.jsonl.archive preserved. First inspector exact-HEAD assertion fails because governed destroy adds a binding-only commit; source/ancestry inspection resolves it. Actual results retained publication-integration/stop-source-catalog-landing-01/{merge.json,postmerge.json}; no remote push or machine adoption claimed."
+    recorded_at: "2026-10-24T10:46:45.121Z"
+    commit_sha: bbe4b3895c53348da4d2703a486b8cabe79cb7d8

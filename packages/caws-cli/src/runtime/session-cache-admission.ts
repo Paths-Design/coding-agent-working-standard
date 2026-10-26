@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { assertMachinePath } from '../init/machine-paths';
+import { resolveExecutionWorkdir } from './execution-workdir';
 import type { RuntimeRequest } from './protocol';
 import type { ActiveInvocationSelection } from './selection';
 
@@ -12,7 +13,7 @@ const PREFIX: Readonly<Record<string, string>> = {
   'runtime-paths.sh': 'c2cc098b08c110723c2d1805170ba2d73a855f0864e5792bb7a88a2c3def7f08',
   'lib/agent-surface.sh': '9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32',
   'surfaces/codex/lib/parse-input.sh':
-    '04a21ee0cd24d917bbee4c63f9285a2a867f2f9a08a9cdf2f9a78d3400a73c61',
+    'c33d320efef119f826de58b145344288264b985f10d911b435645f6d851444fc',
   'lib/session-cache.sh': 'eea9bb74ec74d07931eb13ac45e6822a348ce7fb49e4a7baa9d590e321e093cb',
   'lib/session-id.sh': 'cf662f10e6d3477cecbf5deabd8d2b63284f6f4ac14fa7070725ff8502515c53',
   'surfaces/codex/lib/emit.sh': '7719c904cce6073598717e6a90d82e1c88e99482f79afbfd12b35d23f6d7e86e',
@@ -60,7 +61,7 @@ function absent(root: string, file: string): boolean {
   }
 }
 
-function pinned(root: string, relative: string): boolean {
+function pinned(root: string, relative: string, expected = identities(relative)): boolean {
   const file = path.join(root, relative);
   assertMachinePath(root, file);
   if (!fs.lstatSync(file).isFile()) return false;
@@ -81,12 +82,170 @@ function pinned(root: string, relative: string): boolean {
     }
     return (
       length < bytes.length &&
-      identities(relative).includes(
-        createHash('sha256').update(bytes.subarray(0, length)).digest('hex')
-      )
+      expected.includes(createHash('sha256').update(bytes.subarray(0, length)).digest('hex'))
     );
   } finally {
     fs.closeSync(fd);
+  }
+}
+
+const SESSION_END_SOURCES: Readonly<Record<string, string>> = {
+  ...PREFIX,
+  'session-log.sh': '8f6358e4ec37e9dcd35c98d77d2a77776e6d73c761895f37069b21e61f2f66a9',
+  'lib/parse-input.sh': 'b61ca58672ec23722042fa55b4ba65b8c95ebc67a28dbcdc4f335770fe32d5de',
+  'lib/agent-pid.sh': 'f075356c6fe4179ac14ff3e1131ba355690f55a2ced04dd2f42df6aa0f8ff800',
+  'lib/emit.sh': '32bd200bf9160dffc5d349a7e13341bbcf6644ab9c47ad3f491f68d3ba77bcf4',
+  'lib/run-handlers.sh': '90945b5dd70c9c6e223beefab24208603c2c1a822e4ba85d8bd298d430660093',
+  'surfaces/codex/lib/run-handlers.sh':
+    '8ebf6a8c131cc51e8f2ecd549db890340634d8fc1ebf38e5fc185a20e4532696',
+  'lib/reprieve.sh': '5eaa9953d1edc0e98ec73a365560371cf1daea25d4ec4f812e1d38403cf04a9d',
+  'lib/reprieve-reader.cjs': '6f17057670c52b95dba845c21f8378e15c9508864e90b7406cc481a056c286ab',
+  'lib/guard-config.sh': 'c3d9d5b0f6ffb4eb6add5a3f27b2d3d2bf7f46d86b39614c351e8b5bba06c73c',
+  'lib/guard-config.cjs': 'b7947a24da1670613bb43a548be9951d7fe3be6d4be2f9418607a35dac945a85',
+};
+
+/** Finite complete-prefix profile for the sole reviewed SessionEnd logger.
+ * This admission is before any native effects. A later source change is fatal,
+ * never permission to replay the parser prefix after native completion.
+ */
+export function qualifiesForNativeSessionEndPrefix(context: {
+  readonly request: RuntimeRequest;
+  readonly selection: ActiveInvocationSelection;
+  readonly environment: Readonly<Record<string, string>>;
+  readonly sessionId: string | null;
+}): boolean {
+  const { request, selection, environment, sessionId } = context;
+  try {
+    const sid = request.payload.session_id;
+    if (
+      selection.status !== 'active' ||
+      request.configuration !== 'system' ||
+      selection.configuration !== 'system' ||
+      !['codex', 'claude-code'].includes(request.surface) ||
+      selection.surface !== request.surface ||
+      request.event !== 'session_end' ||
+      selection.event !== request.event ||
+      !/^[a-f0-9]{64}$/.test(request.runtimeDigest) ||
+      selection.runtimeDigest !== request.runtimeDigest ||
+      selection.hooksDirectory !== selection.runtimeDirectory ||
+      typeof sid !== 'string' ||
+      sid !== sessionId ||
+      !sid ||
+      sid === 'unknown' ||
+      sid === '.' ||
+      sid === '..' ||
+      Buffer.byteLength(sid) > 128 ||
+      !/^[A-Za-z0-9_.@:-]+$/.test(sid) ||
+      Object.keys(selection.overrides).length ||
+      Object.keys(selection.libraryOverrides).length ||
+      Object.values(selection.libraries).some(
+        (library) => !['shared', 'surface'].includes(library.kind)
+      ) ||
+      selection.handlers.length !== 1 ||
+      [request.caller.environment, environment].some((env) => Boolean(env.CAWS_GUARD_CONFIG_PY))
+    )
+      return false;
+    const handler = selection.handlers[0]!;
+    if (
+      handler.kind !== 'stock' ||
+      handler.name !== 'session-log.sh' ||
+      handler.entry !== 'session-log.sh' ||
+      handler.args.length ||
+      handler.path !== path.join(selection.runtimeDirectory, 'session-log.sh') ||
+      handler.sha256 !== SESSION_END_SOURCES['session-log.sh']
+    )
+      return false;
+    const home =
+      environment.CAWS_HOME || (environment.HOME ? path.join(environment.HOME, '.caws') : '');
+    if (
+      !directory(home) ||
+      !directory(selection.checkout) ||
+      !directory(selection.canonical) ||
+      selection.runtimeDirectory !== path.join(home, 'lib/runtimes', request.runtimeDigest) ||
+      !directory(selection.runtimeDirectory) ||
+      !environmentSupported(request.caller.environment, null) ||
+      !environmentSupported(environment, path.join(selection.runtimeDirectory, 'handler-env.sh'))
+    )
+      return false;
+    const cwd = request.payload.cwd;
+    if (cwd !== undefined && cwd !== null && cwd !== '') {
+      if (typeof cwd !== 'string' || !directory(cwd)) return false;
+      const relative = path.relative(selection.checkout, cwd);
+      if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative))
+        return false;
+    }
+    const routing: Readonly<Record<string, string>> = {
+      CAWS_PROJECT_DIR: selection.checkout,
+      CAWS_MACHINE_POLICY_ROOT: selection.canonical,
+      CAWS_MACHINE_RUNTIME: '1',
+      CAWS_SYSTEM_RUNTIME: '1',
+      CAWS_AGENT_SURFACE: request.surface,
+      CAWS_ADAPTER_RUNTIME_DIGEST: request.runtimeDigest,
+      CAWS_SHARED_LIB_DIR: path.join(selection.runtimeDirectory, 'lib'),
+      CAWS_MACHINE_ADAPTER_LIB_DIR: path.join(
+        selection.runtimeDirectory,
+        'surfaces',
+        request.surface,
+        'lib'
+      ),
+      CAWS_MACHINE_LIBRARIES: '{}',
+      CAWS_MACHINE_HANDLERS: '{}',
+      HOOKS_DIR: selection.runtimeDirectory,
+    };
+    for (const [name, expected] of Object.entries(routing))
+      if (environment[name] && environment[name] !== expected) return false;
+    if (!absent(selection.checkout, path.join(selection.checkout, '.caws/hooks/runtime-paths.sh')))
+      return false;
+    const libraries: Readonly<Record<string, 'shared' | 'surface'>> = {
+      'agent-surface.sh': 'shared',
+      'parse-input.sh': request.surface === 'codex' ? 'surface' : 'shared',
+      'session-cache.sh': 'shared',
+      'session-id.sh': 'shared',
+      'agent-pid.sh': 'shared',
+      'run-handlers.sh': request.surface === 'codex' ? 'surface' : 'shared',
+      'reprieve.sh': 'shared',
+      'reprieve-reader.cjs': 'shared',
+      'guard-config.sh': 'shared',
+      'guard-config.cjs': 'shared',
+      'emit.sh': request.surface === 'codex' ? 'surface' : 'shared',
+    };
+    const required = new Set([
+      'dispatch.sh',
+      'handler-env.sh',
+      'runtime-paths.sh',
+      'session-log.sh',
+      'lib/parse-input.sh',
+      'lib/agent-surface.sh',
+      'lib/session-cache.sh',
+      'lib/agent-pid.sh',
+      'lib/run-handlers.sh',
+    ]);
+    for (const [name, kind] of Object.entries(libraries)) {
+      const relative =
+        kind === 'shared' ? 'lib/' + name : 'surfaces/' + request.surface + '/lib/' + name;
+      const library = selection.libraries[name];
+      if (
+        !library ||
+        library.kind !== kind ||
+        library.path !== path.join(selection.runtimeDirectory, relative) ||
+        library.sha256 !== SESSION_END_SOURCES[relative] ||
+        !absent(home, path.join(home, 'surfaces', request.surface, 'lib', name)) ||
+        (kind === 'shared' &&
+          !absent(
+            selection.runtimeDirectory,
+            path.join(selection.runtimeDirectory, 'surfaces', request.surface, 'lib', name)
+          ))
+      )
+        return false;
+      required.add(relative);
+    }
+    for (const relative of required) {
+      const expected = SESSION_END_SOURCES[relative];
+      if (!expected || !pinned(selection.runtimeDirectory, relative, [expected])) return false;
+    }
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -174,6 +333,13 @@ export function qualifiesForNativeSessionCache(context: {
     if (cwd !== undefined && cwd !== null && cwd !== '') {
       if (typeof cwd !== 'string' || !directory(cwd)) return false;
       const relative = path.relative(selection.checkout, cwd);
+      if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative))
+        return false;
+    }
+    const execution = resolveExecutionWorkdir(request.payload, request.event);
+    if (execution.status === 'resolved') {
+      if (!directory(execution.path)) return false;
+      const relative = path.relative(selection.checkout, execution.path);
       if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative))
         return false;
     }
