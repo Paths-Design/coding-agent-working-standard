@@ -51,7 +51,7 @@ evidence:
     recorded_at: "2026-10-26T11:55:29.502Z"
     commit_sha: "401425c45be224c6313fc0957aa52774998ff42d"
   - criterion_id: A3
-    status: unchecked
-    evidence_ref: "Candidate401425c45be224c6313fc0957aa52774998ff42d committedclean; restored28controls0 andhostileenv-clearingmutant101retained. Independentcommittedreview foundnoactionabledefectwithinboundedstartupscope. ActualordinaryRootcaller replayonmergedParent stillPENDING, soA3UNC. NeedproperRoot-ownedchildmerge --no-close, reconcileownedbasecheckout withsafe read-tree ifneeded, compileconfigurednativeparentfromnewjoinedSource, updateexactrequestcommit/tree andcapture realpipes underunchanged30000ms. Preservefirstactualfailure/noNode/noWriter andseparatelyqualifyfullSourceexport/freshSQL/completeinstalledscenario. Raw /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/native-joined-preparation-01; CLIverificationcommitexistenceONLY, runtimeproofmanuallyinspected."
-    recorded_at: "2026-10-26T11:55:37.628Z"
-    commit_sha: "401425c45be224c6313fc0957aa52774998ff42d"
+    status: pass
+    evidence_ref: "Root ordinarycaller replay configured-parent-02 onmergedParenteb79 usedactualRootCODEXID/cwd/unchangedambientappmetadata andconfiguredbootstrap30000ms; executableSHA9d0248aa89fd96346bef18d9a633b10249f9c794e605e926b6a7351cfe0d59f6. At5s actualpinnedNode11684/Git11735 wereobserved asnativeParent11682 descendants, provingstartupadvancedbeyondbaselineappmetadatarefusal (baseline01 noNode/446ms). Outer02exit2 at30473.117ms/bothEOFs, stdout0/stderr0, no native terminalreceipt; fullSourceexportFAILED/UNQUALIFIED, source+futureBUILDabsent. Postexitknownancestryrows[] areboundedobservationNOTsettlement/escapedcensusproof. Noexternalenvsanitization/extraRuntimeflags/deadlinechange; actualproductionstartupclosure testedby28restoredcontrols anduniqueenv-clear mutantfailure. This closesONLY inertmetadata classification: completepreparation/freshSQL/fullinstalled/custody remainRoot-ownedParent gaps. Raw native-joined-preparation-01 records; CLIverifycommitexistenceONLY, runtime manuallyinspected."
+    recorded_at: "2026-10-26T12:09:31.159Z"
+    commit_sha: eb79c810366add6e2b7e042b2af78a190199029a
