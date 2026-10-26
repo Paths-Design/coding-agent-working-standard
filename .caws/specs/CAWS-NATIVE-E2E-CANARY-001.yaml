@@ -59,3 +59,8 @@ evidence:
     evidence_ref: "Direct runtime inspection: fresh normal OAuth/trust12, actual Codex init0 then git status host custom-tool output blocked with execution-contract guard2, no retry. Raw644bytes SHA9d9e3671825cf1e638c0b0eb8e8c024dcbb150792fec6efa19c0f8dda7e87d55 equals nativejournal74277. Native compatibility bash-write-guard2; workspace-write/no-network turn context retained. Rootartifact/native-agent-workflow-01/first-tool-observations-01.jsonl, first-pretool-handlers-01.jsonl, real-callbacks-01/pre_tool_use-74278-6805a9f3e8a8b60b9e562f28.json and first-callback-result-01.json. CLI verification establishes only commit existence. No successful guarded command, typed stock dispatch or OS-level zero-launch trace inferred."
     recorded_at: "2026-10-26T22:01:57.194Z"
     commit_sha: "3068e3b2f95d4161760aa0bc2f57c3a192c215c2"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Direct runtime inspection: function/tests/sentinel SHA256 match baseline-observation.json, only fixture governance/gitignore created. Outerexec9865 terminal0; owned63706/63748 absent. Four active correlated custody roots retained in Rootartifact/native-agent-workflow-01/custody-01 and custody-terminal-observations-01.json: complete/child0/stopOk/Exited/bothEOFs/errornull. Initial two inactive custody uncorrelated, arbitrary escaped descendants not enumerated, OS-level zero user launches not traced. CLI verification establishes only commit existence. Full workflow remains open under Root/Parent; observation index first-callback-result-01.json gives exact absolute artifactRoot."
+    recorded_at: "2026-10-26T22:02:06.465Z"
+    commit_sha: "3068e3b2f95d4161760aa0bc2f57c3a192c215c2"
