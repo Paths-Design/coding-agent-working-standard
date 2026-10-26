@@ -9,6 +9,7 @@ pub mod invocation_project;
 pub mod monotonic_deadline;
 pub mod owned_group;
 pub mod plan_snapshots;
+pub mod preparation_parent;
 pub mod process_comm_macos;
 pub mod render_context;
 pub mod render_observation;
