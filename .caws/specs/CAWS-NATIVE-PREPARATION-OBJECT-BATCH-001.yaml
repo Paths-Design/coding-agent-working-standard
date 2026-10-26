@@ -2,7 +2,6 @@ id: CAWS-NATIVE-PREPARATION-OBJECT-BATCH-001
 title: 'Batch immutable preparation blob reads within existing bounds'
 mode: fix
 lifecycle_state: active
-worktree: native-preparation-object-batch
 created_at: '2026-10-26T12:19:31.062Z'
 updated_at: '2026-10-26T12:19:34.323Z'
 created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
