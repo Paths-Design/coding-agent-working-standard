@@ -20,6 +20,8 @@ const {
 } = require('../../dist/tooling/native-qualification-prepare');
 const {
   executeFrozenSourcePreparation,
+  executePreparationParentChannel,
+  preparationDescriptorChannel,
 } = require('../../dist/tooling/native-qualification-prepare-entry');
 
 describe('native preparation bounded request handler', () => {
@@ -53,6 +55,135 @@ describe('native preparation bounded request handler', () => {
       phase: 'parent',
       reason: 'An independently admitted maintained parent is required',
     });
+  });
+});
+
+describe('native preparation private channel framing', () => {
+  const start = (changes = {}) => ({
+    kind: 'start',
+    request: Buffer.from('{}').toString('base64'),
+    cwd: '/fixture',
+    parentPid: process.ppid,
+    environment: {},
+    remainingMs: 30_000,
+    ...changes,
+  });
+  test.each([
+    [{ kind: 'approved' }, 'Expected preparation channel start'],
+    [{ approved: true }, 'Unexpected preparation channel fields'],
+    [{ request: '***' }, 'byte encoding'],
+    [{ request: Buffer.alloc(65537).toString('base64') }, 'byte bound'],
+    [{ cwd: '../fixture' }, 'channel directory'],
+    [{ parentPid: -1 }, 'process correspondence'],
+    [{ environment: { CODEX_THREAD_ID: 42 } }, 'environment member'],
+    [{ remainingMs: 0 }, 'remaining interval'],
+  ])('rejects malformed private context before any outgoing request', (changes, diagnostic) => {
+    const channel = { read: () => start(changes), write: jest.fn() };
+    expect(() => executePreparationParentChannel(channel)).toThrow(diagnostic);
+    expect(channel.write).not.toHaveBeenCalled();
+  });
+
+  function descriptor(input, partialWrite = Infinity) {
+    let at = 0;
+    const output = [];
+    jest.spyOn(fs, 'fstatSync').mockImplementation((fd) => ({
+      dev: 1n,
+      ino: BigInt(fd),
+      uid: BigInt(process.geteuid()),
+      isSocket: () => fd === 64,
+    }));
+    jest.spyOn(fs, 'readSync').mockImplementation((fd, bytes, offset, length) => {
+      expect(fd).toBe(64);
+      const copied = input.copy(bytes, offset, at, at + Math.min(2, length));
+      at += copied;
+      return copied;
+    });
+    jest.spyOn(fs, 'writeSync').mockImplementation((fd, bytes, offset, length) => {
+      expect(fd).toBe(64);
+      const size = Math.min(partialWrite, length);
+      output.push(Buffer.from(bytes.subarray(offset, offset + size)));
+      return size;
+    });
+    return { channel: preparationDescriptorChannel(64), output };
+  }
+  const framed = (bytes) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(bytes.length);
+    return Buffer.concat([length, bytes]);
+  };
+  afterEach(() => jest.restoreAllMocks());
+
+  test('preserves exact frames across partial reads and writes', () => {
+    const value = { kind: 'ok', seq: 9, remainingMs: 1000 };
+    const bytes = Buffer.from(JSON.stringify(value));
+    const { channel, output } = descriptor(framed(bytes), 2);
+    expect(channel.read()).toEqual(value);
+    channel.write(value);
+    expect(Buffer.concat(output)).toEqual(framed(bytes));
+  });
+
+  test.each([
+    [Buffer.alloc(4), 'frame bound'],
+    [Buffer.from([1, 0, 0, 1]), 'frame bound'],
+    [Buffer.from([0, 0]), 'channel closed'],
+    [framed(Buffer.from([0xff])), 'not UTF-8'],
+    [framed(Buffer.from('{')), 'JSON'],
+  ])('fails closed on malformed or incomplete frame bytes', (bytes, diagnostic) => {
+    const { channel, output } = descriptor(bytes);
+    expect(() => channel.read()).toThrow(diagnostic);
+    expect(output).toEqual([]);
+  });
+
+  test('refuses descriptor substitution before consuming body bytes', () => {
+    const { channel } = descriptor(framed(Buffer.from('{}')));
+    fs.fstatSync.mockImplementation((fd) => ({
+      dev: 1n,
+      ino: BigInt(fd) + 1n,
+      uid: BigInt(process.geteuid()),
+      isSocket: () => true,
+    }));
+    expect(() => channel.read()).toThrow('socket identity changed');
+    expect(fs.readSync).not.toHaveBeenCalled();
+  });
+
+  test('rejects a regular descriptor or standard-stream alias', () => {
+    jest.spyOn(fs, 'fstatSync').mockReturnValue({
+      dev: 1n,
+      ino: 64n,
+      uid: BigInt(process.geteuid()),
+      isSocket: () => false,
+    });
+    expect(() => preparationDescriptorChannel(64)).toThrow('parent socket');
+    fs.fstatSync.mockReturnValue({
+      dev: 1n,
+      ino: 64n,
+      uid: BigInt(process.geteuid()),
+      isSocket: () => true,
+    });
+    expect(() => preparationDescriptorChannel(64)).toThrow('aliases standard I/O');
+  });
+
+  test('retains full inode bits when checking an inherited descriptor', () => {
+    descriptor(framed(Buffer.from('{}')));
+    const inode = (1n << 63n) + 1n;
+    fs.fstatSync.mockImplementation((fd, options) => {
+      expect(options).toEqual({ bigint: true });
+      return {
+        dev: 1n,
+        ino: fd === 64 ? inode : BigInt(fd),
+        uid: BigInt(process.geteuid()),
+        isSocket: () => fd === 64,
+      };
+    });
+    const channel = preparationDescriptorChannel(64);
+    fs.fstatSync.mockReturnValue({
+      dev: 1n,
+      ino: inode + 1n,
+      uid: BigInt(process.geteuid()),
+      isSocket: () => true,
+    });
+    expect(() => channel.read()).toThrow('socket identity changed');
+    expect(fs.readSync).not.toHaveBeenCalled();
   });
 });
 
@@ -457,6 +588,196 @@ describe('native preparation actual worktree source and output observations', ()
     };
     return { request, context, objectReads };
   }
+
+  function privateChannelFixture(changeReply = (reply) => reply, callerChanges = {}) {
+    const fixture = frozenSourceFixture();
+    const queue = [
+      {
+        kind: 'start',
+        request: Buffer.from(JSON.stringify(fixture.request)).toString('base64'),
+        cwd: fixture.context.cwd,
+        parentPid: process.ppid,
+        environment: { ...fixture.context.environment, ...callerChanges },
+        remainingMs: 30_000,
+      },
+    ];
+    const frames = [];
+    const metadata = {
+      commonDir: ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      topLevel: ['rev-parse', '--show-toplevel'],
+      objectFormat: ['rev-parse', '--show-object-format'],
+      headCommit: ['rev-parse', '--verify', 'HEAD^{commit}'],
+      headTree: ['rev-parse', '--verify', 'HEAD^{tree}'],
+    };
+    const channel = {
+      read: () => {
+        if (!queue.length) throw new Error('fixture parent channel closed');
+        return changeReply(queue.shift(), frames);
+      },
+      write: (frame) => {
+        frames.push(frame);
+        if (frame.kind === 'checkpoint')
+          queue.push({ kind: 'ok', seq: frame.seq, remainingMs: 30_000 });
+        else if (frame.kind === 'metadata') {
+          const args =
+            frame.operation === 'ignored'
+              ? ['check-ignore', '--quiet', '--no-index', '--', frame.path]
+              : metadata[frame.operation];
+          expect(args).toBeDefined();
+          try {
+            const text = fixture.context.git(args, { cwd: frame.cwd });
+            queue.push({
+              kind: 'gitResult',
+              seq: frame.seq,
+              exitCode: 0,
+              stdout: Buffer.from(text + '\n').toString('base64'),
+              stderr: '',
+            });
+          } catch (error) {
+            queue.push({
+              kind: 'gitResult',
+              seq: frame.seq,
+              exitCode: error.status || 1,
+              stdout: '',
+              stderr: '',
+            });
+          }
+        } else if (frame.kind === 'objects') {
+          const bytes = fixture.context.readObjects(frame.selections);
+          // Several chunks force actual reconstruction, including partial frames.
+          for (let at = 0; at < bytes.length; at += 7)
+            queue.push({
+              kind: 'objectChunk',
+              seq: frame.seq,
+              data: bytes.subarray(at, at + 7).toString('base64'),
+            });
+          queue.push({ kind: 'objectEnd', seq: frame.seq, exitCode: 0, stderr: '' });
+        } else expect(frame.kind).toBe('result');
+      },
+    };
+    return { ...fixture, channel, frames };
+  }
+
+  test('private channel carries fixed metadata and chunked objects into live fixture authority', () => {
+    const fixture = privateChannelFixture();
+    const before = canonicalBytes();
+    const result = executePreparationParentChannel(fixture.channel);
+    expect(result.status).toBe('prepared');
+    expect(fs.readFileSync(path.join(result.sourceTree.root, 'package.json'), 'utf8')).toBe(
+      '{"fixture":true}\n'
+    );
+    expect(fixture.frames.at(-1)).toEqual({ kind: 'result', seq: fixture.frames.length, result });
+    expect(
+      fixture.frames.filter((frame) => frame.kind === 'metadata').map((frame) => frame.operation)
+    ).toEqual(
+      expect.arrayContaining([
+        'commonDir',
+        'topLevel',
+        'objectFormat',
+        'headCommit',
+        'headTree',
+        'ignored',
+      ])
+    );
+    expect(fixture.objectReads.filter((item) => item.kind === 'blob')).toHaveLength(2);
+    expect(canonicalBytes()).toEqual(before);
+    expect(fs.existsSync(fixture.request.futureBuildRoot)).toBe(false);
+  });
+
+  test('private channel cannot borrow another caller ownership', () => {
+    const fixture = privateChannelFixture(undefined, { CODEX_THREAD_ID: 'foreign-caller' });
+    const result = executePreparationParentChannel(fixture.channel);
+    expect(result).toMatchObject({
+      status: 'failed',
+      writerState: 'NOT_STARTED',
+      phase: 'authority',
+    });
+    expect(result.reason).toContain('another caller');
+    expect(fixture.objectReads).toEqual([]);
+    expect(fs.existsSync(fixture.request.outputRoot)).toBe(false);
+  });
+
+  test.each(['checkpoint', 'metadata', 'objects'])(
+    'refuses uncorrelated %s replies before writes',
+    (kind) => {
+      const fixture = privateChannelFixture((reply) => {
+        if (
+          (kind === 'checkpoint' && reply.kind === 'ok') ||
+          (kind === 'metadata' && reply.kind === 'gitResult') ||
+          (kind === 'objects' && reply.kind === 'objectChunk')
+        )
+          return { ...reply, seq: reply.seq + 1 };
+        return reply;
+      });
+      const result = executePreparationParentChannel(fixture.channel);
+      expect(result.status).toBe('failed');
+      expect(result.writerState).toBe('NOT_STARTED');
+      expect(result.reason).toContain(
+        kind === 'metadata' ? 'Cannot resolve canonical preparation project' : 'correlation'
+      );
+      expect(result.phase).toBe(
+        kind === 'metadata' ? 'authority' : kind === 'objects' ? 'objects' : 'request'
+      );
+      if (kind === 'metadata') {
+        expect(fixture.frames.filter((frame) => frame.kind === 'metadata')).toHaveLength(1);
+        expect(fixture.objectReads).toEqual([]);
+      }
+      expect(fs.existsSync(fixture.request.outputRoot)).toBe(false);
+    }
+  );
+
+  test('parent control loss after exclusive root creation prevents source writes and completion', () => {
+    const fixture = privateChannelFixture((reply) => {
+      if (reply.kind === 'ok' && fs.existsSync(fixture.request.outputRoot))
+        throw new Error('fixture parent channel closed');
+      return reply;
+    });
+    const result = executePreparationParentChannel(fixture.channel);
+    expect(result).toMatchObject({
+      status: 'failed',
+      writerState: 'RETAINED_UNCERTAIN',
+      phase: 'source',
+    });
+    expect(result.reason).toContain('parent channel closed');
+    expect(fs.readdirSync(fixture.request.outputRoot)).toEqual([]);
+    expect(fs.existsSync(fixture.request.futureBuildRoot)).toBe(false);
+    expect(fixture.frames.at(-1).result.status).toBe('failed');
+  });
+
+  test.each(['negative-exit', 'surplus-exit', 'combined-bytes', 'empty-chunk', 'oversize-chunk'])(
+    'rejects malformed bounded parent reply %s without writing source',
+    (fault) => {
+      let altered = false;
+      const fixture = privateChannelFixture((reply) => {
+        if (
+          reply.kind === 'gitResult' &&
+          ['negative-exit', 'surplus-exit', 'combined-bytes'].includes(fault)
+        ) {
+          altered = true;
+          if (fault === 'combined-bytes')
+            return {
+              ...reply,
+              stdout: Buffer.alloc(1024 * 1024).toString('base64'),
+              stderr: 'eA==',
+            };
+          return { ...reply, exitCode: fault === 'negative-exit' ? -1 : 256 };
+        }
+        if (reply.kind === 'objectChunk' && ['empty-chunk', 'oversize-chunk'].includes(fault)) {
+          altered = true;
+          return {
+            ...reply,
+            data: fault === 'empty-chunk' ? '' : Buffer.alloc(256 * 1024 + 1).toString('base64'),
+          };
+        }
+        return reply;
+      });
+      const result = executePreparationParentChannel(fixture.channel);
+      expect(altered).toBe(true);
+      expect(result).toMatchObject({ status: 'failed', writerState: 'NOT_STARTED' });
+      expect(fs.existsSync(fixture.request.outputRoot)).toBe(false);
+      expect(fs.existsSync(fixture.request.futureBuildRoot)).toBe(false);
+    }
+  );
 
   test('prepares exact private source bytes from real Git without building or changing governance', () => {
     const { request, context, objectReads } = frozenSourceFixture();
