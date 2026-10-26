@@ -9,6 +9,7 @@ created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
 blast_radius:
   modules:
     - 'Installed native invocation route, immutable generation receipt and compiled capability diagnostic'
+    - 'Original installed callback terminal delivery, containment, infrastructure counter and retained-custodian cleanup bounds'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -41,6 +42,7 @@ invariants:
   - 'Installed route identity survives parsing; mandatory generation validation cannot be swallowed as optional Stop preparation or retried through Node or compatibility.'
   - 'The same original MonotonicDeadline bounds capture, revalidation and effects; no pointer reread, new timeout, duplicated full capture or admission authority is introduced.'
   - 'Direct invocation and existing event refusal exit and cleanup/output contracts remain; internal SQLite identity and Stop profile v1 semantics stay unchanged.'
+  - 'Terminal delivery and cleanup time are reserved within the same original invocation interval. No post-proposal output, signal, state transaction, acknowledgment or synchronous cleanup wait receives additive grace; uncertain existing custodians retain actual child ownership without a second stdout result.'
 acceptance:
   - id: A1
     given: 'direct and installed native invocation arguments across six events'
@@ -58,6 +60,18 @@ acceptance:
     given: 'the compiled native SQLite build diagnostic and existing internal identity consumers'
     when: 'the existing diagnostic phase runs'
     then: 'exact diagnostic v2 advertises invoke-installed-v1 with maximum original timeout30000 while internal SQLite identity v1 remains unchanged'
+  - id: A5
+    given: >-
+      the same original installed invocation deadline with held input, delayed
+      proposal, output backpressure, interrupted delivery and a custodian that
+      remains retained after cleanup retry
+    when: 'the frontend prepares terminal output or infrastructure fallback and settles cleanup'
+    then: >-
+      terminal and cleanup time is reserved inside the unchanged original interval,
+      authoritative clock checks bound effects and waits without a fresh timeout,
+      partial output never produces a second stdout result, refusal precedence
+      remains and unproven cleanup retains actual custodian ownership with explicit
+      uncertainty
 observability:
   - 'Retain exact commands revisions selected tests exits raw logs and absence of Node or native effects for hostile installed routes.'
 rollback:
