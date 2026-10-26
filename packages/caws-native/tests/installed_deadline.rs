@@ -226,7 +226,10 @@ fn installed_live_partial_transit_expires_before_stdin_and_reports_original_inte
         let args = with_wire(f.args(event), wire(live(10_000, 8_000)));
         let (output, elapsed) = f.held(&args);
         outcome(&output, event);
-        assert!(elapsed < Duration::from_secs(5));
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "frontend must finish inside the original remaining interval"
+        );
         let error = String::from_utf8(output.stderr).unwrap();
         assert!(error.contains("request deadline expired"), "{error}");
         let suffix = error
@@ -239,9 +242,11 @@ fn installed_live_partial_transit_expires_before_stdin_and_reports_original_inte
             .expect("progress JSON prefix")
             .unwrap();
         let total = progress["elapsedLocalMs"].as_u64().unwrap();
-        // Reject both fresh frontend timing (~2s) and config-sized timing (~30s).
+        // Processing may stop early to reserve terminal work. Progress must
+        // include the original eight seconds of transit and stay within the
+        // original ten-second interval, never a fresh or config-sized clock.
         assert!(
-            (9500..20_000).contains(&total),
+            (8000..10_000).contains(&total),
             "wrong original progress: {progress}"
         );
         assert_eq!(progress["phase"], "payload");
