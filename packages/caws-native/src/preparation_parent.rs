@@ -825,6 +825,154 @@ impl MetadataPin {
         require(self.bytes == current.bytes, "Source configuration changed")
     }
 }
+const PRIVATE_CONFIG: usize = 64 * 1024;
+
+fn private_config(bytes: &[u8], object_format: &str) -> Result<()> {
+    require(
+        bytes.len() <= PRIVATE_CONFIG,
+        "Private Git config exceeds bound",
+    )?;
+    require(
+        bytes
+            .iter()
+            .all(|b| b.is_ascii_graphic() || matches!(b, b' ' | b'\t' | b'\n')),
+        "Private Git config contains unsupported bytes",
+    )?;
+    let text = std::str::from_utf8(bytes).map_err(|e| e.to_string())?;
+    let mut section = "";
+    let mut sections = BTreeSet::new();
+    let mut values = BTreeMap::new();
+    // This admits the literal profile emitted by ordinary git init, not the
+    // general Git config language. Includes, quoting, escapes, subsections,
+    // implicit booleans and duplicate settings have no interpretation here.
+    for line in text.lines().map(|line| line.trim_matches([' ', '\t'])) {
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') {
+            section = match line {
+                "[core]" => "core",
+                "[extensions]" => "extensions",
+                _ => return Err("Unsupported private Git config section".into()),
+            };
+            require(
+                sections.insert(section),
+                "Duplicate private Git config section",
+            )?;
+            continue;
+        }
+        let (key, value) = line
+            .split_once('=')
+            .ok_or("Malformed private Git config setting")?;
+        let key = key.trim_matches([' ', '\t']);
+        let value = value.trim_matches([' ', '\t']);
+        let accepted = match (section, key) {
+            ("core", "repositoryformatversion") => matches!(value, "0" | "1"),
+            ("core", "bare") => value == "false",
+            (
+                "core",
+                "filemode" | "logallrefupdates" | "ignorecase" | "precomposeunicode" | "symlinks",
+            ) => matches!(value, "true" | "false"),
+            ("extensions", "objectformat") => matches!(value, "sha1" | "sha256"),
+            _ => false,
+        };
+        require(accepted, "Unsupported private Git config setting")?;
+        require(
+            values.insert((section, key), value).is_none(),
+            "Duplicate private Git config setting",
+        )?;
+    }
+    require(
+        values.contains_key(&("core", "filemode"))
+            && values.get(&("core", "bare")) == Some(&"false"),
+        "Private Git config requires ordinary init core settings",
+    )?;
+    let version = values.get(&("core", "repositoryformatversion")).copied();
+    let format = values.get(&("extensions", "objectformat")).copied();
+    require(
+        matches!(
+            (object_format, version, format),
+            ("sha1", Some("0"), None) | ("sha256", Some("1"), Some("sha256"))
+        ),
+        "Private Git config/object format mismatch",
+    )
+}
+
+struct PrivateGit {
+    config: MetadataPin,
+    directories: Vec<(PathBuf, fs::Metadata)>,
+    absent: Vec<PathBuf>,
+}
+impl PrivateGit {
+    fn admit(root: &Path, object_format: &str, deadline: &MonotonicDeadline) -> Result<Self> {
+        let mut directories = vec![];
+        for relative in ["", "objects", "objects/info", "objects/pack", "refs"] {
+            checked(deadline)?;
+            let path = if relative.is_empty() {
+                root.to_path_buf()
+            } else {
+                root.join(relative)
+            };
+            physical(&path)?;
+            let metadata = fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+            require(metadata.is_dir(), "Private Git directory shape refused")?;
+            directories.push((path, metadata));
+        }
+        let absent: Vec<PathBuf> = [
+            "commondir",
+            "config.worktree",
+            "objects/info/alternates",
+            "objects/info/http-alternates",
+        ]
+        .into_iter()
+        .map(|name| root.join(name))
+        .collect();
+        for path in &absent {
+            Self::check_absent(path, deadline)?;
+        }
+        let path = root.join("config");
+        let bytes = read_file(&path, PRIVATE_CONFIG, deadline)?;
+        private_config(&bytes, object_format)?;
+        let admitted = Self {
+            config: MetadataPin {
+                path,
+                bytes: Some(bytes),
+            },
+            directories,
+            absent,
+        };
+        admitted.check(deadline)?;
+        Ok(admitted)
+    }
+    fn check_absent(path: &Path, deadline: &MonotonicDeadline) -> Result<()> {
+        checked(deadline)?;
+        // Even a dangling link, FIFO or empty redirect file is refused without
+        // opening it or following its target.
+        require(
+            fs::symlink_metadata(path).is_err_and(|e| e.kind() == io::ErrorKind::NotFound),
+            "Private Git redirect metadata must be absent",
+        )
+    }
+    fn check(&self, deadline: &MonotonicDeadline) -> Result<()> {
+        for (path, original) in &self.directories {
+            checked(deadline)?;
+            physical(path)?;
+            let current = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+            require(
+                stamp(original) == stamp(&current),
+                "Private Git directory changed",
+            )?;
+        }
+        for path in &self.absent {
+            Self::check_absent(path, deadline)?;
+        }
+        require(
+            self.config.bytes.as_deref()
+                == Some(read_file(&self.config.path, PRIVATE_CONFIG, deadline)?.as_slice()),
+            "Private Git config changed",
+        )
+    }
+}
 #[derive(Clone)]
 struct SourceGit {
     top: PathBuf,
@@ -1047,6 +1195,7 @@ struct Parent {
     channel: Channel,
     roots: BTreeMap<PathBuf, SourceGit>,
     source: SourceGit,
+    private_git: PrivateGit,
     observed_result: Option<Value>,
 }
 impl Parent {
@@ -1059,6 +1208,7 @@ impl Parent {
         limit: usize,
     ) -> Result<(i32, Vec<u8>, Vec<u8>)> {
         checked(&self.deadline)?;
+        self.private_git.check(&self.deadline)?;
         let mut child = spawn_git(
             &self.bootstrap.git,
             &args,
@@ -1112,6 +1262,7 @@ impl Parent {
                     "Combined Git output exceeds bound",
                 )?;
                 self.queries.pop();
+                self.private_git.check(&self.deadline)?;
                 return Ok((code, out, err));
             }
             pause(&self.deadline)?;
@@ -1594,6 +1745,11 @@ fn execute_with_deadline(
     let environment = startup_environment().map_err(failure)?;
     let cwd = env::current_dir().map_err(|e| failure(e.to_string()))?;
     physical(&cwd).map_err(failure)?;
+    // Raw profile admission precedes every child and even executable/prefix
+    // reads. The complete inventory then authenticates these observed bytes.
+    let private_git =
+        PrivateGit::admit(&pins.git_view.root, &pins.git_view.object_format, &deadline)
+            .map_err(failure)?;
     check_program(&pins.node, &deadline).map_err(failure)?;
     check_program(&pins.git, &deadline).map_err(failure)?;
     check_inventory(&pins.prefix.root, &pins.prefix.inventory, ENTRY, &deadline)
@@ -1605,6 +1761,7 @@ fn execute_with_deadline(
         &deadline,
     )
     .map_err(failure)?;
+    private_git.check(&deadline).map_err(failure)?;
     require(
         request.source.object_format == pins.git_view.object_format,
         "Private Git/source format mismatch",
@@ -1653,6 +1810,7 @@ fn execute_with_deadline(
         fd.to_string(),
     ];
     let start = json!({"kind":"start","request":B64.encode(bytes),"cwd":cwd,"parentPid":std::process::id(),"environment":environment,"remainingMs":remaining(&deadline).map_err(failure)?});
+    private_git.check(&deadline).map_err(failure)?;
     let node = spawn_fixed(
         &pins.node,
         &args,
@@ -1677,6 +1835,7 @@ fn execute_with_deadline(
         },
         roots,
         source,
+        private_git,
         observed_result: None,
     };
     match owner.serve(start) {
@@ -1871,6 +2030,174 @@ mod tests {
         ));
         fs::create_dir(&root).unwrap();
         root
+    }
+    const INIT_CONFIG: &[u8] = b"[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n";
+    fn private_view_fixture(root: &Path) {
+        for name in ["objects/info", "objects/pack", "refs/heads", "refs/tags"] {
+            fs::create_dir_all(root.join(name)).unwrap();
+        }
+        fs::write(root.join("config"), INIT_CONFIG).unwrap();
+    }
+    #[test]
+    fn private_profile_accepts_actual_git_init_in_both_object_formats() {
+        let root = temp_root("git-init");
+        for format in ["sha1", "sha256"] {
+            let checkout = root.join(format);
+            let output = Command::new("/usr/bin/git")
+                .env_clear()
+                .envs(git_env())
+                .args([
+                    "init",
+                    "-q",
+                    "--template=",
+                    &format!("--object-format={format}"),
+                ])
+                .arg(&checkout)
+                .output()
+                .unwrap();
+            assert_eq!(
+                output.status.code(),
+                Some(0),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+            let view = checkout.join(".git");
+            let admitted = PrivateGit::admit(&view, format, &deadline).unwrap();
+            assert_eq!(
+                admitted.config.bytes.as_deref(),
+                Some(fs::read(view.join("config")).unwrap().as_slice())
+            );
+            admitted.check(&deadline).unwrap();
+            let other = if format == "sha1" { "sha256" } else { "sha1" };
+            assert_eq!(
+                PrivateGit::admit(&view, other, &deadline).err().unwrap(),
+                "Private Git config/object format mismatch"
+            );
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn private_config_profile_is_closed_and_format_specific() {
+        assert!(private_config(INIT_CONFIG, "sha1").is_ok());
+        for suffix in [
+            "[include]\npath = /outside\n",
+            "[includeIf \"gitdir:x\"]\npath = /outside\n",
+            "[core \"subsection\"]\nfilemode = true\n",
+            "[extensions]\nunknown = true\n",
+            "[extensions]\nobjectformat = sha256\n",
+            "\tworktree = /outside\n",
+            "\thooksPath = /outside\n",
+            "\tfsmonitor = /outside\n",
+            "\tfilemode = false\n",
+            "\tsymlinks\n",
+            "\tsymlinks = \"true\"\n",
+            "\tsymlinks = true # comment\n",
+            "\tsymlinks = tr\\\nue\n",
+            "[core]\n",
+            "\0",
+            "\r",
+            "é",
+        ] {
+            let mut bytes = INIT_CONFIG.to_vec();
+            bytes.extend_from_slice(suffix.as_bytes());
+            assert!(private_config(&bytes, "sha1").is_err(), "{suffix:?}");
+        }
+        assert!(
+            private_config(
+                b"[core]\nrepositoryformatversion = 0\nbare = false\n",
+                "sha1"
+            )
+            .is_err()
+        );
+        assert!(private_config(&vec![b' '; PRIVATE_CONFIG + 1], "sha1").is_err());
+        let sha256 = b"[core]\nrepositoryformatversion = 1\nfilemode = false\nbare = false\nignorecase = true\nprecomposeunicode = true\nsymlinks = false\n[extensions]\nobjectformat = sha256\n";
+        assert!(private_config(sha256, "sha256").is_ok());
+        assert!(private_config(sha256, "sha1").is_err());
+    }
+    #[test]
+    fn private_view_pins_refuse_redirect_creation_config_change_and_root_replacement() {
+        let root = temp_root("private-pins");
+        for name in [
+            "commondir",
+            "config.worktree",
+            "objects/info/alternates",
+            "objects/info/http-alternates",
+        ] {
+            let view = root.join(name.replace('/', "-"));
+            private_view_fixture(&view);
+            let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+            let pin = PrivateGit::admit(&view, "sha1", &deadline).unwrap();
+            std::os::unix::fs::symlink("/missing-private-redirect", view.join(name)).unwrap();
+            assert!(pin.check(&deadline).is_err(), "{name}");
+            assert_eq!(
+                PrivateGit::admit(&view, "sha1", &deadline).err().unwrap(),
+                "Private Git redirect metadata must be absent"
+            );
+        }
+        let view = root.join("changing");
+        private_view_fixture(&view);
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(5)).unwrap();
+        let pin = PrivateGit::admit(&view, "sha1", &deadline).unwrap();
+        let changed = String::from_utf8(INIT_CONFIG.to_vec())
+            .unwrap()
+            .replace("filemode = true", "filemode = false");
+        fs::write(view.join("config"), changed).unwrap();
+        assert_eq!(
+            pin.check(&deadline).unwrap_err(),
+            "Private Git config changed"
+        );
+        fs::write(view.join("config"), INIT_CONFIG).unwrap();
+        let pin = PrivateGit::admit(&view, "sha1", &deadline).unwrap();
+        fs::rename(&view, root.join("original")).unwrap();
+        private_view_fixture(&view);
+        assert_eq!(
+            pin.check(&deadline).unwrap_err(),
+            "Private Git directory changed"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn private_include_is_refused_before_program_reads_children_or_sentinel_reads() {
+        let root = temp_root("private-include");
+        let view = root.join("view");
+        private_view_fixture(&view);
+        let sentinel = root.join("unread-include");
+        let name = std::ffi::CString::new(sentinel.to_str().unwrap()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+        let mut fifo = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&sentinel)
+            .unwrap();
+        let sentinel_bytes = b"[core]\nfilemode = false\n";
+        fifo.write_all(sentinel_bytes).unwrap();
+        fs::write(
+            view.join("config"),
+            format!(
+                "{}[include]\npath = {}\n",
+                String::from_utf8_lossy(INIT_CONFIG),
+                sentinel.display()
+            ),
+        )
+        .unwrap();
+        // Absent executables/inventories are intentional: this must refuse at
+        // raw config admission, before even attempting their first read.
+        let file =
+            json!({"path":root.join("unread-program"),"sizeBytes":1,"sha256":"0".repeat(64)});
+        let mut program = file.clone();
+        program["mode"] = json!(0o755);
+        let record = json!({"schema":"caws.preparation.bootstrap.v1","node":program,"git":program,"prefix":{"root":root.join("unread-prefix"),"inventory":file},"gitView":{"root":view,"inventory":file,"objectFormat":"sha1"},"timeoutMs":1000}).to_string();
+        let error = execute_configured(&request(), Some(&record)).unwrap_err();
+        assert_eq!(error.reason, "Unsupported private Git config section");
+        assert!(!error.terminal.node_started);
+        assert!(!error.retains_custody());
+        let mut observed = vec![0; sentinel_bytes.len()];
+        fifo.read_exact(&mut observed).unwrap();
+        assert_eq!(observed, sentinel_bytes);
+        drop(fifo);
+        fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn file_pins_detect_replacement_and_forbid_symlinks() {
