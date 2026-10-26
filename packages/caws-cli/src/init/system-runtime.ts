@@ -359,9 +359,18 @@ export function configureSystemRuntime(options: SystemOptions): {
             throw new Error(
               `Conditional or unsupported CAWS hook requires native-harness reconciliation: ${name}`
             );
-          if (!qualifiedHookTimeout(options.surface, event, hook.timeout))
+          // Reconcile the recognized stock seconds-era Codex registration.
+          // Other custom budgets need explicit reconciliation rather than the
+          // host silently clamping them during its five-second teardown.
+          const timeout =
+            options.surface === 'codex' && event === 'session_end' && hook.timeout === 10
+              ? 3
+              : hook.timeout;
+          if (!qualifiedHookTimeout(options.surface, event, timeout))
             throw new Error(
-              `Qwen CAWS timeout requires millisecond-budget reconciliation: ${name}`
+              options.surface === 'qwen-code'
+                ? `Qwen CAWS timeout requires millisecond-budget reconciliation: ${name}`
+                : `Codex CAWS timeout requires teardown-budget reconciliation: ${name}`
             );
           if (
             ['pre_tool_use', 'post_tool_use'].includes(event) &&
@@ -374,6 +383,7 @@ export function configureSystemRuntime(options: SystemOptions): {
           return {
             ...hook,
             ...failurePolicy,
+            ...(timeout === hook.timeout ? {} : { timeout }),
             command:
               hook.command === systemCommand(home, options.surface, event, entry)
                 ? hook.command
@@ -398,10 +408,8 @@ export function configureSystemRuntime(options: SystemOptions): {
         options.surface === 'qwen-code'
           ? CANONICAL_QWEN_HOOK_ENTRIES[name]
           : CANONICAL_HOOK_ENTRIES[name];
-      // Qwen consumes milliseconds; Claude and Codex consume seconds. Retain
-      // canonical event budgets, including lifecycle budgets, in their units.
-      // SessionEnd and PreCompact share the corresponding seconds policy when
-      // a surface's legacy pack does not define that event.
+      // Qwen consumes milliseconds; Claude and Codex consume seconds. Codex
+      // caps SessionEnd at three seconds to leave host-shutdown headroom.
       const seconds =
         name === 'SessionEnd'
           ? 10
@@ -412,7 +420,9 @@ export function configureSystemRuntime(options: SystemOptions): {
               : 30;
       const defaultHooks = defaults?.hooks as NativeHook[] | undefined;
       const timeout =
-        defaultHooks?.[0]?.timeout ?? seconds * (options.surface === 'qwen-code' ? 1000 : 1);
+        options.surface === 'codex' && event === 'session_end'
+          ? 3
+          : (defaultHooks?.[0]?.timeout ?? seconds * (options.surface === 'qwen-code' ? 1000 : 1));
       const group = {
         ...defaults,
         hooks: [

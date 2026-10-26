@@ -366,13 +366,130 @@ test.each(['codex', 'claude-code', 'qwen-code'])(
       SessionStart: 30,
       Stop: 30,
       PreCompact: 30,
-      SessionEnd: 10,
+      SessionEnd: surface === 'codex' ? 3 : 10,
     };
     for (const [name, budget] of Object.entries(seconds)) {
       expect(value.hooks[name][0].hooks[0].timeout).toBe(budget * scale);
     }
     for (const name of ['PreToolUse', 'PostToolUse'])
       expect(value.hooks[name][0].matcher).toBe('.*');
+  }
+);
+test.each(['legacy', 'native'])(
+  'Codex %s reconciles historical stock SessionEnd without changing foreign hooks',
+  (entry) => {
+    if (entry === 'native') nativeObservationFixture();
+    const file = path.join(user, '.codex/hooks.json');
+    const foreign = { type: 'command', command: 'printf foreign-session-end', timeout: 10 };
+    write(file, {
+      hooks: {
+        SessionEnd: [
+          {
+            hooks: [
+              foreign,
+              {
+                type: 'command',
+                command: systemCommand(home, 'codex', 'session_end', entry),
+                timeout: 10,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    configureSystemRuntime({ home, userHome: user, surface: 'codex', entry });
+    const bytes = fs.readFileSync(file);
+    const hooks = JSON.parse(bytes).hooks.SessionEnd[0].hooks;
+    expect(hooks[0]).toEqual(foreign);
+    expect(hooks[1].timeout).toBe(3);
+    expect(qualifiedHookTimeout('codex', 'session_end', 10)).toBe(false);
+    expect(configureSystemRuntime({ home, userHome: user, surface: 'codex', entry }).changed).toBe(
+      false
+    );
+    expect(fs.readFileSync(file)).toEqual(bytes);
+  }
+);
+test('fresh native Codex SessionEnd uses the host budget without changing Stop', () => {
+  nativeObservationFixture();
+  configureSystemRuntime({ home, userHome: user, surface: 'codex', entry: 'native' });
+  const value = JSON.parse(fs.readFileSync(path.join(user, '.codex/hooks.json')));
+  expect(value.hooks.SessionEnd[0].hooks[0]).toMatchObject({
+    command: systemCommand(home, 'codex', 'session_end', 'native'),
+    timeout: 3,
+  });
+  expect(value.hooks.Stop[0].hooks[0].timeout).toBe(30);
+  expect(value.hooks.PreToolUse[0].hooks[0].timeout).toBe(45);
+});
+test('Codex project selection cannot treat an unreconciled SessionEnd budget as qualified', () => {
+  const file = path.join(canonical, '.codex/hooks.json');
+  const hook = {
+    type: 'command',
+    command: machineCommand(home, 'codex', 'session_end'),
+    timeout: 10,
+  };
+  write(file, { hooks: { SessionEnd: [{ hooks: [hook] }] } });
+  expect(() => resolveInvocationSelection({ ...options, event: 'session_end' })).toThrow(
+    /reconciliation/
+  );
+  write(file, { hooks: { SessionEnd: [{ hooks: [{ ...hook, timeout: 3 }] }] } });
+  expect(resolveInvocationSelection({ ...options, event: 'session_end' }).status).toBe('inactive');
+});
+test.each([undefined, 1, 2, 3])(
+  'Codex preserves supported custom SessionEnd budget %s',
+  (timeout) => {
+    const file = path.join(user, '.codex/hooks.json');
+    write(file, {
+      hooks: {
+        SessionEnd: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command: systemCommand(home, 'codex', 'session_end'),
+                ...(timeout === undefined ? {} : { timeout }),
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(qualifiedHookTimeout('codex', 'session_end', timeout)).toBe(true);
+    configureSystemRuntime({ home, userHome: user, surface: 'codex' });
+    const bytes = fs.readFileSync(file);
+    const hook = JSON.parse(bytes).hooks.SessionEnd[0].hooks[0];
+    expect(hook.timeout).toBe(timeout);
+    expect(Object.hasOwn(hook, 'timeout')).toBe(timeout !== undefined);
+    expect(configureSystemRuntime({ home, userHome: user, surface: 'codex' }).changed).toBe(false);
+    expect(fs.readFileSync(file)).toEqual(bytes);
+  }
+);
+test.each([0, 0.5, 3.5, 4, 11, '3', null, 4294967296])(
+  'Codex unsupported custom SessionEnd budget %s refuses before changing state',
+  (timeout) => {
+    const file = path.join(user, '.codex/hooks.json');
+    fs.unlinkSync(path.join(home, 'surfaces/codex/settings.json'));
+    write(file, {
+      hooks: {
+        SessionEnd: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command: systemCommand(home, 'codex', 'session_end'),
+                timeout,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const bytes = fs.readFileSync(file);
+    expect(qualifiedHookTimeout('codex', 'session_end', timeout)).toBe(false);
+    expect(() => configureSystemRuntime({ home, userHome: user, surface: 'codex' })).toThrow(
+      /reconciliation/
+    );
+    expect(fs.readFileSync(file)).toEqual(bytes);
+    expect(fs.existsSync(path.join(home, 'surfaces/codex/settings.json'))).toBe(false);
   }
 );
 test.each([
