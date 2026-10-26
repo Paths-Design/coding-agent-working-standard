@@ -1,0 +1,50 @@
+id: CAWS-BRIDGE-LIFECYCLE-LOCK-001
+title: 'Serialize bridge mutations under the lifecycle lock'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-26T22:42:32.159Z'
+updated_at: '2026-10-26T22:42:32.159Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'Bridge authority store and claim command consumer'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/bridge-store.ts'
+    - 'packages/caws-cli/tests/store/bridge-store.test.js'
+    - 'packages/caws-cli/tests/shell/claim-bridge.test.js'
+  out: []
+invariants:
+  - 'Acquire, refresh, takeover and release hold the lifecycle lock from bridge registry load through transaction completion or recovery.'
+  - 'Public store signatures, exclusive ownership, refusal diagnostics, prior-owner audit and release events remain compatible; no nested lifecycle lock is acquired.'
+  - 'Prune preview remains read-only; applied pruning serializes bridge registry reads and writes, without inventing retirement events.'
+acceptance:
+  - id: A1
+    given: 'concurrent bridge operations for different and identical specs'
+    when: 'acquire, takeover and named or bare release run'
+    then: 'registry updates preserve unrelated claims and ownership decisions use state loaded after acquiring the lifecycle lock.'
+  - id: A2
+    given: 'another lifecycle lock holder or a transaction event failure'
+    when: 'a bridge mutation is attempted'
+    then: 'no bridge or event effect occurs while acquisition is refused and failure or recovery remains truthful with the lock released.'
+  - id: A3
+    given: 'retired and active bridge entries'
+    when: 'pruning previews or applies alongside claims'
+    then: 'preview mutates nothing and applied pruning holds the lifecycle lock while preserving unrelated entries and appending no event.'
+  - id: A4
+    given: 'the normal claim command consumer'
+    when: 'acquire, refresh, takeover and release execute or encounter a held lifecycle lock'
+    then: 'existing ownership and audit behavior remains intact and contended mutations refuse without bridge or event effects.'
+observability:
+  - 'Focused compiled store and shell tests retain raw logs for successful, concurrent, refused and recovered operations.'
+rollback:
+  - 'Revert this logical source commit through normal governed history if serialized bridge behavior regresses; do not rewrite shared history.'
+non_functional:
+  security:
+    - 'Registry ownership decisions and their transactional writes share one critical section; this slice does not claim complete spec/worktree snapshot fencing or final execution authorization.'
+contracts:
+  - name: 'bridge-store-lifecycle-serialization'
+    type: behavior
+    path: 'packages/caws-cli/src/store/bridge-store.ts'
