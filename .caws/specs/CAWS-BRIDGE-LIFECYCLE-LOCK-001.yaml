@@ -39,6 +39,13 @@ acceptance:
     given: 'the normal claim command consumer'
     when: 'acquire, refresh, takeover and release execute or encounter a held lifecycle lock'
     then: 'existing ownership and audit behavior remains intact and contended mutations refuse without bridge or event effects.'
+  - id: A5
+    given: 'A retired bridge, no worktree cleanup candidates, and a held lifecycle lock'
+    when: 'Worktree prune apply runs through text or JSON output'
+    then: >-
+      The command preserves the bridge and events, reports the lock diagnostic, and
+      returns nonzero with JSON ok false; receipt-only and preview behavior remain
+      unchanged
 observability:
   - 'Focused compiled store and shell tests retain raw logs for successful, concurrent, refused and recovered operations.'
 rollback:
