@@ -109,6 +109,8 @@ export type FrozenSourcePreparationResult =
 const MAX_OBJECT_BYTES = 16 * 1024 * 1024;
 const MAX_BATCH_BYTES = 512 * 1024 * 1024;
 const MAX_OBJECTS = 50000;
+// A frame has at most 128 header bytes and two LF delimiters.
+const MAX_BLOB_BATCH_OBJECTS = Math.floor(MAX_BATCH_BYTES / (MAX_OBJECT_BYTES + 130));
 
 // This is a production-input profile, not the publication curation authority.
 // All tracked first-party Markdown docs feed the maintained audience selector;
@@ -269,19 +271,28 @@ export function collectPreparationProductionSource(
   requireOid(tree, format);
   const cache = new Map<string, PreparationGitObject>();
   let objectBytes = 0;
+  const readMissing = (selections: readonly PreparationObjectSelection[]): void => {
+    requireCondition(
+      cache.size + selections.length <= MAX_OBJECTS,
+      'Production object count exceeds bound'
+    );
+    const objects = decodePreparationGitBatch(read(selections), selections, format);
+    const nextObjectBytes = objects.reduce(
+      (total, object) => total + object.bytes.length,
+      objectBytes
+    );
+    requireCondition(nextObjectBytes <= MAX_BATCH_BYTES, 'Production object bytes exceed bound');
+    objectBytes = nextObjectBytes;
+    for (const object of objects) cache.set(object.oid, object);
+  };
   const get = (oid: string, kind: PreparationObjectKind): Buffer => {
     const cached = cache.get(oid);
     if (cached) {
       requireCondition(cached.kind === kind, 'Incorrect production graph edge type');
       return cached.bytes;
     }
-    requireCondition(cache.size < MAX_OBJECTS, 'Production object count exceeds bound');
-    const selection = [{ oid, kind }];
-    const object = decodePreparationGitBatch(read(selection), selection, format)[0]!;
-    objectBytes += object.bytes.length;
-    requireCondition(objectBytes <= MAX_BATCH_BYTES, 'Production object bytes exceed bound');
-    cache.set(oid, object);
-    return object.bytes;
+    readMissing([{ oid, kind }]);
+    return cache.get(oid)!.bytes;
   };
   requireCondition(
     preparationCommitTree(get(commit, 'commit'), format) === tree,
@@ -322,6 +333,16 @@ export function collectPreparationProductionSource(
   omitted.sort((a, b) =>
     a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0
   );
+  const blobs = new Map<string, PreparationObjectSelection>();
+  for (const file of selected) {
+    const cached = cache.get(file.oid);
+    if (cached) requireCondition(cached.kind === 'blob', 'Incorrect production graph edge type');
+    else blobs.set(file.oid, { oid: file.oid, kind: 'blob' });
+  }
+  const selections = [...blobs.values()];
+  for (let offset = 0; offset < selections.length; offset += MAX_BLOB_BATCH_OBJECTS) {
+    readMissing(selections.slice(offset, offset + MAX_BLOB_BATCH_OBJECTS));
+  }
   const directories = new Set<string>();
   let materializedBytes = 0;
   const files = selected.map((file): PreparationExportFile => {
