@@ -25,5 +25,11 @@ acceptance:
     then: >-
       the inert digest metadata is discarded while the exact identity is retained
       and no such variable reaches child startup
+  - id: A2
+    given: >-
+      actual loader or Node injection variables, unknown Node variables and siblings
+      of the inert metadata name
+    when: 'preparation inspects startup environment'
+    then: 'all remain refused before pin or child work; no namespace or prefix allowance is introduced'
 non_functional: {}
 contracts: []
