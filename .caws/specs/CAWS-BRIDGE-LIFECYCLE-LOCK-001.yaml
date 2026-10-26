@@ -1,10 +1,11 @@
 id: CAWS-BRIDGE-LIFECYCLE-LOCK-001
 title: 'Serialize bridge mutations under the lifecycle lock'
 mode: fix
-lifecycle_state: active
-worktree: bridge-lifecycle-lock
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Implemented and checked bridge registry serialization and truthful applied-prune error propagation in c53707e0012be94a7e8c4208d14de1cedd06a650 plus e9c5d70e62cb5d7525be9b7bdbfea051ed458f13. Original deterministic RED18 and command RED2 retained; integrated seven suites63pass, build/lint/gates passed. A1-A5 manually adjudicated and dual-read events14326-14330; commit verification alone does not execute tests. Independent read-only peer finding reproduced and repaired. Full authority snapshot/fence, host final launch, installed Rust cutover and rollback remain with the active parent goal.'
 created_at: '2026-10-26T22:42:32.159Z'
-updated_at: '2026-10-26T23:01:47.374Z'
+updated_at: '2026-10-26T23:08:43.296Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
