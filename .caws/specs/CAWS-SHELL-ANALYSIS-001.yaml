@@ -189,6 +189,16 @@ acceptance:
       alternate routes launch zero user commands, and rollback restores the prior
       observed selection and behavior; global adoption remains unqualified until its
       own checks pass
+  - id: A13
+    given: 'An existing lifecycle lock, its owning process and competing acquisition or recovery attempts'
+    when: >-
+      The owner is live or dead, metadata is unavailable, a reclaimer is
+      interrupted, or an old handle is released after a successor exists
+    then: >-
+      Live and unknown owners remain protected; aged dead owners recover through a
+      serialized single unlink; stale or repeated handles cannot remove or close
+      successors, and the whole lock file meets the unchanged 80 percent mutation
+      floor
 observability:
   - 'Structured verdict, reason codes and source-positioned decision trace distinguish allowed, denied and unresolved facts without claiming a general process sandbox.'
 rollback:
