@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-26T08:01:00.363Z'
+updated_at: '2026-10-26T11:01:38.633Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -280,6 +280,7 @@ scope:
     - packages/caws-cli/tests/transcripts/render-values.test.ts
     - packages/caws-cli/tests/transcripts/transcript-json-profile.test.ts
     - packages/caws-cli/src/runtime/session-store-publication.ts
+    - packages/caws-cli/tests/adapter/opencode-project-registration.test.js
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
