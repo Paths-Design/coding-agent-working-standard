@@ -2,7 +2,6 @@ id: CAWS-EXECUTION-AUTHORITY-FENCE-001
 title: 'Serialize authority writers with the execution launch fence'
 mode: fix
 lifecycle_state: active
-worktree: execution-authority-fence
 created_at: '2026-10-26T22:34:51.104Z'
 updated_at: '2026-10-26T22:35:15.804Z'
 created_by_session: '01a17a57-7506-7df3-929e-be30abfa6cab'
