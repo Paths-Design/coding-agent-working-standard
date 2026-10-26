@@ -12,6 +12,7 @@ const {
   planPreparationGitExport,
   inspectPreparationWriteAuthority,
   preparationSourceDisposition,
+  collectPreparationProductionSource,
 } = require('../../dist/tooling/native-qualification-prepare');
 
 describe('native preparation closed production input profile', () => {
@@ -271,6 +272,178 @@ function framed(value) {
 function treeRecord(mode, name, oid) {
   return Buffer.concat([Buffer.from(`${mode} ${name}\0`), Buffer.from(oid, 'hex')]);
 }
+
+describe('native preparation profile before blob reads', () => {
+  function graph(files, format = 'sha1') {
+    const index = new Map();
+    const roots = {};
+    const blobs = {};
+    for (const [name, body, mode = '100644'] of files) {
+      const blob = object('blob', body, format);
+      index.set(blob.oid, blob);
+      blobs[name] = blob;
+      const parts = name.split('/');
+      let cursor = roots;
+      for (const part of parts.slice(0, -1)) cursor = cursor[part] ??= {};
+      cursor[parts.at(-1)] = { blob, mode };
+    }
+    function treeOf(directory) {
+      const tree = object(
+        'tree',
+        Buffer.concat(
+          Object.entries(directory).map(([name, entry]) =>
+            entry.blob
+              ? treeRecord(entry.mode, name, entry.blob.oid)
+              : treeRecord('40000', name, treeOf(entry).oid)
+          )
+        ),
+        format
+      );
+      index.set(tree.oid, tree);
+      return tree;
+    }
+    const tree = treeOf(roots);
+    const commit = object('commit', `tree ${tree.oid}\n\nproduction snapshot`, format);
+    index.set(commit.oid, commit);
+    const calls = [];
+    const read = (selections) => {
+      calls.push(...selections.map((value) => ({ ...value })));
+      return Buffer.concat(selections.map(({ oid }) => framed(index.get(oid))));
+    };
+    return { read, index, calls, blobs, commit, tree, format };
+  }
+  const collect = (fixture) =>
+    collectPreparationProductionSource(
+      fixture.read,
+      fixture.commit.oid,
+      fixture.tree.oid,
+      fixture.format
+    );
+
+  test.each(['sha1', 'sha256'])(
+    'reads only selected %s blobs after completing the name inventory',
+    (format) => {
+      const fixture = graph(
+        [
+          ['package.json', '{"private":true}\n'],
+          ['scripts/install-cli-snapshot.mjs', 'executable source\n', '100755'],
+          ['docs/new-guide.md', '---\naudience: consumer\n---\n'],
+          ['README.md', 'unselected root documentation'],
+          ['.caws/policy.yaml', 'protected policy'],
+        ],
+        format
+      );
+      const result = collect(fixture);
+      expect(result.commit).toBe(fixture.commit.oid);
+      expect(result.tree).toBe(fixture.tree.oid);
+      expect(result.objectFormat).toBe(format);
+      expect(result.directories).toEqual(['docs', 'scripts']);
+      expect(result.files).toEqual([
+        {
+          relativePath: 'docs/new-guide.md',
+          oid: fixture.blobs['docs/new-guide.md'].oid,
+          mode: '100644',
+          bytes: Buffer.from('---\naudience: consumer\n---\n'),
+        },
+        {
+          relativePath: 'package.json',
+          oid: fixture.blobs['package.json'].oid,
+          mode: '100644',
+          bytes: Buffer.from('{"private":true}\n'),
+        },
+        {
+          relativePath: 'scripts/install-cli-snapshot.mjs',
+          oid: fixture.blobs['scripts/install-cli-snapshot.mjs'].oid,
+          mode: '100755',
+          bytes: Buffer.from('executable source\n'),
+        },
+      ]);
+      expect(result.omitted).toEqual([
+        { relativePath: '.caws/policy.yaml', disposition: 'protected' },
+        { relativePath: 'README.md', disposition: 'unselected' },
+      ]);
+      const expectedMetadata = [...fixture.index.values()]
+        .filter(({ kind }) => kind !== 'blob')
+        .map(({ oid, kind }) => ({ oid, kind }));
+      const firstBlob = fixture.calls.findIndex(({ kind }) => kind === 'blob');
+      expect(firstBlob).toBe(expectedMetadata.length);
+      expect(fixture.calls.slice(0, firstBlob)).toEqual(expect.arrayContaining(expectedMetadata));
+      expect(fixture.calls.slice(firstBlob)).toEqual(
+        result.files.map(({ oid }) => ({ oid, kind: 'blob' }))
+      );
+    }
+  );
+
+  test.each([
+    'docs/.env/guide.md',
+    'packages/caws-cli/src/runtime/.caws/state.json',
+    'packages/caws-cli/templates/hook-packs/shared/credentials.json',
+  ])('refuses required protected input %s before reading any blobs', (name) => {
+    const fixture = graph([
+      ['package.json', 'otherwise selected'],
+      [name, 'must never read'],
+    ]);
+    expect(() => collect(fixture)).toThrow(`Required production input is protected: ${name}`);
+    expect(fixture.calls.filter(({ kind }) => kind === 'blob')).toEqual([]);
+  });
+
+  test('does not request unselected test fixtures or an empty profile', () => {
+    const fixture = graph([['packages/caws-cli/tests/example.test.js', 'not a production input']]);
+    expect(() => collect(fixture)).toThrow('Production source selection is empty');
+    expect(fixture.calls.filter(({ kind }) => kind === 'blob')).toEqual([]);
+  });
+
+  test('rehashes selected content and refuses a transport returning changed bytes', () => {
+    const fixture = graph([['package.json', 'selected bytes']]);
+    fixture.blobs['package.json'].bytes[0] ^= 1;
+    expect(() => collect(fixture)).toThrow('content identity mismatch');
+  });
+
+  test('rejects a root pin mismatch before traversing any source tree', () => {
+    const fixture = graph([['package.json', 'selected bytes']]);
+    expect(() =>
+      collectPreparationProductionSource(fixture.read, fixture.commit.oid, '1'.repeat(40), 'sha1')
+    ).toThrow('Pinned root tree mismatch');
+    expect(fixture.calls).toEqual([{ oid: fixture.commit.oid, kind: 'commit' }]);
+  });
+
+  test('deduplicates object reads but preserves each selected file and mode', () => {
+    const fixture = graph([
+      ['LICENSE', 'same bytes'],
+      ['package.json', 'same bytes', '100755'],
+    ]);
+    const result = collect(fixture);
+    expect(
+      result.files.map(({ relativePath, mode, bytes }) => [relativePath, mode, bytes.toString()])
+    ).toEqual([
+      ['LICENSE', '100644', 'same bytes'],
+      ['package.json', '100755', 'same bytes'],
+    ]);
+    expect(fixture.calls.filter(({ kind }) => kind === 'blob')).toEqual([
+      { oid: fixture.blobs.LICENSE.oid, kind: 'blob' },
+    ]);
+    result.files[0].bytes.fill(0);
+    expect(result.files[1].bytes.toString()).toBe('same bytes');
+  });
+
+  test('refuses a link without following it even outside the selected profile', () => {
+    const fixture = graph([
+      ['package.json', 'selected'],
+      ['unselected-link', '/outside', '120000'],
+    ]);
+    expect(() => collect(fixture)).toThrow('Unsupported source mode');
+    expect(fixture.calls.filter(({ kind }) => kind === 'blob')).toEqual([]);
+  });
+
+  test('bounds metadata depth before reading otherwise selected content', () => {
+    const fixture = graph([
+      ['package.json', 'selected'],
+      [`${'d/'.repeat(65)}file`, 'deep'],
+    ]);
+    expect(() => collect(fixture)).toThrow('depth exceeds bound');
+    expect(fixture.calls.filter(({ kind }) => kind === 'blob')).toEqual([]);
+  });
+});
 
 describe('native preparation raw Git object identities', () => {
   test.each(['sha1', 'sha256'])(

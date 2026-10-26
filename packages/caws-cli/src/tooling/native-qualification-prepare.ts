@@ -111,6 +111,23 @@ const PRODUCTION_INPUT_FILES = new Set([
 
 export type PreparationSourceDisposition = 'include' | 'unselected' | 'protected';
 
+function productionInputName(relativePath: string): boolean {
+  if (PRODUCTION_INPUT_FILES.has(relativePath)) return true;
+  if (relativePath.startsWith('docs/') && relativePath.endsWith('.md')) return true;
+  if (
+    /^packages\/caws-cli\/src\/(?:store|shell|kernel|init|runtime|transcripts|tooling)\/.+\.(?:ts|json)$/.test(
+      relativePath
+    )
+  )
+    return true;
+  if (relativePath.startsWith('packages/caws-cli/templates/hook-packs/')) return true;
+  if (relativePath.startsWith('packages/caws-native/src/') && relativePath.endsWith('.rs')) {
+    const parts = relativePath.split('/');
+    return parts[parts.length - 1] !== 'tests.rs' && !parts.slice(3).includes('tests');
+  }
+  return false;
+}
+
 /** Name-only selection. Call before requesting any source blob bytes. */
 export function preparationSourceDisposition(relativePath: string): PreparationSourceDisposition {
   requireCondition(
@@ -163,14 +180,6 @@ export function preparationSourceDisposition(relativePath: string): PreparationS
     relativePath.startsWith('.cargo/')
   )
     return 'protected';
-  if (PRODUCTION_INPUT_FILES.has(relativePath)) return 'include';
-  if (relativePath.startsWith('docs/') && relativePath.endsWith('.md')) return 'include';
-  if (
-    /^packages\/caws-cli\/src\/(?:store|shell|kernel|init|runtime|transcripts|tooling)\/.+\.(?:ts|json)$/.test(
-      relativePath
-    )
-  )
-    return 'include';
   if (relativePath.startsWith('packages/caws-cli/templates/hook-packs/')) {
     // These are distributable templates, not effective machine registrations.
     // Their operational scratch/state and arbitrary fixtures are not inputs.
@@ -183,13 +192,112 @@ export function preparationSourceDisposition(relativePath: string): PreparationS
       )
     )
       return 'protected';
-    return 'include';
   }
-  if (relativePath.startsWith('packages/caws-native/src/') && relativePath.endsWith('.rs')) {
-    if (base === 'tests.rs' || parts.slice(3).includes('tests')) return 'unselected';
-    return 'include';
-  }
-  return 'unselected';
+  return productionInputName(relativePath) ? 'include' : 'unselected';
+}
+
+export interface PreparationProductionPlan extends PreparationExportPlan {
+  objectFormat: PreparationObjectFormat;
+  /** Names only; none of these source blobs were requested. */
+  omitted: { relativePath: string; disposition: 'protected' | 'unselected' }[];
+}
+
+/** Maintained transport returns raw fixed cat-file --batch frames, not decoded assertions. */
+export type PreparationObjectReader = (selections: readonly PreparationObjectSelection[]) => Buffer;
+
+/**
+ * Inspect commit/tree names before selecting any blob. Only the compiled
+ * production profile can select content; a protected input required by that
+ * profile refuses the entire plan. Source standing and write authority are
+ * independent prerequisites enforced by the maintained entry.
+ */
+export function collectPreparationProductionSource(
+  read: PreparationObjectReader,
+  commit: string,
+  tree: string,
+  format: PreparationObjectFormat
+): PreparationProductionPlan {
+  requireOid(commit, format);
+  requireOid(tree, format);
+  const cache = new Map<string, PreparationGitObject>();
+  let objectBytes = 0;
+  const get = (oid: string, kind: PreparationObjectKind): Buffer => {
+    const cached = cache.get(oid);
+    if (cached) {
+      requireCondition(cached.kind === kind, 'Incorrect production graph edge type');
+      return cached.bytes;
+    }
+    requireCondition(cache.size < MAX_OBJECTS, 'Production object count exceeds bound');
+    const selection = [{ oid, kind }];
+    const object = decodePreparationGitBatch(read(selection), selection, format)[0]!;
+    objectBytes += object.bytes.length;
+    requireCondition(objectBytes <= MAX_BATCH_BYTES, 'Production object bytes exceed bound');
+    cache.set(oid, object);
+    return object.bytes;
+  };
+  requireCondition(
+    preparationCommitTree(get(commit, 'commit'), format) === tree,
+    'Pinned root tree mismatch'
+  );
+  const selected: Omit<PreparationExportFile, 'bytes'>[] = [];
+  const omitted: PreparationProductionPlan['omitted'] = [];
+  let entries = 0;
+  const walk = (oid: string, prefix: string, depth: number): void => {
+    requireCondition(depth <= 64, 'Source tree depth exceeds bound');
+    for (const entry of decodePreparationGitTree(get(oid, 'tree'), format)) {
+      const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      requireCondition(
+        relativePath.length <= 4096 && ++entries <= MAX_OBJECTS,
+        'Source path inventory exceeds bound'
+      );
+      if (entry.mode === '40000') {
+        walk(entry.oid, relativePath, depth + 1);
+        continue;
+      }
+      const disposition = preparationSourceDisposition(relativePath);
+      if (disposition === 'include')
+        selected.push({ relativePath, oid: entry.oid, mode: entry.mode });
+      else {
+        requireCondition(
+          disposition !== 'protected' || !productionInputName(relativePath),
+          `Required production input is protected: ${relativePath}`
+        );
+        omitted.push({ relativePath, disposition });
+      }
+    }
+  };
+  walk(tree, '', 0);
+  requireCondition(selected.length > 0, 'Production source selection is empty');
+  selected.sort((a, b) =>
+    a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0
+  );
+  omitted.sort((a, b) =>
+    a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0
+  );
+  const directories = new Set<string>();
+  let materializedBytes = 0;
+  const files = selected.map((file): PreparationExportFile => {
+    const bytes = get(file.oid, 'blob');
+    materializedBytes += bytes.length;
+    requireCondition(
+      materializedBytes <= MAX_BATCH_BYTES,
+      'Materialized source bytes exceed bound'
+    );
+    let directory = path.posix.dirname(file.relativePath);
+    while (directory !== '.') {
+      directories.add(directory);
+      directory = path.posix.dirname(directory);
+    }
+    return { ...file, bytes: Buffer.from(bytes) };
+  });
+  return {
+    commit,
+    tree,
+    objectFormat: format,
+    directories: [...directories].sort(),
+    files,
+    omitted,
+  };
 }
 
 function requireCondition(value: unknown, message: string): asserts value {
