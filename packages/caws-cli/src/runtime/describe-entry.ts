@@ -62,6 +62,7 @@ export async function runDescribeEntry(
           runtimeDigest,
           surface,
           event,
+          caller,
           system: configuration === 'system',
         })
       : { status: 'inactive' as const, reason: project.reason };
