@@ -42,7 +42,7 @@ invariants:
   - 'Installed route identity survives parsing; mandatory generation validation cannot be swallowed as optional Stop preparation or retried through Node or compatibility.'
   - 'The same original MonotonicDeadline bounds capture, revalidation and effects; no pointer reread, new timeout, duplicated full capture or admission authority is introduced.'
   - 'Direct invocation and existing event refusal exit and cleanup/output contracts remain; internal SQLite identity and Stop profile v1 semantics stay unchanged.'
-  - 'Terminal delivery and cleanup time are reserved within the same original invocation interval. No post-proposal output, signal, state transaction, acknowledgment or synchronous cleanup wait receives additive grace; uncertain existing custodians retain actual child ownership without a second stdout result.'
+  - 'Terminal delivery and frontend cleanup waiting are reserved within the same original invocation interval. No post-proposal output, containment signal, state transaction, acknowledgment or synchronous frontend wait receives additive grace; existing custodians may continue cleanup of their actual children after frontend expiry with explicit uncertainty and no second stdout result.'
 acceptance:
   - id: A1
     given: 'direct and installed native invocation arguments across six events'
