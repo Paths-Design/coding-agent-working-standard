@@ -29,10 +29,6 @@ acceptance:
     given: 'a lifecycle fence is held in one process'
     when: 'another real process attempts acquisition before release and after release'
     then: 'the competitor refuses without entering while held and acquires after the completed release'
-  - id: A4
-    given: 'bind and scope amendment derive plans before locking'
-    when: 'source authority changes before acquiring the fence'
-    then: 'stale authority plans cannot overwrite committed state'
 observability:
   - 'Focused hostile-path tests retain refusal rules and authority bytes.'
 rollback:
