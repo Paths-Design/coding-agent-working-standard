@@ -175,6 +175,19 @@ acceptance:
       profiles, authority revocation, altered fields, expiry, cancellation, replay
       and malformed or timed-out analysis produce zero user launches, with bounded
       cleanup and truthful partial outcomes
+  - id: A12
+    given: >-
+      A pinned real native host using an isolated exclusive CAWS execution profile
+      and the prior immutable profile for rollback
+    when: >-
+      Actual tool inventory, authenticated host association, useful benign and
+      hostile native calls, restart and rollback are observed
+    then: >-
+      Every covered native execution route reaches the CAWS final-launch owner,
+      benign computed data launches once with matching execution fields, hostile or
+      alternate routes launch zero user commands, and rollback restores the prior
+      observed selection and behavior; global adoption remains unqualified until its
+      own checks pass
 observability:
   - 'Structured verdict, reason codes and source-positioned decision trace distinguish allowed, denied and unresolved facts without claiming a general process sandbox.'
 rollback:
