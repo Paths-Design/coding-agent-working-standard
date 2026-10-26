@@ -26,9 +26,9 @@ acceptance:
     when: 'competing acquisition and prior-handle release execute'
     then: 'the live holder is retained and the successor remains locked'
   - id: A2
-    given: 'an authority fence is held'
-    when: 'real bridge release or takeover attempts commit'
-    then: 'the mutation refuses without changes and a completed release is visible after reacquisition'
+    given: 'a lifecycle fence is held in one process'
+    when: 'another real process attempts acquisition before release and after release'
+    then: 'the competitor refuses without entering while held and acquires after the completed release'
   - id: A3
     given: 'a worktree takeover whose audit fails'
     when: 'rollback and a later successful transition execute'
