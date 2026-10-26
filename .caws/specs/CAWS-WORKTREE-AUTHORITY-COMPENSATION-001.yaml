@@ -1,0 +1,44 @@
+id: CAWS-WORKTREE-AUTHORITY-COMPENSATION-001
+title: 'Serialize worktree authority validation and compensation'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-26T23:44:06.643Z'
+updated_at: '2026-10-26T23:44:06.643Z'
+created_by_session: '01a17a98-b495-73f3-9f98-08991fac57ec'
+blast_radius:
+  modules:
+    - 'worktree create and takeover authority writer'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/tests/shell/claim-takeover-event.test.js'
+    - 'packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js'
+  out: []
+invariants:
+  - 'Canonical authority is read, validated, written, and compensated only while the lifecycle lock is held; failed acquisition preserves authority and audit bytes.'
+  - 'Physical Git setup and cleanup remain outside the canonical authority lock; immutable audit residue is reported honestly.'
+acceptance:
+  - id: A1
+    given: 'a failed lifecycle lock acquisition'
+    when: 'create or takeover is requested'
+    then: 'canonical spec registry and audit bytes remain exactly unchanged'
+  - id: A2
+    given: 'competing authority changes before lock acquisition'
+    when: 'create or takeover enters the acquired lock'
+    then: 'fresh authority is validated and stale takeover plans are refused without overwriting competing changes'
+  - id: A3
+    given: 'authority mutation or audit append fails while locked'
+    when: 'compensation runs'
+    then: 'exact prior authority bytes are restored before unlock or restoration failure is explicitly reported with immutable audit residue preserved'
+observability:
+  - 'Real compiled-writer regression tests inspect authority bytes and audit records through lock failure and competing commits.'
+rollback:
+  - 'Revert the source and behavioral tests through an ordinary follow-up commit.'
+non_functional:
+  security:
+    - 'Reject stale ownership binding and inconsistent spec registry envelopes before transfer.'
+contracts:
+  - name: 'worktree-authority-compensation'
+    type: behavior
