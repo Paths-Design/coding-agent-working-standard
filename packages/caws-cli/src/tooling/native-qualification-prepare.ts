@@ -7,7 +7,11 @@ import { loadPolicy } from '../store/policy-store';
 import { loadSpecs } from '../store/specs-store';
 import { loadWorktrees } from '../store/worktrees-store';
 import { resolveCallerSession } from '../shell/session/resolve-session';
-import { nativeSqlitePreparationCustody, type ReviewedTree } from './native-sqlite-build';
+import {
+  nativeSqlitePreparationCustody,
+  type NativeSqliteBuildRequest,
+  type ReviewedTree,
+} from './native-sqlite-build';
 import type { ReviewedFile } from './sqlite-static-build';
 
 /** Object identities are storage-format identities, never revision expressions. */
@@ -617,6 +621,196 @@ function requireAbsent(file: string): void {
     throw error;
   }
   throw new Error(`Preparation path already exists: ${file}`);
+}
+
+export interface CapturedPreparationInput {
+  identity: ReviewedFile;
+  bytes: Buffer;
+}
+export interface PreparedNativeRequestComposition {
+  request: NativeSqliteBuildRequest;
+  provenance: {
+    sourceInventory: ReviewedFile;
+    baseRecipe: ReviewedFile;
+    source: PreparationSourceObservation;
+  };
+}
+
+function capturedPreparationJson(captured: CapturedPreparationInput): unknown {
+  exactObjectKeys(captured, ['identity', 'bytes']);
+  exactObjectKeys(captured.identity, ['path', 'sizeBytes', 'sha256']);
+  normalizedAbsolute(captured.identity.path);
+  requireCondition(
+    Buffer.isBuffer(captured.bytes) &&
+      captured.bytes.length > 0 &&
+      captured.bytes.length <= MAX_OBJECT_BYTES &&
+      captured.bytes.length === captured.identity.sizeBytes &&
+      createHash('sha256').update(captured.bytes).digest('hex') === captured.identity.sha256,
+    'Captured preparation input identity mismatch'
+  );
+  const text = captured.bytes.toString('utf8');
+  requireCondition(
+    Buffer.from(text, 'utf8').equals(captured.bytes),
+    'Captured preparation input must be UTF-8'
+  );
+  return JSON.parse(text);
+}
+
+/**
+ * Compose request data only from parent-captured, identity-checked byte records.
+ * Preserve reviewed tool/vendor/SQLite/SDK pins only when Cargo inputs match.
+ * A current source observation is a separate parent dependency, not JSON input.
+ * Pins bind records; they do not authenticate the parent, establish semantic
+ * acceptance, grant authority or verify current files. No filesystem/child I/O.
+ */
+export function composePreparedNativeBuildRequest(
+  sourceInventory: CapturedPreparationInput,
+  baseRecipe: CapturedPreparationInput,
+  currentSource: PreparationSourceObservation
+): PreparedNativeRequestComposition {
+  const inventory = capturedPreparationJson(sourceInventory) as {
+    schema: string;
+    adoption: string;
+    source: PreparationSourceObservation;
+    files: (ReviewedTree['files'][number] & { gitObject: string; gitMode: string })[];
+    futureBuildRoot: string;
+  };
+  exactObjectKeys(inventory, [
+    'schema',
+    'adoption',
+    'source',
+    'files',
+    'omitted',
+    'futureBuildRoot',
+    'limits',
+  ]);
+  requireCondition(
+    inventory.schema === 'caws.frozen_source_inventory.v1' && inventory.adoption === 'NOT_ADOPTED',
+    'Unsupported preparation inventory'
+  );
+  requireCondition(
+    path.basename(sourceInventory.identity.path) === 'source-inventory.json',
+    'Expected maintained source inventory path'
+  );
+  const sourceKeys = [
+    'sourceRoot',
+    'commit',
+    'tree',
+    'objectFormat',
+    'repoRoot',
+    'worktreeName',
+    'specId',
+  ] as const;
+  exactObjectKeys(inventory.source, sourceKeys);
+  exactObjectKeys(currentSource, sourceKeys);
+  for (const key of sourceKeys)
+    requireCondition(
+      inventory.source[key] === currentSource[key],
+      'Source standing changed before request composition'
+    );
+  requireOid(currentSource.commit, currentSource.objectFormat);
+  requireOid(currentSource.tree, currentSource.objectFormat);
+  const sourceTree: ReviewedTree = {
+    root: path.join(path.dirname(sourceInventory.identity.path), 'source'),
+    files: [],
+  };
+  normalizedAbsolute(inventory.futureBuildRoot);
+  requireCondition(
+    Array.isArray(inventory.files) &&
+      inventory.files.length > 0 &&
+      inventory.files.length <= MAX_OBJECTS,
+    'Invalid prepared source inventory count'
+  );
+  const names = new Set<string>();
+  let sourceBytes = 0;
+  for (const file of inventory.files) {
+    exactObjectKeys(file, [
+      'relativePath',
+      'sizeBytes',
+      'sha256',
+      'executable',
+      'gitObject',
+      'gitMode',
+    ]);
+    requireCondition(
+      preparationSourceDisposition(file.relativePath) === 'include' &&
+        !names.has(file.relativePath),
+      'Prepared inventory contains an unselected or duplicate source path'
+    );
+    requireOid(file.gitObject, currentSource.objectFormat);
+    requireCondition(
+      (file.gitMode === '100644' || file.gitMode === '100755') &&
+        file.executable === (file.gitMode === '100755'),
+      'Prepared source mode mismatch'
+    );
+    requireCondition(
+      Number.isSafeInteger(file.sizeBytes) &&
+        file.sizeBytes >= 0 &&
+        file.sizeBytes <= MAX_OBJECT_BYTES &&
+        typeof file.sha256 === 'string' &&
+        /^[0-9a-f]{64}$/.test(file.sha256),
+      'Invalid prepared file identity'
+    );
+    sourceBytes += file.sizeBytes;
+    requireCondition(sourceBytes <= MAX_BATCH_BYTES, 'Prepared source bytes exceed bound');
+    names.add(file.relativePath);
+    sourceTree.files.push({
+      relativePath: file.relativePath,
+      sizeBytes: file.sizeBytes,
+      sha256: file.sha256,
+      executable: file.executable,
+    });
+  }
+  const baseRequest = capturedPreparationJson(baseRecipe) as NativeSqliteBuildRequest;
+  nativeSqlitePreparationCustody.validateRequest(baseRequest);
+  requireCondition(
+    baseRequest.schema === 'caws.native_sqlite_build_request.v2' &&
+      baseRequest.profile === 'release',
+    'Preparation requires a reviewed v2 release recipe'
+  );
+  const subtree = (prefix: string): ReviewedTree => ({
+    root: path.join(sourceTree.root, prefix),
+    files: sourceTree.files
+      .filter((file) => file.relativePath.startsWith(`${prefix}/`))
+      .map((file) => ({ ...file, relativePath: file.relativePath.slice(prefix.length + 1) })),
+  });
+  const source = subtree('packages/caws-native');
+  for (const name of ['Cargo.toml', 'Cargo.lock']) {
+    const prior = baseRequest.source.files.find((file) => file.relativePath === name);
+    const current = source.files.find((file) => file.relativePath === name);
+    requireCondition(
+      prior &&
+        current &&
+        prior.sha256 === current.sha256 &&
+        prior.sizeBytes === current.sizeBytes &&
+        prior.executable === current.executable,
+      `Cargo input changed; review a new dependency recipe: ${name}`
+    );
+  }
+  const clientPath =
+    'packages/caws-cli/templates/hook-packs/shared/lib/session-render-service-client.sh';
+  const client = sourceTree.files.find((file) => file.relativePath === clientPath);
+  requireCondition(client, 'Prepared service client is missing');
+  const request = JSON.parse(JSON.stringify(baseRequest)) as NativeSqliteBuildRequest;
+  request.source = source;
+  request.embedded = {
+    serviceClient: {
+      path: path.join(sourceTree.root, clientPath),
+      sizeBytes: client.sizeBytes,
+      sha256: client.sha256,
+    },
+    serviceImage: subtree('packages/caws-cli/templates/hook-packs/runtime/service-image'),
+  };
+  request.outputRoot = inventory.futureBuildRoot;
+  nativeSqlitePreparationCustody.validateRequest(request);
+  return {
+    request,
+    provenance: {
+      sourceInventory: { ...sourceInventory.identity },
+      baseRecipe: { ...baseRecipe.identity },
+      source: { ...currentSource },
+    },
+  };
 }
 
 /**

@@ -16,6 +16,7 @@ const {
   collectPreparationProductionSource,
   inspectPreparationSourceStanding,
   prepareFrozenProductionSource,
+  composePreparedNativeBuildRequest,
 } = require('../../dist/tooling/native-qualification-prepare');
 const {
   executeFrozenSourcePreparation,
@@ -52,6 +53,220 @@ describe('native preparation bounded request handler', () => {
       phase: 'parent',
       reason: 'An independently admitted maintained parent is required',
     });
+  });
+});
+
+describe('native preparation data-only build request composition', () => {
+  const imageNames = [
+    'caws.sh',
+    'codex-parser-runtime.sh',
+    'dispatch.sh',
+    'execute-handler.sh',
+    'git.sh',
+    'handler-env.sh',
+    'handler-routes.sh',
+    'libraries.sh',
+    'parse-input.sh',
+    'plan-transcript-finalize.sh',
+    'tool.sh',
+  ];
+  const clientPath =
+    'packages/caws-cli/templates/hook-packs/shared/lib/session-render-service-client.sh';
+  const imagePrefix = 'packages/caws-cli/templates/hook-packs/runtime/service-image';
+  const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+  const row = (relativePath, text) => ({
+    relativePath,
+    sizeBytes: Buffer.byteLength(text),
+    sha256: sha(Buffer.from(text)),
+    executable: false,
+  });
+  const pin = (file, text) => ({
+    path: file,
+    sizeBytes: Buffer.byteLength(text),
+    sha256: sha(Buffer.from(text)),
+  });
+  const capture = (file, value) => {
+    const bytes = Buffer.from(JSON.stringify(value));
+    return { identity: { path: file, sizeBytes: bytes.length, sha256: sha(bytes) }, bytes };
+  };
+  function fixture() {
+    // Schema-valid inert metadata only. No SQLite/tool/source files exist at
+    // these paths; no child or file operation can qualify a candidate here.
+    const source = {
+      sourceRoot: '/fixture/project/lane',
+      commit: 'a'.repeat(40),
+      tree: 'b'.repeat(40),
+      objectFormat: 'sha1',
+      repoRoot: '/fixture/project',
+      worktreeName: 'lane',
+      specId: 'FIXTURE-1',
+    };
+    const cargo = [row('Cargo.toml', 'manifest'), row('Cargo.lock', 'locked dependencies')];
+    const currentNative = [...cargo, row('src/installed_entry_main.rs', 'current entry metadata')];
+    const currentImage = imageNames.map((name) => row(name, `current image ${name}`));
+    const currentClient = row(clientPath, 'current client metadata');
+    const inventory = {
+      schema: 'caws.frozen_source_inventory.v1',
+      adoption: 'NOT_ADOPTED',
+      source,
+      files: [
+        row('LICENSE', 'fixture notice'),
+        ...currentNative.map((file) => ({
+          ...file,
+          relativePath: `packages/caws-native/${file.relativePath}`,
+        })),
+        ...currentImage.map((file) => ({
+          ...file,
+          relativePath: `${imagePrefix}/${file.relativePath}`,
+        })),
+        currentClient,
+      ].map((file) => ({ ...file, gitObject: 'c'.repeat(40), gitMode: '100644' })),
+      omitted: [],
+      futureBuildRoot: '/fixture/project/lane/tmp/native-build',
+      limits: ['Metadata only'],
+    };
+    const binding = row('bindgen-bindings/bindgen_3.34.1.rs', 'binding metadata');
+    const base = {
+      schema: 'caws.native_sqlite_build_request.v2',
+      source: {
+        root: '/fixture/base/native',
+        files: [...cargo, row('src/installed_entry_main.rs', 'prior entry metadata')],
+      },
+      embedded: {
+        serviceClient: pin('/fixture/base/client.sh', 'prior client'),
+        serviceImage: {
+          root: '/fixture/base/image',
+          files: imageNames.map((name) => row(name, `prior image ${name}`)),
+        },
+      },
+      vendors: [
+        {
+          directory: 'libsqlite3-sys-0.38.2',
+          tree: {
+            root: '/fixture/vendor/sqlite',
+            files: [row('Cargo.toml', 'vendor manifest'), binding],
+          },
+        },
+      ],
+      prefix: {
+        archive: pin('/fixture/prefix/sqlite.a', 'archive metadata'),
+        object: pin('/fixture/prefix/sqlite.o', 'object metadata'),
+        header: {
+          ...pin('/fixture/prefix/sqlite.h', 'header metadata'),
+          sha256: '919e7f2e8ed1d8f56ac17b412b8971c76aa5d1a879752cc6058f75e7d5910e1d',
+        },
+      },
+      binding: {
+        directory: 'libsqlite3-sys-0.38.2',
+        relativePath: binding.relativePath,
+        sha256: binding.sha256,
+      },
+      tools: Object.fromEntries(
+        ['cargo', 'rustc', 'clang', 'ar', 'nm', 'otool'].map((name) => [
+          name,
+          pin(`/fixture/tools/${name}`, `tool metadata ${name}`),
+        ])
+      ),
+      sdk: { root: '/fixture/sdk', settings: pin('/fixture/sdk/SDKSettings.json', 'SDK metadata') },
+      outputRoot: '/fixture/base-build',
+      profile: 'release',
+      timeoutMs: 600000,
+      maxOutputBytes: 4096,
+    };
+    return { source, inventory, base, currentNative, currentImage, currentClient };
+  }
+  const inputs = (f) => [
+    capture('/fixture/project/lane/tmp/prepared/source-inventory.json', f.inventory),
+    capture('/fixture/base-request.json', f.base),
+    f.source,
+  ];
+  afterEach(() => jest.restoreAllMocks());
+
+  test('replaces exact source descriptors, preserves reviewed dependencies and binds both input records', () => {
+    const f = fixture();
+    const captured = inputs(f);
+    const before = JSON.stringify(f);
+    const open = jest.spyOn(fs, 'openSync');
+    const child = jest.spyOn(children, 'execFileSync');
+    const composed = composePreparedNativeBuildRequest(...captured);
+    const newRoot = '/fixture/project/lane/tmp/prepared/source';
+    expect(composed.request).toEqual({
+      ...f.base,
+      source: { root: `${newRoot}/packages/caws-native`, files: f.currentNative },
+      embedded: {
+        serviceClient: {
+          path: `${newRoot}/${clientPath}`,
+          sizeBytes: f.currentClient.sizeBytes,
+          sha256: f.currentClient.sha256,
+        },
+        serviceImage: { root: `${newRoot}/${imagePrefix}`, files: f.currentImage },
+      },
+      outputRoot: f.inventory.futureBuildRoot,
+    });
+    expect(composed.provenance).toEqual({
+      sourceInventory: captured[0].identity,
+      baseRecipe: captured[1].identity,
+      source: f.source,
+    });
+    expect(JSON.stringify(f)).toBe(before);
+    composed.request.tools.cargo.sha256 = 'd'.repeat(64);
+    composed.request.source.files[0].sha256 = 'e'.repeat(64);
+    expect(JSON.stringify(f)).toBe(before);
+    expect(open).not.toHaveBeenCalled();
+    expect(child).not.toHaveBeenCalled();
+  });
+
+  test.each(['Cargo.toml', 'Cargo.lock'])('refuses a changed dependency input %s', (name) => {
+    const f = fixture();
+    f.inventory.files.find((file) => file.relativePath === `packages/caws-native/${name}`).sha256 =
+      'f'.repeat(64);
+    expect(() => composePreparedNativeBuildRequest(...inputs(f))).toThrow(
+      `Cargo input changed; review a new dependency recipe: ${name}`
+    );
+  });
+
+  test.each([
+    ['packages/caws-native/src/installed_entry_main.rs', 'Stable hook entry source missing'],
+    [`${imagePrefix}/tool.sh`, 'Embedded service-image inventory mismatch'],
+    [clientPath, 'Prepared service client is missing'],
+  ])('refuses missing required descriptor %s', (name, reason) => {
+    const f = fixture();
+    f.inventory.files = f.inventory.files.filter((file) => file.relativePath !== name);
+    expect(() => composePreparedNativeBuildRequest(...inputs(f))).toThrow(reason);
+  });
+
+  test.each([0, 1])('refuses mutated captured bytes for input %i', (index) => {
+    const captured = inputs(fixture());
+    captured[index].bytes[1] ^= 1;
+    expect(() => composePreparedNativeBuildRequest(...captured)).toThrow(
+      'Captured preparation input identity mismatch'
+    );
+  });
+
+  test('refuses a changed current source observation before retaining the recipe', () => {
+    const f = fixture();
+    const captured = inputs(f);
+    captured[2] = { ...f.source, commit: 'd'.repeat(40) };
+    expect(() => composePreparedNativeBuildRequest(...captured)).toThrow(
+      'Source standing changed before request composition'
+    );
+  });
+
+  test('refuses an external descriptor aliasing the proposed build output', () => {
+    const f = fixture();
+    f.base.tools.cargo.path = `${f.inventory.futureBuildRoot}/cargo`;
+    expect(() => composePreparedNativeBuildRequest(...inputs(f))).toThrow(
+      'Output/input file collision'
+    );
+  });
+
+  test.each(['v1', 'debug'])('refuses unsupported recipe %s', (kind) => {
+    const f = fixture();
+    if (kind === 'v1') f.base.schema = 'caws.native_sqlite_build_request.v1';
+    else f.base.profile = 'debug';
+    expect(() => composePreparedNativeBuildRequest(...inputs(f))).toThrow(
+      'reviewed v2 release recipe'
+    );
   });
 });
 
