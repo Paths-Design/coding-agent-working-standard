@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: shell-analysis
 created_at: '2026-10-19T02:30:42.300Z'
-updated_at: '2026-10-26T17:47:17.607Z'
+updated_at: '2026-10-26T17:47:32.846Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -62,6 +62,7 @@ scope:
     - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
     - docs/guides/worktree-isolation.md
     - packages/caws-cli/tests/hooks/pytest/test_bash_mutation_boundary.py
+    - packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js
 invariants:
   - 'Analysis never executes submitted commands, expansions, scripts or redirections.'
   - 'Every possible shell-visible Git target and admitted execution-bearing argument satisfies the declared policy; unresolved syntax or values never become an allow proof.'
