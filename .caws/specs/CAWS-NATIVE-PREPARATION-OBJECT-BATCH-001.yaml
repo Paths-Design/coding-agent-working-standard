@@ -20,8 +20,11 @@ invariants:
   - 'No mutable observation cache, deadline increase, protocol expansion or weakened byte, count, identity, mode or materialization bound'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an admitted immutable production graph with selected and excluded files and repeated blob identities'
+    when: 'the selected contents are collected through the existing array protocol'
+    then: >-
+      bounded requests preserve complete ordered paths, exact bytes, independent
+      buffers and modes; excluded or protected blobs are never requested before
+      complete metadata admission
 non_functional: {}
 contracts: []
