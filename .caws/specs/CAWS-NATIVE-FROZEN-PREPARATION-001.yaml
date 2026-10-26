@@ -58,3 +58,8 @@ contracts:
     type: schema
   - name: 'native-qualification-preparation-entry'
     type: behavior
+evidence:
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "Requirement reconciled with coordinator: malformed request/startup injection refuses before any child; fixed pinned read-only Node/Git preflight may derive actual source/ownership, before any mutation or unapproved child. Source153-control result is not actual host startup/guard proof. Private operator-reviewed preparation distribution and closed Rust parent remain unimplemented/unqualified; no effectful export run."
+    recorded_at: "2026-10-26T03:57:11.650Z"
