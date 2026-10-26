@@ -39,3 +39,10 @@ acceptance:
     then: 'semantic positive and hostile controls pass with retained raw output and fixture effects, without claiming installed publication or machine cutover'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Committed clean fd5fac0bb5106532e39ee020f885def959b9a3a5, original1f6d full243 actual0 plus final2path YAMLerror correction focused5 actual0; independent committed peer concern grounded and changed-question followup inspected exact repair, not authority. Root5gates7pathbasis0; no sixTS/threegatedtest changes. Final combined245case proof and normal Source integration accepted by guard owner01a151c0 as part final10suite; pending that actual check before A3pass/closure. Supported Root child untrack will preserve directory+branch, enabling Source docscommit and ordinary merge; no teardown/foreign takeover/global change or installed smoke claim."
+    recorded_at: "2026-10-26T18:58:50.970Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/native-unlink-entry-01/yaml-error-green-01.log"
+    commit_sha: fd5fac0bb5106532e39ee020f885def959b9a3a5
