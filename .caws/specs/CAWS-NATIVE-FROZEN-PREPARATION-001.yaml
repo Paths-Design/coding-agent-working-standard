@@ -31,9 +31,13 @@ acceptance:
     when: 'maintained preparation runs'
     then: 'exact frozen files and request identities are produced with fixed Git commands only and the build output remains absent'
   - id: A2
-    given: 'stale source standing or unauthorized output and startup injection'
-    when: 'preparation is requested'
-    then: 'it refuses before mutation or child launch and leaves foreign bytes unchanged'
+    given: 'malformed requests, startup injection, stale source standing or unauthorized output'
+    when: 'maintained preparation is requested under the existing ordinary CLI caller-attribution contract'
+    then: >-
+      malformed requests and startup injection refuse before any child launch; only
+      pinned closed bounded read-only Node/Git preflight may observe source and
+      authority, and stale source or unauthorized output refuses before any
+      mutation, writer, compiler or unapproved child with foreign bytes unchanged
   - id: A3
     given: 'changed pins, traversal, overlaps, symlink or root substitution and unrepresented files'
     when: 'preparation verifies and stages inputs'
