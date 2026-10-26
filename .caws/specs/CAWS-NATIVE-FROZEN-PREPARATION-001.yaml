@@ -1,0 +1,69 @@
+id: CAWS-NATIVE-FROZEN-PREPARATION-001
+title: 'Prepare pinned native qualification inputs from admitted Git objects'
+mode: feature
+lifecycle_state: active
+worktree: native-frozen-preparation
+created_at: '2026-10-26T00:29:07.194Z'
+updated_at: '2026-10-26T04:08:05.081Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'Native qualification preparation and frozen source export'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/tooling/native-qualification-prepare.ts'
+    - 'packages/caws-cli/src/tooling/native-qualification-prepare-entry.ts'
+    - 'packages/caws-cli/tests/tooling/native-qualification-prepare.test.js'
+    - packages/caws-native/src/preparation_parent.rs
+    - packages/caws-native/src/bin/caws-prepare-source.rs
+    - packages/caws-native/tests/preparation_parent.rs
+  out: []
+  support:
+    - packages/caws-cli/src/tooling/native-sqlite-build.ts
+    - packages/caws-native/src/lib.rs
+invariants:
+  - 'Preparation uses exact admitted commit and tree identities and enumerated blobs; no implicit working-tree source, replace refs, hooks, filters or arbitrary commands.'
+  - 'Source and tool pins are provenance only. The actual maintained operation must verify independent source standing and exclusive output authority.'
+  - 'Input byte inventories and modes are complete; link graphs are explicit and closed; foreign and protected inputs remain unchanged.'
+  - 'Preparation output and still-absent future build output are distinct. Exclusive no-follow custody rejects overlap and root substitution; uncertain partial outputs are retained without retry or adoption.'
+  - 'Only the independently reviewed pinned Node preparation entry and fixed pinned read-only Git operations may launch. Node startup is closed before launch; Cargo, npm, compiler and native candidate execution are forbidden during preparation.'
+acceptance:
+  - id: A1
+    given: 'admitted immutable source and pinned tool inputs with an authorized absent output'
+    when: 'maintained preparation runs'
+    then: 'exact frozen files and request identities are produced with fixed Git commands only and the build output remains absent'
+  - id: A2
+    given: 'malformed requests, startup injection, stale source standing or unauthorized output'
+    when: 'maintained preparation is requested under the existing ordinary CLI caller-attribution contract'
+    then: >-
+      malformed requests and startup injection refuse before any child launch; only
+      pinned closed bounded read-only Node/Git preflight may observe source and
+      authority, and stale source or unauthorized output refuses before any
+      mutation, writer, compiler or unapproved child with foreign bytes unchanged
+  - id: A3
+    given: 'changed pins, traversal, overlaps, symlink or root substitution and unrepresented files'
+    when: 'preparation verifies and stages inputs'
+    then: 'it refuses with accurate retained-uncertain state and does not overwrite protected data'
+  - id: A4
+    given: 'the supported entry and actual guard consumer'
+    when: 'valid and hostile preparation requests are submitted'
+    then: 'admitted effects match execution while opaque scripts and foreign writes remain refused'
+observability:
+  - 'Bounded receipts retain request/source/tree identities, Git command results, byte inventories and failure phase without claiming adoption.'
+rollback:
+  - 'No global runtime or CLI mutation. Preserve failed exclusive roots and use the original installed runtime until independent integration succeeds.'
+non_functional:
+  security:
+    - 'No shell or dynamic source execution; reject startup injection, arbitrary executable selection, generic link following and self-authorizing receipts.'
+contracts:
+  - name: 'native-qualification-preparation'
+    type: schema
+  - name: 'native-qualification-preparation-entry'
+    type: behavior
+evidence:
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "Requirement reconciled with coordinator: malformed request/startup injection refuses before any child; fixed pinned read-only Node/Git preflight may derive actual source/ownership, before any mutation or unapproved child. Source153-control result is not actual host startup/guard proof. Private operator-reviewed preparation distribution and closed Rust parent remain unimplemented/unqualified; no effectful export run."
+    recorded_at: "2026-10-26T03:57:11.650Z"
