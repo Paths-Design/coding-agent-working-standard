@@ -15,7 +15,8 @@ scope:
     - 'packages/caws-native/src/preparation_parent.rs'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Pinned child environment stays closed; inert browser bridge digest metadata never enters identity or child startup, and loader and unknown Node injection variables retain rejection before child launch'
+  - 'The unchanged 30000ms preparation and runtime invocation bounds, original caller identity and all foreign lanes remain preserved'
 acceptance:
   - id: A1
     given: 'TODO'
