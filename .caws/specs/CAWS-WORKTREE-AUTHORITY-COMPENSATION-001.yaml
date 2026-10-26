@@ -1,9 +1,10 @@
 id: CAWS-WORKTREE-AUTHORITY-COMPENSATION-001
 title: 'Serialize worktree authority validation and compensation'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: worktree-authority-compensation
 created_at: '2026-10-26T23:44:06.643Z'
-updated_at: '2026-10-26T23:44:06.643Z'
+updated_at: '2026-10-26T23:44:16.002Z'
 created_by_session: '01a17a98-b495-73f3-9f98-08991fac57ec'
 blast_radius:
   modules:
