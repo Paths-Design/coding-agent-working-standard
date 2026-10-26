@@ -31,6 +31,7 @@ invariants:
   - 'Input byte inventories and modes are complete; link graphs are explicit and closed; foreign and protected inputs remain unchanged.'
   - 'Preparation output and still-absent future build output are distinct. Exclusive no-follow custody rejects overlap and root substitution; uncertain partial outputs are retained without retry or adoption.'
   - 'Only the independently reviewed pinned Node preparation entry and fixed pinned read-only Git operations may launch. Node startup is closed before launch; Cargo, npm, compiler and native candidate execution are forbidden during preparation.'
+  - 'Bootstrap inventories are optional identity data emitted by the existing normal installer, not source-export or write authority. Default behavior is unchanged; no observer manifest is stored inside either inventoried root; failed inventory never activates or automatically rolls back a retained release.'
 acceptance:
   - id: A1
     given: 'admitted immutable source and pinned tool inputs with an authorized absent output'
@@ -52,6 +53,19 @@ acceptance:
     given: 'the supported entry and actual guard consumer'
     when: 'valid and hostile preparation requests are submitted'
     then: 'admitted effects match execution while opaque scripts and foreign writes remain refused'
+  - id: A5
+    given: >-
+      The normal standalone CLI installer is explicitly asked for bootstrap
+      inventory v1 of a retained private installation.
+    when: >-
+      It captures the complete CLI prefix and private probe Git view after final
+      rename and chmod but before changing the command symlink.
+    then: >-
+      Its ordinary success JSON carries exact closed parent-consumable inventories
+      with canonical entries, full modes, finite stable files and admitted relative
+      bin links; protected credential paths or changed/special/unbounded members
+      refuse before activation and retain any already-renamed unselected release,
+      with the previous command unchanged.
 observability:
   - 'Bounded receipts retain request/source/tree identities, Git command results, byte inventories and failure phase without claiming adoption.'
 rollback:
