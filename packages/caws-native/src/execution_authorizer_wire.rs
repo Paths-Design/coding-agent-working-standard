@@ -302,11 +302,12 @@ fn digest(bytes: &[u8]) -> String {
 }
 
 fn encode_frame(payload: &[u8], limit: usize) -> Result<Vec<u8>, WireError> {
-    if payload.is_empty() || payload.len() > limit || payload.len() > u32::MAX as usize {
+    if payload.is_empty() || payload.len() > limit {
         return Err(WireError::Frame);
     }
+    let size = u32::try_from(payload.len()).map_err(|_| WireError::Frame)?;
     let mut frame = Vec::with_capacity(4 + payload.len());
-    frame.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    frame.extend_from_slice(&size.to_be_bytes());
     frame.extend_from_slice(payload);
     Ok(frame)
 }
@@ -435,6 +436,36 @@ mod tests {
                 original.envelope.execution_digest
             );
         }
+    }
+
+    #[test]
+    fn protocol_limits_accept_exact_sized_valid_json_and_refuse_one_more_byte() {
+        // Protocol sizes are independent oracle values, not derived from the
+        // implementation constant that mutation testing can change.
+        assert_eq!(REQUEST_LIMIT, 4_194_304);
+        assert_eq!(REPLY_LIMIT, 65_536);
+        let req = request(Phase::Analyze);
+        let mut payload = serde_json::to_vec(&request_json(&req)).unwrap();
+        payload.resize(4_194_304, b' ');
+        assert_eq!(
+            RequestRecord::decode(&payload).unwrap().record_bytes(),
+            req.record_bytes()
+        );
+        payload.push(b' ');
+        assert!(matches!(
+            RequestRecord::decode(&payload),
+            Err(WireError::Frame)
+        ));
+        assert!(matches!(RequestRecord::decode(&[]), Err(WireError::Frame)));
+        let mut payload = serde_json::to_vec(&reply(&req)).unwrap();
+        payload.resize(65_536, b' ');
+        assert!(req.correlate_reply(&payload).unwrap().decision() == Decision::Allow);
+        payload.push(b' ');
+        assert!(matches!(
+            req.correlate_reply(&payload),
+            Err(WireError::Frame)
+        ));
+        assert!(matches!(req.correlate_reply(&[]), Err(WireError::Frame)));
     }
 
     #[test]
