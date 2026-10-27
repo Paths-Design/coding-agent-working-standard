@@ -22,7 +22,8 @@ scope:
   out: []
 invariants:
   - 'Without an explicit handler refresh the retained base remains byte identical; refresh changes only named registered packaged handlers and records original and replacement identities before activation'
-  - 'Refresh requires an explicit verified legacy base and native image; unknown paths, invalid dependencies, changed inputs and unsafe files refuse before machine writes; no runtime failure triggers policy fallback'
+  - 'Refresh requires an explicit verified legacy base and native image; unknown paths, invalid declared inputs, changed inputs and unsafe files refuse before machine writes; no runtime failure triggers policy fallback'
+  - 'Package and retained-base handler compatibility is a separate qualification obligation; byte custody and registered membership alone do not prove semantic dependency compatibility'
 acceptance:
   - id: A1
     given: 'a verified retained legacy generation and a reviewed packaged guard correction'
