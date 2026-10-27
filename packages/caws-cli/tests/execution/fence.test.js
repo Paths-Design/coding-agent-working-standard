@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawnCoveredSync } = require('./child-coverage.cjs');
 const { verifyInheritedFence } = require('../../dist/execution/fence');
 const roots = [];
 afterEach(() => {
@@ -44,7 +44,7 @@ describe('inherited canonical execution fence', () => {
     try {
       write(h, { ...h.value, pid: process.pid });
       fs.readFileSync(h.fd);
-      const child = spawnSync(
+      const child = spawnCoveredSync(
         process.execPath,
         [
           '-e',

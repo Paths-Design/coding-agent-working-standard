@@ -3,7 +3,8 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn, spawnSync } = require('node:child_process');
+const { spawnSync } = require('node:child_process');
+const { spawnCoveredSync, spawnCovered } = require('./child-coverage.cjs');
 const { setTimeout, clearTimeout } = require('node:timers');
 const {
   acquireLifecycleLock,
@@ -42,7 +43,7 @@ function agedDeadLock(dir) {
 }
 
 function childResult(dir) {
-  const result = spawnSync(
+  const result = spawnCoveredSync(
     process.execPath,
     [
       '-e',
@@ -248,7 +249,7 @@ test('non-regular lock paths fail closed without blocking recovery', () => {
   const made = spawnSync('/usr/bin/mkfifo', [file], { timeout: 5000 });
   expect(made.status).toBe(0);
   fs.utimesSync(file, new Date(0), new Date(0));
-  const attempt = spawnSync(
+  const attempt = spawnCoveredSync(
     process.execPath,
     [
       '-e',
@@ -463,7 +464,7 @@ test('competing reclaimers cannot remove a successor after the single unlink', a
   const file = agedDeadLock(dir);
   const beforeGate = path.join(dir, 'continue-before');
   const afterGate = path.join(dir, 'continue-after');
-  const child = spawn(
+  const { child, completeCoverage } = spawnCovered(
     process.execPath,
     [
       '-e',
@@ -520,6 +521,9 @@ test('competing reclaimers cannot remove a successor after the single unlink', a
   expect(fs.readFileSync(file, 'utf8')).toBe(before);
   expect(childResult(dir).ok).toBe(false);
   releaseLifecycleLock(successor.value);
+  await completeCoverage();
+  expect(child.exitCode).toBe(0);
+  expect(child.signalCode).toBe(null);
 });
 
 test('the wrapper releases on returned failure and thrown failure', () => {

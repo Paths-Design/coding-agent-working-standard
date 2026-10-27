@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawnSync, execFileSync } = require('node:child_process');
+const { execFileSync } = require('node:child_process');
+const { spawnCoveredSync } = require('./child-coverage.cjs');
 const { authorityFixture, cleanupAll, source, hash } = require('./authority-fixture');
 afterAll(cleanupAll);
 // Native ESM import is unavailable in Jest's VM. Exercise the actual private
@@ -12,7 +13,7 @@ function evaluatePreparedExecution(record, envelope) {
   const active = String(
     globalThis.__stryker__?.activeMutant ?? process.env.__STRYKER_ACTIVE_MUTANT__ ?? ''
   );
-  const child = spawnSync(
+  const child = spawnCoveredSync(
     process.execPath,
     [path.resolve(__dirname, '../../dist/execution/authorizer-main.js')],
     {
@@ -210,7 +211,7 @@ describe('private authorizer component observations, without USER execution', ()
       const body = Buffer.from(JSON.stringify(input));
       const header = Buffer.alloc(4);
       header.writeUInt32BE(body.length);
-      return spawnSync(
+      return spawnCoveredSync(
         process.execPath,
         [path.resolve(__dirname, '../../dist/execution/authorizer-main.js')],
         {

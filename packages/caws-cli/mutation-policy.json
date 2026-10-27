@@ -256,7 +256,7 @@
       "config": "stryker.execution.conf.js",
       "reportDir": "reports/mutation-execution",
       "threshold": 80,
-      "coverageAnalysis": "off",
+      "coverageAnalysis": "perTest",
       "buildCommand": "node scripts/build-cli.js",
       "targets": [
         { "source": "src/execution/authority.ts" },

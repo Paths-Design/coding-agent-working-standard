@@ -707,6 +707,29 @@ describe('mutation policy topology contract', () => {
     expect(names.test('bounded shell analysis contract semantic mutation in policies')).toBe(false);
   });
 
+  test('execution mutations use attributed child coverage and retain every integrated contract', () => {
+    const config = require(path.join(PACKAGE_ROOT, 'stryker.execution.conf.js'));
+    expect(config.coverageAnalysis).toBe('perTest');
+    expect(config.incremental).toBe(false);
+    expect(config).not.toHaveProperty('testFiles');
+    expect(config.jest.config.testMatch).toEqual([
+      '<rootDir>/tests/execution/authority-fence.test.js',
+      '<rootDir>/tests/execution/authority.test.js',
+      '<rootDir>/tests/execution/authorizer.test.js',
+      '<rootDir>/tests/execution/fence.test.js',
+      '<rootDir>/tests/execution/prepared-schema.test.js',
+      '<rootDir>/tests/execution/protocol.test.js',
+    ]);
+    expect(config.mutate).toEqual([
+      'src/execution/authority.ts',
+      'src/execution/authorizer.ts',
+      'src/execution/fence.ts',
+      'src/execution/prepared-schema.ts',
+      'src/execution/protocol.ts',
+      'src/store/lifecycle-lock.ts',
+    ]);
+  });
+
   test.each([
     [
       'multiline benign source',
