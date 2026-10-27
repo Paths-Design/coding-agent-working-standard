@@ -1,0 +1,36 @@
+id: CAWS-RUNTIME-CUSTODY-IGNORE-001
+title: 'Keep runtime custody records out of source control'
+mode: chore
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge native-custody-ignore at d4f6cfa00acefec770a488c8cf8fbb7682143ca4'
+created_at: '2026-10-27T22:26:07.893Z'
+updated_at: '2026-10-27T22:34:32.398Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.gitignore'
+  out: []
+invariants:
+  - 'Only the managed ignore block changes; runtime custody stays local while specs, policy, and waivers remain versioned.'
+acceptance:
+  - id: A1
+    given: 'The repository has a stale managed ignore block and the native runtime creates custody records'
+    when: 'The managed block is synchronized with the shipped v4 entries'
+    then: >-
+      Git ignores renderer and plan snapshot custody at the required paths,
+      authority paths remain versionable, the rest of gitignore is byte-identical,
+      and the managed block is idempotent.
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed managed block exactly matches shipped gitignore-manage v4. Actual git check-ignore --no-index checks from owned native-custody-ignore lane: all five renderer and plan-custody paths match repository .gitignore; specs, policy and waivers controls return1/unignored. Outside managed block bytes equal pre-editHEAD, and shipped computeGitignore returns unchanged with byte-equal content. Raw checks /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-02/custody-ignore-check.json; actual helper check in root transcript. Independent read-only peer inspected committed one-file diff and raw checks; no concrete issue. Policy gates all5 pass onepath. New CLI doctor1 is retained: machine SessionEnd45 configuration is owned by cutover, and canonical ignore warnings remain until this lane lands because doctor inspects canonical repoRoot. No native host or global activation claim. Commit verification checks reachability only, not execution."
+    recorded_at: "2026-10-27T22:33:53.551Z"
+    commit_sha: bfe7310d041d5181802eee22ece8253458d355c9
