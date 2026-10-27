@@ -33,3 +33,9 @@ acceptance:
       default linking is unchanged
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/published43-compat-01/node-link-child-green.log: 13 passing tests include actual CLI creation and offline npm ci; canonical sentinels preserved; default and existing-path controls pass. node-link-red.log records 3 expected failures before implementation. Discovery is canonical and bounded; existing paths are not certified physical."
+    recorded_at: "2026-10-27T19:23:04.589Z"
+    commit_sha: "1fcbaaec7"
