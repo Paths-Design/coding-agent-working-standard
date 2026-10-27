@@ -636,6 +636,7 @@ import { isAdapterCoveredSurface } from './types';
 // observed registry or contained-scope failures cannot become empty admission.
 // v122: scope-guard discovers canonical authority from sparse linked leaves
 // and hard-blocks authoritative exclusions and unavailable bound governance.
+// Native patches check every source/destination before emitting one advisory.
 export const SHARED_PACK_VERSION = 122;
 
 /**

@@ -179,6 +179,7 @@ _scope_cli() {
 }
 
 _create_sparse_scope_fixture() {
+  local surface="${1:-claude-code}"
   SCOPE_REPO="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$SCOPE_REPO"
   SCOPE_REPO="$(cd "$SCOPE_REPO" && pwd -P)"
@@ -187,7 +188,7 @@ _create_sparse_scope_fixture() {
   git -C "$SCOPE_REPO" config user.email 'test@caws.invalid'
   git -C "$SCOPE_REPO" config commit.gpgsign false
   git -C "$SCOPE_REPO" commit -q --allow-empty -m root
-  run _scope_cli init --agent-surface claude-code
+  run _scope_cli init --agent-surface "$surface"
   assert_success
   run _scope_cli specs create SCOPE-1 --title 'Sparse scope fixture' --mode fix \
     --scope-in allowed.txt --scope-in protected.txt
@@ -360,6 +361,170 @@ _run_cache_only_ungoverned_guard() {
     _assert_hard_block_without_strike
     assert_output --partial 'canonical governance'
   done
+}
+
+_create_codex_patch_fixture() {
+  _create_sparse_scope_fixture codex
+  run _scope_cli specs amend-scope SCOPE-1 --add 'allowed two.txt' --add renamed.txt
+  assert_success
+  printf 'original\n' > "$SCOPE_LEAF/allowed.txt"
+  printf 'second\n' > "$SCOPE_LEAF/allowed two.txt"
+  [ -f "$SCOPE_REPO/.codex/hooks/lib/parse-input.sh" ]
+}
+
+_run_codex_patch_guard() {
+  local patch="$1" effect="${2:-multi}" source="${3:-allowed.txt}" dest="${4:-protected.txt}" envelope
+  envelope="$(jq -nc --arg cwd "$SCOPE_LEAF" --arg sid "$CAWS_TEST_SESSION_ID" --arg patch "$patch" \
+    '{tool_name:"apply_patch",hook_event_name:"PreToolUse",cwd:$cwd,session_id:$sid,tool_input:{command:$patch}}')"
+  # Use the installed Codex parser, as the dispatcher does, and replay the
+  # ORIGINAL envelope on stdin to the single handler invocation. The fixture
+  # supplies only explicit simulated effects; it never executes the patch.
+  run env -u CLAUDE_CODE_SESSION_ID CAWS_AGENT_SURFACE=codex CODEX_THREAD_ID="$CAWS_TEST_SESSION_ID" \
+    CAWS_PROJECT_DIR="$SCOPE_LEAF" CAWS_MACHINE_POLICY_ROOT="$SCOPE_REPO" \
+    CAWS_SHARED_LIB_DIR="$CAWS_TEST_HOOKS_DIR/lib" PATH="$CAWS_TEST_HOME/bin:$PATH" \
+    bash -c '
+      cd "$1" || exit 97
+      source "$2/runtime-paths.sh"
+      source "$3"
+      HOOK_INPUT_JSON="$4"
+      parse_hook_input || exit 97
+      [ "$HOOK_ORIGINAL_TOOL_NAME" = apply_patch ] || exit 97
+      printf "%s" "$4" | bash "$2/scope-guard.sh"
+      rc=$?
+      if [ "$rc" -eq 0 ]; then
+        case "$5" in
+          multi) printf "changed\n" > allowed.txt; printf "changed\n" > protected.txt ;;
+          rename) mv "$6" "$7" ;;
+          admitted) printf "changed\n" > allowed.txt; printf "changed\n" > "allowed two.txt" ;;
+          foreign) printf "changed\n" > "$7" ;;
+        esac
+      fi
+      exit "$rc"
+    ' _ "$SCOPE_LEAF" "$CAWS_TEST_HOOKS_DIR" "$SCOPE_REPO/.codex/hooks/lib/parse-input.sh" \
+    "$envelope" "$effect" "$source" "$dest"
+  printf '# Codex patch: exit=%s allowed=%s protected=%s\n' "$status" \
+    "$(cat "$SCOPE_LEAF/allowed.txt" 2>/dev/null || true)" "$(cat "$SCOPE_LEAF/protected.txt" 2>/dev/null || true)"
+}
+
+_assert_patch_unchanged() {
+  _assert_hard_block_without_strike
+  assert_equal "$(cat "$SCOPE_LEAF/allowed.txt")" original
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard Codex patch: admitted first cannot bypass protected later" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Update File: allowed.txt\n@@\n-original\n+changed\n*** Update File: protected.txt\n@@\n-sentinel\n+changed\n*** End Patch'
+  _assert_patch_unchanged
+  assert_output --partial 'out-of-scope'
+}
+
+@test "scope-guard Codex patch: protected first blocks admitted later" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Update File: protected.txt\n@@\n-sentinel\n+changed\n*** Update File: allowed.txt\n@@\n-original\n+changed\n*** End Patch'
+  _assert_patch_unchanged
+}
+
+@test "scope-guard Codex patch: file-transported original payload retains later targets" {
+  _create_codex_patch_fixture
+  export CAWS_HOOK_INLINE_PAYLOAD_MAX_BYTES=1
+  _run_codex_patch_guard $'*** Begin Patch\n*** Add File: allowed.txt\n+one\n*** Delete File: protected.txt\n*** End Patch'
+  _assert_patch_unchanged
+}
+
+@test "scope-guard Codex patch: exempt docs first cannot bypass protected Delete" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Add File: docs/note.md\n+note\n*** Delete File: protected.txt\n*** End Patch'
+  _assert_patch_unchanged
+}
+
+@test "scope-guard Codex patch: admitted rename source cannot bypass protected destination" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Update File: allowed.txt\n*** Move to: protected.txt\n@@\n-original\n+original\n*** End Patch' rename
+  _assert_patch_unchanged
+  assert_output --partial protected.txt
+}
+
+@test "scope-guard Codex patch: protected rename source blocks admitted destination" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Update File: protected.txt\n*** Move to: renamed.txt\n@@\n-sentinel\n+sentinel\n*** End Patch' rename protected.txt renamed.txt
+  _assert_patch_unchanged
+  [ ! -e "$SCOPE_LEAF/renamed.txt" ]
+}
+
+@test "scope-guard Codex patch: all-admitted multi-file targets include space paths" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Update File: allowed.txt\n@@\n-original\n+changed\n*** Update File: allowed two.txt\n@@\n-second\n+changed\n*** End Patch' admitted
+  assert_success
+  assert_output ""
+  assert_equal "$(cat "$SCOPE_LEAF/allowed.txt")" changed
+  assert_equal "$(cat "$SCOPE_LEAF/allowed two.txt")" changed
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard Codex patch: admitted rename to a space path proceeds" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Update File: allowed.txt\n*** Move to: allowed two.txt\n@@\n-original\n+original\n*** End Patch' rename allowed.txt 'allowed two.txt'
+  assert_success
+  assert_output ""
+  [ ! -e "$SCOPE_LEAF/allowed.txt" ]
+  assert_equal "$(cat "$SCOPE_LEAF/allowed two.txt")" original
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard Codex patch: prefixed content resembling metadata is not a target" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Add File: allowed.txt\n+*** Delete File: protected.txt\n+*** Move to: protected.txt\n*** End Patch' none
+  assert_success
+  assert_output ""
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard Codex patch: malformed empty and unrepresentable inventories hard-block" {
+  _create_codex_patch_fixture
+  local patch
+  for patch in '' $'*** Begin Patch\n*** End Patch' \
+    $'*** Begin Patch\n*** Add File: allowed.txt\n+content' \
+    $'*** Begin Patch\n*** Update File: allowed.txt\n*** Move to: \n@@\n-original\n+new\n*** End Patch' \
+    $'*** Begin Patch\n*** Add File: allowed.txt\n+ok\n*** Move to: protected.txt\n*** End Patch' \
+    $'*** Begin Patch\n*** Add File: allowed\tname.txt\n+content\n*** End Patch'; do
+    _run_codex_patch_guard "$patch"
+    _assert_patch_unchanged
+    assert_output --partial 'target inventory'
+  done
+}
+
+@test "scope-guard Codex patch: multiple advisory targets consume one strike per tool" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Add File: unmatched-one.txt\n+one\n*** Add File: unmatched-two.txt\n+two\n*** End Patch' none
+  assert_success
+  assert_output --partial 'strike 1 of 3'
+  refute_output --partial 'strike 2 of 3'
+}
+
+@test "scope-guard Codex patch: advisory first cannot bypass hard refusal or consume a strike" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Add File: unmatched.txt\n+one\n*** Delete File: protected.txt\n*** End Patch'
+  _assert_patch_unchanged
+}
+
+@test "scope-guard Codex patch: admitted first cannot bypass foreign target" {
+  _create_codex_patch_fixture
+  local foreign="$BATS_TEST_TMPDIR/foreign.txt" patch
+  printf 'foreign-sentinel\n' > "$foreign"
+  patch="$(printf '*** Begin Patch\n*** Add File: allowed.txt\n+one\n*** Delete File: %s\n*** End Patch' "$foreign")"
+  _run_codex_patch_guard "$patch" foreign allowed.txt "$foreign"
+  _assert_patch_unchanged
+  assert_output --partial 'DIFFERENT repository'
+  assert_equal "$(cat "$foreign")" foreign-sentinel
+}
+
+@test "scope-guard Codex patch: exempt first cannot bypass later authority load fault" {
+  _create_codex_patch_fixture
+  printf 'invalid: [\n' > "$SCOPE_REPO/.caws/policy.yaml"
+  _run_codex_patch_guard $'*** Begin Patch\n*** Add File: docs/note.md\n+one\n*** Delete File: protected.txt\n*** End Patch'
+  _assert_patch_unchanged
+  assert_output --partial 'could not render the structured diagnostic'
 }
 
 @test "scope-guard: fails closed (hard block) when the JSON diagnostic is unparseable" {
