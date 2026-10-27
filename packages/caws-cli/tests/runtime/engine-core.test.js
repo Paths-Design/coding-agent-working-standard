@@ -195,12 +195,15 @@ test.each([
   ['session', { session_id: 'neighbor' }],
   ['handler', { handler: 'other.sh' }],
   ['path', { path: '/foreign/guard.sh' }],
+  ['event', { hook_event: 'Stop' }],
+  ['tool correlation', { tool_use_id: 'another-call' }],
   ['timestamp', { timestamp: 'invalid' }],
   ['status', { status: 'started' }],
   ['unknown exit', { exit_code: null }],
   ['fractional exit', { exit_code: 2.5 }],
   ['output', { stdout: {} }],
   ['skipped result', { status: 'reprieved', exit_code: 0 }],
+  ['skipped output', { status: 'reprieved', exit_code: null }],
 ])('invalid compatibility %s is diagnostic and cannot publish an outcome', (_name, changes) => {
   const f = compatibilityJournal();
   f.journal.recordCompatibility(Buffer.from(JSON.stringify({ ...f.row, ...changes }) + '\n'));
@@ -208,20 +211,29 @@ test.each([
   expect(f.journal.takeDiagnostics()).toContain('does not match');
 });
 
-test('malformed and duplicate compatibility records preserve only the captured selected result', () => {
+test.each(['malformed', 'duplicate'])(
+  '%s compatibility capture cannot publish a first-row-wins result',
+  (kind) => {
+    const f = compatibilityJournal();
+    const line = JSON.stringify(f.row) + '\n';
+    f.journal.recordCompatibility(Buffer.from(line + (kind === 'malformed' ? 'not-json\n' : line)));
+    expect(fs.existsSync(f.file)).toBe(false);
+    expect(f.journal.takeDiagnostics()).toContain('incomplete');
+  }
+);
+
+test('valid compatibility reports preserve their explicit unverified observation boundary', () => {
   const f = compatibilityJournal();
-  f.journal.recordCompatibility(
-    Buffer.from('not-json\n' + JSON.stringify(f.row) + '\n' + JSON.stringify(f.row) + '\n')
-  );
+  f.journal.recordCompatibility(Buffer.from(JSON.stringify(f.row) + '\n'));
   const rows = fs.readFileSync(f.file, 'utf8').trim().split('\n').map(JSON.parse);
   expect(rows).toHaveLength(1);
   expect(rows[0]).toMatchObject({
     ...f.row,
     delivery: 'not_observed',
-    observation_boundary: 'compatibility_handler_return',
+    observation_boundary: 'unverified_compatibility_dispatcher_report',
     source_sha256: f.handler.sha256,
   });
-  expect(f.journal.takeDiagnostics()).toContain('incomplete');
+  expect(f.journal.takeDiagnostics()).toBe('');
 });
 
 test.each(['missing', 'reprieved'])(
@@ -260,6 +272,8 @@ test('compatibility observations obey capture bounds, collision protection and n
 
 test('typed handler results retain raw renderer fields alongside lossless journal bytes', () => {
   const f = compatibilityJournal();
+  f.journal.record({ stage: 'handler_started', selectedIndex: 0, handler: f.handler });
+  expect(fs.existsSync(f.file)).toBe(false);
   f.journal.record({
     stage: 'handler_completed',
     selectedIndex: 0,

@@ -6,6 +6,7 @@ import { nativeInputDigest } from './protocol';
 import type { ActiveInvocationSelection } from './selection';
 import type { HandlerObservation } from './composer';
 import { appendOperationalRecord, ensureOperationalDirectory } from './operational-files';
+import { MACHINE_EVENTS } from '../init/native-hook-identification';
 
 const safeSession = (value: unknown): value is string =>
   typeof value === 'string' &&
@@ -110,7 +111,8 @@ export class InvocationJournal {
         : {}),
     };
     this.append(observation.stage, fields);
-    if (!safeSession(this.resolvedSessionId)) return;
+    // The invocation journal retains progress; the renderer consumes outcomes.
+    if (!safeSession(this.resolvedSessionId) || observation.stage === 'handler_started') return;
     try {
       const file = join(
         sessionDirectory(this.selection.canonical, this.resolvedSessionId),
@@ -145,7 +147,7 @@ export class InvocationJournal {
       this.incomplete(error);
     }
   }
-  /** Captured legacy records are observations, never permission or delivery receipts. */
+  /** Legacy reports share the handler's OS identity; they do not authenticate execution. */
   recordCompatibility(records: Uint8Array): void {
     if (this.disabled || !safeSession(this.resolvedSessionId) || records.byteLength === 0) return;
     if (records.byteLength > 2 * 1024 * 1024) {
@@ -153,6 +155,8 @@ export class InvocationJournal {
       return;
     }
     const seen = new Set<number>();
+    const validated: { value: Record<string, unknown>; index: number }[] = [];
+    const toolUseId = this.request.payload.tool_use_id ?? '';
     for (const line of Buffer.from(records).toString().split('\n')) {
       if (!line.trim()) continue;
       try {
@@ -174,20 +178,34 @@ export class InvocationJournal {
           !Number.isFinite(Date.parse(value.timestamp)) ||
           typeof value.stdout !== 'string' ||
           typeof value.stderr !== 'string' ||
-          typeof value.hook_event !== 'string' ||
+          value.hook_event !== MACHINE_EVENTS[this.request.event] ||
           typeof value.tool_name !== 'string' ||
-          typeof value.tool_use_id !== 'string' ||
+          typeof toolUseId !== 'string' ||
+          value.tool_use_id !== toolUseId ||
           !(value.status === 'completed'
             ? Number.isInteger(value.exit_code) &&
               Number(value.exit_code) >= 0 &&
               Number(value.exit_code) <= 255
             : (value.status === 'missing' || value.status === 'reprieved') &&
-              value.exit_code === null)
+              value.exit_code === null &&
+              value.stdout === '' &&
+              value.stderr === '')
         )
           throw new Error(
             'Compatibility execution record does not match its selected handler/session or result contract'
           );
         seen.add(index);
+        validated.push({ value, index });
+      } catch (error) {
+        // Validate the entire capture before publishing: an injected first row
+        // must not win over a duplicate genuine report later in the capture.
+        this.incomplete(error);
+        return;
+      }
+    }
+    for (const { value, index } of validated) {
+      const handler = this.selection.handlers[index]!;
+      try {
         const file = join(
           sessionDirectory(this.selection.canonical, this.resolvedSessionId),
           'hook-events.jsonl'
@@ -200,9 +218,9 @@ export class InvocationJournal {
               ...this.metadata,
               schema: 'caws.hook_execution.v1',
               stage: 'handler_' + value.status,
-              observation_boundary: 'compatibility_handler_return',
+              observation_boundary: 'unverified_compatibility_dispatcher_report',
               timestamp: value.timestamp,
-              timestamp_ms: Date.parse(value.timestamp),
+              timestamp_ms: Date.parse(value.timestamp as string),
               session_id: this.resolvedSessionId,
               handler: handler.name,
               path: handler.path,

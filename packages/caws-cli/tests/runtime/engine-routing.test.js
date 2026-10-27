@@ -11,6 +11,191 @@ const { prepareRuntimeInvocation } = require('../../dist/runtime/engine');
 const templates = path.resolve(__dirname, '../../templates/hook-packs');
 const quote = (text) => "'" + text.replace(/'/g, "'\\''") + "'";
 
+function renderReportedTurn(root, repo, outcomesBytes) {
+  const outcomesPath = path.join(repo, '.caws/sessions/routing-fixture/hook-events.jsonl');
+  const { prepareSessionArtifacts } = require('../../dist/transcripts/render-prepare');
+  const { createDefaultTranscriptRegistry } = require('../../dist/transcripts/registry');
+  const { RENDER_JSON_4300 } = require('../../dist/transcripts/render-reader');
+  const { jsonNumber } = require('../../dist/transcripts/lossless-json');
+  const timestamp = JSON.parse(outcomesBytes.toString().trim().split('\n')[0]).timestamp;
+  const transcript =
+    [
+      { type: 'user', timestamp, message: { content: 'Run the guarded command' } },
+      {
+        type: 'assistant',
+        timestamp,
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'guarded-command',
+              name: 'Bash',
+              input: { command: 'echo safe' },
+            },
+          ],
+        },
+      },
+      {
+        type: 'user',
+        timestamp,
+        message: {
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'guarded-command',
+              content: 'refused',
+              is_error: true,
+            },
+          ],
+        },
+      },
+    ]
+      .map(JSON.stringify)
+      .join('\n') + '\n';
+  const observed = (file, bytes) => ({
+    path: file,
+    disposition: 'read',
+    source: {
+      sourceId: file,
+      sourceGeneration: 'captured',
+      inode: '1',
+      size: BigInt(bytes.length),
+      bytes,
+    },
+  });
+  const rendered = prepareSessionArtifacts({
+    transcript: observed(path.join(repo, 'chat.jsonl'), Buffer.from(transcript)),
+    audit: { path: path.join(repo, 'audit.jsonl'), disposition: 'absent' },
+    hookOutcomes: observed(outcomesPath, outcomesBytes),
+    subagents: {
+      claudeCandidate: { path: path.join(repo, 'routing-fixture/subagents'), kind: 'absent' },
+      qwenCandidate: { path: path.join(root, 'subagents/routing-fixture'), kind: 'absent' },
+    },
+    registry: createDefaultTranscriptRegistry({ numericProfile: RENDER_JSON_4300 }),
+    numericProfile: RENDER_JSON_4300,
+    calendar: {
+      profileId: 'fixture-utc-calendar/1',
+      timezone: 'UTC',
+      epochSeconds: (ts) =>
+        ts === null || !Number.isFinite(Date.parse(ts)) ? null : Date.parse(ts) / 1000,
+      secondsBetween: () => null,
+    },
+    context: {
+      sessionId: 'routing-fixture',
+      cwd: repo,
+      startedAt: timestamp,
+      model: 'fixture',
+      branch: 'fixture',
+      headSha: 'head',
+      startSha: 'start',
+      dirtyFiles: jsonNumber('0'),
+    },
+    priorInventory: { observationId: 'empty', artifacts: [] },
+    limits: {
+      maximumInputBytes: 1000000,
+      maximumArtifactBytes: 1000000,
+      maximumTotalArtifactBytes: 2000000,
+      maximumArtifacts: 100,
+    },
+  });
+  if (rendered.disposition !== 'ready')
+    throw new Error(require('node:util').inspect(rendered, { depth: 8 }));
+  expect(rendered.disposition).toBe('ready');
+  return JSON.parse(
+    Buffer.from(
+      rendered.generation.artifacts.find((item) => item.role === 'turn').bytes()
+    ).toString()
+  );
+}
+
+test('typed composer progress renders exactly one terminal handler context', async () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-typed-render-')));
+  const repo = path.join(root, 'project');
+  fs.mkdirSync(repo);
+  try {
+    const { InvocationJournal } = require('../../dist/runtime/journal');
+    const { composeHandlers } = require('../../dist/runtime/composer');
+    const handler = {
+      entry: 'guard.sh',
+      name: 'guard.sh',
+      args: [],
+      path: path.join(repo, 'guard.sh'),
+      sha256: 'b'.repeat(64),
+      tier: 'stock',
+      kind: 'stock',
+    };
+    const selection = {
+      status: 'active',
+      runtimeDigest: 'a'.repeat(64),
+      checkout: repo,
+      canonical: repo,
+      surface: 'codex',
+      event: 'pre_tool_use',
+      configuration: 'system',
+      runtimeDirectory: root,
+      hooksDirectory: root,
+      handlers: [handler],
+      libraries: {},
+      overrides: {},
+      libraryOverrides: {},
+      transcriptAdapter: null,
+    };
+    const request = {
+      id: 'typed-render',
+      runtimeDigest: selection.runtimeDigest,
+      surface: 'codex',
+      event: 'pre_tool_use',
+      inputJson: '{}',
+      payload: {
+        session_id: 'routing-fixture',
+        cwd: repo,
+        tool_use_id: 'guarded-command',
+        tool_name: 'Bash',
+      },
+    };
+    const journal = new InvocationJournal(request, selection, 'routing-fixture');
+    const execute = jest.fn(async () => ({
+      exitCode: 2,
+      stdout: Buffer.from('{"decision":"block","reason":"typed refusal"}'),
+      stderr: Buffer.alloc(0),
+    }));
+    const completed = await composeHandlers(
+      selection,
+      {},
+      {
+        execute,
+        record: (observation) => journal.record(observation),
+      }
+    );
+    expect(completed.nativeResult.exitCode).toBe(2);
+    expect(execute).toHaveBeenCalledTimes(1);
+    const session = path.join(repo, '.caws/sessions/routing-fixture');
+    const progress = fs
+      .readFileSync(path.join(session, 'hook-invocations/typed-render.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map(JSON.parse);
+    expect(progress.map((row) => row.stage)).toEqual([
+      'invocation_started',
+      'handler_started',
+      'handler_completed',
+    ]);
+    const outcomes = fs.readFileSync(path.join(session, 'hook-events.jsonl'));
+    expect(outcomes.toString().trim().split('\n')).toHaveLength(1);
+    const turn = renderReportedTurn(root, repo, outcomes);
+    expect(turn.hook_contexts).toHaveLength(1);
+    expect(turn.hook_contexts[0]).toMatchObject({
+      hook_name: 'guard.sh',
+      status: 'block',
+      additional_context: 'typed refusal',
+      observation_boundary: 'handler_completed',
+      delivery: 'not_observed',
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a selected project override receives complete Codex normalization through compatibility dispatch', async () => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-engine-route-')));
   const repo = path.join(root, 'project');
@@ -126,7 +311,7 @@ test('a selected project override receives complete Codex normalization through 
       exit_code: 2,
       tool_use_id: 'guarded-command',
       delivery: 'not_observed',
-      observation_boundary: 'compatibility_handler_return',
+      observation_boundary: 'unverified_compatibility_dispatcher_report',
     });
     expect(JSON.parse(outcomes[0].stdout)).toEqual({
       decision: 'block',
@@ -140,99 +325,7 @@ test('a selected project override receives complete Codex normalization through 
       .map(JSON.parse);
     expect(captured).toHaveLength(1);
     expect(captured[0].stdout).toBe(outcomes[0].stdout);
-    const { prepareSessionArtifacts } = require('../../dist/transcripts/render-prepare');
-    const { createDefaultTranscriptRegistry } = require('../../dist/transcripts/registry');
-    const { RENDER_JSON_4300 } = require('../../dist/transcripts/render-reader');
-    const { jsonNumber } = require('../../dist/transcripts/lossless-json');
-    const timestamp = outcomes[0].timestamp;
-    const transcript =
-      [
-        { type: 'user', timestamp, message: { content: 'Run the guarded command' } },
-        {
-          type: 'assistant',
-          timestamp,
-          message: {
-            content: [
-              {
-                type: 'tool_use',
-                id: 'guarded-command',
-                name: 'Bash',
-                input: { command: 'echo safe' },
-              },
-            ],
-          },
-        },
-        {
-          type: 'user',
-          timestamp,
-          message: {
-            content: [
-              {
-                type: 'tool_result',
-                tool_use_id: 'guarded-command',
-                content: 'refused',
-                is_error: true,
-              },
-            ],
-          },
-        },
-      ]
-        .map(JSON.stringify)
-        .join('\n') + '\n';
-    const observed = (file, bytes) => ({
-      path: file,
-      disposition: 'read',
-      source: {
-        sourceId: file,
-        sourceGeneration: 'captured',
-        inode: '1',
-        size: BigInt(bytes.length),
-        bytes,
-      },
-    });
-    const rendered = prepareSessionArtifacts({
-      transcript: observed(path.join(repo, 'chat.jsonl'), Buffer.from(transcript)),
-      audit: { path: path.join(repo, 'audit.jsonl'), disposition: 'absent' },
-      hookOutcomes: observed(outcomesPath, outcomesBytes),
-      subagents: {
-        claudeCandidate: { path: path.join(repo, 'routing-fixture/subagents'), kind: 'absent' },
-        qwenCandidate: { path: path.join(root, 'subagents/routing-fixture'), kind: 'absent' },
-      },
-      registry: createDefaultTranscriptRegistry({ numericProfile: RENDER_JSON_4300 }),
-      numericProfile: RENDER_JSON_4300,
-      calendar: {
-        profileId: 'fixture-utc-calendar/1',
-        timezone: 'UTC',
-        epochSeconds: (ts) =>
-          ts === null || !Number.isFinite(Date.parse(ts)) ? null : Date.parse(ts) / 1000,
-        secondsBetween: () => null,
-      },
-      context: {
-        sessionId: 'routing-fixture',
-        cwd: repo,
-        startedAt: timestamp,
-        model: 'fixture',
-        branch: 'fixture',
-        headSha: 'head',
-        startSha: 'start',
-        dirtyFiles: jsonNumber('0'),
-      },
-      priorInventory: { observationId: 'empty', artifacts: [] },
-      limits: {
-        maximumInputBytes: 1000000,
-        maximumArtifactBytes: 1000000,
-        maximumTotalArtifactBytes: 2000000,
-        maximumArtifacts: 100,
-      },
-    });
-    if (rendered.disposition !== 'ready')
-      throw new Error(require('node:util').inspect(rendered, { depth: 8 }));
-    expect(rendered.disposition).toBe('ready');
-    const turn = JSON.parse(
-      Buffer.from(
-        rendered.generation.artifacts.find((item) => item.role === 'turn').bytes()
-      ).toString()
-    );
+    const turn = renderReportedTurn(root, repo, outcomesBytes);
     // A failed tool result takes precedence in the turn summary; the hook
     // context must independently retain the exact blocking decision and reason.
     expect(turn.status).toBe('error');
@@ -242,6 +335,7 @@ test('a selected project override receives complete Codex normalization through 
       status: 'block',
       additional_context: 'normalized extension refusal',
       delivery: 'not_observed',
+      observation_boundary: 'unverified_compatibility_dispatcher_report',
     });
     expect(turn.timeline[0].hook_contexts[0].additional_context).toBe(
       'normalized extension refusal'
