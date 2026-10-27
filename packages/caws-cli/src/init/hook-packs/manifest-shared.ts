@@ -637,7 +637,12 @@ import { isAdapterCoveredSurface } from './types';
 // v122: scope-guard discovers canonical authority from sparse linked leaves
 // and hard-blocks authoritative exclusions and unavailable bound governance.
 // Native patches check every source/destination before emitting one advisory.
-export const SHARED_PACK_VERSION = 122;
+// v123: project complete literal direct Node heredoc bodies out of outer-shell
+// target views while retaining raw interpreter-write analysis and conservative
+// handling of unsupported forms. Require the header as the first nonblank line
+// so preceding command-lookup overrides cannot hide shell operations in a body.
+// File-sink policy and helper API are preserved.
+export const SHARED_PACK_VERSION = 123;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
