@@ -39,6 +39,7 @@ import {
   ok,
   parseAndValidateSpec,
   type RegistryPatch,
+  type WorktreeRegistry,
   type Result,
   type SessionIdentity,
   type Diagnostic,
@@ -70,7 +71,7 @@ import { resolveGitBinary } from './git-binary';
 import { repoRootFromCawsDir, runGit, storeDiagnostic, validateSpecId } from './repo-root';
 import { STORE_RULES } from './rules';
 import { insertTopLevelScalarAfter, removeTopLevelScalar, setTopLevelScalar } from './yaml-patch';
-import { readYamlSource } from './yaml-store';
+import { readYamlSourceBytes } from './yaml-store';
 
 // ─── Common types ────────────────────────────────────────────────────────
 
@@ -570,10 +571,116 @@ function isWorkingTreeCleanExceptArtifactLinks(repoRoot: string, worktreePath: s
   return lines.every((l) => links.has(l.slice(3)));
 }
 
-function isBranchMerged(repoRoot: string, branch: string, base: string): boolean {
-  const r = runGit(['merge-base', '--is-ancestor', branch, base], repoRoot);
-  // Git exits 0 when branch is ancestor of base (i.e., branch is fully merged).
-  return r.ok;
+interface RetirementGitObservation {
+  readonly directory: { readonly dev: string; readonly ino: string } | null;
+  readonly status: string | null;
+  readonly head: string | null;
+  readonly branch: string | null;
+  readonly base: string | null;
+  readonly artifactLinks: readonly string[];
+}
+
+// The retirement decision uses only this snapshot. Re-observe it under the
+// lifecycle lock; Git writers remain external to that cooperative lock.
+function retirementGitObservation(
+  repoRoot: string,
+  wtPath: string,
+  branch?: string,
+  base?: string
+): RetirementGitObservation {
+  const git = (args: string[], cwd: string): string =>
+    execFileSync(resolveGitBinary(), args, {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 2_000,
+      killSignal: 'SIGKILL',
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+    });
+  let directory: { dev: string; ino: string } | null = null;
+  let status: string | null = null;
+  let head: string | null = null;
+  let artifactLinks: string[] = [];
+  try {
+    const stat = fs.lstatSync(wtPath, { bigint: true });
+    if (!stat.isDirectory()) throw new Error('worktree path is not a directory');
+    directory = { dev: stat.dev.toString(), ino: stat.ino.toString() };
+    status = git(['status', '--porcelain'], wtPath);
+    head = git(['rev-parse', '--verify', 'HEAD'], wtPath).trim();
+    if (status.split('\n').some((line) => line.startsWith('?? ')))
+      artifactLinks = listVerifiedArtifactLinks(repoRoot, wtPath)
+        .map((link) => link.split(path.sep).join('/'))
+        .sort();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || fs.existsSync(wtPath)) throw error;
+  }
+  const ref = (name: string | undefined): string | null => {
+    if (name === undefined) return null;
+    try {
+      return git(['rev-parse', '--verify', '--quiet', `${name}^{commit}`], repoRoot).trim();
+    } catch (error) {
+      // A missing recorded ref is a captured absence, not an I/O failure.
+      // Untrack does not require ancestry; destroy requires it unless the
+      // caller explicitly abandons unmerged work. Timeouts and other failures
+      // continue to refuse rather than masquerading as absent refs.
+      if (
+        (error as { status?: unknown; signal?: unknown }).status === 1 &&
+        !(error as { signal?: unknown }).signal
+      )
+        return null;
+      throw error;
+    }
+  };
+  return { directory, status, head, branch: ref(branch), base: ref(base), artifactLinks };
+}
+
+function retirementIsClean(snapshot: RetirementGitObservation): boolean {
+  if (snapshot.status === null) return false;
+  const lines = snapshot.status.split('\n').filter((line) => line.trim().length > 0);
+  const links = new Set(snapshot.artifactLinks);
+  return lines.every((line) => line.startsWith('?? ') && links.has(line.slice(3)));
+}
+
+// Resolve ancestry only from immutable captured commit IDs, never mutable refs.
+function retirementIsMerged(repoRoot: string, branch: string, base: string): boolean {
+  if (
+    !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(branch) ||
+    !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(base)
+  )
+    return false;
+  try {
+    execFileSync(resolveGitBinary(), ['merge-base', '--is-ancestor', branch, base], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 2_000,
+      killSignal: 'SIGKILL',
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function captureRetirementGit(
+  name: string,
+  repoRoot: string,
+  wtPath: string,
+  branch?: string,
+  base?: string
+): Result<RetirementGitObservation> {
+  try {
+    return ok(retirementGitObservation(repoRoot, wtPath, branch, base));
+  } catch (error) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Cannot verify Git state for retirement of "${name}": ${String(error)}`,
+        { subject: name }
+      )
+    );
+  }
 }
 
 // ─── ID + name validation ────────────────────────────────────────────────
@@ -600,6 +707,7 @@ function loadSpecOrError(
   specId: string
 ): Result<{
   readonly source: string;
+  readonly sourceBytes: Buffer;
   readonly path: string;
   readonly spec: ReturnType<typeof parseAndValidateSpec> extends Result<infer S> ? S : never;
   readonly lifecycleState: string;
@@ -614,9 +722,10 @@ function loadSpecOrError(
       })
     );
   }
-  const srcResult = readYamlSource(p);
+  const srcResult = readYamlSourceBytes(p);
   if (!isOk(srcResult)) return err(srcResult.errors);
-  const parsed = parseAndValidateSpec(srcResult.value);
+  const source = srcResult.value.toString('utf8');
+  const parsed = parseAndValidateSpec(source);
   if (!isOk(parsed)) {
     return err(
       parsed.errors.map((d) =>
@@ -633,7 +742,8 @@ function loadSpecOrError(
     scope?: { in?: string[] };
   };
   return ok({
-    source: srcResult.value,
+    source,
+    sourceBytes: srcResult.value,
     path: p,
     spec: parsed.value as never,
     lifecycleState: spec.lifecycle_state,
@@ -717,33 +827,6 @@ function nonGovernableSpecBindingError(specId: string, lifecycleState: string): 
 }
 
 // ─── Destroy-time demotion (CAWS-SPEC-ACTIVATION-BINDS-001) ──────────────
-
-/**
- * Has `branch` moved at all since the worktree was created at `baseSha`?
- *
- * Returns `null` when the question cannot be answered — no recorded fork sha
- * (a pre-existing registry entry), a missing ref, or a git failure. Callers
- * MUST treat null as "assume work happened": the demotion this gates is only
- * safe on a provably untouched branch.
- *
- * Reachability deliberately is NOT used here. `rev-list --count base..branch`
- * returns 0 both for a branch that never received a commit AND for one whose
- * commits have since been merged into base — so a merge teardown would read as
- * "never started" and demote a spec whose work actually landed. Comparing the
- * branch tip to its recorded fork point distinguishes the two exactly.
- */
-function branchMovedSinceFork(
-  repoRoot: string,
-  branch: string,
-  baseSha: string | undefined
-): boolean | null {
-  if (typeof baseSha !== 'string' || baseSha.length === 0) return null;
-  const tip = runGit(['rev-parse', branch], repoRoot);
-  if (!tip.ok) return null;
-  const tipSha = tip.stdout.trim();
-  if (tipSha.length === 0) return null;
-  return tipSha !== baseSha;
-}
 
 /**
  * When a worktree is destroyed without its branch ever carrying a commit, the
@@ -1519,20 +1602,300 @@ function restoreRegistrySnapshot(cawsDir: string, priorBytes: Buffer | null): Re
   );
 }
 
-function rollbackRegistryEntry(cawsDir: string, name: string): void {
-  // Direct file mutation for rollback — applyRegistryPatch has no
-  // "remove entry" mode. This is best-effort recovery.
-  const p = path.join(cawsDir, 'worktrees.json');
+/** Read the plan's registry and retain exactly the bytes it came from. */
+function retirementRegistry(
+  cawsDir: string
+): Result<{ bytes: Buffer | null; registry: WorktreeRegistry }> {
+  const registryPath = path.join(cawsDir, 'worktrees.json');
+  let bytes: Buffer;
   try {
-    const raw = fs.readFileSync(p, 'utf8');
-    const obj = JSON.parse(raw);
-    if (obj && typeof obj === 'object' && obj[name] !== undefined) {
-      delete obj[name];
-      fs.writeFileSync(p, JSON.stringify(obj, null, 2));
-    }
-  } catch {
-    /* best-effort */
+    bytes = fs.readFileSync(registryPath);
+  } catch (e) {
+    const cause = e as { code?: string; message?: string };
+    if (cause.code === 'ENOENT') return ok({ bytes: null, registry: {} });
+    return err(
+      storeDiagnostic(
+        STORE_RULES.READ_IO_FAILED,
+        `Failed to read ${registryPath}: ${cause.message ?? 'unknown error'}.`,
+        { subject: registryPath, data: { code: cause.code } }
+      )
+    );
   }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bytes.toString('utf8'));
+  } catch (e) {
+    const cause = e as { message?: string };
+    return err(
+      storeDiagnostic(
+        STORE_RULES.READ_JSON_INVALID,
+        `JSON parse failed in ${registryPath}: ${cause.message ?? 'unknown error'}.`,
+        { subject: registryPath }
+      )
+    );
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return err(
+      storeDiagnostic(STORE_RULES.REGISTRY_NOT_OBJECT, `worktrees.json is not a JSON object.`, {
+        subject: registryPath,
+      })
+    );
+  }
+  return ok({ bytes, registry: parsed as WorktreeRegistry });
+}
+
+/** Preserve exact bytes of unchanged lines, including malformed UTF-8 comments.
+ * Refuse if an altered or ambiguous line contains undecodable bytes. */
+function retirementSpecBytes(original: Buffer, patched: string, subject: string): Result<Buffer> {
+  const lines: Buffer[] = [];
+  let start = 0;
+  for (let i = 0; i < original.length; i++) {
+    if (original[i] === 10) {
+      lines.push(original.subarray(start, i + 1));
+      start = i + 1;
+    }
+  }
+  if (start < original.length) lines.push(original.subarray(start));
+  const decoded = lines.map((line) => line.toString('utf8'));
+  const output: Buffer[] = [];
+  let cursor = 0;
+  const unsafe = (line: Buffer): boolean =>
+    !Buffer.from(line.toString('utf8'), 'utf8').equals(line);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (
+      line !== undefined &&
+      unsafe(line) &&
+      decoded.indexOf(decoded[i] ?? '') !== decoded.lastIndexOf(decoded[i] ?? '')
+    ) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          'Cannot safely distinguish duplicate invalid UTF-8 spec lines.',
+          { subject }
+        )
+      );
+    }
+  }
+  for (const line of patched.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
+    let found = -1;
+    for (let i = cursor; i < decoded.length; i++) {
+      if (decoded[i] === line) {
+        found = i;
+        break;
+      }
+    }
+    if (found < 0) {
+      output.push(Buffer.from(line, 'utf8'));
+      continue;
+    }
+    for (let i = cursor; i < found; i++) {
+      const skipped = lines[i];
+      if (skipped !== undefined && unsafe(skipped)) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+            'Cannot safely rewrite an invalid UTF-8 spec line.',
+            { subject }
+          )
+        );
+      }
+    }
+    const matched = lines[found];
+    if (matched !== undefined) output.push(matched);
+    cursor = found + 1;
+  }
+  for (let i = cursor; i < lines.length; i++) {
+    const skipped = lines[i];
+    if (skipped !== undefined && unsafe(skipped)) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          'Cannot safely rewrite an invalid UTF-8 spec line.',
+          { subject }
+        )
+      );
+    }
+  }
+  return ok(Buffer.concat(output));
+}
+
+/** Lock callers compare every authority byte used by the plan before effects. */
+function retirementTransaction(
+  cawsDir: string,
+  name: string,
+  registryBytes: Buffer | null,
+  expectedSpec: { path: string; bytes: Buffer } | null,
+  plannedWrites: { path: string; contents: string }[],
+  events: EventBody[],
+  beforeMutation?: () => Result<boolean>
+): ReturnType<typeof runLifecycleTransaction> {
+  const registryPath = path.join(cawsDir, 'worktrees.json');
+  try {
+    if (
+      registryBytes === null ||
+      !fs.readFileSync(registryPath).equals(registryBytes) ||
+      (expectedSpec !== null && !fs.readFileSync(expectedSpec.path).equals(expectedSpec.bytes))
+    ) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Authority changed while planning retirement of "${name}"; retry.`,
+          { subject: name }
+        )
+      );
+    }
+  } catch (e) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Cannot revalidate retirement authority for "${name}": ${String(e)}`,
+        { subject: name }
+      )
+    );
+  }
+  if (
+    registryBytes !== null &&
+    !Buffer.from(registryBytes.toString('utf8'), 'utf8').equals(registryBytes)
+  ) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        'Cannot safely rewrite a registry containing invalid UTF-8.',
+        { subject: name }
+      )
+    );
+  }
+  // Construct byte-preserving writes before any irreversible physical action.
+  const byteWrites: { path: string; contents: Buffer }[] = [];
+  for (const write of plannedWrites) {
+    if (expectedSpec === null || expectedSpec.path !== write.path) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          'Retirement spec plan lacks a matching byte snapshot.',
+          { subject: write.path }
+        )
+      );
+    }
+    const bytes = retirementSpecBytes(expectedSpec.bytes, write.contents, write.path);
+    if (!bytes.ok) return bytes;
+    byteWrites.push({ path: write.path, contents: bytes.value });
+  }
+  const auditPath = path.join(cawsDir, 'events.jsonl');
+  const readAudit = (): Buffer | null => {
+    try {
+      return fs.readFileSync(auditPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw error;
+    }
+  };
+  let auditBefore: Buffer | null;
+  try {
+    auditBefore = readAudit();
+  } catch (error) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Cannot snapshot retirement audit before mutation: ${String(error)}`,
+        { subject: name }
+      )
+    );
+  }
+  let physicalRemoval = false;
+  if (beforeMutation !== undefined) {
+    const before = beforeMutation();
+    if (!before.ok) return before;
+    physicalRemoval = before.value;
+  }
+  if (registryBytes === null)
+    return err(
+      storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, 'Registry disappeared.', {
+        subject: name,
+      })
+    );
+  const registry = JSON.parse(registryBytes.toString('utf8')) as Record<string, unknown>;
+  delete registry[name];
+  const write = writeFileAtomic(registryPath, JSON.stringify(registry, null, 2), {
+    preserveMode: true,
+  });
+  if (!write.ok) {
+    const restored = restoreRegistrySnapshot(cawsDir, registryBytes);
+    return err([
+      ...write.errors,
+      ...(restored.ok ? [] : restored.errors),
+      ...(physicalRemoval
+        ? [
+            storeDiagnostic(
+              STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+              `Git worktree for "${name}" was removed; registry write failed. Physical removal was not reversed.`,
+              { subject: name }
+            ),
+          ]
+        : []),
+    ]);
+  }
+  const transaction = runLifecycleTransaction({ cawsDir, plannedWrites: byteWrites, events });
+  let cause: readonly Diagnostic[];
+  if (!transaction.ok) cause = transaction.errors;
+  else if (transaction.value.kind === 'success') return transaction;
+  else cause = transaction.value.cause;
+  {
+    const restored = restoreRegistrySnapshot(cawsDir, registryBytes);
+    // The transaction compensates successful writes, but a failing writer can
+    // itself have mutated the target before reporting failure. Restore the
+    // exact source on every failed transaction that planned a spec write.
+    const specRestored =
+      expectedSpec !== null && plannedWrites.length > 0
+        ? writeFileAtomic(expectedSpec.path, expectedSpec.bytes, { preserveMode: true })
+        : ok(true);
+    const specErrors = specRestored.ok
+      ? []
+      : [
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+            `Could not restore spec authority after retirement failure: ${specRestored.errors.map((d) => d.message).join('; ')}`,
+            { subject: expectedSpec?.path ?? name }
+          ),
+        ];
+    let auditChanged = true;
+    try {
+      const auditAfter = readAudit();
+      auditChanged =
+        auditBefore === null
+          ? auditAfter !== null
+          : auditAfter === null || !auditBefore.equals(auditAfter);
+    } catch {
+      /* An unreadable audit cannot establish no effect. */
+    }
+    if (!restored.ok || !specRestored.ok || physicalRemoval || auditChanged) {
+      return err([
+        ...cause,
+        ...(auditChanged
+          ? [
+              storeDiagnostic(
+                STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+                `Retirement audit changed or could not be read after failure; append outcome is ambiguous. Inspect the event log before retrying.`,
+                { subject: auditPath }
+              ),
+            ]
+          : []),
+        ...(restored.ok ? [] : restored.errors),
+        ...specErrors,
+        ...(physicalRemoval
+          ? [
+              storeDiagnostic(
+                STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+                `Git worktree for "${name}" was removed; canonical transaction failed. Physical removal was not reversed.`,
+                { subject: name }
+              ),
+            ]
+          : []),
+      ]);
+    }
+  }
+  return transaction;
 }
 
 /** Augment a registry entry with descriptive metadata the kernel
@@ -1761,9 +2124,9 @@ export function destroyWorktree(
   const nameValidation = validateWorktreeName(input.name);
   if (!nameValidation.ok) return nameValidation;
 
-  const registry = loadWorktrees(cawsDir);
-  if (!isOk(registry)) return err(registry.errors);
-  const entry = registry.value[input.name];
+  const retirement = retirementRegistry(cawsDir);
+  if (!retirement.ok) return retirement;
+  const entry = retirement.value.registry[input.name];
   // CAWS-FIRST-CONTACT-UX-001 Fix 5: capture pre-write state once we
   // know the bound spec (entry may have no specId for legacy entries).
   const preStateSpecId: string | null =
@@ -1822,11 +2185,20 @@ export function destroyWorktree(
     }
   }
 
+  const gitBefore = captureRetirementGit(
+    input.name,
+    repoRootFromCawsDir(cawsDir),
+    entry.path ?? worktreePathFor(cawsDir, input.name),
+    entry.branch,
+    entry.baseBranch
+  );
+  if (!gitBefore.ok) return gitBefore;
+
   // Dirty-tree check. Verified artifact links are exempt — destroy
   // removes them itself just before `git worktree remove`.
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const wtPath = entry.path ?? worktreePathFor(cawsDir, input.name);
-  if (fs.existsSync(wtPath) && !isWorkingTreeCleanExceptArtifactLinks(repoRoot, wtPath)) {
+  if (gitBefore.value.directory !== null && !retirementIsClean(gitBefore.value)) {
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
@@ -1841,7 +2213,9 @@ export function destroyWorktree(
     entry.branch !== undefined &&
     entry.baseBranch !== undefined &&
     input.abandonUnmerged !== true &&
-    !isBranchMerged(repoRoot, entry.branch, entry.baseBranch)
+    (gitBefore.value.branch === null ||
+      gitBefore.value.base === null ||
+      !retirementIsMerged(repoRoot, gitBefore.value.branch, gitBefore.value.base))
   ) {
     return err(
       storeDiagnostic(
@@ -1852,42 +2226,44 @@ export function destroyWorktree(
     );
   }
 
-  // Run git worktree remove. Never rm -rf. Verified artifact links are
-  // unlinked first: a legacy link that is not git-ignored would make
-  // `git worktree remove` refuse on an untracked file CAWS itself created.
   let removedGitWorktree = false;
-  if (fs.existsSync(wtPath)) {
-    removeWorktreeArtifactLinks(repoRoot, wtPath);
-    const removeResult = runGit(['worktree', 'remove', wtPath], repoRoot);
-    if (!removeResult.ok) {
-      return err(
-        storeDiagnostic(
-          STORE_RULES.LIFECYCLE_WRITE_FAILED,
-          `git worktree remove failed: ${removeResult.reason}`,
-          { subject: input.name }
-        )
-      );
-    }
-    removedGitWorktree = true;
-  }
 
   // Clear spec.worktree field if a spec was bound, and — when the branch never
   // carried a commit — undo the activation the bind conferred.
   const now = (input.now ?? (() => new Date()))().toISOString();
   const plannedWrites: { path: string; contents: string }[] = [];
+  let expectedSpec: { path: string; bytes: Buffer } | null = null;
   let demotionEvent: EventBody | null = null;
   let demotedSpecId: string | null = null;
   if (entry.specId !== undefined) {
     const specInfo = loadSpecOrError(cawsDir, entry.specId);
-    if (isOk(specInfo)) {
+    if (!isOk(specInfo)) return err(specInfo.errors);
+    expectedSpec = { path: specInfo.value.path, bytes: specInfo.value.sourceBytes };
+    if (
+      specInfo.value.currentWorktree !== undefined &&
+      specInfo.value.currentWorktree.length > 0 &&
+      specInfo.value.currentWorktree !== input.name
+    ) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${entry.specId}" is bound to another worktree; refusing retirement.`,
+          { subject: entry.specId }
+        )
+      );
+    }
+    {
       const newSpecBytes = patchSpecClearWorktree(specInfo.value.source);
+      if (!isOk(newSpecBytes)) return err(newSpecBytes.errors);
       if (isOk(newSpecBytes)) {
         // An entry with no recorded fork sha (created before baseSha existed)
         // reads as indeterminate, so the conservative branch is taken and the
         // spec stays active.
         const branchMoved =
-          entry.branch !== undefined
-            ? branchMovedSinceFork(repoRoot, entry.branch, entry.baseSha)
+          gitBefore.value.branch !== null &&
+          typeof entry.baseSha === 'string' &&
+          entry.baseSha.length > 0
+            ? gitBefore.value.branch !== entry.baseSha
             : null;
         const demotion = demoteSpecOnUnstartedDestroy(
           newSpecBytes.value,
@@ -1930,17 +2306,55 @@ export function destroyWorktree(
   } as unknown as EventBody;
 
   const txnOutcome = withLifecycleLock(cawsDir, () => {
-    // Remove the registry entry first.
-    rollbackRegistryEntry(cawsDir, input.name); // misnomer — also used here as the canonical remover
-    // spec_deactivated LAST, for the same reason spec_activated is last in
-    // create/bind: a rolled-back append must not leave a lifecycle claim the
-    // spec body never received.
+    const currentGit = captureRetirementGit(
+      input.name,
+      repoRoot,
+      wtPath,
+      entry.branch,
+      entry.baseBranch
+    );
+    if (!currentGit.ok) return currentGit;
+    if (JSON.stringify(currentGit.value) !== JSON.stringify(gitBefore.value))
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Git state changed while planning retirement of "${input.name}"; retry.`,
+          { subject: input.name }
+        )
+      );
     const events = demotionEvent !== null ? [event, demotionEvent] : [event];
-    return runLifecycleTransaction({
+    return retirementTransaction(
       cawsDir,
+      input.name,
+      retirement.value.bytes,
+      expectedSpec,
       plannedWrites,
       events,
-    });
+      () => {
+        if (!fs.existsSync(wtPath)) return ok(false);
+        removeWorktreeArtifactLinks(repoRoot, wtPath);
+        try {
+          execFileSync(resolveGitBinary(), ['worktree', 'remove', wtPath], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+            timeout: 10_000,
+            killSignal: 'SIGKILL',
+          });
+        } catch (e) {
+          return err(
+            storeDiagnostic(
+              STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+              `git worktree remove failed or timed out for ${wtPath}; physical effects may be incomplete (path exists: ${fs.existsSync(wtPath)}): ${String(e)}`,
+              { subject: input.name }
+            )
+          );
+        }
+        removedGitWorktree = true;
+        eventData.removed_git_worktree = true;
+        return ok(true);
+      }
+    );
   });
 
   if (!txnOutcome.ok) return err(txnOutcome.errors);
@@ -1994,9 +2408,9 @@ export function pruneWorktree(
   const nameValidation = validateWorktreeName(input.name);
   if (!nameValidation.ok) return nameValidation;
 
-  const registry = loadWorktrees(cawsDir);
-  if (!isOk(registry)) return err(registry.errors);
-  const entry = registry.value[input.name];
+  const retirement = retirementRegistry(cawsDir);
+  if (!retirement.ok) return retirement;
+  const entry = retirement.value.registry[input.name];
   if (entry === undefined) {
     return err(
       storeDiagnostic(
@@ -2025,10 +2439,27 @@ export function pruneWorktree(
   // Plan: clear the bound spec's worktree: field (if any) so the prune does not
   // leave a one-sided spec->registry binding behind.
   const plannedWrites: { path: string; contents: string }[] = [];
+  let expectedSpec: { path: string; bytes: Buffer } | null = null;
   if (entry.specId !== undefined) {
     const specInfo = loadSpecOrError(cawsDir, entry.specId);
-    if (isOk(specInfo)) {
+    if (!isOk(specInfo)) return err(specInfo.errors);
+    expectedSpec = { path: specInfo.value.path, bytes: specInfo.value.sourceBytes };
+    if (
+      specInfo.value.currentWorktree !== undefined &&
+      specInfo.value.currentWorktree.length > 0 &&
+      specInfo.value.currentWorktree !== input.name
+    ) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${entry.specId}" is bound to another worktree; refusing retirement.`,
+          { subject: entry.specId }
+        )
+      );
+    }
+    {
       const newSpecBytes = patchSpecClearWorktree(specInfo.value.source);
+      if (!isOk(newSpecBytes)) return err(newSpecBytes.errors);
       if (isOk(newSpecBytes) && newSpecBytes.value !== specInfo.value.source) {
         plannedWrites.push({ path: specInfo.value.path, contents: newSpecBytes.value });
       }
@@ -2061,9 +2492,14 @@ export function pruneWorktree(
   } as unknown as EventBody;
 
   const txnOutcome = withLifecycleLock(cawsDir, () => {
-    // Remove the stale registry entry (no git touch — the dir is already gone).
-    rollbackRegistryEntry(cawsDir, input.name);
-    return runLifecycleTransaction({ cawsDir, plannedWrites, events: [event] });
+    return retirementTransaction(
+      cawsDir,
+      input.name,
+      retirement.value.bytes,
+      expectedSpec,
+      plannedWrites,
+      [event]
+    );
   });
 
   if (!txnOutcome.ok) return err(txnOutcome.errors);
@@ -2105,9 +2541,9 @@ export function untrackWorktree(
     );
   }
 
-  const registry = loadWorktrees(cawsDir);
-  if (!isOk(registry)) return err(registry.errors);
-  const entry = registry.value[input.name];
+  const retirement = retirementRegistry(cawsDir);
+  if (!retirement.ok) return retirement;
+  const entry = retirement.value.registry[input.name];
   if (entry === undefined) {
     return err(
       storeDiagnostic(
@@ -2134,7 +2570,15 @@ export function untrackWorktree(
 
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const wtPath = worktreePathFor(cawsDir, input.name);
-  if (!fs.existsSync(wtPath) || !fs.statSync(wtPath).isDirectory()) {
+  const gitBefore = captureRetirementGit(
+    input.name,
+    repoRoot,
+    wtPath,
+    entry.branch,
+    entry.baseBranch
+  );
+  if (!gitBefore.ok) return gitBefore;
+  if (gitBefore.value.directory === null) {
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
@@ -2144,7 +2588,7 @@ export function untrackWorktree(
     );
   }
 
-  if (!isWorkingTreeCleanExceptArtifactLinks(repoRoot, wtPath)) {
+  if (!retirementIsClean(gitBefore.value)) {
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
@@ -2157,11 +2601,13 @@ export function untrackWorktree(
   const specId = entry.specId;
   const preState = capturePreWriteState(cawsDir, specId ?? null);
   const plannedWrites: { path: string; contents: string }[] = [];
+  let expectedSpec: { path: string; bytes: Buffer } | null = null;
   let clearsSpecBinding = false;
 
   if (specId !== undefined) {
     const specInfo = loadSpecOrError(cawsDir, specId);
     if (!isOk(specInfo)) return err(specInfo.errors);
+    expectedSpec = { path: specInfo.value.path, bytes: specInfo.value.sourceBytes };
     const currentWorktree = specInfo.value.currentWorktree;
     if (
       currentWorktree !== undefined &&
@@ -2224,8 +2670,30 @@ export function untrackWorktree(
   } as unknown as EventBody;
 
   const txnOutcome = withLifecycleLock(cawsDir, () => {
-    rollbackRegistryEntry(cawsDir, input.name);
-    return runLifecycleTransaction({ cawsDir, plannedWrites, events: [event] });
+    const currentGit = captureRetirementGit(
+      input.name,
+      repoRoot,
+      wtPath,
+      entry.branch,
+      entry.baseBranch
+    );
+    if (!currentGit.ok) return currentGit;
+    if (JSON.stringify(currentGit.value) !== JSON.stringify(gitBefore.value))
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Git state changed while planning retirement of "${input.name}"; retry.`,
+          { subject: input.name }
+        )
+      );
+    return retirementTransaction(
+      cawsDir,
+      input.name,
+      retirement.value.bytes,
+      expectedSpec,
+      plannedWrites,
+      [event]
+    );
   });
 
   if (!txnOutcome.ok) return err(txnOutcome.errors);
