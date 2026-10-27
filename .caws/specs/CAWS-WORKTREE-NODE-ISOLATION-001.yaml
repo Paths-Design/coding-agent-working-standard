@@ -1,10 +1,11 @@
 id: CAWS-WORKTREE-NODE-ISOLATION-001
 title: 'Create worktrees with private Node dependencies'
 mode: fix
-lifecycle_state: active
-worktree: native-node-isolation
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Create-only Node link opt-out qualified with 13 targeted tests including actual CLI parsing and an offline npm ci preserving canonical sentinels; existing physical and symbolic paths preserved, default and Rust artifact controls pass. Existing or undiscovered symlinks still require inspection before installs. Independent committed-candidate review inspected source and raw logs.'
 created_at: '2026-10-27T19:18:40.931Z'
-updated_at: '2026-10-27T19:18:42.655Z'
+updated_at: '2026-10-27T19:23:49.888Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
