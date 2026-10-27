@@ -72,9 +72,8 @@ evidence:
     commit_sha: eb0e884ed46cc2aa68f763c04877b0bb8d3b8bc6
   - criterion_id: A4
     status: pass
-    evidence_ref: "complete-targets-events.jsonl:124, Bats cases 9,11,33-34: existing unmatched/union first-strike advisory remains; full target scan emits at most one advisory strike per tool and records no strike if a later target hard-refuses. OLD199 RED at line 103 exposes advisory-first bypass. Component acceptance only; cwd=/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/rooted-scope-enforcement/packages/caws-cli. Raw command/output inspected separately. Artifact and commit existence checked manually; installed --verify rejects this absolute external artifact path and would not execute the recorded Bats command. No installed native-host acceptance."
-    recorded_at: "2026-10-27T21:58:22.376Z"
+    evidence_ref: "A4: ordinary unmatched/union advisory progression retained (GREEN cases 9,11); full scan emits at most one first advisory per tool and no strike if a later target hard-refuses (cases 33-34), with OLD199 RED distinguishing the prior advisory-first bypass. Raw external event log: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/complete-targets-events.jsonl (GREEN line 124; OLD199 RED line 103). Component behavior only; Bats cwd=/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/rooted-scope-enforcement/packages/caws-cli. --verify re-derives cited commit existence/reachability only and never executes the recorded Bats command. Actual raw output and relevant assertions inspected separately by Root and independent peer. Installed-native qualification/global adoption remain separate."
+    recorded_at: "2026-10-27T22:07:53.370Z"
     command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/scope-guard.bats"
     exit_code: 0
-    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/complete-targets-events.jsonl"
     commit_sha: eb0e884ed46cc2aa68f763c04877b0bb8d3b8bc6
