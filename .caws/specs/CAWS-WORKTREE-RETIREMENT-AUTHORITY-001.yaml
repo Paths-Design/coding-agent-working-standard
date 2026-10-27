@@ -54,3 +54,8 @@ evidence:
     evidence_ref: "Injected partial registry/spec writes restore exact original bytes or return unrecovered. Actual events-store partial write and post-write fsync failures leave audit effects and now explicitly report ambiguous/unrecovered state without truncating the log. Destructive Git removal is not falsely called reversed. Final build and 3 selected suites:99 tests pass, package cwd eslint0, gates5PASS, doctor0E5W6I. Raw stale-ref-green.log/json; prior failing probes retained in same artifact directory. --verify establishes committed identity only; raw checks were separately inspected. No installed Rust, full native fence or global adoption claim."
     recorded_at: "2026-10-27T16:05:05.971Z"
     commit_sha: "69097f5ff8ec53d958758b2e8ab185bfae88a249"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Uncontended destroy/prune/untrack and shell repair/untrack controls retain existing semantics, including absent recorded base for untrack and explicit abandonment, ordinary destroy ancestry refusal, physical removal diagnostic and bounded Git timeout. Mock timeout establishes configuration and refusal, not kernel scheduling. Final build and 3 selected suites:99 tests pass, package cwd eslint0, gates5PASS, doctor0E5W6I. Raw stale-ref-green.log/json; prior failing probes retained in same artifact directory. --verify establishes committed identity only; raw checks were separately inspected. No installed Rust, full native fence or global adoption claim."
+    recorded_at: "2026-10-27T16:05:07.038Z"
+    commit_sha: "69097f5ff8ec53d958758b2e8ab185bfae88a249"
