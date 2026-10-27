@@ -1,10 +1,11 @@
 id: CAWS-DEFECT-SHORTCUT-LANG-PREEXISTING-LINE-STRIKE-01
 title: 'Shortcut-language guard strikes agents on a pre-existing ''# placeholder'' comment in classify_command.py they did not write'
 mode: fix
-lifecycle_state: active
-worktree: shortcut-normalization
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Authored-range normalization qualified through installed bootstrap, native engine and actual Rust subprocess routes, including exact retained Python-comment incident, direct Write preimages, accepted Codex patch envelopes and implicit first chunks. 206 runtime/cache checks passed; pack121 fingerprint separately14passed; Bats49passed; final3 route probes passed. Independent committed-candidate review used owner-authorized parser exports. PostTool payload/postimage tests are not actual host patch application; unknown/ambiguous content is explicit, and preimage reads do not establish atomic custody. Global Rust cutover is separate and remains pending.'
 created_at: '2026-10-05T08:26:31.631Z'
-updated_at: '2026-10-27T16:24:59.031Z'
+updated_at: '2026-10-27T19:27:09.859Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
@@ -22,6 +23,9 @@ scope:
     - packages/caws-cli/templates/hook-packs/codex/hooks/lib/emit.sh
     - packages/caws-cli/tests/runtime/engine-routing.test.js
     - packages/caws-cli/src/init/hook-packs/manifest-codex.ts
+    - packages/caws-cli/src/runtime/session-cache-admission.ts
+    - packages/caws-cli/tests/runtime/session-cache-admission.test.js
+    - packages/caws-cli/templates/hook-packs/shared/dispatch/pre_tool_use.sh
   out: []
 invariants:
   - 'A strike is charged only for content the agent authored in the tool call being judged; a line already present in the file is never charged to the editor.'
@@ -49,5 +53,52 @@ acceptance:
       strikes, unknown content is explicit without a disk scan, and feedback
       truthfully states the tool already applied while preserving progressive
       enforcement
+  - id: A5
+    given: 'The shipped agent-surface helper preserves exact Git root path bytes in its vendor fallback branch'
+    when: >-
+      The immutable runtime qualifies native session cache and SessionEnd with
+      explicitly selected project routing
+    then: >-
+      The reviewed helper identity qualifies, altered bytes refuse even with
+      recomputed selection metadata, and actual native exchange controls preserve
+      cache and failure behavior
+  - id: A6
+    given: 'A direct full-file Write replacing retained markers or introducing a new source marker'
+    when: 'The installed pre-tool chain compares a bounded stable regular-file preimage with the proposed bytes'
+    then: >-
+      Retained lines do not strike, introduced markers preserve progressive
+      enforcement, unknown preimages are explicit, and the post-tool event never
+      charges the same Write again
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/shortcut-normalization-01/incident-routes.log: 3 real adapter/engine routes pass exact retained classify_command.py result.append comment and missing-payload diagnostic. Old source20a4083 selected whole Edit new_string or disk fallback; introduced-range selection removes that attribution error. Test b68fc3665."
+    recorded_at: "2026-10-27T19:26:05.284Z"
+    commit_sha: b68fc3665
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/shortcut-normalization-01/incident-routes.log and envelope-bats.log: retained Edit lines, deletion, direct Write comparison and accepted Codex patch envelopes produce no old-content strike. Malformed/missing/ambiguous content emits explicit unknown, not a clean-content claim. PostTool tests supply payload/postimages; no actual Codex patch application claimed."
+    recorded_at: "2026-10-27T19:26:06.088Z"
+    commit_sha: b68fc3665
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/shortcut-normalization-01/envelope-bats.log: 49 pass including authored Python placeholder stub and code/comment negative controls; incident-routes.log preserves progressive strikes, one charge per call, and a third-strike refusal through installed and Rust routes."
+    recorded_at: "2026-10-27T19:26:06.915Z"
+    commit_sha: b68fc3665
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/shortcut-normalization-01/envelope-native-first.log: 206 pass with sole stale fingerprint failure; envelope-fingerprint-green.log14 pass after explicit pack121 update. incident-routes.log3 routes include exact original incident and nine accepted envelope/implicit-chunk cases. Multi-file/hunk, retained/deleted text, malformed/unknown and truthful post-tool feedback checked. Pinned parser exports ground grammar; tests inject postimages rather than execute host apply_patch."
+    recorded_at: "2026-10-27T19:26:07.762Z"
+    commit_sha: b68fc3665
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/shortcut-normalization-01/envelope-native-first.log: session-cache-admission and engine-routing suites pass with explicit CAWS_TEST_NATIVE_EXECUTABLE native2d498ac7; reviewed helper hash455dbfc selected, changed-byte/recomputed-metadata refusals and SessionEnd controls. Only fingerprint baseline failed separately corrected; no whole Python retirement or native deployment claim."
+    recorded_at: "2026-10-27T19:26:08.639Z"
+    commit_sha: b68fc3665
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/shortcut-normalization-01/incident-routes.log: all3 routes pass pre-tool full-file Write retained/new marker controls, bounded stable preimage unknowns, new nested path and no duplicate PostTool Write charge. Preimage observation is not atomic custody of later host write; partial ambiguous edits remain explicitly unknown."
+    recorded_at: "2026-10-27T19:26:09.529Z"
+    commit_sha: b68fc3665
