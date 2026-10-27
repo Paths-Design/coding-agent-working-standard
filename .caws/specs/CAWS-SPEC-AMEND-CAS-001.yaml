@@ -55,3 +55,10 @@ evidence:
     command: "node scripts/build-cli.js && node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/spec-amend-concurrency.test.js tests/store/specs-body-writer-acceptance.test.js tests/store/specs-body-writer-folded.test.js tests/shell/specs-amend.test.js tests/shell/specs-amend-scope-reason.test.js tests/store/specs-scope-in-placeholder.test.js tests/store/specs-evidence-roundtrip.test.js tests/store/yaml-patch.test.js"
     exit_code: 0
     commit_sha: "7dd22a504b4089584ebe2d2ab60df7c953ce977b"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Actual unchanged/retry controls preserve competing scope and reset current evidence on AC rewrite with exact audit fields; existing amendment and YAML compatibility suites pass, eight suites170tests exit0. Raw checks: /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/spec-amend-cas-01/encoding-correction.json. No installed/native/rollback claim; commit rederivation checks existence only."
+    recorded_at: "2026-10-27T01:56:03.090Z"
+    command: "node scripts/build-cli.js && node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/spec-amend-concurrency.test.js tests/store/specs-body-writer-acceptance.test.js tests/store/specs-body-writer-folded.test.js tests/shell/specs-amend.test.js tests/shell/specs-amend-scope-reason.test.js tests/store/specs-scope-in-placeholder.test.js tests/store/specs-evidence-roundtrip.test.js tests/store/yaml-patch.test.js"
+    exit_code: 0
+    commit_sha: "7dd22a504b4089584ebe2d2ab60df7c953ce977b"
