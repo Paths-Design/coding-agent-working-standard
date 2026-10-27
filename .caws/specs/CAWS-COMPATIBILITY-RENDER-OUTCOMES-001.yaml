@@ -1,10 +1,11 @@
 id: CAWS-COMPATIBILITY-RENDER-OUTCOMES-001
 title: 'Publish captured compatibility hook outcomes to session rendering'
 mode: fix
-lifecycle_state: active
-worktree: compatibility-render-outcomes
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Publish compatibility reports to actual renderer input and typed terminal observations once; committed928b9c887/2fcc002fb, semantic red/green evidence and independent finding discharge recorded. Compatibility carrier remains explicitly unverified and delivery not_observed; actual host/global refresh belongs to parent cutover.'
 created_at: '2026-10-27T19:44:54.708Z'
-updated_at: '2026-10-27T19:44:56.600Z'
+updated_at: '2026-10-27T20:14:46.349Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
@@ -32,3 +33,9 @@ acceptance:
       observations do not fabricate successful outcomes or retry dispatch
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed928b9c887 and review correction2fcc002fb. Raw artifact compatibility-render-outcomes-01: producer-consumer-red missing sidecar; green-final actual compatibility refusal retains exact decision/reason in actual compiled renderer; integrated-build0 and integrated-runtime-tests230pass across engine/core/executor/cache suites. Independent review identified typed progress duplication and weak report correlation; review-controls-red7fail olddist, review-build0, review-controls-green27pass26skipped exercises changedcompatibility/typed paths including actualcomposeHandlers-to-journal-to-renderer exactonecontext, wholecapture rejection, no redispatch unknownresult, bounded capture/collision/nofollow. Package ESLint0; doctor0warnings; gates5pass. Reviewed finalsource coordinate discharge: compatibility reports remain explicitly unverified_compatibility_dispatcher_report in renderedcontext, delivery not_observed; shared-identity carrier is not authenticated execution or permission authority. Actual selected installed image and host refresh not established by this component acceptance. Verify checks commit existence; logs inspected separately."
+    recorded_at: "2026-10-27T20:13:34.973Z"
+    commit_sha: "2fcc002fb"
