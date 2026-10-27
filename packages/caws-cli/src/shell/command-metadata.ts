@@ -1163,7 +1163,13 @@ const INIT_INSTALL: LeafCommandMeta = {
     {
       flag: '--base-runtime-digest <digest>',
       description:
-        'Preserve the exact guards and policy of a verified retained legacy generation while adding --native-image. Selects before analysis; no refusal fallback. Requires --native-image.',
+        'Preserve the exact guards and policy of a verified retained legacy generation while adding --native-image, except explicitly selected --refresh-base-handler updates. Selects before analysis; no refusal fallback. Requires --native-image.',
+    },
+    {
+      flag: '--refresh-base-handler <name>',
+      collect: true,
+      description:
+        'Replace one existing registered base handler with its packaged source (repeatable). Requires --base-runtime-digest and --native-image. Plan records old/new hashes; other base members and policy remain unchanged. Handler/base compatibility requires separate qualification.',
     },
   ],
 };

@@ -59,6 +59,26 @@ afterEach(() => {
 describe('caws init --plan', () => {
   test.each([
     { action: 'adapters', actionArg: 'install' },
+    { action: 'adapters', actionArg: 'install', nativeImage: '/absent' },
+    {
+      action: 'adapters',
+      actionArg: 'rollback',
+      nativeImage: '/absent',
+      baseRuntimeDigest: 'a'.repeat(64),
+    },
+    { action: 'adapters', actionArg: 'configure' },
+    {},
+  ])('handler refresh rejects incompatible command %j before writes', (options) => {
+    const root = makeTempRepo();
+    const before = snapshotTree(root);
+    const result = runInit(root, { ...options, refreshBaseHandler: ['scope-guard.sh'] });
+    expect(result.code).toBe(2);
+    expect(result.err).toMatch(/incompatible options|refresh-base-handler/);
+    expect(snapshotTree(root)).toEqual(before);
+    expect(fs.existsSync(process.env.CAWS_HOME)).toBe(false);
+  });
+  test.each([
+    { action: 'adapters', actionArg: 'install' },
     { action: 'adapters', actionArg: 'rollback', nativeImage: '/absent' },
     { action: 'adapters', actionArg: 'configure', nativeImage: '/absent' },
     {},

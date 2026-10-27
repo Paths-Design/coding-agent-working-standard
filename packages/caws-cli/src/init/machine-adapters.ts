@@ -33,6 +33,16 @@ export interface MachineRuntimeOptions {
   readonly nativeImage?: string;
   /** Explicit legacy guard generation, preserved before native transport selection. */
   readonly baseRuntimeDigest?: string;
+  /** Explicit packaged handler updates; never inferred from a dispatch failure. */
+  readonly refreshBaseHandlers?: readonly string[];
+}
+
+interface BaseHandlerRefresh {
+  readonly name: string;
+  readonly beforeSha256: string;
+  readonly afterSha256: string;
+  readonly source: { readonly path: string; readonly mode: number };
+  readonly installedMode: number;
 }
 
 export interface MachineRuntimeResult {
@@ -44,6 +54,7 @@ export interface MachineRuntimeResult {
   readonly files: readonly string[];
   readonly nativeLauncher?: string;
   readonly baseRuntimeDigest?: string;
+  readonly refreshedBaseHandlers?: readonly BaseHandlerRefresh[];
 }
 
 export function machineHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -332,6 +343,20 @@ function withRuntimeLock(home: string, run: () => MachineRuntimeResult): Machine
 
 export function installMachineRuntime(options: MachineRuntimeOptions = {}): MachineRuntimeResult {
   if (
+    options.refreshBaseHandlers !== undefined &&
+    (!options.baseRuntimeDigest ||
+      !options.nativeImage ||
+      !Array.isArray(options.refreshBaseHandlers) ||
+      options.refreshBaseHandlers.length === 0 ||
+      new Set(options.refreshBaseHandlers).size !== options.refreshBaseHandlers.length ||
+      options.refreshBaseHandlers.some(
+        (name) => typeof name !== 'string' || !/^[A-Za-z0-9_-]+\.sh$/.test(name)
+      ))
+  )
+    throw new Error(
+      'Handler refresh requires unique packaged handler names, a base runtime and a native image'
+    );
+  if (
     options.baseRuntimeDigest !== undefined &&
     (!options.nativeImage || !/^[a-f0-9]{64}$/.test(options.baseRuntimeDigest))
   )
@@ -385,6 +410,73 @@ function retainedRuntimeFiles(home: string, digest: string): Map<string, Buffer>
   return files;
 }
 
+function refreshBaseHandlers(
+  files: Map<string, Buffer>,
+  templatesRoot: string,
+  names: readonly string[]
+): BaseHandlerRefresh[] {
+  const capture = (relative: string) => {
+    const file = path.join(templatesRoot, relative);
+    assertMachinePath(templatesRoot, file);
+    const captured = liveSelectionReadIo.readRuntimeFile(file, true);
+    assertMachinePath(templatesRoot, file);
+    const mode = captured.stat.mode & 0o7777;
+    if (mode !== 0o644 && mode !== 0o755)
+      throw new Error(`Unsupported packaged handler source mode: ${relative}`);
+    return { bytes: captured.bytes, mode };
+  };
+  const registered = new Set<string>();
+  for (const item of SHARED_PACK.installedFiles.filter((file) =>
+    /^dispatch\/[a-z_]+\.sh$/.test(file.sourcePath)
+  )) {
+    const dispatcher = capture('shared/' + item.sourcePath).bytes.toString('utf8');
+    for (const entry of extractMachineHandlers(dispatcher, dispatcher))
+      registered.add(entry.split(' ')[0]!);
+  }
+  const basePolicy = JSON.parse(files.get('system-policy.json')!.toString('utf8')) as {
+    events: Record<string, string[]>;
+  };
+  const baseHandlers = new Set(
+    Object.values(basePolicy.events)
+      .flat()
+      .map((entry) => entry.split(' ')[0])
+  );
+  const replacements: BaseHandlerRefresh[] = [];
+  for (const name of [...names].sort()) {
+    const matches = SHARED_PACK.installedFiles.filter(
+      (file) => file.sourcePath === name && file.executable === true
+    );
+    const before = files.get(name);
+    if (matches.length !== 1 || !registered.has(name) || !baseHandlers.has(name) || !before)
+      throw new Error(
+        `Handler refresh is not an existing registered packaged base handler: ${name}`
+      );
+    const sourcePath = 'shared/' + name;
+    const captured = capture(sourcePath);
+    replacements.push({
+      name,
+      beforeSha256: sha(before),
+      afterSha256: sha(captured.bytes),
+      source: { path: sourcePath, mode: captured.mode },
+      installedMode: 0o755,
+    });
+    files.set(name, captured.bytes);
+  }
+  const provenance = JSON.parse(files.get('base-runtime-provenance.json')!.toString('utf8'));
+  files.set(
+    'base-runtime-provenance.json',
+    Buffer.from(
+      JSON.stringify({
+        ...provenance,
+        schema: 'caws.runtime.base-provenance.v2',
+        replacements,
+        compatibility: 'requires_separate_qualification',
+      })
+    )
+  );
+  return replacements;
+}
+
 function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   const home = path.resolve(options.home ?? machineHome());
   const templatesRoot =
@@ -392,6 +484,9 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   const files = options.baseRuntimeDigest
     ? retainedRuntimeFiles(home, options.baseRuntimeDigest)
     : runtimeFiles(templatesRoot, home);
+  const refreshedBaseHandlers = options.refreshBaseHandlers
+    ? refreshBaseHandlers(files, templatesRoot, options.refreshBaseHandlers)
+    : undefined;
   const executablePaths = new Set([...files.keys()].filter((relative) => relative.endsWith('.sh')));
   const native = options.nativeImage ? readNativeImage(options.nativeImage) : undefined;
   if (native) {
@@ -443,6 +538,7 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
     files: [...files.keys()],
     ...(nativeEntry ? { nativeLauncher: path.join(home, 'bin/caws-hook-native') } : {}),
     ...(options.baseRuntimeDigest ? { baseRuntimeDigest: options.baseRuntimeDigest } : {}),
+    ...(refreshedBaseHandlers ? { refreshedBaseHandlers } : {}),
   };
   if (options.plan || !result.changed) return result;
 
@@ -482,8 +578,8 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
 }
 
 export function rollbackMachineRuntime(options: MachineRuntimeOptions = {}): MachineRuntimeResult {
-  if (options.baseRuntimeDigest !== undefined)
-    throw new Error('A base runtime digest is only valid for installation');
+  if (options.baseRuntimeDigest !== undefined || options.refreshBaseHandlers !== undefined)
+    throw new Error('A base runtime digest or handler refresh is only valid for installation');
   if (options.plan) return rollbackRuntime(options);
   return withRuntimeLock(path.resolve(options.home ?? machineHome()), () =>
     rollbackRuntime(options)
