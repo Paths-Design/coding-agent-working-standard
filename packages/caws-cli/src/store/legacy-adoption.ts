@@ -3,7 +3,8 @@ import * as path from 'node:path';
 import * as yaml from 'js-yaml';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { isOk, parseAndValidatePolicy, parseAndValidateSpec } from '../kernel';
+import { isOk, ok, parseAndValidatePolicy, parseAndValidateSpec } from '../kernel';
+import { withLifecycleLock } from './lifecycle-lock';
 import { assertMachinePath } from '../init/machine-paths';
 import { writeFileAtomic } from './atomic-write';
 
@@ -138,30 +139,33 @@ export function adoptLegacyProject(cwd: string, input: unknown, apply: boolean) 
       }
     }
   }
-  for (const name of legacy) {
-    assertMachinePath(root, path.join(root, name));
-    if (fs.existsSync(path.join(root, name)) && !names.has(name))
-      throw new Error(`Unreviewed legacy residue: ${name}`);
-  }
-  const policy = plan.changes.find((c) => c.path === '.caws/policy.yaml')?.contents;
-  if (!policy) {
-    const file = path.join(root, '.caws/policy.yaml');
-    assertMachinePath(root, file);
-    if (!fs.existsSync(file) || !isOk(parseAndValidatePolicy(fs.readFileSync(file, 'utf8'))))
-      throw new Error('A validated modern policy is required');
-  }
   const specs = path.join(root, '.caws/specs');
-  assertMachinePath(root, specs);
-  for (const name of fs.existsSync(specs) ? fs.readdirSync(specs) : []) {
-    if (!/\.ya?ml$/.test(name)) continue;
-    const relative = `.caws/specs/${name}`;
-    assertMachinePath(root, path.join(root, relative));
-    if (
-      !names.has(relative) &&
-      !isOk(parseAndValidateSpec(fs.readFileSync(path.join(root, relative), 'utf8')))
-    )
-      throw new Error(`Unreviewed legacy spec: ${relative}`);
-  }
+  const validateDependencies = () => {
+    for (const name of legacy) {
+      assertMachinePath(root, path.join(root, name));
+      if (fs.existsSync(path.join(root, name)) && !names.has(name))
+        throw new Error(`Unreviewed legacy residue: ${name}`);
+    }
+    const policy = plan.changes.find((c) => c.path === '.caws/policy.yaml')?.contents;
+    if (!policy) {
+      const file = path.join(root, '.caws/policy.yaml');
+      assertMachinePath(root, file);
+      if (!fs.existsSync(file) || !isOk(parseAndValidatePolicy(fs.readFileSync(file, 'utf8'))))
+        throw new Error('A validated modern policy is required');
+    }
+    assertMachinePath(root, specs);
+    for (const name of fs.existsSync(specs) ? fs.readdirSync(specs) : []) {
+      if (!/\.ya?ml$/.test(name)) continue;
+      const relative = `.caws/specs/${name}`;
+      assertMachinePath(root, path.join(root, relative));
+      if (
+        !names.has(relative) &&
+        !isOk(parseAndValidateSpec(fs.readFileSync(path.join(root, relative), 'utf8')))
+      )
+        throw new Error(`Unreviewed legacy spec: ${relative}`);
+    }
+  };
+  validateDependencies();
   const identity = sha(JSON.stringify(plan));
   const archive = `.caws/legacy/${identity}`;
   for (const [name, original] of originals) {
@@ -191,32 +195,49 @@ export function adoptLegacyProject(cwd: string, input: unknown, apply: boolean) 
     if (!isOk(written)) throw new Error(`Migration write failed: ${target}`);
   };
   try {
-    // Recheck the entire input set after obtaining the lock and before writes.
-    for (const [name, original] of originals) {
-      const target = path.join(root, name);
-      assertMachinePath(root, target);
-      if ((fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null) !== original)
-        throw new Error(`Stale migration input: ${name}`);
-    }
-    for (const [name, original] of originals)
-      if (original !== null) write(path.join(root, archive, name.slice('.caws/'.length)), original);
-    // The review is operational evidence; archived original source stays versionable.
-    const receipt = path.join(common, `caws-legacy-adoption-${identity}.json`);
-    const recorded = writeFileAtomic(receipt, JSON.stringify({ plan, result }, null, 2) + '\n');
-    if (!isOk(recorded)) throw new Error('Failed to preserve migration review');
-    for (const change of plan.changes.filter((c) => c.contents !== null))
-      write(path.join(root, change.path), change.contents!);
-    for (const change of plan.changes
-      .filter((c) => c.contents === null)
-      .sort((a, b) => Number(legacy.includes(a.path)) - Number(legacy.includes(b.path)))) {
-      const target = path.join(root, change.path);
-      assertMachinePath(root, target);
-      if (fs.readFileSync(target, 'utf8') !== originals.get(change.path))
-        throw new Error(`Archive source changed: ${change.path}`);
-      fs.unlinkSync(target);
-    }
-    fs.mkdirSync(specs, { recursive: true });
-    return result;
+    // Lock order is adoption -> lifecycle. Git resolution and plan parsing
+    // are outside this section; archives and publication share fresh authority.
+    const cawsDir = path.join(root, '.caws');
+    assertMachinePath(root, cawsDir);
+    fs.mkdirSync(cawsDir, { recursive: true });
+    const applied = withLifecycleLock(cawsDir, () => {
+      validateDependencies();
+      // Recheck the entire input set after obtaining the lock and before writes.
+      for (const [name, original] of originals) {
+        const target = path.join(root, name);
+        assertMachinePath(root, target);
+        const current = fs.existsSync(target) ? fs.readFileSync(target) : null;
+        if (
+          original === null
+            ? current !== null
+            : current === null || !current.equals(Buffer.from(original, 'utf8'))
+        )
+          throw new Error(`Stale migration input: ${name}`);
+      }
+      for (const [name, original] of originals)
+        if (original !== null)
+          write(path.join(root, archive, name.slice('.caws/'.length)), original);
+      // The review is operational evidence; archived original source stays versionable.
+      const receipt = path.join(common, `caws-legacy-adoption-${identity}.json`);
+      const recorded = writeFileAtomic(receipt, JSON.stringify({ plan, result }, null, 2) + '\n');
+      if (!isOk(recorded)) throw new Error('Failed to preserve migration review');
+      for (const change of plan.changes.filter((c) => c.contents !== null))
+        write(path.join(root, change.path), change.contents!);
+      for (const change of plan.changes
+        .filter((c) => c.contents === null)
+        .sort((a, b) => Number(legacy.includes(a.path)) - Number(legacy.includes(b.path)))) {
+        const target = path.join(root, change.path);
+        assertMachinePath(root, target);
+        if (!fs.readFileSync(target).equals(Buffer.from(originals.get(change.path)!, 'utf8')))
+          throw new Error(`Archive source changed: ${change.path}`);
+        fs.unlinkSync(target);
+      }
+      fs.mkdirSync(specs, { recursive: true });
+      return ok(result);
+    });
+    if (!applied.ok)
+      throw new Error(applied.errors.map((d) => `${d.rule}: ${d.message}`).join('; '));
+    return applied.value;
   } finally {
     fs.closeSync(fd);
     fs.unlinkSync(lock);
