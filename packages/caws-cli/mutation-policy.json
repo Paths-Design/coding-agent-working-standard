@@ -108,6 +108,8 @@
       "rationale": "Stateful, I/O, parsing, rendering, and orchestration code is exercised through fixture-driven behavior and replay tests.",
       "files": [
         "src/execution/authorizer-main.ts",
+        "src/execution/program-discovery-main.ts",
+        "src/execution/program-discovery.ts",
         "src/kernel/diagnostics/construct.ts",
         "src/kernel/doctor/history.ts",
         "src/kernel/doctor/inspect.ts",
@@ -272,6 +274,7 @@
         "tests/execution/authorizer.test.js",
         "tests/execution/fence.test.js",
         "tests/execution/prepared-schema.test.js",
+        "tests/execution/program-discovery.test.js",
         "tests/execution/protocol.test.js"
       ]
     },

@@ -59,7 +59,9 @@ context. A validated host execution directory establishes only that coordinate.
 The analyzer bridge's inherited `CAWS_BIN` or `PATH` selection also requires
 generation-bound Node and CLI identity through launch. The private
 prepared-record authorizer checks source profiles, canonical authority and an
-inherited fence; it returns observations and does not launch user commands. The
+inherited fence; it returns observations and does not launch user commands.
+Private draft utility discovery supplies candidates for producer preparation,
+with final analysis and validation required after the manifest is frozen. The
 guide's complete owned execution boundary remains proposed. Retain the deployed
 runtime until complete final-launch and rewrite custody, useful benign
 admission, an isolated native canary and rollback are demonstrated. A protective

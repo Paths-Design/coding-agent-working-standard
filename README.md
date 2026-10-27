@@ -74,10 +74,11 @@ A mutation projection has no permission verdict. Consumers inspect its schema,
 issues and effect coverage; parser or backend failures can appear as issues in
 an exit-zero projection. The private execution authorizer implements strict
 prepared-record decoding, canonical authority observations and inherited-fence
-validation. Its reply is an observation, never a launch permit; the complete
-owned execution boundary remains proposed. The implemented copy guards consume
-complete operand roles for a closed regular-file `cp`/`mv` profile, so external
-artifact copies are distinguished from canonical writes. Unknown roles,
+validation. A separate private helper discovers utility candidates without
+submitted execution. These replies are observations, never launch permits; the
+complete owned execution boundary remains proposed. The implemented copy guards
+consume complete operand roles for a closed regular-file `cp`/`mv` profile, so
+external artifact copies are distinguished from canonical writes. Unknown roles,
 hard-link aliases and unmodeled filesystem cases refuse. A copy's effective
 final symlink destination refuses even when approval is available; a
 destination-directory alias with a regular final child is supported. Removal

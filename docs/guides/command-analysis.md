@@ -513,6 +513,28 @@ opaque sandbox-state bytes retain their identity. The child returns one framed
 observation after analysis. A reply is not a launch permit or a public CLI
 execution command.
 
+`program-discovery-main.ts` implements private, nonexecuting utility discovery.
+It accepts the existing authorizer `analyze` frame over a draft prepared record
+whose utility manifest is empty. Its distinct
+`caws.execution.program-discovery.v1` reply contains `invocationId`, the draft's
+`executionDigest`, `status` (`observed` or `unresolved`), unique lexical
+`commands` and closed `reasonCodes`. The bounded analyzer, initial bindings and
+`command` wrapper handling are shared with final authorization. Bare builtins
+are omitted; utility spellings are not resolved images or trusted hashes. At
+most 256 candidates of 4096 UTF-8 bytes each are observed; excessive count or
+encoded output produces an unresolved result with an empty list. Replies fit the
+same 64 KiB bound and contain no permission or authority revision.
+
+The native producer must independently resolve and hash those candidates,
+deduplicate physical images and freeze the final record. Its execution digest
+must cover those final bytes, including the completed manifest. Every result,
+including an empty candidate list, requires the existing `analyze` and
+`final_validate` phases before a private one-use permit can exist. Discovery
+cannot replace either phase, establish native origin or execute submitted
+expansions. The owner's original monotonic preparation budget includes this
+child; discovery does not start a new budget. Candidate names are private
+metadata, not default diagnostic output.
+
 Authority derives from the verified native caller coordinate, actual thread
 owner, canonical policy, active spec and unique worktree or bridge binding.
 Native association fields require the owning private transport; decoding a
@@ -531,12 +553,12 @@ effects the separate diagnostic analyzer can partially classify. Finite writes
 require owned physical targets admitted by scope. Existing leaf entries retain
 their canonical spelling and observed device/inode before scope evaluation.
 Excluded file and directory aliases cannot borrow a different spelling;
-unresolved prospective aliases remain held. Native v1 write paths relative to
-the pin must be ASCII, including ordinary LF names. Unicode filesystem
-equivalence is not guessed; UTF-8 roots, source and read data are separate from
-this write-path restriction. Policy exemptions retain their kernel precedence;
-execution-control paths remain refused. Unmodeled programs, scripts, image
-aliases, implicit temporary writers, heredocs, here-strings and private
+unresolved prospective aliases remain held. Native v1 canonical write paths
+relative to the pin must be ASCII, including ordinary LF names. Unicode
+filesystem equivalence is not guessed; UTF-8 roots, source and read data are
+separate from this write-path restriction. Policy exemptions retain their kernel
+precedence; execution-control paths remain refused. Unmodeled programs, scripts,
+image aliases, implicit temporary writers, heredocs, here-strings and private
 descriptor redirects remain held. Ordinary inherited application data can
 provide finite values. `PWD` derives from the prepared physical cwd; other
 Bash-generated variables are opaque. Mutations of special variables remain held.

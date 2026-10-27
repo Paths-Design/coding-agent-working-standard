@@ -4,6 +4,7 @@ import { basename, dirname, isAbsolute, relative } from 'node:path';
 import { analyzeCommand } from '../shell/analysis/analyze';
 import { classifyInterpreterEffects } from '../shell/analysis/interpreter-effects';
 import { loadParser } from '../shell/analysis/load-parser';
+import type { Argument } from '../shell/analysis/types';
 import { inside, sensitiveBinding } from '../shell/analysis/policies';
 import { evaluatePath } from '../kernel';
 import { normalizeRelativePosixPath } from '../kernel/scope/normalize';
@@ -33,6 +34,17 @@ const BUILTINS = new Set([
   '[',
   'read',
 ]);
+export function isExecutionProfileBuiltin(command: string): boolean {
+  return BUILTINS.has(command);
+}
+export function executionProfileArguments(argv: readonly Argument[]): readonly Argument[] {
+  let args = argv;
+  for (let depth = 0; args[0]?.value === 'command'; depth++) {
+    if (depth >= 8) refuse('unsupported_profile');
+    args = args.slice(args[1]?.value === '--' ? 2 : 1);
+  }
+  return args;
+}
 const SPECIAL_BINDING =
   /^(?:BASH.*|COMP_.*|PWD|OLDPWD|SHLVL|UID|EUID|PPID|BASHPID|RANDOM|SRANDOM|SECONDS|LINENO|DIRSTACK|FUNCNAME|GROUPS|PIPESTATUS|OPTIND|OPTERR|HISTCMD|EPOCHSECONDS|EPOCHREALTIME|_)$/;
 // These controls can change executable lookup, shell semantics, or write a
@@ -109,7 +121,9 @@ function verifyImage(image: ProgramImage): void {
     fs.closeSync(fd);
   }
 }
-function environment(record: PreparedExecutionV1): Map<string, readonly string[]> {
+export function executionProfileBindings(
+  record: PreparedExecutionV1
+): Map<string, readonly string[]> {
   const values = new Map(
     record.execution.environment.map(({ name, value }) => [name, [value] as readonly string[]])
   );
@@ -276,7 +290,7 @@ async function inspectSource(
   record: PreparedExecutionV1,
   authority: ExecutionAuthority
 ): Promise<void> {
-  const bindings = environment(record);
+  const bindings = executionProfileBindings(record);
   // Bash's special variables have startup/read/assignment semantics outside
   // ordinary scalar tracking. A syntax scan only narrows admission; the bounded
   // analyzer below must independently accept every other part of the source.
@@ -364,14 +378,10 @@ async function inspectSource(
       observers: {
         invocation({ node, argv, state }) {
           observe(() => {
-            let args = argv;
-            for (let depth = 0; args[0]?.value === 'command'; depth++) {
-              if (depth >= 8) refuse('unsupported_profile');
-              args = args.slice(args[1]?.value === '--' ? 2 : 1);
-            }
+            const args = executionProfileArguments(argv);
             const command = args[0]?.value;
             if (!command) refuse('source_unresolved');
-            if (BUILTINS.has(command)) {
+            if (isExecutionProfileBuiltin(command)) {
               if (
                 command === 'read' &&
                 args

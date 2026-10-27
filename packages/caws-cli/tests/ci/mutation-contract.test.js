@@ -523,7 +523,7 @@ describe('mutation policy topology contract', () => {
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
     // The inventory includes bounded analysis and the renderer-calendar adapter.
-    expect(result.stdout).toMatch(/^PASS: 210 source files accounted for exactly once$/m);
+    expect(result.stdout).toMatch(/^PASS: 212 source files accounted for exactly once$/m);
     expect(result.stdout).toMatch(/^PASS: 34 mutation targets across 5 surfaces$/m);
   });
 
@@ -718,6 +718,7 @@ describe('mutation policy topology contract', () => {
       '<rootDir>/tests/execution/authorizer.test.js',
       '<rootDir>/tests/execution/fence.test.js',
       '<rootDir>/tests/execution/prepared-schema.test.js',
+      '<rootDir>/tests/execution/program-discovery.test.js',
       '<rootDir>/tests/execution/protocol.test.js',
     ]);
     expect(config.mutate).toEqual([

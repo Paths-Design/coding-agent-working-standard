@@ -374,10 +374,14 @@ canonical-root directory change; an earlier decision cannot authorize changed
 bytes. The private Node authorizer decodes an immutable prepared record, derives
 canonical binding and scope, and checks the inherited final-validation fence.
 Its framed reply is an observation tied to original record bytes and authority
-revision, not a permit. It neither acquires the launch fence nor spawns the user
-program. The complete typed executor and single-use permit sequence remain
-proposed. Complete final-launch mediation, native canary and rollback require
-separate proof before the deployed runtime is replaced.
+revision, not a permit. A separate draft program-discovery entry returns lexical
+utility candidates using the same bounded analyzer and initial bindings. The
+producer must resolve and hash those candidates, freeze the final record and
+perform both authorizer phases; an empty candidate list grants no permission.
+Neither entry acquires the launch fence or spawns the user program. The complete
+typed executor and single-use permit sequence remain proposed. Complete
+final-launch mediation, native canary and rollback require separate proof before
+the deployed runtime is replaced.
 
 ## Dispatcher resolution
 
