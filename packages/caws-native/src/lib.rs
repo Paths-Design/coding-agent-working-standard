@@ -7,6 +7,7 @@ pub mod context_git;
 mod installed_generation;
 mod execution_authorizer_wire;
 mod execution_child;
+mod execution_control;
 mod execution_fd_transport;
 mod execution_fence;
 mod execution_host;
