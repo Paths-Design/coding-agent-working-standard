@@ -49,3 +49,8 @@ evidence:
     evidence_ref: "Compiled writer race controls for destroy/prune/untrack preserve competing owner and exact newer spec bytes at lifecycle acquisition, including raw UTF8 replacement cases. Git branch/status/existence seam controls refuse changed observations; admission uses captured OIDs/status. External Git writers after final check are not excluded by lifecycle lock. Final build and 3 selected suites:99 tests pass, package cwd eslint0, gates5PASS, doctor0E5W6I. Raw stale-ref-green.log/json; prior failing probes retained in same artifact directory. --verify establishes committed identity only; raw checks were separately inspected. No installed Rust, full native fence or global adoption claim."
     recorded_at: "2026-10-27T16:05:05.026Z"
     commit_sha: "69097f5ff8ec53d958758b2e8ab185bfae88a249"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Injected partial registry/spec writes restore exact original bytes or return unrecovered. Actual events-store partial write and post-write fsync failures leave audit effects and now explicitly report ambiguous/unrecovered state without truncating the log. Destructive Git removal is not falsely called reversed. Final build and 3 selected suites:99 tests pass, package cwd eslint0, gates5PASS, doctor0E5W6I. Raw stale-ref-green.log/json; prior failing probes retained in same artifact directory. --verify establishes committed identity only; raw checks were separately inspected. No installed Rust, full native fence or global adoption claim."
+    recorded_at: "2026-10-27T16:05:05.971Z"
+    commit_sha: "69097f5ff8ec53d958758b2e8ab185bfae88a249"
