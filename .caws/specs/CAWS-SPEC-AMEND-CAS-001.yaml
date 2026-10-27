@@ -1,10 +1,11 @@
 id: CAWS-SPEC-AMEND-CAS-001
 title: 'Reject stale scope and body amendment plans under the authority lock'
 mode: fix
-lifecycle_state: active
-worktree: spec-amend-cas
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Exact byte freshness for scope/body amendments verified on 7dd22a504 with eight compiled-writer and YAML suites, 170 tests, build and scoped lint/gates. Independent UTF-8 finding reproduced with four failures and repaired. A1-A3 recorded and read back. This closes only the bounded amendment writer repair; full authority fence, native execution, installed replacement and rollback remain open with the cutover owners.'
 created_at: '2026-10-26T23:41:53.211Z'
-updated_at: '2026-10-27T01:43:50.339Z'
+updated_at: '2026-10-27T01:59:33.645Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
