@@ -1,10 +1,11 @@
 id: CAWS-COMPATIBILITY-RENDER-OUTCOMES-001
 title: 'Publish captured compatibility hook outcomes to session rendering'
 mode: fix
-lifecycle_state: active
-worktree: compatibility-render-outcomes
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Publish compatibility reports to actual renderer input and typed terminal observations once; committed928b9c887/2fcc002fb, semantic red/green evidence and independent finding discharge recorded. Compatibility carrier remains explicitly unverified and delivery not_observed; actual host/global refresh belongs to parent cutover.'
 created_at: '2026-10-27T19:44:54.708Z'
-updated_at: '2026-10-27T19:44:56.600Z'
+updated_at: '2026-10-27T20:14:46.349Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
