@@ -96,15 +96,146 @@ afterEach(() => {
     );
   else fs.rmSync(root, { recursive: true, force: true });
 });
-function install(home, native = true) {
+function install(home, native = true, options = {}) {
   const nativeImage = path.join(root, 'native-image.json');
   if (native) fs.writeFileSync(nativeImage, JSON.stringify(input), { mode: 0o600 });
   return installMachineRuntime({
     home,
     templatesRoot: path.join(__dirname, '../../templates/hook-packs'),
     ...(native ? { nativeImage } : {}),
+    ...options,
   });
 }
+test('explicit base runtime preserves guard bytes and policy through native install and rollback', () => {
+  const home = path.join(root, 'machine');
+  const base = install(home, false);
+  const baseRoot = path.join(home, 'lib/runtimes', base.digest);
+  const rawManifest = fs.readFileSync(path.join(baseRoot, 'manifest.json'));
+  const manifest = JSON.parse(rawManifest);
+  const nativeImage = path.join(root, 'native-image.json');
+  fs.writeFileSync(nativeImage, JSON.stringify(input));
+  const options = {
+    home,
+    nativeImage,
+    baseRuntimeDigest: base.digest,
+    templatesRoot: path.join(root, 'must-not-read-current-templates'),
+  };
+  const before = fixtureState(home);
+  const plan = installMachineRuntime({ ...options, plan: true });
+  expect(fixtureState(home)).toEqual(before);
+  const installed = installMachineRuntime(options);
+  expect(installed.digest).toBe(plan.digest);
+  expect(installed.baseRuntimeDigest).toBe(base.digest);
+  expect(installed.previousDigest).toBe(base.digest);
+  expect(installed.digest).not.toBe(base.digest);
+  const selected = path.join(home, 'lib/runtimes', installed.digest);
+  const combined = verifyRuntime(home, installed.digest);
+  for (const [name, hash] of Object.entries(manifest)) {
+    expect(combined[name]).toBe(hash);
+    expect(fs.readFileSync(path.join(selected, name))).toEqual(
+      fs.readFileSync(path.join(baseRoot, name))
+    );
+    expect(fs.statSync(path.join(selected, name)).mode & 0o777).toBe(
+      name.endsWith('.sh') ? 0o755 : 0o644
+    );
+  }
+  const provenance = JSON.parse(
+    fs.readFileSync(path.join(selected, 'base-runtime-provenance.json'))
+  );
+  expect(provenance).toEqual({
+    schema: 'caws.runtime.base-provenance.v1',
+    digest: base.digest,
+    manifest: rawManifest.toString('utf8'),
+  });
+  expect(sha(Buffer.from(provenance.manifest))).toBe(base.digest);
+  expect(combined['native-entry.json']).toMatch(/^[a-f0-9]{64}$/);
+  expect(fs.existsSync(path.join(home, 'surfaces'))).toBe(false);
+  expect(
+    rollbackMachineRuntime({
+      home,
+      templatesRoot: path.join(__dirname, '../../templates/hook-packs'),
+    }).digest
+  ).toBe(base.digest);
+  expect(JSON.parse(fs.readFileSync(path.join(home, 'state/adapter-runtime.json'))).digest).toBe(
+    base.digest
+  );
+  expect(installMachineRuntime(options).digest).toBe(installed.digest);
+});
+
+test.each([
+  'tampered bytes',
+  'symlink',
+  'hardlink',
+  'executable mode',
+  'missing generation',
+  'native base',
+])('explicit base runtime refuses %s without changing selected entries', (kind) => {
+  const home = path.join(root, 'machine');
+  const base = install(home, kind === 'native base');
+  const file = path.join(home, 'lib/runtimes', base.digest, 'bash-write-guard.sh');
+  if (kind === 'tampered bytes') fs.appendFileSync(file, '\nchanged\n');
+  if (kind === 'executable mode') fs.chmodSync(file, 0o644);
+  if (kind === 'symlink' || kind === 'hardlink') {
+    const retained = path.join(root, 'retained-guard');
+    fs.renameSync(file, retained);
+    if (kind === 'symlink') fs.symlinkSync(retained, file);
+    else fs.linkSync(retained, file);
+  }
+  const before = fixtureState(home);
+  expect(() =>
+    install(home, true, {
+      baseRuntimeDigest: kind === 'missing generation' ? 'f'.repeat(64) : base.digest,
+    })
+  ).toThrow();
+  expect(fixtureState(home)).toEqual(before);
+});
+
+test('explicit base runtime rejects a captured member changed after initial verification', () => {
+  const home = path.join(root, 'machine');
+  const base = install(home, false);
+  const baseRoot = path.join(home, 'lib/runtimes', base.digest);
+  const manifestIno = fs.statSync(path.join(baseRoot, 'manifest.json')).ino;
+  const member = path.join(baseRoot, 'bash-write-guard.sh');
+  const pointer = fs.readFileSync(path.join(home, 'state/adapter-runtime.json'));
+  const bootstrap = fs.readFileSync(path.join(home, 'bin/caws-hook'));
+  const originalRead = fs.readFileSync;
+  let changed = false;
+  let manifestCaptures = 0;
+  const read = jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+    const result = originalRead(file, ...args);
+    if (typeof file === 'number' && fs.fstatSync(file).ino === manifestIno) manifestCaptures++;
+    if (!changed && manifestCaptures === 2) {
+      changed = true;
+      fs.appendFileSync(member, '\nchanged after verification\n');
+    }
+    return result;
+  });
+  try {
+    expect(() => install(home, true, { baseRuntimeDigest: base.digest })).toThrow(
+      /changed during capture/
+    );
+  } finally {
+    read.mockRestore();
+  }
+  expect(changed).toBe(true);
+  expect(fs.readFileSync(path.join(home, 'state/adapter-runtime.json'))).toEqual(pointer);
+  expect(fs.readFileSync(path.join(home, 'bin/caws-hook'))).toEqual(bootstrap);
+  expect(fs.existsSync(path.join(home, 'bin/caws-hook-native'))).toBe(false);
+});
+
+test('explicit base runtime requires native image and an exact digest before any writes', () => {
+  const home = path.join(root, 'absent-home');
+  for (const options of [
+    { baseRuntimeDigest: 'a'.repeat(64) },
+    { baseRuntimeDigest: '', nativeImage: '/absent' },
+    { baseRuntimeDigest: '../escape', nativeImage: '/absent' },
+  ])
+    expect(() => installMachineRuntime({ home, ...options })).toThrow(/base runtime/);
+  expect(() => rollbackMachineRuntime({ home, baseRuntimeDigest: 'a'.repeat(64) })).toThrow(
+    /only valid/
+  );
+  expect(fs.existsSync(home)).toBe(false);
+});
 function fixtureState(directory = root) {
   const state = {};
   function visit(parent) {

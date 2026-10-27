@@ -19,6 +19,7 @@ import { IMPLEMENTED_SURFACES, resolveHookPack } from './hook-packs/register';
 import { extractMachineHandlers } from './machine-handler-policy';
 import { SHARED_PACK } from './hook-packs/manifest-shared';
 import { readNativeImage } from './native-runtime-entry';
+import { liveSelectionReadIo } from './selection-read-io';
 import {
   OPENCODE_NATIVE_PLUGIN_MEMBER,
   renderOpenCodeNativePlugin,
@@ -30,6 +31,8 @@ export interface MachineRuntimeOptions {
   readonly plan?: boolean;
   /** Explicit local, pinned production image; installation never opts a harness in. */
   readonly nativeImage?: string;
+  /** Explicit legacy guard generation, preserved before native transport selection. */
+  readonly baseRuntimeDigest?: string;
 }
 
 export interface MachineRuntimeResult {
@@ -40,6 +43,7 @@ export interface MachineRuntimeResult {
   readonly launcher: string;
   readonly files: readonly string[];
   readonly nativeLauncher?: string;
+  readonly baseRuntimeDigest?: string;
 }
 
 export function machineHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -327,17 +331,67 @@ function withRuntimeLock(home: string, run: () => MachineRuntimeResult): Machine
 }
 
 export function installMachineRuntime(options: MachineRuntimeOptions = {}): MachineRuntimeResult {
+  if (
+    options.baseRuntimeDigest !== undefined &&
+    (!options.nativeImage || !/^[a-f0-9]{64}$/.test(options.baseRuntimeDigest))
+  )
+    throw new Error('A base runtime requires --native-image and a 64-character lowercase digest');
   if (options.plan) return installRuntime(options);
   return withRuntimeLock(path.resolve(options.home ?? machineHome()), () =>
     installRuntime(options)
   );
 }
 
+function retainedRuntimeFiles(home: string, digest: string): Map<string, Buffer> {
+  const verified = verifyRuntime(home, digest);
+  if (
+    Object.hasOwn(verified, 'native-entry.json') ||
+    Object.hasOwn(verified, 'native-modes.json') ||
+    Object.hasOwn(verified, 'base-runtime-provenance.json')
+  )
+    throw new Error('Base runtime must be an explicit legacy generation');
+  const root = path.join(home, 'lib/runtimes', digest);
+  const capture = (relative: string): Buffer => {
+    const file = path.join(root, relative);
+    assertMachinePath(home, file);
+    const captured = liveSelectionReadIo.readRuntimeFile(file, true);
+    assertMachinePath(home, file);
+    const mode = captured.stat.mode & 0o7777;
+    if (relative.endsWith('.sh') ? mode !== 0o755 : ![0o600, 0o644].includes(mode))
+      throw new Error(`Unsupported base runtime mode: ${relative}`);
+    return captured.bytes;
+  };
+  const manifest = capture('manifest.json');
+  if (sha(manifest) !== digest) throw new Error('Base runtime manifest changed during capture');
+  const files = new Map<string, Buffer>();
+  for (const [relative, expected] of Object.entries(verified)) {
+    const bytes = capture(relative);
+    if (sha(bytes) !== expected)
+      throw new Error(`Base runtime member changed during capture: ${relative}`);
+    files.set(relative, bytes);
+  }
+  for (const required of ['bootstrap.py', 'launcher.py', 'system-policy.json'])
+    if (!files.has(required)) throw new Error(`Base runtime member missing: ${required}`);
+  files.set(
+    'base-runtime-provenance.json',
+    Buffer.from(
+      JSON.stringify({
+        schema: 'caws.runtime.base-provenance.v1',
+        digest,
+        manifest: manifest.toString('utf8'),
+      })
+    )
+  );
+  return files;
+}
+
 function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   const home = path.resolve(options.home ?? machineHome());
   const templatesRoot =
     options.templatesRoot ?? path.resolve(__dirname, '../../templates/hook-packs');
-  const files = runtimeFiles(templatesRoot, home);
+  const files = options.baseRuntimeDigest
+    ? retainedRuntimeFiles(home, options.baseRuntimeDigest)
+    : runtimeFiles(templatesRoot, home);
   const executablePaths = new Set([...files.keys()].filter((relative) => relative.endsWith('.sh')));
   const native = options.nativeImage ? readNativeImage(options.nativeImage) : undefined;
   if (native) {
@@ -388,6 +442,7 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
     launcher,
     files: [...files.keys()],
     ...(nativeEntry ? { nativeLauncher: path.join(home, 'bin/caws-hook-native') } : {}),
+    ...(options.baseRuntimeDigest ? { baseRuntimeDigest: options.baseRuntimeDigest } : {}),
   };
   if (options.plan || !result.changed) return result;
 
@@ -427,6 +482,8 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
 }
 
 export function rollbackMachineRuntime(options: MachineRuntimeOptions = {}): MachineRuntimeResult {
+  if (options.baseRuntimeDigest !== undefined)
+    throw new Error('A base runtime digest is only valid for installation');
   if (options.plan) return rollbackRuntime(options);
   return withRuntimeLock(path.resolve(options.home ?? machineHome()), () =>
     rollbackRuntime(options)

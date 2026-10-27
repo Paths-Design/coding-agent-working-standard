@@ -1155,6 +1155,11 @@ const INIT_INSTALL: LeafCommandMeta = {
       description:
         'Install an explicit local pinned native image and complete production prefix. Accepts reviewed native-image-input.v1 descriptors or receipt-selected native-image-input.v2 descriptors. Keeps existing harness registration; configure --entry native opts in separately.',
     },
+    {
+      flag: '--base-runtime-digest <digest>',
+      description:
+        'Preserve the exact guards and policy of a verified retained legacy generation while adding --native-image. Selects before analysis; no refusal fallback. Requires --native-image.',
+    },
   ],
 };
 const INIT_MIGRATE_PREVIEW: LeafCommandMeta = {

@@ -495,6 +495,7 @@ export function registerShellCommands(
     projectsRoot?: string;
     nativeConfigTarget?: string;
     nativeImage?: string;
+    baseRuntimeDigest?: string;
     entry?: 'native' | 'legacy';
   };
   const invokeInit = (
@@ -553,6 +554,8 @@ export function registerShellCommands(
       (runOpts as { nativeConfigTarget?: string }).nativeConfigTarget = opts.nativeConfigTarget;
     if (opts.nativeImage !== undefined)
       (runOpts as { nativeImage?: string }).nativeImage = opts.nativeImage;
+    if (opts.baseRuntimeDigest !== undefined)
+      (runOpts as { baseRuntimeDigest?: string }).baseRuntimeDigest = opts.baseRuntimeDigest;
     if (opts.entry !== undefined) (runOpts as { entry?: 'native' | 'legacy' }).entry = opts.entry;
     if (opts.from !== undefined) {
       (runOpts as { fromFile?: string }).fromFile = opts.from;

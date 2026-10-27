@@ -57,6 +57,20 @@ afterEach(() => {
 });
 
 describe('caws init --plan', () => {
+  test.each([
+    { action: 'adapters', actionArg: 'install' },
+    { action: 'adapters', actionArg: 'rollback', nativeImage: '/absent' },
+    { action: 'adapters', actionArg: 'configure', nativeImage: '/absent' },
+    {},
+  ])('base runtime option rejects incompatible command %j before writes', (options) => {
+    const root = makeTempRepo();
+    const before = snapshotTree(root);
+    const result = runInit(root, { ...options, baseRuntimeDigest: 'a'.repeat(64) });
+    expect(result.code).toBe(2);
+    expect(result.err).toMatch(/incompatible options|base-runtime-digest/);
+    expect(snapshotTree(root)).toEqual(before);
+    expect(fs.existsSync(process.env.CAWS_HOME)).toBe(false);
+  });
   test.each([true, false])(
     'known dispatcher reconciliation refuses plan=%s before every init write',
     (plan) => {
