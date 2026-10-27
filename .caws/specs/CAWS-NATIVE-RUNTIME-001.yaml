@@ -343,6 +343,14 @@ acceptance:
       isolated state, ordered owner-specific mutations, independent required
       enforcement capacity, no eviction of in-flight work and no unsafe replay or
       interruption of another generation.
+  - id: A9
+    given: 'A cutover worktree requiring a private Node dependency installation'
+    when: 'The user creates it with explicit Node dependency linking disabled and runs an isolated install'
+    then: >-
+      No root, workspace, or hook Node dependency link is created; existing paths
+      and non-Node artifacts are preserved; the normal CLI propagates the option;
+      canonical dependency contents remain unchanged. Existing ensure admission and
+      default linking remain separate behavior.
 observability:
   - 'Per-request runtime identity, stage timings, terminal outcome, interrupted state and separate transport delivery observation.'
 rollback:
