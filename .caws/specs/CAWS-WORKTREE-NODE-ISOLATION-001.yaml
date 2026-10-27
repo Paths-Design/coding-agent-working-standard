@@ -8,7 +8,7 @@ updated_at: '2026-10-27T19:18:42.655Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'Worktree artifact linking and create command'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -22,7 +22,7 @@ scope:
     - 'packages/caws-cli/tests/shell/worktree-ensure.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Opting out never creates, removes or rewrites a Node dependency path; other artifact kinds and default linking retain their behavior'
 acceptance:
   - id: A1
     given: 'A new worktree needs a private Node install'
