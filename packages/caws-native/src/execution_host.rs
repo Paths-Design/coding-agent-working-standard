@@ -236,6 +236,90 @@ mod macos {
         }
     }
 
+    /// Darwin reports the socketpair creator, not the current writer after an
+    /// endpoint transfer. The producer must retain exclusive peer custody and
+    /// keep its endpoint CLOEXEC. The pin is derived outside the startup frame.
+    pub(crate) struct ProducerPeer {
+        process: ProcessInstance,
+        path: PathBuf,
+        disk: ImageIdentity,
+    }
+    fn peer_pid(fd: std::os::fd::BorrowedFd<'_>) -> io::Result<u32> {
+        use std::os::fd::AsRawFd;
+        let (mut uid, mut gid) = (0, 0);
+        if unsafe { libc::getpeereid(fd.as_raw_fd(), &mut uid, &mut gid) } != 0
+            || uid != unsafe { libc::geteuid() }
+        {
+            return Err(refused());
+        }
+        let mut pid: libc::pid_t = 0;
+        let mut len = std::mem::size_of_val(&pid) as libc::socklen_t;
+        if unsafe {
+            libc::getsockopt(
+                fd.as_raw_fd(),
+                libc::SOL_LOCAL,
+                libc::LOCAL_PEERPID,
+                (&mut pid as *mut libc::pid_t).cast(),
+                &mut len,
+            )
+        } != 0
+            || len as usize != std::mem::size_of_val(&pid)
+            || pid <= 1
+        {
+            return Err(refused());
+        }
+        Ok(pid as u32)
+    }
+    impl ProducerPeer {
+        pub(crate) fn capture(
+            fd: std::os::fd::BorrowedFd<'_>,
+            pin: &ProgramImage,
+            deadline: &MonotonicDeadline,
+        ) -> io::Result<Self> {
+            live(deadline)?;
+            let pid = peer_pid(fd)?;
+            let process = process_instance(pid)?;
+            let path = process_path(pid)?;
+            if path != Path::new(&pin.path) {
+                return Err(refused());
+            }
+            let disk = image(&path, &pin.sha256, deadline)?;
+            if peer_pid(fd)? != pid
+                || process_instance(pid)? != process
+                || process_path(pid)? != path
+            {
+                return Err(refused());
+            }
+            live(deadline)?;
+            Ok(Self {
+                process,
+                path,
+                disk,
+            })
+        }
+        pub(crate) fn revalidate(
+            &self,
+            fd: std::os::fd::BorrowedFd<'_>,
+            pin: &ProgramImage,
+            deadline: &MonotonicDeadline,
+        ) -> io::Result<()> {
+            live(deadline)?;
+            let pid = self.process.pid;
+            if peer_pid(fd)? != pid
+                || process_instance(pid)? != self.process
+                || process_path(pid)? != self.path
+                || self.path != Path::new(&pin.path)
+                || image(&self.path, &pin.sha256, deadline)? != self.disk
+                || peer_pid(fd)? != pid
+                || process_instance(pid)? != self.process
+                || process_path(pid)? != self.path
+            {
+                return Err(refused());
+            }
+            live(deadline)
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -362,6 +446,17 @@ mod macos {
                         .unwrap();
                     let actual = observe_peer(&stream)
                         .expect("LOCAL_PEERPID available on inherited socketpair");
+                    let pin = self_image();
+                    let bound = deadline();
+                    let mut peer = ProducerPeer::capture(stream.as_fd(), &pin, &bound).unwrap();
+                    peer.revalidate(stream.as_fd(), &pin, &bound).unwrap();
+                    peer.process.microseconds = (peer.process.microseconds + 1) % 1_000_000;
+                    assert!(peer.revalidate(stream.as_fd(), &pin, &bound).is_err());
+                    let wrong = ProgramImage {
+                        path: pin.path,
+                        sha256: "0".repeat(64),
+                    };
+                    assert!(ProducerPeer::capture(stream.as_fd(), &wrong, &bound).is_err());
                     println!("observed LOCAL_PEERPID={actual}, creator={expected}");
                     assert_eq!(
                         actual, expected,
@@ -445,7 +540,32 @@ mod macos {
     }
 }
 #[cfg(target_os = "macos")]
-pub(crate) use macos::HostContext;
+pub(crate) use macos::{HostContext, ProducerPeer};
+#[cfg(not(target_os = "macos"))]
+pub(crate) struct ProducerPeer {
+    never: std::convert::Infallible,
+}
+#[cfg(not(target_os = "macos"))]
+impl ProducerPeer {
+    pub(crate) fn capture(
+        _: std::os::fd::BorrowedFd<'_>,
+        _: &ProgramImage,
+        _: &MonotonicDeadline,
+    ) -> io::Result<Self> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "producer peer unsupported platform",
+        ))
+    }
+    pub(crate) fn revalidate(
+        &self,
+        _: std::os::fd::BorrowedFd<'_>,
+        _: &ProgramImage,
+        _: &MonotonicDeadline,
+    ) -> io::Result<()> {
+        match self.never {}
+    }
+}
 #[cfg(not(target_os = "macos"))]
 pub(crate) struct HostContext {
     never: std::convert::Infallible,
