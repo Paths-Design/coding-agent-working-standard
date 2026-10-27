@@ -1,0 +1,40 @@
+id: CAWS-EXECUTION-AUTHORITY-FENCE-001
+title: 'Serialize authority writers with the execution launch fence'
+mode: fix
+lifecycle_state: closed
+resolution: superseded
+closure_notes: 'No product source or tests were applied: the actual apply_patch actor was refused by the ordinary worktree write guard. Root session 01a151c0 explicitly accepted the exact lifecycle lock patch, hostile tests and remaining implementation and proof obligations under its owned bound CAWS-SHELL-ANALYSIS-001 A11 execution-boundary Source lane. Child binding released through supported untrack, with clean physical branch and ignored dependency state preserved. Supersession records recipient ownership, not completed acceptance.'
+created_at: '2026-10-26T22:34:51.104Z'
+updated_at: '2026-10-26T22:44:08.550Z'
+created_by_session: '01a17a57-7506-7df3-929e-be30abfa6cab'
+blast_radius:
+  modules:
+    - 'Authority lifecycle writers and launch fence'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/lifecycle-lock.ts'
+    - 'packages/caws-cli/tests/execution/authority-fence.test.js'
+  out: []
+invariants:
+  - 'Completed authority revocations serialize with final authority validation and spawn through the canonical lifecycle lock.'
+  - 'A live lifecycle lock holder cannot be stolen due to elapsed time and an obsolete handle cannot unlink a successor lock.'
+  - 'Rollback must occur inside the same critical section as the authority write it compensates.'
+acceptance:
+  - id: A1
+    given: 'a live aged lifecycle lock and an obsolete handle'
+    when: 'competing acquisition and prior-handle release execute'
+    then: 'the live holder is retained and the successor remains locked'
+  - id: A2
+    given: 'a lifecycle fence is held in one process'
+    when: 'another real process attempts acquisition before release and after release'
+    then: 'the competitor refuses without entering while held and acquires after the completed release'
+observability:
+  - 'Focused hostile-path tests retain refusal rules and authority bytes.'
+rollback:
+  - 'Revert the owned source change through an ordinary follow-up commit.'
+non_functional: {}
+contracts:
+  - name: 'authority-fence'
+    type: behavior

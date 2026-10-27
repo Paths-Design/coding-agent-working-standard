@@ -2,12 +2,14 @@ id: CAWS-SHELL-ANALYSIS-001
 title: 'Prove bounded shell behavior before worktree-isolation decisions'
 mode: fix
 lifecycle_state: active
+worktree: execution-boundary
 created_at: '2026-10-19T02:30:42.300Z'
-updated_at: '2026-10-26T22:30:13.291Z'
+updated_at: '2026-10-27T00:18:32.626Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
     - 'Typed shell parsing, bounded abstract values, utility effects and worktree-isolation analysis; CLI explanation and installed guard consumer'
+    - 'CAWS-owned prepared execution, native host routing, single-use launch authority and bounded process lifecycle'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -68,6 +70,9 @@ scope:
     - packages/caws-cli/src/store/bridge-store.ts
     - packages/caws-cli/src/store/worktrees-writer.ts
     - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/stryker.execution.conf.js
+    - packages/caws-cli/scripts/stryker-config.cjs
+    - packages/caws-cli/tsconfig.vnext.json
 invariants:
   - 'Analysis never executes submitted commands, expansions, scripts or redirections.'
   - 'Every possible shell-visible Git target and admitted execution-bearing argument satisfies the declared policy; unresolved syntax or values never become an allow proof.'
@@ -161,6 +166,41 @@ acceptance:
       refused, foreign source reads retain existing policy, and incomplete roles,
       rewrites or symlink relations cannot grant admission; source fixture proof
       does not qualify installed runtime adoption
+  - id: A11
+    given: >-
+      An authenticated host association and a fully owned executable, argv, physical
+      cwd, environment, stdin, startup mode, effect profile and authority revision
+    when: >-
+      CAWS prepares and analyzes the invocation without submitted execution, then
+      consumes admission under the authority fence
+    then: >-
+      The same owner launches exactly the admitted record once; unsupported
+      profiles, authority revocation, altered fields, expiry, cancellation, replay
+      and malformed or timed-out analysis produce zero user launches, with bounded
+      cleanup and truthful partial outcomes
+  - id: A12
+    given: >-
+      A pinned real native host using an isolated exclusive CAWS execution profile
+      and the prior immutable profile for rollback
+    when: >-
+      Actual tool inventory, authenticated host association, useful benign and
+      hostile native calls, restart and rollback are observed
+    then: >-
+      Every covered native execution route reaches the CAWS final-launch owner,
+      benign computed data launches once with matching execution fields, hostile or
+      alternate routes launch zero user commands, and rollback restores the prior
+      observed selection and behavior; global adoption remains unqualified until its
+      own checks pass
+  - id: A13
+    given: 'An existing lifecycle lock, its owning process and competing acquisition or recovery attempts'
+    when: >-
+      The owner is live or dead, metadata is unavailable, a reclaimer is
+      interrupted, or an old handle is released after a successor exists
+    then: >-
+      Live and unknown owners remain protected; aged dead owners recover through a
+      serialized single unlink; stale or repeated handles cannot remove or close
+      successors, and the whole lock file meets the unchanged 80 percent mutation
+      floor
 observability:
   - 'Structured verdict, reason codes and source-positioned decision trace distinguish allowed, denied and unresolved facts without claiming a general process sandbox.'
 rollback:

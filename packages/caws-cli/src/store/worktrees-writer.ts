@@ -46,6 +46,7 @@ import {
 } from '../kernel';
 
 import { applyRegistryPatch } from './apply-patch';
+import { writeFileAtomic } from './atomic-write';
 import {
   autoCommit,
   isPathDirty,
@@ -913,50 +914,12 @@ export function createWorktree(
   // writer mutation lands, so the auto-commit step can distinguish
   // "writer made the only change" from "writer's change on top of
   // someone else's uncommitted change".
-  const preState = capturePreWriteState(cawsDir, input.specId);
+  let preState = capturePreWriteState(cawsDir, input.specId);
 
   const nameValidation = validateWorktreeName(input.name);
   if (!nameValidation.ok) return nameValidation;
   const specValidation = validateSpecId(input.specId);
   if (!specValidation.ok) return specValidation;
-
-  const specInfo = loadSpecOrError(cawsDir, input.specId);
-  if (!isOk(specInfo)) return err(specInfo.errors);
-  // CAWS-SPEC-ACTIVATION-BINDS-001: draft is a GOVERNABLE bind state, not a
-  // refusal. A draft bound here is promoted to active inside the transaction
-  // below; only terminal states (closed/archived) are refused.
-  if (specInfo.value.lifecycleState !== 'active' && specInfo.value.lifecycleState !== 'draft') {
-    return nonGovernableSpecBindingError(input.specId, specInfo.value.lifecycleState);
-  }
-  if (specInfo.value.scopeIn.includes(SCOPE_IN_PLACEHOLDER)) {
-    return unscopedSpecBindingError(input.specId);
-  }
-  if (
-    specInfo.value.currentWorktree !== undefined &&
-    specInfo.value.currentWorktree.length > 0 &&
-    specInfo.value.currentWorktree !== input.name
-  ) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec "${input.specId}" is already bound to worktree "${specInfo.value.currentWorktree}".`,
-        { subject: input.specId }
-      )
-    );
-  }
-
-  // Refuse if a worktree with this name already exists in the registry.
-  const registry = loadWorktrees(cawsDir);
-  if (!isOk(registry)) return err(registry.errors);
-  if (registry.value[input.name] !== undefined) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Worktree "${input.name}" already exists in registry.`,
-        { subject: input.name }
-      )
-    );
-  }
 
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const baseBranch = input.baseBranch ?? getCurrentBranch(repoRoot);
@@ -1040,27 +1003,6 @@ export function createWorktree(
 
   const now = (input.now ?? (() => new Date()))().toISOString();
 
-  // CAWS-SPEC-ACTIVATION-BINDS-001: promote a draft to active FIRST, so the
-  // worktree pointer is written onto the already-promoted body and both land
-  // as one set of bytes in one transaction.
-  const activation = activateSpecOnBind(
-    specInfo.value.source,
-    input.specId,
-    specInfo.value.lifecycleState,
-    input.actor,
-    now
-  );
-  if (!isOk(activation)) {
-    rollbackGitWorktree(repoRoot, wtPath);
-    return err(activation.errors);
-  }
-
-  const newSpecBytes = patchSpecSetWorktree(activation.value.bytes, input.name);
-  if (!isOk(newSpecBytes)) {
-    rollbackGitWorktree(repoRoot, wtPath);
-    return err(newSpecBytes.errors);
-  }
-
   // Build the worktree_created event (no spec_id — binding is a
   // separate fact emitted next).
   const createdEvent: EventBody = {
@@ -1086,7 +1028,75 @@ export function createWorktree(
     },
   } as unknown as EventBody;
 
+  let specActivated = false;
   const txnOutcome = withLifecycleLock(cawsDir, () => {
+    // Git preparation is external. Authority is read and derived afresh only
+    // after acquisition, so a competing lifecycle commit cannot be overwritten.
+    const specInfo = loadSpecOrError(cawsDir, input.specId);
+    if (!isOk(specInfo)) return err(specInfo.errors);
+    if (specInfo.value.spec.id !== input.specId) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec identity does not match "${input.specId}".`,
+          { subject: input.specId }
+        )
+      );
+    }
+    // CAWS-SPEC-ACTIVATION-BINDS-001: draft is a GOVERNABLE bind state, not a
+    // refusal. A draft bound here is promoted to active inside the transaction
+    // below; only terminal states (closed/archived) are refused.
+    if (specInfo.value.lifecycleState !== 'active' && specInfo.value.lifecycleState !== 'draft') {
+      return nonGovernableSpecBindingError(input.specId, specInfo.value.lifecycleState);
+    }
+    if (specInfo.value.scopeIn.includes(SCOPE_IN_PLACEHOLDER)) {
+      return unscopedSpecBindingError(input.specId);
+    }
+    if (
+      specInfo.value.currentWorktree !== undefined &&
+      specInfo.value.currentWorktree.length > 0 &&
+      specInfo.value.currentWorktree !== input.name
+    ) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${input.specId}" is already bound to worktree "${specInfo.value.currentWorktree}".`,
+          { subject: input.specId }
+        )
+      );
+    }
+
+    // Refuse if a worktree with this name already exists in the registry.
+    const registry = loadWorktrees(cawsDir);
+    if (!isOk(registry)) return err(registry.errors);
+    if (registry.value[input.name] !== undefined) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Worktree "${input.name}" already exists in registry.`,
+          { subject: input.name }
+        )
+      );
+    }
+
+    const activation = activateSpecOnBind(
+      specInfo.value.source,
+      input.specId,
+      specInfo.value.lifecycleState,
+      input.actor,
+      now
+    );
+    if (!isOk(activation)) return err(activation.errors);
+    const newSpecBytes = patchSpecSetWorktree(activation.value.bytes, input.name);
+    if (!isOk(newSpecBytes)) return err(newSpecBytes.errors);
+    const snapshot = captureRegistrySnapshot(cawsDir);
+    if (!isOk(snapshot)) return err(snapshot.errors);
+    specActivated = activation.value.activated;
+
+    // Include dirty edits that landed during external Git preparation when
+    // deciding whether the later Git auto-commit may safely run.
+    preState = capturePreWriteState(cawsDir, input.specId);
+
     // Use kernel bindWorktree with the actual parsed Spec so it can
     // verify lifecycle_state etc.
     const bindResult = kernelBindWorktree(
@@ -1102,17 +1112,24 @@ export function createWorktree(
     // Apply the bind_worktree patch (writes worktrees.json with the
     // kernel-modeled fields: specId, owner, last_heartbeat).
     const applyResult = applyRegistryPatch(cawsDir, bindResult.value);
-    if (!isOk(applyResult)) return err(applyResult.errors);
+    if (!isOk(applyResult)) {
+      const restored = restoreRegistrySnapshot(cawsDir, snapshot.value);
+      return err([...applyResult.errors, ...(restored.ok ? [] : restored.errors)]);
+    }
 
     // Augment the entry with descriptive metadata the kernel does NOT
     // model (branch, baseBranch, path). These are governance metadata
     // for merge/destroy decisions, not authority claims.
-    augmentRegistryEntry(cawsDir, input.name, {
+    const augmented = augmentRegistryEntry(cawsDir, input.name, {
       branch,
       baseBranch,
       path: wtPath,
       ...(baseSha !== null ? { baseSha } : {}),
     });
+    if (!augmented.ok) {
+      const restored = restoreRegistrySnapshot(cawsDir, snapshot.value);
+      return err([...augmented.errors, ...(restored.ok ? [] : restored.errors)]);
+    }
 
     // Then run the lifecycle transaction for spec YAML + events.
     // spec_activated goes LAST, and the ordering is load-bearing.
@@ -1133,23 +1150,34 @@ export function createWorktree(
         ? [createdEvent, boundEvent, activation.value.event]
         : [createdEvent, boundEvent];
 
-    return runLifecycleTransaction({
+    const transaction = runLifecycleTransaction({
       cawsDir,
       plannedWrites: [{ path: specInfo.value.path, contents: newSpecBytes.value }],
       events,
     });
+    if (!transaction.ok || transaction.value.kind !== 'success') {
+      const restored = restoreRegistrySnapshot(cawsDir, snapshot.value);
+      if (!restored.ok) {
+        return err([
+          ...(!transaction.ok
+            ? transaction.errors
+            : transaction.value.kind !== 'success'
+              ? transaction.value.cause
+              : []),
+          ...restored.errors,
+        ]);
+      }
+    }
+    return transaction;
   });
 
   if (!txnOutcome.ok) {
     // Compensation: remove the git worktree we created.
     rollbackGitWorktree(repoRoot, wtPath);
-    // Also remove the registry entry that bind_worktree wrote.
-    rollbackRegistryEntry(cawsDir, input.name);
     return err(txnOutcome.errors);
   }
   if (txnOutcome.value.kind !== 'success') {
     rollbackGitWorktree(repoRoot, wtPath);
-    rollbackRegistryEntry(cawsDir, input.name);
     return ok({
       kind: 'partial_failure_recovered',
       cause: txnOutcome.value.cause,
@@ -1174,7 +1202,7 @@ export function createWorktree(
       spec_id: input.specId,
       artifact_links: artifactLinks,
       audit_commit: autoCommitOutcome,
-      spec_activated: activation.value.activated,
+      spec_activated: specActivated,
     },
   });
 }
@@ -1304,85 +1332,191 @@ export function applyTakeoverWithAudit(
   cawsDir: string,
   input: ApplyTakeoverWithAuditInput
 ): Result<true> {
-  const registryPath = path.join(cawsDir, 'worktrees.json');
-  // Captured BEFORE the patch so the compensation restores the exact prior
-  // bytes — including fields applyRegistryPatch does not model. Restoring a
-  // re-serialized object could silently drop them.
-  let priorBytes: string | null = null;
-  try {
-    priorBytes = fs.readFileSync(registryPath, 'utf8');
-  } catch {
-    priorBytes = null;
-  }
+  return withLifecycleLock(cawsDir, () => {
+    const registry = loadWorktrees(cawsDir);
+    if (!isOk(registry)) return err(registry.errors);
+    const entry = registry.value[input.name];
+    const patch = input.patch;
+    const reject = (): Result<true> =>
+      err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Takeover of worktree "${input.name}" refused: the supplied plan does not match the current owner, binding, or audit envelope. Reload authority and plan the transfer again.`,
+          { subject: input.name }
+        )
+      );
+    // The shell renders success from the supplied patch. Refuse stale plans
+    // instead of silently rebasing them or turning a transfer into a no-op.
+    if (
+      patch.kind !== 'takeover_claim' ||
+      patch.worktree_name !== input.name ||
+      patch.prior_owner === null ||
+      typeof patch.prior_owner !== 'object' ||
+      patch.owner === null ||
+      typeof patch.owner !== 'object' ||
+      typeof patch.owner.session_id !== 'string' ||
+      typeof patch.when !== 'string' ||
+      !Number.isFinite(Date.parse(patch.when)) ||
+      entry === undefined ||
+      entry === null ||
+      typeof entry !== 'object' ||
+      entry.owner === undefined ||
+      entry.owner === null ||
+      typeof entry.owner !== 'object' ||
+      typeof entry.owner.session_id !== 'string' ||
+      entry.owner.session_id.length === 0 ||
+      (entry.prior_owners !== undefined && !Array.isArray(entry.prior_owners)) ||
+      entry.owner.session_id === input.newOwner.session_id ||
+      entry.owner.session_id !== patch.prior_owner.session_id ||
+      entry.owner.platform !== patch.prior_owner.platform ||
+      (entry.last_heartbeat ?? null) !== (patch.prior_owner.last_seen ?? null) ||
+      input.priorOwner.session_id !== patch.prior_owner.session_id ||
+      input.priorOwner.platform !== patch.prior_owner.platform ||
+      input.priorOwner.last_seen !== (patch.prior_owner.last_seen ?? null) ||
+      input.newOwner.session_id !== patch.owner.session_id ||
+      input.newOwner.platform !== patch.owner.platform ||
+      input.newOwner.session_id.length === 0 ||
+      input.actor.id !== input.newOwner.session_id ||
+      (input.actor.session_id !== undefined &&
+        input.actor.session_id !== input.newOwner.session_id) ||
+      patch.prior_owner.takenOver_at !== patch.when ||
+      entry.specId !== input.specId
+    )
+      return reject();
 
-  const now = (input.now ?? (() => new Date()))().toISOString();
-  const event: EventBody = {
-    event: 'claim_taken_over',
-    ts: now,
-    actor: input.actor,
-    ...(input.specId !== undefined ? { spec_id: input.specId } : {}),
-    data: {
-      worktree_name: input.name,
-      prior_owner: {
-        session_id: input.priorOwner.session_id,
-        ...(input.priorOwner.platform !== undefined ? { platform: input.priorOwner.platform } : {}),
-        last_seen: input.priorOwner.last_seen,
-      },
-      new_owner: {
-        session_id: input.newOwner.session_id,
-        ...(input.newOwner.platform !== undefined ? { platform: input.newOwner.platform } : {}),
-      },
-      ...(input.reason !== undefined ? { reason: input.reason } : {}),
-    },
-  } as unknown as EventBody;
-
-  const outcome = withLifecycleLock(cawsDir, () => {
-    const applyResult = applyRegistryPatch(cawsDir, input.patch);
-    if (!isOk(applyResult)) return err(applyResult.errors);
-    return runLifecycleTransaction({ cawsDir, plannedWrites: [], events: [event] });
-  });
-
-  const restorePriorRegistry = (): void => {
-    if (priorBytes === null) return;
-    try {
-      fs.writeFileSync(registryPath, priorBytes);
-    } catch {
-      /* best-effort; the error below already refuses the takeover */
+    if (entry.specId !== undefined) {
+      if (typeof entry.specId !== 'string' || !validateSpecId(entry.specId).ok) return reject();
+      const spec = loadSpecOrError(cawsDir, entry.specId);
+      if (!isOk(spec)) return err(spec.errors);
+      if (
+        spec.value.spec.id !== entry.specId ||
+        spec.value.lifecycleState !== 'active' ||
+        spec.value.currentWorktree !== input.name ||
+        spec.value.scopeIn.includes(SCOPE_IN_PLACEHOLDER)
+      )
+        return reject();
     }
-  };
+    const snapshot = captureRegistrySnapshot(cawsDir);
+    if (!isOk(snapshot)) return err(snapshot.errors);
 
-  if (!outcome.ok) {
-    restorePriorRegistry();
-    return err(outcome.errors);
-  }
-  // runLifecycleTransaction wraps `partial_failure_recovered` in ok(), and with
-  // plannedWrites: [] a rolled-back append arrives exactly that way. isOk alone
-  // would let the takeover report success with the audit silently missing.
-  if (outcome.value.kind !== 'success') {
-    restorePriorRegistry();
+    const now = (input.now ?? (() => new Date()))().toISOString();
+    const event: EventBody = {
+      event: 'claim_taken_over',
+      ts: now,
+      actor: input.actor,
+      ...(input.specId !== undefined ? { spec_id: input.specId } : {}),
+      data: {
+        worktree_name: input.name,
+        prior_owner: {
+          session_id: input.priorOwner.session_id,
+          ...(input.priorOwner.platform !== undefined
+            ? { platform: input.priorOwner.platform }
+            : {}),
+          last_seen: input.priorOwner.last_seen,
+        },
+        new_owner: {
+          session_id: input.newOwner.session_id,
+          ...(input.newOwner.platform !== undefined ? { platform: input.newOwner.platform } : {}),
+        },
+        ...(input.reason !== undefined ? { reason: input.reason } : {}),
+      },
+    } as unknown as EventBody;
+
+    const applyResult = applyRegistryPatch(cawsDir, patch);
+    if (!isOk(applyResult)) {
+      const restored = restoreRegistrySnapshot(cawsDir, snapshot.value);
+      return err([...applyResult.errors, ...(restored.ok ? [] : restored.errors)]);
+    }
+    const outcome = runLifecycleTransaction({ cawsDir, plannedWrites: [], events: [event] });
+    if (!outcome.ok || outcome.value.kind !== 'success') {
+      const restored = restoreRegistrySnapshot(cawsDir, snapshot.value);
+      if (!restored.ok)
+        return err([
+          ...(!outcome.ok
+            ? outcome.errors
+            : outcome.value.kind !== 'success'
+              ? outcome.value.cause
+              : []),
+          ...restored.errors,
+        ]);
+    }
+    if (!outcome.ok) return err(outcome.errors);
+    // runLifecycleTransaction wraps `partial_failure_recovered` in ok(), and with
+    // plannedWrites: [] a rolled-back append arrives exactly that way. isOk alone
+    // would let the takeover report success with the audit silently missing.
+    if (outcome.value.kind !== 'success') {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+          `Takeover of worktree "${input.name}" was rolled back: the claim_taken_over audit event could not be appended, and ownership must not transfer without it. The prior owner (${input.priorOwner.session_id}) is unchanged.`,
+          {
+            subject: input.name,
+            // `caws claim` reads the CURRENT DIRECTORY and takes no worktree-name
+            // argument, so the retry must carry the cd or it refuses when run
+            // from canonical. Pinned by tests/docs/agent-recovery-path-drift.
+            narrowRepair:
+              `Inspect the event chain with \`caws events verify\`, then retry from inside the worktree: ` +
+              `cd .caws/worktrees/${input.name} && caws claim --takeover`,
+            data: {
+              worktree_name: input.name,
+              prior_owner_session_id: input.priorOwner.session_id,
+              new_owner_session_id: input.newOwner.session_id,
+              append_outcome_kind: outcome.value.kind,
+            },
+          }
+        )
+      );
+    }
+    return ok(true);
+  });
+}
+
+/** These snapshots and restorations belong to the acquired lifecycle section.
+ * Exact bytes (including metadata unknown to the kernel) and file absence are
+ * authoritative; reconstructing an object is not compensation. */
+function captureRegistrySnapshot(cawsDir: string): Result<Buffer | null> {
+  const registryPath = path.join(cawsDir, 'worktrees.json');
+  try {
+    return ok(fs.readFileSync(registryPath));
+  } catch (e) {
+    if ((e as { code?: string }).code === 'ENOENT') return ok(null);
     return err(
       storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Takeover of worktree "${input.name}" was rolled back: the claim_taken_over audit event could not be appended, and ownership must not transfer without it. The prior owner (${input.priorOwner.session_id}) is unchanged.`,
-        {
-          subject: input.name,
-          // `caws claim` reads the CURRENT DIRECTORY and takes no worktree-name
-          // argument, so the retry must carry the cd or it refuses when run
-          // from canonical. Pinned by tests/docs/agent-recovery-path-drift.
-          narrowRepair:
-            `Inspect the event chain with \`caws events verify\`, then retry from inside the worktree: ` +
-            `cd .caws/worktrees/${input.name} && caws claim --takeover`,
-          data: {
-            worktree_name: input.name,
-            prior_owner_session_id: input.priorOwner.session_id,
-            new_owner_session_id: input.newOwner.session_id,
-            append_outcome_kind: outcome.value.kind,
-          },
-        }
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Cannot snapshot registry before authority mutation: ${String(e)}`,
+        { subject: registryPath }
       )
     );
   }
-  return ok(true);
+}
+
+function restoreRegistrySnapshot(cawsDir: string, priorBytes: Buffer | null): Result<true> {
+  const registryPath = path.join(cawsDir, 'worktrees.json');
+  let failure: string;
+  if (priorBytes !== null) {
+    const restored = writeFileAtomic(registryPath, priorBytes, { preserveMode: true });
+    if (restored.ok) return ok(true);
+    failure = restored.errors.map((d) => d.message).join('; ');
+  } else {
+    try {
+      fs.unlinkSync(registryPath);
+      return ok(true);
+    } catch (e) {
+      if ((e as { code?: string }).code === 'ENOENT') return ok(true);
+      failure = String(e);
+    }
+  }
+  return err(
+    storeDiagnostic(
+      STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+      `Registry authority is unrecovered: could not restore the prior registry snapshot. Ownership and binding must be inspected before retrying. ${failure}`,
+      {
+        subject: registryPath,
+        narrowRepair:
+          'Inspect the canonical registry and event chain before performing another authority mutation.',
+      }
+    )
+  );
 }
 
 function rollbackRegistryEntry(cawsDir: string, name: string): void {
@@ -1405,8 +1539,8 @@ function rollbackRegistryEntry(cawsDir: string, name: string): void {
  *  doesn't model (branch, baseBranch, path). These fields are used by
  *  merge/destroy for prerequisite checks but are not authority claims.
  *  applyRegistryPatch only touches the kernel-modeled fields, so we
- *  layer in the rest via a direct merge. Best-effort — read failure
- *  is logged but doesn't fail the caller. */
+ *  layer in the rest atomically. The entire registry carries authority, so
+ *  every failure must reach the caller's locked compensation path. */
 function augmentRegistryEntry(
   cawsDir: string,
   name: string,
@@ -1416,18 +1550,29 @@ function augmentRegistryEntry(
     readonly path?: string;
     readonly baseSha?: string;
   }
-): void {
+): Result<true> {
   const p = path.join(cawsDir, 'worktrees.json');
   try {
     const raw = fs.readFileSync(p, 'utf8');
-    const obj = JSON.parse(raw);
-    if (!obj || typeof obj !== 'object') return;
-    const entry = obj[name];
-    if (!entry || typeof entry !== 'object') return;
-    obj[name] = { ...entry, ...extra };
-    fs.writeFileSync(p, JSON.stringify(obj, null, 2));
-  } catch {
-    /* best-effort */
+    const obj: unknown = JSON.parse(raw);
+    if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) {
+      throw new Error('Registry is not an object.');
+    }
+    const registry = obj as Record<string, unknown>;
+    const entry = registry[name];
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`Registry entry "${name}" is not an object.`);
+    }
+    registry[name] = { ...entry, ...extra };
+    return writeFileAtomic(p, JSON.stringify(registry, null, 2), { preserveMode: true });
+  } catch (e) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.WRITE_IO_FAILED,
+        `Cannot augment worktree "${name}" in the registry: ${String(e)}`,
+        { subject: p }
+      )
+    );
   }
 }
 
@@ -2247,6 +2392,104 @@ function verifyLaneProvenance(
 /** How many times a lost compare-and-swap is retried before giving up. */
 const MERGE_CAS_MAX_ATTEMPTS = 5;
 
+/** A safe refresh observation for one actual Git checkout of the base branch. */
+interface BaseCheckoutSync {
+  readonly path: string;
+  readonly state: 'in_sync' | 'stale';
+  readonly sync_error?: string;
+  readonly repair_command?: string;
+}
+
+type BaseCheckoutDiscovery =
+  | { ok: true; paths: readonly string[] }
+  | { ok: false; message: string };
+
+/**
+ * Git's worktree inventory, not the CAWS registry, owns branch checkout facts.
+ * NUL-delimited porcelain preserves whitespace and newlines in checkout paths.
+ * An unavailable or malformed observation must refuse BEFORE publishing a ref.
+ */
+function discoverBaseCheckouts(repoRoot: string, ref: string): BaseCheckoutDiscovery {
+  const inventory = runGit(['worktree', 'list', '--porcelain', '-z'], repoRoot);
+  if (!inventory.ok) {
+    return { ok: false, message: `git worktree list --porcelain -z failed: ${inventory.reason}` };
+  }
+  if (!inventory.stdout.endsWith('\0\0')) {
+    return { ok: false, message: 'git worktree list returned incomplete NUL-delimited metadata.' };
+  }
+  const records = inventory.stdout.slice(0, -2).split('\0\0');
+  const paths = new Set<string>();
+  for (const record of records) {
+    const fields = record.split('\0');
+    const first = fields[0];
+    const heads = fields.filter((field) => field.startsWith('HEAD '));
+    const branches = fields.filter((field) => field.startsWith('branch '));
+    const detached = fields.includes('detached');
+    const bare = fields.includes('bare');
+    const checkoutPath = first?.startsWith('worktree ') ? first.slice(9) : '';
+    if (
+      !path.isAbsolute(checkoutPath) ||
+      fields.slice(1).some((field) => field.startsWith('worktree ')) ||
+      (!bare && (heads.length !== 1 || !/^HEAD [0-9a-f]{40}$/.test(heads[0] ?? ''))) ||
+      (!bare && branches.length + Number(detached) !== 1) ||
+      branches.some((field) => !field.startsWith('branch refs/heads/'))
+    ) {
+      return { ok: false, message: 'git worktree list returned malformed checkout metadata.' };
+    }
+    if (branches[0] !== `branch ${ref}`) continue;
+    try {
+      paths.add(fs.realpathSync(checkoutPath));
+    } catch (error) {
+      return {
+        ok: false,
+        message: `Cannot resolve base checkout ${checkoutPath}: ${String(error)}`,
+      };
+    }
+  }
+  return { ok: true, paths: [...paths] };
+}
+
+function quoteCheckoutPath(checkoutPath: string): string {
+  return `'${checkoutPath.replace(/'/g, "'\\''")}'`;
+}
+
+/** The CAS has landed; any subsequent refusal is a path-specific stale state. */
+function refreshBaseCheckouts(
+  paths: readonly string[],
+  ref: string,
+  baseBefore: string,
+  mergeCommit: string
+): readonly BaseCheckoutSync[] {
+  const syncArgs = ['read-tree', '-u', '-m', baseBefore, mergeCommit];
+  return paths.map((checkoutPath): BaseCheckoutSync => {
+    const repairCommand = `git -C ${quoteCheckoutPath(checkoutPath)} ${syncArgs.join(' ')}`;
+    const stale = (reason: string): BaseCheckoutSync => ({
+      path: checkoutPath,
+      state: 'stale',
+      sync_error: reason,
+      repair_command: repairCommand,
+    });
+    // Inventory and refresh cannot be atomic against external Git commands.
+    // Re-observe HEAD before touching an index; never refresh another branch.
+    const headRef = runGit(['symbolic-ref', '--quiet', 'HEAD'], checkoutPath);
+    if (!headRef.ok) return stale(`Cannot observe checkout HEAD: ${headRef.reason}`);
+    if (headRef.stdout.trim() !== ref) {
+      return stale(
+        `Checkout HEAD changed from ${ref} to ${headRef.stdout.trim()}; refresh not attempted.`
+      );
+    }
+    const head = runGit(['rev-parse', 'HEAD'], checkoutPath);
+    if (!head.ok) return stale(`Cannot observe checkout commit: ${head.reason}`);
+    if (head.stdout.trim() !== mergeCommit) {
+      return stale(`Checkout HEAD advanced beyond ${mergeCommit}; refresh not attempted.`);
+    }
+    // Both trees are explicit because HEAD already resolves to the new ref.
+    // Git preserves unrelated edits and refuses overlapping edits atomically.
+    const refreshed = runGit(syncArgs, checkoutPath);
+    return refreshed.ok ? { path: checkoutPath, state: 'in_sync' } : stale(refreshed.reason);
+  });
+}
+
 type MergeCasOutcome =
   | {
       ok: true;
@@ -2254,6 +2497,7 @@ type MergeCasOutcome =
       baseBefore: string;
       attempts: number;
       canonicalCheckoutState: 'in_sync' | 'stale';
+      baseCheckoutSync: readonly BaseCheckoutSync[];
       canonicalCheckoutSyncError?: string;
       canonicalCheckoutRepairCommand?: string;
     }
@@ -2264,6 +2508,7 @@ type MergeCasOutcome =
       contention: boolean;
       attempts?: number;
       repairSuffix?: string;
+      checkoutDiscoveryFailed?: true;
     };
 
 /**
@@ -2347,49 +2592,45 @@ function mergeViaCompareAndSwap(
     }
     const mergeCommit = commitResult.stdout.trim();
 
+    // Discover on every attempt immediately before publication. A failed
+    // observer cannot turn undiscovered base checkouts into an in_sync claim.
+    const checkouts = discoverBaseCheckouts(repoRoot, ref);
+    if (!checkouts.ok) {
+      return {
+        ok: false,
+        message: `Cannot merge ${branch} into ${baseBranch}: ${checkouts.message}`,
+        contention: false,
+        checkoutDiscoveryFailed: true,
+        repairSuffix:
+          'No base ref was advanced. Repair checkout metadata observation, then re-run.',
+      };
+    }
+
     // The atomic instant. Passing baseBefore as the expected-old value makes
     // this a compare-and-swap: if another agent advanced the base since we
     // read it, git refuses and writes nothing.
     const casResult = runGit(['update-ref', ref, mergeCommit, baseBefore], repoRoot);
     if (casResult.ok) {
-      // The ref moved. If the CANONICAL checkout happens to have the base
-      // branch checked out, its working tree and index are now stale relative
-      // to the new HEAD — every merged file would show as a staged deletion
-      // ("D path"), making a successful merge look like it deleted the work.
-      //
-      // `read-tree -u -m` fast-forwards the tree and index to match. The `-m`
-      // (merge) form is deliberate over `reset --hard`: it REFUSES rather
-      // than clobbers when local modifications are present, so it cannot
-      // destroy uncommitted work. (The merge preconditions already require a
-      // clean tree; this is defense in depth.)
-      //
-      // Worktrees with a different branch checked out are unaffected, which
-      // is the entire point of computing the merge in the object database.
-      const headRef = runGit(['symbolic-ref', '--quiet', 'HEAD'], repoRoot);
-      let canonicalCheckoutState: 'in_sync' | 'stale' = 'in_sync';
-      let canonicalCheckoutSyncError: string | undefined;
-      let canonicalCheckoutRepairCommand: string | undefined;
-      if (headRef.ok && headRef.stdout.trim() === ref) {
-        // Name both trees explicitly. HEAD already resolves to mergeCommit
-        // after update-ref; the two-tree form tells Git which transition to
-        // materialize and preserves unrelated local changes. When an edit
-        // overlaps the merged paths, Git refuses instead of overwriting it.
-        const syncArgs = ['read-tree', '-u', '-m', baseBefore, mergeCommit];
-        const syncResult = runGit(syncArgs, repoRoot);
-        if (!syncResult.ok) {
-          canonicalCheckoutState = 'stale';
-          canonicalCheckoutSyncError = syncResult.reason;
-          canonicalCheckoutRepairCommand = `git ${syncArgs.join(' ')}`;
-        }
-      }
+      const baseCheckoutSync = refreshBaseCheckouts(checkouts.paths, ref, baseBefore, mergeCommit);
+      const canonical = baseCheckoutSync.find(
+        (checkout) => checkout.path === realpathOrLiteral(repoRoot)
+      );
+      // Preserve the original canonical fields for existing consumers. A
+      // canonical checkout on another branch needs no base refresh.
+      const canonicalCheckoutState = canonical?.state ?? 'in_sync';
       return {
         ok: true,
         mergeCommit,
         baseBefore,
         attempts: attempt,
+        baseCheckoutSync,
         canonicalCheckoutState,
-        ...(canonicalCheckoutSyncError !== undefined ? { canonicalCheckoutSyncError } : {}),
-        ...(canonicalCheckoutRepairCommand !== undefined ? { canonicalCheckoutRepairCommand } : {}),
+        ...(canonical?.sync_error !== undefined
+          ? { canonicalCheckoutSyncError: canonical.sync_error }
+          : {}),
+        ...(canonical?.repair_command !== undefined
+          ? { canonicalCheckoutRepairCommand: `git read-tree -u -m ${baseBefore} ${mergeCommit}` }
+          : {}),
       };
     }
 
@@ -2673,6 +2914,9 @@ export function mergeWorktree(
           : `${mergeRepairHint(input.name, entry)} ${casOutcome.repairSuffix ?? ''}`.trim(),
         data: {
           base_branch: baseBranch,
+          ...(casOutcome.checkoutDiscoveryFailed === true
+            ? { checkout_discovery_failed: true }
+            : {}),
           ...(casOutcome.contention ? { contention: true } : {}),
           ...(casOutcome.attempts !== undefined ? { attempts: casOutcome.attempts } : {}),
         },
@@ -2680,12 +2924,49 @@ export function mergeWorktree(
     );
   }
   const mergeCommit = casOutcome.mergeCommit;
+  // A later lifecycle failure cannot undo the ref or erase the checkout
+  // observation. Keep it in diagnostics even when no merge event is appended.
+  const attachCheckoutState = (diagnostic: Diagnostic): Diagnostic => {
+    const stale = casOutcome.baseCheckoutSync
+      .filter((checkout) => checkout.state === 'stale')
+      .map(
+        (checkout) =>
+          `Base checkout is STALE: ${checkout.path}\n` +
+          `  Safe refresh failed: ${checkout.sync_error}\n` +
+          `  Preserve local edits and inspect HEAD before retrying:\n    ${checkout.repair_command}`
+      );
+    // Preserve the established diagnostic shape when checkout refresh worked.
+    // Only failed refreshes need additional state and recovery instructions.
+    if (stale.length === 0) return diagnostic;
+    return {
+      ...diagnostic,
+      data: {
+        ...diagnostic.data,
+        merge_commit: mergeCommit,
+        base_checkout_sync: casOutcome.baseCheckoutSync,
+        canonical_checkout_state: casOutcome.canonicalCheckoutState,
+      },
+      ...(stale.length > 0
+        ? {
+            narrowRepair: [
+              diagnostic.narrowRepair,
+              `Merge commit ${mergeCommit} already advanced ${baseBranch}.`,
+              ...stale,
+            ]
+              .filter(Boolean)
+              .join('\n'),
+          }
+        : {}),
+    };
+  };
   if (!/^[0-9a-f]{7,40}$/.test(mergeCommit)) {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_WRITE_FAILED,
-        `Unexpected merge commit shape from git: ${mergeCommit}`,
-        { subject: input.name }
+      attachCheckoutState(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_WRITE_FAILED,
+          `Unexpected merge commit shape from git: ${mergeCommit}`,
+          { subject: input.name }
+        )
       )
     );
   }
@@ -2718,7 +2999,7 @@ export function mergeWorktree(
   // disk. loadSpecOrError re-reads through the canonical parser.
   const preCloseState = loadSpecOrError(cawsDir, specId);
   if (!isOk(preCloseState)) {
-    return err(preCloseState.errors);
+    return err(preCloseState.errors.map(attachCheckoutState));
   }
   const specWasAlreadyClosed = preCloseState.value.lifecycleState === 'closed';
 
@@ -2763,29 +3044,31 @@ export function mergeWorktree(
 
   if (!isOk(closeResult)) {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Merge succeeded (commit ${mergeCommit}) but spec close failed. The bound spec remains active.`,
-        {
-          subject: input.name,
-          // CAWS-DEFECT-MERGE-SPLIT-STATE-RECOVERY-01: the recovery lives in
-          // narrowRepair, which renders unconditionally. It used to sit in
-          // `data`, which renderDiagnostics prints ONLY under --data — so an
-          // operator hitting this was told what broke and nothing about what to
-          // do, at the exact moment three surfaces had come apart.
-          narrowRepair: splitStateRepair({
-            name: input.name,
-            specId,
-            mergeCommit,
-            baseBranch,
-            worktreeDestroyed: false,
-          }),
-          data: {
-            merge_commit: mergeCommit,
-            spec_id: specId,
-            close_errors: closeResult.errors.map((d) => d.message),
-          },
-        }
+      attachCheckoutState(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+          `Merge succeeded (commit ${mergeCommit}) but spec close failed. The bound spec remains active.`,
+          {
+            subject: input.name,
+            // CAWS-DEFECT-MERGE-SPLIT-STATE-RECOVERY-01: the recovery lives in
+            // narrowRepair, which renders unconditionally. It used to sit in
+            // `data`, which renderDiagnostics prints ONLY under --data — so an
+            // operator hitting this was told what broke and nothing about what to
+            // do, at the exact moment three surfaces had come apart.
+            narrowRepair: splitStateRepair({
+              name: input.name,
+              specId,
+              mergeCommit,
+              baseBranch,
+              worktreeDestroyed: false,
+            }),
+            data: {
+              merge_commit: mergeCommit,
+              spec_id: specId,
+              close_errors: closeResult.errors.map((d) => d.message),
+            },
+          }
+        )
       )
     );
   }
@@ -2800,28 +3083,30 @@ export function mergeWorktree(
   // genuinely closed on disk, just by an earlier close.)
   if (closeResult.value.kind !== 'success') {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Merge succeeded (commit ${mergeCommit}) but spec close transaction rolled back; the bound spec remains active. Worktree has NOT been destroyed.`,
-        {
-          subject: input.name,
-          narrowRepair: splitStateRepair({
-            name: input.name,
-            specId,
-            mergeCommit,
-            baseBranch,
-            worktreeDestroyed: false,
-          }),
-          data: {
-            merge_commit: mergeCommit,
-            spec_id: specId,
-            close_outcome_kind: closeResult.value.kind,
-            close_cause:
-              closeResult.value.kind === 'partial_failure_recovered'
-                ? closeResult.value.cause
-                : undefined,
-          },
-        }
+      attachCheckoutState(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+          `Merge succeeded (commit ${mergeCommit}) but spec close transaction rolled back; the bound spec remains active. Worktree has NOT been destroyed.`,
+          {
+            subject: input.name,
+            narrowRepair: splitStateRepair({
+              name: input.name,
+              specId,
+              mergeCommit,
+              baseBranch,
+              worktreeDestroyed: false,
+            }),
+            data: {
+              merge_commit: mergeCommit,
+              spec_id: specId,
+              close_outcome_kind: closeResult.value.kind,
+              close_cause:
+                closeResult.value.kind === 'partial_failure_recovered'
+                  ? closeResult.value.cause
+                  : undefined,
+            },
+          }
+        )
       )
     );
   }
@@ -2860,6 +3145,8 @@ export function mergeWorktree(
       // checkout refresh are separate operations. Record whether the latter
       // landed so a successful merge cannot silently leave a rollback staged
       // in the canonical index.
+      // Keep this payload readable by installed strict readers. Per-checkout
+      // observations are carried by the command result and failure diagnostics.
       canonical_checkout_state: casOutcome.canonicalCheckoutState,
       ...(casOutcome.canonicalCheckoutSyncError !== undefined
         ? { canonical_checkout_sync_error: casOutcome.canonicalCheckoutSyncError }
@@ -2891,25 +3178,27 @@ export function mergeWorktree(
   );
   if (!mergedTxn.ok) {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Merge succeeded and spec_closed event appended, but worktree_merged event append failed. The worktree was not destroyed.`,
-        {
-          subject: input.name,
-          narrowRepair: splitStateRepair({
-            name: input.name,
-            specId,
-            mergeCommit,
-            baseBranch,
-            specClosed: !specLeftOpen,
-            mergedEventAppended: false,
-            worktreeDestroyed: false,
-          }),
-          data: {
-            merge_commit: mergeCommit,
-            merged_cause: mergedTxn.errors,
-          },
-        }
+      attachCheckoutState(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+          `Merge succeeded and spec_closed event appended, but worktree_merged event append failed. The worktree was not destroyed.`,
+          {
+            subject: input.name,
+            narrowRepair: splitStateRepair({
+              name: input.name,
+              specId,
+              mergeCommit,
+              baseBranch,
+              specClosed: !specLeftOpen,
+              mergedEventAppended: false,
+              worktreeDestroyed: false,
+            }),
+            data: {
+              merge_commit: mergeCommit,
+              merged_cause: mergedTxn.errors,
+            },
+          }
+        )
       )
     );
   }
@@ -2923,29 +3212,31 @@ export function mergeWorktree(
   // record that this lane's commits landed under governance. Refuse instead.
   if (mergedTxn.value.kind !== 'success') {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Merge succeeded (commit ${mergeCommit}) but worktree_merged event append rolled back; the provenance ledger is missing the merge record. Worktree has NOT been destroyed.`,
-        {
-          subject: input.name,
-          narrowRepair: splitStateRepair({
-            name: input.name,
-            specId,
-            mergeCommit,
-            baseBranch,
-            specClosed: !specLeftOpen,
-            mergedEventAppended: false,
-            worktreeDestroyed: false,
-          }),
-          data: {
-            merge_commit: mergeCommit,
-            merged_outcome_kind: mergedTxn.value.kind,
-            merged_cause:
-              mergedTxn.value.kind === 'partial_failure_recovered'
-                ? mergedTxn.value.cause
-                : undefined,
-          },
-        }
+      attachCheckoutState(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+          `Merge succeeded (commit ${mergeCommit}) but worktree_merged event append rolled back; the provenance ledger is missing the merge record. Worktree has NOT been destroyed.`,
+          {
+            subject: input.name,
+            narrowRepair: splitStateRepair({
+              name: input.name,
+              specId,
+              mergeCommit,
+              baseBranch,
+              specClosed: !specLeftOpen,
+              mergedEventAppended: false,
+              worktreeDestroyed: false,
+            }),
+            data: {
+              merge_commit: mergeCommit,
+              merged_outcome_kind: mergedTxn.value.kind,
+              merged_cause:
+                mergedTxn.value.kind === 'partial_failure_recovered'
+                  ? mergedTxn.value.cause
+                  : undefined,
+            },
+          }
+        )
       )
     );
   }
@@ -2972,25 +3263,27 @@ export function mergeWorktree(
     // The merge + close + merged event all succeeded. The destroy
     // failed. Surface as partial-failure with a manual recovery hint.
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Merge succeeded but post-merge worktree destroy failed. Run caws worktree destroy ${input.name} manually.`,
-        {
-          subject: input.name,
-          narrowRepair: splitStateRepair({
-            name: input.name,
-            specId,
-            mergeCommit,
-            baseBranch,
-            specClosed: !specLeftOpen,
-            mergedEventAppended: true,
-            worktreeDestroyed: false,
-          }),
-          data: {
-            merge_commit: mergeCommit,
-            destroy_errors: destroyResult.errors.map((d) => d.message),
-          },
-        }
+      attachCheckoutState(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+          `Merge succeeded but post-merge worktree destroy failed. Run caws worktree destroy ${input.name} manually.`,
+          {
+            subject: input.name,
+            narrowRepair: splitStateRepair({
+              name: input.name,
+              specId,
+              mergeCommit,
+              baseBranch,
+              specClosed: !specLeftOpen,
+              mergedEventAppended: true,
+              worktreeDestroyed: false,
+            }),
+            data: {
+              merge_commit: mergeCommit,
+              destroy_errors: destroyResult.errors.map((d) => d.message),
+            },
+          }
+        )
       )
     );
   }
@@ -3030,6 +3323,7 @@ export function mergeWorktree(
     data: {
       merge_commit: mergeCommit,
       spec_id: specId,
+      base_checkout_sync: casOutcome.baseCheckoutSync,
       canonical_checkout_state: casOutcome.canonicalCheckoutState,
       ...(casOutcome.canonicalCheckoutSyncError !== undefined
         ? { canonical_checkout_sync_error: casOutcome.canonicalCheckoutSyncError }

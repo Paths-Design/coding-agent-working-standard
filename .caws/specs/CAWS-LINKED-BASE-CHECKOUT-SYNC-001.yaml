@@ -1,0 +1,72 @@
+id: CAWS-LINKED-BASE-CHECKOUT-SYNC-001
+title: 'Refresh actual base checkouts after compare-and-swap merge'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Safe refresh follows the observed base branch into actual linked checkouts. Final 398b65 passed build and 30 focused tests; stale local edits and late failures retain repair diagnostics. Private installed aa14 package produced six events readable by old published CLI. Does not establish Rust executor integration or installed rollback.'
+created_at: '2026-10-27T02:32:59.245Z'
+updated_at: '2026-10-27T03:25:38.422Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'worktree merge checkout consistency'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/src/kernel/schemas/events/worktree_merged.v1.json'
+    - 'packages/caws-cli/tests/store/worktree-merge-canonical-consistency.test.js'
+    - 'packages/caws-cli/tests/shell/worktree-merge-canonical-consistency.test.js'
+  out: []
+invariants:
+  - 'A landed base ref is followed by safe refresh of every observed checkout on that base without overwriting local edits.'
+  - 'Checkout discovery and refresh failures remain explicit after the durable merge; canonical compatibility fields remain readable.'
+  - 'Persisted worktree_merged payload stays compatible with the currently installed strict reader; per-checkout detail belongs in command results, failure diagnostics and retained command artifacts.'
+acceptance:
+  - id: A1
+    given: 'a base branch checked out in a linked workspace'
+    when: 'compare-and-swap merge succeeds'
+    then: >-
+      its source index and working files reflect the merged base while source
+      payload and branch identity in a different canonical checkout remain
+      unchanged; existing governance autocommits retain their contract
+  - id: A2
+    given: 'local edits in a base checkout'
+    when: 'safe refresh follows merge'
+    then: 'unrelated edits survive and overlapping edits remain untouched with explicit stale path and repair diagnostics'
+  - id: A3
+    given: >-
+      checkout discovery is unavailable before ref publication or a checkout refresh
+      fails after publication
+    when: 'merge executes'
+    then: >-
+      failed discovery refuses without advancing the base; post-publication refresh
+      failure reports the landed merge and affected checkout explicitly
+observability:
+  - 'Real Git store and shell tests compare branch refs index blobs working bytes and retained dirty paths.'
+rollback:
+  - 'Revert this source and regression tests through a normal follow-up commit.'
+non_functional:
+  security:
+    - 'Never force reset or restore checkout files to hide stale state.'
+contracts:
+  - name: 'linked-base-checkout-sync'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Final398b65 build and four suites30tests actual0; real linked Parent tests compare merged branch, index blob and working bytes while preserving different canonical source payload and branch identity. Prior76 broader tests apply844 only. Raw compatibility-followup.json; committed peer followup source inspected. No final runtime cutover claim."
+    recorded_at: "2026-10-27T03:19:14.244Z"
+    commit_sha: "398b65f9fae57480dc6ba5e235f894d1dba6e817"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Final398b65 four suites30tests actual0; overlapping linked edits and index remain exact on refused refresh, unrelated staged and unstaged edits survive, command names actual stale path and quoted repair. Close/event failure controls preserve diagnostics. Raw compatibility-followup.json; no external Git atomicity claim."
+    recorded_at: "2026-10-27T03:19:24.077Z"
+    commit_sha: "398b65f9fae57480dc6ba5e235f894d1dba6e817"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Final398b65 four suites30tests actual0; unavailable/malformed discovery refuses pre-ref; later failures retain landed merge and stale checkout diagnostics. Installed old89061 reader actual fixture rejected844 newfield, then read all6 compatible events from corrected private packageaa14; doctor0. reader-packaged/observations.json retains full runtime output. Schema identical baseline; global runtime unchanged."
+    recorded_at: "2026-10-27T03:19:33.388Z"
+    commit_sha: "398b65f9fae57480dc6ba5e235f894d1dba6e817"
