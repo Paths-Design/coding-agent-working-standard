@@ -17,10 +17,12 @@
  *                           left dangling.
  *   ambiguous             — outcome depends on ordering the seam cannot pin.
  *
- * Mechanism: ONLY the shipped CAWS_TEST_INJECT_LIFECYCLE_FAULT seam
+ * Event-append cases use the shipped CAWS_TEST_INJECT_LIFECYCLE_FAULT seam
  * (WORKTREE-MERGE-A2-FAULT-INJECTION-001). It fires on the FIRST planned event
  * whose `event` field equals eventMatch, during step-4 (event append), and
- * rolls back step-3 writes. No second injection mechanism, no fs sabotage.
+ * rolls back step-3 writes. Authority cases schedule competing commits before
+ * the real lock wrapper and fail the atomic restore boundary without adding a
+ * production injection mechanism.
  *
  * Discipline (load-bearing):
  * - Assert result.value.kind explicitly. partial_failure_recovered is wrapped
@@ -53,6 +55,10 @@ const {
 const { initProject } = require('../../dist/store/init-store');
 const { loadEvents } = require('../../dist/store/events-store');
 const { verifyChain } = require('../../dist/kernel');
+const lifecycleLock = require('../../dist/store/lifecycle-lock');
+const atomicWrite = require('../../dist/store/atomic-write');
+
+afterEach(() => jest.restoreAllMocks());
 
 const FAULT_ENV = 'CAWS_TEST_INJECT_LIFECYCLE_FAULT';
 
@@ -638,5 +644,254 @@ describe('mergeWorktree — inject on worktree_merged [classify: external-half-s
       expect(result.errors.length).toBeGreaterThan(0);
     }
     expect(chainIsVerifiable(caws).ok).toBe(true);
+  });
+});
+
+function createAuthorityBytes(caws, id) {
+  return ['worktrees.json', `specs/${id}.yaml`, 'events.jsonl'].map((relative) => {
+    const p = path.join(caws, relative);
+    return fs.existsSync(p) ? fs.readFileSync(p) : null;
+  });
+}
+
+function beforeCreateLock(fn, afterRelease = () => {}) {
+  const original = lifecycleLock.withLifecycleLock;
+  return jest.spyOn(lifecycleLock, 'withLifecycleLock').mockImplementation((dir, body, opts) => {
+    fn(dir);
+    try {
+      return original(dir, body, opts);
+    } finally {
+      afterRelease(dir);
+    }
+  });
+}
+
+describe('create authority lock and compensation', () => {
+  test('failed acquisition does not read canonical authority or audit', () => {
+    const caws = setupCaws(mkRepo('rbh-create-no-read-'));
+    seedBoundableSpec(caws, 'WT-NOREAD-001');
+    const before = createAuthorityBytes(caws, 'WT-NOREAD-001');
+    fs.writeFileSync(path.join(caws, 'state.lock'), 'held');
+    const original = fs.readFileSync;
+    const authorityReads = [];
+    const reader = jest.spyOn(fs, 'readFileSync').mockImplementation((p, ...args) => {
+      if (
+        [
+          path.join(caws, 'worktrees.json'),
+          path.join(caws, 'specs/WT-NOREAD-001.yaml'),
+          path.join(caws, 'events.jsonl'),
+        ].includes(p)
+      )
+        authorityReads.push(p);
+      return original(p, ...args);
+    });
+    const result = createWorktree(caws, {
+      name: 'wt-noread',
+      specId: 'WT-NOREAD-001',
+      session: SESSION,
+      actor: ACTOR,
+    });
+    reader.mockRestore();
+    expect(result.ok).toBe(false);
+    expect(authorityReads).toEqual([]);
+    expect(createAuthorityBytes(caws, 'WT-NOREAD-001')).toEqual(before);
+  });
+
+  test('lock acquisition failure leaves a competing same-name registry commit and audit exactly intact', () => {
+    const caws = setupCaws(mkRepo('rbh-create-lock-'));
+    seedBoundableSpec(caws, 'WT-LOCK-001');
+    let competing;
+    beforeCreateLock((dir) => {
+      fs.writeFileSync(
+        path.join(dir, 'worktrees.json'),
+        '{"wt-lock":{"owner":{"session_id":"competitor"},"note":"preserve exactly"}}\n'
+      );
+      fs.writeFileSync(path.join(dir, 'state.lock'), 'held');
+      competing = createAuthorityBytes(dir, 'WT-LOCK-001');
+    });
+    const result = createWorktree(caws, {
+      name: 'wt-lock',
+      specId: 'WT-LOCK-001',
+      session: SESSION,
+      actor: ACTOR,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((d) => d.rule)).toContain('store.lifecycle.lock_contention');
+    expect(createAuthorityBytes(caws, 'WT-LOCK-001')).toEqual(competing);
+    expect(fs.existsSync(path.join(caws, 'worktrees', 'wt-lock'))).toBe(false);
+  });
+
+  test.each([
+    [
+      'same-name registry entry',
+      (dir) =>
+        fs.writeFileSync(
+          path.join(dir, 'worktrees.json'),
+          '{"wt-fresh":{"owner":{"session_id":"competitor"}}}\n'
+        ),
+    ],
+    [
+      'new spec binding',
+      (dir, p) => fs.writeFileSync(p, fs.readFileSync(p, 'utf8') + 'worktree: competing-lane\n'),
+    ],
+    [
+      'terminal lifecycle',
+      (dir, p) =>
+        fs.writeFileSync(
+          p,
+          fs.readFileSync(p, 'utf8').replace(/^lifecycle_state:.*$/m, 'lifecycle_state: archived')
+        ),
+    ],
+    [
+      'placeholder scope',
+      (dir, p) =>
+        fs.writeFileSync(
+          p,
+          fs
+            .readFileSync(p, 'utf8')
+            .replace('payload.txt', 'TODO: list the file(s) or directories this spec authorizes.')
+        ),
+    ],
+    ['missing spec', (dir, p) => fs.unlinkSync(p)],
+    ['malformed spec', (dir, p) => fs.writeFileSync(p, 'bad: [')],
+  ])('validates %s from the acquired snapshot and preserves competing bytes', (_label, mutate) => {
+    const caws = setupCaws(mkRepo('rbh-create-fresh-'));
+    seedBoundableSpec(caws, 'WT-FRESH-001');
+    let competing;
+    beforeCreateLock((dir) => {
+      mutate(dir, path.join(dir, 'specs/WT-FRESH-001.yaml'));
+      competing = createAuthorityBytes(dir, 'WT-FRESH-001');
+    });
+    const result = createWorktree(caws, {
+      name: 'wt-fresh',
+      specId: 'WT-FRESH-001',
+      session: SESSION,
+      actor: ACTOR,
+    });
+    expect(result.ok).toBe(false);
+    expect(createAuthorityBytes(caws, 'WT-FRESH-001')).toEqual(competing);
+    expect(fs.existsSync(path.join(caws, 'worktrees', 'wt-fresh'))).toBe(false);
+  });
+
+  test('derives spec bytes from a fresh valid edit instead of overwriting it', () => {
+    const caws = setupCaws(mkRepo('rbh-create-edit-'));
+    seedBoundableSpec(caws, 'WT-EDIT-001');
+    beforeCreateLock((dir) => {
+      const p = path.join(dir, 'specs/WT-EDIT-001.yaml');
+      fs.writeFileSync(
+        p,
+        fs.readFileSync(p, 'utf8').replace(/^title:.*$/m, "title: 'competing edit'")
+      );
+    });
+    const result = createWorktree(caws, {
+      name: 'wt-edit',
+      specId: 'WT-EDIT-001',
+      session: SESSION,
+      actor: ACTOR,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('success');
+    expect(result.value.data.audit_commit.kind).toBe('refused_dirty');
+    expect(fs.readFileSync(path.join(caws, 'specs/WT-EDIT-001.yaml'), 'utf8')).toContain(
+      "title: 'competing edit'"
+    );
+  });
+
+  test.each(['worktree_created', 'worktree_bound'])(
+    'restores exact prior registry/spec bytes before unlock on %s failure',
+    (failedEvent) => {
+      const caws = setupCaws(mkRepo('rbh-create-restore-'));
+      seedBoundableSpec(caws, 'WT-RESTORE-001');
+      let competing;
+      let atRelease;
+      beforeCreateLock(
+        (dir) => {
+          fs.writeFileSync(
+            path.join(dir, 'worktrees.json'),
+            '{ "unrelated": { "note": "fresh metadata" } }\n'
+          );
+          competing = createAuthorityBytes(dir, 'WT-RESTORE-001');
+        },
+        (dir) => {
+          atRelease = createAuthorityBytes(dir, 'WT-RESTORE-001');
+        }
+      );
+      const result = withFault(failedEvent, () =>
+        createWorktree(caws, {
+          name: 'wt-restore',
+          specId: 'WT-RESTORE-001',
+          session: SESSION,
+          actor: ACTOR,
+        })
+      );
+      expect(atRelease.slice(0, 2)).toEqual(competing.slice(0, 2));
+      expect(createAuthorityBytes(caws, 'WT-RESTORE-001')).toEqual(atRelease);
+      const kinds = readEventsRaw(caws).map((e) => e.event);
+      expect(kinds).not.toContain(failedEvent);
+      expect(chainIsVerifiable(caws).ok).toBe(true);
+      if (failedEvent === 'worktree_created') {
+        expect(result.ok).toBe(true);
+        expect(result.value.kind).toBe('partial_failure_recovered');
+        expect(atRelease[2]).toEqual(competing[2]);
+      } else {
+        expect(result.ok).toBe(false);
+        expect(result.errors.map((d) => d.rule)).toContain(
+          'store.lifecycle.partial_failure_unrecovered'
+        );
+        expect(kinds).toContain('worktree_created');
+      }
+    }
+  );
+
+  test('removes a registry created by the failed transaction when the prior file was absent', () => {
+    const caws = setupCaws(mkRepo('rbh-create-absent-'));
+    seedBoundableSpec(caws, 'WT-ABSENT-001');
+    fs.unlinkSync(path.join(caws, 'worktrees.json'));
+    const before = createAuthorityBytes(caws, 'WT-ABSENT-001');
+    const result = withFault('worktree_created', () =>
+      createWorktree(caws, {
+        name: 'wt-absent',
+        specId: 'WT-ABSENT-001',
+        session: SESSION,
+        actor: ACTOR,
+      })
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('partial_failure_recovered');
+    expect(createAuthorityBytes(caws, 'WT-ABSENT-001')).toEqual(before);
+  });
+
+  test('reports registry compensation failure explicitly while still holding the lock', () => {
+    const caws = setupCaws(mkRepo('rbh-create-unrecovered-'));
+    seedBoundableSpec(caws, 'WT-UNRECOVERED-001');
+    const original = atomicWrite.writeFileAtomic;
+    let registryWrites = 0;
+    jest.spyOn(atomicWrite, 'writeFileAtomic').mockImplementation((p, bytes, options) => {
+      if (p === path.join(caws, 'worktrees.json') && ++registryWrites === 2) {
+        expect(fs.existsSync(path.join(caws, 'state.lock'))).toBe(true);
+        return {
+          ok: false,
+          errors: [{ rule: 'test.restore_failed', severity: 'error', message: 'restore denied' }],
+        };
+      }
+      return original(p, bytes, options);
+    });
+    const result = withFault('worktree_created', () =>
+      createWorktree(caws, {
+        name: 'wt-unrecovered',
+        specId: 'WT-UNRECOVERED-001',
+        session: SESSION,
+        actor: ACTOR,
+      })
+    );
+    expect(result.ok).toBe(false);
+    expect(registryWrites).toBe(2);
+    expect(result.errors.map((d) => d.rule)).toContain(
+      'store.lifecycle.partial_failure_unrecovered'
+    );
+    expect(result.errors.map((d) => d.message).join('\n')).toMatch(
+      /restor.*fail|could not.*restor|unrecovered/i
+    );
+    expect(fs.existsSync(path.join(caws, 'state.lock'))).toBe(false);
   });
 });

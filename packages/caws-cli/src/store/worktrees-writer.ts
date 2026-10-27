@@ -46,6 +46,7 @@ import {
 } from '../kernel';
 
 import { applyRegistryPatch } from './apply-patch';
+import { writeFileAtomic } from './atomic-write';
 import {
   autoCommit,
   isPathDirty,
@@ -913,50 +914,12 @@ export function createWorktree(
   // writer mutation lands, so the auto-commit step can distinguish
   // "writer made the only change" from "writer's change on top of
   // someone else's uncommitted change".
-  const preState = capturePreWriteState(cawsDir, input.specId);
+  let preState = capturePreWriteState(cawsDir, input.specId);
 
   const nameValidation = validateWorktreeName(input.name);
   if (!nameValidation.ok) return nameValidation;
   const specValidation = validateSpecId(input.specId);
   if (!specValidation.ok) return specValidation;
-
-  const specInfo = loadSpecOrError(cawsDir, input.specId);
-  if (!isOk(specInfo)) return err(specInfo.errors);
-  // CAWS-SPEC-ACTIVATION-BINDS-001: draft is a GOVERNABLE bind state, not a
-  // refusal. A draft bound here is promoted to active inside the transaction
-  // below; only terminal states (closed/archived) are refused.
-  if (specInfo.value.lifecycleState !== 'active' && specInfo.value.lifecycleState !== 'draft') {
-    return nonGovernableSpecBindingError(input.specId, specInfo.value.lifecycleState);
-  }
-  if (specInfo.value.scopeIn.includes(SCOPE_IN_PLACEHOLDER)) {
-    return unscopedSpecBindingError(input.specId);
-  }
-  if (
-    specInfo.value.currentWorktree !== undefined &&
-    specInfo.value.currentWorktree.length > 0 &&
-    specInfo.value.currentWorktree !== input.name
-  ) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec "${input.specId}" is already bound to worktree "${specInfo.value.currentWorktree}".`,
-        { subject: input.specId }
-      )
-    );
-  }
-
-  // Refuse if a worktree with this name already exists in the registry.
-  const registry = loadWorktrees(cawsDir);
-  if (!isOk(registry)) return err(registry.errors);
-  if (registry.value[input.name] !== undefined) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Worktree "${input.name}" already exists in registry.`,
-        { subject: input.name }
-      )
-    );
-  }
 
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const baseBranch = input.baseBranch ?? getCurrentBranch(repoRoot);
@@ -1040,27 +1003,6 @@ export function createWorktree(
 
   const now = (input.now ?? (() => new Date()))().toISOString();
 
-  // CAWS-SPEC-ACTIVATION-BINDS-001: promote a draft to active FIRST, so the
-  // worktree pointer is written onto the already-promoted body and both land
-  // as one set of bytes in one transaction.
-  const activation = activateSpecOnBind(
-    specInfo.value.source,
-    input.specId,
-    specInfo.value.lifecycleState,
-    input.actor,
-    now
-  );
-  if (!isOk(activation)) {
-    rollbackGitWorktree(repoRoot, wtPath);
-    return err(activation.errors);
-  }
-
-  const newSpecBytes = patchSpecSetWorktree(activation.value.bytes, input.name);
-  if (!isOk(newSpecBytes)) {
-    rollbackGitWorktree(repoRoot, wtPath);
-    return err(newSpecBytes.errors);
-  }
-
   // Build the worktree_created event (no spec_id — binding is a
   // separate fact emitted next).
   const createdEvent: EventBody = {
@@ -1086,7 +1028,75 @@ export function createWorktree(
     },
   } as unknown as EventBody;
 
+  let specActivated = false;
   const txnOutcome = withLifecycleLock(cawsDir, () => {
+    // Git preparation is external. Authority is read and derived afresh only
+    // after acquisition, so a competing lifecycle commit cannot be overwritten.
+    const specInfo = loadSpecOrError(cawsDir, input.specId);
+    if (!isOk(specInfo)) return err(specInfo.errors);
+    if (specInfo.value.spec.id !== input.specId) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec identity does not match "${input.specId}".`,
+          { subject: input.specId }
+        )
+      );
+    }
+    // CAWS-SPEC-ACTIVATION-BINDS-001: draft is a GOVERNABLE bind state, not a
+    // refusal. A draft bound here is promoted to active inside the transaction
+    // below; only terminal states (closed/archived) are refused.
+    if (specInfo.value.lifecycleState !== 'active' && specInfo.value.lifecycleState !== 'draft') {
+      return nonGovernableSpecBindingError(input.specId, specInfo.value.lifecycleState);
+    }
+    if (specInfo.value.scopeIn.includes(SCOPE_IN_PLACEHOLDER)) {
+      return unscopedSpecBindingError(input.specId);
+    }
+    if (
+      specInfo.value.currentWorktree !== undefined &&
+      specInfo.value.currentWorktree.length > 0 &&
+      specInfo.value.currentWorktree !== input.name
+    ) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${input.specId}" is already bound to worktree "${specInfo.value.currentWorktree}".`,
+          { subject: input.specId }
+        )
+      );
+    }
+
+    // Refuse if a worktree with this name already exists in the registry.
+    const registry = loadWorktrees(cawsDir);
+    if (!isOk(registry)) return err(registry.errors);
+    if (registry.value[input.name] !== undefined) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Worktree "${input.name}" already exists in registry.`,
+          { subject: input.name }
+        )
+      );
+    }
+
+    const activation = activateSpecOnBind(
+      specInfo.value.source,
+      input.specId,
+      specInfo.value.lifecycleState,
+      input.actor,
+      now
+    );
+    if (!isOk(activation)) return err(activation.errors);
+    const newSpecBytes = patchSpecSetWorktree(activation.value.bytes, input.name);
+    if (!isOk(newSpecBytes)) return err(newSpecBytes.errors);
+    const snapshot = captureRegistrySnapshot(cawsDir);
+    if (!isOk(snapshot)) return err(snapshot.errors);
+    specActivated = activation.value.activated;
+
+    // Include dirty edits that landed during external Git preparation when
+    // deciding whether the later Git auto-commit may safely run.
+    preState = capturePreWriteState(cawsDir, input.specId);
+
     // Use kernel bindWorktree with the actual parsed Spec so it can
     // verify lifecycle_state etc.
     const bindResult = kernelBindWorktree(
@@ -1102,7 +1112,10 @@ export function createWorktree(
     // Apply the bind_worktree patch (writes worktrees.json with the
     // kernel-modeled fields: specId, owner, last_heartbeat).
     const applyResult = applyRegistryPatch(cawsDir, bindResult.value);
-    if (!isOk(applyResult)) return err(applyResult.errors);
+    if (!isOk(applyResult)) {
+      const restored = restoreRegistrySnapshot(cawsDir, snapshot.value);
+      return err([...applyResult.errors, ...(restored.ok ? [] : restored.errors)]);
+    }
 
     // Augment the entry with descriptive metadata the kernel does NOT
     // model (branch, baseBranch, path). These are governance metadata
@@ -1133,23 +1146,34 @@ export function createWorktree(
         ? [createdEvent, boundEvent, activation.value.event]
         : [createdEvent, boundEvent];
 
-    return runLifecycleTransaction({
+    const transaction = runLifecycleTransaction({
       cawsDir,
       plannedWrites: [{ path: specInfo.value.path, contents: newSpecBytes.value }],
       events,
     });
+    if (!transaction.ok || transaction.value.kind !== 'success') {
+      const restored = restoreRegistrySnapshot(cawsDir, snapshot.value);
+      if (!restored.ok) {
+        return err([
+          ...(!transaction.ok
+            ? transaction.errors
+            : transaction.value.kind !== 'success'
+              ? transaction.value.cause
+              : []),
+          ...restored.errors,
+        ]);
+      }
+    }
+    return transaction;
   });
 
   if (!txnOutcome.ok) {
     // Compensation: remove the git worktree we created.
     rollbackGitWorktree(repoRoot, wtPath);
-    // Also remove the registry entry that bind_worktree wrote.
-    rollbackRegistryEntry(cawsDir, input.name);
     return err(txnOutcome.errors);
   }
   if (txnOutcome.value.kind !== 'success') {
     rollbackGitWorktree(repoRoot, wtPath);
-    rollbackRegistryEntry(cawsDir, input.name);
     return ok({
       kind: 'partial_failure_recovered',
       cause: txnOutcome.value.cause,
@@ -1174,7 +1198,7 @@ export function createWorktree(
       spec_id: input.specId,
       artifact_links: artifactLinks,
       audit_commit: autoCommitOutcome,
-      spec_activated: activation.value.activated,
+      spec_activated: specActivated,
     },
   });
 }
@@ -1304,85 +1328,191 @@ export function applyTakeoverWithAudit(
   cawsDir: string,
   input: ApplyTakeoverWithAuditInput
 ): Result<true> {
-  const registryPath = path.join(cawsDir, 'worktrees.json');
-  // Captured BEFORE the patch so the compensation restores the exact prior
-  // bytes — including fields applyRegistryPatch does not model. Restoring a
-  // re-serialized object could silently drop them.
-  let priorBytes: string | null = null;
-  try {
-    priorBytes = fs.readFileSync(registryPath, 'utf8');
-  } catch {
-    priorBytes = null;
-  }
+  return withLifecycleLock(cawsDir, () => {
+    const registry = loadWorktrees(cawsDir);
+    if (!isOk(registry)) return err(registry.errors);
+    const entry = registry.value[input.name];
+    const patch = input.patch;
+    const reject = (): Result<true> =>
+      err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Takeover of worktree "${input.name}" refused: the supplied plan does not match the current owner, binding, or audit envelope. Reload authority and plan the transfer again.`,
+          { subject: input.name }
+        )
+      );
+    // The shell renders success from the supplied patch. Refuse stale plans
+    // instead of silently rebasing them or turning a transfer into a no-op.
+    if (
+      patch.kind !== 'takeover_claim' ||
+      patch.worktree_name !== input.name ||
+      patch.prior_owner === null ||
+      typeof patch.prior_owner !== 'object' ||
+      patch.owner === null ||
+      typeof patch.owner !== 'object' ||
+      typeof patch.owner.session_id !== 'string' ||
+      typeof patch.when !== 'string' ||
+      !Number.isFinite(Date.parse(patch.when)) ||
+      entry === undefined ||
+      entry === null ||
+      typeof entry !== 'object' ||
+      entry.owner === undefined ||
+      entry.owner === null ||
+      typeof entry.owner !== 'object' ||
+      typeof entry.owner.session_id !== 'string' ||
+      entry.owner.session_id.length === 0 ||
+      (entry.prior_owners !== undefined && !Array.isArray(entry.prior_owners)) ||
+      entry.owner.session_id === input.newOwner.session_id ||
+      entry.owner.session_id !== patch.prior_owner.session_id ||
+      entry.owner.platform !== patch.prior_owner.platform ||
+      (entry.last_heartbeat ?? null) !== (patch.prior_owner.last_seen ?? null) ||
+      input.priorOwner.session_id !== patch.prior_owner.session_id ||
+      input.priorOwner.platform !== patch.prior_owner.platform ||
+      input.priorOwner.last_seen !== (patch.prior_owner.last_seen ?? null) ||
+      input.newOwner.session_id !== patch.owner.session_id ||
+      input.newOwner.platform !== patch.owner.platform ||
+      input.newOwner.session_id.length === 0 ||
+      input.actor.id !== input.newOwner.session_id ||
+      (input.actor.session_id !== undefined &&
+        input.actor.session_id !== input.newOwner.session_id) ||
+      patch.prior_owner.takenOver_at !== patch.when ||
+      entry.specId !== input.specId
+    )
+      return reject();
 
-  const now = (input.now ?? (() => new Date()))().toISOString();
-  const event: EventBody = {
-    event: 'claim_taken_over',
-    ts: now,
-    actor: input.actor,
-    ...(input.specId !== undefined ? { spec_id: input.specId } : {}),
-    data: {
-      worktree_name: input.name,
-      prior_owner: {
-        session_id: input.priorOwner.session_id,
-        ...(input.priorOwner.platform !== undefined ? { platform: input.priorOwner.platform } : {}),
-        last_seen: input.priorOwner.last_seen,
-      },
-      new_owner: {
-        session_id: input.newOwner.session_id,
-        ...(input.newOwner.platform !== undefined ? { platform: input.newOwner.platform } : {}),
-      },
-      ...(input.reason !== undefined ? { reason: input.reason } : {}),
-    },
-  } as unknown as EventBody;
-
-  const outcome = withLifecycleLock(cawsDir, () => {
-    const applyResult = applyRegistryPatch(cawsDir, input.patch);
-    if (!isOk(applyResult)) return err(applyResult.errors);
-    return runLifecycleTransaction({ cawsDir, plannedWrites: [], events: [event] });
-  });
-
-  const restorePriorRegistry = (): void => {
-    if (priorBytes === null) return;
-    try {
-      fs.writeFileSync(registryPath, priorBytes);
-    } catch {
-      /* best-effort; the error below already refuses the takeover */
+    if (entry.specId !== undefined) {
+      if (typeof entry.specId !== 'string' || !validateSpecId(entry.specId).ok) return reject();
+      const spec = loadSpecOrError(cawsDir, entry.specId);
+      if (!isOk(spec)) return err(spec.errors);
+      if (
+        spec.value.spec.id !== entry.specId ||
+        spec.value.lifecycleState !== 'active' ||
+        spec.value.currentWorktree !== input.name ||
+        spec.value.scopeIn.includes(SCOPE_IN_PLACEHOLDER)
+      )
+        return reject();
     }
-  };
+    const snapshot = captureRegistrySnapshot(cawsDir);
+    if (!isOk(snapshot)) return err(snapshot.errors);
 
-  if (!outcome.ok) {
-    restorePriorRegistry();
-    return err(outcome.errors);
-  }
-  // runLifecycleTransaction wraps `partial_failure_recovered` in ok(), and with
-  // plannedWrites: [] a rolled-back append arrives exactly that way. isOk alone
-  // would let the takeover report success with the audit silently missing.
-  if (outcome.value.kind !== 'success') {
-    restorePriorRegistry();
+    const now = (input.now ?? (() => new Date()))().toISOString();
+    const event: EventBody = {
+      event: 'claim_taken_over',
+      ts: now,
+      actor: input.actor,
+      ...(input.specId !== undefined ? { spec_id: input.specId } : {}),
+      data: {
+        worktree_name: input.name,
+        prior_owner: {
+          session_id: input.priorOwner.session_id,
+          ...(input.priorOwner.platform !== undefined
+            ? { platform: input.priorOwner.platform }
+            : {}),
+          last_seen: input.priorOwner.last_seen,
+        },
+        new_owner: {
+          session_id: input.newOwner.session_id,
+          ...(input.newOwner.platform !== undefined ? { platform: input.newOwner.platform } : {}),
+        },
+        ...(input.reason !== undefined ? { reason: input.reason } : {}),
+      },
+    } as unknown as EventBody;
+
+    const applyResult = applyRegistryPatch(cawsDir, patch);
+    if (!isOk(applyResult)) {
+      const restored = restoreRegistrySnapshot(cawsDir, snapshot.value);
+      return err([...applyResult.errors, ...(restored.ok ? [] : restored.errors)]);
+    }
+    const outcome = runLifecycleTransaction({ cawsDir, plannedWrites: [], events: [event] });
+    if (!outcome.ok || outcome.value.kind !== 'success') {
+      const restored = restoreRegistrySnapshot(cawsDir, snapshot.value);
+      if (!restored.ok)
+        return err([
+          ...(!outcome.ok
+            ? outcome.errors
+            : outcome.value.kind !== 'success'
+              ? outcome.value.cause
+              : []),
+          ...restored.errors,
+        ]);
+    }
+    if (!outcome.ok) return err(outcome.errors);
+    // runLifecycleTransaction wraps `partial_failure_recovered` in ok(), and with
+    // plannedWrites: [] a rolled-back append arrives exactly that way. isOk alone
+    // would let the takeover report success with the audit silently missing.
+    if (outcome.value.kind !== 'success') {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+          `Takeover of worktree "${input.name}" was rolled back: the claim_taken_over audit event could not be appended, and ownership must not transfer without it. The prior owner (${input.priorOwner.session_id}) is unchanged.`,
+          {
+            subject: input.name,
+            // `caws claim` reads the CURRENT DIRECTORY and takes no worktree-name
+            // argument, so the retry must carry the cd or it refuses when run
+            // from canonical. Pinned by tests/docs/agent-recovery-path-drift.
+            narrowRepair:
+              `Inspect the event chain with \`caws events verify\`, then retry from inside the worktree: ` +
+              `cd .caws/worktrees/${input.name} && caws claim --takeover`,
+            data: {
+              worktree_name: input.name,
+              prior_owner_session_id: input.priorOwner.session_id,
+              new_owner_session_id: input.newOwner.session_id,
+              append_outcome_kind: outcome.value.kind,
+            },
+          }
+        )
+      );
+    }
+    return ok(true);
+  });
+}
+
+/** These snapshots and restorations belong to the acquired lifecycle section.
+ * Exact bytes (including metadata unknown to the kernel) and file absence are
+ * authoritative; reconstructing an object is not compensation. */
+function captureRegistrySnapshot(cawsDir: string): Result<Buffer | null> {
+  const registryPath = path.join(cawsDir, 'worktrees.json');
+  try {
+    return ok(fs.readFileSync(registryPath));
+  } catch (e) {
+    if ((e as { code?: string }).code === 'ENOENT') return ok(null);
     return err(
       storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Takeover of worktree "${input.name}" was rolled back: the claim_taken_over audit event could not be appended, and ownership must not transfer without it. The prior owner (${input.priorOwner.session_id}) is unchanged.`,
-        {
-          subject: input.name,
-          // `caws claim` reads the CURRENT DIRECTORY and takes no worktree-name
-          // argument, so the retry must carry the cd or it refuses when run
-          // from canonical. Pinned by tests/docs/agent-recovery-path-drift.
-          narrowRepair:
-            `Inspect the event chain with \`caws events verify\`, then retry from inside the worktree: ` +
-            `cd .caws/worktrees/${input.name} && caws claim --takeover`,
-          data: {
-            worktree_name: input.name,
-            prior_owner_session_id: input.priorOwner.session_id,
-            new_owner_session_id: input.newOwner.session_id,
-            append_outcome_kind: outcome.value.kind,
-          },
-        }
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Cannot snapshot registry before authority mutation: ${String(e)}`,
+        { subject: registryPath }
       )
     );
   }
-  return ok(true);
+}
+
+function restoreRegistrySnapshot(cawsDir: string, priorBytes: Buffer | null): Result<true> {
+  const registryPath = path.join(cawsDir, 'worktrees.json');
+  let failure: string;
+  if (priorBytes !== null) {
+    const restored = writeFileAtomic(registryPath, priorBytes, { preserveMode: true });
+    if (restored.ok) return ok(true);
+    failure = restored.errors.map((d) => d.message).join('; ');
+  } else {
+    try {
+      fs.unlinkSync(registryPath);
+      return ok(true);
+    } catch (e) {
+      if ((e as { code?: string }).code === 'ENOENT') return ok(true);
+      failure = String(e);
+    }
+  }
+  return err(
+    storeDiagnostic(
+      STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+      `Registry authority is unrecovered: could not restore the prior registry snapshot. Ownership and binding must be inspected before retrying. ${failure}`,
+      {
+        subject: registryPath,
+        narrowRepair:
+          'Inspect the canonical registry and event chain before performing another authority mutation.',
+      }
+    )
+  );
 }
 
 function rollbackRegistryEntry(cawsDir: string, name: string): void {
