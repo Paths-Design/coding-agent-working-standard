@@ -1,9 +1,10 @@
 id: CAWS-WORKTREE-RETIREMENT-AUTHORITY-001
 title: 'Preserve current authority during worktree retirement'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: retirement-authority
 created_at: '2026-10-27T13:58:11.215Z'
-updated_at: '2026-10-27T13:58:11.215Z'
+updated_at: '2026-10-27T14:00:08.123Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
