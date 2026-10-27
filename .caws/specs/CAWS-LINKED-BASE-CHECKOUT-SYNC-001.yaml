@@ -59,3 +59,8 @@ evidence:
     evidence_ref: "Final398b65 build and four suites30tests actual0; real linked Parent tests compare merged branch, index blob and working bytes while preserving different canonical source payload and branch identity. Prior76 broader tests apply844 only. Raw compatibility-followup.json; committed peer followup source inspected. No final runtime cutover claim."
     recorded_at: "2026-10-27T03:19:14.244Z"
     commit_sha: "398b65f9fae57480dc6ba5e235f894d1dba6e817"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Final398b65 four suites30tests actual0; overlapping linked edits and index remain exact on refused refresh, unrelated staged and unstaged edits survive, command names actual stale path and quoted repair. Close/event failure controls preserve diagnostics. Raw compatibility-followup.json; no external Git atomicity claim."
+    recorded_at: "2026-10-27T03:19:24.077Z"
+    commit_sha: "398b65f9fae57480dc6ba5e235f894d1dba6e817"
