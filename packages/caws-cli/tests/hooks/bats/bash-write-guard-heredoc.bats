@@ -8,16 +8,14 @@
 # worktree-claim oracle — refusing a command whose only real mutation was the
 # file it redirected into.
 #
-# The neutralization is a SAFELIST, not blanket blanking, because a heredoc fed
-# to an interpreter IS code. A2 is the load-bearing test for that direction: if
-# someone "simplifies" the helper into blanking every body, A2 must go red.
+# File-sink neutralization is a SAFELIST, not blanket blanking. Literal Node
+# projection is only an outer-shell view: the original executable JavaScript
+# must remain available to interpreter-write checks.
 #
-# FALSIFIABILITY NOTE. The control (A1b) uses the FOREIGN WORKTREE PAYLOAD path,
-# which blocks yaml-free in this harness. A claim expressed only through a spec's
-# scope.in cannot block here (the fixture pack has no resolvable js-yaml, so the
-# oracle degrades to allow-with-advisory) — an A1 built on that path would pass
-# whether or not body neutralization existed. The control exists to make that
-# mistake impossible to ship.
+# Foreign-payload controls assert a real refusal independently of unmatched
+# scope. Helper and lexical-API assertions pin the portable projection defect;
+# the current typed handler already handles JavaScript and is a positive/hostile
+# control, not an installed43 reproduction. Hostile commands are never executed.
 
 load helpers
 
@@ -28,8 +26,7 @@ teardown_file() {
   caws_teardown_pack
 }
 
-# A worktree owned by another session. Its payload subtree is the yaml-free
-# isolation block: mutating a file beneath it HARD-BLOCKS regardless of js-yaml.
+# A foreign-owned payload provides an explicit ownership refusal control.
 _seed_foreign_worktree() {
   local wt="wt-seed" spec="SEED-001" owner="${1:-other-session}"
   mkdir -p "$CAWS_TEST_REPO/.caws/worktrees/$wt" "$CAWS_TEST_REPO/.caws/specs"
@@ -52,6 +49,17 @@ _run_bwg() {
 _run_blank() {
   local input="$1"
   run bash -c "source '$CAWS_TEST_HOOKS_DIR/lib/heredoc.sh'; caws_blank_heredoc_bodies \"\$1\"" _ "$input"
+}
+
+# The marker keeps trailing newlines observable through bats' output capture.
+_run_blank_exact() {
+  run bash -eu -o pipefail -c 'source "$1/lib/heredoc.sh"; caws_blank_heredoc_bodies "$2"; printf __END__' _ "$CAWS_TEST_HOOKS_DIR" "$1"
+}
+
+# Exercise the published lexical API directly, not a replacement for the
+# current bash-write-guard's mandatory typed analysis or an installed43 image.
+_run_shell_view() {
+  run bash -eu -o pipefail -c 'source "$1/lib/heredoc.sh"; source "$1/lib/bash-mutation-targets.sh"; "$2" "$3"' _ "$CAWS_TEST_HOOKS_DIR" "$1" "$2"
 }
 
 # ── guard-level (end to end through the real oracle) ────────────────────────
@@ -115,4 +123,163 @@ _run_blank() {
   _run_blank "$(printf 'cat > f <<%s\nEOFX\nstill body text\n%s\n' "'EOF'" EOF)"
   assert_success
   refute_output --partial 'still body text'
+}
+
+@test "literal Node: installed helper body matches the selected source" {
+  run sed '/^# hook_pack_version:/d' "$CLI_PKG_ROOT/templates/hook-packs/shared/lib/heredoc.sh"
+  assert_success
+  local expected="$output"
+  run sed '/^# hook_pack_version:/d' "$CAWS_TEST_HOOKS_DIR/lib/heredoc.sh"
+  assert_success
+  assert_output "$expected"
+}
+
+@test "literal Node: quoted arrow and greater-than payload projects out with exact surrounding bytes" {
+  local quote input expected
+  for quote in "'" '"'; do
+    input="$(printf 'echo before > before.txt\n  node <<%sJS%s\nconst rows = ["1"].map(x => JSON.parse(x));\nconsole.log(rows.length > 0);\nJS\necho after > after.txt\n' "$quote" "$quote")"$'\n\n'
+    expected="$(printf 'echo before > before.txt\n  node <<%sJS%s\n\n\nJS\necho after > after.txt\n' "$quote" "$quote")"$'\n\n'
+    _run_blank_exact "$input"
+    assert_success
+    assert_output "${expected}__END__"
+  done
+}
+
+@test "literal Node: observed map arrow produces no outer-shell mutation candidate" {
+  local input
+  input=$'node <<\'JS\'\nconst rows = ["1"].map(x => JSON.parse(x));\nconsole.log(rows.length > 0);\nJS'
+  _run_shell_view caws_bash_mutation_candidates "$input"
+  assert_success
+  assert_output ''
+}
+
+@test "literal Node: current typed guard admits the read-only command" {
+  _run_bwg $'node <<\'JS\'\nconst rows = ["1"].map(x => JSON.parse(x));\nconsole.log(rows.length > 0);\nJS'
+  assert_success
+  refute_output --partial 'BLOCKED'
+  refute_output --partial 'UNRESOLVED'
+}
+
+@test "literal Node: exact terminator and absent final newline are preserved" {
+  _run_blank_exact $'node <<"JS"\nJSX\nconsole.log("ok");\nJS'
+  assert_success
+  assert_output $'node <<"JS"\n\n\nJS__END__'
+}
+
+@test "literal Node: unsupported headers retain the entire payload" {
+  local header input
+  for header in 'node <<JS' 'node <<$END' 'node - <<"JS"' 'node --input-type=module <<"JS"' \
+    'env node <<"JS"' 'command node <<"JS"' '/usr/bin/node <<"JS"' 'node <<-"JS"' \
+    'node <<"JS" > result' 'node <<"JS"; echo after' 'node <<"JS" # comment' \
+    'bash <<"JS"' 'python3 <<"JS"' 'mystery-tool <<"JS"'; do
+    input="$header"$'\nconst rows = ["1"].map(x => JSON.parse(x));\nJS'
+    _run_blank "$input"
+    assert_success
+    assert_output "$input"
+  done
+}
+
+@test "literal Node: unterminated or multiply introduced payloads are not erased" {
+  local input
+  for input in $'node <<\'JS\'\nconst f = x => x > 0;' \
+    $'node <<\'JS\' <<\'OTHER\'\nconst f = x => x;\nJS\nOTHER\n' \
+    $'node <<\'JS\'\nconst f = x => x;\nJS\nnode <<\'OTHER\'\nconst g = x => x;\nOTHER\n'; do
+    _run_blank "$input"
+    assert_success
+    assert_output "$(printf '%s' "$input")"
+  done
+}
+
+@test "literal Node: quoted or compound shell contexts cannot masquerade as a direct header" {
+  local input
+  for input in $'bash -c \'\nnode <<"JS"\ngit push --force\nJS\n\'' \
+    $'value=$(\nnode <<"JS"\nconsole.log("ok");\nJS\n)' \
+    $'if true; then\nnode <<"JS"\nconsole.log("ok");\nJS\nfi' \
+    $'echo continued \\\nnode <<"JS"\nconsole.log("ok");\nJS'; do
+    _run_blank "$input"
+    assert_success
+    assert_output "$input"
+  done
+}
+
+@test "literal Node: unquoted shell substitution remains visible and cannot write the sentinel" {
+  _seed_foreign_worktree
+  local target input
+  target="$(_foreign_payload)"
+  printf sentinel > "$target"
+  input="$(printf 'node <<JS\n$(touch %s)\nJS\n' "$target")"
+  _run_blank "$input"
+  assert_success
+  assert_output "$input"
+  _run_bwg "$input"
+  assert_equal "$status" 2
+  assert_output --partial 'BLOCKED'
+  assert_equal "$(cat "$target")" sentinel
+}
+
+@test "literal Node: raw interpreter write literals survive outer-shell projection" {
+  local input target="$CAWS_TEST_REPO/foreign/file.txt"
+  input="$(printf 'node <<%s\nrequire("fs").writeFileSync("%s", "changed");\nJS\n' "'JS'" "$target")"
+  _run_blank "$input"
+  assert_success
+  refute_output --partial 'writeFileSync'
+  _run_shell_view caws_bash_interpreter_write_literals "$input"
+  assert_success
+  assert_output --partial "$target"
+}
+
+@test "literal Node: valid JavaScript foreign write is refused before any simulated effect" {
+  local foreign="$BATS_TEST_TMPDIR/foreign" target input
+  mkdir -p "$foreign"
+  git -C "$foreign" init -q -b main
+  target="$foreign/sentinel.txt"
+  printf sentinel > "$target"
+  input="$(printf 'node <<%s\nrequire("fs").writeFileSync("%s", "changed");\nJS\n' "'JS'" "$target")"
+  _run_bwg "$input"
+  local guard_status="$status" guard_output="$output"
+  if [[ "$guard_status" == 0 ]]; then printf changed > "$target"; fi
+  assert_equal "$guard_status" 2
+  assert_equal "$(cat "$target")" sentinel
+  [[ "$guard_output" == *BLOCKED* ]]
+  [[ "$guard_output" == *"$foreign"* ]]
+}
+
+@test "literal Node: real shell redirects before and after retain targets and refusal" {
+  _seed_foreign_worktree
+  local target input position
+  target="$(_foreign_payload)"
+  printf sentinel > "$target"
+  for position in before after; do
+    input=$'node <<\'JS\'\nconst f = x => x > 0;\nJS'
+    if [[ "$position" == before ]]; then input="echo changed > $target"$'\n'"$input";
+    else input+=$'\n'"echo changed > $target"; fi
+    _run_shell_view caws_bash_mutation_candidates "$input"
+    assert_success
+    assert_output "$target"
+    _run_bwg "$input"
+    assert_equal "$status" 2
+    assert_output --partial 'BLOCKED'
+    assert_output --partial 'wt-seed'
+    assert_equal "$(cat "$target")" sentinel
+  done
+}
+
+@test "literal Node: worktree operation view ignores body prose and preserves outside Git policy" {
+  _seed_foreign_worktree
+  local input position
+  input=$'node <<\'JS\'\nconsole.log("git sparse-checkout disable");\nJS'
+  _run_shell_view caws_bash_command_lines "$input"
+  assert_success
+  assert_output ''
+  for position in before after; do
+    input=$'node <<\'JS\'\nconsole.log("git sparse-checkout disable");\nJS'
+    if [[ "$position" == before ]]; then input=$'git sparse-checkout disable\n'"$input";
+    else input+=$'\ngit sparse-checkout disable'; fi
+    _run_shell_view caws_bash_command_lines "$input"
+    assert_success
+    assert_output 'git sparse-checkout disable'
+    run_guard worktree-guard.sh "$(hook_envelope Bash '' "$input")"
+    assert_equal "$status" 2
+    assert_output --partial 'BLOCKED: agent-issued git sparse-checkout'
+  done
 }

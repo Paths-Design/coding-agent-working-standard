@@ -19,11 +19,10 @@
 # CAWS-GUARD-HEREDOC-BODY-READ-AS-COMMAND-01.
 #
 # Ported into the canonical pack from sterling's .caws/hooks/lib/heredoc.sh
-# (GUARD-HEREDOC-BODY-READ-AS-COMMAND-001). The body below is kept byte-faithful
-# to the sterling original so the two copies can be compared rather than
-# re-derived. Canonical reaches this defect through the shell target extractor
-# in bash-write-guard.sh; the Python classifier already carries its own
-# `in_heredoc` state machine and is unaffected.
+# (GUARD-HEREDOC-BODY-READ-AS-COMMAND-001). The file-sink behavior is preserved;
+# a separate literal Node projection handles JavaScript operators that resemble
+# shell redirects. Callers must retain the original command for interpreter
+# write checks. This projection is only an outer-shell syntax view.
 #
 # Entry 35 records the extractor's narrowness ("a here-doc heredoc that writes a
 # claimed path is not recognized"); this file closes the OTHER face of that
@@ -47,13 +46,13 @@
 # Blanking that hides a genuine force push from every guard. So this blanks a
 # body only when the introducing line's command is one this file KNOWS writes
 # the payload to a file or to stdout (`cat`, `tee`). Anything else — a shell, an
-# interpreter, an unrecognized command, a form this parser cannot read — keeps
-# its body fully visible and is adjudicated exactly as it is today.
+# unrecognized command, a form this parser cannot read — keeps its body fully
+# visible. A complete, direct, quoted Node heredoc is the narrow exception for
+# outer-shell syntax only: its body IS executable JavaScript, so raw interpreter
+# checks must still see it. Node is never a file sink or a read-only safelist.
 #
-# The residue is therefore a FALSE POSITIVE (a file-writing heredoc through some
-# command other than cat/tee still has its body scanned), never a hole. Widen
-# CAWS_HEREDOC_FILE_SINKS only for a command that provably cannot execute its
-# payload.
+# Widen CAWS_HEREDOC_FILE_SINKS only for a command that provably cannot execute
+# its payload.
 
 # Commands whose heredoc payload is written out, never executed.
 CAWS_HEREDOC_FILE_SINKS="${CAWS_HEREDOC_FILE_SINKS:-cat tee}"
@@ -71,6 +70,44 @@ caws_blank_heredoc_bodies() {
   if [[ "$input" != *"<<"* ]]; then
     printf '%s' "$input"
     return 0
+  fi
+
+  # Buffer/look ahead before projecting Node: an unfinished or ambiguous
+  # heredoc must not erase any payload. This deliberately recognizes only one
+  # standalone bare `node <<'DELIM'` / `node <<"DELIM"` header, with no options,
+  # wrapper, redirects, continuation, or second heredoc. Quotes in the prefix
+  # could put the apparent header inside another command's string; compound
+  # shell syntax could put it in an executable nested context. Leave those
+  # unsupported forms to the existing conservative view rather than guessing.
+  local node_rest="${input#*<<}"
+  local node_single="^[[:blank:]]*node[[:blank:]]+<<[[:blank:]]*'([^']+)'[[:blank:]]*$"
+  local node_double='^[[:blank:]]*node[[:blank:]]+<<[[:blank:]]*"([^"\\]+)"[[:blank:]]*$'
+  local node_plain='^[-[:alnum:][:blank:]_./:=~%+@,>]*$'
+  local node_reserved='^[[:blank:]]*(if|then|elif|else|fi|for|while|until|do|done|case|esac|function|select|in)([[:blank:]]|$)'
+  local node_prefix_ok=1 node_body=0 node_offset=0 node_start=0 node_delim="" node_blanks=""
+  if [[ "$node_rest" != *"<<"* ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      if [[ "$node_body" == 1 ]]; then
+        if [[ "$line" == "$node_delim" ]]; then
+          # Slice the original string, including its exact trailing newlines.
+          # Only body lines become blank; header and terminator are untouched.
+          printf '%s%s%s' "${input:0:node_start}" "$node_blanks" "${input:node_offset}"
+          return 0
+        fi
+        node_blanks+=$'\n'
+      elif [[ "$node_prefix_ok" == 1 ]]; then
+        if [[ "$line" =~ $node_single || "$line" =~ $node_double ]]; then
+          node_delim="${BASH_REMATCH[1]}"
+          if [[ ! "$node_delim" =~ [[:cntrl:]] ]]; then
+            node_body=1
+            node_start=$((node_offset + ${#line} + 1))
+          fi
+        elif [[ ! "$line" =~ $node_plain || "$line" =~ $node_reserved ]]; then
+          node_prefix_ok=0
+        fi
+      fi
+      node_offset=$((node_offset + ${#line} + 1))
+    done <<< "$input"
   fi
 
   while IFS= read -r line || [[ -n "$line" ]]; do
