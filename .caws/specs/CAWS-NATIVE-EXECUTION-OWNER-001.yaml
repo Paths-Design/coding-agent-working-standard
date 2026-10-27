@@ -39,6 +39,13 @@ acceptance:
     given: 'cancellation timeout overflow malformed replies or changed fence identity'
     when: 'preparation or job execution fails'
     then: 'launch is refused before effects or owned processes are terminated and reaped with truthful settlement'
+  - id: A4
+    given: 'A direct local host process with a trusted configured physical image pin'
+    when: 'Native startup captures and revalidates its parent process instance and inherited local socket peer'
+    then: >-
+      Actual PID birth UID and image changes or parent loss refuse admission; local
+      socket peer observations match the creator across exec without claiming
+      sandbox or loaded-memory attestation
 rollback:
   - 'Return to the captured prior npm installation and runtime; do not deploy an unqualified native owner'
 non_functional: {}
