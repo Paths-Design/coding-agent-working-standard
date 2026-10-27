@@ -45,3 +45,9 @@ non_functional:
 contracts:
   - name: 'maintenance-authority-lock'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Final f1db9b1 build plus six suites63tests actual exit0. All four maintenance apply paths refuse held lifecycle lock, preserve authority bytes and retry after release; previews remain read-only. Raw checks.json and archive-checks.json under root maintenance-authority-lock-01. No full Rust fence or installed execution claim."
+    recorded_at: "2026-10-27T14:28:24.065Z"
+    commit_sha: f1db9b1c9eb97f10d6789efd7766d593446da28c
