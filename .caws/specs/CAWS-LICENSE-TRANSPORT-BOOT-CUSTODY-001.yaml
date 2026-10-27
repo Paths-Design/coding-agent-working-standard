@@ -1,0 +1,58 @@
+id: CAWS-LICENSE-TRANSPORT-BOOT-CUSTODY-001
+title: 'License transport custody survives reboots; staging relinquishes unverifiable ownership'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-27T23:43:29.535Z'
+updated_at: '2026-10-27T23:43:29.535Z'
+created_by_session: '4126b194-a8f5-4ff4-aed5-f071b045cfda'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/scripts/clean-staged-docs.mjs (license transport custody: stage/clean/recover)'
+    - 'packages/caws-cli/scripts/stage-consumer-docs.mjs (build-time staging entry; build-cli.js:165, prepack, docs:check)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/clean-staged-docs.mjs'
+    - 'packages/caws-cli/scripts/stage-consumer-docs.mjs'
+    - 'packages/caws-cli/tests/docs/package-license-transport.test.js'
+    - 'packages/caws-cli/.gitignore'
+  out: []
+invariants:
+  - 'Cleanup never unlinks a license file it cannot prove it created: every recorded field except the boot-scoped device number must match, the object must sit on the package root filesystem now, and owned bytes must hash to the recorded sha256.'
+  - 'Staging never deletes or overwrites a license file or an ownership record; relinquishing moves the record inode aside intact and only reduces deletion authority.'
+  - 'Marker schema v1 is unchanged, so records written by older and newer scripts stay mutually readable across worktrees.'
+  - 'In-run custody races (current() checkpoints), symlinks, nonregular files, an existing operation lock, conflicting destination bytes and missing sources still refuse in both staging and cleanup.'
+acceptance:
+  - id: A1
+    given: 'a ready marker whose recorded dev on the marker and every owned leaf differs from the live device (reboot renumbering) while every other recorded field matches'
+    when: 'staging and then cleanup run'
+    then: 'staging returns created [] and preserved for all three transports with no relinquished key, and cleanup removes exactly the three owned transports and retires the marker'
+  - id: A2
+    given: 'a device-shifted record plus a same-byte foreign replacement (new inode) of the marker or of one owned leaf'
+    when: 'cleanup runs'
+    then: 'it refuses naming the differing ino/birthtimeNs fields and deletes no license'
+  - id: A3
+    given: 'the package root reports a different device than the marker, or than an owned leaf whose own lstat and fstat agree'
+    when: 'cleanup runs'
+    then: 'it refuses naming device for that object and deletes no license'
+  - id: A4
+    given: 'an unverifiable stored record (interrupted staging or cleaning phase, incomplete JSON, same-byte foreign marker, or a replaced owned leaf, including the state a crash mid-staging leaves)'
+    when: 'staging runs'
+    then: 'it succeeds, deletes no license, renames the original marker inode to .license-transport.relinquished-<uuid> with identical bytes, returns relinquished {reason, sha256, retainedAt}, creates only missing transports under a fresh marker, and a later cleanup removes only those freshly created'
+  - id: A5
+    given: 'a relinquish whose rename fails, or whose moved record is not the observed inode and bytes'
+    when: 'staging runs'
+    then: 'it refuses, creates no fresh marker, and preserves every record it observed'
+  - id: A6
+    given: 'an unverifiable stored record'
+    when: 'cleanup runs'
+    then: 'it refuses with a message naming the failed predicate and the staging remedy, and a staging run that relinquishes yields a licenseTransportNotice that stage-consumer-docs writes to stderr naming the reason, retained path and sha256'
+  - id: A7
+    given: 'the real caws-cli package after the change'
+    when: 'npm run build runs and the license transport and mutation-contract suites run'
+    then: 'build exits 0 and both suites pass'
+rollback:
+  - 'Revert the fix commit; markers written by the fixed script remain schema-v1 and are read by the reverted code (a dev mismatch then refuses as before; recover with --recover-license-ownership).'
+non_functional: {}
+contracts: []
