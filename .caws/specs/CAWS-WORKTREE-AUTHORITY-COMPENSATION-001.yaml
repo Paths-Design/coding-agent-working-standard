@@ -51,3 +51,10 @@ evidence:
     command: "node scripts/build-cli.js && node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/lifecycle-rollback-harness.test.js tests/shell/claim-takeover-event.test.js"
     exit_code: 0
     commit_sha: "111e281463aea4899f5b1df36ac56ca5388a5371"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "111e281 build and two focused suites actual exit 0; competing registry/spec changes are inspected after acquisition, stale takeover and invalid reciprocal binding refuse without overwriting competitor bytes. Raw augmentation-followup.json; manual execution adjudication, commit verification only."
+    recorded_at: "2026-10-27T02:20:29.471Z"
+    command: "node scripts/build-cli.js && node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/lifecycle-rollback-harness.test.js tests/shell/claim-takeover-event.test.js"
+    exit_code: 0
+    commit_sha: "111e281463aea4899f5b1df36ac56ca5388a5371"
