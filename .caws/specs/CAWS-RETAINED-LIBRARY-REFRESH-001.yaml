@@ -34,3 +34,9 @@ rollback:
   - 'Use the new CLI supported rollback to select the previously verified runtime; no immutable generation is edited.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed library selector bcb658650. Actual clean-source baselinebuild0; added tests fail against prior5d439 behavior (red-local-build.log22fail1pass). Fresh production build0 then full native-runtime-entry and init-plan suites181pass257.6s; package ESLint0, gates5pass6paths and installed doctor0E5W7I. Raw actual checks at /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/retained-library-refresh-01/. Positive library-only and combinedhandler selections compare all retained bytes/policy, sorted provenance, originalgeneration integrity, rollback/reinstall, repeated realCLI human/JSON hashes and modes. Negative controls cover lexical/duplicate/empty/unknown requests, missing verifiedbase members, unregistered-but-present members, absent packaged sources, symlink/hardlink/mode/concurrentcapture, incompatiblecommands and unchanged selectedstate. Earlier runnerpath and missinglocaldist attempts retained separately, not semantic passes. Independent read-only Terra reviewed committed code/originalAC/rawlogs; root directly inspected capture/allowlist/provenance/CLI paths. Verify checks commit existence only; no actual refreshed-library caller compatibility or installed native/host activation claimed."
+    recorded_at: "2026-10-27T23:05:24.974Z"
+    commit_sha: bcb6586500a67a7732b00619fd13da7721c86bb0
