@@ -1,0 +1,48 @@
+id: CAWS-SPARSE-SCOPE-ENFORCEMENT-001
+title: 'Enforce canonical scope authority in sparse linked checkouts'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-27T20:09:31.298Z'
+updated_at: '2026-10-27T20:09:31.298Z'
+created_by_session: '01a17efa-5ae7-79f1-9981-66151c4a7631'
+blast_radius:
+  modules:
+    - 'Shared Write/Edit scope guard and fixture-driven regression tests'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/scope-guard.sh'
+    - 'packages/caws-cli/tests/hooks/bats/scope-guard.bats'
+  out: []
+invariants:
+  - 'CAWS_PROJECT_DIR and scope CLI cwd retain actual leaf checkout identity; canonical governance discovery does not change binding selection.'
+  - 'An explicit authoritative scope.out refusal blocks the first write before tool effect; missing or invalid linked governance cannot silently become ungoverned.'
+  - 'Existing advisory progression remains for legitimate non-authoritative or unmatched-scope cases.'
+acceptance:
+  - id: A1
+    given: 'a linked sparse lane with canonical bound governance and no local .caws directory'
+    when: 'the scope guard checks an admitted source file'
+    then: 'the guard allows the file using the leaf binding and CLI cwd.'
+  - id: A2
+    given: 'an authoritative bound spec with an explicit scope.out path'
+    when: 'the first Write or Edit targets that path'
+    then: 'the guard blocks immediately and a simulated guarded write leaves file bytes unchanged.'
+  - id: A3
+    given: 'a linked checkout whose canonical authority is missing or whose bound authority is invalid'
+    when: 'a governed write is attempted'
+    then: 'the guard emits a visible blocking diagnostic before any write effect.'
+  - id: A4
+    given: 'ordinary unmatched-scope or union advisory cases'
+    when: 'the guard checks a first violation'
+    then: 'existing advisory progression semantics remain intact.'
+observability:
+  - 'Structured guard decision and retained focused Bats logs identify allow, immediate block, and advisory outcomes.'
+rollback:
+  - 'Revert the logical source commit through an ordinary governed follow-up; do not modify installed runtime snapshots.'
+non_functional:
+  security:
+    - 'Canonical authority failure and explicit authoritative exclusions must refuse writes without a first-strike escape.'
+contracts:
+  - name: 'sparse-checkout-scope'
+    type: behavior
