@@ -96,3 +96,8 @@ evidence:
     evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/shortcut-normalization-01/envelope-native-first.log: session-cache-admission and engine-routing suites pass with explicit CAWS_TEST_NATIVE_EXECUTABLE native2d498ac7; reviewed helper hash455dbfc selected, changed-byte/recomputed-metadata refusals and SessionEnd controls. Only fingerprint baseline failed separately corrected; no whole Python retirement or native deployment claim."
     recorded_at: "2026-10-27T19:26:08.639Z"
     commit_sha: b68fc3665
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/shortcut-normalization-01/incident-routes.log: all3 routes pass pre-tool full-file Write retained/new marker controls, bounded stable preimage unknowns, new nested path and no duplicate PostTool Write charge. Preimage observation is not atomic custody of later host write; partial ambiguous edits remain explicitly unknown."
+    recorded_at: "2026-10-27T19:26:09.529Z"
+    commit_sha: b68fc3665
