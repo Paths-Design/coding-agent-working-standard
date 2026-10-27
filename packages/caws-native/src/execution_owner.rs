@@ -17,7 +17,7 @@ use crate::{
     execution_fd_transport::{configure_child_fds, configure_private_child},
     execution_fence::ExecutionFence,
     execution_prepared::{PreparedRecord, ProgramImage},
-    monotonic_deadline::{self, MonotonicDeadline},
+    monotonic_deadline::{self, EffectCheck, MonotonicDeadline},
 };
 use sha2::{Digest, Sha256};
 use std::{
@@ -64,6 +64,7 @@ pub(crate) enum Refusal {
     Identity,
     InvalidDeadline,
     Cancelled,
+    Control,
     Expired,
     Image,
     AuthorizerSpawn,
@@ -248,12 +249,16 @@ fn authorizer(
     pins: &PinnedAuthorizer,
     deadline: &MonotonicDeadline,
     cancelled: &Arc<AtomicBool>,
+    control: &EffectCheck<'_>,
     grace: TerminationGrace,
     phase: Phase,
     revision: Option<String>,
     fence: Option<&ExecutionFence>,
 ) -> Result<String, OwnerFailure> {
-    let live = || check(record, trusted, deadline, cancelled);
+    let live = || {
+        check(record, trusted, deadline, cancelled)?;
+        control("execution_preparation").map_err(|_| Refusal::Control)
+    };
     live().map_err(failure)?;
     image_valid(&pins.node, &live).map_err(failure)?;
     image_valid(&pins.entry, &live).map_err(failure)?;
@@ -342,14 +347,18 @@ fn authorizer(
 
 /// Consumes the prepared record once; no launch retry is performed here.
 /// The caller owns returned process/fence custody and must not drop it silently.
+/// `control` polls the already-open private carrier for cancellation or loss.
+/// It must be nonblocking and must not change the descriptor table or reap
+/// children. It supplies liveness only, never project or launch authority.
 pub(crate) fn execute(
     record: PreparedRecord,
     trusted: &TrustedInvocation,
     pins: &PinnedAuthorizer,
     deadline: &MonotonicDeadline,
     cancelled: Arc<AtomicBool>,
+    control: &EffectCheck<'_>,
 ) -> OwnerOutcome {
-    match execute_inner(record, trusted, pins, deadline, cancelled) {
+    match execute_inner(record, trusted, pins, deadline, cancelled, control) {
         Ok(v) => OwnerOutcome::Completed(v),
         Err(e) => OwnerOutcome::Failed(e),
     }
@@ -360,6 +369,7 @@ fn execute_inner(
     pins: &PinnedAuthorizer,
     deadline: &MonotonicDeadline,
     cancelled: Arc<AtomicBool>,
+    control: &EffectCheck<'_>,
 ) -> Result<Completed, OwnerFailure> {
     if !cfg!(target_os = "macos") || !trusted.same_host_macos_verified {
         return Err(failure(Refusal::Unsupported));
@@ -371,7 +381,10 @@ fn execute_inner(
         record.value().limits.termination_grace_ms,
     ))
     .map_err(|_| failure(Refusal::InvalidDeadline))?;
-    let live = || check(&record, trusted, deadline, &cancelled);
+    let live = || {
+        check(&record, trusted, deadline, &cancelled)?;
+        control("execution_preparation").map_err(|_| Refusal::Control)
+    };
     live().map_err(failure)?;
     images(&record, pins, &live).map_err(failure)?;
     let revision = authorizer(
@@ -380,6 +393,7 @@ fn execute_inner(
         pins,
         deadline,
         &cancelled,
+        control,
         grace,
         Phase::Analyze,
         None,
@@ -395,6 +409,7 @@ fn execute_inner(
             pins,
             deadline,
             &cancelled,
+            control,
             grace,
             Phase::FinalValidate,
             Some(revision),
@@ -449,7 +464,11 @@ fn execute_inner(
         }
         Ok((child, job_deadline)) => {
             let child = release_after_spawn(child, fence, grace)?;
-            let noop = |_: &'static str| Ok(());
+            // The preparation deadline does not constrain the job lifetime.
+            // Liveness/cancellation of the private carrier still does.
+            let job_control = |_: &'static str| {
+                control("execution_job").map_err(|_| "execution control unavailable".to_owned())
+            };
             execution_child::service_child(
                 child,
                 record.stdin(),
@@ -459,7 +478,7 @@ fn execute_inner(
                 record.value().limits.max_output_bytes,
                 record.value().limits.max_output_bytes,
                 grace,
-                &noop,
+                &job_control,
             )
             .map_err(|e| OwnerFailure {
                 reason: Refusal::JobIo,
@@ -759,6 +778,15 @@ process.stdin.resume();
         }
     }
     fn run(f: &Fixture, node: &str, entry: &str, cancel: bool) -> OwnerOutcome {
+        run_with_control(f, node, entry, cancel, &|_| Ok(()))
+    }
+    fn run_with_control(
+        f: &Fixture,
+        node: &str,
+        entry: &str,
+        cancel: bool,
+        control: &EffectCheck<'_>,
+    ) -> OwnerOutcome {
         let record = PreparedRecord::decode(serde_json::to_vec(&f.data["record"]).unwrap())
             .expect("fixture prepared record");
         let p = record.value();
@@ -787,6 +815,7 @@ process.stdin.resume();
             &pins,
             &deadline,
             Arc::new(AtomicBool::new(cancel)),
+            control,
         )
     }
     struct FailureSummary {
@@ -916,6 +945,39 @@ process.stdin.resume();
         assert_no_custody(&s);
         assert!(matches!(s.job_kind, Some(FailureKind::TotalOutputLimit)));
         assert!(!f.path("caws").join("state.lock").exists());
+        f.finish();
+    }
+    #[test]
+    #[ignore = "requires explicit external real Source fixture, Node, and built authorizer entry"]
+    fn control_refusal_before_preparation_prevents_user_launch() {
+        let (node, entry, source) = config();
+        let f = Fixture::create("cancel", &node, &source);
+        let control = |_: &'static str| Err("injected carrier loss".to_owned());
+        let s = failed(run_with_control(&f, &node, &entry, false, &control));
+        assert_eq!(s.reason, Refusal::Control);
+        assert!(!s.possible);
+        assert_no_custody(&s);
+        assert!(!f.path("lane").join("src/cancel.txt").exists());
+        assert!(!f.path("caws").join("state.lock").exists());
+        f.finish();
+    }
+    #[test]
+    #[ignore = "requires explicit external real Source fixture, Node, and built authorizer entry"]
+    fn control_loss_while_servicing_job_stops_and_reports_possible_effects() {
+        let (node, entry, source) = config();
+        let f = Fixture::create("positive", &node, &source);
+        let control = |phase: &'static str| match phase {
+            "execution_preparation" => Ok(()),
+            "execution_job" => Err("injected carrier loss".to_owned()),
+            _ => panic!("unexpected control phase"),
+        };
+        let s = failed(run_with_control(&f, &node, &entry, false, &control));
+        assert_eq!(s.reason, Refusal::JobIo);
+        assert!(s.possible);
+        assert_no_custody(&s);
+        assert!(matches!(s.job_kind, Some(FailureKind::EffectCheck(_))));
+        assert!(!f.path("caws").join("state.lock").exists());
+        // The job may already have written its file before control was polled.
         f.finish();
     }
 }
