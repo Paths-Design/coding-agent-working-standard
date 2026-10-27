@@ -496,6 +496,7 @@ export function registerShellCommands(
     nativeConfigTarget?: string;
     nativeImage?: string;
     baseRuntimeDigest?: string;
+    refreshBaseHandler?: string[];
     entry?: 'native' | 'legacy';
   };
   const invokeInit = (
@@ -556,6 +557,9 @@ export function registerShellCommands(
       (runOpts as { nativeImage?: string }).nativeImage = opts.nativeImage;
     if (opts.baseRuntimeDigest !== undefined)
       (runOpts as { baseRuntimeDigest?: string }).baseRuntimeDigest = opts.baseRuntimeDigest;
+    if (opts.refreshBaseHandler !== undefined)
+      (runOpts as { refreshBaseHandler?: readonly string[] }).refreshBaseHandler =
+        opts.refreshBaseHandler;
     if (opts.entry !== undefined) (runOpts as { entry?: 'native' | 'legacy' }).entry = opts.entry;
     if (opts.from !== undefined) {
       (runOpts as { fromFile?: string }).fromFile = opts.from;

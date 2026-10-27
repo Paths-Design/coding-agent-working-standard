@@ -168,6 +168,7 @@ export interface InitCommandOptions {
   readonly nativeConfigTarget?: string;
   readonly nativeImage?: string;
   readonly baseRuntimeDigest?: string;
+  readonly refreshBaseHandler?: readonly string[];
   readonly entry?: 'native' | 'legacy';
   /** Override for the machine-runtime home consulted by systemSurfaceEnabled
    *  (default: CAWS_HOME env var, else ~/.caws). Callers that invoke
@@ -1107,6 +1108,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
       opts.nativeConfigTarget ||
       opts.nativeImage ||
       opts.baseRuntimeDigest ||
+      opts.refreshBaseHandler !== undefined ||
       opts.entry
     ) {
       err(
@@ -1144,6 +1146,8 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
         (opts.nativeConfigTarget && operation !== 'configure') ||
         (opts.nativeImage && operation !== 'install') ||
         (opts.baseRuntimeDigest !== undefined && (operation !== 'install' || !opts.nativeImage)) ||
+        (opts.refreshBaseHandler !== undefined &&
+          (operation !== 'install' || !opts.nativeImage || !opts.baseRuntimeDigest)) ||
         (opts.entry !== undefined &&
           (operation !== 'configure' || !['native', 'legacy'].includes(opts.entry)))
       ) {
@@ -1246,6 +1250,9 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
         ...(opts.baseRuntimeDigest !== undefined
           ? { baseRuntimeDigest: opts.baseRuntimeDigest }
           : {}),
+        ...(opts.refreshBaseHandler !== undefined
+          ? { refreshBaseHandlers: opts.refreshBaseHandler }
+          : {}),
       };
       const result =
         operation === 'rollback' ? rollbackMachineRuntime(options) : installMachineRuntime(options);
@@ -1266,10 +1273,11 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     opts.nativeConfigTarget ||
     opts.nativeImage ||
     opts.baseRuntimeDigest !== undefined ||
+    opts.refreshBaseHandler !== undefined ||
     opts.entry
   ) {
     err(
-      'caws init: --projects-root requires adapters migrate; --native-config-target/--entry require adapters configure; --native-image/--base-runtime-digest require adapters install.'
+      'caws init: --projects-root requires adapters migrate; --native-config-target/--entry require adapters configure; --native-image/--base-runtime-digest/--refresh-base-handler require adapters install.'
     );
     return 2;
   }

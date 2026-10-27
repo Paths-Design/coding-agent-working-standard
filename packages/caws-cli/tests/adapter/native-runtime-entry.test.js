@@ -162,6 +162,196 @@ test('explicit base runtime preserves guard bytes and policy through native inst
   expect(installMachineRuntime(options).digest).toBe(installed.digest);
 });
 
+test('explicit handler refresh changes only selected base bytes and records the exact plan and return path', () => {
+  const home = path.join(root, 'machine');
+  const templates = path.join(__dirname, '../../templates/hook-packs');
+  const older = path.join(root, 'older-templates');
+  fs.cpSync(templates, older, { recursive: true });
+  fs.appendFileSync(path.join(older, 'shared/scope-guard.sh'), '\n# prior packaged revision\n');
+  const base = install(home, false, { templatesRoot: older });
+  const baseRoot = path.join(home, 'lib/runtimes', base.digest);
+  const manifestBytes = fs.readFileSync(path.join(baseRoot, 'manifest.json'));
+  const manifest = JSON.parse(manifestBytes);
+  const baseState = fixtureState(baseRoot);
+  const before = fixtureState(home);
+  const options = { baseRuntimeDigest: base.digest, refreshBaseHandlers: ['scope-guard.sh'] };
+  const plan = install(home, true, { ...options, plan: true });
+  expect(fixtureState(home)).toEqual(before);
+  const expected = fs.readFileSync(path.join(templates, 'shared/scope-guard.sh'));
+  expect(plan.refreshedBaseHandlers).toEqual([
+    {
+      name: 'scope-guard.sh',
+      beforeSha256: manifest['scope-guard.sh'],
+      afterSha256: sha(expected),
+      source: {
+        path: 'shared/scope-guard.sh',
+        mode: fs.statSync(path.join(templates, 'shared/scope-guard.sh')).mode & 0o7777,
+      },
+      installedMode: 0o755,
+    },
+  ]);
+  const result = install(home, true, options);
+  expect(result.digest).toBe(plan.digest);
+  expect(result.refreshedBaseHandlers).toEqual(plan.refreshedBaseHandlers);
+  const selected = path.join(home, 'lib/runtimes', result.digest);
+  const actual = verifyRuntime(home, result.digest);
+  for (const [name, hash] of Object.entries(manifest)) {
+    expect(actual[name]).toBe(name === 'scope-guard.sh' ? sha(expected) : hash);
+    expect(fs.readFileSync(path.join(selected, name))).toEqual(
+      name === 'scope-guard.sh' ? expected : fs.readFileSync(path.join(baseRoot, name))
+    );
+  }
+  const provenance = JSON.parse(
+    fs.readFileSync(path.join(selected, 'base-runtime-provenance.json'))
+  );
+  expect(provenance).toEqual({
+    schema: 'caws.runtime.base-provenance.v2',
+    digest: base.digest,
+    manifest: manifestBytes.toString(),
+    replacements: plan.refreshedBaseHandlers,
+    compatibility: 'requires_separate_qualification',
+  });
+  expect(sha(Buffer.from(provenance.manifest))).toBe(base.digest);
+  expect(fs.statSync(path.join(selected, 'scope-guard.sh')).mode & 0o7777).toBe(0o755);
+  expect(fixtureState(baseRoot)).toEqual(baseState);
+  expect(rollbackMachineRuntime({ home, templatesRoot: templates }).digest).toBe(base.digest);
+  expect(verifyRuntime(home, base.digest)).toEqual(manifest);
+  expect(install(home, true, options).digest).toBe(result.digest);
+  const cliBefore = fixtureState(home);
+  const cliPlan = require('node:child_process').spawnSync(
+    process.execPath,
+    [
+      path.join(dist, 'index.js'),
+      'init',
+      'adapters',
+      'install',
+      '--plan',
+      '--json',
+      '--base-runtime-digest',
+      base.digest,
+      '--native-image',
+      path.join(root, 'native-image.json'),
+      '--refresh-base-handler',
+      'scope-guard.sh',
+    ],
+    { env: { ...process.env, CAWS_HOME: home }, encoding: 'utf8' }
+  );
+  expect(cliPlan.status).toBe(0);
+  expect(JSON.parse(cliPlan.stdout).digest).toBe(result.digest);
+  expect(JSON.parse(cliPlan.stdout).refreshedBaseHandlers).toEqual(plan.refreshedBaseHandlers);
+  expect(fixtureState(home)).toEqual(cliBefore);
+  const repeated = require('node:child_process').spawnSync(
+    process.execPath,
+    [
+      path.join(dist, 'index.js'),
+      'init',
+      'adapters',
+      'install',
+      '--plan',
+      '--json',
+      '--base-runtime-digest',
+      base.digest,
+      '--native-image',
+      path.join(root, 'native-image.json'),
+      '--refresh-base-handler',
+      'scope-guard.sh',
+      '--refresh-base-handler',
+      'scope-guard.sh',
+    ],
+    { env: { ...process.env, CAWS_HOME: home }, encoding: 'utf8' }
+  );
+  expect(repeated.status).toBe(1);
+  expect(repeated.stderr).toContain('unique packaged handler names');
+  expect(JSON.parse(fs.readFileSync(path.join(home, 'state/adapter-runtime.json'))).digest).toBe(
+    result.digest
+  );
+});
+
+test.each([
+  ['duplicate', ['scope-guard.sh', 'scope-guard.sh']],
+  ['empty', []],
+  ['escape', ['../scope-guard.sh']],
+  ['library', ['lib/caws-state.sh']],
+  ['dispatcher', ['dispatch/pre_tool_use.sh']],
+  ['utility', ['guard-strikes.sh']],
+  ['unknown', ['not-a-handler.sh']],
+])('handler refresh rejects %s without changing installed state', (_kind, refreshBaseHandlers) => {
+  const home = path.join(root, 'machine');
+  const base = install(home, false);
+  const before = fixtureState(home);
+  expect(() =>
+    install(home, true, { baseRuntimeDigest: base.digest, refreshBaseHandlers })
+  ).toThrow(/refresh/i);
+  expect(fixtureState(home)).toEqual(before);
+});
+
+test.each(['symlink', 'hardlink', 'mode', 'changed during capture', 'not selected by base'])(
+  'handler refresh rejects %s before publication',
+  (kind) => {
+    const home = path.join(root, 'machine');
+    const templates = path.join(root, 'templates');
+    fs.cpSync(path.join(__dirname, '../../templates/hook-packs'), templates, { recursive: true });
+    if (kind === 'not selected by base') {
+      const dispatch = path.join(templates, 'shared/dispatch/pre_tool_use.sh');
+      fs.writeFileSync(
+        dispatch,
+        fs.readFileSync(dispatch, 'utf8').replace(/^.*scope-guard\.sh.*\n/m, '')
+      );
+    }
+    const base = install(home, false, { templatesRoot: templates });
+    const member = path.join(templates, 'shared/scope-guard.sh');
+    if (kind === 'symlink' || kind === 'hardlink') {
+      const saved = path.join(root, 'guard-source');
+      fs.renameSync(member, saved);
+      if (kind === 'symlink') fs.symlinkSync(saved, member);
+      else fs.linkSync(saved, member);
+    }
+    if (kind === 'mode') fs.chmodSync(member, 0o666);
+    const before = fixtureState(home);
+    const ino = fs.statSync(member).ino;
+    const original = fs.readFileSync;
+    let changed = false;
+    const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+      const bytes = original(file, ...args);
+      if (
+        kind === 'changed during capture' &&
+        !changed &&
+        typeof file === 'number' &&
+        fs.fstatSync(file).ino === ino
+      ) {
+        changed = true;
+        fs.appendFileSync(member, '\n# concurrent change\n');
+      }
+      return bytes;
+    });
+    try {
+      expect(() =>
+        install(home, true, {
+          templatesRoot: templates,
+          baseRuntimeDigest: base.digest,
+          refreshBaseHandlers: ['scope-guard.sh'],
+        })
+      ).toThrow();
+    } finally {
+      spy.mockRestore();
+    }
+    if (kind === 'changed during capture') expect(changed).toBe(true);
+    expect(fixtureState(home)).toEqual(before);
+  }
+);
+
+test('handler refresh requires explicit base and native inputs before creating a home', () => {
+  const home = path.join(root, 'absent-home');
+  for (const options of [{}, { nativeImage: '/absent' }, { baseRuntimeDigest: 'a'.repeat(64) }])
+    expect(() =>
+      installMachineRuntime({ home, ...options, refreshBaseHandlers: ['scope-guard.sh'] })
+    ).toThrow(/refresh/i);
+  expect(() => rollbackMachineRuntime({ home, refreshBaseHandlers: ['scope-guard.sh'] })).toThrow(
+    /only valid/
+  );
+  expect(fs.existsSync(home)).toBe(false);
+});
+
 test.each([
   'tampered bytes',
   'symlink',
