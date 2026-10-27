@@ -1,9 +1,10 @@
 id: CAWS-LITERAL-NODE-HEREDOC-001
 title: 'Project literal direct Node heredoc bodies out of outer shell targets'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: literal-node-heredoc
 created_at: '2026-10-27T22:56:23.420Z'
-updated_at: '2026-10-27T22:56:23.420Z'
+updated_at: '2026-10-27T22:56:44.950Z'
 created_by_session: '01a17f02-2191-7702-8805-227272637592'
 blast_radius:
   modules:
