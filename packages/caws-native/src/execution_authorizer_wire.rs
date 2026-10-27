@@ -9,6 +9,23 @@ use sha2::{Digest, Sha256};
 pub(crate) const REQUEST_LIMIT: usize = 4 * 1024 * 1024;
 pub(crate) const REPLY_LIMIT: usize = 64 * 1024;
 const PROTOCOL: &str = "caws.execution.authorizer.v1";
+const REASON_CODES: &[&str] = &[
+    "invalid_frame",
+    "invalid_record",
+    "identity_unverified",
+    "context_unresolved",
+    "unsupported_profile",
+    "source_unresolved",
+    "source_denied",
+    "binding_unavailable",
+    "foreign_owner",
+    "scope_refused",
+    "authority_changed",
+    "fence_unverified",
+    "deadline_expired",
+    "cancelled",
+    "infrastructure_unavailable",
+];
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum WireError {
@@ -190,7 +207,9 @@ impl RequestRecord {
             return Err(WireError::Schema);
         }
         for reason in &reply.reason_codes {
-            bounded_text(reason, 128)?;
+            if !REASON_CODES.contains(&reason.as_str()) {
+                return Err(WireError::Schema);
+            }
         }
         if reply.decision == Decision::Allow
             && reply.phase == Phase::FinalValidate
@@ -669,12 +688,12 @@ mod tests {
             ] {
                 let mut value = reply(req);
                 value["decision"] = json!(name);
-                value["reasonCodes"] = json!(["reason"]);
+                value["reasonCodes"] = json!(["source_denied"]);
                 let observation = req
                     .correlate_reply(&serde_json::to_vec(&value).unwrap())
                     .unwrap();
                 assert!(observation.decision() == decision);
-                assert_eq!(observation.reason_codes(), &["reason"]);
+                assert_eq!(observation.reason_codes(), &["source_denied"]);
                 assert_eq!(
                     observation.authority_revision(),
                     req.envelope
@@ -736,21 +755,45 @@ mod tests {
                 assert_eq!(decodes(&value), expected, "field {key}");
             }
         }
-        for (text, expected) in [
-            ("a".repeat(128), true),
-            ("é".repeat(64), true),
-            ("é".repeat(65), false),
-            ("a".repeat(129), false),
-            (String::new(), false),
-            ("x\n".into(), false),
+        for text in [
+            "a".repeat(128),
+            "é".repeat(64),
+            "é".repeat(65),
+            "a".repeat(129),
+            String::new(),
+            "x\n".into(),
+            "reason".into(),
         ] {
             let mut value = reply(&req);
             value["reasonCodes"] = json!([text]);
-            assert_eq!(accepts(&req, &value), expected);
+            assert!(!accepts(&req, &value));
+        }
+        // Every protocol reason is accepted; the list is pinned independently
+        // from the implementation constant so dropping a code is observable.
+        for reason in [
+            "invalid_frame",
+            "invalid_record",
+            "identity_unverified",
+            "context_unresolved",
+            "unsupported_profile",
+            "source_unresolved",
+            "source_denied",
+            "binding_unavailable",
+            "foreign_owner",
+            "scope_refused",
+            "authority_changed",
+            "fence_unverified",
+            "deadline_expired",
+            "cancelled",
+            "infrastructure_unavailable",
+        ] {
+            let mut value = reply(&req);
+            value["reasonCodes"] = json!([reason]);
+            assert!(accepts(&req, &value));
         }
         for (count, expected) in [(32, true), (33, false)] {
             let mut value = reply(&req);
-            value["reasonCodes"] = json!(vec!["reason"; count]);
+            value["reasonCodes"] = json!(vec!["source_denied"; count]);
             assert_eq!(accepts(&req, &value), expected);
         }
         for bad in [json!(null), json!([1]), json!("reason")] {
