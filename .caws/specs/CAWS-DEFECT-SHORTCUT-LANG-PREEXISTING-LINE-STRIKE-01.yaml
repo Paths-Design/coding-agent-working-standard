@@ -51,5 +51,14 @@ acceptance:
       strikes, unknown content is explicit without a disk scan, and feedback
       truthfully states the tool already applied while preserving progressive
       enforcement
+  - id: A5
+    given: 'The shipped agent-surface helper preserves exact Git root path bytes in its vendor fallback branch'
+    when: >-
+      The immutable runtime qualifies native session cache and SessionEnd with
+      explicitly selected project routing
+    then: >-
+      The reviewed helper identity qualifies, altered bytes refuse even with
+      recomputed selection metadata, and actual native exchange controls preserve
+      cache and failure behavior
 non_functional: {}
 contracts: []
