@@ -66,3 +66,11 @@ evidence:
     exit_code: 0
     artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/complete-targets-events.jsonl"
     commit_sha: eb0e884ed46cc2aa68f763c04877b0bb8d3b8bc6
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "complete-targets-events.jsonl:124, Bats cases 6-7,10,15-17,22,32,36: missing known canonical specs, malformed policy, one-sided invalid bound spec and later load fault visibly block exit 2 before effects. Cases 20-21 preserve cache-only unadopted no-op; cache presence confers no governance. Component acceptance only; cwd=/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/rooted-scope-enforcement/packages/caws-cli. Raw command/output inspected separately. Artifact and commit existence checked manually; installed --verify rejects this absolute external artifact path and would not execute the recorded Bats command. No installed native-host acceptance."
+    recorded_at: "2026-10-27T21:58:15.550Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/scope-guard.bats"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/complete-targets-events.jsonl"
+    commit_sha: eb0e884ed46cc2aa68f763c04877b0bb8d3b8bc6
