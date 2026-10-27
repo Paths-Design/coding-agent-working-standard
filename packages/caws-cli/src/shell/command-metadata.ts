@@ -856,7 +856,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       name: 'create',
       argument: { name: 'name', required: true, description: 'Worktree name' },
       description:
-        'Create a new git worktree under .caws/worktrees/<name> bound to an active spec. Also links recognized git-ignored dependency/cache artifacts (node_modules, .pnpm-store, Python venvs, Rust target, Swift .build) from the canonical checkout into the worktree as relative symlinks, reported under an "Artifacts:" block with unlink/install guidance. Linking is advisory (create never fails on it), skips paths that already exist in the worktree, and skips on lock/manifest divergence. A linked artifact shares the canonical directory: run the printed unlink command before installing if the worktree branch changes dependency manifests.',
+        'Create a new git worktree under .caws/worktrees/<name> bound to an active spec. Also links recognized git-ignored dependency/cache artifacts (node_modules, .pnpm-store, Python venvs, Rust target, Swift .build) from the canonical checkout into the worktree as relative symlinks, reported under an "Artifacts:" block with unlink/install guidance. Linking is advisory (create never fails on it), skips existing paths, and skips on lock/manifest divergence. A linked artifact shares the canonical directory: unlink every shared Node dependency path before any package-manager install, even with unchanged manifests. Use --no-link-node-modules for a new lane that needs its own Node installation; this option preserves any existing paths and does not certify that they are physical.',
       options: [
         {
           flag: '--spec <id>',
@@ -868,6 +868,11 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
           description: 'Base branch to start from (default: current branch)',
         },
         { flag: '--branch <branch>', description: 'New branch name (default: worktree name)' },
+        {
+          flag: '--no-link-node-modules',
+          description:
+            'Skip recognized root, workspace and hook Node dependency links; preserve existing paths and other artifact kinds',
+        },
         DATA_OPTION,
       ],
     },

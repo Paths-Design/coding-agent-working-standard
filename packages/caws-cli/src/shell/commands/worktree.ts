@@ -168,6 +168,14 @@ function surfaceArtifactLinks(summary: unknown, out: (s: string) => void): void 
   for (const item of artifactSummary.statuses) {
     out(`  ${formatArtifactStatus(item)}`);
     if (item.unlinkCommand !== undefined) out(`    unlink: ${item.unlinkCommand}`);
+    if (item.kind === 'node_dependencies' && item.unlinkCommand !== undefined)
+      out(
+        '    Unlink this shared dependency path before any package-manager install, even with unchanged manifests.'
+      );
+    if (item.state === 'skipped_node_link_by_option')
+      out(
+        '    Inspect this path and unlink any shared symlink before installing; existing paths were preserved.'
+      );
     if (requiresInstall(item)) out(`    install: ${item.installHint}`);
   }
 }
@@ -208,7 +216,8 @@ function requiresInstall(item: WorktreeArtifactLinkStatus): boolean {
     item.state === 'missing_target' ||
     item.state === 'lock_mismatch' ||
     item.state === 'link_failed' ||
-    item.state === 'skipped_not_ignored'
+    item.state === 'skipped_not_ignored' ||
+    item.state === 'skipped_node_link_by_option'
   );
 }
 
@@ -292,6 +301,7 @@ export interface WorktreeCreateOptions extends BaseCommandOptions {
   readonly specId: string;
   readonly baseBranch?: string;
   readonly branch?: string;
+  readonly linkNodeModules?: boolean;
 }
 
 export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
@@ -329,6 +339,8 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
   if (opts.baseBranch !== undefined)
     (input as { baseBranch?: string }).baseBranch = opts.baseBranch;
   if (opts.branch !== undefined) (input as { branch?: string }).branch = opts.branch;
+  if (opts.linkNodeModules !== undefined)
+    (input as { linkNodeModules?: boolean }).linkNodeModules = opts.linkNodeModules;
 
   // PRESENCE-DECISION-POINT-INJECTION-001: advisory peer block at the
   // authority decision point (Entry 36 — create is the point of no easy

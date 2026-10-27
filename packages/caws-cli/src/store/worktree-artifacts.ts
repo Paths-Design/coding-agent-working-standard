@@ -22,6 +22,7 @@ export type WorktreeArtifactLinkState =
   | 'already_linked'
   | 'missing_target'
   | 'skipped_existing_path'
+  | 'skipped_node_link_by_option'
   | 'skipped_not_ignored'
   | 'lock_mismatch'
   | 'link_failed';
@@ -126,7 +127,8 @@ const ROOT_CANDIDATES: readonly ArtifactCandidate[] = [
 
 export function linkWorktreeArtifacts(
   repoRoot: string,
-  worktreeRoot: string
+  worktreeRoot: string,
+  linkNodeModules = true
 ): WorktreeArtifactLinkSummary {
   const candidates = discoverCandidates(repoRoot);
   if (candidates.length === 0) return { statuses: [] };
@@ -136,7 +138,14 @@ export function linkWorktreeArtifacts(
   for (const candidate of candidates) {
     if (seen.has(candidate.relPath)) continue;
     seen.add(candidate.relPath);
-    statuses.push(linkCandidate(repoRoot, worktreeRoot, candidate));
+    statuses.push(
+      !linkNodeModules && candidate.kind === 'node_dependencies'
+        ? status(candidate, 'skipped_node_link_by_option', {
+            reason:
+              'Node dependency linking disabled; existing paths are not inspected or changed.',
+          })
+        : linkCandidate(repoRoot, worktreeRoot, candidate)
+    );
   }
   return { statuses };
 }

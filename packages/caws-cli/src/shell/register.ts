@@ -1903,6 +1903,7 @@ export function registerShellCommands(
         spec: string;
         baseBranch?: string;
         branch?: string;
+        linkNodeModules?: boolean;
         data?: boolean;
       }
     ) => {
@@ -1911,6 +1912,7 @@ export function registerShellCommands(
         specId: opts.spec,
         ...(opts.baseBranch !== undefined ? { baseBranch: opts.baseBranch } : {}),
         ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
+        ...(opts.linkNodeModules !== undefined ? { linkNodeModules: opts.linkNodeModules } : {}),
         showData: opts.data === true,
       });
       exit(code);
