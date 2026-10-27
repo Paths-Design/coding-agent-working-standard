@@ -125,6 +125,14 @@ acceptance:
       idempotent, explicit continue or invalid policy refuses before writes, foreign
       handlers stay unchanged, and other events and harnesses gain no unsupported
       field
+  - id: A8
+    given: 'A verified retained legacy guard generation and a pinned native transport image'
+    when: 'Installation explicitly selects a base runtime digest before analysis'
+    then: >-
+      The new immutable generation preserves every base member byte and guard
+      policy, normalizes only supported permission modes, records the base manifest,
+      rejects unsafe or changed inputs before activation, and supports return to the
+      previous selected generation without changing harness registration.
 observability:
   - 'Raw commands and entry stdout/stderr/status, selected engine/handler execution witness, pointer/manifest/images before-after hashes and retained upgrade/rollback state'
 rollback:
