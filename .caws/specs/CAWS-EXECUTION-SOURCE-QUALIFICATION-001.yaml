@@ -4,7 +4,7 @@ mode: chore
 lifecycle_state: active
 worktree: execution-qualification
 created_at: '2026-10-27T17:30:32.605Z'
-updated_at: '2026-10-27T17:31:22.522Z'
+updated_at: '2026-10-27T17:34:37.584Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -33,6 +33,13 @@ scope:
     - packages/caws-cli/tsconfig.vnext.json
     - packages/caws-cli/src/init/hook-packs/surfaces.generated.ts
     - packages/caws-cli/templates/hook-packs/shared/lib/surfaces-registry.sh
+    - packages/caws-cli/node_modules/
+    - packages/caws-cli/dist/
+    - packages/caws-cli/docs/
+    - packages/caws-cli/.license-transport.json
+    - packages/caws-cli/LICENSE
+    - packages/caws-cli/LICENSE.spdx
+    - .stryker-execution-*/**
 invariants:
   - 'Qualification never changes tracked source or lowers the six per-file 80 percent floors'
 acceptance:
