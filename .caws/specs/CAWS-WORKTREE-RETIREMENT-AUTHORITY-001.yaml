@@ -1,10 +1,11 @@
 id: CAWS-WORKTREE-RETIREMENT-AUTHORITY-001
 title: 'Preserve current authority during worktree retirement'
 mode: fix
-lifecycle_state: active
-worktree: retirement-authority
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Retirement source fix verified at69097f5ff with99 selected compiled writer/shell controls, exact authority recovery and truthful audit ambiguity. A1-A3 recorded and read back. Independent committed-candidate review findings grounded and repaired. No native execution or global cutover claim; external Git mutation after final observation is outside cooperative lifecycle locking.'
 created_at: '2026-10-27T13:58:11.215Z'
-updated_at: '2026-10-27T14:00:08.123Z'
+updated_at: '2026-10-27T16:06:41.042Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
