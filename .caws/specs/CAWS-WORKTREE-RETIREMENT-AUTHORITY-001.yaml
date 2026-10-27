@@ -1,0 +1,44 @@
+id: CAWS-WORKTREE-RETIREMENT-AUTHORITY-001
+title: 'Preserve current authority during worktree retirement'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-27T13:58:11.215Z'
+updated_at: '2026-10-27T13:58:11.215Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'worktree destroy prune and untrack'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js'
+    - 'packages/caws-cli/tests/store/worktree-retirement-authority.test.js'
+  out: []
+invariants:
+  - 'Retirement validates current ownership and exact authority inputs under the lifecycle lock before publishing governance changes.'
+  - 'Failed canonical publication restores exact prior spec and registry bytes or reports unrecovered state; physical Git effects remain explicit.'
+acceptance:
+  - id: A1
+    given: 'authority changes before retirement acquires the lifecycle lock'
+    when: 'destroy prune or untrack applies'
+    then: 'it refuses stale authority or rederives current state without overwriting a newer owner or scope'
+  - id: A2
+    given: 'registry publication or audit append fails'
+    when: 'canonical retirement compensates'
+    then: 'exact prior spec and registry bytes are restored or the result explicitly reports incomplete recovery'
+  - id: A3
+    given: 'valid uncontended retirement'
+    when: 'it succeeds'
+    then: 'existing removal and ownership semantics hold and physical Git effects are reported truthfully'
+observability:
+  - 'Compiled writer tests schedule competing authority and inject partial registry or audit failures with exact byte comparisons.'
+rollback:
+  - 'Revert source and regression tests through an ordinary follow-up commit.'
+non_functional:
+  security:
+    - 'Retirement must not restore stale authority after execution fencing.'
+contracts:
+  - name: 'worktree-retirement-authority'
+    type: behavior
