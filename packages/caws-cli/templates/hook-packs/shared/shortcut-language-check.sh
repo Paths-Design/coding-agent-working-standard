@@ -93,7 +93,16 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { TextDecoder } = require("node:util");
 const MAX = 16 * 1024 * 1024;
-function unknown() { process.stderr.write("[shortcut-language] authored content unavailable; no strike recorded\n"); process.exit(1); }
+function unknown() { throw new Error("authored content unavailable"); }
+function diagnostic() { process.stderr.write("[shortcut-language] authored content unavailable; no strike recorded for unavailable content\n"); }
+// Mirror the guard exemptions before opening a postimage.
+function exempt(file) {
+  const name = path.basename(file);
+  return /\/(node_modules|dist|build|coverage|\.next|out|vendor|tests|__tests__|test|fixtures)\//.test("/" + file) ||
+    /\.(md|markdown|txt|lock|map)$/.test(name) || /-lock\.json$/.test(name) ||
+    name === "package-lock.json" || /\.(min|bundle)\.js$/.test(name) ||
+    /\.(test|spec)\./.test(name);
+}
 function object(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
 function physical(file) {
   return path.resolve(process.env.HOOK_CWD || process.cwd(), file);
@@ -105,9 +114,28 @@ function fileImage(file, allowAbsent) {
     try { fd = fs.openSync(target, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK); }
     catch (e) {
       if (!allowAbsent || e.code !== "ENOENT") unknown();
-      const parent = fs.statSync(path.dirname(target));
-      if (!parent.isDirectory()) unknown();
-      try { fs.lstatSync(target); unknown(); } catch (again) { if (again.code !== "ENOENT") unknown(); }
+      // Walk up to the nearest existing directory. A missing intermediate
+      // component is safe only while it remains missing; symlinks, inaccessible
+      // components, non-directories, and changed ancestors remain unknown.
+      let cursor = target;
+      let missing = target;
+      let anchor;
+      for (;;) {
+        try { anchor = fs.lstatSync(cursor, { bigint: true }); break; }
+        catch (again) {
+          if (again.code !== "ENOENT") unknown();
+          missing = cursor;
+          const parent = path.dirname(cursor);
+          if (parent === cursor) unknown();
+          cursor = parent;
+        }
+      }
+      if (!anchor.isDirectory()) unknown();
+      try { fs.lstatSync(missing); unknown(); }
+      catch (again) { if (again.code !== "ENOENT") unknown(); }
+      const after = fs.lstatSync(cursor, { bigint: true });
+      if (!after.isDirectory() || after.dev !== anchor.dev || after.ino !== anchor.ino ||
+          after.mtimeNs !== anchor.mtimeNs || after.ctimeNs !== anchor.ctimeNs) unknown();
       return "";
     }
     const before = fs.fstatSync(fd, { bigint: true });
@@ -128,27 +156,41 @@ function fileImage(file, allowAbsent) {
   } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 function withPostimage(row) {
-  if (!row.fragment || !row.authored.length) return row;
+  if (!row.fragment || !row.authored.length) return { candidates: [row] };
   const text = fileImage(row.path, false);
-  // A hunk/new_string must match exactly one complete line-bounded occurrence.
-  // Multiple occurrences cannot identify which one the tool actually edited.
   const needle = row.content;
-  let from = 0, found = -1;
+  let from = 0; const found = [];
   while (from <= text.length) {
     const at = text.indexOf(needle, from);
     if (at < 0) break;
     const end = at + needle.length;
-    if ((at === 0 || text[at - 1] === "\n") &&
-        (end === text.length || text[end] === "\n" || needle.endsWith("\n"))) {
-      if (found !== -1) unknown();
-      found = at;
+    if (row.partial || ((at === 0 || text[at - 1] === "\n") &&
+        (end === text.length || text[end] === "\n" || needle.endsWith("\n")))) {
+      found.push(at);
+      if (found.length > 8) unknown();
     }
     from = at + 1;
   }
-  if (found < 0) unknown();
-  let offset = 0;
-  for (let i = 0; i < found; i++) if (text[i] === "\n") offset++;
-  return { ...row, content: text, authored: row.authored.map((line) => line + offset), offset };
+  if (!found.length) unknown();
+  const candidates = found.map((at) => {
+    let offset = 0, lineStart = 0;
+    for (let i = 0; i < at; i++) if (text[i] === "\n") { offset++; lineStart = i + 1; }
+    let range = null, oldMarker = false;
+    if (row.partial) {
+      const next = text.indexOf("\n", at);
+      const actualLine = text.slice(lineStart, next < 0 ? text.length : next);
+      // Shell awk and JS offset models agree for ASCII. Anything else remains
+      // explicitly unknown rather than confusing byte/character positions.
+      if (!/^[\x00-\x7f]*$/.test(actualLine)) unknown();
+      range = { line: offset + 1, start: at - lineStart + row.partial.start + 1,
+        end: at - lineStart + row.partial.end };
+      const left = actualLine.slice(0, range.start - 1);
+      const right = actualLine.slice(range.end);
+      oldMarker = /TODO|FIXME|XXX|HACK|TBD|placeholder|not implemented|implement later|coming soon/i.test(left + "\n" + right);
+    }
+    return { ...row, content: text, authored: row.authored.map((line) => line + offset), offset, range, oldMarker };
+  });
+  return { candidates };
 }
 function markAuthored(fragments, removed) {
   const counts = new Map();
@@ -231,13 +273,28 @@ try {
     }
     const fragment = value.split("\n").map((text) => ({ text, added: true }));
     const marked = markAuthored([fragment], removed)[0];
-    rows.push({ path: file, ...marked, fragment: name === "Edit" });
+    let partial = null;
+    if (name === "Edit" && !value.includes("\n") && !tool.old_string.includes("\n") && marked.authored.length) {
+      let start = 0, end = value.length, oldEnd = tool.old_string.length;
+      while (start < end && start < oldEnd && value[start] === tool.old_string[start]) start++;
+      while (end > start && oldEnd > start && value[end - 1] === tool.old_string[oldEnd - 1]) { end--; oldEnd--; }
+      // A token crossing the edit boundary cannot be faithfully attributed by
+      // a clipped token matcher; keep that case explicitly unknown.
+      if ((start && /[A-Za-z0-9_]/.test(value[start - 1]) && /[A-Za-z0-9_]/.test(value[start] || "")) ||
+          (end < value.length && /[A-Za-z0-9_]/.test(value[end - 1] || "") && /[A-Za-z0-9_]/.test(value[end]))) unknown();
+      if (!/^[\x00-\x7f]*$/.test(value) || !/^[\x00-\x7f]*$/.test(tool.old_string)) unknown();
+      partial = { start, end };
+    }
+    rows.push({ path: file, ...marked, fragment: name === "Edit", partial });
   }
   for (const row of rows) {
-    const result = name === "Edit" || name === "apply_patch" ? withPostimage(row) : row;
-    process.stdout.write(JSON.stringify(result) + "\n");
+    if (exempt(row.path)) continue;
+    try {
+      const result = name === "Edit" || name === "apply_patch" ? withPostimage(row) : { candidates: [row] };
+      process.stdout.write(JSON.stringify(result) + "\n");
+    } catch { diagnostic(); }
   }
-} catch { unknown(); }
+} catch { diagnostic(); process.exitCode = 1; }
 '
 }
 
@@ -260,7 +317,25 @@ scan_authored() {
 # for every other comment.
 TAB=$'\t'
 filter_authored() {
-  awk -F "\t" 'NR == FNR { if ($1 ~ /^[0-9]+$/) authored[$1] = 1; next } authored[$1]' "$authored_file" -
+  awk -F "\t" -v partial_line="${PARTIAL_LINE:-0}" -v partial_start="${PARTIAL_START:-0}" -v partial_end="${PARTIAL_END:-0}" '
+    FILENAME == ARGV[1] { if ($1 ~ /^[0-9]+$/) authored[$1] = 1; next }
+    FILENAME == ARGV[2] { original[FNR] = $0; next }
+    authored[$1] {
+      if (partial_line != $1) { print; next }
+      prefix = $1 FS $2 FS; value = substr($0, length(prefix) + 1)
+      start = 1
+      if ($2 != "code") {
+        start = index(original[$1], value)
+        if (!start || index(substr(original[$1], start + 1), value)) {
+          print "[shortcut-language] ambiguous partial comment context" > "/dev/stderr"; next
+        }
+      }
+      left = partial_start - start + 1; right = partial_end - start + 1
+      if (left < 1) left = 1
+      if (right > length(value)) right = length(value)
+      if (left <= right) print prefix substr(value, left, right - left + 1)
+    }
+  ' "$authored_file" "$content_file" -
 }
 CODE_RECORDS=$(printf '%s\n' "$CONTENT" | awk '{ print NR "\tcode\t" $0 }' | filter_authored)
 
@@ -453,33 +528,68 @@ MSG1="${BASE} (strike 1 of 3 — advisory.)"
 MSG2="${BASE} (strike 2 of 3 — please resolve before continuing.)"
 MSG3="${BASE} (strike 3 — replace the placeholder/stub with a real implementation, or move the work to a tracked spec.)"
 
-guard_enforce_progressive_strikes \
-  "${HOOK_SESSION_ID:-unknown}" \
-  "shortcut_language" \
-  "${HOOK_CWD:-}" \
-  "$MSG1" "$MSG2" "$MSG3"
-
+  HIT_KEY="${PATTERN_DESC}|${LINE_REF}|${LINE_TEXT}"
+  HIT_MSG1="$MSG1"; HIT_MSG2="$MSG2"; HIT_MSG3="$MSG3"
   return 1
 }
 
 records=$(mktemp "${TMPDIR:-/tmp}/caws-shortcut-XXXXXX") || exit 0
 authored_file=$(mktemp "${TMPDIR:-/tmp}/caws-shortcut-lines-XXXXXX") || { rm -f "$records"; exit 0; }
-trap 'rm -f "$records" "$authored_file"' EXIT
+content_file=$(mktemp "${TMPDIR:-/tmp}/caws-shortcut-content-XXXXXX") || { rm -f "$records" "$authored_file"; exit 0; }
+trap 'rm -f "$records" "$authored_file" "$content_file"' EXIT
 if [[ "${HOOK_PAYLOAD_TRUNCATED:-0}" == 1 && -n "${HOOK_PAYLOAD_FILE:-}" ]]; then
   extract_authored < "$HOOK_PAYLOAD_FILE" > "$records" || exit 0
 else
   printf '%s' "${HOOK_TOOL_INPUT_JSON:-}" | extract_authored > "$records" || exit 0
 fi
-while IFS= read -r row; do
-  file=$(printf '%s' "$row" | jq -rj '.path'; printf '.')
-  file=${file%.}
-  content=$(printf '%s' "$row" | jq -rj '.content'; printf '.')
-  content=${content%.}
-  fragment=$(printf '%s' "$row" | jq -r 'if .fragment then 1 else 0 end')
-  printf '%s' "$row" | jq -r '.authored[]' > "$authored_file"
-  # Keep the first awk input nonempty even for a known-empty authored set.
-  [[ -s "$authored_file" ]] || printf '\n' > "$authored_file"
-  offset=$(printf '%s' "$row" | jq -r '.offset // 0')
-  scan_authored "$file" "$content" "$fragment" "$offset" || break
+while IFS= read -r group; do
+  count=$(printf '%s' "$group" | jq -r '.candidates | length')
+  [[ "$count" =~ ^[0-9]+$ && "$count" -gt 0 && "$count" -le 8 ]] || continue
+  first_key=""; agreement=1; index=0
+  while (( index < count )); do
+    row=$(printf '%s' "$group" | jq -c --argjson index "$index" '.candidates[$index]')
+    file=$(printf '%s' "$row" | jq -rj '.path'; printf '.')
+    file=${file%.}
+    content=$(printf '%s' "$row" | jq -rj '.content'; printf '.')
+    content=${content%.}
+    fragment=$(printf '%s' "$row" | jq -r 'if .fragment then 1 else 0 end')
+    offset=$(printf '%s' "$row" | jq -r '.offset // 0')
+    PARTIAL_LINE=$(printf '%s' "$row" | jq -r '.range.line // 0')
+    PARTIAL_START=$(printf '%s' "$row" | jq -r '.range.start // 0')
+    PARTIAL_END=$(printf '%s' "$row" | jq -r '.range.end // 0')
+    printf '%s' "$content" > "$content_file"
+    printf '%s' "$row" | jq -r '.authored[]' > "$authored_file"
+    [[ -s "$authored_file" ]] || printf '\n' > "$authored_file"
+    HIT_KEY=""; HIT_MSG1=""; HIT_MSG2=""; HIT_MSG3=""
+    scan_authored "$file" "$content" "$fragment" "$offset" || true
+    key="${HIT_KEY:-<clean>}"
+    if [[ "$PARTIAL_LINE" != 0 ]]; then
+      clipped_key="$key"; clipped_pattern="${PATTERN_DESC:-}"
+      clipped_msg1="$HIT_MSG1"; clipped_msg2="$HIT_MSG2"; clipped_msg3="$HIT_MSG3"
+      old_marker=$(printf '%s' "$row" | jq -r 'if .oldMarker then 1 else 0 end')
+      PARTIAL_LINE=0; HIT_KEY=""; PATTERN_DESC=""
+      scan_authored "$file" "$content" "$fragment" "$offset" || true
+      full_key="${HIT_KEY:-<clean>}"
+      if [[ "$old_marker" == 1 ]]; then
+        key='<unknown>'
+      elif [[ "$clipped_key" == '<clean>' && "$full_key" == '<clean>' ]]; then
+        key='<clean>'
+      elif [[ "$clipped_key" != '<clean>' && "$full_key" != '<clean>' && "$clipped_pattern" == "$PATTERN_DESC" ]]; then
+        key="$clipped_key"; HIT_MSG1="$clipped_msg1"; HIT_MSG2="$clipped_msg2"; HIT_MSG3="$clipped_msg3"
+      else
+        key='<unknown>'
+      fi
+    fi
+    if (( index == 0 )); then
+      first_key="$key"; first_msg1="$HIT_MSG1"; first_msg2="$HIT_MSG2"; first_msg3="$HIT_MSG3"
+    elif [[ "$key" != "$first_key" ]]; then agreement=0; fi
+    index=$((index + 1))
+  done
+  if (( ! agreement )) || [[ "$first_key" == '<unknown>' ]]; then
+    printf '%s\n' '[shortcut-language] authored content unavailable; no strike recorded for ambiguous candidate context' >&2
+  elif [[ "$first_key" != '<clean>' ]]; then
+    guard_enforce_progressive_strikes "${HOOK_SESSION_ID:-unknown}" "shortcut_language" "${HOOK_CWD:-}" "$first_msg1" "$first_msg2" "$first_msg3"
+    break
+  fi
 done < "$records"
 exit 0

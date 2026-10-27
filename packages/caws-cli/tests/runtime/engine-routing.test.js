@@ -1305,8 +1305,22 @@ test.each(shortcutRoutes)(
       );
       expect(outside).toContain('todo implement this');
       expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(13);
-      // A repeated span cannot establish the actual occurrence.
-      put(second, '/*\n  earlier block context\n  todo implement this\n */\n'.repeat(2));
+      // Repeated placements qualify when every candidate has the same authored
+      // comment finding; different lexical contexts remain explicit unknown.
+      const repeated = '/*\n  earlier block context\n  todo implement this\n */\n';
+      put(second, repeated.repeat(2));
+      const repeatedOutput = await runPatch(
+        patch([
+          `*** Update File: ${second}`,
+          '@@',
+          '   earlier block context',
+          '+  todo implement this',
+        ]),
+        2
+      );
+      expect(repeatedOutput).toContain('todo implement this');
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(14);
+      put(second, repeated + '  earlier block context\n  todo implement this\n');
       await runPatch(
         patch([
           `*** Update File: ${second}`,
@@ -1316,7 +1330,71 @@ test.each(shortcutRoutes)(
         ])
       );
       expect(lastStderr).toMatch(/authored content unavailable/i);
-      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(13);
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(14);
+      // Partial-line Edit: only the added character range is authored.
+      put(second, '  return 1; // TODO finish\n');
+      const partial = await runTool(
+        'Edit',
+        { file_path: second, old_string: 'return 1;', new_string: 'return 1; // TODO finish' },
+        2
+      );
+      expect(partial).toContain('TODO finish');
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(15);
+      put(second, '// a TODO\n');
+      await runTool('Edit', { file_path: second, old_string: '// a ', new_string: '// a TODO' });
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(15);
+      put(second, '/* TODO old */ // a TODO\n');
+      await runTool('Edit', { file_path: second, old_string: '// a ', new_string: '// a TODO' });
+      expect(lastStderr).toMatch(/authored content unavailable/i);
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(15);
+      put(second, 'const x = "TODO";\n');
+      await runTool('Edit', { file_path: second, old_string: '""', new_string: '"TODO"' });
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(15);
+      put(second, '  return 2; // TODO old\n');
+      await runTool('Edit', {
+        file_path: second,
+        old_string: 'return 1;',
+        new_string: 'return 2;',
+      });
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(15);
+      // A missing or excluded later file cannot discard an earlier qualified
+      // finding in a syntactically valid multipatch.
+      put(first, '// TODO qualified first\n');
+      const mixed = await runPatch(
+        patch([
+          `*** Update File: ${first}`,
+          '@@',
+          '+// TODO qualified first',
+          `*** Update File: ${repo}/not-present.js`,
+          '@@',
+          '+const x = 1;',
+        ]),
+        2
+      );
+      expect(mixed).toContain('qualified first');
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(16);
+      const excluded = await runPatch(
+        patch([
+          `*** Update File: ${first}`,
+          '@@',
+          '+// TODO qualified first',
+          `*** Update File: ${repo}/tests/not-present.js`,
+          '@@',
+          '+// TODO fixture',
+        ]),
+        2
+      );
+      expect(excluded).toContain('qualified first');
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(17);
+      const nested = path.join(repo, 'new', 'nested', 'file.js');
+      const nestedOutput = await runTool(
+        'Write',
+        { file_path: nested, content: '// TODO new nested file\n' },
+        2,
+        'pre_tool_use'
+      );
+      expect(nestedOutput).toContain('new nested file');
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(18);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
