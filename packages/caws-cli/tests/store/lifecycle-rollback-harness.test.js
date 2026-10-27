@@ -57,6 +57,7 @@ const { loadEvents } = require('../../dist/store/events-store');
 const { verifyChain } = require('../../dist/kernel');
 const lifecycleLock = require('../../dist/store/lifecycle-lock');
 const atomicWrite = require('../../dist/store/atomic-write');
+const registryPatch = require('../../dist/store/apply-patch');
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -867,7 +868,7 @@ describe('create authority lock and compensation', () => {
     const original = atomicWrite.writeFileAtomic;
     let registryWrites = 0;
     jest.spyOn(atomicWrite, 'writeFileAtomic').mockImplementation((p, bytes, options) => {
-      if (p === path.join(caws, 'worktrees.json') && ++registryWrites === 2) {
+      if (p === path.join(caws, 'worktrees.json') && ++registryWrites === 3) {
         expect(fs.existsSync(path.join(caws, 'state.lock'))).toBe(true);
         return {
           ok: false,
@@ -885,7 +886,7 @@ describe('create authority lock and compensation', () => {
       })
     );
     expect(result.ok).toBe(false);
-    expect(registryWrites).toBe(2);
+    expect(registryWrites).toBe(3);
     expect(result.errors.map((d) => d.rule)).toContain(
       'store.lifecycle.partial_failure_unrecovered'
     );
@@ -893,5 +894,140 @@ describe('create authority lock and compensation', () => {
       /restor.*fail|could not.*restor|unrecovered/i
     );
     expect(fs.existsSync(path.join(caws, 'state.lock'))).toBe(false);
+  });
+});
+
+describe('create registry augmentation failure', () => {
+  test.each(['read failure', 'invalid JSON', 'array registry', 'missing entry', 'array entry'])(
+    '%s before augmentation refuses without spec or audit effects',
+    (fault) => {
+      const caws = setupCaws(mkRepo('rbh-augment-input-'));
+      seedBoundableSpec(caws, 'WT-AUGMENT-INPUT-001');
+      const before = createAuthorityBytes(caws, 'WT-AUGMENT-INPUT-001');
+      const registryPath = path.join(caws, 'worktrees.json');
+      const apply = registryPatch.applyRegistryPatch;
+      jest.spyOn(registryPatch, 'applyRegistryPatch').mockImplementationOnce((...args) => {
+        const result = apply(...args);
+        expect(result.ok).toBe(true);
+        expect(fs.existsSync(path.join(caws, 'state.lock'))).toBe(true);
+        if (fault === 'read failure') {
+          const read = fs.readFileSync;
+          let injected = false;
+          jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...options) => {
+            if (file === registryPath && !injected) {
+              injected = true;
+              throw Object.assign(new Error('augmentation read denied'), { code: 'EACCES' });
+            }
+            return read(file, ...options);
+          });
+        } else {
+          const contents = {
+            'invalid JSON': '{',
+            'array registry': '[]',
+            'missing entry': '{}',
+            'array entry': '{"wt-input":[]}',
+          };
+          fs.writeFileSync(registryPath, contents[fault]);
+        }
+        return result;
+      });
+      let atRelease;
+      beforeCreateLock(
+        () => {},
+        () => {
+          atRelease = createAuthorityBytes(caws, 'WT-AUGMENT-INPUT-001');
+        }
+      );
+      const result = createWorktree(caws, {
+        name: 'wt-input',
+        specId: 'WT-AUGMENT-INPUT-001',
+        session: SESSION,
+        actor: ACTOR,
+      });
+      expect(result.ok).toBe(false);
+      expect(result.errors.map((d) => d.rule)).toContain('store.write.io_failed');
+      expect(atRelease).toEqual(before);
+      expect(createAuthorityBytes(caws, 'WT-AUGMENT-INPUT-001')).toEqual(before);
+    }
+  );
+
+  test('reports unrecovered authority if augmentation and its compensation both fail', () => {
+    const caws = setupCaws(mkRepo('rbh-augment-unrecovered-'));
+    seedBoundableSpec(caws, 'WT-AUGMENT-LOSS-001');
+    const before = createAuthorityBytes(caws, 'WT-AUGMENT-LOSS-001');
+    const atomic = atomicWrite.writeFileAtomic;
+    let failedAugmentation = false;
+    jest.spyOn(atomicWrite, 'writeFileAtomic').mockImplementation((file, bytes, options) => {
+      if (file === path.join(caws, 'worktrees.json')) {
+        const contents = bytes.toString();
+        if (failedAugmentation || contents.includes('baseBranch')) {
+          failedAugmentation = true;
+          expect(fs.existsSync(path.join(caws, 'state.lock'))).toBe(true);
+          return {
+            ok: false,
+            errors: [{ rule: 'store.write.io_failed', severity: 'error', message: 'write denied' }],
+          };
+        }
+      }
+      return atomic(file, bytes, options);
+    });
+    const result = createWorktree(caws, {
+      name: 'wt-loss',
+      specId: 'WT-AUGMENT-LOSS-001',
+      session: SESSION,
+      actor: ACTOR,
+    });
+    expect(failedAugmentation).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((d) => d.rule)).toContain(
+      'store.lifecycle.partial_failure_unrecovered'
+    );
+    expect(createAuthorityBytes(caws, 'WT-AUGMENT-LOSS-001').slice(1)).toEqual(before.slice(1));
+    expect(
+      JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8'))['wt-loss'].owner
+        .session_id
+    ).toBe(SESSION.session_id);
+    expect(fs.existsSync(path.join(caws, 'state.lock'))).toBe(false);
+  });
+
+  test('a partial augmentation write and EIO refuses create and restores exact authority before release', () => {
+    const caws = setupCaws(mkRepo('rbh-create-augment-'));
+    seedBoundableSpec(caws, 'WT-AUGMENT-001');
+    const before = createAuthorityBytes(caws, 'WT-AUGMENT-001');
+    let atRelease;
+    beforeCreateLock(
+      () => {},
+      (dir) => {
+        atRelease = createAuthorityBytes(dir, 'WT-AUGMENT-001');
+      }
+    );
+    const original = fs.writeFileSync;
+    const worktreePath = path.join(caws, 'worktrees', 'wt-augment');
+    let injected = false;
+    // Metadata identifies augmentation in both direct-target and atomic-temp
+    // implementations; the initial kernel bind has no branch/path metadata.
+    jest.spyOn(fs, 'writeFileSync').mockImplementation((target, bytes, ...args) => {
+      const contents = Buffer.isBuffer(bytes) ? bytes.toString('utf8') : String(bytes);
+      if (!injected && contents.includes(worktreePath) && contents.includes('baseBranch')) {
+        injected = true;
+        expect(fs.existsSync(path.join(caws, 'state.lock'))).toBe(true);
+        original(target, contents.slice(0, 23), ...args);
+        throw Object.assign(new Error('injected partial augmentation EIO'), { code: 'EIO' });
+      }
+      return original(target, bytes, ...args);
+    });
+    const result = createWorktree(caws, {
+      name: 'wt-augment',
+      specId: 'WT-AUGMENT-001',
+      session: SESSION,
+      actor: ACTOR,
+    });
+    expect(injected).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(atRelease).toEqual(before);
+    expect(createAuthorityBytes(caws, 'WT-AUGMENT-001')).toEqual(before);
+    expect(chainIsVerifiable(caws).ok).toBe(true);
+    expect(fs.existsSync(path.join(caws, 'state.lock'))).toBe(false);
+    expect(fs.existsSync(worktreePath)).toBe(false);
   });
 });

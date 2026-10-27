@@ -1120,12 +1120,16 @@ export function createWorktree(
     // Augment the entry with descriptive metadata the kernel does NOT
     // model (branch, baseBranch, path). These are governance metadata
     // for merge/destroy decisions, not authority claims.
-    augmentRegistryEntry(cawsDir, input.name, {
+    const augmented = augmentRegistryEntry(cawsDir, input.name, {
       branch,
       baseBranch,
       path: wtPath,
       ...(baseSha !== null ? { baseSha } : {}),
     });
+    if (!augmented.ok) {
+      const restored = restoreRegistrySnapshot(cawsDir, snapshot.value);
+      return err([...augmented.errors, ...(restored.ok ? [] : restored.errors)]);
+    }
 
     // Then run the lifecycle transaction for spec YAML + events.
     // spec_activated goes LAST, and the ordering is load-bearing.
@@ -1535,8 +1539,8 @@ function rollbackRegistryEntry(cawsDir: string, name: string): void {
  *  doesn't model (branch, baseBranch, path). These fields are used by
  *  merge/destroy for prerequisite checks but are not authority claims.
  *  applyRegistryPatch only touches the kernel-modeled fields, so we
- *  layer in the rest via a direct merge. Best-effort — read failure
- *  is logged but doesn't fail the caller. */
+ *  layer in the rest atomically. The entire registry carries authority, so
+ *  every failure must reach the caller's locked compensation path. */
 function augmentRegistryEntry(
   cawsDir: string,
   name: string,
@@ -1546,18 +1550,29 @@ function augmentRegistryEntry(
     readonly path?: string;
     readonly baseSha?: string;
   }
-): void {
+): Result<true> {
   const p = path.join(cawsDir, 'worktrees.json');
   try {
     const raw = fs.readFileSync(p, 'utf8');
-    const obj = JSON.parse(raw);
-    if (!obj || typeof obj !== 'object') return;
-    const entry = obj[name];
-    if (!entry || typeof entry !== 'object') return;
-    obj[name] = { ...entry, ...extra };
-    fs.writeFileSync(p, JSON.stringify(obj, null, 2));
-  } catch {
-    /* best-effort */
+    const obj: unknown = JSON.parse(raw);
+    if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) {
+      throw new Error('Registry is not an object.');
+    }
+    const registry = obj as Record<string, unknown>;
+    const entry = registry[name];
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`Registry entry "${name}" is not an object.`);
+    }
+    registry[name] = { ...entry, ...extra };
+    return writeFileAtomic(p, JSON.stringify(registry, null, 2), { preserveMode: true });
+  } catch (e) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.WRITE_IO_FAILED,
+        `Cannot augment worktree "${name}" in the registry: ${String(e)}`,
+        { subject: p }
+      )
+    );
   }
 }
 
