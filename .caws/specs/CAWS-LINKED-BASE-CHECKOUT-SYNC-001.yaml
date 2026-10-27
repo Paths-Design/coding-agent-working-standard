@@ -1,0 +1,46 @@
+id: CAWS-LINKED-BASE-CHECKOUT-SYNC-001
+title: 'Refresh actual base checkouts after compare-and-swap merge'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-27T02:32:59.245Z'
+updated_at: '2026-10-27T02:32:59.245Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'worktree merge checkout consistency'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/src/kernel/schemas/events/worktree_merged.v1.json'
+    - 'packages/caws-cli/tests/store/worktree-merge-canonical-consistency.test.js'
+    - 'packages/caws-cli/tests/shell/worktree-merge-canonical-consistency.test.js'
+  out: []
+invariants:
+  - 'A landed base ref is followed by safe refresh of every observed checkout on that base without overwriting local edits.'
+  - 'Checkout discovery and refresh failures remain explicit after the durable merge; canonical compatibility fields remain readable.'
+acceptance:
+  - id: A1
+    given: 'a base branch checked out in a linked workspace'
+    when: 'compare-and-swap merge succeeds'
+    then: 'its index and working files reflect the merged base and a different canonical branch remains unchanged'
+  - id: A2
+    given: 'local edits in a base checkout'
+    when: 'safe refresh follows merge'
+    then: 'unrelated edits survive and overlapping edits remain untouched with explicit stale path and repair diagnostics'
+  - id: A3
+    given: 'checkout metadata cannot be observed or refresh cannot complete'
+    when: 'the merge ref has already advanced'
+    then: 'output and audit retain the landed merge and report observation or refresh uncertainty explicitly'
+observability:
+  - 'Real Git store and shell tests compare branch refs index blobs working bytes and retained dirty paths.'
+rollback:
+  - 'Revert this source and regression tests through a normal follow-up commit.'
+non_functional:
+  security:
+    - 'Never force reset or restore checkout files to hide stale state.'
+contracts:
+  - name: 'linked-base-checkout-sync'
+    type: behavior
