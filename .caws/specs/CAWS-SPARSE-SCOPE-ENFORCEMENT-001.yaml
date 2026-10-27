@@ -1,9 +1,10 @@
 id: CAWS-SPARSE-SCOPE-ENFORCEMENT-001
 title: 'Enforce canonical scope authority in sparse linked checkouts'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: sparse-scope-enforcement
 created_at: '2026-10-27T20:09:31.298Z'
-updated_at: '2026-10-27T20:09:31.298Z'
+updated_at: '2026-10-27T20:09:39.192Z'
 created_by_session: '01a17efa-5ae7-79f1-9981-66151c4a7631'
 blast_radius:
   modules:
