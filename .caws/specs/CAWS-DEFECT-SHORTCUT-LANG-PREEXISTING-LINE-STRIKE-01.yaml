@@ -37,5 +37,15 @@ acceptance:
     given: 'an authored ''# placeholder'' stub comment in a non-test source file'
     when: 'the guard runs'
     then: 'it still strikes (negative control)'
+  - id: A4
+    given: >-
+      A Codex apply_patch command with multiple file sections, unchanged stub
+      context, deletion-only edits, or malformed patch grammar
+    when: 'The immutable installed adapter and native compatibility engine run the actual PostToolUse event'
+    then: >-
+      Every introduced source fragment is checked, unchanged and deleted text never
+      strikes, unknown content is explicit without a disk scan, and feedback
+      truthfully states the tool already applied while preserving progressive
+      enforcement
 non_functional: {}
 contracts: []
