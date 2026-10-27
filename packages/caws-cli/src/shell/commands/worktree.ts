@@ -22,6 +22,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { resolveGitBinary } from '../../store/git-binary';
+import { withLifecycleLock } from '../../store/lifecycle-lock';
 
 import {
   type ActorKind,
@@ -30,6 +31,7 @@ import {
   type EvidenceRecord,
   inspectProjectState,
   isOk,
+  ok,
   type Spec,
   type WorktreeRecord,
 } from '../../kernel';
@@ -984,7 +986,25 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   // durable even when Git refuses to refresh a dirty canonical checkout. The
   // merge still exits 0, but the split state must be loud and actionable so a
   // later commit cannot unknowingly record the old index as a rollback.
-  if (outcome.data?.canonical_checkout_state === 'stale') {
+  const checkoutSync = outcome.data?.base_checkout_sync;
+  if (Array.isArray(checkoutSync)) {
+    for (const checkout of checkoutSync as {
+      path: string;
+      state: string;
+      sync_error?: string;
+      repair_command?: string;
+    }[]) {
+      if (checkout.state !== 'stale') continue;
+      const canonical = realpathSafe(checkout.path) === realpathSafe(ctx.repoRoot);
+      err(
+        `warning: merge completed but the ${canonical ? 'canonical checkout' : 'base checkout'} is STALE: ${checkout.path}\n` +
+          `  Git refused the safe refresh: ${String(checkout.sync_error)}\n` +
+          `  Preserve or commit the local changes first, then inspect HEAD and refresh the exact merged transition:\n` +
+          `    ${String(checkout.repair_command)}\n` +
+          `  Do not commit from this checkout until git status no longer shows merged paths as staged reversions.`
+      );
+    }
+  } else if (outcome.data?.canonical_checkout_state === 'stale') {
     err(
       `warning: merge completed but the canonical checkout is STALE.\n` +
         `  Git refused the safe refresh: ${String(outcome.data?.canonical_checkout_sync_error)}\n` +
@@ -1146,80 +1166,97 @@ export function runWorktreeMigrateRegistryCommand(opts: WorktreeMigrateRegistryO
   const ctx = resolveCawsCtx(cwd, err, showData, 'migrate-registry');
   if (ctx === null) return 2;
 
-  const worktreesJsonPath = path.join(ctx.cawsDir, 'worktrees.json');
+  // Derive from canonical authority only after acquisition. Previews stay read-only.
+  const migrate = (): number => {
+    const worktreesJsonPath = path.join(ctx.cawsDir, 'worktrees.json');
 
-  // Read worktrees.json. ENOENT means there is nothing to migrate.
-  let fileContents: string;
-  try {
-    fileContents = fs.readFileSync(worktreesJsonPath, 'utf8');
-  } catch (e) {
-    const cause = e as { code?: string; message?: string };
-    if (cause.code === 'ENOENT') {
-      out(`${worktreesJsonPath} does not exist. Nothing to migrate.`);
-      return 0;
-    }
-    err(
-      `caws worktree migrate-registry: failed to read ${worktreesJsonPath}: ${cause.message ?? 'unknown error'}`
-    );
-    return 2;
-  }
-
-  // Load specs for the destroyed-record policy check.
-  // We pass the loadSpecs result through unchanged; planMigration's
-  // A12 gate decides whether the load is verifiable.
-  const specsResult = loadSpecs(ctx.cawsDir);
-  const specs = specsResult.specs.map((s) => ({
-    id: s.id,
-    ...(s.worktree !== undefined ? { worktree: s.worktree } : {}),
-  }));
-
-  const plan = planMigration(fileContents, specs, specsResult.diagnostics, (p: string) =>
-    fs.existsSync(p)
-  );
-
-  const dryRun = opts.dryRun === true;
-
-  // Refusals: stderr + nonzero exit. No write under any refusal path.
-  if (plan.kind === 'refuse') {
-    err('caws worktree migrate-registry: refused.');
-    err(plan.diagnostic.message);
-    if (plan.decisions) {
-      err('');
-      err(`Nested records: ${plan.decisions.length}`);
-      for (const d of plan.decisions) {
-        err(formatDecision(d));
+    // Read worktrees.json. ENOENT means there is nothing to migrate.
+    let fileContents: string;
+    try {
+      fileContents = fs.readFileSync(worktreesJsonPath, 'utf8');
+    } catch (e) {
+      const cause = e as { code?: string; message?: string };
+      if (cause.code === 'ENOENT') {
+        out(`${worktreesJsonPath} does not exist. Nothing to migrate.`);
+        return 0;
       }
-    }
-    if (plan.diagnostic.narrowRepair !== undefined) {
-      err('');
-      err(plan.diagnostic.narrowRepair);
-    }
-    err('');
-    err('No changes were made.');
-    if (showData) {
-      renderPlanData(plan, err);
-    }
-    // read_failed -> 2 (IO/parse error class), everything else -> 1 (policy refusal).
-    return plan.reason === 'read_failed' ? 2 : 1;
-  }
-
-  // no_op or apply: stdout + zero exit.
-  renderPlanReport(plan, worktreesJsonPath, dryRun, out);
-
-  if (plan.kind === 'apply' && !dryRun) {
-    const writeResult = writeFileAtomic(worktreesJsonPath, plan.outputBytes);
-    if (!isOk(writeResult)) {
-      err('caws worktree migrate-registry: failed to write migrated file.');
-      err(renderDiagnostics(writeResult.errors, { showData }));
+      err(
+        `caws worktree migrate-registry: failed to read ${worktreesJsonPath}: ${cause.message ?? 'unknown error'}`
+      );
       return 2;
     }
-  }
 
-  if (showData) {
-    renderPlanData(plan, out);
-  }
+    // Load specs for the destroyed-record policy check.
+    // We pass the loadSpecs result through unchanged; planMigration's
+    // A12 gate decides whether the load is verifiable.
+    const specsResult = loadSpecs(ctx.cawsDir);
+    const specs = specsResult.specs.map((s) => ({
+      id: s.id,
+      ...(s.worktree !== undefined ? { worktree: s.worktree } : {}),
+    }));
 
-  return 0;
+    const plan = planMigration(fileContents, specs, specsResult.diagnostics, (p: string) =>
+      fs.existsSync(p)
+    );
+
+    const dryRun = opts.dryRun === true;
+
+    // Refusals: stderr + nonzero exit. No write under any refusal path.
+    if (plan.kind === 'refuse') {
+      err('caws worktree migrate-registry: refused.');
+      err(plan.diagnostic.message);
+      if (plan.decisions) {
+        err('');
+        err(`Nested records: ${plan.decisions.length}`);
+        for (const d of plan.decisions) {
+          err(formatDecision(d));
+        }
+      }
+      if (plan.diagnostic.narrowRepair !== undefined) {
+        err('');
+        err(plan.diagnostic.narrowRepair);
+      }
+      err('');
+      err('No changes were made.');
+      if (showData) {
+        renderPlanData(plan, err);
+      }
+      // read_failed -> 2 (IO/parse error class), everything else -> 1 (policy refusal).
+      return plan.reason === 'read_failed' ? 2 : 1;
+    }
+
+    // no_op or apply: stdout + zero exit.
+    renderPlanReport(plan, worktreesJsonPath, dryRun, out);
+
+    if (plan.kind === 'apply' && !dryRun) {
+      const writeResult = writeFileAtomic(worktreesJsonPath, plan.outputBytes);
+      if (!isOk(writeResult)) {
+        err('caws worktree migrate-registry: failed to write migrated file.');
+        err(renderDiagnostics(writeResult.errors, { showData }));
+        return 2;
+      }
+    }
+
+    if (showData) {
+      renderPlanData(plan, out);
+    }
+
+    return 0;
+  };
+  if (opts.dryRun === true) return migrate();
+  // An absent container cannot contain authority to migrate. Return directly:
+  // invoking migrate() here could race initialization and publish without a lock.
+  if (!fs.existsSync(ctx.cawsDir)) {
+    out(`${path.join(ctx.cawsDir, 'worktrees.json')} does not exist. Nothing to migrate.`);
+    return 0;
+  }
+  const result = withLifecycleLock(ctx.cawsDir, () => ok(migrate()));
+  if (!result.ok) {
+    err('caws worktree migrate-registry: failed to acquire lifecycle authority.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 2;
+  }
+  return result.value;
 }
 
 // ─── caws worktree cleanup-plan ───────────────────────────────────────────
@@ -2808,12 +2845,18 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
     // Exact creation receipts never carry unrelated bridge cleanup along.
     const receiptOnly = opts.state?.length === 1 && opts.state[0] === 'verified-dead-creation';
     const bridgePlan = bridgeGhostPlan(ctx.cawsDir, !receiptOnly);
+    const bridgeCleanupFailed = !receiptOnly && !bridgePlan.ok;
+    const succeeded = !bridgeCleanupFailed && !outcomes.some((item) => item.action !== 'applied');
+    if (bridgeCleanupFailed && !bridgePlan.ok) {
+      err('caws worktree prune: bridge cleanup failed.');
+      err(renderDiagnostics(bridgePlan.errors, { showData }));
+    }
 
     if (opts.json === true) {
       out(
         JSON.stringify(
           {
-            ok: !outcomes.some((item) => item.action !== 'applied'),
+            ok: succeeded,
             dry_run: false,
             read_only: false,
             outcomes,
@@ -2823,7 +2866,9 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
                   bridge_ghosts: bridgePlan.value.candidates,
                   bridge_removed: bridgePlan.value.removed,
                 }
-              : {}),
+              : bridgeCleanupFailed
+                ? { bridge_errors: bridgePlan.errors }
+                : {}),
             filters: {
               state: opts.state ?? [],
               include: opts.include ?? [],
@@ -2838,7 +2883,7 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
       renderWorktreePruneApply(outcomes, out);
       if (bridgePlan.ok) renderBridgeGhostSection(bridgePlan.value, out);
     }
-    return outcomes.some((item) => item.action !== 'applied') ? 1 : 0;
+    return succeeded ? 0 : 1;
   }
 
   if (opts.json === true) {
@@ -2880,26 +2925,12 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
  * nothing read-side; removal is disk hygiene (no events). Spec states come
  * from loadSpecs so the plan never guesses.
  */
-function bridgeGhostPlan(
-  cawsDir: string,
-  apply: boolean
-):
-  | {
-      ok: true;
-      value: {
-        candidates: ReadonlyArray<{ specId: string; holderSessionId: string; reason: string }>;
-        removed: ReadonlyArray<string>;
-        apply: boolean;
-      };
-    }
-  | { ok: false } {
+function bridgeGhostPlan(cawsDir: string, apply: boolean): ReturnType<typeof pruneBridgeGhosts> {
   const specs = loadSpecs(cawsDir);
   const specStates: Record<string, string | undefined> = {};
   for (const s of specs.specs) specStates[s.id] = s.lifecycle_state;
   const activeIds = specs.specs.filter((s) => s.lifecycle_state === 'active').map((s) => s.id);
-  const r = pruneBridgeGhosts(cawsDir, { activeSpecIds: activeIds, specStates, apply });
-  if (!r.ok) return { ok: false };
-  return { ok: true, value: r.value };
+  return pruneBridgeGhosts(cawsDir, { activeSpecIds: activeIds, specStates, apply });
 }
 
 export function runWorktreeRepairCommand(opts: WorktreeRepairOptions): number {

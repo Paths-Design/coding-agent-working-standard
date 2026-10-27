@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: Shared hook runtime and native adapter contract
 owner: CAWS maintainers
-updated: 2026-10-05
+updated: 2026-10-26
 audience: consumer
 ---
 
@@ -282,69 +282,98 @@ dedicated `lib/agent-surface.sh`):
 | updatedInput rewrite      | yes                              | yes                                            | no (no documented contract; quiet-merge passes through)                    | no on the plain-CLI path (0.21.4 and 0.21.11 alike); the ACP/daemon surface applies it as of 0.21.11 — quiet-merge still passes through        | yes, via the bridge shim re-wrapping dispatcher output                                                                        | yes — `plugin.ts` mutates `output.args.command` before the tool runs                                                           |
 | non-2 non-zero hook exit  | warning (max returned)           | warning (max returned)                         | promoted to blocking exit 2 — Kimi does not enforce exit 1 (verified live) | warning (max returned) — Qwen enforces exit 2 blocking and treats exit 1 as a non-blocking error, same contract as Claude Code (verified live) | N/A — ZCode's hook runner requires strict JSON on stdout; the bridge re-wraps every shared-dispatcher exit into that contract | N/A — opencode interposition is in-process; `plugin.ts` throws directly rather than relying on a process exit code             |
 
-Backward-compatibility: the resolver falls back to the legacy env var
-(`CLAUDE_PROJECT_DIR` / `CODEX_PROJECT_DIR`) when `CAWS_PROJECT_DIR` is unset,
-so a not-yet-migrated wiring keeps working during the transition.
+The resolver preserves a nonempty `CAWS_PROJECT_DIR` verbatim. Otherwise it
+normalizes the legacy `CLAUDE_PROJECT_DIR` or `CODEX_PROJECT_DIR` candidate to
+its Git root, retaining the candidate if Git discovery fails. Git path readers
+remove one trailing record delimiter and preserve newlines belonging to the path
+itself.
+
+`worktree-guard.sh` queries canonical registry authority only after lexical
+projection finds a protected operation. An empty protected-operation view
+returns 0; nested executable Git commands remain subject to the guard. Required
+root helpers or unreadable or malformed registry JSON refuse with exit 2. The
+opt-in `stop-worktree-check.sh` instead diagnoses unavailable activity and
+returns 0. Registry readers distinguish a flat entry named `worktrees` from a
+legacy envelope by entry marker fields; this compatibility rule does not
+validate every registry field.
+
+For selected `cp` and `mv` calls, `worktree-guard.sh` consumes the bounded
+backend's complete operand-role projection instead of inferring a destination
+from the whole command. The mandatory `bash-write-guard.sh` consumes the same
+projection independently. `lib/copy-roles.sh` resolves regular-file destination
+children, checks single-link file identity, and includes move-source deletion in
+ownership checks. Copy destinations whose effective final entry is a symlink
+refuse with exit 2 even when approval is available: force-copy fallback can
+replace the link entry instead of writing its referent. Known canonical or
+foreign referent violations retain precedence. A symlink to a destination
+directory remains supported when the effective child is regular. An external
+artifact destination remains external when a source path contains a repository
+directory name. Unknown roles, options, coordinates and unmodeled filesystem
+entries refuse. The helper's bounded filesystem snapshot does not establish
+final-launch confinement; see the
+[closed copy profile](../guides/command-analysis.md#active-write-guard-integration).
+
+The Bash removal channel preserves an entry effect separately from referent
+writes. Supported `rm` symlink deletion checks the physical parent and final
+name; unsupported options retain uncertainty and cannot become referent-only
+permission. The shared oracle follows actual registered physical roots for
+default and migrated worktrees. Bash and Write/Edit perform ownership checks
+before metadata or documentation allowlists; unavailable or ambiguous payload
+ownership cannot become a canonical-path allow. Role transport failures refuse.
+An invalid or unreadable existing registry cannot become an absent-registry
+allow. These observations do not establish final-launch filesystem confinement.
 
 ## Payload `cwd` contract
 
-Guards learn where the agent is from the payload's `cwd`. `lib/parse-input.sh`
-sets `HOOK_CWD` from it, and to empty when the field is absent — overwriting any
-value already exported — so an absent `cwd` is always seen as absent, never
-inherited.
+Repository identity, the payload's base directory and a command's effective
+execution directory serve different purposes. `lib/parse-input.sh` sets
+`HOOK_CWD` from the payload and clears it when absent; an inherited value is not
+evidence of supplied context.
 
-Two questions use that value, and they need different things:
+Repository-wide state (`.caws/sessions/`, leases) resolves through
+`git rev-parse --git-common-dir` from `${HOOK_CWD:-$PWD}`. That locates
+canonical governance from canonical and linked checkouts. It does not bind a
+relative command operand to its execution directory. Tests that execute hooks
+must enter a fixture root first
+([hook-test isolation](../guides/hook-packs.md#hook-test-isolation)).
 
-- **Which repository's state?** Repo-wide state (`.caws/sessions/`, leases) is
-  located by repository identity: `lib/session-cache.sh` runs
-  `git rev-parse --git-common-dir` from `${HOOK_CWD:-$PWD}`, which names the
-  canonical `.git` from the canonical checkout and from every linked worktree.
-  The `$PWD` step is the hook process's directory, chosen by whoever launched
-  the hook. A test that runs a real hook from inside a real checkout therefore
-  writes that checkout's state; hook tests must enter a fixture root first
-  ([hook-test isolation](../guides/hook-packs.md#hook-test-isolation)).
-- **Which file does a relative path name?** That needs a location, and
-  repository identity is not one. Only a payload `cwd` naming an existing
-  directory counts as resolved (`_CWD_RESOLVED` in `bash-write-guard.sh`).
-  Without it, on a surface whose contract carries `cwd`, a relative mutation
-  target goes to the ownership oracle flagged unresolved
-  (`CAWS_ORACLE_CWD_UNRESOLVED`) and the answer is
-  `ask_uncertain:cwd-unresolved:<path>`. On any other surface the guard keeps
-  resolving against the canonical root, because there an absent `cwd` is the
-  normal case and asking would refuse every relative write.
+The mandatory write guard uses the decoded execution contract from
+`caws hooks mutation-view`, not repository identity as a substitute for command
+context. Its native envelope preserves the exact source and rejects conflicting
+`command`/`cmd`, shell and startup declarations. Declared native
+`exec_command`/`shell_command` aliases require explicit Bash and
+`tool_input.login:false`. Their `workdir` resolves against the original native
+base `cwd`; an existing absolute workdir can establish its own coordinate.
+Invalid supplied context remains an issue. Unknown directories stay `null`,
+rather than borrowing the CLI's or canonical root's directory. The bounded
+projection can retain independently known facts without treating unknown
+relative targets as resolved.
 
-Which surfaces carry `cwd` is a per-surface fact, recorded here with its
-evidence. `_CWD_CONTRACT_SURFACES` in `bash-write-guard.sh` is the enforcing
-copy of the "fail closed" column; the two change together.
+`tool_input.cwd`, `env` and `environment` have no modeled native execution
+contract; supplying them is unresolved. The literal `Bash` compatibility profile
+retains its declared Bash assumption when no shell is supplied, except for the
+known incompatible Codex producer. That profile does not establish another
+harness's normalization or effective executor settings.
 
-| Surface        | Payload carries `cwd`    | Evidence                                                                                                                                                         | Absent `cwd`                                |
-| -------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `claude-code`  | yes                      | `cwd` is a common field of the harness's hook input                                                                                                              | fail closed (`ask`)                         |
-| `codex`        | assumed                  | the vendor parser reads it (`codex/hooks/lib/parse-input.sh`); no captured payload                                                                               | fail closed (`ask` → `deny`)                |
-| `opencode`     | yes, built by the plugin | `opencode/plugin.ts` `resolveAgentCwd`: the Bash call's `workdir` when given, else `ctx.directory`; never `ctx.worktree`, which differs in a subdirectory launch | fail closed (block — opencode has no `ask`) |
-| `qwen-code`    | yes, documented          | payload row in `qwen-code/CAWS-HOOKS.md`; `caws-qwen-hook.sh` header                                                                                             | fail closed (`ask`)                         |
-| `kimi-code`    | yes, documented          | payload row in `kimi-code/AGENTS.md`; `caws-kimi-hook.sh` header                                                                                                 | fail closed (`ask` → `deny`)                |
-| `zcode`        | unverified               | `zcode/hooks/caws-bridge.sh` passes the harness payload through unchanged                                                                                        | resolve against the canonical root          |
-| `dsh`          | unverified               | external adapter                                                                                                                                                 | resolve against the canonical root          |
-| (unrecognized) | —                        | —                                                                                                                                                                | resolve against the canonical root          |
+| Surface                   | Coordinate evidence                                                                                            | Execution boundary                                                                                                                                                               |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code               | Native payload declares a base `cwd`                                                                           | The compatibility profile does not by itself qualify final shell, startup or rewritten source.                                                                                   |
+| Codex                     | A host `execution_workdir` can establish a directory when emitted and validated; a turn directory alone cannot | The known reduced command projection remains `execution-contract` unresolved, including caller-added shell fields or aliases. Complete native launch qualification remains open. |
+| OpenCode                  | The plugin derives a coordinate from the Bash call's workdir or its native directory                           | Adapter coordinate construction is separate from complete native launch qualification.                                                                                           |
+| Qwen, Kimi, ZCode and DSH | Their adapters define payload transport with different documented or unverified cwd coverage                   | A surface label or canonical-root fallback does not establish effective execution context.                                                                                       |
 
-Rules for changing it:
+The trusted launcher identifies the Codex producer through `CAWS_AGENT_SURFACE`;
+literal diagnostic analysis cannot lift that native restriction. Protective
+refusal is not benign admission or qualified deployment. The
+[bounded analysis guide](../guides/command-analysis.md) records the exact
+implemented decoder, source-profile limits and producer evidence.
 
-- **Absence is decided per surface, from evidence.** Failing closed on a surface
-  that never sends `cwd` refuses every relative write there; failing open on one
-  that does turns a degraded payload into a confident wrong answer. Neither is a
-  safe global default.
-- **Adding a surface to the fail-closed set** is a one-word change to
-  `_CWD_CONTRACT_SURFACES`, made together with this table's evidence and the
-  retirement of that surface's prior-behavior control test in
-  `tests/hooks/bats/claim-oracle-cwd-relative.bats`.
-- **A new vendor adapter** declares its row before it ships. If its harness
-  supplies no `cwd`, the adapter builds one from the harness's own notion of the
-  session directory, as `plugin.ts` does, rather than leaving the guards to
-  guess.
-- **Present is not current.** The table records whether the field is sent, not
-  whether each harness updates it after the agent changes directory inside its
-  shell; that is unverified per surface.
+Native adoption also requires the checked source and context to survive every
+later transformation. `quiet-merge.sh` follows blocking guards and can prepend a
+canonical-root directory change; an earlier decision cannot authorize changed
+bytes. The guide's typed executor and permit sequence are proposed. Complete
+final-launch mediation, native canary and rollback require separate proof before
+the deployed runtime is replaced.
 
 ## Dispatcher resolution
 
@@ -553,8 +582,10 @@ changes only a vendor tree does not contend for the shared version.
 - Idempotent: a byte-identical re-run reports unchanged and writes nothing.
 - Non-destructive: the settings.json / hooks.json merge preserves user-authored
   content; managed drift refuses by default (adopt/overwrite to override).
-- Fail-open dispatcher: a parser crash or missing lib in the shared core exits 0
-  rather than blocking the tool call.
+- Shared PreToolUse dispatch requires `agent-surface.sh` and `parse-input.sh`
+  before parsing; either missing library produces exit 2. Rejected input returns
+  0 before the `run-handlers.sh` check. Accepted input then requires
+  `run-handlers.sh`, whose absence produces exit 2.
 - The hooks.json placeholder substitution (absolute dispatcher command paths)
   continues to run at install for the codex wiring; the substituted command now
   points at `.caws/hooks/dispatch/<event>.sh`.

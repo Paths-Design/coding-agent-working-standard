@@ -10,7 +10,7 @@
     {
       "id": "mutation",
       "strategy": "mutation",
-      "command": "npm run mutation:run:kernel && npm run mutation:run:store && npm run mutation:run:shell",
+      "command": "npm run mutation:run:kernel && npm run mutation:run:store && npm run mutation:run:shell && npm run mutation:run:analysis",
       "rationale": "Pure safety, authority, timestamp parsing, and arithmetic decisions are held to an explicit per-file mutation floor.",
       "files": [
         "src/kernel/evidence/canonical-json.ts",
@@ -23,6 +23,12 @@
         "src/kernel/spec/validate-shape.ts",
         "src/kernel/worktree/freshness.ts",
         "src/kernel/worktree/transitions.ts",
+        "src/shell/analysis/analyze.ts",
+        "src/shell/analysis/git-context.ts",
+        "src/shell/analysis/interpreter-effects.ts",
+        "src/shell/analysis/mutation-view.ts",
+        "src/shell/analysis/policies.ts",
+        "src/shell/analysis/words.ts",
         "src/shell/binding/resolve-binding.ts",
         "src/shell/commands/agents-conjoining.ts",
         "src/shell/gates/disposition.ts",
@@ -69,6 +75,8 @@
         "src/kernel/worktree/index.ts",
         "src/kernel/worktree/rules.ts",
         "src/kernel/worktree/types.ts",
+        "src/shell/analysis/parser-types.ts",
+        "src/shell/analysis/types.ts",
         "src/shell/binding/types.ts",
         "src/shell/command-metadata.ts",
         "src/shell/gates/local-evaluators/index.ts",
@@ -113,6 +121,7 @@
         "src/kernel/worktree/identity.ts",
         "src/kernel/worktree/leases.ts",
         "src/kernel/worktree/ownership.ts",
+        "src/shell/analysis/load-parser.js",
         "src/shell/build-freshness.ts",
         "src/shell/commands/agents.ts",
         "src/shell/commands/claim.ts",
@@ -235,6 +244,26 @@
     }
   ],
   "surfaces": {
+    "analysis": {
+      "config": "stryker.analysis.conf.js",
+      "reportDir": "reports/mutation-analysis",
+      "threshold": 80,
+      "coverageAnalysis": "off",
+      "buildCommand": "node scripts/build-cli.js",
+      "targets": [
+        { "source": "src/shell/analysis/analyze.ts" },
+        { "source": "src/shell/analysis/git-context.ts" },
+        { "source": "src/shell/analysis/interpreter-effects.ts" },
+        { "source": "src/shell/analysis/mutation-view.ts" },
+        { "source": "src/shell/analysis/policies.ts" },
+        { "source": "src/shell/analysis/words.ts" }
+      ],
+      "tests": [
+        "tests/shell/command-analysis.test.js",
+        "tests/shell/interpreter-effects.test.js",
+        "tests/shell/mutation-view.test.js"
+      ]
+    },
     "kernel": {
       "config": "stryker.kernel.conf.js",
       "reportDir": "reports/mutation-kernel",

@@ -1,0 +1,54 @@
+id: CAWS-CODEX-SESSION-END-BUDGET-001
+title: 'Align Codex SessionEnd registration with the host teardown budget'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded Codex registration repair d5a235007; A1/A2/A3 pass14287/14288/14289 exact spec-event dualread. Fresh SessionEnd3 and owned historical10→3; valid omitted/1..3, foreign hooks, other surfaces and native original30000 preserved; unsupported custom values refuse before writes. Full275 registration checks plus later4 selected native/selection checks, no entire278 rerun claim; build0/gates5PASS/doctor0E5W7I, committed same-provider independent peer source-grounded. Source-only integration into Parent; normal private CLI snapshot0fa02a6d created and actual no-CAWS-clamp host discovery remains Root-owned next validation. Actual SessionEnd terminalseal, final-launch host integration, full installed scenario/replay/rollback/no-Python/fair workload and machine replacement remain Parent obligations. Captured3068/nativebuild artifacts/frozen host untouched.'
+created_at: '2026-10-26T22:01:42.796Z'
+updated_at: '2026-10-26T22:26:09.091Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Codex native registration generation and reconciliation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/system-runtime.ts'
+    - 'packages/caws-cli/src/init/native-hook-identification.ts'
+    - 'packages/caws-cli/tests/adapter/native-entry-registration.test.js'
+  out: []
+invariants:
+  - 'The existing original installed invocation deadline remains 30000ms; supported Codex SessionEnd registration is bounded by the actual host maximum of three seconds without modifying the host or foreign hooks'
+  - 'Normalize only recognized historical stock ten-second Codex SessionEnd registrations; preserve valid custom supported budgets, foreign registrations, other surfaces and their units, and refuse unsupported custom authority rather than silently broadening it'
+acceptance:
+  - id: A1
+    given: 'fresh Codex native configuration'
+    when: 'generated registration is inspected and qualified'
+    then: 'SessionEnd declares three seconds and other event and harness budgets retain their existing semantics'
+  - id: A2
+    given: 'recognized historical stock10, valid supported custom budgets and foreign or unsupported hooks'
+    when: 'supported configure reconciliation runs'
+    then: 'stock10 becomes3 idempotently, supported values and foreign hooks remain exact, and unsupported custom registrations refuse before enabling state'
+  - id: A3
+    given: 'committed reviewed source and matching compiled consumer'
+    when: 'existing focused registration checks gates and doctor run'
+    then: 'configuration assertions pass with retained raw output while actual host discovery and SessionEnd sealing remain explicit runtime obligations of the Parent'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Bounded configuration source atd5a235007: freshCodexSessionEnd3 seconds, Stop30/PreTool45 unchanged, Claude/Qwen budgets and Qwen milliseconds preserved. Parent normal build38715exit0. Inspected registration-green.json all275pass0fail0pending actual62927exit0, subsequent native-selection-green.json selected4pass274pending actual18776exit0 includes fresh native entry using inert validated assets, legacy/native stock10 reconciliation and project10refusal3acceptance. Original RED2198exit1 exposed fresh10 vs3 and retained10, no runtime changed. Raw Root external session-end-budget-01 logs/json retained. Actual callback completion, selected machine registration/trust and no-warning discovery remain Parent runtime obligations; native original30000 unchanged. Commit verifier proves existence only; semantic basis is inspected source/assertions/rawchecks."
+    recorded_at: "2026-10-26T22:19:47.009Z"
+    commit_sha: d5a235007b388b9d32c9d8c0be4454eb4d549d59
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Direct source/assertion inspection: classify ownership and reject unsupported hook fields before known owned Codex SessionEnd10→3; all traversal completes before writes. Foreign hook timeout10 remains exact; valid omitted or integer1..3 preserved idempotently; 0/0.5/3.5/4/11/string3/null/overflow refuse with config bytes and initially absent enablement unchanged. Canonical project selection old10 refuses, same fixture changed onlytimeout3 accepts inactive. Full registration275/0 plus subsequent4 native/legacy/selection controls0 at matching compiled source, not whole278 rerun. Original10failure RED causal output preserved in Root session-end-budget-01. Frozen host source confirms omitted default1/max3. No blanket warning-free foreign hooks claim or actual native execution; original30000 untouched. Commit verification establishes reachability, behavior manually adjudicated."
+    recorded_at: "2026-10-26T22:19:57.167Z"
+    commit_sha: d5a235007b388b9d32c9d8c0be4454eb4d549d59
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Committed clean3path source d5a235007, normal build0, existing registration suite275pass0fail0pending and later new native/selection4pass274pending actual0; no complete278run claim. Root gates fivePASS exact3path staged+baseaddc basis; doctor0E5W7I; ordinary commit hooks0 with TS ESLint ignored-file warnings retained, not lint-coverage claim. Independent same-provider GPT6.1-sol read-only committed peer used because native falsifier unavailable; load-bearing predicates/classification/write ordering/selection and host1..3 bounds grounded directly, peer reply not proof. Raw logs/json external Root session-end-budget-01 retained. Runtime host discovery/changed trust/SessionEnd terminal sealing, actual native final-launch contract, full installed pair/replay/rollback/no-Python/fair workloads and machine cutover remain Parent obligations. No captured canary, foreign worktree, installed runtime or native30000 modified. Commit-only mechanical verification is existence."
+    recorded_at: "2026-10-26T22:20:07.835Z"
+    commit_sha: d5a235007b388b9d32c9d8c0be4454eb4d549d59

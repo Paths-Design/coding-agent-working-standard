@@ -23,10 +23,15 @@
 const fs = require('fs');
 const path = require('path');
 
+const lifecycleLock = require('../../dist/store/lifecycle-lock');
+const atomicWrite = require('../../dist/store/atomic-write');
+
 const { initProject } = require('../../dist/store/init-store');
 const { runClaimCommand } = require('../../dist/shell/commands/claim');
 const { applyTakeoverWithAudit } = require('../../dist/store/worktrees-writer');
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
+
+afterEach(() => jest.restoreAllMocks());
 
 afterAll(() => {
   cleanupAll();
@@ -282,6 +287,7 @@ describe('A2: the registry write and the audit append are one transaction', () =
         last_seen: '2026-08-12T11:45:00.000Z',
       },
       newOwner: { session_id: 'me', platform: 'claude-code' },
+      specId: 'CLAIMEV-001',
     });
 
     expect(result.ok).toBe(false);
@@ -304,8 +310,13 @@ describe('A2: the registry write and the audit append are one transaction', () =
       name: 'wt-claim',
       patch: takeoverPatch(),
       actor: { kind: 'agent', id: 'me', session_id: 'me' },
-      priorOwner: { session_id: 'peer-session', last_seen: null },
-      newOwner: { session_id: 'me' },
+      priorOwner: {
+        session_id: 'peer-session',
+        platform: 'claude-code',
+        last_seen: '2026-08-12T11:45:00.000Z',
+      },
+      newOwner: { session_id: 'me', platform: 'claude-code' },
+      specId: 'CLAIMEV-001',
     });
 
     expect(result.ok).toBe(false);
@@ -321,8 +332,13 @@ describe('A2: the registry write and the audit append are one transaction', () =
       name: 'wt-claim',
       patch: takeoverPatch(),
       actor: { kind: 'agent', id: 'me', session_id: 'me' },
-      priorOwner: { session_id: 'peer-session', last_seen: null },
-      newOwner: { session_id: 'me' },
+      priorOwner: {
+        session_id: 'peer-session',
+        platform: 'claude-code',
+        last_seen: '2026-08-12T11:45:00.000Z',
+      },
+      newOwner: { session_id: 'me', platform: 'claude-code' },
+      specId: 'CLAIMEV-001',
     });
 
     // Without this control, the two tests above could both be passing because
@@ -392,5 +408,266 @@ describe('A4: a refused takeover leaves no audit implying it happened', () => {
     // occurred — worse than the silence this slice is fixing.
     expect(takenOverEvents(cawsDir)).toHaveLength(0);
     expect(readOwner(cawsDir)).toBe('peer-session');
+  });
+});
+
+function takeoverInput(extra = {}) {
+  return {
+    name: 'wt-claim',
+    patch: takeoverPatch(),
+    actor: { kind: 'agent', id: 'me', session_id: 'me' },
+    priorOwner: {
+      session_id: 'peer-session',
+      platform: 'claude-code',
+      last_seen: '2026-08-12T11:45:00.000Z',
+    },
+    newOwner: { session_id: 'me', platform: 'claude-code' },
+    specId: 'CLAIMEV-001',
+    now: () => new Date('2026-08-12T12:00:00.000Z'),
+    ...extra,
+  };
+}
+
+function authorityBytes(cawsDir) {
+  return ['worktrees.json', 'specs/CLAIMEV-001.yaml', 'events.jsonl'].map((relative) => {
+    const p = path.join(cawsDir, relative);
+    return fs.existsSync(p) ? fs.readFileSync(p) : null;
+  });
+}
+
+// Inject the competing commit immediately before the real lock wrapper runs.
+// The callback, filesystem writers and lock acquisition remain production code.
+function beforeTakeoverLock(fn, afterRelease = () => {}) {
+  const original = lifecycleLock.withLifecycleLock;
+  return jest.spyOn(lifecycleLock, 'withLifecycleLock').mockImplementation((dir, body, opts) => {
+    fn(dir);
+    try {
+      return original(dir, body, opts);
+    } finally {
+      afterRelease(dir);
+    }
+  });
+}
+
+describe('takeover authority lock and compensation', () => {
+  test('failed acquisition does not read canonical authority or audit', () => {
+    const { cawsDir } = setupTakeoverRepo();
+    const before = authorityBytes(cawsDir);
+    fs.writeFileSync(path.join(cawsDir, 'state.lock'), 'held');
+    const original = fs.readFileSync;
+    const authorityReads = [];
+    const reader = jest.spyOn(fs, 'readFileSync').mockImplementation((p, ...args) => {
+      if (
+        [
+          path.join(cawsDir, 'worktrees.json'),
+          path.join(cawsDir, 'specs/CLAIMEV-001.yaml'),
+          path.join(cawsDir, 'events.jsonl'),
+        ].includes(p)
+      )
+        authorityReads.push(p);
+      return original(p, ...args);
+    });
+    const result = applyTakeoverWithAudit(cawsDir, takeoverInput());
+    reader.mockRestore();
+    expect(result.ok).toBe(false);
+    expect(authorityReads).toEqual([]);
+    expect(authorityBytes(cawsDir)).toEqual(before);
+  });
+
+  test('lock acquisition failure never restores an obsolete registry over a competing commit', () => {
+    const { cawsDir } = setupTakeoverRepo();
+    let competing;
+    beforeTakeoverLock((dir) => {
+      const registry = JSON.parse(fs.readFileSync(path.join(dir, 'worktrees.json'), 'utf8'));
+      registry.unrelated = { owner: { session_id: 'competitor' }, note: 'retain exactly' };
+      fs.writeFileSync(path.join(dir, 'worktrees.json'), JSON.stringify(registry) + '\n');
+      fs.writeFileSync(path.join(dir, 'state.lock'), 'held');
+      competing = authorityBytes(dir);
+    });
+    const result = applyTakeoverWithAudit(cawsDir, takeoverInput());
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((d) => d.rule)).toContain('store.lifecycle.lock_contention');
+    expect(authorityBytes(cawsDir)).toEqual(competing);
+  });
+
+  test('append compensation restores the locked snapshot and never writes after release', () => {
+    const { cawsDir } = setupTakeoverRepo();
+    corruptEventChain(cawsDir);
+    let competing;
+    let released;
+    beforeTakeoverLock(
+      (dir) => {
+        const registry = JSON.parse(fs.readFileSync(path.join(dir, 'worktrees.json'), 'utf8'));
+        registry.unrelated = { note: 'new commit before acquire' };
+        fs.writeFileSync(path.join(dir, 'worktrees.json'), JSON.stringify(registry) + '\n');
+        competing = authorityBytes(dir);
+      },
+      (dir) => {
+        released = authorityBytes(dir);
+      }
+    );
+    const result = applyTakeoverWithAudit(cawsDir, takeoverInput());
+    expect(result.ok).toBe(false);
+    expect(released).toEqual(competing);
+    expect(authorityBytes(cawsDir)).toEqual(released);
+  });
+
+  test.each([
+    [
+      'changed owner',
+      (r) => {
+        r['wt-claim'].owner.session_id = 'competitor';
+      },
+    ],
+    [
+      'already transferred owner',
+      (r) => {
+        r['wt-claim'].owner.session_id = 'me';
+      },
+    ],
+    [
+      'changed owner platform',
+      (r) => {
+        r['wt-claim'].owner.platform = 'codex';
+      },
+    ],
+    [
+      'changed heartbeat',
+      (r) => {
+        r['wt-claim'].last_heartbeat = '2026-08-12T11:59:00.000Z';
+      },
+    ],
+    [
+      'changed binding',
+      (r) => {
+        r['wt-claim'].specId = 'OTHER-001';
+      },
+    ],
+    [
+      'missing binding',
+      (r) => {
+        delete r['wt-claim'].specId;
+      },
+    ],
+    [
+      'missing entry',
+      (r) => {
+        delete r['wt-claim'];
+      },
+    ],
+    [
+      'malformed entry',
+      (r) => {
+        r['wt-claim'] = null;
+      },
+    ],
+    [
+      'malformed owner',
+      (r) => {
+        r['wt-claim'].owner = 'peer-session';
+      },
+    ],
+    [
+      'malformed ownership history',
+      (r) => {
+        r['wt-claim'].prior_owners = {};
+      },
+    ],
+  ])('refuses stale plans after %s without changing authority or audit', (_label, mutate) => {
+    const { cawsDir } = setupTakeoverRepo();
+    let competing;
+    beforeTakeoverLock((dir) => {
+      const registry = JSON.parse(fs.readFileSync(path.join(dir, 'worktrees.json'), 'utf8'));
+      mutate(registry);
+      fs.writeFileSync(path.join(dir, 'worktrees.json'), JSON.stringify(registry) + '\n');
+      competing = authorityBytes(dir);
+    });
+    const result = applyTakeoverWithAudit(cawsDir, takeoverInput());
+    expect(result.ok).toBe(false);
+    expect(authorityBytes(cawsDir)).toEqual(competing);
+  });
+
+  test.each([
+    ['missing spec', (dir) => fs.unlinkSync(path.join(dir, 'specs/CLAIMEV-001.yaml'))],
+    [
+      'malformed spec',
+      (dir) => fs.writeFileSync(path.join(dir, 'specs/CLAIMEV-001.yaml'), 'bad: ['),
+    ],
+    [
+      'terminal spec',
+      (dir) => {
+        const p = path.join(dir, 'specs/CLAIMEV-001.yaml');
+        fs.writeFileSync(
+          p,
+          fs.readFileSync(p, 'utf8').replace('lifecycle_state: active', 'lifecycle_state: archived')
+        );
+      },
+    ],
+    ['one sided binding', (dir) => writeSpec(dir, 'CLAIMEV-001', 'other-lane')],
+  ])('refuses %s in fresh canonical binding', (_label, mutate) => {
+    const { cawsDir } = setupTakeoverRepo();
+    let competing;
+    beforeTakeoverLock((dir) => {
+      mutate(dir);
+      competing = authorityBytes(dir);
+    });
+    const result = applyTakeoverWithAudit(cawsDir, takeoverInput());
+    expect(result.ok).toBe(false);
+    expect(authorityBytes(cawsDir)).toEqual(competing);
+  });
+
+  test.each([
+    ['missing prior owner', { patch: { ...takeoverPatch(), prior_owner: undefined } }],
+    ['missing beneficiary', { patch: { ...takeoverPatch(), owner: null } }],
+    ['invalid patch time', { patch: { ...takeoverPatch(), when: 'invalid' } }],
+    ['patch name', { patch: { ...takeoverPatch(), worktree_name: 'other-lane' } }],
+    [
+      'patch kind',
+      {
+        patch: {
+          kind: 'refresh_agent',
+          session: { session_id: 'me' },
+          last_active: '2026-08-12T12:00:00.000Z',
+        },
+      },
+    ],
+    ['patch beneficiary', { patch: { ...takeoverPatch(), owner: { session_id: 'other' } } }],
+    ['prior audit', { priorOwner: { session_id: 'invented', last_seen: null } }],
+    [
+      'prior audit heartbeat',
+      { priorOwner: { session_id: 'peer-session', platform: 'claude-code', last_seen: null } },
+    ],
+    ['actor', { actor: { kind: 'agent', id: 'other', session_id: 'other' } }],
+    ['spec id', { specId: 'OTHER-001' }],
+  ])('refuses inconsistent %s envelope', (_label, change) => {
+    const { cawsDir } = setupTakeoverRepo();
+    const before = authorityBytes(cawsDir);
+    expect(applyTakeoverWithAudit(cawsDir, takeoverInput(change)).ok).toBe(false);
+    expect(authorityBytes(cawsDir)).toEqual(before);
+  });
+
+  test('a failed registry restore reports unrecovered ownership instead of claiming prior owner unchanged', () => {
+    const { cawsDir } = setupTakeoverRepo();
+    corruptEventChain(cawsDir);
+    const original = atomicWrite.writeFileAtomic;
+    let registryWrites = 0;
+    jest.spyOn(atomicWrite, 'writeFileAtomic').mockImplementation((p, bytes, options) => {
+      if (p === path.join(cawsDir, 'worktrees.json') && ++registryWrites === 2) {
+        expect(fs.existsSync(path.join(cawsDir, 'state.lock'))).toBe(true);
+        return {
+          ok: false,
+          errors: [{ rule: 'test.restore_failed', severity: 'error', message: 'restore denied' }],
+        };
+      }
+      return original(p, bytes, options);
+    });
+    const result = applyTakeoverWithAudit(cawsDir, takeoverInput());
+    expect(result.ok).toBe(false);
+    expect(registryWrites).toBe(2);
+    expect(readOwner(cawsDir)).toBe('me');
+    const messages = result.errors.map((d) => d.message).join('\n');
+    expect(messages).toMatch(/unrecovered|could not.*restor/i);
+    expect(messages).not.toMatch(/prior owner .*unchanged/);
+    expect(fs.existsSync(path.join(cawsDir, 'state.lock'))).toBe(false);
   });
 });

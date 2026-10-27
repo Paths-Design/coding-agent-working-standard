@@ -68,7 +68,7 @@ import {
   patchEvidenceBlock,
   type SpecWriterOutcome,
 } from './specs-writer';
-import { readYamlSource } from './yaml-store';
+import { readYamlSourceBytes } from './yaml-store';
 
 export interface AmendSpecBodyInput {
   readonly id: string;
@@ -617,9 +617,10 @@ export function amendSpecBody(
     );
   }
 
-  const sourceResult = readYamlSource(targetPath);
+  const sourceResult = readYamlSourceBytes(targetPath);
   if (!isOk(sourceResult)) return err(sourceResult.errors);
-  const originalBytes = sourceResult.value;
+  const originalSourceBytes = sourceResult.value;
+  const originalBytes = originalSourceBytes.toString('utf8');
   const parsed = parseAndValidateSpec(originalBytes);
   if (!isOk(parsed)) {
     return err(
@@ -1043,6 +1044,31 @@ export function amendSpecBody(
       cawsDir,
       plannedWrites: [{ path: targetPath, contents: patched }],
       events: [event],
+      // Evidence resets and lifecycle checks belong to the exact source used
+      // to plan this amendment. Validate it while the authority lock is held.
+      validate: () => {
+        try {
+          if (fs.readFileSync(targetPath).equals(originalSourceBytes)) {
+            return ok(undefined);
+          }
+        } catch (e) {
+          const cause = e as { code?: string };
+          return err(
+            storeDiagnostic(
+              STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+              `Spec "${input.id}" cannot be re-read for amendment; retry from its current state.`,
+              { subject: input.id, data: { code: cause.code } }
+            )
+          );
+        }
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+            `Spec "${input.id}" changed since amendment planning; retry from its current state.`,
+            { subject: input.id }
+          )
+        );
+      },
     })
   );
   if (!txnResult.ok) return err(txnResult.errors);

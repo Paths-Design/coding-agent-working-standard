@@ -40,9 +40,8 @@
 //   - The seeded policy MUST pass `parseAndValidatePolicy` before
 //     hitting disk. If it doesn't, init refuses (this is a programmer
 //     error in our default, not a user-recoverable condition).
-//   - All writes go through `writeFileAtomic`. Concurrent invocations
-//     either both see "already initialized" or one wins and the other
-//     observes the same canonical state.
+//   - Authority reads and missing-file writes share the lifecycle lock.
+//     Only the canonical container is created before acquisition.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -51,6 +50,7 @@ import { isOk, parseAndValidatePolicy, type Diagnostic, type Policy, type Result
 import { err, ok } from '../kernel';
 
 import { writeFileAtomic } from './atomic-write';
+import { withLifecycleLock } from './lifecycle-lock';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 
@@ -252,8 +252,29 @@ export function initProject(repoRoot: string): Result<InitProjectResult> {
     throw new TypeError('initProject: repoRoot must be a non-empty string.');
   }
 
-  // 1. Refuse if any legacy residue exists. Do this BEFORE any write so
-  //    the caller's repo is not mutated when we say "no".
+  // The lock lives in this container. mkdir's return value identifies whether
+  // this invocation created it, including a race with another initializer.
+  const cawsDir = abs(repoRoot, CANONICAL_PATHS.cawsDir);
+  let createdContainer: boolean;
+  try {
+    createdContainer = fs.mkdirSync(cawsDir, { recursive: true }) !== undefined;
+  } catch (cause) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.WRITE_IO_FAILED,
+        `Failed to create ${cawsDir}: ${(cause as Error).message}.`,
+        { subject: cawsDir }
+      )
+    );
+  }
+  return withLifecycleLock(cawsDir, () => initProjectUnderLock(repoRoot, createdContainer));
+}
+
+function initProjectUnderLock(
+  repoRoot: string,
+  createdContainer: boolean
+): Result<InitProjectResult> {
+  // 1. Refuse legacy residue before seeding any authority file.
   const residue = findLegacyResidue(repoRoot);
   if (residue.length > 0) {
     return err(legacyDiag(residue));
@@ -275,7 +296,7 @@ export function initProject(repoRoot: string): Result<InitProjectResult> {
     present.policyFile &&
     present.worktreesFile &&
     present.agentsFile;
-  if (allPresent) {
+  if (allPresent && !createdContainer) {
     return ok({
       outcome: 'already_initialized',
       created: [],
@@ -287,13 +308,7 @@ export function initProject(repoRoot: string): Result<InitProjectResult> {
   //    shell can report "what changed" precisely. Each step is its own
   //    Ok-or-Err — we abort on the first error rather than continue and
   //    partially populate.
-  const created: string[] = [];
-
-  if (!present.cawsDir) {
-    const r = mkdirRecursive(abs(repoRoot, CANONICAL_PATHS.cawsDir));
-    if (!isOk(r)) return r;
-    created.push(abs(repoRoot, CANONICAL_PATHS.cawsDir));
-  }
+  const created: string[] = createdContainer ? [abs(repoRoot, CANONICAL_PATHS.cawsDir)] : [];
   if (!present.specsDir) {
     const r = mkdirRecursive(abs(repoRoot, CANONICAL_PATHS.specsDir));
     if (!isOk(r)) return r;

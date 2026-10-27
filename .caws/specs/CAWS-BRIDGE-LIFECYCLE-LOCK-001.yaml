@@ -1,0 +1,96 @@
+id: CAWS-BRIDGE-LIFECYCLE-LOCK-001
+title: 'Serialize bridge mutations under the lifecycle lock'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Implemented and checked bridge registry serialization and truthful applied-prune error propagation in c53707e0012be94a7e8c4208d14de1cedd06a650 plus e9c5d70e62cb5d7525be9b7bdbfea051ed458f13. Original deterministic RED18 and command RED2 retained; integrated seven suites63pass, build/lint/gates passed. A1-A5 manually adjudicated and dual-read events14326-14330; commit verification alone does not execute tests. Independent read-only peer finding reproduced and repaired. Full authority snapshot/fence, host final launch, installed Rust cutover and rollback remain with the active parent goal.'
+created_at: '2026-10-26T22:42:32.159Z'
+updated_at: '2026-10-26T23:08:43.296Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'Bridge authority store and claim command consumer'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/bridge-store.ts'
+    - 'packages/caws-cli/tests/store/bridge-store.test.js'
+    - 'packages/caws-cli/tests/shell/claim-bridge.test.js'
+    - packages/caws-cli/src/shell/commands/worktree.ts
+  out: []
+invariants:
+  - 'Acquire, refresh, takeover and release hold the lifecycle lock from bridge registry load through transaction completion or recovery.'
+  - 'Public store signatures, exclusive ownership, refusal diagnostics, prior-owner audit and release events remain compatible; no nested lifecycle lock is acquired.'
+  - 'Prune preview remains read-only; applied pruning serializes bridge registry reads and writes, without inventing retirement events.'
+acceptance:
+  - id: A1
+    given: 'concurrent bridge operations for different and identical specs'
+    when: 'acquire, takeover and named or bare release run'
+    then: 'registry updates preserve unrelated claims and ownership decisions use state loaded after acquiring the lifecycle lock.'
+  - id: A2
+    given: 'another lifecycle lock holder or a transaction event failure'
+    when: 'a bridge mutation is attempted'
+    then: 'no bridge or event effect occurs while acquisition is refused and failure or recovery remains truthful with the lock released.'
+  - id: A3
+    given: 'retired and active bridge entries'
+    when: 'pruning previews or applies alongside claims'
+    then: 'preview mutates nothing and applied pruning holds the lifecycle lock while preserving unrelated entries and appending no event.'
+  - id: A4
+    given: 'the normal claim command consumer'
+    when: 'acquire, refresh, takeover and release execute or encounter a held lifecycle lock'
+    then: 'existing ownership and audit behavior remains intact and contended mutations refuse without bridge or event effects.'
+  - id: A5
+    given: 'A retired bridge, no worktree cleanup candidates, and a held lifecycle lock'
+    when: 'Worktree prune apply runs through text or JSON output'
+    then: >-
+      The command preserves the bridge and events, reports the lock diagnostic, and
+      returns nonzero with JSON ok false; receipt-only and preview behavior remain
+      unchanged
+observability:
+  - 'Focused compiled store and shell tests retain raw logs for successful, concurrent, refused and recovered operations.'
+rollback:
+  - 'Revert this logical source commit through normal governed history if serialized bridge behavior regresses; do not rewrite shared history.'
+non_functional:
+  security:
+    - 'Registry ownership decisions and their transactional writes share one critical section; this slice does not claim complete spec/worktree snapshot fencing or final execution authorization.'
+contracts:
+  - name: 'bridge-store-lifecycle-serialization'
+    type: behavior
+    path: 'packages/caws-cli/src/store/bridge-store.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Real-worker overlapping calls preserve distinct claims, reject competing owner claims and old-owner named/bare releases, and retain takeover audit ordering. Original RED18 failures then final integrated63pass. Raw checks: /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/bridge-lifecycle-lock-01/{checks.json,candidate-checks.json,prune-consumer-checks.json}. Tests manually inspected/run in lane packages/caws-cli; --verify here re-derives commit existence only, not runtime execution. No full authority snapshot, host cutover or installed rollback claim."
+    recorded_at: "2026-10-26T23:06:46.129Z"
+    command: node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/bridge-store.test.js tests/shell/claim-bridge.test.js tests/shell/binding-bridge-resolve.test.js tests/shell/claim-release-preview.test.js tests/shell/worktree-group-prune-handoff.test.js tests/shell/worktree-prune-status-alias.test.js tests/store/worktree-reconciliation.test.js
+    exit_code: 0
+    commit_sha: e9c5d70e62cb5d7525be9b7bdbfea051ed458f13
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Held lifecycle lock refuses acquire/refresh/takeover/named release/bare release/prune without bridge or event effects; supported release restores success. Injected append recovery restores exact bytes while holding lock; partial bare-release audit failure remains explicit. Raw checks: /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/bridge-lifecycle-lock-01/{checks.json,candidate-checks.json,prune-consumer-checks.json}. Tests manually inspected/run in lane packages/caws-cli; --verify here re-derives commit existence only, not runtime execution. No full authority snapshot, host cutover or installed rollback claim."
+    recorded_at: "2026-10-26T23:06:55.147Z"
+    command: node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/bridge-store.test.js tests/shell/claim-bridge.test.js tests/shell/binding-bridge-resolve.test.js tests/shell/claim-release-preview.test.js tests/shell/worktree-group-prune-handoff.test.js tests/shell/worktree-prune-status-alias.test.js tests/store/worktree-reconciliation.test.js
+    exit_code: 0
+    commit_sha: e9c5d70e62cb5d7525be9b7bdbfea051ed458f13
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Two-order prune-versus-claim interleavings preserve new claims and retired removals; applied contention refuses without effects; preview remains read-only under held lock and appends no event. Raw checks: /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/bridge-lifecycle-lock-01/{checks.json,candidate-checks.json,prune-consumer-checks.json}. Tests manually inspected/run in lane packages/caws-cli; --verify here re-derives commit existence only, not runtime execution. No full authority snapshot, host cutover or installed rollback claim."
+    recorded_at: "2026-10-26T23:07:04.160Z"
+    command: node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/bridge-store.test.js tests/shell/claim-bridge.test.js tests/shell/binding-bridge-resolve.test.js tests/shell/claim-release-preview.test.js tests/shell/worktree-group-prune-handoff.test.js tests/shell/worktree-prune-status-alias.test.js tests/store/worktree-reconciliation.test.js
+    exit_code: 0
+    commit_sha: e9c5d70e62cb5d7525be9b7bdbfea051ed458f13
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Actual runClaimCommand consumers refuse under held lifecycle lock and succeed after release; existing ownership/subordination/scope/audit/release consumers pass. Raw checks: /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/bridge-lifecycle-lock-01/{checks.json,candidate-checks.json,prune-consumer-checks.json}. Tests manually inspected/run in lane packages/caws-cli; --verify here re-derives commit existence only, not runtime execution. No full authority snapshot, host cutover or installed rollback claim."
+    recorded_at: "2026-10-26T23:07:13.042Z"
+    command: node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/bridge-store.test.js tests/shell/claim-bridge.test.js tests/shell/binding-bridge-resolve.test.js tests/shell/claim-release-preview.test.js tests/shell/worktree-group-prune-handoff.test.js tests/shell/worktree-prune-status-alias.test.js tests/store/worktree-reconciliation.test.js
+    exit_code: 0
+    commit_sha: e9c5d70e62cb5d7525be9b7bdbfea051ed458f13
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Actual runWorktreePruneCommand text and JSON RED returned0 under held lock. Repaired command returns1, JSONokfalse and typed lock_contention, preserves bridge/events; preview/receiptOnly controls and existing prune/reconciliation consumers pass. Raw checks: /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/bridge-lifecycle-lock-01/{checks.json,candidate-checks.json,prune-consumer-checks.json}. Tests manually inspected/run in lane packages/caws-cli; --verify here re-derives commit existence only, not runtime execution. No full authority snapshot, host cutover or installed rollback claim."
+    recorded_at: "2026-10-26T23:07:22.126Z"
+    command: node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/bridge-store.test.js tests/shell/claim-bridge.test.js tests/shell/binding-bridge-resolve.test.js tests/shell/claim-release-preview.test.js tests/shell/worktree-group-prune-handoff.test.js tests/shell/worktree-prune-status-alias.test.js tests/store/worktree-reconciliation.test.js
+    exit_code: 0
+    commit_sha: e9c5d70e62cb5d7525be9b7bdbfea051ed458f13

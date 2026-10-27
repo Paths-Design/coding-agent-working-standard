@@ -19,7 +19,9 @@
 # When an agent's CWD is inside the worktree being destroyed, the process
 #    loses its CWD and crashes (posix_spawn ENOENT on PostToolUse hooks).
 #
-# The fix rewrites merge/destroy commands to `cd <repo-root> && <command>`.
+# The fix rewrites a proven standalone literal lifecycle invocation to
+# `cd <repo-root> && <command>`. Mentions and compound source are untouched:
+# earlier guards checked their targets in the original execution directory.
 # It intentionally does not pipe, redirect, summarize, or append a confirmation
 # command: the governed command's stdout, stderr, and exit status are authority
 # signals and must survive byte-for-byte shell execution semantics.
@@ -68,18 +70,50 @@ fi
 # Shared helper — HOOK-LIB-CONSOLIDATION-001 T2a.
 PROJECT_DIR="$(resolve_canonical_dir "${CAWS_PROJECT_DIR:-.}")"
 
-# Match: caws worktree merge|destroy <name> [options]
-# Skip if already piped/redirected (user already handling output)
-if echo "$COMMAND" | grep -qE 'caws\s+worktree\s+(merge|destroy)\b' && ! echo "$COMMAND" | grep -qE '[|>]'; then
+# A cheap candidate filter is not a syntax certificate. The pinned parser below
+# must establish the complete invocation, including quoted data and neighbors.
+if [[ "$COMMAND" == *caws* ]]; then
   # Surfaces without an updatedInput contract (kimi-code: none documented)
   # cannot rewrite the command — pass it through unrewritten. This hook does
   # not have block authority, so lack of rewrite support must not deny access.
   if [[ "${CAWS_SUPPORTS_UPDATED_INPUT:-1}" != "1" ]]; then
     exit 0
   fi
+  if [[ -z "${HOOK_CWD:-}" || ! -d "$HOOK_CWD" ]]; then
+    exit 0
+  fi
+  EXPECTED_CWD="$(cd -- "$HOOK_CWD" && pwd -P)" || exit 0
+  if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then
+    if [[ ! -f "$HOOK_PAYLOAD_FILE" || ! -r "$HOOK_PAYLOAD_FILE" ]]; then
+      echo '[quiet-merge] Original payload is unavailable; lifecycle CWD rewrite skipped.' >&2
+      exit 0
+    fi
+  elif [[ -z "${HOOK_INPUT_JSON:-}" ]]; then
+    HOOK_INPUT_JSON="$(cat)" || exit 0
+    export -n HOOK_INPUT_JSON 2>/dev/null || true
+  fi
+  original_payload() {
+    if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then cat "$HOOK_PAYLOAD_FILE"
+    else printf '%s' "${HOOK_INPUT_JSON:-}"; fi
+  }
+  if ! command -v "${CAWS_BIN:-caws}" >/dev/null 2>&1 ||
+      ! FACTS="$(original_payload | "${CAWS_BIN:-caws}" hooks mutation-view --json \
+        --cwd "$EXPECTED_CWD" --project "$PROJECT_DIR")"; then
+    echo '[quiet-merge] Lifecycle source/context could not be proved; CWD rewrite skipped.' >&2
+    exit 0
+  fi
+  if ! printf '%s' "$FACTS" | jq -se --arg command "$COMMAND" --arg cwd "$EXPECTED_CWD" '
+      length==1 and .[0].schema=="caws.shell_mutation_view.v2" and
+      .[0].execution.command==$command and .[0].execution.cwd==$cwd and
+      (.[0].issues|type)=="array" and (.[0].issues|length)==0 and
+      (.[0].singleLifecycle=="merge" or .[0].singleLifecycle=="destroy")
+    ' >/dev/null 2>&1; then
+    exit 0
+  fi
   # Always prepend cd to repo root for CWD safety (critical for subagents
   # whose CWD is inside the worktree being destroyed)
-  SAFE_CMD="cd \"$PROJECT_DIR\" && $COMMAND"
+  printf -v QUOTED_PROJECT '%q' "$PROJECT_DIR"
+  SAFE_CMD="cd $QUOTED_PROJECT && $COMMAND"
   # Hosts that enforce the updatedInput contract (observed live: "PreToolUse
   # hook returned updatedInput without permissionDecision:allow") reject a
   # rewrite that carries no explicit decision. The rewrite is an allow-with-

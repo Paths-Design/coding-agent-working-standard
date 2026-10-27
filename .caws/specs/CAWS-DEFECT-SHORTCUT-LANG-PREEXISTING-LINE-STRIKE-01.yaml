@@ -1,9 +1,10 @@
 id: CAWS-DEFECT-SHORTCUT-LANG-PREEXISTING-LINE-STRIKE-01
 title: 'Shortcut-language guard strikes agents on a pre-existing ''# placeholder'' comment in classify_command.py they did not write'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: shortcut-normalization
 created_at: '2026-10-05T08:26:31.631Z'
-updated_at: '2026-10-05T08:26:31.631Z'
+updated_at: '2026-10-27T16:24:59.031Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
@@ -17,6 +18,10 @@ scope:
     - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
     - 'packages/caws-cli/tests/hooks'
+    - packages/caws-cli/templates/hook-packs/codex/hooks/lib/parse-input.sh
+    - packages/caws-cli/templates/hook-packs/codex/hooks/lib/emit.sh
+    - packages/caws-cli/tests/runtime/engine-routing.test.js
+    - packages/caws-cli/src/init/hook-packs/manifest-codex.ts
   out: []
 invariants:
   - 'A strike is charged only for content the agent authored in the tool call being judged; a line already present in the file is never charged to the editor.'
@@ -34,5 +39,15 @@ acceptance:
     given: 'an authored ''# placeholder'' stub comment in a non-test source file'
     when: 'the guard runs'
     then: 'it still strikes (negative control)'
+  - id: A4
+    given: >-
+      A Codex apply_patch command with multiple file sections, unchanged stub
+      context, deletion-only edits, or malformed patch grammar
+    when: 'The immutable installed adapter and native compatibility engine run the actual PostToolUse event'
+    then: >-
+      Every introduced source fragment is checked, unchanged and deleted text never
+      strikes, unknown content is explicit without a disk scan, and feedback
+      truthfully states the tool already applied while preserving progressive
+      enforcement
 non_functional: {}
 contracts: []
