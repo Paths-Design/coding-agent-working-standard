@@ -84,9 +84,9 @@ pub(crate) struct Prepared {
 /// Kept private to the native owner; no Debug to disclose source or environment.
 pub(crate) struct PreparedRecord {
     original: Vec<u8>,
-    pub value: Prepared,
-    pub stdin: Vec<u8>,
-    pub sandbox_state: Vec<u8>,
+    value: Prepared,
+    stdin: Vec<u8>,
+    sandbox_state: Vec<u8>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -230,6 +230,20 @@ impl PreparedRecord {
 
     pub(crate) fn original(&self) -> &[u8] {
         &self.original
+    }
+
+    // Shared views only: the authorized bytes and launch inputs cannot diverge
+    // after decoding. Do not add mutable accessors or interior mutability.
+    pub(crate) fn value(&self) -> &Prepared {
+        &self.value
+    }
+
+    pub(crate) fn stdin(&self) -> &[u8] {
+        &self.stdin
+    }
+
+    pub(crate) fn sandbox_state(&self) -> &[u8] {
+        &self.sandbox_state
     }
 }
 

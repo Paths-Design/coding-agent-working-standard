@@ -6,6 +6,11 @@
 //! proof. Node, the entry script, their versioned dependency tree and image
 //! directories must be protected against concurrent replacement by untrusted
 //! writers. The fence similarly requires cooperating lifecycle writers.
+//! This owner runs in a dedicated single-threaded worker. Its caller must
+//! exclude signal handlers or other threads that open/close descriptors or reap
+//! children. In particular, descriptor setup through spawn requires the
+//! quiescent-table contract in execution_fd_transport. A threaded MCP server
+//! must use a separate worker rather than call this owner in its own process.
 use crate::{
     execution_authorizer_wire::{Decision, Fence, FrameDecoder, Phase, RequestRecord},
     execution_child::{self, Completed, Failure, TerminationGrace},
@@ -94,7 +99,7 @@ fn failure(reason: Refusal) -> OwnerFailure {
     }
 }
 fn association_matches(record: &PreparedRecord, trusted: &TrustedInvocation) -> bool {
-    let p = &record.value;
+    let p = record.value();
     let a = &p.association;
     trusted.same_host_macos_verified
         && cfg!(target_os = "macos")
@@ -112,7 +117,7 @@ fn wall_valid(record: &PreparedRecord) -> bool {
         .duration_since(UNIX_EPOCH)
         .ok()
         .is_some_and(|d| {
-            d.as_millis() < u128::from(record.value.limits.preparation_deadline_unix_ms)
+            d.as_millis() < u128::from(record.value().limits.preparation_deadline_unix_ms)
         })
 }
 fn check(
@@ -197,9 +202,9 @@ fn images(
 ) -> Result<(), Refusal> {
     image_valid(&pins.node, live)?;
     image_valid(&pins.entry, live)?;
-    image_valid(&record.value.execution.executable, live)?;
-    image_valid(&record.value.sandbox.launcher, live)?;
-    for utility in &record.value.profile.utilities {
+    image_valid(&record.value().execution.executable, live)?;
+    image_valid(&record.value().sandbox.launcher, live)?;
+    for utility in &record.value().profile.utilities {
         image_valid(utility, live)?;
     }
     Ok(())
@@ -261,7 +266,7 @@ fn authorizer(
     };
     let request = RequestRecord::new(
         phase,
-        record.value.invocation_id.clone(),
+        record.value().invocation_id.clone(),
         record.original().to_vec(),
         revision,
         wire_fence,
@@ -284,7 +289,7 @@ fn authorizer(
     private_exec_check(
         &mut command,
         deadline,
-        record.value.limits.preparation_deadline_unix_ms,
+        record.value().limits.preparation_deadline_unix_ms,
     );
     live().map_err(failure)?;
     let child = command
@@ -363,7 +368,7 @@ fn execute_inner(
         return Err(failure(Refusal::InvalidDeadline));
     }
     let grace = TerminationGrace::new(Duration::from_millis(
-        record.value.limits.termination_grace_ms,
+        record.value().limits.termination_grace_ms,
     ))
     .map_err(|_| failure(Refusal::InvalidDeadline))?;
     let live = || check(&record, trusted, deadline, &cancelled);
@@ -399,7 +404,7 @@ fn execute_inner(
         images(&record, pins, &live).map_err(failure)?;
         fence.validate().map_err(|_| failure(Refusal::Fence))?;
         live().map_err(failure)?;
-        let e = &record.value.execution;
+        let e = &record.value().execution;
         let mut command = pipe_command(&e.executable.path);
         command
             .arg0(&e.argv[0])
@@ -414,7 +419,7 @@ fn execute_inner(
         private_exec_check(
             &mut command,
             deadline,
-            record.value.limits.preparation_deadline_unix_ms,
+            record.value().limits.preparation_deadline_unix_ms,
         );
         // The fence and transport descriptors are CLOEXEC; no fd 3 is mapped to USER.
         // This parent observation is the cancellation boundary for the launch
@@ -423,7 +428,7 @@ fn execute_inner(
         // Arc<AtomicBool> would not observe later parent writes (copy-on-write).
         live().map_err(failure)?;
         let job_deadline = Instant::now()
-            .checked_add(Duration::from_millis(record.value.limits.job_timeout_ms))
+            .checked_add(Duration::from_millis(record.value().limits.job_timeout_ms))
             .ok_or_else(|| failure(Refusal::JobIo))?;
         let child = command
             .spawn()
@@ -443,24 +448,16 @@ fn execute_inner(
             Err(problem)
         }
         Ok((child, job_deadline)) => {
-            if fence.try_release().is_err() {
-                return Err(OwnerFailure {
-                    reason: Refusal::FenceRelease,
-                    child: Some(child),
-                    fence: Some(fence),
-                    job_failure: None,
-                    user_spawn_may_have_occurred: true,
-                });
-            }
+            let child = release_after_spawn(child, fence, grace)?;
             let noop = |_: &'static str| Ok(());
             execution_child::service_child(
                 child,
-                &record.stdin,
+                record.stdin(),
                 job_deadline,
                 &cancelled,
-                record.value.limits.max_output_bytes,
-                record.value.limits.max_output_bytes,
-                record.value.limits.max_output_bytes,
+                record.value().limits.max_output_bytes,
+                record.value().limits.max_output_bytes,
+                record.value().limits.max_output_bytes,
                 grace,
                 &noop,
             )
@@ -475,10 +472,88 @@ fn execute_inner(
     }
 }
 
+fn release_after_spawn(
+    child: Child,
+    mut fence: ExecutionFence,
+    grace: TerminationGrace,
+) -> Result<Child, OwnerFailure> {
+    if fence.try_release().is_err() {
+        // Failure to release authority ends this attempt. Terminate and reap
+        // the private group before reporting; retain actual custody if bounded
+        // settlement fails, and never unlink a replacement lock.
+        let (child, cleanup_detail) = execution_child::stop_child(child, grace);
+        return Err(OwnerFailure {
+            reason: Refusal::FenceRelease,
+            child,
+            fence: Some(fence),
+            job_failure: cleanup_detail.map(|detail| Failure {
+                kind: execution_child::FailureKind::Settlement(detail.clone()),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+                retained_child: None,
+                cleanup_detail: Some(detail),
+            }),
+            user_spawn_may_have_occurred: true,
+        });
+    }
+    Ok(child)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn release_failure_stops_user_before_returning_and_preserves_replaced_lock() {
+        let dir = std::env::temp_dir().join(format!("caws-release-fault-{}", std::process::id()));
+        fs::create_dir(&dir).unwrap();
+        let dir = fs::canonicalize(dir).unwrap();
+        let fence = ExecutionFence::acquire(&dir).unwrap();
+        let mut command = pipe_command("/bin/sh");
+        command.args(["-c", "printf ready; exec /bin/sleep 30"]);
+        let mut child = command.spawn().unwrap();
+        let pid = child.id() as i32;
+        let mut ready = [0; 5];
+        child
+            .stdout
+            .as_mut()
+            .unwrap()
+            .read_exact(&mut ready)
+            .unwrap();
+        assert_eq!(&ready, b"ready");
+        let lock = dir.join("state.lock");
+        fs::remove_file(&lock).unwrap();
+        fs::write(&lock, b"foreign replacement").unwrap();
+        let grace = TerminationGrace::new(Duration::from_millis(10)).unwrap();
+        let mut problem = match release_after_spawn(child, fence, grace) {
+            Err(e) => e,
+            Ok(mut child) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("replacement must fail release");
+            }
+        };
+        let retained_live_child = problem.child.is_some();
+        // Cleanup the red control before making assertions.
+        if let Some(child) = problem.child.take() {
+            let (remaining, detail) = execution_child::stop_child(child, grace);
+            assert!(remaining.is_none(), "test cleanup failed: {detail:?}");
+        }
+        assert_eq!(problem.reason, Refusal::FenceRelease);
+        assert!(problem.user_spawn_may_have_occurred);
+        assert!(problem.fence.is_some());
+        drop(problem);
+        assert_eq!(fs::read(&lock).unwrap(), b"foreign replacement");
+        assert_eq!(unsafe { libc::kill(pid, 0) }, -1);
+        assert_eq!(io::Error::last_os_error().raw_os_error(), Some(libc::ESRCH));
+        fs::remove_dir_all(dir).unwrap();
+        assert!(
+            !retained_live_child,
+            "settle USER before returning fence-release failure"
+        );
+    }
 
     fn prepared() -> PreparedRecord {
         let image = json!({"path":"/bin/bash","sha256":"a".repeat(64)});
@@ -686,7 +761,7 @@ process.stdin.resume();
     fn run(f: &Fixture, node: &str, entry: &str, cancel: bool) -> OwnerOutcome {
         let record = PreparedRecord::decode(serde_json::to_vec(&f.data["record"]).unwrap())
             .expect("fixture prepared record");
-        let p = &record.value;
+        let p = record.value();
         let a = &p.association;
         // This is a synthetic test context. It does not assert that a real
         // native carrier authenticated these values or established a sandbox.
