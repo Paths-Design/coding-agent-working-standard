@@ -614,8 +614,23 @@ function retirementGitObservation(
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || fs.existsSync(wtPath)) throw error;
   }
-  const ref = (name: string | undefined): string | null =>
-    name === undefined ? null : git(['rev-parse', '--verify', `${name}^{commit}`], repoRoot).trim();
+  const ref = (name: string | undefined): string | null => {
+    if (name === undefined) return null;
+    try {
+      return git(['rev-parse', '--verify', '--quiet', `${name}^{commit}`], repoRoot).trim();
+    } catch (error) {
+      // A missing recorded ref is a captured absence, not an I/O failure.
+      // Untrack does not require ancestry; destroy requires it unless the
+      // caller explicitly abandons unmerged work. Timeouts and other failures
+      // continue to refuse rather than masquerading as absent refs.
+      if (
+        (error as { status?: unknown; signal?: unknown }).status === 1 &&
+        !(error as { signal?: unknown }).signal
+      )
+        return null;
+      throw error;
+    }
+  };
   return { directory, status, head, branch: ref(branch), base: ref(base), artifactLinks };
 }
 

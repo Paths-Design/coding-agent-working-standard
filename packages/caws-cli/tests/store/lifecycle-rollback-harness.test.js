@@ -1051,6 +1051,24 @@ describe('retirement authority race and compensation', () => {
   }
 
   test.each([
+    ['untrack', false, true],
+    ['destroy', true, true],
+    ['destroy', false, false],
+  ])('%s handles an absent recorded base with abandon=%s', (op, abandon, admitted) => {
+    const { caws, wtPath, input, invoke } = fixture(op);
+    const registryPath = path.join(caws, 'worktrees.json');
+    const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    registry['wt-retire'].baseBranch = 'absent-recorded-base';
+    fs.writeFileSync(registryPath, JSON.stringify(registry));
+    input.abandonUnmerged = abandon;
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    const result = invoke();
+    expect(result.ok && result.value.kind === 'success').toBe(admitted);
+    if (!admitted) expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+    expect(fs.existsSync(wtPath)).toBe(op === 'untrack' || !admitted);
+  });
+
+  test.each([
     ['invalid JSON', '{', 'store.read.json_invalid'],
     ['array registry', '[]', 'store.registry.not_object'],
   ])('%s retains loader diagnostics', (_label, raw, rule) => {
