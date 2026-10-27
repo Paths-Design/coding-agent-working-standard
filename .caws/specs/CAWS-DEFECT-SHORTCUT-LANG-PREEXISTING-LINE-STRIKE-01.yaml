@@ -70,3 +70,9 @@ acceptance:
       charges the same Write again
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/shortcut-normalization-01/incident-routes.log: 3 real adapter/engine routes pass exact retained classify_command.py result.append comment and missing-payload diagnostic. Old source20a4083 selected whole Edit new_string or disk fallback; introduced-range selection removes that attribution error. Test b68fc3665."
+    recorded_at: "2026-10-27T19:26:05.284Z"
+    commit_sha: b68fc3665
