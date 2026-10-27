@@ -249,7 +249,12 @@ async function inspectSource(
     if (!image) refuse('unsupported_profile');
     if (basename(command) === 'node') {
       if (resolved !== fs.realpathSync.native(process.execPath)) refuse('unsupported_profile');
-    } else if (!protectedSystemImage(resolved)) refuse('unsupported_profile');
+    } else if (basename(resolved) !== basename(command) || !protectedSystemImage(resolved)) {
+      // A root-owned image/hash does not establish which utility it implements.
+      // The v1 system profiles admit only their named system executable; PATH
+      // aliases to other utilities, shells or multicall images need a profile.
+      refuse('unsupported_profile');
+    }
     if (!used.has(resolved)) verifyImage(image);
     used.add(resolved);
   };

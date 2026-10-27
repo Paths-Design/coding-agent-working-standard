@@ -47,6 +47,27 @@ async function observe(f, command, utilities = []) {
   return evaluatePreparedExecution(record, request(record));
 }
 describe('private authorizer component observations, without USER execution', () => {
+  test('rejects reader aliases to writers or shells while accepting an alias to the actual reader', async () => {
+    const f = authorityFixture();
+    const directory = path.join(f.root, 'utility-path');
+    fs.mkdirSync(directory);
+    const alias = path.join(directory, 'cat');
+    f.record.execution.environment.find((entry) => entry.name === 'PATH').value =
+      `${directory}:${f.record.execution.environment.find((entry) => entry.name === 'PATH').value}`;
+    const target = path.join(f.root, 'must-remain-absent');
+    for (const image of ['/usr/bin/touch', '/bin/bash']) {
+      fs.symlinkSync(fs.realpathSync.native(image), alias);
+      const observation = await observe(f, `cat ${JSON.stringify(target)}`, [image]);
+      expect(observation.decision).toBe('unresolved');
+      expect(observation.reasonCodes).toEqual(['unsupported_profile']);
+      expect(fs.existsSync(target)).toBe(false);
+      fs.unlinkSync(alias);
+    }
+    fs.symlinkSync(fs.realpathSync.native('/bin/cat'), alias);
+    const benign = await observe(f, 'cat src/data.txt', ['/bin/cat']);
+    expect(benign.decision).toBe('allow');
+    expect(benign.reasonCodes).toEqual([]);
+  });
   test('allows benign computed sed data and owned finite redirection without executing either', async () => {
     const f = authorityFixture();
     fs.writeFileSync(path.join(f.lane, 'notes\nfile.txt'), 'line one\n');
