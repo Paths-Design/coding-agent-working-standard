@@ -14,10 +14,10 @@
 //     in-memory rollback for scaling reasons).
 //
 // What this module does NOT do:
-//   - Read any file outside .caws/specs/ and .caws/migrations/.
+//   - Read project source outside the canonical governance directory.
 //   - Write to the events log (migrations are not lifecycle events).
-//   - Hold locks (per-file atomic write is sufficient since each spec file
-//     is independent).
+//   - Bypass lifecycle serialization: apply holds the canonical authority lock.
+//     Dry-run remains read-only and does not acquire it.
 //   - Touch .caws/specs/.archive/ (active spec migration only — invariant 9).
 
 import * as crypto from 'crypto';
@@ -39,6 +39,7 @@ import {
   type Result,
 } from '../kernel';
 import { writeFileAtomic } from './atomic-write';
+import { withLifecycleLock } from './lifecycle-lock';
 import { repoRootFromCawsDir, storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 
@@ -325,6 +326,14 @@ export function runSpecsMigrateScan(opts: ScanOptions): Result<ScanReport> {
  *   AFTER all per-file decisions are recorded.
  */
 export function runSpecsMigrateApply(opts: ApplyOptions): Result<ApplyResult> {
+  if (!opts.apply) return runSpecsMigrateApplyUnderLock(opts);
+  // Validate the root before attempting to acquire a lock at that path.
+  const checked = assertCawsDirShape(opts.cawsDir);
+  if (!isOk(checked)) return checked;
+  return withLifecycleLock(opts.cawsDir, () => runSpecsMigrateApplyUnderLock(opts));
+}
+
+function runSpecsMigrateApplyUnderLock(opts: ApplyOptions): Result<ApplyResult> {
   // --- Scan first --------------------------------------------------------
   const scanResult = runSpecsMigrateScan(opts);
   if (!isOk(scanResult)) {
