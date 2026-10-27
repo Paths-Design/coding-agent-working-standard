@@ -1,10 +1,11 @@
 id: CAWS-MAINTENANCE-AUTHORITY-LOCK-001
 title: 'Serialize initialization and migration authority writes'
 mode: fix
-lifecycle_state: active
-worktree: maintenance-authority-lock
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Four initialization and migration writers use canonical lifecycle serialization. Final f1db9b1 passed build, six suites63 tests, lint and gates; exact input and archive bytes are rechecked before publication, independent review followed actual RED controls. Long-held lock strengthening, Rust final launch and installed cutover remain separate.'
 created_at: '2026-10-27T02:30:30.096Z'
-updated_at: '2026-10-27T02:30:39.838Z'
+updated_at: '2026-10-27T14:31:01.557Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
