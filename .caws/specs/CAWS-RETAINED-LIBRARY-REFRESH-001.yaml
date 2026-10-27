@@ -1,10 +1,11 @@
 id: CAWS-RETAINED-LIBRARY-REFRESH-001
 title: 'Explicitly refresh registered shared shell libraries in retained native generations'
 mode: fix
-lifecycle_state: active
-worktree: retained-library-refresh
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Explicit registered shared shell library refresh implemented and exercised with unchanged-base, combined provenance, real CLI plan, rollback and hostile capture controls. Actual 181 tests pass; source build, package lint and five policy gates pass. Refreshed helper runtime compatibility and local Rust activation remain under the parent cutover objective.'
 created_at: '2026-10-27T22:50:26.753Z'
-updated_at: '2026-10-27T22:50:34.442Z'
+updated_at: '2026-10-27T23:05:50.086Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
