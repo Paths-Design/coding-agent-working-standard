@@ -1103,6 +1103,20 @@ test.each(shortcutRoutes)(
       const deletion = patch([`*** Update File: ${first}`, '@@', '-const old = 1;']);
       await runPatch(deletion);
       expect(fs.existsSync(strikes)).toBe(false);
+      // Original incident: scanning the entire new_string (or disk fallback)
+      // charged an unchanged heredoc-blanking comment to the editor.
+      const classifier = path.join(repo, 'classify_command.py');
+      const retainedBlanking = 'result.append(" ")  # placeholder';
+      put(classifier, retainedBlanking + '\nvalue = 2\n');
+      await runTool('Edit', {
+        file_path: classifier,
+        old_string: retainedBlanking + '\nvalue = 1\n',
+        new_string: retainedBlanking + '\nvalue = 2\n',
+      });
+      expect(fs.existsSync(strikes)).toBe(false);
+      await runTool('Edit', { file_path: classifier });
+      expect(lastStderr).toContain('authored content unavailable; no strike recorded');
+      expect(fs.existsSync(strikes)).toBe(false);
       const secondFileStub = patch([
         `*** Update File: ${first}`,
         '@@',
