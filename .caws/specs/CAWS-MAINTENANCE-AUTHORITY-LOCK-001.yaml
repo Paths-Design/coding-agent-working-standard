@@ -56,3 +56,8 @@ evidence:
     evidence_ref: "Final f1db9b1 tests exercise before-acquire registry/spec/policy/residue changes and refuse stale exact source/archive bytes including UTF8 collisions. Actual initial14RED, wrappers21pass1RED then fixed; archive3RED before final63pass. Direct source and independent committed peer followup inspected. External writers ignoring lock not fenced."
     recorded_at: "2026-10-27T14:28:34.533Z"
     commit_sha: f1db9b1c9eb97f10d6789efd7766d593446da28c
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Final f1db9b1 six suites63tests actual0 cover existing adoption/init/mapping semantics, successful retry, released locks and failure preservation. Lint0, gates5pass, doctor0E5W6I. Preview and Git discovery remain outside common lock. Source-owned long-held lock strengthening and full local Rust cutover remain open."
+    recorded_at: "2026-10-27T14:28:49.467Z"
+    commit_sha: f1db9b1c9eb97f10d6789efd7766d593446da28c
