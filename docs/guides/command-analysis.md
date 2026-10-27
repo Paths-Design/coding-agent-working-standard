@@ -526,10 +526,12 @@ namespace; an unsupported sandbox topology cannot weaken it.
 
 The bounded execution profile accepts clean Bash, named protected system utility
 images and the existing literal Node effect grammar on the pinned actual Node
-runtime. Finite writes require owned physical targets admitted by scope.
-Unmodeled programs, scripts, image aliases, implicit temporary writers and
-private descriptor redirects remain held. Ordinary inherited application data
-can provide finite values. `PWD` derives from the prepared physical cwd; other
+runtime. Python programs have no native v1 profile, including programs whose
+effects the separate diagnostic analyzer can partially classify. Finite writes
+require owned physical targets admitted by scope. Unmodeled programs, scripts,
+image aliases, implicit temporary writers, heredocs, here-strings and private
+descriptor redirects remain held. Ordinary inherited application data can
+provide finite values. `PWD` derives from the prepared physical cwd; other
 Bash-generated variables are opaque. Mutations of special variables remain held.
 Startup and lookup controls such as `EXECIGNORE`, `BASH_COMPAT` and
 `POSIX_PEDANTIC`, and history-file effects through `HISTFILESIZE`, are outside

@@ -124,6 +124,18 @@ describe('private authorizer component observations, without USER execution', ()
       expect(fs.existsSync(path.join(f.lane, 'sentinel'))).toBe(false);
     }
   );
+  test.each([
+    "true 3<<'EOF'\ndata\nEOF",
+    "true <<'EOF'\ndata\nEOF",
+    'true 3<<< "data"',
+    'true <<< "data"',
+  ])('holds here-input descriptors and implicit temporary-file effects: %s', async (command) => {
+    const f = authorityFixture();
+    const result = await observe(f, command);
+    expect(result.decision).toBe('unresolved');
+    expect(result.reasonCodes).toEqual(['unsupported_profile']);
+    expect(fs.readdirSync(path.join(f.lane, 'src'))).toEqual([]);
+  });
   test('denies known sed execution and foreign Node writes after valid image preparation', async () => {
     const f = authorityFixture();
     fs.writeFileSync(path.join(f.lane, 'notes.txt'), 'data');

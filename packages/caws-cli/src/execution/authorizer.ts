@@ -210,6 +210,10 @@ async function inspectSource(
     const value = pending.pop();
     if (value === null || typeof value !== 'object') continue;
     const row = value as Record<string, unknown>;
+    // Bash can materialize either form in a temporary file. The core analyzer
+    // also handles HereDoc before its redirection observer, so this profile
+    // check must inspect the syntax tree rather than depend on that observer.
+    if (row.type === 'HereDoc' || row.type === 'HereString') refuse('unsupported_profile');
     if (
       row.type === 'Assignment' &&
       typeof row.name === 'string' &&
@@ -341,7 +345,7 @@ async function inspectSource(
                 refuse('unsupported_profile');
               return;
             }
-            if (node.type === 'HereString' || node.operator === '<') return;
+            if (node.operator === '<') return;
             for (const fields of targets) {
               if (
                 fields.length !== 1 ||
