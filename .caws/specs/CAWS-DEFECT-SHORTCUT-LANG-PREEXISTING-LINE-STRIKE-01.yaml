@@ -61,5 +61,12 @@ acceptance:
       The reviewed helper identity qualifies, altered bytes refuse even with
       recomputed selection metadata, and actual native exchange controls preserve
       cache and failure behavior
+  - id: A6
+    given: 'A direct full-file Write replacing retained markers or introducing a new source marker'
+    when: 'The installed pre-tool chain compares a bounded stable regular-file preimage with the proposed bytes'
+    then: >-
+      Retained lines do not strike, introduced markers preserve progressive
+      enforcement, unknown preimages are explicit, and the post-tool event never
+      charges the same Write again
 non_functional: {}
 contracts: []
