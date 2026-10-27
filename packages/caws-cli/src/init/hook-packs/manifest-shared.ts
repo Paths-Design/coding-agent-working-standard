@@ -634,7 +634,7 @@ import { isAdapterCoveredSurface } from './types';
 // v117: complete typed copy roles replace the source-byte destination heuristic.
 // Removal entries and registered physical roots retain distinct ownership checks;
 // observed registry or contained-scope failures cannot become empty admission.
-export const SHARED_PACK_VERSION = 118;
+export const SHARED_PACK_VERSION = 119;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

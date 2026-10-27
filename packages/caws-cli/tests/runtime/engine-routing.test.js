@@ -987,6 +987,9 @@ test.each(shortcutRoutes)(
       const defaults = JSON.parse(fs.readFileSync(path.join(runtime, 'system-policy.json')));
       const policy = {
         disabled: {
+          pre_tool_use: defaults.events.pre_tool_use
+            .map((entry) => entry.split(' ')[0])
+            .filter((name) => name !== 'shortcut-language-check.sh'),
           post_tool_use: defaults.events.post_tool_use
             .map((entry) => entry.split(' ')[0])
             .filter((name) => name !== 'shortcut-language-check.sh'),
@@ -1015,9 +1018,9 @@ test.each(shortcutRoutes)(
       const strikes = path.join(root, '.caws/state/sessions/shortcut-test/strikes.json');
       let counter = 0;
       let lastStderr = '';
-      async function runTool(toolName, toolInput, expectedExit = 0) {
+      async function runTool(toolName, toolInput, expectedExit = 0, event = 'post_tool_use') {
         const payload = {
-          hook_event_name: 'PostToolUse',
+          hook_event_name: event === 'pre_tool_use' ? 'PreToolUse' : 'PostToolUse',
           cwd: repo,
           session_id: 'shortcut-test',
           tool_name: toolName,
@@ -1040,7 +1043,7 @@ test.each(shortcutRoutes)(
                   '--surface',
                   'codex',
                   '--event',
-                  'post_tool_use',
+                  event,
                   '--runtime-digest',
                   installed.digest,
                   '--timeout-ms',
@@ -1048,7 +1051,7 @@ test.each(shortcutRoutes)(
                   '--configuration',
                   'system',
                 ]
-              : ['codex', 'post_tool_use', '--system'];
+              : ['codex', event, '--system'];
           const result = cp.spawnSync(binary, args, {
             cwd: repo,
             env: environment,
@@ -1066,7 +1069,7 @@ test.each(shortcutRoutes)(
           id: 'shortcut-post-' + ++counter,
           runtimeDigest: installed.digest,
           surface: 'codex',
-          event: 'post_tool_use',
+          event,
           configuration: 'system',
           caller: { processId: process.pid, cwd: repo, environment },
           deadlineEpochMs: Date.now() + 15000,
@@ -1109,14 +1112,20 @@ test.each(shortcutRoutes)(
         '@@',
         '+// TODO newly introduced',
       ]);
+      put(first, 'b\n');
+      put(second, '// TODO newly introduced\n');
       for (let count = 1; count <= 3; count++) {
         const output = await runPatch(secondFileStub, count === 3 ? 2 : 0);
         expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(count);
         expect(output).toContain('second.js');
         expect(output).toMatch(/PostToolUse|already applied/i);
         expect(output).not.toMatch(/permissionDecision"\s*:\s*"deny/i);
-        if (count === 3) expect(JSON.parse(output).decision).toBe('block');
-        else expect(JSON.parse(output).hookSpecificOutput.hookEventName).toBe('PostToolUse');
+        if (count === 3) {
+          expect(JSON.parse(output).decision).toBe('block');
+          // The pinned Codex consumer requires nonempty stderr when exit is 2.
+          expect(lastStderr).toContain('this tool result is blocked');
+          expect(lastStderr).not.toContain('further progress is blocked');
+        } else expect(JSON.parse(output).hookSpecificOutput.hookEventName).toBe('PostToolUse');
       }
       // Each call counts at most once, even if multiple eligible files match.
       const runAndCount = async (command, count, named) => {
@@ -1134,6 +1143,7 @@ test.each(shortcutRoutes)(
         4,
         'added.js'
       );
+      put(path.join(repo, 'moved.js'), '// TODO moved source\n');
       await runAndCount(
         patch([
           `*** Update File: ${first}`,
@@ -1176,6 +1186,7 @@ test.each(shortcutRoutes)(
       });
       await runTool('Edit', { file_path: lfPath, old_string: '// TODO existing\n' });
       expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(6);
+      put(lfPath, '// TODO existing\n// TODO new duplicate\n');
       const lfOutput = await runTool(
         'Edit',
         {
@@ -1188,6 +1199,7 @@ test.each(shortcutRoutes)(
       expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(7);
       expect(lfOutput).toContain('owned\\nlane.js');
       // Identical old/new lines are a multiset: an excess second copy is new.
+      put(lfPath, '// TODO repeat\n// TODO repeat\n');
       await runTool(
         'Edit',
         {
@@ -1200,6 +1212,7 @@ test.each(shortcutRoutes)(
       expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(8);
       // Lexer sees surrounding unchanged block-comment context but charges only
       // the added lowercase marker. References count the complete new fragment.
+      put(second, '/*\n todo implement this\n*/\n');
       const contextPatch = patch([
         `*** Update File: ${second}`,
         '@@',
@@ -1211,6 +1224,7 @@ test.each(shortcutRoutes)(
       expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(9);
       expect(blockOutput).toContain('line 2 of the edit');
       expect(blockOutput).toContain('todo implement this');
+      put(second, '/*\n todo implement this\n */\n');
       const editOutput = await runTool(
         'Edit',
         { file_path: second, old_string: '/*\n */', new_string: '/*\n todo implement this\n */' },
@@ -1219,17 +1233,90 @@ test.each(shortcutRoutes)(
       expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(10);
       expect(editOutput).toContain('line 2 of the edit');
       // Existing lowercase marker in unchanged comment context remains uncharged.
+      put(second, '/*\n todo existing\n */\nconst value = 1;');
       await runTool('Edit', {
         file_path: second,
         old_string: '/*\n todo existing\n */',
         new_string: '/*\n todo existing\n */\nconst value = 1;',
       });
       expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(10);
+      expect(lastStderr).not.toContain('authored content unavailable');
       // Two independent hunks do not share synthetic comment state.
+      put(second, 'todo standalone\n');
       await runPatch(patch([`*** Update File: ${second}`, '@@', ' /*', '@@', '+todo standalone']));
       expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(10);
       await runPatch(patch([`*** Delete File: ${first}`]));
       expect(lastStderr).not.toContain('authored content unavailable');
+      // Pre Write observes an actual regular preimage; retained markers do not
+      // strike. A Post Write must not charge again or trust forged preimages.
+      const writePath = path.join(repo, 'write.js');
+      put(writePath, '// TODO retained\nconst changed = 1;\n');
+      const retainedWrite = '// TODO retained\nconst changed = 2;\n';
+      await runTool('Write', { file_path: writePath, content: retainedWrite }, 0, 'pre_tool_use');
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(10);
+      put(writePath, retainedWrite);
+      await runTool('Write', {
+        file_path: writePath,
+        content: retainedWrite,
+        old_string: '',
+        created: true,
+      });
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(10);
+      const preOutput = await runTool(
+        'Write',
+        { file_path: writePath, content: retainedWrite + '// TODO genuinely new\n' },
+        2,
+        'pre_tool_use'
+      );
+      expect(preOutput).toContain('genuinely new');
+      expect(preOutput).not.toMatch(/already applied/i);
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(11);
+      // ENOENT leaf with an existing parent establishes an empty preimage.
+      const newPath = path.join(repo, 'new-file.js');
+      const createOutput = await runTool(
+        'Write',
+        { file_path: newPath, content: '// TODO new file\n' },
+        2,
+        'pre_tool_use'
+      );
+      expect(createOutput).toContain('TODO new file');
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(12);
+      // A symlink cannot supply the observed regular-file preimage.
+      const link = path.join(repo, 'link.js');
+      fs.symlinkSync(writePath, link);
+      await runTool(
+        'Write',
+        { file_path: link, content: '// TODO not qualified\n' },
+        0,
+        'pre_tool_use'
+      );
+      expect(lastStderr).toMatch(/authored content unavailable/i);
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(12);
+      // The postimage supplies block-comment context omitted from the hunk.
+      put(second, '/*\n  earlier block context\n  todo implement this\n */\n');
+      const outside = await runPatch(
+        patch([
+          `*** Update File: ${second}`,
+          '@@',
+          '   earlier block context',
+          '+  todo implement this',
+        ]),
+        2
+      );
+      expect(outside).toContain('todo implement this');
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(13);
+      // A repeated span cannot establish the actual occurrence.
+      put(second, '/*\n  earlier block context\n  todo implement this\n */\n'.repeat(2));
+      await runPatch(
+        patch([
+          `*** Update File: ${second}`,
+          '@@',
+          '   earlier block context',
+          '+  todo implement this',
+        ])
+      );
+      expect(lastStderr).toMatch(/authored content unavailable/i);
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(13);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

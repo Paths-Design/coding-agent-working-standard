@@ -16,7 +16,8 @@
 #
 # CAWS Shortcut-Language Progressive Check (QG-HOOKS-EXTRACT-001)
 #
-# PostToolUse hook firing on Write/Edit. Flags "shortcut" / incomplete-work
+# PreToolUse checks direct Write against its observed preimage; PostToolUse
+# checks Edit and apply_patch against their authored fragments. Flags incomplete-work
 # language in committed-bound source — the edit-time analogue of the
 # quality-gates `todo_detection` gate.
 # Shortcut/placeholder quality signal: re-implements the practical intent in
@@ -27,8 +28,8 @@
 # Unlike the other three advisory hooks, this one escalates via the existing
 # progressive-strike mechanism (guard-strikes.sh):
 #   strike 1 -> warn (allow)
-#   strike 2 -> ask  (permission prompt)
-#   strike 3 -> block
+#   strike 2 -> ask before Write, advisory after an edit
+#   strike 3 -> block the attempted Write or the completed tool result
 # Rationale: TODO/placeholder language in committed code is the CLAUDE.md
 # "No fake implementations" rule; repeated offenses in a session warrant
 # escalation, matching how scope-guard treats repeated scope violations.
@@ -61,12 +62,25 @@ parse_hook_input || exit 0
 # shellcheck source=guard-strikes.sh
 source "$SCRIPT_DIR/guard-strikes.sh" 2>/dev/null || exit 0
 
+# Only direct Write belongs to the pre-tool check. Codex Add File patches
+# normalize to Write but remain post-tool patch observations.
+_selected_tool="${HOOK_TOOL_NAME:-}"
+[[ "${HOOK_ORIGINAL_TOOL_NAME:-}" == apply_patch ]] && _selected_tool=apply_patch
+case "${HOOK_EVENT_NAME:-}:$_selected_tool" in
+  PreToolUse:Write) ;;
+  PreToolUse:*) exit 0 ;;
+  # Post-only custom chains do not perform complete Write qualification.
+  PostToolUse:Write) exit 0 ;;
+  PostToolUse:*) ;;
+  *) exit 0 ;;
+esac
+
 # PostToolUse is notification after the mutation. Preserve the progressive
 # counter, but never tell Codex it denied an operation that already completed.
 if [[ "${CAWS_AGENT_SURFACE:-}" == codex && "${HOOK_EVENT_NAME:-}" == PostToolUse ]]; then
   guard_emit_warning_allow() { emit_additional_context "$1 The edit was already applied." PostToolUse; }
   guard_emit_permission_ask() { emit_additional_context "$1 The edit was already applied." PostToolUse; }
-  guard_emit_block() { emit_block "$1 The edit was already applied; further progress is blocked."; }
+  guard_emit_block() { emit_block "$1 The edit was already applied; this tool result is blocked."; }
 fi
 
 # Retain new-side context for the lexer; exact-line multisets mark only excess
@@ -76,9 +90,66 @@ fi
 extract_authored() {
   node -e '
 const fs = require("node:fs");
+const path = require("node:path");
+const { TextDecoder } = require("node:util");
 const MAX = 16 * 1024 * 1024;
 function unknown() { process.stderr.write("[shortcut-language] authored content unavailable; no strike recorded\n"); process.exit(1); }
 function object(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
+function physical(file) {
+  return path.resolve(process.env.HOOK_CWD || process.cwd(), file);
+}
+function fileImage(file, allowAbsent) {
+  const target = physical(file);
+  let fd;
+  try {
+    try { fd = fs.openSync(target, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK); }
+    catch (e) {
+      if (!allowAbsent || e.code !== "ENOENT") unknown();
+      const parent = fs.statSync(path.dirname(target));
+      if (!parent.isDirectory()) unknown();
+      try { fs.lstatSync(target); unknown(); } catch (again) { if (again.code !== "ENOENT") unknown(); }
+      return "";
+    }
+    const before = fs.fstatSync(fd, { bigint: true });
+    if (!before.isFile() || before.size > BigInt(MAX)) unknown();
+    const buffer = Buffer.alloc(Number(before.size) + 1);
+    let count = 0;
+    while (count < buffer.length) {
+      const n = fs.readSync(fd, buffer, count, buffer.length - count, count);
+      if (!n) break;
+      count += n;
+    }
+    const after = fs.fstatSync(fd, { bigint: true });
+    const named = fs.lstatSync(target, { bigint: true });
+    if (!named.isFile() || BigInt(count) !== before.size ||
+        [after, named].some((x) => x.dev !== before.dev || x.ino !== before.ino ||
+          x.size !== before.size || x.mtimeNs !== before.mtimeNs || x.ctimeNs !== before.ctimeNs)) unknown();
+    return new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, count));
+  } finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+function withPostimage(row) {
+  if (!row.fragment || !row.authored.length) return row;
+  const text = fileImage(row.path, false);
+  // A hunk/new_string must match exactly one complete line-bounded occurrence.
+  // Multiple occurrences cannot identify which one the tool actually edited.
+  const needle = row.content;
+  let from = 0, found = -1;
+  while (from <= text.length) {
+    const at = text.indexOf(needle, from);
+    if (at < 0) break;
+    const end = at + needle.length;
+    if ((at === 0 || text[at - 1] === "\n") &&
+        (end === text.length || text[end] === "\n" || needle.endsWith("\n"))) {
+      if (found !== -1) unknown();
+      found = at;
+    }
+    from = at + 1;
+  }
+  if (found < 0) unknown();
+  let offset = 0;
+  for (let i = 0; i < found; i++) if (text[i] === "\n") offset++;
+  return { ...row, content: text, authored: row.authored.map((line) => line + offset), offset };
+}
 function markAuthored(fragments, removed) {
   const counts = new Map();
   for (const line of removed) counts.set(line, (counts.get(line) || 0) + 1);
@@ -104,7 +175,8 @@ try {
   const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   const tool = object(data) && Object.hasOwn(data, "tool_input") ? data.tool_input : data;
   if (!object(tool)) unknown();
-  const name = process.env.HOOK_ORIGINAL_TOOL_NAME || process.env.HOOK_TOOL_NAME || "";
+  const name = process.env.HOOK_ORIGINAL_TOOL_NAME === "apply_patch"
+    ? "apply_patch" : (process.env.HOOK_TOOL_NAME || "");
   const rows = [];
   if (name === "apply_patch") {
     const command = tool.command;
@@ -152,7 +224,7 @@ try {
     const value = tool[name === "Write" ? "content" : "new_string"];
     const file = process.env.HOOK_FILE_PATH || "";
     if (typeof value !== "string" || !file || value.includes("\0")) unknown();
-    let removed = [];
+    let removed = name === "Write" ? fileImage(file, true).split("\n") : [];
     if (name === "Edit") {
       if (typeof tool.old_string !== "string" || tool.old_string.includes("\0")) unknown();
       removed = tool.old_string.split("\n");
@@ -161,13 +233,16 @@ try {
     const marked = markAuthored([fragment], removed)[0];
     rows.push({ path: file, ...marked, fragment: name === "Edit" });
   }
-  for (const row of rows) process.stdout.write(JSON.stringify(row) + "\n");
+  for (const row of rows) {
+    const result = name === "Edit" || name === "apply_patch" ? withPostimage(row) : row;
+    process.stdout.write(JSON.stringify(result) + "\n");
+  }
 } catch { unknown(); }
 '
 }
 
 scan_authored() {
-  local FILE_PATH="$1" CONTENT="$2" CONTENT_IS_FRAGMENT="$3"
+  local FILE_PATH="$1" CONTENT="$2" CONTENT_IS_FRAGMENT="$3" SOURCE_OFFSET="${4:-0}"
   [[ -z "$FILE_PATH" || -z "$CONTENT" ]] && return 0
   case "$FILE_PATH" in
     */node_modules/* | */dist/* | */build/* | */coverage/* | */.next/* | */out/* | */vendor/*) return 0 ;;
@@ -371,7 +446,7 @@ LINE_NO="${MATCH%%"$TAB"*}"
 [[ "$LINE_NO" =~ ^[0-9]+$ ]] || return 0
 LINE_TEXT=$(printf '%s\n' "$CONTENT" | sed -n "${LINE_NO}p" | sed 's/^[[:space:]]*//' | cut -c1-120)
 LINE_REF="line ${LINE_NO}"
-[[ "$CONTENT_IS_FRAGMENT" -eq 1 ]] && LINE_REF="line ${LINE_NO} of the edit"
+[[ "$CONTENT_IS_FRAGMENT" -eq 1 ]] && LINE_REF="line $((LINE_NO - SOURCE_OFFSET)) of the edit"
 
 BASE="Shortcut-language advisory in ${FILE_PATH}: ${PATTERN_DESC} — ${LINE_REF}: \"${LINE_TEXT}\". CAWS doctrine (\"No fake implementations\") asks for complete code in committed source, not TODO/placeholder stubs."
 MSG1="${BASE} (strike 1 of 3 — advisory.)"
@@ -404,6 +479,7 @@ while IFS= read -r row; do
   printf '%s' "$row" | jq -r '.authored[]' > "$authored_file"
   # Keep the first awk input nonempty even for a known-empty authored set.
   [[ -s "$authored_file" ]] || printf '\n' > "$authored_file"
-  scan_authored "$file" "$content" "$fragment" || break
+  offset=$(printf '%s' "$row" | jq -r '.offset // 0')
+  scan_authored "$file" "$content" "$fragment" "$offset" || break
 done < "$records"
 exit 0
