@@ -1,0 +1,30 @@
+id: CAWS-COMPATIBILITY-RENDER-OUTCOMES-001
+title: 'Publish captured compatibility hook outcomes to session rendering'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-27T19:44:54.708Z'
+updated_at: '2026-10-27T19:44:54.708Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'Runtime invocation observations and session renderer input'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/engine.ts'
+    - 'packages/caws-cli/src/runtime/journal.ts'
+    - 'packages/caws-cli/tests/runtime/engine-routing.test.js'
+    - 'packages/caws-cli/tests/runtime/engine-core.test.js'
+    - 'packages/caws-cli/tests/runtime/handler-executor.test.js'
+  out: []
+invariants:
+  - 'Observation publication cannot alter the selected guard result or trigger redispatch'
+  - 'Only captured outcomes for the current selected handlers and safe session may reach renderer input; unknown and malformed records remain diagnostic'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
