@@ -1256,10 +1256,16 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
       };
       const result =
         operation === 'rollback' ? rollbackMachineRuntime(options) : installMachineRuntime(options);
+      const refreshDetails = (result.refreshedBaseHandlers ?? [])
+        .map(
+          (item) =>
+            `\n  handler refresh: ${item.name}\n    before: ${item.beforeSha256}\n    after: ${item.afterSha256}\n    packaged source: ${item.source.path}\n    compatibility: requires separate qualification`
+        )
+        .join('');
       out(
         opts.json
           ? JSON.stringify(result, null, 2)
-          : `${opts.plan ? 'PLAN' : 'OK'} machine adapter ${operation}: ${result.digest}\n  home: ${result.home}\n  launcher: ${result.launcher}\n  changed: ${result.changed}\n  Project adoption and harness wiring are separate explicit steps.`
+          : `${opts.plan ? 'PLAN' : 'OK'} machine adapter ${operation}: ${result.digest}\n  home: ${result.home}\n  launcher: ${result.launcher}\n  changed: ${result.changed}${refreshDetails}\n  Project adoption and harness wiring are separate explicit steps.`
       );
       return 0;
     } catch (error) {

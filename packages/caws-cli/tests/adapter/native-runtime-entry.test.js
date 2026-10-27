@@ -240,6 +240,41 @@ test('explicit handler refresh changes only selected base bytes and records the 
   expect(JSON.parse(cliPlan.stdout).digest).toBe(result.digest);
   expect(JSON.parse(cliPlan.stdout).refreshedBaseHandlers).toEqual(plan.refreshedBaseHandlers);
   expect(fixtureState(home)).toEqual(cliBefore);
+  const multiArgs = [
+    path.join(dist, 'index.js'),
+    'init',
+    'adapters',
+    'install',
+    '--plan',
+    '--base-runtime-digest',
+    base.digest,
+    '--native-image',
+    path.join(root, 'native-image.json'),
+    '--refresh-base-handler',
+    'worktree-write-guard.sh',
+    '--refresh-base-handler',
+    'scope-guard.sh',
+  ];
+  const multi = require('node:child_process').spawnSync(
+    process.execPath,
+    [...multiArgs, '--json'],
+    { env: { ...process.env, CAWS_HOME: home }, encoding: 'utf8' }
+  );
+  expect(multi.status).toBe(0);
+  const refreshed = JSON.parse(multi.stdout).refreshedBaseHandlers;
+  expect(refreshed.map((item) => item.name)).toEqual(['scope-guard.sh', 'worktree-write-guard.sh']);
+  const human = require('node:child_process').spawnSync(process.execPath, multiArgs, {
+    env: { ...process.env, CAWS_HOME: home },
+    encoding: 'utf8',
+  });
+  expect(human.status).toBe(0);
+  for (const item of refreshed) {
+    expect(human.stdout).toContain('handler refresh: ' + item.name);
+    expect(human.stdout).toContain('before: ' + item.beforeSha256);
+    expect(human.stdout).toContain('after: ' + item.afterSha256);
+    expect(human.stdout).toContain('packaged source: ' + item.source.path);
+  }
+  expect(fixtureState(home)).toEqual(cliBefore);
   const repeated = require('node:child_process').spawnSync(
     process.execPath,
     [
