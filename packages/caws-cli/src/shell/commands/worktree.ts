@@ -984,7 +984,25 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   // durable even when Git refuses to refresh a dirty canonical checkout. The
   // merge still exits 0, but the split state must be loud and actionable so a
   // later commit cannot unknowingly record the old index as a rollback.
-  if (outcome.data?.canonical_checkout_state === 'stale') {
+  const checkoutSync = outcome.data?.base_checkout_sync;
+  if (Array.isArray(checkoutSync)) {
+    for (const checkout of checkoutSync as {
+      path: string;
+      state: string;
+      sync_error?: string;
+      repair_command?: string;
+    }[]) {
+      if (checkout.state !== 'stale') continue;
+      const canonical = realpathSafe(checkout.path) === realpathSafe(ctx.repoRoot);
+      err(
+        `warning: merge completed but the ${canonical ? 'canonical checkout' : 'base checkout'} is STALE: ${checkout.path}\n` +
+          `  Git refused the safe refresh: ${String(checkout.sync_error)}\n` +
+          `  Preserve or commit the local changes first, then inspect HEAD and refresh the exact merged transition:\n` +
+          `    ${String(checkout.repair_command)}\n` +
+          `  Do not commit from this checkout until git status no longer shows merged paths as staged reversions.`
+      );
+    }
+  } else if (outcome.data?.canonical_checkout_state === 'stale') {
     err(
       `warning: merge completed but the canonical checkout is STALE.\n` +
         `  Git refused the safe refresh: ${String(outcome.data?.canonical_checkout_sync_error)}\n` +

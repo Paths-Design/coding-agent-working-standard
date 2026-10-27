@@ -51,6 +51,57 @@
       "type": "string",
       "minLength": 1,
       "description": "The exact two-tree read-tree command that retries the refused canonical checkout transition after local changes are preserved."
+    },
+    "base_checkout_sync": {
+      "type": "array",
+      "description": "Path-specific safe refresh outcomes for actual Git checkouts of the base branch observed before ref publication. Optional for older events; canonical compatibility fields remain available.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "state"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "type": "string",
+            "enum": ["in_sync", "stale"]
+          },
+          "sync_error": {
+            "type": "string",
+            "minLength": 1
+          },
+          "repair_command": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "stale"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "sync_error": { "type": "string", "minLength": 1 },
+                "repair_command": { "type": "string", "minLength": 1 }
+              },
+              "required": ["sync_error", "repair_command"]
+            },
+            "else": {
+              "properties": {
+                "sync_error": false,
+                "repair_command": false
+              }
+            }
+          }
+        ]
+      }
     }
   }
 }

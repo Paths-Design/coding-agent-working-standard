@@ -2392,6 +2392,104 @@ function verifyLaneProvenance(
 /** How many times a lost compare-and-swap is retried before giving up. */
 const MERGE_CAS_MAX_ATTEMPTS = 5;
 
+/** A safe refresh observation for one actual Git checkout of the base branch. */
+interface BaseCheckoutSync {
+  readonly path: string;
+  readonly state: 'in_sync' | 'stale';
+  readonly sync_error?: string;
+  readonly repair_command?: string;
+}
+
+type BaseCheckoutDiscovery =
+  | { ok: true; paths: readonly string[] }
+  | { ok: false; message: string };
+
+/**
+ * Git's worktree inventory, not the CAWS registry, owns branch checkout facts.
+ * NUL-delimited porcelain preserves whitespace and newlines in checkout paths.
+ * An unavailable or malformed observation must refuse BEFORE publishing a ref.
+ */
+function discoverBaseCheckouts(repoRoot: string, ref: string): BaseCheckoutDiscovery {
+  const inventory = runGit(['worktree', 'list', '--porcelain', '-z'], repoRoot);
+  if (!inventory.ok) {
+    return { ok: false, message: `git worktree list --porcelain -z failed: ${inventory.reason}` };
+  }
+  if (!inventory.stdout.endsWith('\0\0')) {
+    return { ok: false, message: 'git worktree list returned incomplete NUL-delimited metadata.' };
+  }
+  const records = inventory.stdout.slice(0, -2).split('\0\0');
+  const paths = new Set<string>();
+  for (const record of records) {
+    const fields = record.split('\0');
+    const first = fields[0];
+    const heads = fields.filter((field) => field.startsWith('HEAD '));
+    const branches = fields.filter((field) => field.startsWith('branch '));
+    const detached = fields.includes('detached');
+    const bare = fields.includes('bare');
+    const checkoutPath = first?.startsWith('worktree ') ? first.slice(9) : '';
+    if (
+      !path.isAbsolute(checkoutPath) ||
+      fields.slice(1).some((field) => field.startsWith('worktree ')) ||
+      (!bare && (heads.length !== 1 || !/^HEAD [0-9a-f]{40}$/.test(heads[0] ?? ''))) ||
+      (!bare && branches.length + Number(detached) !== 1) ||
+      branches.some((field) => !field.startsWith('branch refs/heads/'))
+    ) {
+      return { ok: false, message: 'git worktree list returned malformed checkout metadata.' };
+    }
+    if (branches[0] !== `branch ${ref}`) continue;
+    try {
+      paths.add(fs.realpathSync(checkoutPath));
+    } catch (error) {
+      return {
+        ok: false,
+        message: `Cannot resolve base checkout ${checkoutPath}: ${String(error)}`,
+      };
+    }
+  }
+  return { ok: true, paths: [...paths] };
+}
+
+function quoteCheckoutPath(checkoutPath: string): string {
+  return `'${checkoutPath.replace(/'/g, "'\\''")}'`;
+}
+
+/** The CAS has landed; any subsequent refusal is a path-specific stale state. */
+function refreshBaseCheckouts(
+  paths: readonly string[],
+  ref: string,
+  baseBefore: string,
+  mergeCommit: string
+): readonly BaseCheckoutSync[] {
+  const syncArgs = ['read-tree', '-u', '-m', baseBefore, mergeCommit];
+  return paths.map((checkoutPath): BaseCheckoutSync => {
+    const repairCommand = `git -C ${quoteCheckoutPath(checkoutPath)} ${syncArgs.join(' ')}`;
+    const stale = (reason: string): BaseCheckoutSync => ({
+      path: checkoutPath,
+      state: 'stale',
+      sync_error: reason,
+      repair_command: repairCommand,
+    });
+    // Inventory and refresh cannot be atomic against external Git commands.
+    // Re-observe HEAD before touching an index; never refresh another branch.
+    const headRef = runGit(['symbolic-ref', '--quiet', 'HEAD'], checkoutPath);
+    if (!headRef.ok) return stale(`Cannot observe checkout HEAD: ${headRef.reason}`);
+    if (headRef.stdout.trim() !== ref) {
+      return stale(
+        `Checkout HEAD changed from ${ref} to ${headRef.stdout.trim()}; refresh not attempted.`
+      );
+    }
+    const head = runGit(['rev-parse', 'HEAD'], checkoutPath);
+    if (!head.ok) return stale(`Cannot observe checkout commit: ${head.reason}`);
+    if (head.stdout.trim() !== mergeCommit) {
+      return stale(`Checkout HEAD advanced beyond ${mergeCommit}; refresh not attempted.`);
+    }
+    // Both trees are explicit because HEAD already resolves to the new ref.
+    // Git preserves unrelated edits and refuses overlapping edits atomically.
+    const refreshed = runGit(syncArgs, checkoutPath);
+    return refreshed.ok ? { path: checkoutPath, state: 'in_sync' } : stale(refreshed.reason);
+  });
+}
+
 type MergeCasOutcome =
   | {
       ok: true;
@@ -2399,6 +2497,7 @@ type MergeCasOutcome =
       baseBefore: string;
       attempts: number;
       canonicalCheckoutState: 'in_sync' | 'stale';
+      baseCheckoutSync: readonly BaseCheckoutSync[];
       canonicalCheckoutSyncError?: string;
       canonicalCheckoutRepairCommand?: string;
     }
@@ -2409,6 +2508,7 @@ type MergeCasOutcome =
       contention: boolean;
       attempts?: number;
       repairSuffix?: string;
+      checkoutDiscoveryFailed?: true;
     };
 
 /**
@@ -2492,49 +2592,45 @@ function mergeViaCompareAndSwap(
     }
     const mergeCommit = commitResult.stdout.trim();
 
+    // Discover on every attempt immediately before publication. A failed
+    // observer cannot turn undiscovered base checkouts into an in_sync claim.
+    const checkouts = discoverBaseCheckouts(repoRoot, ref);
+    if (!checkouts.ok) {
+      return {
+        ok: false,
+        message: `Cannot merge ${branch} into ${baseBranch}: ${checkouts.message}`,
+        contention: false,
+        checkoutDiscoveryFailed: true,
+        repairSuffix:
+          'No base ref was advanced. Repair checkout metadata observation, then re-run.',
+      };
+    }
+
     // The atomic instant. Passing baseBefore as the expected-old value makes
     // this a compare-and-swap: if another agent advanced the base since we
     // read it, git refuses and writes nothing.
     const casResult = runGit(['update-ref', ref, mergeCommit, baseBefore], repoRoot);
     if (casResult.ok) {
-      // The ref moved. If the CANONICAL checkout happens to have the base
-      // branch checked out, its working tree and index are now stale relative
-      // to the new HEAD — every merged file would show as a staged deletion
-      // ("D path"), making a successful merge look like it deleted the work.
-      //
-      // `read-tree -u -m` fast-forwards the tree and index to match. The `-m`
-      // (merge) form is deliberate over `reset --hard`: it REFUSES rather
-      // than clobbers when local modifications are present, so it cannot
-      // destroy uncommitted work. (The merge preconditions already require a
-      // clean tree; this is defense in depth.)
-      //
-      // Worktrees with a different branch checked out are unaffected, which
-      // is the entire point of computing the merge in the object database.
-      const headRef = runGit(['symbolic-ref', '--quiet', 'HEAD'], repoRoot);
-      let canonicalCheckoutState: 'in_sync' | 'stale' = 'in_sync';
-      let canonicalCheckoutSyncError: string | undefined;
-      let canonicalCheckoutRepairCommand: string | undefined;
-      if (headRef.ok && headRef.stdout.trim() === ref) {
-        // Name both trees explicitly. HEAD already resolves to mergeCommit
-        // after update-ref; the two-tree form tells Git which transition to
-        // materialize and preserves unrelated local changes. When an edit
-        // overlaps the merged paths, Git refuses instead of overwriting it.
-        const syncArgs = ['read-tree', '-u', '-m', baseBefore, mergeCommit];
-        const syncResult = runGit(syncArgs, repoRoot);
-        if (!syncResult.ok) {
-          canonicalCheckoutState = 'stale';
-          canonicalCheckoutSyncError = syncResult.reason;
-          canonicalCheckoutRepairCommand = `git ${syncArgs.join(' ')}`;
-        }
-      }
+      const baseCheckoutSync = refreshBaseCheckouts(checkouts.paths, ref, baseBefore, mergeCommit);
+      const canonical = baseCheckoutSync.find(
+        (checkout) => checkout.path === realpathOrLiteral(repoRoot)
+      );
+      // Preserve the original canonical fields for existing consumers. A
+      // canonical checkout on another branch needs no base refresh.
+      const canonicalCheckoutState = canonical?.state ?? 'in_sync';
       return {
         ok: true,
         mergeCommit,
         baseBefore,
         attempts: attempt,
+        baseCheckoutSync,
         canonicalCheckoutState,
-        ...(canonicalCheckoutSyncError !== undefined ? { canonicalCheckoutSyncError } : {}),
-        ...(canonicalCheckoutRepairCommand !== undefined ? { canonicalCheckoutRepairCommand } : {}),
+        ...(canonical?.sync_error !== undefined
+          ? { canonicalCheckoutSyncError: canonical.sync_error }
+          : {}),
+        ...(canonical?.repair_command !== undefined
+          ? { canonicalCheckoutRepairCommand: `git read-tree -u -m ${baseBefore} ${mergeCommit}` }
+          : {}),
       };
     }
 
@@ -2818,6 +2914,9 @@ export function mergeWorktree(
           : `${mergeRepairHint(input.name, entry)} ${casOutcome.repairSuffix ?? ''}`.trim(),
         data: {
           base_branch: baseBranch,
+          ...(casOutcome.checkoutDiscoveryFailed === true
+            ? { checkout_discovery_failed: true }
+            : {}),
           ...(casOutcome.contention ? { contention: true } : {}),
           ...(casOutcome.attempts !== undefined ? { attempts: casOutcome.attempts } : {}),
         },
@@ -3005,6 +3104,7 @@ export function mergeWorktree(
       // checkout refresh are separate operations. Record whether the latter
       // landed so a successful merge cannot silently leave a rollback staged
       // in the canonical index.
+      base_checkout_sync: casOutcome.baseCheckoutSync,
       canonical_checkout_state: casOutcome.canonicalCheckoutState,
       ...(casOutcome.canonicalCheckoutSyncError !== undefined
         ? { canonical_checkout_sync_error: casOutcome.canonicalCheckoutSyncError }
@@ -3175,6 +3275,7 @@ export function mergeWorktree(
     data: {
       merge_commit: mergeCommit,
       spec_id: specId,
+      base_checkout_sync: casOutcome.baseCheckoutSync,
       canonical_checkout_state: casOutcome.canonicalCheckoutState,
       ...(casOutcome.canonicalCheckoutSyncError !== undefined
         ? { canonical_checkout_sync_error: casOutcome.canonicalCheckoutSyncError }
