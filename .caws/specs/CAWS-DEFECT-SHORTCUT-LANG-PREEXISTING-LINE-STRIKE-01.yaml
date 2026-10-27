@@ -86,3 +86,8 @@ evidence:
     evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/shortcut-normalization-01/envelope-bats.log: 49 pass including authored Python placeholder stub and code/comment negative controls; incident-routes.log preserves progressive strikes, one charge per call, and a third-strike refusal through installed and Rust routes."
     recorded_at: "2026-10-27T19:26:06.915Z"
     commit_sha: b68fc3665
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/shortcut-normalization-01/envelope-native-first.log: 206 pass with sole stale fingerprint failure; envelope-fingerprint-green.log14 pass after explicit pack121 update. incident-routes.log3 routes include exact original incident and nine accepted envelope/implicit-chunk cases. Multi-file/hunk, retained/deleted text, malformed/unknown and truthful post-tool feedback checked. Pinned parser exports ground grammar; tests inject postimages rather than execute host apply_patch."
+    recorded_at: "2026-10-27T19:26:07.762Z"
+    commit_sha: b68fc3665
