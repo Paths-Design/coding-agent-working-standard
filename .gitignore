@@ -626,8 +626,9 @@ packages/caws-cli/tests/hooks/pytest/.venv/
 
 .rehearsal-smoke/
 
-# >>> caws gitignore (managed, v3) >>>
-# Ephemeral CAWS runtime/local state — never tracked. Authority state
+# >>> caws gitignore (managed, v4) >>>
+# CAWS runtime/local state — never tracked. Durable writer and snapshot
+# custody and provisioning identities must survive cache cleanup. Authority state
 # (.caws/specs/, .caws/policy.yaml, .caws/waivers/) is intentionally NOT
 # listed here so it stays versioned. Managed by `caws init`; edits inside
 # these markers are overwritten on the next init.
@@ -638,6 +639,9 @@ packages/caws-cli/tests/hooks/pytest/.venv/
 .caws/claims/
 .caws/cache/
 .caws/sessions/
+.caws/.render-writer-custody/
+.caws/.render-writer-provisioned
+**/.caws-plan-snapshot-custody/
 .caws/state/
 .caws/hooks/.pristine/
 .caws/duplication-cache.json
