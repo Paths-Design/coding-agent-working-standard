@@ -1,10 +1,11 @@
 id: CAWS-LITERAL-NODE-HEREDOC-001
 title: 'Project literal direct Node heredoc bodies out of outer shell targets'
 mode: fix
-lifecycle_state: active
-worktree: literal-node-heredoc
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed bounded literal Node-first quoted heredoc shell projection, preserved raw interpreter writes and conservative lookup/unsupported forms; old-helper false targets and prefix-override bypass reproduced RED then 26-case GREEN with unchanged sentinels. A1-A4 component evidence recorded and verified for commit existence only; actual raw execution inspected separately. Installed retained43/native full-workflow and global machine configuration remain separate Root/cutover obligations.'
 created_at: '2026-10-27T22:56:23.420Z'
-updated_at: '2026-10-27T22:56:44.950Z'
+updated_at: '2026-10-27T23:36:26.799Z'
 created_by_session: '01a17f02-2191-7702-8805-227272637592'
 blast_radius:
   modules:
