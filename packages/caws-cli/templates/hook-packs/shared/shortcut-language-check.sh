@@ -223,40 +223,51 @@ try {
   if (name === "apply_patch") {
     const command = tool.command;
     if (typeof command !== "string" || command.includes("\0")) unknown();
-    const lines = command.split("\n");
-    if (lines.at(-1) === "") lines.pop();
-    if (lines.length < 3 || lines[0] !== "*** Begin Patch" || lines.at(-1) !== "*** End Patch") unknown();
+    let lines = command.trim().split("\n").map((line) => line.endsWith("\r") ? line.slice(0, -1) : line);
+    if (["<<EOF", "<<\"EOF\"", "<<\u0027EOF\u0027"].includes(lines[0]) && lines.at(-1).endsWith("EOF"))
+      lines = lines.slice(1, -1);
+    if (lines.length < 3 || lines[0].trim() !== "*** Begin Patch" || lines.at(-1).trim() !== "*** End Patch") unknown();
     let i = 1; const seen = new Set();
+    if (lines[i].trim().startsWith("*** Environment ID:")) {
+      if (!lines[i].trim().slice("*** Environment ID:".length).trim()) unknown();
+      i++;
+    }
     while (i < lines.length - 1) {
-      const header = lines[i];
+      const header = lines[i].trim();
       const mode = ["Add", "Update", "Delete"].find((m) => header.startsWith("*** " + m + " File: "));
       if (!mode) unknown();
       let file = header.slice(("*** " + mode + " File: ").length);
       if (!file || seen.has(file)) unknown();
       seen.add(file); i++;
-      if (mode === "Update" && i < lines.length - 1 && lines[i].startsWith("*** Move to: ")) {
-        file = lines[i].slice("*** Move to: ".length);
+      if (mode === "Update" && i < lines.length - 1 && lines[i].trimEnd().startsWith("*** Move to: ")) {
+        file = lines[i].trimEnd().slice("*** Move to: ".length);
         if (!file) unknown(); i++;
       }
-      const removed = []; let hunk = false;
+      const removed = []; let hunk = false, chunkContent = false;
       const fragments = mode === "Add" ? [[]] : [];
-      while (i < lines.length - 1 && !["*** Add File: ", "*** Update File: ", "*** Delete File: "].some((x) => lines[i].startsWith(x))) {
+      const contentChunk = () => {
+        if (!hunk) { hunk = true; fragments.push([]); }
+        chunkContent = true;
+      };
+      const structural = (line) => mode === "Update" ? line.trimEnd() : line.trim();
+      while (i < lines.length - 1 && !["*** Add File: ", "*** Update File: ", "*** Delete File: "].some((x) => structural(lines[i]).startsWith(x))) {
         const line = lines[i++];
         if (mode === "Delete") unknown();
-        if (mode === "Update" && (line === "@@" || line.startsWith("@@ "))) {
-          hunk = true; fragments.push([]);
-        } else if (mode === "Update" && line === "*** End of File") { if (!hunk) unknown(); }
+        if (mode === "Update" && (structural(line) === "@@" || structural(line).startsWith("@@ "))) {
+          if (hunk && !chunkContent) unknown();
+          hunk = true; chunkContent = false; fragments.push([]);
+        } else if (mode === "Update" && structural(line) === "*** End of File") { if (!chunkContent) unknown(); }
         else if (line.startsWith("+")) {
-          if (mode === "Update" && !hunk) unknown();
+          if (mode === "Update") contentChunk();
           fragments[fragments.length - 1].push({ text: line.slice(1), added: true });
         } else if (mode === "Update" && line.startsWith("-")) {
-          if (!hunk) unknown(); removed.push(line.slice(1));
-        } else if (mode === "Update" && line.startsWith(" ")) {
-          if (!hunk) unknown();
+          contentChunk(); removed.push(line.slice(1));
+        } else if (mode === "Update" && (line === "" || line.startsWith(" "))) {
+          contentChunk();
           fragments[fragments.length - 1].push({ text: line.slice(1), added: false });
         } else unknown();
       }
-      if (mode === "Update" && !hunk) unknown();
+      if (mode === "Update" && !chunkContent) unknown();
       if (mode === "Delete") rows.push({ path: file, content: "", authored: [], fragment: true });
       for (const fragment of markAuthored(fragments, removed))
         rows.push({ path: file, ...fragment, fragment: mode !== "Add" });

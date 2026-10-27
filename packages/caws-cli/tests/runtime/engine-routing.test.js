@@ -1395,6 +1395,41 @@ test.each(shortcutRoutes)(
       );
       expect(nestedOutput).toContain('new nested file');
       expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(18);
+      let envelopeCount = 18;
+      for (const envelope of [
+        `*** Begin Patch\r\n*** Add File: ${second}\r\n+// TODO CRLF marker\r\n*** End Patch\r\n`,
+        `*** Begin Patch\n*** Environment ID: remote\n*** Add File: ${second}\n+// TODO environment marker\n*** End Patch`,
+        `  *** Begin Patch \n \t*** Add File: ${second} \t\n+// TODO padded marker\n *** End Patch \n`,
+        `<<'EOF'\n*** Begin Patch\n*** Add File: ${second}\n+// TODO wrapper marker\n*** End Patch\nEOF`,
+      ]) {
+        const observed = await runPatch(envelope, 2);
+        expect(observed).toContain('marker');
+        expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(++envelopeCount);
+      }
+      put(second, '\n// TODO blank-context marker\n');
+      const blankContext = await runPatch(
+        patch([`*** Update File: ${second}`, '@@', '', '+// TODO blank-context marker']),
+        2
+      );
+      expect(blankContext).toContain('blank-context marker');
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(++envelopeCount);
+      for (const firstChunk of [
+        [' context', '+// TODO implicit context chunk'],
+        ['+// TODO implicit addition chunk'],
+        ['-removed', '+// TODO implicit removal chunk'],
+        ['', '+// TODO implicit empty context chunk'],
+      ]) {
+        put(
+          second,
+          firstChunk
+            .filter((line) => !line.startsWith('-'))
+            .map((line) => line.slice(1))
+            .join('\n') + '\n'
+        );
+        const observed = await runPatch(patch([`*** Update File: ${second}`, ...firstChunk]), 2);
+        expect(observed).toContain('implicit');
+        expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(++envelopeCount);
+      }
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
