@@ -571,10 +571,101 @@ function isWorkingTreeCleanExceptArtifactLinks(repoRoot: string, worktreePath: s
   return lines.every((l) => links.has(l.slice(3)));
 }
 
-function isBranchMerged(repoRoot: string, branch: string, base: string): boolean {
-  const r = runGit(['merge-base', '--is-ancestor', branch, base], repoRoot);
-  // Git exits 0 when branch is ancestor of base (i.e., branch is fully merged).
-  return r.ok;
+interface RetirementGitObservation {
+  readonly directory: { readonly dev: string; readonly ino: string } | null;
+  readonly status: string | null;
+  readonly head: string | null;
+  readonly branch: string | null;
+  readonly base: string | null;
+  readonly artifactLinks: readonly string[];
+}
+
+// The retirement decision uses only this snapshot. Re-observe it under the
+// lifecycle lock; Git writers remain external to that cooperative lock.
+function retirementGitObservation(
+  repoRoot: string,
+  wtPath: string,
+  branch?: string,
+  base?: string
+): RetirementGitObservation {
+  const git = (args: string[], cwd: string): string =>
+    execFileSync(resolveGitBinary(), args, {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 2_000,
+      killSignal: 'SIGKILL',
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+    });
+  let directory: { dev: string; ino: string } | null = null;
+  let status: string | null = null;
+  let head: string | null = null;
+  let artifactLinks: string[] = [];
+  try {
+    const stat = fs.lstatSync(wtPath, { bigint: true });
+    if (!stat.isDirectory()) throw new Error('worktree path is not a directory');
+    directory = { dev: stat.dev.toString(), ino: stat.ino.toString() };
+    status = git(['status', '--porcelain'], wtPath);
+    head = git(['rev-parse', '--verify', 'HEAD'], wtPath).trim();
+    if (status.split('\n').some((line) => line.startsWith('?? ')))
+      artifactLinks = listVerifiedArtifactLinks(repoRoot, wtPath)
+        .map((link) => link.split(path.sep).join('/'))
+        .sort();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || fs.existsSync(wtPath)) throw error;
+  }
+  const ref = (name: string | undefined): string | null =>
+    name === undefined ? null : git(['rev-parse', '--verify', `${name}^{commit}`], repoRoot).trim();
+  return { directory, status, head, branch: ref(branch), base: ref(base), artifactLinks };
+}
+
+function retirementIsClean(snapshot: RetirementGitObservation): boolean {
+  if (snapshot.status === null) return false;
+  const lines = snapshot.status.split('\n').filter((line) => line.trim().length > 0);
+  const links = new Set(snapshot.artifactLinks);
+  return lines.every((line) => line.startsWith('?? ') && links.has(line.slice(3)));
+}
+
+// Resolve ancestry only from immutable captured commit IDs, never mutable refs.
+function retirementIsMerged(repoRoot: string, branch: string, base: string): boolean {
+  if (
+    !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(branch) ||
+    !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(base)
+  )
+    return false;
+  try {
+    execFileSync(resolveGitBinary(), ['merge-base', '--is-ancestor', branch, base], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 2_000,
+      killSignal: 'SIGKILL',
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function captureRetirementGit(
+  name: string,
+  repoRoot: string,
+  wtPath: string,
+  branch?: string,
+  base?: string
+): Result<RetirementGitObservation> {
+  try {
+    return ok(retirementGitObservation(repoRoot, wtPath, branch, base));
+  } catch (error) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Cannot verify Git state for retirement of "${name}": ${String(error)}`,
+        { subject: name }
+      )
+    );
+  }
 }
 
 // ─── ID + name validation ────────────────────────────────────────────────
@@ -721,33 +812,6 @@ function nonGovernableSpecBindingError(specId: string, lifecycleState: string): 
 }
 
 // ─── Destroy-time demotion (CAWS-SPEC-ACTIVATION-BINDS-001) ──────────────
-
-/**
- * Has `branch` moved at all since the worktree was created at `baseSha`?
- *
- * Returns `null` when the question cannot be answered — no recorded fork sha
- * (a pre-existing registry entry), a missing ref, or a git failure. Callers
- * MUST treat null as "assume work happened": the demotion this gates is only
- * safe on a provably untouched branch.
- *
- * Reachability deliberately is NOT used here. `rev-list --count base..branch`
- * returns 0 both for a branch that never received a commit AND for one whose
- * commits have since been merged into base — so a merge teardown would read as
- * "never started" and demote a spec whose work actually landed. Comparing the
- * branch tip to its recorded fork point distinguishes the two exactly.
- */
-function branchMovedSinceFork(
-  repoRoot: string,
-  branch: string,
-  baseSha: string | undefined
-): boolean | null {
-  if (typeof baseSha !== 'string' || baseSha.length === 0) return null;
-  const tip = runGit(['rev-parse', branch], repoRoot);
-  if (!tip.ok) return null;
-  const tipSha = tip.stdout.trim();
-  if (tipSha.length === 0) return null;
-  return tipSha !== baseSha;
-}
 
 /**
  * When a worktree is destroyed without its branch ever carrying a commit, the
@@ -1703,6 +1767,27 @@ function retirementTransaction(
     if (!bytes.ok) return bytes;
     byteWrites.push({ path: write.path, contents: bytes.value });
   }
+  const auditPath = path.join(cawsDir, 'events.jsonl');
+  const readAudit = (): Buffer | null => {
+    try {
+      return fs.readFileSync(auditPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw error;
+    }
+  };
+  let auditBefore: Buffer | null;
+  try {
+    auditBefore = readAudit();
+  } catch (error) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Cannot snapshot retirement audit before mutation: ${String(error)}`,
+        { subject: name }
+      )
+    );
+  }
   let physicalRemoval = false;
   if (beforeMutation !== undefined) {
     const before = beforeMutation();
@@ -1759,9 +1844,28 @@ function retirementTransaction(
             { subject: expectedSpec?.path ?? name }
           ),
         ];
-    if (!restored.ok || !specRestored.ok || physicalRemoval) {
+    let auditChanged = true;
+    try {
+      const auditAfter = readAudit();
+      auditChanged =
+        auditBefore === null
+          ? auditAfter !== null
+          : auditAfter === null || !auditBefore.equals(auditAfter);
+    } catch {
+      /* An unreadable audit cannot establish no effect. */
+    }
+    if (!restored.ok || !specRestored.ok || physicalRemoval || auditChanged) {
       return err([
         ...cause,
+        ...(auditChanged
+          ? [
+              storeDiagnostic(
+                STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+                `Retirement audit changed or could not be read after failure; append outcome is ambiguous. Inspect the event log before retrying.`,
+                { subject: auditPath }
+              ),
+            ]
+          : []),
         ...(restored.ok ? [] : restored.errors),
         ...specErrors,
         ...(physicalRemoval
@@ -2066,11 +2170,20 @@ export function destroyWorktree(
     }
   }
 
+  const gitBefore = captureRetirementGit(
+    input.name,
+    repoRootFromCawsDir(cawsDir),
+    entry.path ?? worktreePathFor(cawsDir, input.name),
+    entry.branch,
+    entry.baseBranch
+  );
+  if (!gitBefore.ok) return gitBefore;
+
   // Dirty-tree check. Verified artifact links are exempt — destroy
   // removes them itself just before `git worktree remove`.
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const wtPath = entry.path ?? worktreePathFor(cawsDir, input.name);
-  if (fs.existsSync(wtPath) && !isWorkingTreeCleanExceptArtifactLinks(repoRoot, wtPath)) {
+  if (gitBefore.value.directory !== null && !retirementIsClean(gitBefore.value)) {
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
@@ -2085,7 +2198,9 @@ export function destroyWorktree(
     entry.branch !== undefined &&
     entry.baseBranch !== undefined &&
     input.abandonUnmerged !== true &&
-    !isBranchMerged(repoRoot, entry.branch, entry.baseBranch)
+    (gitBefore.value.branch === null ||
+      gitBefore.value.base === null ||
+      !retirementIsMerged(repoRoot, gitBefore.value.branch, gitBefore.value.base))
   ) {
     return err(
       storeDiagnostic(
@@ -2130,8 +2245,10 @@ export function destroyWorktree(
         // reads as indeterminate, so the conservative branch is taken and the
         // spec stays active.
         const branchMoved =
-          entry.branch !== undefined
-            ? branchMovedSinceFork(repoRoot, entry.branch, entry.baseSha)
+          gitBefore.value.branch !== null &&
+          typeof entry.baseSha === 'string' &&
+          entry.baseSha.length > 0
+            ? gitBefore.value.branch !== entry.baseSha
             : null;
         const demotion = demoteSpecOnUnstartedDestroy(
           newSpecBytes.value,
@@ -2174,6 +2291,22 @@ export function destroyWorktree(
   } as unknown as EventBody;
 
   const txnOutcome = withLifecycleLock(cawsDir, () => {
+    const currentGit = captureRetirementGit(
+      input.name,
+      repoRoot,
+      wtPath,
+      entry.branch,
+      entry.baseBranch
+    );
+    if (!currentGit.ok) return currentGit;
+    if (JSON.stringify(currentGit.value) !== JSON.stringify(gitBefore.value))
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Git state changed while planning retirement of "${input.name}"; retry.`,
+          { subject: input.name }
+        )
+      );
     const events = demotionEvent !== null ? [event, demotionEvent] : [event];
     return retirementTransaction(
       cawsDir,
@@ -2422,7 +2555,15 @@ export function untrackWorktree(
 
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const wtPath = worktreePathFor(cawsDir, input.name);
-  if (!fs.existsSync(wtPath) || !fs.statSync(wtPath).isDirectory()) {
+  const gitBefore = captureRetirementGit(
+    input.name,
+    repoRoot,
+    wtPath,
+    entry.branch,
+    entry.baseBranch
+  );
+  if (!gitBefore.ok) return gitBefore;
+  if (gitBefore.value.directory === null) {
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
@@ -2432,7 +2573,7 @@ export function untrackWorktree(
     );
   }
 
-  if (!isWorkingTreeCleanExceptArtifactLinks(repoRoot, wtPath)) {
+  if (!retirementIsClean(gitBefore.value)) {
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
@@ -2514,6 +2655,22 @@ export function untrackWorktree(
   } as unknown as EventBody;
 
   const txnOutcome = withLifecycleLock(cawsDir, () => {
+    const currentGit = captureRetirementGit(
+      input.name,
+      repoRoot,
+      wtPath,
+      entry.branch,
+      entry.baseBranch
+    );
+    if (!currentGit.ok) return currentGit;
+    if (JSON.stringify(currentGit.value) !== JSON.stringify(gitBefore.value))
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Git state changed while planning retirement of "${input.name}"; retry.`,
+          { subject: input.name }
+        )
+      );
     return retirementTransaction(
       cawsDir,
       input.name,

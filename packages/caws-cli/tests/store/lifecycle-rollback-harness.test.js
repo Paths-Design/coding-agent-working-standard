@@ -1047,7 +1047,7 @@ describe('retirement authority race and compensation', () => {
         caws,
         input
       );
-    return { caws, root, wtPath, invoke };
+    return { caws, root, wtPath, input, invoke };
   }
 
   test.each([
@@ -1304,5 +1304,155 @@ describe('retirement authority race and compensation', () => {
     } else {
       expect(result.ok && result.value.kind).toBe('partial_failure_recovered');
     }
+  });
+
+  test('destroy refuses a branch advanced at the lifecycle lock seam', () => {
+    const { caws, wtPath, invoke } = fixture('destroy');
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    beforeCreateLock(() => {
+      fs.writeFileSync(path.join(wtPath, 'new-work'), 'owned');
+      execFileSync('git', ['-C', wtPath, 'add', 'new-work']);
+      execFileSync('git', ['-C', wtPath, 'commit', '-qm', 'new work']);
+    });
+    const result = invoke();
+    expect(result.ok).toBe(false);
+    expect(fs.readFileSync(path.join(wtPath, 'new-work'), 'utf8')).toBe('owned');
+    expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+  });
+
+  test.each(['destroy', 'untrack'])('%s refuses dirt appearing at the lock seam', (op) => {
+    const { caws, wtPath, invoke } = fixture(op);
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    beforeCreateLock(() => fs.writeFileSync(path.join(wtPath, 'new-work'), 'owned'));
+    const result = invoke();
+    expect(result.ok).toBe(false);
+    expect(fs.readFileSync(path.join(wtPath, 'new-work'), 'utf8')).toBe('owned');
+    expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+  });
+
+  test.each(['destroy', 'untrack'])('%s refuses checkout disappearance at the lock seam', (op) => {
+    const { caws, root, wtPath, invoke } = fixture(op);
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    beforeCreateLock(() => execFileSync('git', ['-C', root, 'worktree', 'remove', wtPath]));
+    const result = invoke();
+    expect(result.ok).toBe(false);
+    expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+  });
+
+  test.each(
+    ['destroy', 'prune', 'untrack'].flatMap((op) =>
+      ['fsync', 'partial-write'].map((failure) => [op, failure])
+    )
+  )('%s refuses recovered classification after event %s', (op, failure) => {
+    const { caws, invoke } = fixture(op);
+    const audit = path.join(caws, 'events.jsonl');
+    const before = fs.readFileSync(audit);
+    const realOpen = fs.openSync;
+    const realWrite = fs.writeFileSync;
+    const realFsync = fs.fsyncSync;
+    let eventFd;
+    let injected = false;
+    jest.spyOn(fs, 'openSync').mockImplementation((file, flags, ...rest) => {
+      const fd = realOpen(file, flags, ...rest);
+      if (file === audit && flags === 'a') eventFd = fd;
+      return fd;
+    });
+    jest.spyOn(fs, 'writeFileSync').mockImplementation((file, data, ...rest) => {
+      if (file === eventFd && failure === 'partial-write' && !injected) {
+        injected = true;
+        realWrite(file, String(data).slice(0, 12), ...rest);
+        throw Object.assign(new Error('injected partial append'), { code: 'EIO' });
+      }
+      return realWrite(file, data, ...rest);
+    });
+    jest.spyOn(fs, 'fsyncSync').mockImplementation((fd) => {
+      if (fd === eventFd && failure === 'fsync' && !injected) {
+        injected = true;
+        throw Object.assign(new Error('injected append fsync'), { code: 'EIO' });
+      }
+      return realFsync(fd);
+    });
+    const result = invoke();
+    expect(injected).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((d) => d.rule)).toContain(
+      'store.lifecycle.partial_failure_unrecovered'
+    );
+    expect(result.errors.map((d) => d.message).join(' ')).toMatch(
+      /audit changed|append outcome is ambiguous/i
+    );
+    expect(fs.readFileSync(audit).equals(before)).toBe(false);
+  });
+
+  test.each(['destroy', 'untrack'])(
+    '%s decides dirt from captured status, not a transient clean read',
+    (op) => {
+      const { caws, wtPath, invoke } = fixture(op);
+      fs.writeFileSync(path.join(wtPath, 'owned-dirt'), 'keep');
+      const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+      const child = require('child_process');
+      const actual = child.execFileSync;
+      let statuses = 0;
+      jest.spyOn(child, 'execFileSync').mockImplementation((command, args, options) => {
+        if (args[0] === 'status' && args[1] === '--porcelain' && options.cwd === wtPath) {
+          statuses++;
+          if (statuses === 2) return '';
+        }
+        return actual(command, args, options);
+      });
+      const result = invoke();
+      expect(result.ok).toBe(false);
+      expect(statuses).toBe(1);
+      expect(fs.readFileSync(path.join(wtPath, 'owned-dirt'), 'utf8')).toBe('keep');
+      expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+    }
+  );
+
+  test('destroy bases demotion on the captured branch tip, not a transient fork tip', () => {
+    const { caws, wtPath, input, invoke } = fixture('destroy');
+    fs.writeFileSync(path.join(wtPath, 'new-work'), 'committed');
+    execFileSync('git', ['-C', wtPath, 'add', 'new-work']);
+    execFileSync('git', ['-C', wtPath, 'commit', '-qm', 'new work']);
+    input.abandonUnmerged = true;
+    const entry = JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8'))[
+      'wt-retire'
+    ];
+    const child = require('child_process');
+    const actual = child.execFileSync;
+    let mutableTipReads = 0;
+    jest.spyOn(child, 'execFileSync').mockImplementation((command, args, options) => {
+      if (args[0] === 'rev-parse' && args[1] === entry.branch) {
+        mutableTipReads++;
+        return entry.baseSha + '\n';
+      }
+      return actual(command, args, options);
+    });
+    const result = invoke();
+    expect(result.ok && result.value.kind).toBe('success');
+    expect(mutableTipReads).toBe(0);
+    expect(fs.readFileSync(path.join(caws, 'specs', 'WT-RETIRE-001.yaml'), 'utf8')).toMatch(
+      /^lifecycle_state: active$/m
+    );
+  });
+
+  test('destroy checks ancestry of captured commit IDs, not mutable ref names', () => {
+    const { caws, invoke } = fixture('destroy');
+    const entry = JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8'))[
+      'wt-retire'
+    ];
+    const child = require('child_process');
+    const actual = child.execFileSync;
+    let ancestry;
+    jest.spyOn(child, 'execFileSync').mockImplementation((command, args, options) => {
+      if (args[0] === 'merge-base' && args[1] === '--is-ancestor') ancestry = args.slice(2);
+      return actual(command, args, options);
+    });
+    const result = invoke();
+    expect(result.ok && result.value.kind).toBe('success');
+    expect(ancestry).toHaveLength(2);
+    expect(ancestry[0]).toMatch(/^[a-f0-9]{40,64}$/);
+    expect(ancestry[1]).toMatch(/^[a-f0-9]{40,64}$/);
+    expect(ancestry).not.toContain(entry.branch);
+    expect(ancestry).not.toContain(entry.baseBranch);
   });
 });
