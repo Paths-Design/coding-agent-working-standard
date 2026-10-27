@@ -500,12 +500,53 @@ between the model and the shell remains a host assumption. Widening the subset
 requires independent examples that distinguish a correct interpretation from a
 plausible incorrect one.
 
-## Execution boundary proposal
+## Execution boundary
 
-This design is proposed, not an implemented executor or an activated native
-contract. It places preparation, authorization and launch under one owner. A
-parser or an optional command wrapper cannot supply that ownership by itself.
-The matching Codex release's reduced hook payload is insufficient input.
+### Implemented private authorizer
+
+`packages/caws-cli/src/execution/authorizer-main.ts` implements a private Node
+child protocol for `caws.execution.prepared.v1` records. It accepts one bounded,
+length-prefixed request followed by EOF. Strict decoding rejects duplicate or
+unknown owned fields, invalid UTF-8, noncanonical encodings, excessive sizes and
+correlation mismatches. The execution digest covers the original record bytes;
+opaque sandbox-state bytes retain their identity. The child returns one framed
+observation after analysis. A reply is not a launch permit or a public CLI
+execution command.
+
+Authority derives from the verified native caller coordinate, actual thread
+owner, canonical policy, active spec and unique worktree or bridge binding. The
+server's environment anchor and root session lineage cannot substitute for the
+caller checkout or current thread. Missing, malformed or changing authority
+remains unresolved. Final validation compares the prior authority revision and
+verifies inherited descriptor 3 against canonical `state.lock`, its device and
+inode, private nonce, and actual parent process. That check requires a shared
+local PID namespace; an unsupported sandbox topology cannot weaken it.
+
+The bounded execution profile accepts clean Bash, named protected system utility
+images and the existing literal Node effect grammar on the pinned actual Node
+runtime. Finite writes require owned physical targets admitted by scope.
+Unmodeled programs, scripts, image aliases, implicit temporary writers and
+private descriptor redirects remain held. Ordinary inherited application data
+can provide finite values. `PWD` derives from the prepared physical cwd; other
+Bash-generated variables are opaque. Mutations of special variables remain held.
+Startup and lookup controls such as `EXECIGNORE`, `BASH_COMPAT` and
+`POSIX_PEDANTIC`, and history-file effects through `HISTFILESIZE`, are outside
+this profile. Parsing never runs submitted expansions or executes source to
+discover effects.
+
+The child neither acquires/releases the launch fence nor spawns a user program.
+Its input-completion timeout ends at EOF. The native owner must independently
+enforce the original monotonic preparation deadline across startup and analysis;
+the record's wall-clock deadline is an additional check, not a replacement.
+Private-entry tests exercise observations with zero submitted user effects. They
+do not establish complete mediation, executable custody at final spawn, sandbox
+enforcement, native useful-command execution or qualified adoption.
+
+### Proposed complete launch owner
+
+The complete design places preparation, authorization and launch under one
+owner. A parser or an optional command wrapper cannot supply that ownership by
+itself. The matching Codex release's reduced hook payload is insufficient input.
 
 Interpreter source profiles establish bounded effect knowledge and send proven
 write operands to ownership checks. Opaque interpreter programs have no such

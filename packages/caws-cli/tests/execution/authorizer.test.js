@@ -185,9 +185,123 @@ describe('private authorizer component observations, without USER execution', ()
       'UID=src; printf x > "$UID/escaped.txt"',
       'for SHLVL in src; do printf x; done',
       'read OLDPWD; printf x',
+      'OPTIND=src; printf x > "$OPTIND/escaped.txt"',
+      'for OPTERR in src; do printf x; done',
+      'read HISTCMD; printf x',
+      'EPOCHSECONDS=src; printf x',
+      'read EPOCHREALTIME; printf x',
     ])
       expect((await observe(f, command)).reasonCodes).toEqual(['unsupported_profile']);
     expect(fs.existsSync(path.join(f.lane, 'escaped.txt'))).toBe(false);
+  });
+  test('anchors inherited special bindings to clean Bash startup rather than their supplied strings', () => {
+    const actual = execFileSync(
+      '/bin/bash',
+      ['--noprofile', '--norc', '-c', 'printf "%s\\n" "$OPTIND" "$OPTERR" "$HISTCMD"'],
+      { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C', OPTIND: 'src', OPTERR: 'src', HISTCMD: 'src' } }
+    ).toString();
+    const values = actual.trimEnd().split('\n');
+    expect(values).toHaveLength(3);
+    expect(values[0]).toBe('1');
+    expect(values[1]).toBe('1');
+    expect(values[2]).toMatch(/^[0-9]+$/);
+  });
+  test.each(['OPTIND', 'OPTERR', 'HISTCMD', 'EPOCHSECONDS', 'EPOCHREALTIME'])(
+    'does not use inherited %s as an ordinary path binding',
+    async (name) => {
+      const f = authorityFixture();
+      fs.mkdirSync(path.join(f.lane, '1'));
+      f.record.execution.environment.push({ name, value: 'src' });
+      f.record.execution.environment.sort((a, b) =>
+        Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
+      );
+      const result = await observe(f, `printf x > "$${name}/escaped.txt"`);
+      expect(result.decision).toBe('unresolved');
+      expect(result.reasonCodes).toEqual(['source_unresolved']);
+      expect(fs.existsSync(path.join(f.lane, 'src/escaped.txt'))).toBe(false);
+      expect(fs.existsSync(path.join(f.lane, '1/escaped.txt'))).toBe(false);
+    }
+  );
+  test('retains ordinary inherited application data for finite owned write targets', async () => {
+    const f = authorityFixture();
+    f.record.execution.environment.push({ name: 'OUTPUT_DIR', value: 'src' });
+    f.record.execution.environment.sort((a, b) =>
+      Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
+    );
+    const result = await observe(f, 'printf x > "$OUTPUT_DIR/owned.txt"');
+    expect(result.decision).toBe('allow');
+    expect(result.reasonCodes).toEqual([]);
+    expect(fs.existsSync(path.join(f.lane, 'src/owned.txt'))).toBe(false);
+  });
+  test.each(['EXECIGNORE', 'BASH_COMPAT', 'POSIX_PEDANTIC', 'HISTFILESIZE'])(
+    'holds inherited %s because startup semantics are outside the execution profile',
+    async (name) => {
+      const f = authorityFixture();
+      f.record.execution.environment.push({ name, value: '*' });
+      f.record.execution.environment.sort((a, b) =>
+        Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
+      );
+      const result = await observe(f, 'printf ok');
+      expect(result.decision).toBe('unresolved');
+      expect(result.reasonCodes).toEqual(['unsupported_profile']);
+    }
+  );
+  test('holds special assignments which can truncate a history file without an explicit write operand', async () => {
+    const f = authorityFixture();
+    const target = path.join(f.root, 'history');
+    fs.writeFileSync(target, 'must be preserved\n');
+    // Fixed semantic oracle in a disposable fixture, never authorization of
+    // submitted source: HISTFILESIZE has a filesystem effect even under -c.
+    execFileSync(
+      '/bin/bash',
+      [
+        '--noprofile',
+        '--norc',
+        '-c',
+        'HISTFILE=$1; HISTFILESIZE=0; true',
+        'history-oracle',
+        target,
+      ],
+      { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } }
+    );
+    expect(fs.readFileSync(target, 'utf8')).toBe('');
+    fs.writeFileSync(target, 'must be preserved\n');
+    for (const command of [
+      `HISTFILE=${JSON.stringify(target)}; HISTFILESIZE=0; true`,
+      `HISTFILE=${JSON.stringify(target)}; for HISTFILESIZE in 0; do true; done`,
+      `HISTFILE=${JSON.stringify(target)}; read HISTFILESIZE; true`,
+      'EXECIGNORE=*; true',
+      'for POSIX_PEDANTIC in 1; do true; done',
+      'read EXECIGNORE; true',
+    ]) {
+      const result = await observe(f, command);
+      expect({ command, decision: result.decision }).toEqual({ command, decision: 'unresolved' });
+      expect(result.reasonCodes).toEqual(['unsupported_profile']);
+      expect(fs.readFileSync(target, 'utf8')).toBe('must be preserved\n');
+    }
+  });
+  test('holds PATH changes before a profiled utility, preserving the original PATH control', async () => {
+    const f = authorityFixture();
+    const directory = path.join(f.lane, 'replacement-bin');
+    fs.mkdirSync(directory);
+    fs.symlinkSync('/usr/bin/touch', path.join(directory, 'cat'));
+    const replacement = JSON.stringify(directory);
+    const target = 'src/must-not-execute.txt';
+    expect((await observe(f, `cat ${target}`, ['/bin/cat'])).decision).toBe('allow');
+    for (const command of [
+      `PATH=${replacement}; cat ${target}`,
+      `PATH=${replacement} cat ${target}`,
+      `for PATH in ${replacement}; do cat ${target}; done`,
+      `read -r PATH; cat ${target}`,
+      `unset PATH; cat ${target}`,
+      `export PATH=${replacement}; cat ${target}`,
+      `printf -v PATH %s ${replacement}; cat ${target}`,
+    ]) {
+      const result = await observe(f, command, ['/bin/cat']);
+      expect({ command, decision: result.decision }).toEqual({ command, decision: 'unresolved' });
+      expect(result.reasonCodes.length).toBe(1);
+    }
+    expect(fs.existsSync(path.join(f.lane, target))).toBe(false);
   });
   test('private child checks final fence, changed authority and complete framing; never launches USER', async () => {
     const f = authorityFixture();

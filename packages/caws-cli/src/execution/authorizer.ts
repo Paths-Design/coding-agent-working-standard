@@ -33,7 +33,11 @@ const BUILTINS = new Set([
   'read',
 ]);
 const SPECIAL_BINDING =
-  /^(?:BASH.*|COMP_.*|PWD|OLDPWD|SHLVL|UID|EUID|PPID|BASHPID|RANDOM|SRANDOM|SECONDS|LINENO|DIRSTACK|FUNCNAME|GROUPS|PIPESTATUS|_)$/;
+  /^(?:BASH.*|COMP_.*|PWD|OLDPWD|SHLVL|UID|EUID|PPID|BASHPID|RANDOM|SRANDOM|SECONDS|LINENO|DIRSTACK|FUNCNAME|GROUPS|PIPESTATUS|OPTIND|OPTERR|HISTCMD|EPOCHSECONDS|EPOCHREALTIME|_)$/;
+// These controls can change executable lookup, shell semantics, or write a
+// history file without a modeled write operand. Opaque values alone are not
+// enough: the actual child environment and every assignment route must refuse.
+const PROFILE_CONTROL = /^(?:EXECIGNORE|BASH_COMPAT|POSIX_PEDANTIC|HISTFILESIZE)$/;
 // sort can spill implicit temporary files and has no native v1 write profile.
 const UTILITIES = new Set([
   'sed',
@@ -112,6 +116,7 @@ function environment(record: PreparedExecutionV1): Map<string, readonly string[]
     if (['PWD', 'OLDPWD'].includes(name)) refuse('unsupported_profile');
     if (
       name.startsWith('BASH_FUNC_') ||
+      PROFILE_CONTROL.test(name) ||
       (sensitiveBinding(name) && !['PATH', 'LANG', 'LC_ALL'].includes(name))
     )
       refuse('unsupported_profile');
@@ -205,7 +210,11 @@ async function inspectSource(
     const value = pending.pop();
     if (value === null || typeof value !== 'object') continue;
     const row = value as Record<string, unknown>;
-    if (row.type === 'Assignment' && typeof row.name === 'string' && SPECIAL_BINDING.test(row.name))
+    if (
+      row.type === 'Assignment' &&
+      typeof row.name === 'string' &&
+      (SPECIAL_BINDING.test(row.name) || PROFILE_CONTROL.test(row.name))
+    )
       refuse('unsupported_profile');
     if (
       row.type === 'For' &&
@@ -213,7 +222,7 @@ async function inspectSource(
       typeof row.name === 'object' &&
       'value' in row.name &&
       typeof row.name.value === 'string' &&
-      SPECIAL_BINDING.test(row.name.value)
+      (SPECIAL_BINDING.test(row.name.value) || PROFILE_CONTROL.test(row.name.value))
     )
       refuse('unsupported_profile');
     for (const child of Object.values(row)) {
@@ -283,7 +292,13 @@ async function inspectSource(
             if (BUILTINS.has(command)) {
               if (
                 command === 'read' &&
-                args.slice(1).some((arg) => arg.value !== null && SPECIAL_BINDING.test(arg.value))
+                args
+                  .slice(1)
+                  .some(
+                    (arg) =>
+                      arg.value !== null &&
+                      (SPECIAL_BINDING.test(arg.value) || PROFILE_CONTROL.test(arg.value))
+                  )
               )
                 refuse('unsupported_profile');
               return;
