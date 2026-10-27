@@ -35,9 +35,11 @@ export interface MachineRuntimeOptions {
   readonly baseRuntimeDigest?: string;
   /** Explicit packaged handler updates; never inferred from a dispatch failure. */
   readonly refreshBaseHandlers?: readonly string[];
+  /** Explicit registered shared shell library updates, qualified with the retained callers. */
+  readonly refreshBaseLibraries?: readonly string[];
 }
 
-interface BaseHandlerRefresh {
+interface BaseMemberRefresh {
   readonly name: string;
   readonly beforeSha256: string;
   readonly afterSha256: string;
@@ -54,7 +56,8 @@ export interface MachineRuntimeResult {
   readonly files: readonly string[];
   readonly nativeLauncher?: string;
   readonly baseRuntimeDigest?: string;
-  readonly refreshedBaseHandlers?: readonly BaseHandlerRefresh[];
+  readonly refreshedBaseHandlers?: readonly BaseMemberRefresh[];
+  readonly refreshedBaseLibraries?: readonly BaseMemberRefresh[];
 }
 
 export function machineHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -343,6 +346,20 @@ function withRuntimeLock(home: string, run: () => MachineRuntimeResult): Machine
 
 export function installMachineRuntime(options: MachineRuntimeOptions = {}): MachineRuntimeResult {
   if (
+    options.refreshBaseLibraries !== undefined &&
+    (!options.baseRuntimeDigest ||
+      !options.nativeImage ||
+      !Array.isArray(options.refreshBaseLibraries) ||
+      options.refreshBaseLibraries.length === 0 ||
+      new Set(options.refreshBaseLibraries).size !== options.refreshBaseLibraries.length ||
+      options.refreshBaseLibraries.some(
+        (name) => typeof name !== 'string' || !/^lib\/[A-Za-z0-9_-]+\.sh$/.test(name)
+      ))
+  )
+    throw new Error(
+      'Library refresh requires unique packaged shared shell library paths, a base runtime and a native image'
+    );
+  if (
     options.refreshBaseHandlers !== undefined &&
     (!options.baseRuntimeDigest ||
       !options.nativeImage ||
@@ -410,11 +427,12 @@ function retainedRuntimeFiles(home: string, digest: string): Map<string, Buffer>
   return files;
 }
 
-function refreshBaseHandlers(
+function refreshBaseMembers(
   files: Map<string, Buffer>,
   templatesRoot: string,
-  names: readonly string[]
-): BaseHandlerRefresh[] {
+  names: readonly string[],
+  kind: 'handler' | 'library'
+): BaseMemberRefresh[] {
   const capture = (relative: string) => {
     const file = path.join(templatesRoot, relative);
     assertMachinePath(templatesRoot, file);
@@ -422,34 +440,40 @@ function refreshBaseHandlers(
     assertMachinePath(templatesRoot, file);
     const mode = captured.stat.mode & 0o7777;
     if (mode !== 0o644 && mode !== 0o755)
-      throw new Error(`Unsupported packaged handler source mode: ${relative}`);
+      throw new Error(`Unsupported packaged ${kind} source mode: ${relative}`);
     return { bytes: captured.bytes, mode };
   };
   const registered = new Set<string>();
-  for (const item of SHARED_PACK.installedFiles.filter((file) =>
-    /^dispatch\/[a-z_]+\.sh$/.test(file.sourcePath)
-  )) {
-    const dispatcher = capture('shared/' + item.sourcePath).bytes.toString('utf8');
-    for (const entry of extractMachineHandlers(dispatcher, dispatcher))
-      registered.add(entry.split(' ')[0]!);
+  const baseHandlers = new Set<string>();
+  if (kind === 'handler') {
+    for (const item of SHARED_PACK.installedFiles.filter((file) =>
+      /^dispatch\/[a-z_]+\.sh$/.test(file.sourcePath)
+    )) {
+      const dispatcher = capture('shared/' + item.sourcePath).bytes.toString('utf8');
+      for (const entry of extractMachineHandlers(dispatcher, dispatcher))
+        registered.add(entry.split(' ')[0]!);
+    }
+    const basePolicy = JSON.parse(files.get('system-policy.json')!.toString('utf8')) as {
+      events: Record<string, string[]>;
+    };
+    for (const entry of Object.values(basePolicy.events).flat())
+      baseHandlers.add(entry.split(' ')[0]!);
   }
-  const basePolicy = JSON.parse(files.get('system-policy.json')!.toString('utf8')) as {
-    events: Record<string, string[]>;
-  };
-  const baseHandlers = new Set(
-    Object.values(basePolicy.events)
-      .flat()
-      .map((entry) => entry.split(' ')[0])
-  );
-  const replacements: BaseHandlerRefresh[] = [];
+  const replacements: BaseMemberRefresh[] = [];
   for (const name of [...names].sort()) {
     const matches = SHARED_PACK.installedFiles.filter(
-      (file) => file.sourcePath === name && file.executable === true
+      (file) =>
+        file.sourcePath === name &&
+        (kind === 'handler' ? file.executable === true : file.managed && file.executable === false)
     );
     const before = files.get(name);
-    if (matches.length !== 1 || !registered.has(name) || !baseHandlers.has(name) || !before)
+    if (
+      matches.length !== 1 ||
+      !before ||
+      (kind === 'handler' && (!registered.has(name) || !baseHandlers.has(name)))
+    )
       throw new Error(
-        `Handler refresh is not an existing registered packaged base handler: ${name}`
+        `${kind === 'handler' ? 'Handler' : 'Library'} refresh is not an existing registered packaged base ${kind}: ${name}`
       );
     const sourcePath = 'shared/' + name;
     const captured = capture(sourcePath);
@@ -469,7 +493,9 @@ function refreshBaseHandlers(
       JSON.stringify({
         ...provenance,
         schema: 'caws.runtime.base-provenance.v2',
-        replacements,
+        replacements: [...(provenance.replacements ?? []), ...replacements].sort(
+          (a: BaseMemberRefresh, b: BaseMemberRefresh) => (a.name < b.name ? -1 : 1)
+        ),
         compatibility: 'requires_separate_qualification',
       })
     )
@@ -485,7 +511,10 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
     ? retainedRuntimeFiles(home, options.baseRuntimeDigest)
     : runtimeFiles(templatesRoot, home);
   const refreshedBaseHandlers = options.refreshBaseHandlers
-    ? refreshBaseHandlers(files, templatesRoot, options.refreshBaseHandlers)
+    ? refreshBaseMembers(files, templatesRoot, options.refreshBaseHandlers, 'handler')
+    : undefined;
+  const refreshedBaseLibraries = options.refreshBaseLibraries
+    ? refreshBaseMembers(files, templatesRoot, options.refreshBaseLibraries, 'library')
     : undefined;
   const executablePaths = new Set([...files.keys()].filter((relative) => relative.endsWith('.sh')));
   const native = options.nativeImage ? readNativeImage(options.nativeImage) : undefined;
@@ -539,6 +568,7 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
     ...(nativeEntry ? { nativeLauncher: path.join(home, 'bin/caws-hook-native') } : {}),
     ...(options.baseRuntimeDigest ? { baseRuntimeDigest: options.baseRuntimeDigest } : {}),
     ...(refreshedBaseHandlers ? { refreshedBaseHandlers } : {}),
+    ...(refreshedBaseLibraries ? { refreshedBaseLibraries } : {}),
   };
   if (options.plan || !result.changed) return result;
 
@@ -578,8 +608,12 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
 }
 
 export function rollbackMachineRuntime(options: MachineRuntimeOptions = {}): MachineRuntimeResult {
-  if (options.baseRuntimeDigest !== undefined || options.refreshBaseHandlers !== undefined)
-    throw new Error('A base runtime digest or handler refresh is only valid for installation');
+  if (
+    options.baseRuntimeDigest !== undefined ||
+    options.refreshBaseHandlers !== undefined ||
+    options.refreshBaseLibraries !== undefined
+  )
+    throw new Error('A base runtime digest or member refresh is only valid for installation');
   if (options.plan) return rollbackRuntime(options);
   return withRuntimeLock(path.resolve(options.home ?? machineHome()), () =>
     rollbackRuntime(options)
