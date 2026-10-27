@@ -20,9 +20,37 @@ load helpers
 
 setup_file() {
   caws_install_pack_once
+  # Installation substitutes the pack-version header. Every other byte must
+  # come from this checkout's template, including on the old-guard control run.
+  diff -u <(sed '/^# hook_pack_version:/d' "$CLI_PKG_ROOT/templates/hook-packs/shared/scope-guard.sh") \
+    <(sed '/^# hook_pack_version:/d' "$CAWS_TEST_HOOKS_DIR/scope-guard.sh")
+  printf '# fixture scope-guard body matches checkout; sha256=%s\n' \
+    "$(sed '/^# hook_pack_version:/d' "$CAWS_TEST_HOOKS_DIR/scope-guard.sh" | shasum -a 256)"
 }
 teardown_file() {
   caws_teardown_pack
+}
+
+setup() {
+  # All guard and CLI processes belong to explicit disposable fixtures, never
+  # the runner's native session or global strike home.
+  export HOME="$BATS_TEST_TMPDIR/home"
+  export CAWS_HOME="$HOME/.caws"
+  mkdir -p "$HOME"
+  export CAWS_AGENT_SURFACE=claude-code
+  export CAWS_TEST_SESSION_ID="scope-fixture-$BATS_TEST_NUMBER"
+  export CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID"
+  unset CAWS_SESSION_ID CLAUDE_SESSION_ID CODEX_THREAD_ID HOOK_SESSION_ID
+  unset CAWS_PROJECT_DIR CAWS_MACHINE_POLICY_ROOT HOOK_CWD CAWS_HOOKS_DIR CAWS_LOG_DIR
+  unset CAWS_MACHINE_RUNTIME CAWS_MACHINE_LIBRARIES CAWS_MACHINE_ADAPTER_LIB_DIR CAWS_SHARED_LIB_DIR
+  cd "$CAWS_TEST_REPO"
+}
+
+_assert_hard_block_without_strike() {
+  assert_equal "$status" 2
+  assert_output --partial '"decision": "block"'
+  refute_output --partial 'strike 1 of 3'
+  assert [ ! -e "$HOME/.caws/state/sessions/$CAWS_TEST_SESSION_ID/strikes.json" ]
 }
 
 # Run the installed scope-guard with a stub `caws` on PATH that scripts the
@@ -48,7 +76,8 @@ STUB
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$CAWS_TEST_REPO" \
     PATH="$stubdir:$PATH" \
-    bash -c "printf '%s' '$(hook_envelope Edit "$rel_path")' | bash '$CAWS_TEST_HOOKS_DIR/scope-guard.sh'"
+    bash -c 'cd "$1" && printf "%s" "$2" | bash "$3"' _ \
+    "$CAWS_TEST_REPO" "$(hook_envelope Edit "$rel_path")" "$CAWS_TEST_HOOKS_DIR/scope-guard.sh"
   rm -rf "$stubdir"
 }
 
@@ -90,27 +119,28 @@ STUB
 @test "scope-guard: a top-level rejected file follows the nested-path scope contract" {
   local json='{"decision":"reject","rule":"scope.reject.scope_out","path":"package.json","bindingState":"bound","mode":"authoritative","boundSpecId":"FIX-1","matchedPattern":"package.json"}'
   _run_scope_guard_with_stub "package.json" 1 "$json"
+  _assert_hard_block_without_strike
   assert_output --partial 'out-of-scope'
   assert_output --partial 'FIX-1'
 }
 
 @test "scope-guard: a top-level file with unreadable scope diagnostics fails closed" {
   _run_scope_guard_with_stub "package.json" 1 "not json"
-  assert_output --partial '"decision": "block"'
+  _assert_hard_block_without_strike
   assert_output --partial 'could not render the structured diagnostic'
 }
 
 @test "scope-guard: a failed diagnostic command cannot supply an admission" {
   local json='{"decision":"admit","rule":"scope.admit.scope_in","path":"package.json","bindingState":"bound","mode":"authoritative","boundSpecId":"FIX-1"}'
   _run_scope_guard_with_stub "package.json" 1 "$json" 2
-  assert_output --partial '"decision": "block"'
+  _assert_hard_block_without_strike
   assert_output --partial 'could not render the structured diagnostic'
 }
 
 @test "scope-guard: an out-of-scope reject is surfaced from the JSON contract (authoritative)" {
   local json='{"decision":"reject","rule":"scope.reject.scope_out","path":"packages/out/x.ts","bindingState":"bound","mode":"authoritative","boundSpecId":"FIX-1","matchedPattern":"packages/out"}'
   _run_scope_guard_with_stub "packages/out/x.ts" 1 "$json"
-  assert [ -n "$output" ]
+  _assert_hard_block_without_strike
   assert_output --partial 'out-of-scope'
   assert_output --partial 'packages/out'
 }
@@ -118,6 +148,9 @@ STUB
 @test "scope-guard: a not-in-scope reject is surfaced (authoritative, names bound spec)" {
   local json='{"decision":"reject","rule":"scope.reject.root_not_allowed","path":"packages/elsewhere/y.ts","bindingState":"bound","mode":"authoritative","boundSpecId":"FIX-1"}'
   _run_scope_guard_with_stub "packages/elsewhere/y.ts" 1 "$json"
+  assert_success
+  assert_output --partial 'strike 1 of 3'
+  refute_output --partial '"decision": "block"'
   assert_output --partial 'not in the defined scope'
   assert_output --partial 'FIX-1'
 }
@@ -125,7 +158,373 @@ STUB
 @test "scope-guard: a one_sided binding (malformed/missing bound spec) refuses authoritatively" {
   local json='{"decision":"no_authority","rule":"scope.no_authority.binding_one_sided","path":"packages/x/z.ts","bindingState":"one_sided","mode":"union"}'
   _run_scope_guard_with_stub "packages/x/z.ts" 1 "$json"
+  _assert_hard_block_without_strike
   assert_output --partial 'did not load'
+}
+
+@test "scope-guard: union scope.out retains the first-strike advisory" {
+  local json='{"decision":"reject","rule":"scope.reject.scope_out","path":"outside.txt","bindingState":"unbound","mode":"union","matchedPattern":"outside.txt"}'
+  _run_scope_guard_with_stub "outside.txt" 1 "$json"
+  assert_success
+  assert_output --partial 'strike 1 of 3'
+  assert_output --partial 'Mode: union'
+  refute_output --partial '"decision": "block"'
+}
+
+# These fixtures create actual Git-linked sparse lanes through the built CLI.
+# The direct CLI controls establish authority before a guard can pass/fail;
+# a silent exit caused by unknown cwd or missing setup is never an oracle.
+_scope_cli() {
+  (cd "$SCOPE_REPO" && "$CAWS_TEST_CLI" "$@")
+}
+
+_create_sparse_scope_fixture() {
+  local surface="${1:-claude-code}"
+  SCOPE_REPO="$BATS_TEST_TMPDIR/repo"
+  mkdir -p "$SCOPE_REPO"
+  SCOPE_REPO="$(cd "$SCOPE_REPO" && pwd -P)"
+  git -C "$SCOPE_REPO" init -q -b main
+  git -C "$SCOPE_REPO" config user.name 'CAWS Test'
+  git -C "$SCOPE_REPO" config user.email 'test@caws.invalid'
+  git -C "$SCOPE_REPO" config commit.gpgsign false
+  git -C "$SCOPE_REPO" commit -q --allow-empty -m root
+  run _scope_cli init --agent-surface "$surface"
+  assert_success
+  run _scope_cli specs create SCOPE-1 --title 'Sparse scope fixture' --mode fix \
+    --scope-in allowed.txt --scope-in protected.txt
+  assert_success
+  run _scope_cli specs amend-scope SCOPE-1 --add-out protected.txt
+  assert_success
+  run _scope_cli worktree create sparse --spec SCOPE-1 --base-branch main --branch caws/sparse
+  assert_success
+  SCOPE_LEAF="$SCOPE_REPO/.caws/worktrees/sparse"
+  [ -f "$SCOPE_LEAF/.git" ]
+  [ ! -e "$SCOPE_LEAF/.caws" ]
+  assert_equal "$(git -C "$SCOPE_LEAF" config core.sparseCheckout)" true
+  assert_equal "$(jq -r '.sparse.owner.session_id' "$SCOPE_REPO/.caws/worktrees.json")" "$CAWS_TEST_SESSION_ID"
+  assert_equal "$(jq -r '.sparse.specId' "$SCOPE_REPO/.caws/worktrees.json")" SCOPE-1
+  run bash -c 'cd "$1" && "$2" scope show protected.txt --json' _ "$SCOPE_LEAF" "$CAWS_TEST_CLI"
+  assert_success
+  assert_equal "$(printf '%s' "$output" | jq -r '[.decision,.rule,.bindingState,.mode,.boundSpecId] | join("|")')" \
+    'reject|scope.reject.scope_out|bound|authoritative|SCOPE-1'
+  run bash -c 'cd "$1" && "$2" scope check allowed.txt' _ "$SCOPE_LEAF" "$CAWS_TEST_CLI"
+  assert_success
+  assert_output --partial scope.admit.scope_in
+  printf 'sentinel\n' > "$SCOPE_LEAF/protected.txt"
+}
+
+_run_sparse_guard() {
+  local tool="$1" target="${2:-protected.txt}" envelope
+  envelope="$(jq -nc --arg tool "$tool" --arg cwd "$SCOPE_LEAF" --arg sid "$CAWS_TEST_SESSION_ID" \
+    --arg path "$SCOPE_LEAF/$target" '{tool_name:$tool,cwd:$cwd,session_id:$sid,tool_input:{file_path:$path}}')"
+  # The simulated tool effect happens only if the guard admits. Preserve the
+  # guard's exact status so an exit-0 block envelope cannot mask this failure.
+  run env CAWS_PROJECT_DIR="$SCOPE_LEAF" CAWS_MACHINE_POLICY_ROOT="$SCOPE_REPO" \
+    HOOK_CWD="$SCOPE_LEAF" PATH="$CAWS_TEST_HOME/bin:$PATH" \
+    bash -c 'cd "$1"; printf "%s" "$2" | bash "$3"; rc=$?; if [ "$rc" -eq 0 ] && [ "$4" = protected.txt ]; then printf "changed\n" > "$4"; fi; exit "$rc"' _ \
+    "$SCOPE_LEAF" "$envelope" "$CAWS_TEST_HOOKS_DIR/scope-guard.sh" "$target"
+  if [[ "$target" == protected.txt ]]; then
+    printf '# guarded %s: exit=%s sentinel=%s\n' "$tool" "$status" "$(cat "$SCOPE_LEAF/protected.txt")"
+  fi
+}
+
+@test "scope-guard: a real sparse leaf admits its bound scope.in file" {
+  _create_sparse_scope_fixture
+  _run_sparse_guard Write allowed.txt
+  assert_success
+  assert_output ""
+  assert [ ! -e "$HOME/.caws/state/sessions/$CAWS_TEST_SESSION_ID/strikes.json" ]
+}
+
+@test "scope-guard: first Write in a real sparse leaf blocks scope.out before effect" {
+  _create_sparse_scope_fixture
+  _run_sparse_guard Write
+  _assert_hard_block_without_strike
+  assert_output --partial 'out-of-scope'
+  assert_output --partial SCOPE-1
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard: first Edit in a real sparse leaf blocks scope.out before effect" {
+  _create_sparse_scope_fixture
+  _run_sparse_guard Edit
+  _assert_hard_block_without_strike
+  assert_output --partial 'out-of-scope'
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard: malformed canonical policy visibly blocks a sparse leaf" {
+  _create_sparse_scope_fixture
+  printf 'invalid: [\n' > "$SCOPE_REPO/.caws/policy.yaml"
+  _run_sparse_guard Write
+  _assert_hard_block_without_strike
+  assert_output --partial 'could not render the structured diagnostic'
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard: broken canonical bound spec visibly blocks a sparse leaf" {
+  _create_sparse_scope_fixture
+  printf 'invalid: [\n' > "$SCOPE_REPO/.caws/specs/SCOPE-1.yaml"
+  _run_sparse_guard Write
+  _assert_hard_block_without_strike
+  assert_output --partial 'did not load'
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard: missing known canonical specs visibly blocks a sparse leaf" {
+  _create_sparse_scope_fixture
+  mv "$SCOPE_REPO/.caws/specs" "$BATS_TEST_TMPDIR/held-specs"
+  _run_sparse_guard Write
+  _assert_hard_block_without_strike
+  assert_output --partial 'canonical governance'
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard: an ordinary ungoverned Git project remains a silent no-op" {
+  local plain="$BATS_TEST_TMPDIR/plain" envelope
+  git init -q "$plain"
+  envelope="$(jq -nc --arg cwd "$plain" --arg sid "$CAWS_TEST_SESSION_ID" \
+    '{tool_name:"Write",cwd:$cwd,session_id:$sid,tool_input:{file_path:"plain.txt"}}')"
+  run env CAWS_PROJECT_DIR="$plain" bash -c 'cd "$1" && printf "%s" "$2" | bash "$3"' _ \
+    "$plain" "$envelope" "$CAWS_TEST_HOOKS_DIR/scope-guard.sh"
+  assert_success
+  assert_output ""
+}
+
+@test "scope-guard: an ungoverned linked Git worktree remains a silent no-op" {
+  local plain="$BATS_TEST_TMPDIR/plain" leaf="$BATS_TEST_TMPDIR/plain-linked" envelope
+  git init -q -b main "$plain"
+  git -C "$plain" -c user.name='CAWS Test' -c user.email=test@caws.invalid \
+    -c commit.gpgsign=false commit -q --allow-empty -m root
+  git -C "$plain" worktree add -q -b linked "$leaf"
+  [ -f "$leaf/.git" ]
+  [ ! -e "$plain/.caws" ]
+  [ ! -e "$leaf/.caws" ]
+  envelope="$(jq -nc --arg cwd "$leaf" --arg sid "$CAWS_TEST_SESSION_ID" \
+    '{tool_name:"Write",cwd:$cwd,session_id:$sid,tool_input:{file_path:"plain.txt"}}')"
+  run env CAWS_PROJECT_DIR="$leaf" CAWS_MACHINE_POLICY_ROOT="$plain" \
+    bash -c 'cd "$1" && printf "%s" "$2" | bash "$3"' _ \
+    "$leaf" "$envelope" "$CAWS_TEST_HOOKS_DIR/scope-guard.sh"
+  assert_success
+  assert_output ""
+}
+
+_run_cache_only_ungoverned_guard() {
+  local linked="$1" tool="$2" plain="$BATS_TEST_TMPDIR/cache-only" leaf envelope
+  git init -q -b main "$plain"
+  mkdir -p "$plain/.caws"
+  printf '{}\n' > "$plain/.caws/duplication-cache.json"
+  leaf="$plain"
+  if [[ "$linked" == yes ]]; then
+    git -C "$plain" -c user.name='CAWS Test' -c user.email=test@caws.invalid \
+      -c commit.gpgsign=false commit -q --allow-empty -m root
+    leaf="$BATS_TEST_TMPDIR/cache-linked"
+    git -C "$plain" worktree add -q -b linked "$leaf"
+    [ -f "$leaf/.git" ]
+    [ ! -e "$leaf/.caws" ]
+  fi
+  assert_equal "$(ls -A "$plain/.caws")" duplication-cache.json
+  envelope="$(jq -nc --arg cwd "$leaf" --arg sid "$CAWS_TEST_SESSION_ID" --arg tool "$tool" \
+    '{tool_name:$tool,cwd:$cwd,session_id:$sid,tool_input:{file_path:"plain.txt"}}')"
+  run env CAWS_PROJECT_DIR="$leaf" CAWS_MACHINE_POLICY_ROOT="$plain" \
+    bash -c 'cd "$1" && printf "%s" "$2" | bash "$3"' _ \
+    "$leaf" "$envelope" "$CAWS_TEST_HOOKS_DIR/scope-guard.sh"
+}
+
+@test "scope-guard: cache-only .caws residue does not adopt an ungoverned Git project" {
+  _run_cache_only_ungoverned_guard no Write
+  assert_success
+  assert_output ""
+}
+
+@test "scope-guard: cache-only canonical residue does not adopt an ungoverned linked checkout" {
+  _run_cache_only_ungoverned_guard yes Edit
+  assert_success
+  assert_output ""
+}
+
+@test "scope-guard: known governing artifacts without valid specs block beside a cache" {
+  local marker plain envelope
+  for marker in policy.yaml specs worktrees.json claims/bridge.json; do
+    plain="$BATS_TEST_TMPDIR/known-${marker//\//-}"
+    git init -q "$plain"
+    mkdir -p "$plain/.caws/claims"
+    printf '{}\n' > "$plain/.caws/duplication-cache.json"
+    # Invalid contents/types retain the adoption signal; they cannot silently
+    # demote a previously governed project to cache-only status.
+    printf 'invalid\n' > "$plain/.caws/$marker"
+    envelope="$(jq -nc --arg cwd "$plain" --arg sid "$CAWS_TEST_SESSION_ID" \
+      '{tool_name:"Write",cwd:$cwd,session_id:$sid,tool_input:{file_path:"plain.txt"}}')"
+    run env CAWS_PROJECT_DIR="$plain" CAWS_MACHINE_POLICY_ROOT="$plain" \
+      bash -c 'cd "$1" && printf "%s" "$2" | bash "$3"' _ \
+      "$plain" "$envelope" "$CAWS_TEST_HOOKS_DIR/scope-guard.sh"
+    _assert_hard_block_without_strike
+    assert_output --partial 'canonical governance'
+  done
+}
+
+_create_codex_patch_fixture() {
+  _create_sparse_scope_fixture codex
+  run _scope_cli specs amend-scope SCOPE-1 --add 'allowed two.txt' --add renamed.txt
+  assert_success
+  printf 'original\n' > "$SCOPE_LEAF/allowed.txt"
+  printf 'second\n' > "$SCOPE_LEAF/allowed two.txt"
+  [ -f "$SCOPE_REPO/.codex/hooks/lib/parse-input.sh" ]
+}
+
+_run_codex_patch_guard() {
+  local patch="$1" effect="${2:-multi}" source="${3:-allowed.txt}" dest="${4:-protected.txt}" envelope
+  envelope="$(jq -nc --arg cwd "$SCOPE_LEAF" --arg sid "$CAWS_TEST_SESSION_ID" --arg patch "$patch" \
+    '{tool_name:"apply_patch",hook_event_name:"PreToolUse",cwd:$cwd,session_id:$sid,tool_input:{command:$patch}}')"
+  # Use the installed Codex parser, as the dispatcher does, and replay the
+  # ORIGINAL envelope on stdin to the single handler invocation. The fixture
+  # supplies only explicit simulated effects; it never executes the patch.
+  run env -u CLAUDE_CODE_SESSION_ID CAWS_AGENT_SURFACE=codex CODEX_THREAD_ID="$CAWS_TEST_SESSION_ID" \
+    CAWS_PROJECT_DIR="$SCOPE_LEAF" CAWS_MACHINE_POLICY_ROOT="$SCOPE_REPO" \
+    CAWS_SHARED_LIB_DIR="$CAWS_TEST_HOOKS_DIR/lib" PATH="$CAWS_TEST_HOME/bin:$PATH" \
+    bash -c '
+      cd "$1" || exit 97
+      source "$2/runtime-paths.sh"
+      source "$3"
+      HOOK_INPUT_JSON="$4"
+      parse_hook_input || exit 97
+      [ "$HOOK_ORIGINAL_TOOL_NAME" = apply_patch ] || exit 97
+      printf "%s" "$4" | bash "$2/scope-guard.sh"
+      rc=$?
+      if [ "$rc" -eq 0 ]; then
+        case "$5" in
+          multi) printf "changed\n" > allowed.txt; printf "changed\n" > protected.txt ;;
+          rename) mv "$6" "$7" ;;
+          admitted) printf "changed\n" > allowed.txt; printf "changed\n" > "allowed two.txt" ;;
+          foreign) printf "changed\n" > "$7" ;;
+        esac
+      fi
+      exit "$rc"
+    ' _ "$SCOPE_LEAF" "$CAWS_TEST_HOOKS_DIR" "$SCOPE_REPO/.codex/hooks/lib/parse-input.sh" \
+    "$envelope" "$effect" "$source" "$dest"
+  printf '# Codex patch: exit=%s allowed=%s protected=%s\n' "$status" \
+    "$(cat "$SCOPE_LEAF/allowed.txt" 2>/dev/null || true)" "$(cat "$SCOPE_LEAF/protected.txt" 2>/dev/null || true)"
+}
+
+_assert_patch_unchanged() {
+  _assert_hard_block_without_strike
+  assert_equal "$(cat "$SCOPE_LEAF/allowed.txt")" original
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard Codex patch: admitted first cannot bypass protected later" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Update File: allowed.txt\n@@\n-original\n+changed\n*** Update File: protected.txt\n@@\n-sentinel\n+changed\n*** End Patch'
+  _assert_patch_unchanged
+  assert_output --partial 'out-of-scope'
+}
+
+@test "scope-guard Codex patch: protected first blocks admitted later" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Update File: protected.txt\n@@\n-sentinel\n+changed\n*** Update File: allowed.txt\n@@\n-original\n+changed\n*** End Patch'
+  _assert_patch_unchanged
+}
+
+@test "scope-guard Codex patch: file-transported original payload retains later targets" {
+  _create_codex_patch_fixture
+  export CAWS_HOOK_INLINE_PAYLOAD_MAX_BYTES=1
+  _run_codex_patch_guard $'*** Begin Patch\n*** Add File: allowed.txt\n+one\n*** Delete File: protected.txt\n*** End Patch'
+  _assert_patch_unchanged
+}
+
+@test "scope-guard Codex patch: exempt docs first cannot bypass protected Delete" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Add File: docs/note.md\n+note\n*** Delete File: protected.txt\n*** End Patch'
+  _assert_patch_unchanged
+}
+
+@test "scope-guard Codex patch: admitted rename source cannot bypass protected destination" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Update File: allowed.txt\n*** Move to: protected.txt\n@@\n-original\n+original\n*** End Patch' rename
+  _assert_patch_unchanged
+  assert_output --partial protected.txt
+}
+
+@test "scope-guard Codex patch: protected rename source blocks admitted destination" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Update File: protected.txt\n*** Move to: renamed.txt\n@@\n-sentinel\n+sentinel\n*** End Patch' rename protected.txt renamed.txt
+  _assert_patch_unchanged
+  [ ! -e "$SCOPE_LEAF/renamed.txt" ]
+}
+
+@test "scope-guard Codex patch: all-admitted multi-file targets include space paths" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Update File: allowed.txt\n@@\n-original\n+changed\n*** Update File: allowed two.txt\n@@\n-second\n+changed\n*** End Patch' admitted
+  assert_success
+  assert_output ""
+  assert_equal "$(cat "$SCOPE_LEAF/allowed.txt")" changed
+  assert_equal "$(cat "$SCOPE_LEAF/allowed two.txt")" changed
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard Codex patch: admitted rename to a space path proceeds" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Update File: allowed.txt\n*** Move to: allowed two.txt\n@@\n-original\n+original\n*** End Patch' rename allowed.txt 'allowed two.txt'
+  assert_success
+  assert_output ""
+  [ ! -e "$SCOPE_LEAF/allowed.txt" ]
+  assert_equal "$(cat "$SCOPE_LEAF/allowed two.txt")" original
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard Codex patch: prefixed content resembling metadata is not a target" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Add File: allowed.txt\n+*** Delete File: protected.txt\n+*** Move to: protected.txt\n*** End Patch' none
+  assert_success
+  assert_output ""
+  assert_equal "$(cat "$SCOPE_LEAF/protected.txt")" sentinel
+}
+
+@test "scope-guard Codex patch: malformed empty and unrepresentable inventories hard-block" {
+  _create_codex_patch_fixture
+  local patch
+  for patch in '' $'*** Begin Patch\n*** End Patch' \
+    $'*** Begin Patch\n*** Add File: allowed.txt\n+content' \
+    $'*** Begin Patch\n*** Update File: allowed.txt\n*** Move to: \n@@\n-original\n+new\n*** End Patch' \
+    $'*** Begin Patch\n*** Add File: allowed.txt\n+ok\n*** Move to: protected.txt\n*** End Patch' \
+    $'*** Begin Patch\n*** Add File: allowed\tname.txt\n+content\n*** End Patch'; do
+    _run_codex_patch_guard "$patch"
+    _assert_patch_unchanged
+    assert_output --partial 'target inventory'
+  done
+}
+
+@test "scope-guard Codex patch: multiple advisory targets consume one strike per tool" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Add File: unmatched-one.txt\n+one\n*** Add File: unmatched-two.txt\n+two\n*** End Patch' none
+  assert_success
+  assert_output --partial 'strike 1 of 3'
+  refute_output --partial 'strike 2 of 3'
+}
+
+@test "scope-guard Codex patch: advisory first cannot bypass hard refusal or consume a strike" {
+  _create_codex_patch_fixture
+  _run_codex_patch_guard $'*** Begin Patch\n*** Add File: unmatched.txt\n+one\n*** Delete File: protected.txt\n*** End Patch'
+  _assert_patch_unchanged
+}
+
+@test "scope-guard Codex patch: admitted first cannot bypass foreign target" {
+  _create_codex_patch_fixture
+  local foreign="$BATS_TEST_TMPDIR/foreign.txt" patch
+  printf 'foreign-sentinel\n' > "$foreign"
+  patch="$(printf '*** Begin Patch\n*** Add File: allowed.txt\n+one\n*** Delete File: %s\n*** End Patch' "$foreign")"
+  _run_codex_patch_guard "$patch" foreign allowed.txt "$foreign"
+  _assert_patch_unchanged
+  assert_output --partial 'DIFFERENT repository'
+  assert_equal "$(cat "$foreign")" foreign-sentinel
+}
+
+@test "scope-guard Codex patch: exempt first cannot bypass later authority load fault" {
+  _create_codex_patch_fixture
+  printf 'invalid: [\n' > "$SCOPE_REPO/.caws/policy.yaml"
+  _run_codex_patch_guard $'*** Begin Patch\n*** Add File: docs/note.md\n+one\n*** Delete File: protected.txt\n*** End Patch'
+  _assert_patch_unchanged
+  assert_output --partial 'could not render the structured diagnostic'
 }
 
 @test "scope-guard: fails closed (hard block) when the JSON diagnostic is unparseable" {
@@ -135,7 +534,7 @@ STUB
   # the missing-`caws` branch uses) deterministically, without fighting the
   # lib-sourcing toolchain deps an isolated PATH would strip.
   _run_scope_guard_with_stub "packages/elsewhere/nope.ts" 1 "this is not json"
-  assert_output --partial '"decision": "block"'
+  _assert_hard_block_without_strike
   assert_output --partial 'could not render the structured diagnostic'
 }
 
