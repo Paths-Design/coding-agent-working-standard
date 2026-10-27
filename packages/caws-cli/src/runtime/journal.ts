@@ -6,6 +6,7 @@ import { nativeInputDigest } from './protocol';
 import type { ActiveInvocationSelection } from './selection';
 import type { HandlerObservation } from './composer';
 import { appendOperationalRecord, ensureOperationalDirectory } from './operational-files';
+import { MACHINE_EVENTS } from '../init/native-hook-identification';
 
 const safeSession = (value: unknown): value is string =>
   typeof value === 'string' &&
@@ -110,7 +111,8 @@ export class InvocationJournal {
         : {}),
     };
     this.append(observation.stage, fields);
-    if (!safeSession(this.resolvedSessionId)) return;
+    // The invocation journal retains progress; the renderer consumes outcomes.
+    if (!safeSession(this.resolvedSessionId) || observation.stage === 'handler_started') return;
     try {
       const file = join(
         sessionDirectory(this.selection.canonical, this.resolvedSessionId),
@@ -124,14 +126,120 @@ export class InvocationJournal {
             ...this.metadata,
             schema: 'caws.hook_execution.v1',
             stage: observation.stage,
+            status: observation.stage.replace(/^handler_/, ''),
+            timestamp: new Date().toISOString(),
             timestamp_ms: Date.now(),
             observation_boundary: observation.stage,
+            hook_event: this.request.payload.hook_event_name ?? this.request.event,
+            tool_name: this.request.payload.tool_name ?? '',
+            tool_use_id: this.request.payload.tool_use_id ?? '',
+            ...(result
+              ? {
+                  stdout: Buffer.from(result.stdout).toString(),
+                  stderr: Buffer.from(result.stderr).toString(),
+                }
+              : {}),
             ...fields,
           }) + '\n'
         )
       );
     } catch (error) {
       this.incomplete(error);
+    }
+  }
+  /** Legacy reports share the handler's OS identity; they do not authenticate execution. */
+  recordCompatibility(records: Uint8Array): void {
+    if (this.disabled || !safeSession(this.resolvedSessionId) || records.byteLength === 0) return;
+    if (records.byteLength > 2 * 1024 * 1024) {
+      this.incomplete('Compatibility execution records exceed capture limit');
+      return;
+    }
+    const seen = new Set<number>();
+    const validated: { value: Record<string, unknown>; index: number }[] = [];
+    const toolUseId = this.request.payload.tool_use_id ?? '';
+    for (const line of Buffer.from(records).toString().split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const row: unknown = JSON.parse(line);
+        if (row === null || typeof row !== 'object' || Array.isArray(row))
+          throw new Error('Compatibility execution record is not an object');
+        const value = row as Record<string, unknown>;
+        const index = this.selection.handlers.findIndex(
+          (handler, selectedIndex) =>
+            !seen.has(selectedIndex) &&
+            handler.name === value.handler &&
+            handler.path === value.path
+        );
+        const handler = this.selection.handlers[index];
+        if (
+          !handler ||
+          value.session_id !== this.resolvedSessionId ||
+          typeof value.timestamp !== 'string' ||
+          !Number.isFinite(Date.parse(value.timestamp)) ||
+          typeof value.stdout !== 'string' ||
+          typeof value.stderr !== 'string' ||
+          value.hook_event !== MACHINE_EVENTS[this.request.event] ||
+          typeof value.tool_name !== 'string' ||
+          typeof toolUseId !== 'string' ||
+          value.tool_use_id !== toolUseId ||
+          !(value.status === 'completed'
+            ? Number.isInteger(value.exit_code) &&
+              Number(value.exit_code) >= 0 &&
+              Number(value.exit_code) <= 255
+            : (value.status === 'missing' || value.status === 'reprieved') &&
+              value.exit_code === null &&
+              value.stdout === '' &&
+              value.stderr === '')
+        )
+          throw new Error(
+            'Compatibility execution record does not match its selected handler/session or result contract'
+          );
+        seen.add(index);
+        validated.push({ value, index });
+      } catch (error) {
+        // Validate the entire capture before publishing: an injected first row
+        // must not win over a duplicate genuine report later in the capture.
+        this.incomplete(error);
+        return;
+      }
+    }
+    for (const { value, index } of validated) {
+      const handler = this.selection.handlers[index]!;
+      try {
+        const file = join(
+          sessionDirectory(this.selection.canonical, this.resolvedSessionId),
+          'hook-events.jsonl'
+        );
+        appendOperationalRecord(
+          this.selection.canonical,
+          file,
+          Buffer.from(
+            JSON.stringify({
+              ...this.metadata,
+              schema: 'caws.hook_execution.v1',
+              stage: 'handler_' + value.status,
+              observation_boundary: 'unverified_compatibility_dispatcher_report',
+              timestamp: value.timestamp,
+              timestamp_ms: Date.parse(value.timestamp as string),
+              session_id: this.resolvedSessionId,
+              handler: handler.name,
+              path: handler.path,
+              handler_index: index,
+              source_sha256: handler.sha256,
+              source_digest_boundary: 'before_dispatch',
+              status: value.status,
+              exit_code: value.exit_code,
+              stdout: value.stdout,
+              stderr: value.stderr,
+              hook_event: value.hook_event,
+              tool_name: value.tool_name,
+              tool_use_id: value.tool_use_id,
+            }) + '\n'
+          )
+        );
+      } catch (error) {
+        this.incomplete(error);
+      }
     }
   }
   takeDiagnostics(): string {
