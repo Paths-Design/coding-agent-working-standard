@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "sourceRoots": [
+    "src/execution",
     "src/kernel",
     "src/store",
     "src/shell",
@@ -13,6 +14,7 @@
       "command": "npm run mutation:run:kernel && npm run mutation:run:store && npm run mutation:run:shell && npm run mutation:run:analysis && npm run mutation:run:execution",
       "rationale": "Pure safety, authority, timestamp parsing, and arithmetic decisions are held to an explicit per-file mutation floor.",
       "files": [
+        "src/execution/prepared-schema.ts",
         "src/kernel/evidence/canonical-json.ts",
         "src/kernel/evidence/rederive.ts",
         "src/kernel/evidence/verify.ts",
@@ -50,6 +52,7 @@
       "command": "npm run typecheck && npm test",
       "rationale": "Type, export, rule, and command metadata surfaces are checked as compile-time and executable contracts.",
       "files": [
+        "src/execution/prepared.ts",
         "src/kernel/diagnostics/index.ts",
         "src/kernel/diagnostics/types.ts",
         "src/kernel/doctor/index.ts",
@@ -251,10 +254,12 @@
       "coverageAnalysis": "off",
       "buildCommand": "node scripts/build-cli.js",
       "targets": [
+        { "source": "src/execution/prepared-schema.ts" },
         { "source": "src/store/lifecycle-lock.ts" }
       ],
       "tests": [
-        "tests/execution/authority-fence.test.js"
+        "tests/execution/authority-fence.test.js",
+        "tests/execution/prepared-schema.test.js"
       ]
     },
     "analysis": {

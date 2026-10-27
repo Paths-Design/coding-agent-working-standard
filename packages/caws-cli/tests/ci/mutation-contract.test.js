@@ -523,8 +523,8 @@ describe('mutation policy topology contract', () => {
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
     // The inventory includes bounded analysis and the renderer-calendar adapter.
-    expect(result.stdout).toMatch(/^PASS: 203 source files accounted for exactly once$/m);
-    expect(result.stdout).toMatch(/^PASS: 29 mutation targets across 5 surfaces$/m);
+    expect(result.stdout).toMatch(/^PASS: 205 source files accounted for exactly once$/m);
+    expect(result.stdout).toMatch(/^PASS: 30 mutation targets across 5 surfaces$/m);
   });
 
   test('session seal preparation is classified as behavioral parsing and rendering', () => {
