@@ -43,3 +43,11 @@ non_functional:
 contracts:
   - name: 'worktree-authority-compensation'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "111e281 build and two focused suites actual exit 0; lock-acquisition failure controls preserve exact spec, registry and audit bytes and make no canonical reads/writes. Raw augmentation-followup.json and consumer-regressions.log; manual execution adjudication, commit verification only. Does not establish physical Git atomicity or full writer fence."
+    recorded_at: "2026-10-27T02:20:20.475Z"
+    command: "node scripts/build-cli.js && node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/lifecycle-rollback-harness.test.js tests/shell/claim-takeover-event.test.js"
+    exit_code: 0
+    commit_sha: "111e281463aea4899f5b1df36ac56ca5388a5371"
