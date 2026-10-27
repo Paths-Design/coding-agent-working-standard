@@ -22,6 +22,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { resolveGitBinary } from '../../store/git-binary';
+import { withLifecycleLock } from '../../store/lifecycle-lock';
 
 import {
   type ActorKind,
@@ -30,6 +31,7 @@ import {
   type EvidenceRecord,
   inspectProjectState,
   isOk,
+  ok,
   type Spec,
   type WorktreeRecord,
 } from '../../kernel';
@@ -1164,80 +1166,97 @@ export function runWorktreeMigrateRegistryCommand(opts: WorktreeMigrateRegistryO
   const ctx = resolveCawsCtx(cwd, err, showData, 'migrate-registry');
   if (ctx === null) return 2;
 
-  const worktreesJsonPath = path.join(ctx.cawsDir, 'worktrees.json');
+  // Derive from canonical authority only after acquisition. Previews stay read-only.
+  const migrate = (): number => {
+    const worktreesJsonPath = path.join(ctx.cawsDir, 'worktrees.json');
 
-  // Read worktrees.json. ENOENT means there is nothing to migrate.
-  let fileContents: string;
-  try {
-    fileContents = fs.readFileSync(worktreesJsonPath, 'utf8');
-  } catch (e) {
-    const cause = e as { code?: string; message?: string };
-    if (cause.code === 'ENOENT') {
-      out(`${worktreesJsonPath} does not exist. Nothing to migrate.`);
-      return 0;
-    }
-    err(
-      `caws worktree migrate-registry: failed to read ${worktreesJsonPath}: ${cause.message ?? 'unknown error'}`
-    );
-    return 2;
-  }
-
-  // Load specs for the destroyed-record policy check.
-  // We pass the loadSpecs result through unchanged; planMigration's
-  // A12 gate decides whether the load is verifiable.
-  const specsResult = loadSpecs(ctx.cawsDir);
-  const specs = specsResult.specs.map((s) => ({
-    id: s.id,
-    ...(s.worktree !== undefined ? { worktree: s.worktree } : {}),
-  }));
-
-  const plan = planMigration(fileContents, specs, specsResult.diagnostics, (p: string) =>
-    fs.existsSync(p)
-  );
-
-  const dryRun = opts.dryRun === true;
-
-  // Refusals: stderr + nonzero exit. No write under any refusal path.
-  if (plan.kind === 'refuse') {
-    err('caws worktree migrate-registry: refused.');
-    err(plan.diagnostic.message);
-    if (plan.decisions) {
-      err('');
-      err(`Nested records: ${plan.decisions.length}`);
-      for (const d of plan.decisions) {
-        err(formatDecision(d));
+    // Read worktrees.json. ENOENT means there is nothing to migrate.
+    let fileContents: string;
+    try {
+      fileContents = fs.readFileSync(worktreesJsonPath, 'utf8');
+    } catch (e) {
+      const cause = e as { code?: string; message?: string };
+      if (cause.code === 'ENOENT') {
+        out(`${worktreesJsonPath} does not exist. Nothing to migrate.`);
+        return 0;
       }
-    }
-    if (plan.diagnostic.narrowRepair !== undefined) {
-      err('');
-      err(plan.diagnostic.narrowRepair);
-    }
-    err('');
-    err('No changes were made.');
-    if (showData) {
-      renderPlanData(plan, err);
-    }
-    // read_failed -> 2 (IO/parse error class), everything else -> 1 (policy refusal).
-    return plan.reason === 'read_failed' ? 2 : 1;
-  }
-
-  // no_op or apply: stdout + zero exit.
-  renderPlanReport(plan, worktreesJsonPath, dryRun, out);
-
-  if (plan.kind === 'apply' && !dryRun) {
-    const writeResult = writeFileAtomic(worktreesJsonPath, plan.outputBytes);
-    if (!isOk(writeResult)) {
-      err('caws worktree migrate-registry: failed to write migrated file.');
-      err(renderDiagnostics(writeResult.errors, { showData }));
+      err(
+        `caws worktree migrate-registry: failed to read ${worktreesJsonPath}: ${cause.message ?? 'unknown error'}`
+      );
       return 2;
     }
-  }
 
-  if (showData) {
-    renderPlanData(plan, out);
-  }
+    // Load specs for the destroyed-record policy check.
+    // We pass the loadSpecs result through unchanged; planMigration's
+    // A12 gate decides whether the load is verifiable.
+    const specsResult = loadSpecs(ctx.cawsDir);
+    const specs = specsResult.specs.map((s) => ({
+      id: s.id,
+      ...(s.worktree !== undefined ? { worktree: s.worktree } : {}),
+    }));
 
-  return 0;
+    const plan = planMigration(fileContents, specs, specsResult.diagnostics, (p: string) =>
+      fs.existsSync(p)
+    );
+
+    const dryRun = opts.dryRun === true;
+
+    // Refusals: stderr + nonzero exit. No write under any refusal path.
+    if (plan.kind === 'refuse') {
+      err('caws worktree migrate-registry: refused.');
+      err(plan.diagnostic.message);
+      if (plan.decisions) {
+        err('');
+        err(`Nested records: ${plan.decisions.length}`);
+        for (const d of plan.decisions) {
+          err(formatDecision(d));
+        }
+      }
+      if (plan.diagnostic.narrowRepair !== undefined) {
+        err('');
+        err(plan.diagnostic.narrowRepair);
+      }
+      err('');
+      err('No changes were made.');
+      if (showData) {
+        renderPlanData(plan, err);
+      }
+      // read_failed -> 2 (IO/parse error class), everything else -> 1 (policy refusal).
+      return plan.reason === 'read_failed' ? 2 : 1;
+    }
+
+    // no_op or apply: stdout + zero exit.
+    renderPlanReport(plan, worktreesJsonPath, dryRun, out);
+
+    if (plan.kind === 'apply' && !dryRun) {
+      const writeResult = writeFileAtomic(worktreesJsonPath, plan.outputBytes);
+      if (!isOk(writeResult)) {
+        err('caws worktree migrate-registry: failed to write migrated file.');
+        err(renderDiagnostics(writeResult.errors, { showData }));
+        return 2;
+      }
+    }
+
+    if (showData) {
+      renderPlanData(plan, out);
+    }
+
+    return 0;
+  };
+  if (opts.dryRun === true) return migrate();
+  // An absent container cannot contain authority to migrate. Return directly:
+  // invoking migrate() here could race initialization and publish without a lock.
+  if (!fs.existsSync(ctx.cawsDir)) {
+    out(`${path.join(ctx.cawsDir, 'worktrees.json')} does not exist. Nothing to migrate.`);
+    return 0;
+  }
+  const result = withLifecycleLock(ctx.cawsDir, () => ok(migrate()));
+  if (!result.ok) {
+    err('caws worktree migrate-registry: failed to acquire lifecycle authority.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 2;
+  }
+  return result.value;
 }
 
 // ─── caws worktree cleanup-plan ───────────────────────────────────────────
