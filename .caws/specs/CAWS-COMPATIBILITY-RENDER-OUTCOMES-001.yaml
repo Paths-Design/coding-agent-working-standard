@@ -23,8 +23,11 @@ invariants:
   - 'Only captured outcomes for the current selected handlers and safe session may reach renderer input; unknown and malformed records remain diagnostic'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'An actual compatibility dispatch returns a handler refusal and raw execution records'
+    when: 'The engine records observations and the session renderer consumes their sidecar'
+    then: >-
+      The same handler, status, decision and refusal reason appear in the rendered
+      turn without duplicate execution; malformed, mismatched, colliding or unknown
+      observations do not fabricate successful outcomes or retry dispatch
 non_functional: {}
 contracts: []
