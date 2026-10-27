@@ -75,15 +75,14 @@ caws_blank_heredoc_bodies() {
   # Buffer/look ahead before projecting Node: an unfinished or ambiguous
   # heredoc must not erase any payload. This deliberately recognizes only one
   # standalone bare `node <<'DELIM'` / `node <<"DELIM"` header, with no options,
-  # wrapper, redirects, continuation, or second heredoc. Quotes in the prefix
-  # could put the apparent header inside another command's string; compound
-  # shell syntax could put it in an executable nested context. Leave those
-  # unsupported forms to the existing conservative view rather than guessing.
+  # wrapper, redirects, continuation, or second heredoc. The header must be the
+  # first nonblank line: earlier statements can override command lookup (alias,
+  # hash, builtins, sourced code, etc.), even when they look like plain text.
+  # Do not infer Node identity from such a prefix or try to enumerate overrides.
+  # Leave the entire payload visible under the existing conservative view.
   local node_rest="${input#*<<}"
   local node_single="^[[:blank:]]*node[[:blank:]]+<<[[:blank:]]*'([^']+)'[[:blank:]]*$"
   local node_double='^[[:blank:]]*node[[:blank:]]+<<[[:blank:]]*"([^"\\]+)"[[:blank:]]*$'
-  local node_plain='^[-[:alnum:][:blank:]_./:=~%+@,>]*$'
-  local node_reserved='^[[:blank:]]*(if|then|elif|else|fi|for|while|until|do|done|case|esac|function|select|in)([[:blank:]]|$)'
   local node_prefix_ok=1 node_body=0 node_offset=0 node_start=0 node_delim="" node_blanks=""
   if [[ "$node_rest" != *"<<"* ]]; then
     while IFS= read -r line || [[ -n "$line" ]]; do
@@ -102,7 +101,7 @@ caws_blank_heredoc_bodies() {
             node_body=1
             node_start=$((node_offset + ${#line} + 1))
           fi
-        elif [[ ! "$line" =~ $node_plain || "$line" =~ $node_reserved ]]; then
+        elif [[ ! "$line" =~ ^[[:blank:]]*$ ]]; then
           node_prefix_ok=0
         fi
       fi

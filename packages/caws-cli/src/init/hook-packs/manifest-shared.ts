@@ -639,7 +639,9 @@ import { isAdapterCoveredSurface } from './types';
 // Native patches check every source/destination before emitting one advisory.
 // v123: project complete literal direct Node heredoc bodies out of outer-shell
 // target views while retaining raw interpreter-write analysis and conservative
-// handling of unsupported forms. File-sink policy and helper API are preserved.
+// handling of unsupported forms. Require the header as the first nonblank line
+// so preceding command-lookup overrides cannot hide shell operations in a body.
+// File-sink policy and helper API are preserved.
 export const SHARED_PACK_VERSION = 123;
 
 /**

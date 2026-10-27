@@ -137,8 +137,8 @@ _run_shell_view() {
 @test "literal Node: quoted arrow and greater-than payload projects out with exact surrounding bytes" {
   local quote input expected
   for quote in "'" '"'; do
-    input="$(printf 'echo before > before.txt\n  node <<%sJS%s\nconst rows = ["1"].map(x => JSON.parse(x));\nconsole.log(rows.length > 0);\nJS\necho after > after.txt\n' "$quote" "$quote")"$'\n\n'
-    expected="$(printf 'echo before > before.txt\n  node <<%sJS%s\n\n\nJS\necho after > after.txt\n' "$quote" "$quote")"$'\n\n'
+    input="$(printf '\n \t\n  node <<%sJS%s\nconst rows = ["1"].map(x => JSON.parse(x));\nconsole.log(rows.length > 0);\nJS\necho after > after.txt\n' "$quote" "$quote")"$'\n\n'
+    expected="$(printf '\n \t\n  node <<%sJS%s\n\n\nJS\necho after > after.txt\n' "$quote" "$quote")"$'\n\n'
     _run_blank_exact "$input"
     assert_success
     assert_output "${expected}__END__"
@@ -202,6 +202,58 @@ _run_shell_view() {
   done
 }
 
+@test "literal Node lookup: a visible alias really can execute the body as harmless shell" {
+  local input=$'shopt -s expand_aliases\nalias node=sh\nnode <<\'SH\'\nprintf CAWS_ALIAS_BODY_EXECUTED\nSH'
+  # This is the sole executed payload: a harmless stdout marker, never a
+  # hostile Git command, external write, or interpreter mutation probe.
+  run bash --noprofile --norc -c "$input"
+  assert_success
+  assert_output CAWS_ALIAS_BODY_EXECUTED
+}
+
+@test "literal Node lookup: alias override keeps shell operations visible in projection" {
+  local input=$'shopt -s expand_aliases\nalias node=sh\nnode <<\'SH\'\ngit sparse-checkout disable\nSH'
+  _run_blank "$input"
+  assert_success
+  assert_output "$input"
+  _run_shell_view caws_bash_command_lines "$input"
+  assert_success
+  assert_output 'git sparse-checkout disable'
+}
+
+@test "literal Node lookup: overridden shell body reaches worktree refusal before simulated effects" {
+  _seed_foreign_worktree
+  local input=$'shopt -s expand_aliases\nalias node=sh\nnode <<\'SH\'\ngit sparse-checkout disable\nSH'
+  local marker="$BATS_TEST_TMPDIR/operation-sentinel"
+  printf sentinel > "$marker"
+  run_guard worktree-guard.sh "$(hook_envelope Bash '' "$input")"
+  local guard_status="$status"
+  # Never execute this command. The sentinel models the effect only if the
+  # guard allows it, so an exit-zero block-shaped response cannot pass.
+  if [[ "$guard_status" == 0 ]]; then printf changed > "$marker"; fi
+  printf 'override guard exit=%s sentinel=%s\n' "$guard_status" "$(cat "$marker")"
+  assert_equal "$guard_status" 2
+  assert_output --partial 'BLOCKED: agent-issued git sparse-checkout'
+  assert_equal "$(cat "$marker")" sentinel
+}
+
+@test "literal Node lookup: other visible state changes cannot establish direct Node identity" {
+  local prefix input
+  for prefix in 'builtin alias node=sh' 'hash -p /bin/sh node' \
+    'builtin hash -p /bin/sh node' 'enable -f /tmp/override.so node' \
+    'builtin enable -n node' 'source ./lookup.sh' '. ./lookup.sh' \
+    'eval alias node=sh' 'PATH=/other/bin' 'BASH_ENV=/other/env' \
+    'set -o posix' 'echo plain-prefix'; do
+    input="$prefix"$'\nnode <<\'SH\'\ngit sparse-checkout disable\nSH'
+    _run_blank "$input"
+    assert_success
+    assert_output "$input"
+    _run_shell_view caws_bash_command_lines "$input"
+    assert_success
+    assert_output 'git sparse-checkout disable'
+  done
+}
+
 @test "literal Node: unquoted shell substitution remains visible and cannot write the sentinel" {
   _seed_foreign_worktree
   local target input
@@ -255,7 +307,16 @@ _run_shell_view() {
     else input+=$'\n'"echo changed > $target"; fi
     _run_shell_view caws_bash_mutation_candidates "$input"
     assert_success
-    assert_output "$target"
+    assert_line "$target"
+    if [[ "$position" == before ]]; then
+      # Earlier statements make Node lookup uncertain. The conservative view
+      # retains the whole payload as well as the real outer mutation target.
+      _run_blank "$input"
+      assert_success
+      assert_output "$input"
+    else
+      assert_output "$target"
+    fi
     _run_bwg "$input"
     assert_equal "$status" 2
     assert_output --partial 'BLOCKED'
