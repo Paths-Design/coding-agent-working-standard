@@ -1,9 +1,10 @@
 id: CAWS-MAINTENANCE-AUTHORITY-LOCK-001
 title: 'Serialize initialization and migration authority writes'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: maintenance-authority-lock
 created_at: '2026-10-27T02:30:30.096Z'
-updated_at: '2026-10-27T02:30:30.096Z'
+updated_at: '2026-10-27T02:30:39.838Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
