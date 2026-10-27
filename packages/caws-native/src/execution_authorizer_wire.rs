@@ -123,6 +123,7 @@ impl RequestRecord {
         if payload.is_empty() || payload.len() > REQUEST_LIMIT {
             return Err(WireError::Frame);
         }
+        validate_representation(payload, true)?;
         let envelope: Request = serde_json::from_slice(payload).map_err(|_| WireError::Schema)?;
         let record = STANDARD
             .decode(&envelope.record_base64)
@@ -173,6 +174,7 @@ impl RequestRecord {
         if payload.is_empty() || payload.len() > REPLY_LIMIT {
             return Err(WireError::Frame);
         }
+        validate_representation(payload, false)?;
         let reply: Reply = serde_json::from_slice(payload).map_err(|_| WireError::Schema)?;
         if reply.protocol != PROTOCOL
             || reply.phase != self.envelope.phase
@@ -236,6 +238,36 @@ impl ReplyObservation {
     pub(crate) fn reason_codes(&self) -> &[String] {
         &self.reply.reason_codes
     }
+}
+
+// Serde structs also accept positional sequences and unit enums accept object
+// variants. The wire contract requires objects with string enum values. This
+// representation check does not replace parsing the ORIGINAL bytes into the
+// deny_unknown_fields structs: that second parse preserves duplicate-key refusal.
+fn validate_representation(payload: &[u8], request: bool) -> Result<(), WireError> {
+    let value: serde_json::Value =
+        serde_json::from_slice(payload).map_err(|_| WireError::Schema)?;
+    let object = value.as_object().ok_or(WireError::Schema)?;
+    if object
+        .get("phase")
+        .and_then(serde_json::Value::as_str)
+        .is_none()
+    {
+        return Err(WireError::Schema);
+    }
+    if request {
+        match object.get("fence") {
+            Some(serde_json::Value::Null | serde_json::Value::Object(_)) => (),
+            _ => return Err(WireError::Schema),
+        }
+    } else if object
+        .get("decision")
+        .and_then(serde_json::Value::as_str)
+        .is_none()
+    {
+        return Err(WireError::Schema);
+    }
+    Ok(())
 }
 
 fn bounded_text(value: &str, limit: usize) -> Result<(), WireError> {
@@ -383,6 +415,61 @@ mod tests {
                 digest(&serde_json::to_vec(&parsed).unwrap()),
                 original.envelope.execution_digest
             );
+        }
+    }
+
+    #[test]
+    fn positional_arrays_cannot_replace_keyed_envelopes_or_fence() {
+        for phase in [Phase::Analyze, Phase::FinalValidate] {
+            let req = request(phase);
+            let r = request_json(&req);
+            let sequence = json!([
+                r["protocol"],
+                r["phase"],
+                r["invocationId"],
+                r["recordBase64"],
+                r["executionDigest"],
+                r["expectedAuthorityRevision"],
+                r["fence"]
+            ]);
+            assert!(!decodes(&sequence), "request must be a keyed object");
+            let r = reply(&req);
+            let sequence = json!([
+                r["protocol"],
+                r["phase"],
+                r["invocationId"],
+                r["executionDigest"],
+                r["decision"],
+                r["authorityRevision"],
+                r["reasonCodes"]
+            ]);
+            assert!(!accepts(&req, &sequence), "reply must be a keyed object");
+        }
+        let mut r = request_json(&request(Phase::FinalValidate));
+        r["fence"] = json!(["0", "18446744073709551615", "nonce"]);
+        assert!(!decodes(&r), "fence must be a keyed object");
+    }
+
+    #[test]
+    fn enum_objects_cannot_replace_protocol_strings() {
+        for phase in [Phase::Analyze, Phase::FinalValidate] {
+            let req = request(phase);
+            let name = if phase == Phase::Analyze {
+                "analyze"
+            } else {
+                "final_validate"
+            };
+            let mut r = request_json(&req);
+            r["phase"] = json!({name:null});
+            assert!(!decodes(&r));
+            let mut r = reply(&req);
+            r["phase"] = json!({name:null});
+            assert!(!accepts(&req, &r));
+            for decision in ["allow", "deny", "unresolved"] {
+                let mut r = reply(&req);
+                r["decision"] = json!({decision:null});
+                assert!(!accepts(&req, &r));
+            }
         }
     }
 
