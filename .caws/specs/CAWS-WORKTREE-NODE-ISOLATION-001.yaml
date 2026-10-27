@@ -24,8 +24,11 @@ invariants:
   - 'TODO: describe one invariant this spec guarantees.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A new worktree needs a private Node install'
+    when: 'worktree create receives --no-link-node-modules and npm ci runs in the isolated disposable fixture'
+    then: >-
+      Root, workspace and hook Node links are skipped; existing paths and non-Node
+      artifacts are preserved; canonical dependency sentinels remain unchanged;
+      default linking is unchanged
 non_functional: {}
 contracts: []
