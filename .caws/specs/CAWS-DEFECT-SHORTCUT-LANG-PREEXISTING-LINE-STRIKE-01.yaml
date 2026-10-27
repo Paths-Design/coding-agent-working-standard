@@ -1,9 +1,10 @@
 id: CAWS-DEFECT-SHORTCUT-LANG-PREEXISTING-LINE-STRIKE-01
 title: 'Shortcut-language guard strikes agents on a pre-existing ''# placeholder'' comment in classify_command.py they did not write'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: shortcut-normalization
 created_at: '2026-10-05T08:26:31.631Z'
-updated_at: '2026-10-27T16:23:46.275Z'
+updated_at: '2026-10-27T16:23:48.299Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
