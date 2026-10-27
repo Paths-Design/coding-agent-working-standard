@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: spec-amend-cas
 created_at: '2026-10-26T23:41:53.211Z'
-updated_at: '2026-10-26T23:42:01.747Z'
+updated_at: '2026-10-27T01:43:50.339Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
@@ -16,6 +16,7 @@ scope:
     - 'packages/caws-cli/src/store/specs-writer.ts'
     - 'packages/caws-cli/src/store/specs-body-writer.ts'
     - 'packages/caws-cli/tests/store/spec-amend-concurrency.test.js'
+    - packages/caws-cli/src/store/yaml-store.ts
   out: []
 invariants:
   - 'Scope and body amendment effects require the current source to match the source used to derive the complete plan while the lifecycle lock is held.'
