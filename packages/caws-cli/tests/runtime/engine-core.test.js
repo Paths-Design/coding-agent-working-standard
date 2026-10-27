@@ -151,6 +151,135 @@ test('a colliding invocation cannot append to the first journal or publish handl
   );
 });
 
+function compatibilityJournal() {
+  const handler = {
+    name: 'guard.sh',
+    entry: 'guard.sh',
+    path: path.join(root, 'guard.sh'),
+    sha256: 'b'.repeat(64),
+  };
+  const selected = {
+    canonical: root,
+    checkout: root,
+    handlers: [handler],
+    configuration: 'system',
+  };
+  const invocation = request();
+  invocation.payload.tool_use_id = 'call-one';
+  invocation.payload.tool_name = 'Bash';
+  const journal = new InvocationJournal(invocation, selected, 'session-one');
+  const row = {
+    timestamp: new Date().toISOString(),
+    session_id: 'session-one',
+    handler: handler.name,
+    path: handler.path,
+    status: 'completed',
+    exit_code: 2,
+    stdout: '{"decision":"block","reason":"owned refusal"}',
+    stderr: 'guard diagnostic',
+    hook_event: 'PreToolUse',
+    tool_name: 'Bash',
+    tool_use_id: 'call-one',
+  };
+  return {
+    journal,
+    handler,
+    selected,
+    invocation,
+    row,
+    file: path.join(root, '.caws/sessions/session-one/hook-events.jsonl'),
+  };
+}
+
+test.each([
+  ['session', { session_id: 'neighbor' }],
+  ['handler', { handler: 'other.sh' }],
+  ['path', { path: '/foreign/guard.sh' }],
+  ['timestamp', { timestamp: 'invalid' }],
+  ['status', { status: 'started' }],
+  ['unknown exit', { exit_code: null }],
+  ['fractional exit', { exit_code: 2.5 }],
+  ['output', { stdout: {} }],
+  ['skipped result', { status: 'reprieved', exit_code: 0 }],
+])('invalid compatibility %s is diagnostic and cannot publish an outcome', (_name, changes) => {
+  const f = compatibilityJournal();
+  f.journal.recordCompatibility(Buffer.from(JSON.stringify({ ...f.row, ...changes }) + '\n'));
+  expect(fs.existsSync(f.file)).toBe(false);
+  expect(f.journal.takeDiagnostics()).toContain('does not match');
+});
+
+test('malformed and duplicate compatibility records preserve only the captured selected result', () => {
+  const f = compatibilityJournal();
+  f.journal.recordCompatibility(
+    Buffer.from('not-json\n' + JSON.stringify(f.row) + '\n' + JSON.stringify(f.row) + '\n')
+  );
+  const rows = fs.readFileSync(f.file, 'utf8').trim().split('\n').map(JSON.parse);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    ...f.row,
+    delivery: 'not_observed',
+    observation_boundary: 'compatibility_handler_return',
+    source_sha256: f.handler.sha256,
+  });
+  expect(f.journal.takeDiagnostics()).toContain('incomplete');
+});
+
+test.each(['missing', 'reprieved'])(
+  'compatibility %s remains a nonexecution observation',
+  (status) => {
+    const f = compatibilityJournal();
+    f.journal.recordCompatibility(
+      Buffer.from(
+        JSON.stringify({ ...f.row, status, exit_code: null, stdout: '', stderr: '' }) + '\n'
+      )
+    );
+    expect(JSON.parse(fs.readFileSync(f.file, 'utf8'))).toMatchObject({
+      status,
+      exit_code: null,
+      stdout: '',
+      delivery: 'not_observed',
+    });
+  }
+);
+
+test('compatibility observations obey capture bounds, collision protection and no-follow writes', () => {
+  const f = compatibilityJournal();
+  f.journal.recordCompatibility(Buffer.alloc(2 * 1024 * 1024 + 1));
+  expect(f.journal.takeDiagnostics()).toContain('capture limit');
+  const colliding = new InvocationJournal(f.invocation, f.selected, 'session-one');
+  colliding.recordCompatibility(Buffer.from(JSON.stringify(f.row) + '\n'));
+  expect(colliding.takeDiagnostics()).toContain('incomplete');
+  expect(fs.existsSync(f.file)).toBe(false);
+  const target = path.join(root, 'preserved.txt');
+  fs.writeFileSync(target, 'preserved');
+  fs.symlinkSync(target, f.file);
+  f.journal.recordCompatibility(Buffer.from(JSON.stringify(f.row) + '\n'));
+  expect(f.journal.takeDiagnostics()).toContain('incomplete');
+  expect(fs.readFileSync(target, 'utf8')).toBe('preserved');
+});
+
+test('typed handler results retain raw renderer fields alongside lossless journal bytes', () => {
+  const f = compatibilityJournal();
+  f.journal.record({
+    stage: 'handler_completed',
+    selectedIndex: 0,
+    handler: f.handler,
+    result: { exitCode: 2, stdout: Buffer.from(f.row.stdout), stderr: Buffer.from(f.row.stderr) },
+  });
+  const row = JSON.parse(fs.readFileSync(f.file, 'utf8'));
+  expect(row).toMatchObject({
+    status: 'completed',
+    session_id: 'session-one',
+    stdout: f.row.stdout,
+    stderr: f.row.stderr,
+    tool_use_id: 'call-one',
+    exit_code: 2,
+    delivery: 'not_observed',
+  });
+  expect(Number.isFinite(Date.parse(row.timestamp))).toBe(true);
+  expect(Buffer.from(row.stdout_base64, 'base64').toString()).toBe(f.row.stdout);
+});
+
 test('mixed case journals never write through an alias of an existing session directory', () => {
   const selected = { canonical: root, checkout: root, handlers: [], configuration: 'system' };
   const first = new InvocationJournal(request('CaseA'), selected, 'CaseA');

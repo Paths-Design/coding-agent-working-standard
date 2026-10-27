@@ -124,14 +124,104 @@ export class InvocationJournal {
             ...this.metadata,
             schema: 'caws.hook_execution.v1',
             stage: observation.stage,
+            status: observation.stage.replace(/^handler_/, ''),
+            timestamp: new Date().toISOString(),
             timestamp_ms: Date.now(),
             observation_boundary: observation.stage,
+            hook_event: this.request.payload.hook_event_name ?? this.request.event,
+            tool_name: this.request.payload.tool_name ?? '',
+            tool_use_id: this.request.payload.tool_use_id ?? '',
+            ...(result
+              ? {
+                  stdout: Buffer.from(result.stdout).toString(),
+                  stderr: Buffer.from(result.stderr).toString(),
+                }
+              : {}),
             ...fields,
           }) + '\n'
         )
       );
     } catch (error) {
       this.incomplete(error);
+    }
+  }
+  /** Captured legacy records are observations, never permission or delivery receipts. */
+  recordCompatibility(records: Uint8Array): void {
+    if (this.disabled || !safeSession(this.resolvedSessionId) || records.byteLength === 0) return;
+    if (records.byteLength > 2 * 1024 * 1024) {
+      this.incomplete('Compatibility execution records exceed capture limit');
+      return;
+    }
+    const seen = new Set<number>();
+    for (const line of Buffer.from(records).toString().split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const row: unknown = JSON.parse(line);
+        if (row === null || typeof row !== 'object' || Array.isArray(row))
+          throw new Error('Compatibility execution record is not an object');
+        const value = row as Record<string, unknown>;
+        const index = this.selection.handlers.findIndex(
+          (handler, selectedIndex) =>
+            !seen.has(selectedIndex) &&
+            handler.name === value.handler &&
+            handler.path === value.path
+        );
+        const handler = this.selection.handlers[index];
+        if (
+          !handler ||
+          value.session_id !== this.resolvedSessionId ||
+          typeof value.timestamp !== 'string' ||
+          !Number.isFinite(Date.parse(value.timestamp)) ||
+          typeof value.stdout !== 'string' ||
+          typeof value.stderr !== 'string' ||
+          typeof value.hook_event !== 'string' ||
+          typeof value.tool_name !== 'string' ||
+          typeof value.tool_use_id !== 'string' ||
+          !(value.status === 'completed'
+            ? Number.isInteger(value.exit_code) &&
+              Number(value.exit_code) >= 0 &&
+              Number(value.exit_code) <= 255
+            : (value.status === 'missing' || value.status === 'reprieved') &&
+              value.exit_code === null)
+        )
+          throw new Error(
+            'Compatibility execution record does not match its selected handler/session or result contract'
+          );
+        seen.add(index);
+        const file = join(
+          sessionDirectory(this.selection.canonical, this.resolvedSessionId),
+          'hook-events.jsonl'
+        );
+        appendOperationalRecord(
+          this.selection.canonical,
+          file,
+          Buffer.from(
+            JSON.stringify({
+              ...this.metadata,
+              schema: 'caws.hook_execution.v1',
+              stage: 'handler_' + value.status,
+              observation_boundary: 'compatibility_handler_return',
+              timestamp: value.timestamp,
+              timestamp_ms: Date.parse(value.timestamp),
+              session_id: this.resolvedSessionId,
+              handler: handler.name,
+              path: handler.path,
+              handler_index: index,
+              source_sha256: handler.sha256,
+              source_digest_boundary: 'before_dispatch',
+              status: value.status,
+              exit_code: value.exit_code,
+              stdout: value.stdout,
+              stderr: value.stderr,
+              hook_event: value.hook_event,
+              tool_name: value.tool_name,
+              tool_use_id: value.tool_use_id,
+            }) + '\n'
+          )
+        );
+      } catch (error) {
+        this.incomplete(error);
+      }
     }
   }
   takeDiagnostics(): string {

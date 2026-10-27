@@ -711,6 +711,7 @@ export async function prepareRuntimeInvocation(
             exit_code: completed.exitCode,
             execution_records_base64: Buffer.from(completed.executionRecords).toString('base64'),
           });
+          journal.recordCompatibility(completed.executionRecords);
         } else {
           const composition = await composeHandlers(
             selection,

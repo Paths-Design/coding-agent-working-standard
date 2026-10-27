@@ -71,6 +71,7 @@ test('a selected project override receives complete Codex normalization through 
     const payload = {
       cwd: repo,
       session_id: 'routing-fixture',
+      tool_use_id: 'guarded-command',
       tool_name: 'Bash',
       tool_input: { command: 'echo safe', file_path: '/owned/file' },
     };
@@ -113,6 +114,161 @@ test('a selected project override receives complete Codex normalization through 
     expect(rows.map((row) => row.stage)).toContain('compatibility_dispatch_completed');
     expect(rows.map((row) => row.stage)).not.toContain('handler_started');
     expect(rows.at(-1)).toMatchObject({ stage: 'adapter_finished', exit_code: 2 });
+    const outcomesPath = path.join(repo, '.caws/sessions/routing-fixture/hook-events.jsonl');
+    const outcomesBytes = fs.readFileSync(outcomesPath);
+    const outcomes = outcomesBytes.toString().trim().split('\n').map(JSON.parse);
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toMatchObject({
+      session_id: 'routing-fixture',
+      handler: 'block-dangerous.sh',
+      path: override,
+      status: 'completed',
+      exit_code: 2,
+      tool_use_id: 'guarded-command',
+      delivery: 'not_observed',
+      observation_boundary: 'compatibility_handler_return',
+    });
+    expect(JSON.parse(outcomes[0].stdout)).toEqual({
+      decision: 'block',
+      reason: 'normalized extension refusal',
+    });
+    const receipt = rows.find((row) => row.stage === 'compatibility_dispatch_completed');
+    const captured = Buffer.from(receipt.execution_records_base64, 'base64')
+      .toString()
+      .trim()
+      .split('\n')
+      .map(JSON.parse);
+    expect(captured).toHaveLength(1);
+    expect(captured[0].stdout).toBe(outcomes[0].stdout);
+    const { prepareSessionArtifacts } = require('../../dist/transcripts/render-prepare');
+    const { createDefaultTranscriptRegistry } = require('../../dist/transcripts/registry');
+    const { RENDER_JSON_4300 } = require('../../dist/transcripts/render-reader');
+    const { jsonNumber } = require('../../dist/transcripts/lossless-json');
+    const timestamp = outcomes[0].timestamp;
+    const transcript =
+      [
+        { type: 'user', timestamp, message: { content: 'Run the guarded command' } },
+        {
+          type: 'assistant',
+          timestamp,
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'guarded-command',
+                name: 'Bash',
+                input: { command: 'echo safe' },
+              },
+            ],
+          },
+        },
+        {
+          type: 'user',
+          timestamp,
+          message: {
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'guarded-command',
+                content: 'refused',
+                is_error: true,
+              },
+            ],
+          },
+        },
+      ]
+        .map(JSON.stringify)
+        .join('\n') + '\n';
+    const observed = (file, bytes) => ({
+      path: file,
+      disposition: 'read',
+      source: {
+        sourceId: file,
+        sourceGeneration: 'captured',
+        inode: '1',
+        size: BigInt(bytes.length),
+        bytes,
+      },
+    });
+    const rendered = prepareSessionArtifacts({
+      transcript: observed(path.join(repo, 'chat.jsonl'), Buffer.from(transcript)),
+      audit: { path: path.join(repo, 'audit.jsonl'), disposition: 'absent' },
+      hookOutcomes: observed(outcomesPath, outcomesBytes),
+      subagents: {
+        claudeCandidate: { path: path.join(repo, 'routing-fixture/subagents'), kind: 'absent' },
+        qwenCandidate: { path: path.join(root, 'subagents/routing-fixture'), kind: 'absent' },
+      },
+      registry: createDefaultTranscriptRegistry({ numericProfile: RENDER_JSON_4300 }),
+      numericProfile: RENDER_JSON_4300,
+      calendar: {
+        profileId: 'fixture-utc-calendar/1',
+        timezone: 'UTC',
+        epochSeconds: (ts) =>
+          ts === null || !Number.isFinite(Date.parse(ts)) ? null : Date.parse(ts) / 1000,
+        secondsBetween: () => null,
+      },
+      context: {
+        sessionId: 'routing-fixture',
+        cwd: repo,
+        startedAt: timestamp,
+        model: 'fixture',
+        branch: 'fixture',
+        headSha: 'head',
+        startSha: 'start',
+        dirtyFiles: jsonNumber('0'),
+      },
+      priorInventory: { observationId: 'empty', artifacts: [] },
+      limits: {
+        maximumInputBytes: 1000000,
+        maximumArtifactBytes: 1000000,
+        maximumTotalArtifactBytes: 2000000,
+        maximumArtifacts: 100,
+      },
+    });
+    if (rendered.disposition !== 'ready')
+      throw new Error(require('node:util').inspect(rendered, { depth: 8 }));
+    expect(rendered.disposition).toBe('ready');
+    const turn = JSON.parse(
+      Buffer.from(
+        rendered.generation.artifacts.find((item) => item.role === 'turn').bytes()
+      ).toString()
+    );
+    // A failed tool result takes precedence in the turn summary; the hook
+    // context must independently retain the exact blocking decision and reason.
+    expect(turn.status).toBe('error');
+    expect(turn.hook_contexts).toHaveLength(1);
+    expect(turn.hook_contexts[0]).toMatchObject({
+      hook_name: 'block-dangerous.sh',
+      status: 'block',
+      additional_context: 'normalized extension refusal',
+      delivery: 'not_observed',
+    });
+    expect(turn.timeline[0].hook_contexts[0].additional_context).toBe(
+      'normalized extension refusal'
+    );
+    const executor = require('../../dist/runtime/handler-executor');
+    const unknown = new executor.HandlerExecutionError(
+      'unconfirmed compatibility outcome',
+      undefined,
+      undefined,
+      [],
+      undefined,
+      Buffer.from(JSON.stringify(captured[0]) + '\n')
+    );
+    const capture = jest.spyOn(executor, 'executeCompatibilityDispatch').mockRejectedValue(unknown);
+    try {
+      const interrupted = await prepareRuntimeInvocation(
+        { ...request, id: 'unknown-routing-invocation', deadlineEpochMs: Date.now() + 15000 },
+        new AbortController().signal
+      );
+      await expect(interrupted.dispatch()).rejects.toBe(unknown);
+      await expect(interrupted.dispatch()).rejects.toThrow('single-use');
+      expect(capture).toHaveBeenCalledTimes(1);
+      expect(fs.readFileSync(outcomesPath)).toEqual(outcomesBytes);
+      await interrupted.acknowledgeHandoff(false);
+    } finally {
+      capture.mockRestore();
+    }
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
