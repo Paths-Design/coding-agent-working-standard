@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-26T15:13:43.855Z'
+updated_at: '2026-10-27T19:03:59.370Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -132,6 +132,13 @@ scope:
     - .native-frozen-build-01a17052-02.tmp
     - .native-frozen-source-01a17052-03.tmp
     - .native-frozen-build-01a17052-03.tmp
+    - packages/caws-cli/src/store/worktree-artifacts.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/tests/store/worktree-artifacts.test.js
+    - packages/caws-cli/tests/shell/worktree-ensure.test.js
   out:
     - packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh
