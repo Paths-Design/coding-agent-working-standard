@@ -9,6 +9,7 @@ mod execution_authorizer_wire;
 mod execution_child;
 mod execution_fd_transport;
 mod execution_fence;
+mod execution_host;
 mod execution_ingress;
 mod execution_owner;
 mod execution_prepared;
