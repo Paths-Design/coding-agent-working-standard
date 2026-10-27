@@ -514,13 +514,15 @@ observation after analysis. A reply is not a launch permit or a public CLI
 execution command.
 
 Authority derives from the verified native caller coordinate, actual thread
-owner, canonical policy, active spec and unique worktree or bridge binding. The
-server's environment anchor and root session lineage cannot substitute for the
-caller checkout or current thread. Missing, malformed or changing authority
-remains unresolved. Final validation compares the prior authority revision and
-verifies inherited descriptor 3 against canonical `state.lock`, its device and
-inode, private nonce, and actual parent process. That check requires a shared
-local PID namespace; an unsupported sandbox topology cannot weaken it.
+owner, canonical policy, active spec and unique worktree or bridge binding.
+Native association fields require the owning private transport; decoding a
+record does not authenticate its origin. The server's environment anchor and
+root session lineage cannot substitute for the caller checkout or current
+thread. Missing, malformed or changing authority remains unresolved. Final
+validation compares the prior authority revision and verifies inherited
+descriptor 3 against canonical `state.lock`, its device and inode, private
+nonce, and actual parent process. That check requires a shared local PID
+namespace; an unsupported sandbox topology cannot weaken it.
 
 The bounded execution profile accepts clean Bash, named protected system utility
 images and the existing literal Node effect grammar on the pinned actual Node
