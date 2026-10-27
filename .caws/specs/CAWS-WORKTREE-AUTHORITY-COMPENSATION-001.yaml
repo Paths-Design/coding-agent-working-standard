@@ -58,3 +58,10 @@ evidence:
     command: "node scripts/build-cli.js && node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/lifecycle-rollback-harness.test.js tests/shell/claim-takeover-event.test.js"
     exit_code: 0
     commit_sha: "111e281463aea4899f5b1df36ac56ca5388a5371"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "111e281 build and 72 focused tests actual exit 0; locked mutation/append and partial augmentation EIO controls restore exact prior authority before unlock; failed restore explicitly unrecovered, immutable appended audit residue remains truthful. Retained augmentation-red.log shows prior false success. No crash-durability or native-cutover claim."
+    recorded_at: "2026-10-27T02:20:38.553Z"
+    command: "node scripts/build-cli.js && node ../../node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/store/lifecycle-rollback-harness.test.js tests/shell/claim-takeover-event.test.js"
+    exit_code: 0
+    commit_sha: "111e281463aea4899f5b1df36ac56ca5388a5371"
