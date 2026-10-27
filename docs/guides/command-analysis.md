@@ -528,8 +528,15 @@ The bounded execution profile accepts clean Bash, named protected system utility
 images and the existing literal Node effect grammar on the pinned actual Node
 runtime. Python programs have no native v1 profile, including programs whose
 effects the separate diagnostic analyzer can partially classify. Finite writes
-require owned physical targets admitted by scope. Unmodeled programs, scripts,
-image aliases, implicit temporary writers, heredocs, here-strings and private
+require owned physical targets admitted by scope. Existing leaf entries retain
+their canonical spelling and observed device/inode before scope evaluation.
+Excluded file and directory aliases cannot borrow a different spelling;
+unresolved prospective aliases remain held. Native v1 write paths relative to
+the pin must be ASCII, including ordinary LF names. Unicode filesystem
+equivalence is not guessed; UTF-8 roots, source and read data are separate from
+this write-path restriction. Policy exemptions retain their kernel precedence;
+execution-control paths remain refused. Unmodeled programs, scripts, image
+aliases, implicit temporary writers, heredocs, here-strings and private
 descriptor redirects remain held. Ordinary inherited application data can
 provide finite values. `PWD` derives from the prepared physical cwd; other
 Bash-generated variables are opaque. Mutations of special variables remain held.

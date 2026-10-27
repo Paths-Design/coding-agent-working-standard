@@ -153,6 +153,75 @@ describe('private authorizer component observations, without USER execution', ()
     ).toEqual(['scope_refused']);
     expect(fs.existsSync(path.join(f.root, 'foreign.txt'))).toBe(false);
   });
+  test('checks the canonical existing file entry against exclusions on aliasing filesystems', async () => {
+    const f = authorityFixture();
+    const target = path.join(f.lane, 'src/protected.txt');
+    fs.writeFileSync(target, 'preserve');
+    f.spec.scope.out.push('src/protected.txt');
+    fs.writeFileSync(f.specPath, JSON.stringify(f.spec));
+    const alias = path.join(f.lane, 'src/PROTECTED.TXT');
+    let aliases = false;
+    try {
+      aliases = fs.statSync(alias).ino === fs.statSync(target).ino;
+    } catch (error) {
+      expect(error.code).toBe('ENOENT');
+    }
+    const result = await observe(f, 'printf no > src/PROTECTED.TXT');
+    expect(result.decision).toBe(aliases ? 'deny' : 'allow');
+    expect(result.reasonCodes).toEqual(aliases ? ['scope_refused'] : []);
+    expect(fs.readFileSync(target, 'utf8')).toBe('preserve');
+    expect(fs.existsSync(alias)).toBe(aliases);
+  });
+  test('holds ambiguous prospective exclusions and admits distinct ordinary ASCII names', async () => {
+    const f = authorityFixture();
+    f.spec.scope.out.push('src/protected.txt');
+    fs.writeFileSync(f.specPath, JSON.stringify(f.spec));
+    const held = await observe(f, 'printf no > src/PROTECTED.TXT');
+    expect(held.decision).toBe('unresolved');
+    expect(held.reasonCodes).toEqual(['source_unresolved']);
+    const allowed = await observe(f, 'printf yes > src/unrelated.txt');
+    expect(allowed.decision).toBe('allow');
+    expect(allowed.reasonCodes).toEqual([]);
+    expect(fs.readdirSync(path.join(f.lane, 'src'))).toEqual([]);
+  });
+  test('holds unresolved Unicode write-path equivalence while keeping UTF-8 data inert', async () => {
+    const f = authorityFixture();
+    const target = path.join(f.lane, 'src/caf\u00e9.txt');
+    fs.writeFileSync(target, 'preserve');
+    for (const command of ['printf no > src/caf\u00e9.txt', 'printf no > src/new\u00e9.txt']) {
+      const result = await observe(f, command);
+      expect(result.decision).toBe('unresolved');
+      expect(result.reasonCodes).toEqual(['source_unresolved']);
+    }
+    expect((await observe(f, 'printf "caf\u00e9" > src/data.txt')).decision).toBe('allow');
+    expect(fs.readFileSync(target, 'utf8')).toBe('preserve');
+    expect(fs.existsSync(path.join(f.lane, 'src/data.txt'))).toBe(false);
+  });
+  test('holds dangling exclusion identity and preserves explicit non-governed policy precedence', async () => {
+    const f = authorityFixture();
+    f.spec.scope.out.push('src/dangling');
+    fs.writeFileSync(f.specPath, JSON.stringify(f.spec));
+    fs.symlinkSync('not-created', path.join(f.lane, 'src/dangling'));
+    expect((await observe(f, 'printf no > src/result.txt')).reasonCodes).toEqual([
+      'source_unresolved',
+    ]);
+    const policyPath = path.join(f.caws, 'policy.yaml');
+    const policy = require('js-yaml').load(fs.readFileSync(policyPath, 'utf8'));
+    policy.non_governed_zones = ['src/**'];
+    fs.writeFileSync(policyPath, JSON.stringify(policy));
+    const result = await observe(f, 'printf yes > src/result.txt');
+    expect(result.decision).toBe('allow');
+    expect(result.reasonCodes).toEqual([]);
+    expect(fs.existsSync(path.join(f.lane, 'src/result.txt'))).toBe(false);
+  });
+  test('holds prospective case variants of reserved control names even under broad scope', async () => {
+    const f = authorityFixture();
+    f.spec.scope.in = ['**'];
+    f.spec.scope.out = [];
+    fs.writeFileSync(f.specPath, JSON.stringify(f.spec));
+    expect((await observe(f, 'printf no > .ENV')).reasonCodes).toEqual(['scope_refused']);
+    expect(fs.existsSync(path.join(f.lane, '.ENV'))).toBe(false);
+  });
   test('refuses symlink/hardlink targets, startup overrides, stale images, extra manifest and expired preparation', async () => {
     const f = authorityFixture();
     const foreign = path.join(f.root, 'foreign');

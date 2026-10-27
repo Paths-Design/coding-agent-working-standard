@@ -6,6 +6,7 @@ import { classifyInterpreterEffects } from '../shell/analysis/interpreter-effect
 import { loadParser } from '../shell/analysis/load-parser';
 import { inside, sensitiveBinding } from '../shell/analysis/policies';
 import { evaluatePath } from '../kernel';
+import { normalizeRelativePosixPath } from '../kernel/scope/normalize';
 import {
   ExecutionAuthorityUnavailable,
   readExecutionAuthority,
@@ -157,14 +158,90 @@ function utilityPath(command: string, path: string): string {
   }
   return refuse('unsupported_profile');
 }
+function excludedEntryAliases(
+  physical: string,
+  exists: boolean,
+  authority: ExecutionAuthority
+): void {
+  for (const prefix of authority.binding.spec.scope.out ?? []) {
+    const normalized = normalizeRelativePosixPath(prefix);
+    if (!normalized.ok) refuse('binding_unavailable');
+    const excluded = `${authority.pin}/${normalized.normalized.replace(/\/$/, '')}`;
+    try {
+      if (inside(physical, fs.realpathSync.native(excluded))) refuse('scope_refused');
+      continue;
+    } catch (error) {
+      if (error instanceof ExecutionAuthorityUnavailable) throw error;
+      if (!['ENOENT', 'ENOTDIR'].includes(String((error as NodeJS.ErrnoException).code)))
+        refuse('source_unresolved');
+    }
+    // An existing destination cannot alias an absent exclusion. A dangling
+    // excluded link has unresolved referent identity and cannot erase scope.
+    try {
+      if (fs.lstatSync(excluded).isSymbolicLink()) refuse('source_unresolved');
+    } catch (error) {
+      if (error instanceof ExecutionAuthorityUnavailable) throw error;
+      if (!['ENOENT', 'ENOTDIR'].includes(String((error as NodeJS.ErrnoException).code)))
+        refuse('source_unresolved');
+    }
+    if (exists) continue;
+    let excludedParent: string;
+    try {
+      excludedParent = fs.realpathSync.native(dirname(excluded));
+    } catch (error) {
+      if (['ENOENT', 'ENOTDIR'].includes(String((error as NodeJS.ErrnoException).code))) continue;
+      refuse('source_unresolved');
+    }
+    if (excludedParent !== dirname(physical)) continue;
+    const excludedLeaf = basename(excluded);
+    const leaf = basename(physical);
+    // No creation probe or guessed Unicode/filesystem case-fold algorithm.
+    // Where both entries are absent, an unresolved alias comparison stays held.
+    if (
+      /[^\x00-\x7f]/.test(excludedLeaf + leaf) ||
+      excludedLeaf.toLowerCase() === leaf.toLowerCase()
+    )
+      refuse('source_unresolved');
+  }
+}
 function writeAllowed(target: string, cwd: string, authority: ExecutionAuthority): void {
   const spelling = isAbsolute(target) ? target : `${cwd}/${target}`;
   const leaf = basename(spelling);
   if (!leaf || ['.', '..'].includes(leaf)) refuse('source_unresolved');
   const parent = fs.realpathSync.native(dirname(spelling));
-  const physical = `${parent}/${leaf}`;
+  let physical = `${parent}/${leaf}`;
+  if (!inside(physical, authority.pin)) refuse('scope_refused');
+  let exists = false;
+  let observedExisting = false;
+  try {
+    const stat = fs.lstatSync(physical, { bigint: true });
+    observedExisting = true;
+    if (!stat.isFile() || stat.nlink !== 1n) refuse('scope_refused');
+    const canonical = fs.realpathSync.native(physical);
+    const observed = fs.lstatSync(canonical, { bigint: true });
+    if (
+      !observed.isFile() ||
+      observed.nlink !== 1n ||
+      observed.dev !== stat.dev ||
+      observed.ino !== stat.ino
+    )
+      refuse('scope_refused');
+    physical = canonical;
+    exists = true;
+  } catch (error) {
+    if (error instanceof ExecutionAuthorityUnavailable) throw error;
+    if (observedExisting) refuse('source_unresolved');
+    if (
+      !(typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')
+    )
+      throw error;
+  }
   if (!inside(physical, authority.pin)) refuse('scope_refused');
   const path = relative(authority.pin, physical);
+  // Unicode equivalence varies by filesystem, including ignorable characters
+  // in reserved prefix families. Native v1 does not guess that algorithm.
+  // Root coordinates, source and read data may remain UTF-8.
+  if (/[^\x00-\x7f]/.test(path)) refuse('source_unresolved');
   // Ordinary execution never borrows the kernel's infrastructure exemption to
   // edit its own authority, native registration, Git state, or secret controls.
   if (
@@ -172,21 +249,22 @@ function writeAllowed(target: string, cwd: string, authority: ExecutionAuthority
       .split('/')
       .some(
         (part) =>
-          ['.caws', '.git', '.codex', '.claude', '.env'].includes(part) || part.startsWith('.env.')
+          ['.caws', '.git', '.codex', '.claude', '.env'].includes(part.toLowerCase()) ||
+          part.toLowerCase().startsWith('.env.')
       )
   )
     refuse('scope_refused');
-  try {
-    const stat = fs.lstatSync(physical);
-    if (!stat.isFile() || stat.nlink !== 1) refuse('scope_refused');
-  } catch (error) {
-    if (
-      !(typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')
-    )
-      throw error;
-  }
+  if (inside(physical, fs.realpathSync.native(authority.cawsDir))) refuse('scope_refused');
   if (evaluatePath(path, authority.binding, authority.policy).kind !== 'admit')
     refuse('scope_refused');
+  // Preserve the kernel's policy exemption before scope.out. This secondary
+  // check may narrow an admission; it never grants one by folding a scope.in.
+  const excludedBinding = {
+    ...authority.binding,
+    spec: { ...authority.binding.spec, scope: { ...authority.binding.spec.scope, out: [path] } },
+  };
+  if (evaluatePath(path, excludedBinding, authority.policy).kind !== 'admit')
+    excludedEntryAliases(physical, exists, authority);
 }
 
 /** Analyze actual source and finite effects without running submitted expansion.
