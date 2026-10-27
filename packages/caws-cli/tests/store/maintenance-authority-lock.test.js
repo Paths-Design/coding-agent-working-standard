@@ -407,6 +407,34 @@ test.each([
   expect(fs.existsSync(path.join(f.cawsDir, 'state.lock'))).toBe(false);
 });
 
+test.each(['existing invalid bytes', 'concurrent invalid bytes', 'concurrent different text'])(
+  'adoption preserves conflicting archive: %s',
+  (scenario) => {
+    const f = legacyFixture();
+    const original = 'id: OLD-SINGLETON\n# replacement: \uFFFD\n';
+    write(f, 'working-spec.yaml', original);
+    f.plan.changes[0].beforeSha256 = sha(original);
+    const archive = `legacy/${sha(JSON.stringify(f.plan))}/working-spec.yaml`;
+    const competing =
+      scenario === 'concurrent different text'
+        ? Buffer.from('retained original bytes\n')
+        : Buffer.concat([
+            Buffer.from('id: OLD-SINGLETON\n# replacement: '),
+            Buffer.from([0xff]),
+            Buffer.from('\n'),
+          ]);
+    if (scenario !== 'concurrent different text') expect(competing.toString('utf8')).toBe(original);
+    if (scenario === 'existing invalid bytes') write(f, archive, competing);
+    else beforeAcquire(() => write(f, archive, competing));
+    expect(() => adoptLegacyProject(f.root, f.plan, true)).toThrow(/archive/i);
+    expect(fs.readFileSync(path.join(f.cawsDir, archive))).toEqual(competing);
+    expect(read(f, 'working-spec.yaml')).toBe(original);
+    expect(fs.existsSync(path.join(f.cawsDir, `specs/${ID}.yaml`))).toBe(false);
+    expect(fs.existsSync(path.join(f.cawsDir, 'state.lock'))).toBe(false);
+    expect(fs.existsSync(path.join(f.root, '.git/caws-legacy-adoption.lock'))).toBe(false);
+  }
+);
+
 test('adoption performs its Git resolution outside the common authority lock', () => {
   const f = legacyFixture();
   const real = childProcess.execFileSync;

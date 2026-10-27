@@ -168,13 +168,16 @@ export function adoptLegacyProject(cwd: string, input: unknown, apply: boolean) 
   validateDependencies();
   const identity = sha(JSON.stringify(plan));
   const archive = `.caws/legacy/${identity}`;
-  for (const [name, original] of originals) {
-    if (original === null) continue;
-    const target = path.join(root, archive, name.slice('.caws/'.length));
-    assertMachinePath(root, target);
-    if (fs.existsSync(target) && fs.readFileSync(target, 'utf8') !== original)
-      throw new Error(`Conflicting archive: ${target}`);
-  }
+  const validateArchives = () => {
+    for (const [name, original] of originals) {
+      if (original === null) continue;
+      const target = path.join(root, archive, name.slice('.caws/'.length));
+      assertMachinePath(root, target);
+      if (fs.existsSync(target) && !fs.readFileSync(target).equals(Buffer.from(original, 'utf8')))
+        throw new Error(`Conflicting archive: ${target}`);
+    }
+  };
+  validateArchives();
   const result = {
     readOnly: !apply,
     archive,
@@ -214,6 +217,7 @@ export function adoptLegacyProject(cwd: string, input: unknown, apply: boolean) 
         )
           throw new Error(`Stale migration input: ${name}`);
       }
+      validateArchives();
       for (const [name, original] of originals)
         if (original !== null)
           write(path.join(root, archive, name.slice('.caws/'.length)), original);
