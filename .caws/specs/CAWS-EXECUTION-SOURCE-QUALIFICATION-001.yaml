@@ -1,9 +1,10 @@
 id: CAWS-EXECUTION-SOURCE-QUALIFICATION-001
 title: 'Qualify the committed execution boundary source in isolation'
 mode: chore
-lifecycle_state: draft
+lifecycle_state: active
+worktree: execution-qualification
 created_at: '2026-10-27T17:30:32.605Z'
-updated_at: '2026-10-27T17:30:59.569Z'
+updated_at: '2026-10-27T17:31:22.522Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
