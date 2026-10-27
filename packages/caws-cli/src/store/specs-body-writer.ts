@@ -68,7 +68,7 @@ import {
   patchEvidenceBlock,
   type SpecWriterOutcome,
 } from './specs-writer';
-import { readYamlSource } from './yaml-store';
+import { readYamlSourceBytes } from './yaml-store';
 
 export interface AmendSpecBodyInput {
   readonly id: string;
@@ -617,9 +617,10 @@ export function amendSpecBody(
     );
   }
 
-  const sourceResult = readYamlSource(targetPath);
+  const sourceResult = readYamlSourceBytes(targetPath);
   if (!isOk(sourceResult)) return err(sourceResult.errors);
-  const originalBytes = sourceResult.value;
+  const originalSourceBytes = sourceResult.value;
+  const originalBytes = originalSourceBytes.toString('utf8');
   const parsed = parseAndValidateSpec(originalBytes);
   if (!isOk(parsed)) {
     return err(
@@ -1047,7 +1048,7 @@ export function amendSpecBody(
       // to plan this amendment. Validate it while the authority lock is held.
       validate: () => {
         try {
-          if (fs.readFileSync(targetPath).equals(Buffer.from(originalBytes, 'utf8'))) {
+          if (fs.readFileSync(targetPath).equals(originalSourceBytes)) {
             return ok(undefined);
           }
         } catch (e) {

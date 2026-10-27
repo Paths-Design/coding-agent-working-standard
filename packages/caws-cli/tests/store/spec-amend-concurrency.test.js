@@ -15,6 +15,7 @@ const {
   recordSpecEvidence,
 } = require('../../dist/store/specs-writer');
 const { amendSpecBody } = require('../../dist/store/specs-body-writer');
+const { readYamlSource, readYamlSourceBytes } = require('../../dist/store/yaml-store');
 const { cleanupAll, makeTempRepo, git } = require('../helpers/git-repo-factory');
 
 const ID = 'AMEND-RACE-001';
@@ -175,6 +176,39 @@ describe.each(AMENDERS)('%s amendment freshness', (_kind, amend) => {
     expect(snapshot(f)).toEqual(concurrent);
   });
 
+  test('rejects replacement-character bytes substituted for an invalid source byte', () => {
+    const f = fixture();
+    fs.appendFileSync(f.target, Buffer.from([35, 32, 0x80, 10]));
+    let concurrent;
+    scheduleBeforeAcquire(() => {
+      const current = fs.readFileSync(f.target);
+      const replaced = Buffer.concat([
+        current.subarray(0, current.length - 2),
+        Buffer.from([0xef, 0xbf, 0xbd, 10]),
+      ]);
+      expect(replaced.equals(current)).toBe(false);
+      expect(replaced.toString('utf8')).toBe(current.toString('utf8'));
+      fs.writeFileSync(f.target, replaced);
+      concurrent = snapshot(f);
+    });
+    const result = amend(f);
+    expect(snapshot(f)).toEqual(concurrent);
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].rule).toBe('store.lifecycle.plan_rejected');
+  });
+
+  test('permits unchanged source bytes with a decodable YAML comment', () => {
+    const f = fixture();
+    fs.appendFileSync(f.target, Buffer.from([35, 32, 0x80, 10]));
+    const before = events(f).length;
+    success(amend(f));
+    expect(
+      events(f)
+        .slice(before)
+        .map((e) => e.event)
+    ).toEqual([_kind === 'scope' ? 'spec_scope_amended' : 'spec_body_amended']);
+  });
+
   test('permits unchanged valid bytes and audits exactly the requested change', () => {
     const f = fixture();
     const before = events(f).length;
@@ -215,4 +249,37 @@ test('retrying an acceptance edit resets the actual current evidence in the same
   expect(events(f).at(-1).data.reset_evidence).toEqual([
     { criterion_id: 'A1', previous_status: 'pass' },
   ]);
+});
+
+test('the text reader preserves decoding while the raw reader retains exact bytes', () => {
+  const f = fixture();
+  const raw = Buffer.from([35, 32, 0x80, 10]);
+  fs.writeFileSync(f.target, raw);
+  expect(readYamlSourceBytes(f.target)).toEqual({ ok: true, value: raw });
+  expect(readYamlSource(f.target)).toEqual({ ok: true, value: '# \ufffd\n' });
+});
+
+test.each([
+  ['missing', 'store.read.missing_file'],
+  ['directory', 'store.read.not_a_file'],
+  ['unreadable', 'store.read.io_failed'],
+])('both source readers retain the %s diagnostic', (kind, rule) => {
+  const f = fixture();
+  if (kind === 'missing') fs.unlinkSync(f.target);
+  if (kind === 'directory') {
+    fs.unlinkSync(f.target);
+    fs.mkdirSync(f.target);
+  }
+  if (kind === 'unreadable') {
+    const read = fs.readFileSync;
+    jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+      if (file === f.target)
+        throw Object.assign(new Error('injected read failure'), { code: 'EACCES' });
+      return read.call(fs, file, ...args);
+    });
+  }
+  const raw = readYamlSourceBytes(f.target);
+  expect(raw.ok).toBe(false);
+  expect(raw.errors[0]).toEqual(expect.objectContaining({ rule, subject: f.target }));
+  expect(readYamlSource(f.target)).toEqual(raw);
 });

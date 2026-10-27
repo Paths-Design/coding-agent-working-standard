@@ -58,7 +58,7 @@ import { repoRootFromCawsDir, storeDiagnostic, validateSpecId } from './repo-roo
 import { AGENT_CITED_LEGEND, describeVerdict, rederiveSpecEvidence } from './evidence-rederive';
 import { STORE_RULES } from './rules';
 import { insertTopLevelScalarAfter, removeTopLevelScalar, setTopLevelScalar } from './yaml-patch';
-import { readYamlSource } from './yaml-store';
+import { readYamlSource, readYamlSourceBytes } from './yaml-store';
 import { evidenceSpans } from './yaml-evidence-spans';
 
 // ─── Common types ────────────────────────────────────────────────────────
@@ -3478,9 +3478,10 @@ export function amendScopeSpec(
     );
   }
 
-  const sourceResult = readYamlSource(targetPath);
+  const sourceResult = readYamlSourceBytes(targetPath);
   if (!isOk(sourceResult)) return err(sourceResult.errors);
-  const originalBytes = sourceResult.value;
+  const originalSourceBytes = sourceResult.value;
+  const originalBytes = originalSourceBytes.toString('utf8');
   const parsed = parseAndValidateSpec(originalBytes);
   if (!isOk(parsed)) {
     return err(
@@ -3693,7 +3694,7 @@ export function amendScopeSpec(
       // Refuse stale plans rather than overwrite another writer's newer state.
       validate: () => {
         try {
-          if (fs.readFileSync(targetPath).equals(Buffer.from(originalBytes, 'utf8'))) {
+          if (fs.readFileSync(targetPath).equals(originalSourceBytes)) {
             return ok(undefined);
           }
         } catch (e) {
