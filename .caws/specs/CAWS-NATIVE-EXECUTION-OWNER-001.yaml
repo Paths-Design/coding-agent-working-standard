@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-EXECUTION-OWNER-001
 title: 'Own bounded native execution and authorizer subprocess custody'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-execution-owner
 created_at: '2026-10-27T15:33:35.667Z'
-updated_at: '2026-10-27T15:33:35.667Z'
+updated_at: '2026-10-27T15:33:45.615Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
