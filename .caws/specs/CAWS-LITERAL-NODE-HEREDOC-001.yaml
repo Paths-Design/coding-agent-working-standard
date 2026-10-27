@@ -1,0 +1,86 @@
+id: CAWS-LITERAL-NODE-HEREDOC-001
+title: 'Project literal direct Node heredoc bodies out of outer shell targets'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed bounded literal Node-first quoted heredoc shell projection, preserved raw interpreter writes and conservative lookup/unsupported forms; old-helper false targets and prefix-override bypass reproduced RED then 26-case GREEN with unchanged sentinels. A1-A4 component evidence recorded and verified for commit existence only; actual raw execution inspected separately. Installed retained43/native full-workflow and global machine configuration remain separate Root/cutover obligations.'
+created_at: '2026-10-27T22:56:23.420Z'
+updated_at: '2026-10-27T23:36:26.799Z'
+created_by_session: '01a17f02-2191-7702-8805-227272637592'
+blast_radius:
+  modules:
+    - 'Shared heredoc shell projection helper and focused Bash write guard regression suite'
+    - 'Shared hook pack version and fingerprint metadata'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh'
+    - 'packages/caws-cli/tests/hooks/bats/bash-write-guard-heredoc.bats'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'Preserve genuine session identity, actual caller context, native hooks, trust, policy and guard enforcement; introduce no guard exception.'
+  - 'Retain the original raw command for interpreter-write checks; body projection affects only outer-shell target analysis.'
+  - 'Preserve the existing helper API and all unlisted base-library bytes; no typed Bash profile fallback or shadow legacy copy. Parent owns immutable retained43 distribution and explicit base-library refresh API.'
+acceptance:
+  - id: A1
+    given: 'One complete single direct node command with a wholly single-quoted or double-quoted heredoc delimiter and matching terminator'
+    when: 'Outer-shell mutation targets are projected'
+    then: 'The literal body is excluded from outer-shell targets so JavaScript arrows and literal greater-than characters are data, while the header, delimiter, line count and before/after shell text are preserved.'
+  - id: A2
+    given: 'Unquoted or expanded heredocs, shell command substitutions, Bash or unknown commands, unsupported wrappers or options, or multiple, ambiguous or unterminated forms'
+    when: 'Heredoc projection is requested'
+    then: 'Conservative treatment is retained and no global Node safelist conceals executable shell content.'
+  - id: A3
+    given: 'Actual Node writes and hostile shell-write counterparts before or after a literal Node heredoc'
+    when: 'The guard examines the original raw command and projected outer-shell text'
+    then: 'Actual interpreter writes remain visible and shell-write and worktree policy enforcement remains effective, demonstrated by meaningful hostile counterparts.'
+  - id: A4
+    given: 'The existing helper API, current strict callers and retained43 callers plus existing cat and tee contracts'
+    when: 'The bounded helper change receives focused compatibility, regression and pack-fingerprint checks'
+    then: 'The helper API and conservative contracts remain compatible without changing unlisted library bytes, and installed native host full-workflow qualification remains a separate Root obligation.'
+observability:
+  - 'Retain native command, revision, exit and raw focused-check output; installed native host workflow qualification remains a separate Root obligation.'
+rollback:
+  - 'Revert only the bounded helper correction, focused tests and corresponding pack metadata through an ordinary governed source commit if hostile controls fail.'
+non_functional:
+  security:
+    - 'No global Node safelist; preserve conservative treatment of expansion, command substitution, unsupported or ambiguous shell forms and real interpreter writes.'
+contracts:
+  - name: 'heredoc-projection-api'
+    type: api
+    path: 'packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh'
+  - name: 'literal-node-hostile-controls'
+    type: contract-test
+    path: 'packages/caws-cli/tests/hooks/bats/bash-write-guard-heredoc.bats'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "PASS bounded component: final26 cases10-14 establish selected helper identity, first-nonblank-line complete literal single/double-quoted Node body projection with exact header/terminator/line count/leading blanks/following shell bytes; lexical view emits no fake JSON.parse or greater-than target. Earlier old-helper RED exposes those false targets. Raw inspected external output: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/heredoc-prefix-events.jsonl line118 final26 GREEN exit0, line99 prefix RED exit1. Earlier controls: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/heredoc-implementation-events.jsonl lines145 old-helper RED and182 new22 GREEN. Bats cwd: /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/literal-node-heredoc/packages/caws-cli. Root and independent peer separately inspected actual raw output and relevant assertions. --verify rederives commit existence/reachability only, never executes recorded Bats. Component only; actual retained43/native whole-workflow qualification remains separately owed by Root/Parent."
+    recorded_at: "2026-10-27T23:32:08.457Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/bash-write-guard-heredoc.bats"
+    exit_code: 0
+    commit_sha: "79d7b7b870283dbc2750f6b8be14aedd708cfb1f"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "PASS bounded component: final26 cases5-6,15-22 preserve unknown/Bash/Python, unquoted/expanded, unsupported options/wrappers, multiple/unterminated/compound forms and visible command-lookup prefixes conservatively. Harmless alias marker proves shell execution; prefix RED erases shell policy operations, corrected GREEN retains them. No global Node file-sink safelist. Raw inspected external output: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/heredoc-prefix-events.jsonl line118 final26 GREEN exit0, line99 prefix RED exit1. Earlier controls: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/heredoc-implementation-events.jsonl lines145 old-helper RED and182 new22 GREEN. Bats cwd: /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/literal-node-heredoc/packages/caws-cli. Root and independent peer separately inspected actual raw output and relevant assertions. --verify rederives commit existence/reachability only, never executes recorded Bats. Component only; actual retained43/native whole-workflow qualification remains separately owed by Root/Parent."
+    recorded_at: "2026-10-27T23:32:22.463Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/bash-write-guard-heredoc.bats"
+    exit_code: 0
+    commit_sha: "79d7b7b870283dbc2750f6b8be14aedd708cfb1f"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "PASS bounded component: final26 cases20,22-26 establish original raw valid Node write-literal visibility, current typed foreign-write refusal, unquoted substitution refusal and real outer writes/worktree Git policy before/after. Prefix worktree guard now refuses2 with sentinel unchanged; RED returned0. Hostile commands were not executed: effects were simulated only on guard allow. Raw interpreter command bytes remain separate from projection. Raw inspected external output: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/heredoc-prefix-events.jsonl line118 final26 GREEN exit0, line99 prefix RED exit1. Earlier controls: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/heredoc-implementation-events.jsonl lines145 old-helper RED and182 new22 GREEN. Bats cwd: /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/literal-node-heredoc/packages/caws-cli. Root and independent peer separately inspected actual raw output and relevant assertions. --verify rederives commit existence/reachability only, never executes recorded Bats. Component only; actual retained43/native whole-workflow qualification remains separately owed by Root/Parent."
+    recorded_at: "2026-10-27T23:32:31.856Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/bash-write-guard-heredoc.bats"
+    exit_code: 0
+    commit_sha: "79d7b7b870283dbc2750f6b8be14aedd708cfb1f"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "PASS bounded component: unchanged caws_blank_heredoc_bodies API and no new imports; source-level compatibility with current callers and retained43 helper callers, Bash3.2 strict helper checks, cat/tee regressions cases1-9 and focused 26-case suite pass. Lane-local build exit0 and pack-fingerprint Jest14 checks exit0; unpublished shared123 fingerprint recalculated. Actual installed43/native caller qualification remains separate. Corrected governance CLI12.2.0-rc.2 shipping117 doctor exits1 for restricted global PreToolUse matcher, load0; this global registration finding is not a component pass or a claim to repair newCLI45 teardown. Raw inspected external output: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/heredoc-prefix-events.jsonl line118 final26 GREEN exit0, line99 prefix RED exit1. Earlier controls: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/heredoc-implementation-events.jsonl lines145 old-helper RED and182 new22 GREEN. Bats cwd: /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/literal-node-heredoc/packages/caws-cli. Root and independent peer separately inspected actual raw output and relevant assertions. --verify rederives commit existence/reachability only, never executes recorded Bats. Component only; actual retained43/native whole-workflow qualification remains separately owed by Root/Parent."
+    recorded_at: "2026-10-27T23:32:41.435Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/bash-write-guard-heredoc.bats"
+    exit_code: 0
+    commit_sha: "79d7b7b870283dbc2750f6b8be14aedd708cfb1f"
