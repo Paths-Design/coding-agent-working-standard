@@ -57,3 +57,9 @@ contracts:
   - name: 'execution-source-proof'
     type: contract-test
     path: 'packages/caws-cli/tests/execution'
+evidence:
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "Frozen Source f650 remains tracked-identical. Full six-file attempt a20f9bb6-7a87-42f7-a1f6-da749590294b built0 and passed194 selected baseline tests/42s, instrumented6files1985mutants, then exited1 because shared canonical @stryker-mutator/core replacement-worker entry disappeared. No mutation report/per-file score verdict; criterion unavailable, not pass or a demonstrated semantic Source failure. Both owned campaigns exited naturally and released locks. Raw QA report directory and log retained with recursive/cmp equality outside lane at ~/.codex/artifacts/01a151c0-4722-76a0-9814-eb680a4be9b2/guard-source-qualification/f650798001903ced4a6eed4234409cf7abbbba31/qa-failed-a20f9bb6; terminal mutation-run.json SHA256c1435ae846fbbf15e7d3bd412536f1009bfba1774570086fc9d3525a07e89dac. Root awaits operator retirement of two owned dependency symlinks after installed43 guard refusal, then private physical dependencies and fresh unchanged6file80 run. No source edits/floor lowering/native qualification."
+    recorded_at: "2026-10-27T18:32:12.461Z"
+    commit_sha: f650798001903ced4a6eed4234409cf7abbbba31
