@@ -1,0 +1,35 @@
+id: CAWS-RETAINED-LIBRARY-REFRESH-001
+title: 'Explicitly refresh registered shared shell libraries in retained native generations'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-27T22:50:26.753Z'
+updated_at: '2026-10-27T22:50:26.753Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'Retained runtime installer and CLI selection'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/machine-adapters.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/adapter/native-runtime-entry.test.js'
+    - 'packages/caws-cli/tests/shell/init-plan.test.js'
+  out: []
+invariants:
+  - 'Only explicitly selected registered shared shell libraries and handlers may differ from a verified legacy base; policy and all other members remain unchanged.'
+  - 'Selection happens before publication and never retries a refused invocation with different policy.'
+acceptance:
+  - id: A1
+    given: 'a verified legacy base and reviewed native image'
+    when: 'an explicit registered shared library refresh is planned and installed alone or with a handler refresh'
+    then: 'human and JSON plans expose exact before/after hashes and modes, provenance binds all changes, unrelated base members are identical, and invalid requests preserve the selected runtime and launchers.'
+observability:
+  - 'Installer human and JSON plans plus immutable base-runtime-provenance identify named library replacements.'
+rollback:
+  - 'Use the new CLI supported rollback to select the previously verified runtime; no immutable generation is edited.'
+non_functional: {}
+contracts: []
