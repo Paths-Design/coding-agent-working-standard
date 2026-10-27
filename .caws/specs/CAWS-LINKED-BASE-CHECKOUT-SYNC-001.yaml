@@ -1,10 +1,11 @@
 id: CAWS-LINKED-BASE-CHECKOUT-SYNC-001
 title: 'Refresh actual base checkouts after compare-and-swap merge'
 mode: fix
-lifecycle_state: active
-worktree: linked-base-checkout-sync
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Safe refresh follows the observed base branch into actual linked checkouts. Final 398b65 passed build and 30 focused tests; stale local edits and late failures retain repair diagnostics. Private installed aa14 package produced six events readable by old published CLI. Does not establish Rust executor integration or installed rollback.'
 created_at: '2026-10-27T02:32:59.245Z'
-updated_at: '2026-10-27T02:33:00.596Z'
+updated_at: '2026-10-27T03:25:38.422Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
