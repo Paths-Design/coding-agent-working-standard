@@ -1,0 +1,46 @@
+id: CAWS-MAINTENANCE-AUTHORITY-LOCK-001
+title: 'Serialize initialization and migration authority writes'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-27T02:30:30.096Z'
+updated_at: '2026-10-27T02:30:30.096Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'initialization and governance migration'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/src/store/specs-migration.ts'
+    - 'packages/caws-cli/src/store/legacy-adoption.ts'
+    - 'packages/caws-cli/src/store/init-store.ts'
+    - 'packages/caws-cli/tests/store/maintenance-authority-lock.test.js'
+  out: []
+invariants:
+  - 'Authority read, validation, derivation and publication share the canonical lifecycle lock; preview remains read only.'
+  - 'Git discovery stays outside the lifecycle lock; adoption retains original bytes and does not infer completed authority.'
+acceptance:
+  - id: A1
+    given: 'another operation holds the lifecycle lock'
+    when: 'initialization or migration attempts authority publication'
+    then: 'authority bytes stay unchanged and contention is reported'
+  - id: A2
+    given: 'authority changes before lock acquisition'
+    when: 'initialization or migration acquires the lock'
+    then: 'fresh authority is rederived or a stale reviewed plan is refused without overwriting the newer state'
+  - id: A3
+    given: 'valid uncontended initialization or migration'
+    when: 'it completes or encounters a failure'
+    then: 'existing semantics and partial-failure reporting are preserved and the lock is released for the next operation'
+observability:
+  - 'Compiled-writer tests exercise held locks, competing authority and retry against exact bytes.'
+rollback:
+  - 'Revert the source and regression tests through an ordinary follow-up commit.'
+non_functional:
+  security:
+    - 'Do not let maintenance writers bypass the final execution authority fence.'
+contracts:
+  - name: 'maintenance-authority-lock'
+    type: behavior
