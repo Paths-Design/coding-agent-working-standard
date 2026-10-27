@@ -32,9 +32,13 @@ acceptance:
     when: 'safe refresh follows merge'
     then: 'unrelated edits survive and overlapping edits remain untouched with explicit stale path and repair diagnostics'
   - id: A3
-    given: 'checkout metadata cannot be observed or refresh cannot complete'
-    when: 'the merge ref has already advanced'
-    then: 'output and audit retain the landed merge and report observation or refresh uncertainty explicitly'
+    given: >-
+      checkout discovery is unavailable before ref publication or a checkout refresh
+      fails after publication
+    when: 'merge executes'
+    then: >-
+      failed discovery refuses without advancing the base; post-publication refresh
+      failure reports the landed merge and affected checkout explicitly
 observability:
   - 'Real Git store and shell tests compare branch refs index blobs working bytes and retained dirty paths.'
 rollback:
