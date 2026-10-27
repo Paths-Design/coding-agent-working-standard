@@ -26,7 +26,10 @@ acceptance:
   - id: A1
     given: 'a base branch checked out in a linked workspace'
     when: 'compare-and-swap merge succeeds'
-    then: 'its index and working files reflect the merged base and a different canonical branch remains unchanged'
+    then: >-
+      its source index and working files reflect the merged base while source
+      payload and branch identity in a different canonical checkout remain
+      unchanged; existing governance autocommits retain their contract
   - id: A2
     given: 'local edits in a base checkout'
     when: 'safe refresh follows merge'
