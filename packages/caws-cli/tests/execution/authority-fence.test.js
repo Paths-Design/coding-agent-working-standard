@@ -11,6 +11,7 @@ const {
   withLifecycleLock,
 } = require('../../dist/store/lifecycle-lock');
 const modulePath = path.resolve(__dirname, '../../dist/store/lifecycle-lock');
+const retryClock = require('../../dist/store/repo-root');
 const roots = [];
 const children = [];
 
@@ -123,17 +124,52 @@ test('an aged live holder is not stolen by another process', () => {
 test('dead aged holders recover while malformed and unknown owners fail closed', () => {
   const dir = fixture();
   const file = agedDeadLock(dir);
+  const deadPid = JSON.parse(fs.readFileSync(file, 'utf8')).pid;
+  expect(() => process.kill(-deadPid, 0)).toThrow();
   const recovered = acquire(dir);
   expect(recovered.ok).toBe(true);
   expect(JSON.parse(fs.readFileSync(file, 'utf8')).pid).toBe(process.pid);
   releaseLifecycleLock(recovered.value);
-  for (const bytes of ['not JSON', '{}', '{"pid":0}', '{"pid":"123"}']) {
+  for (const bytes of [
+    'not JSON',
+    '{}',
+    '{"pid":0}',
+    '{"pid":"123"}',
+    JSON.stringify({ pid: -deadPid }),
+  ]) {
     fs.writeFileSync(file, bytes);
     fs.utimesSync(file, new Date(0), new Date(0));
     expect(acquire(dir).ok).toBe(false);
     expect(fs.readFileSync(file, 'utf8')).toBe(bytes);
     fs.unlinkSync(file);
   }
+});
+
+test('the recovery age boundary is inclusive and defaults to thirty seconds', () => {
+  const dir = fixture();
+  const file = agedDeadLock(dir);
+  fs.utimesSync(file, new Date(1000), new Date(1000));
+  const now = jest.spyOn(Date, 'now').mockReturnValue(31000);
+  try {
+    expect(acquireLifecycleLock(dir, { retryDelayMs: 0 }).ok).toBe(false);
+    expect(fs.existsSync(file)).toBe(true);
+    now.mockReturnValue(31001);
+    const acquired = acquireLifecycleLock(dir, { retryDelayMs: 0 });
+    expect(acquired.ok).toBe(true);
+    releaseLifecycleLock(acquired.value);
+  } finally {
+    now.mockRestore();
+  }
+});
+
+test('valid metadata exactly at the byte bound still recovers', () => {
+  const dir = fixture();
+  const file = agedDeadLock(dir);
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').padEnd(4096, ' '));
+  fs.utimesSync(file, new Date(0), new Date(0));
+  const acquired = acquire(dir);
+  expect(acquired.ok).toBe(true);
+  releaseLifecycleLock(acquired.value);
 });
 
 test('a dead owner is protected until the minimum recovery age', () => {
@@ -181,6 +217,9 @@ test.each(['writeFileSync', 'fsyncSync'])(
       const result = acquire(dir);
       expect(result.ok).toBe(false);
       expect(result.errors[0].data.code).toBe('EIO');
+      expect(result.errors[0].message).toContain('Unexpected error acquiring lifecycle lock');
+      expect(result.errors[0].message).toContain('Injected lock metadata I/O failure');
+      expect(result.errors[0].subject).toBe(file);
       expect(Number.isInteger(failedFd)).toBe(true);
       expect(() => fs.fstatSync(failedFd)).toThrow();
       expect(fs.existsSync(file)).toBe(false);
@@ -201,6 +240,183 @@ test('oversized metadata cannot enter dead-owner recovery', () => {
   fs.utimesSync(file, new Date(0), new Date(0));
   expect(acquire(dir).ok).toBe(false);
   expect(fs.readFileSync(file, 'utf8')).toBe(bytes);
+});
+
+test('non-regular lock paths fail closed without blocking recovery', () => {
+  const dir = fixture();
+  const file = path.join(dir, 'state.lock');
+  const made = spawnSync('/usr/bin/mkfifo', [file], { timeout: 5000 });
+  expect(made.status).toBe(0);
+  fs.utimesSync(file, new Date(0), new Date(0));
+  const attempt = spawnSync(
+    process.execPath,
+    [
+      '-e',
+      `
+    const m = require(process.argv[1]);
+    process.stdout.write(JSON.stringify(m.acquireLifecycleLock(process.argv[2], {
+      maxAttempts: 2, retryDelayMs: 0, staleThresholdMs: 0
+    })));
+  `,
+      modulePath,
+      dir,
+    ],
+    { encoding: 'utf8', timeout: 1500, killSignal: 'SIGKILL' }
+  );
+  expect(attempt.status).toBe(0);
+  expect(JSON.parse(attempt.stdout).ok).toBe(false);
+  expect(fs.lstatSync(file).isFIFO()).toBe(true);
+  expect(fs.existsSync(`${file}.reclaim`)).toBe(false);
+});
+
+test('the default contention policy makes three attempts with delays only between them', () => {
+  const dir = fixture();
+  const holder = acquire(dir);
+  expect(holder.ok).toBe(true);
+  const file = path.join(dir, 'state.lock');
+  const open = fs.openSync;
+  const opened = [];
+  let attempts = 0;
+  const spy = jest.spyOn(fs, 'openSync').mockImplementation((target, flags, ...args) => {
+    if (target === file && flags === 'wx') attempts++;
+    const fd = open(target, flags, ...args);
+    opened.push(fd);
+    return fd;
+  });
+  const sleep = jest.spyOn(retryClock, 'sleepSyncMs').mockImplementation(() => {});
+  try {
+    const result = acquireLifecycleLock(dir);
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].subject).toBe(file);
+    expect(result.errors[0].message).toContain('after 3 attempts');
+    expect(attempts).toBe(3);
+    expect(sleep.mock.calls).toEqual([[50], [50]]);
+    expect(opened.length).toBeGreaterThan(0);
+    for (const fd of opened) expect(() => fs.fstatSync(fd)).toThrow();
+    expect(fs.fstatSync(holder.value.fd).isFile()).toBe(true);
+  } finally {
+    sleep.mockRestore();
+    spy.mockRestore();
+    releaseLifecycleLock(holder.value);
+  }
+});
+
+test('an already released handle cannot close a new descriptor for its old inode', () => {
+  const dir = fixture();
+  const first = acquire(dir);
+  expect(first.ok).toBe(true);
+  const alias = path.join(dir, 'retained-inode');
+  fs.linkSync(path.join(dir, 'state.lock'), alias);
+  releaseLifecycleLock(first.value);
+  const reused = fs.openSync(alias, 'r');
+  try {
+    expect(reused).toBe(first.value.fd);
+    releaseLifecycleLock(first.value);
+    expect(fs.fstatSync(reused).isFile()).toBe(true);
+  } finally {
+    fs.closeSync(reused);
+  }
+});
+
+test('a descriptor reused before release cannot authorize deleting the held pathname', () => {
+  const dir = fixture();
+  const held = acquire(dir);
+  expect(held.ok).toBe(true);
+  const other = path.join(dir, 'unrelated-file');
+  fs.writeFileSync(other, 'unrelated');
+  fs.closeSync(held.value.fd);
+  const reused = fs.openSync(other, 'r');
+  try {
+    expect(reused).toBe(held.value.fd);
+    releaseLifecycleLock(held.value);
+    expect(fs.fstatSync(reused).isFile()).toBe(true);
+    expect(fs.existsSync(path.join(dir, 'state.lock'))).toBe(true);
+  } finally {
+    fs.closeSync(reused);
+  }
+});
+
+test('an unavailable acquisition descriptor does not authorize unlinking its pathname', () => {
+  const dir = fixture();
+  const held = acquire(dir);
+  expect(held.ok).toBe(true);
+  fs.closeSync(held.value.fd);
+  releaseLifecycleLock(held.value);
+  expect(fs.existsSync(path.join(dir, 'state.lock'))).toBe(true);
+});
+
+test('inode equality on another device cannot authorize release', () => {
+  const dir = fixture();
+  const held = acquire(dir);
+  expect(held.ok).toBe(true);
+  const fstat = fs.fstatSync;
+  const spy = jest.spyOn(fs, 'fstatSync').mockImplementation((fd, options) => {
+    const value = fstat(fd, options);
+    return fd === held.value.fd ? { ...value, dev: value.dev + 1n } : value;
+  });
+  try {
+    releaseLifecycleLock(held.value);
+  } finally {
+    spy.mockRestore();
+  }
+  expect(fs.existsSync(path.join(dir, 'state.lock'))).toBe(true);
+  expect(fs.fstatSync(held.value.fd).isFile()).toBe(true);
+  fs.closeSync(held.value.fd);
+});
+
+test('a replacement observed during recovery is retained with its live ownership', () => {
+  const dir = fixture();
+  const file = agedDeadLock(dir);
+  const replacement = JSON.stringify({ pid: process.pid, purpose: 'replacement-live' });
+  const open = fs.openSync;
+  let replaced = false;
+  const spy = jest.spyOn(fs, 'openSync').mockImplementation((target, flags, ...args) => {
+    const fd = open(target, flags, ...args);
+    if (!replaced && target === file && (flags === 'r' || typeof flags === 'number')) {
+      replaced = true;
+      fs.unlinkSync(file);
+      fs.writeFileSync(file, replacement);
+    }
+    return fd;
+  });
+  try {
+    expect(acquire(dir).ok).toBe(false);
+    expect(replaced).toBe(true);
+    expect(fs.readFileSync(file, 'utf8')).toBe(replacement);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('a released path retries immediately while malformed ownership keeps the retry delay', () => {
+  const dir = fixture();
+  const file = agedDeadLock(dir);
+  const open = fs.openSync;
+  let released = false;
+  const spy = jest.spyOn(fs, 'openSync').mockImplementation((target, flags, ...args) => {
+    if (!released && target === file && (flags === 'r' || typeof flags === 'number')) {
+      released = true;
+      fs.unlinkSync(file);
+      throw Object.assign(new Error('Released during observation'), { code: 'ENOENT' });
+    }
+    return open(target, flags, ...args);
+  });
+  const sleep = jest.spyOn(retryClock, 'sleepSyncMs').mockImplementation(() => {});
+  try {
+    const acquired = acquireLifecycleLock(dir);
+    expect(acquired.ok).toBe(true);
+    expect(released).toBe(true);
+    expect(sleep.mock.calls).toEqual([]);
+    releaseLifecycleLock(acquired.value);
+    fs.writeFileSync(file, 'not JSON');
+    fs.utimesSync(file, new Date(0), new Date(0));
+    expect(acquireLifecycleLock(dir, { maxAttempts: 2 }).ok).toBe(false);
+    expect(sleep.mock.calls).toEqual([[50]]);
+    expect(fs.readFileSync(file, 'utf8')).toBe('not JSON');
+  } finally {
+    sleep.mockRestore();
+    spy.mockRestore();
+  }
 });
 
 test('a prior handle cannot unlink a successor or close its reused descriptor', () => {

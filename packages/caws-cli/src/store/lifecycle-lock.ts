@@ -91,7 +91,10 @@ function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolea
     reclaimIdentity = fs.fstatSync(reclaimFd, { bigint: true });
     // Re-read after becoming the sole reclaimer. A predecessor may have
     // recovered the old holder and an ordinary caller acquired its successor.
-    lockFd = fs.openSync(lockPath, 'r');
+    lockFd = fs.openSync(
+      lockPath,
+      fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | fs.constants.O_NOFOLLOW
+    );
     const stat = fs.fstatSync(lockFd, { bigint: true });
     if (!stat.isFile() || stat.size > 4096n) return false;
     if (Date.now() - Number(stat.mtimeMs) <= staleThresholdMs) return false;
@@ -171,7 +174,7 @@ export function acquireLifecycleLock(
         );
       }
       const recovered = tryRecoverStaleLock(lockPath, staleThresholdMs);
-      if (!recovered) {
+      if (!recovered && attempt + 1 < maxAttempts) {
         sleepSyncMs(retryDelayMs);
       }
     }
