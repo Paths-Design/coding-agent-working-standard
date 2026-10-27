@@ -22,6 +22,7 @@ scope:
 invariants:
   - 'A landed base ref is followed by safe refresh of every observed checkout on that base without overwriting local edits.'
   - 'Checkout discovery and refresh failures remain explicit after the durable merge; canonical compatibility fields remain readable.'
+  - 'Persisted worktree_merged payload stays compatible with the currently installed strict reader; per-checkout detail belongs in command results, failure diagnostics and retained command artifacts.'
 acceptance:
   - id: A1
     given: 'a base branch checked out in a linked workspace'
