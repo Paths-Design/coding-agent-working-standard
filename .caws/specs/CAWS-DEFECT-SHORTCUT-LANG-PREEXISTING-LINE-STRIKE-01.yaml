@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: shortcut-normalization
 created_at: '2026-10-05T08:26:31.631Z'
-updated_at: '2026-10-27T16:57:00.955Z'
+updated_at: '2026-10-27T17:34:18.879Z'
 created_by_session: '3fda9a6f-2c79-4f6a-8ee2-bcb6e0b090e1'
 blast_radius:
   modules:
@@ -24,6 +24,7 @@ scope:
     - packages/caws-cli/src/init/hook-packs/manifest-codex.ts
     - packages/caws-cli/src/runtime/session-cache-admission.ts
     - packages/caws-cli/tests/runtime/session-cache-admission.test.js
+    - packages/caws-cli/templates/hook-packs/shared/dispatch/pre_tool_use.sh
   out: []
 invariants:
   - 'A strike is charged only for content the agent authored in the tool call being judged; a line already present in the file is never charged to the editor.'
