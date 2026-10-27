@@ -1,10 +1,11 @@
 id: CAWS-RETAINED-HANDLER-REFRESH-001
 title: 'Refresh an explicitly selected packaged handler in a retained native base'
 mode: fix
-lifecycle_state: active
-worktree: retained-handler-refresh
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Explicit retained-handler refresh979d959d4/3b1405cdc: qualified immutable byte delta, source capture and provenance, CLI plans and rollback;156focusedpasses plus review finding red/green. Actual repaired scopeguard compatibility and native host/global activation remain parent cutover obligations.'
 created_at: '2026-10-27T20:15:28.846Z'
-updated_at: '2026-10-27T20:15:29.877Z'
+updated_at: '2026-10-27T20:33:17.722Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
