@@ -1,9 +1,10 @@
 id: CAWS-RETAINED-LIBRARY-REFRESH-001
 title: 'Explicitly refresh registered shared shell libraries in retained native generations'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: retained-library-refresh
 created_at: '2026-10-27T22:50:26.753Z'
-updated_at: '2026-10-27T22:50:26.753Z'
+updated_at: '2026-10-27T22:50:34.442Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
