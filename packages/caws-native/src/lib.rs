@@ -5,6 +5,7 @@ extern crate self as caws_native;
 pub mod agent_pid_cache;
 pub mod context_git;
 mod installed_generation;
+mod execution_authorizer_wire;
 pub mod invocation_project;
 pub mod monotonic_deadline;
 pub mod owned_group;
