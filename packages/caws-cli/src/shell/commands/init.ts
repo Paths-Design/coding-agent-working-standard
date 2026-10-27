@@ -169,6 +169,7 @@ export interface InitCommandOptions {
   readonly nativeImage?: string;
   readonly baseRuntimeDigest?: string;
   readonly refreshBaseHandler?: readonly string[];
+  readonly refreshBaseLibrary?: readonly string[];
   readonly entry?: 'native' | 'legacy';
   /** Override for the machine-runtime home consulted by systemSurfaceEnabled
    *  (default: CAWS_HOME env var, else ~/.caws). Callers that invoke
@@ -1109,6 +1110,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
       opts.nativeImage ||
       opts.baseRuntimeDigest ||
       opts.refreshBaseHandler !== undefined ||
+      opts.refreshBaseLibrary !== undefined ||
       opts.entry
     ) {
       err(
@@ -1147,6 +1149,8 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
         (opts.nativeImage && operation !== 'install') ||
         (opts.baseRuntimeDigest !== undefined && (operation !== 'install' || !opts.nativeImage)) ||
         (opts.refreshBaseHandler !== undefined &&
+          (operation !== 'install' || !opts.nativeImage || !opts.baseRuntimeDigest)) ||
+        (opts.refreshBaseLibrary !== undefined &&
           (operation !== 'install' || !opts.nativeImage || !opts.baseRuntimeDigest)) ||
         (opts.entry !== undefined &&
           (operation !== 'configure' || !['native', 'legacy'].includes(opts.entry)))
@@ -1253,19 +1257,28 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
         ...(opts.refreshBaseHandler !== undefined
           ? { refreshBaseHandlers: opts.refreshBaseHandler }
           : {}),
+        ...(opts.refreshBaseLibrary !== undefined
+          ? { refreshBaseLibraries: opts.refreshBaseLibrary }
+          : {}),
       };
       const result =
         operation === 'rollback' ? rollbackMachineRuntime(options) : installMachineRuntime(options);
-      const refreshDetails = (result.refreshedBaseHandlers ?? [])
-        .map(
-          (item) =>
-            `\n  handler refresh: ${item.name}\n    before: ${item.beforeSha256}\n    after: ${item.afterSha256}\n    packaged source: ${item.source.path}\n    compatibility: requires separate qualification`
+      const refreshDetails = [
+        ['handler', result.refreshedBaseHandlers],
+        ['library', result.refreshedBaseLibraries],
+      ] as const;
+      const renderedRefreshDetails = refreshDetails
+        .flatMap(([kind, items]) =>
+          (items ?? []).map(
+            (item) =>
+              `\n  ${kind} refresh: ${item.name}\n    before: ${item.beforeSha256}\n    after: ${item.afterSha256}\n    packaged source: ${item.source.path}\n    source mode: ${item.source.mode.toString(8)}\n    installed mode: ${item.installedMode.toString(8)}\n    compatibility: requires separate qualification`
+          )
         )
         .join('');
       out(
         opts.json
           ? JSON.stringify(result, null, 2)
-          : `${opts.plan ? 'PLAN' : 'OK'} machine adapter ${operation}: ${result.digest}\n  home: ${result.home}\n  launcher: ${result.launcher}\n  changed: ${result.changed}${refreshDetails}\n  Project adoption and harness wiring are separate explicit steps.`
+          : `${opts.plan ? 'PLAN' : 'OK'} machine adapter ${operation}: ${result.digest}\n  home: ${result.home}\n  launcher: ${result.launcher}\n  changed: ${result.changed}${renderedRefreshDetails}\n  Project adoption and harness wiring are separate explicit steps.`
       );
       return 0;
     } catch (error) {
@@ -1280,10 +1293,11 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     opts.nativeImage ||
     opts.baseRuntimeDigest !== undefined ||
     opts.refreshBaseHandler !== undefined ||
+    opts.refreshBaseLibrary !== undefined ||
     opts.entry
   ) {
     err(
-      'caws init: --projects-root requires adapters migrate; --native-config-target/--entry require adapters configure; --native-image/--base-runtime-digest/--refresh-base-handler require adapters install.'
+      'caws init: --projects-root requires adapters migrate; --native-config-target/--entry require adapters configure; --native-image/--base-runtime-digest/--refresh-base-handler/--refresh-base-library require adapters install.'
     );
     return 2;
   }

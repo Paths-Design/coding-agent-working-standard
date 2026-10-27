@@ -67,6 +67,27 @@ describe('caws init --plan', () => {
       baseRuntimeDigest: 'a'.repeat(64),
     },
     { action: 'adapters', actionArg: 'configure' },
+    { action: 'migrate', fromFile: '/absent' },
+    {},
+  ])('library refresh rejects incompatible command %j before writes', (options) => {
+    const root = makeTempRepo(),
+      before = snapshotTree(root);
+    const result = runInit(root, { ...options, refreshBaseLibrary: ['lib/heredoc.sh'] });
+    expect(result.code).toBe(2);
+    expect(result.err).toMatch(/incompatible options|refresh-base-library|reviewed-plan/);
+    expect(snapshotTree(root)).toEqual(before);
+    expect(fs.existsSync(process.env.CAWS_HOME)).toBe(false);
+  });
+  test.each([
+    { action: 'adapters', actionArg: 'install' },
+    { action: 'adapters', actionArg: 'install', nativeImage: '/absent' },
+    {
+      action: 'adapters',
+      actionArg: 'rollback',
+      nativeImage: '/absent',
+      baseRuntimeDigest: 'a'.repeat(64),
+    },
+    { action: 'adapters', actionArg: 'configure' },
     {},
   ])('handler refresh rejects incompatible command %j before writes', (options) => {
     const root = makeTempRepo();

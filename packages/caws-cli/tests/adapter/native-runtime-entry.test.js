@@ -302,6 +302,230 @@ test('explicit handler refresh changes only selected base bytes and records the 
   );
 });
 
+test.each([false, true])(
+  'library refresh preserves the base with handler refresh=%s',
+  (handler) => {
+    const home = path.join(root, 'machine');
+    const templates = path.join(__dirname, '../../templates/hook-packs');
+    const older = path.join(root, 'older-templates');
+    fs.cpSync(templates, older, { recursive: true });
+    const libraries = ['lib/heredoc.sh', 'lib/caws-state.sh'];
+    for (const name of [...libraries, 'scope-guard.sh'])
+      fs.appendFileSync(path.join(older, 'shared', name), '\n# prior packaged revision\n');
+    const base = install(home, false, { templatesRoot: older });
+    const baseRoot = path.join(home, 'lib/runtimes', base.digest);
+    const baseState = fixtureState(baseRoot);
+    const manifestBytes = fs.readFileSync(path.join(baseRoot, 'manifest.json'));
+    const manifest = JSON.parse(manifestBytes);
+    const options = {
+      baseRuntimeDigest: base.digest,
+      refreshBaseLibraries: libraries,
+      ...(handler ? { refreshBaseHandlers: ['scope-guard.sh'] } : {}),
+    };
+    const before = fixtureState(home);
+    const plan = install(home, true, { ...options, plan: true });
+    expect(fixtureState(home)).toEqual(before);
+    const expected = libraries
+      .slice()
+      .sort()
+      .map((name) => ({
+        name,
+        beforeSha256: manifest[name],
+        afterSha256: sha(fs.readFileSync(path.join(templates, 'shared', name))),
+        source: {
+          path: 'shared/' + name,
+          mode: fs.statSync(path.join(templates, 'shared', name)).mode & 0o7777,
+        },
+        installedMode: 0o755,
+      }));
+    expect(plan.refreshedBaseLibraries).toEqual(expected);
+    const result = install(home, true, options);
+    expect(result.digest).toBe(plan.digest);
+    expect(result.refreshedBaseLibraries).toEqual(expected);
+    const selected = path.join(home, 'lib/runtimes', result.digest);
+    const replacements = [...expected, ...(plan.refreshedBaseHandlers || [])].sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+    const actual = verifyRuntime(home, result.digest);
+    for (const [name, hash] of Object.entries(manifest)) {
+      const replacement = replacements.find((item) => item.name === name);
+      expect(actual[name]).toBe(replacement ? replacement.afterSha256 : hash);
+      expect(fs.readFileSync(path.join(selected, name))).toEqual(
+        fs.readFileSync(path.join(replacement ? path.join(templates, 'shared') : baseRoot, name))
+      );
+    }
+    expect(
+      JSON.parse(fs.readFileSync(path.join(selected, 'base-runtime-provenance.json')))
+    ).toEqual({
+      schema: 'caws.runtime.base-provenance.v2',
+      digest: base.digest,
+      manifest: manifestBytes.toString(),
+      replacements,
+      compatibility: 'requires_separate_qualification',
+    });
+    for (const name of libraries)
+      expect(fs.statSync(path.join(selected, name)).mode & 0o7777).toBe(0o755);
+    expect(fixtureState(baseRoot)).toEqual(baseState);
+    expect(rollbackMachineRuntime({ home, templatesRoot: templates }).digest).toBe(base.digest);
+    expect(install(home, true, options).digest).toBe(result.digest);
+    const args = [
+      path.join(dist, 'index.js'),
+      'init',
+      'adapters',
+      'install',
+      '--plan',
+      '--base-runtime-digest',
+      base.digest,
+      '--native-image',
+      path.join(root, 'native-image.json'),
+      '--refresh-base-library',
+      libraries[0],
+      '--refresh-base-library',
+      libraries[1],
+      ...(handler ? ['--refresh-base-handler', 'scope-guard.sh'] : []),
+    ];
+    const cliBefore = fixtureState(home);
+    for (const jsonOutput of [true, false]) {
+      const output = require('node:child_process').spawnSync(
+        process.execPath,
+        [...args, ...(jsonOutput ? ['--json'] : [])],
+        { env: { ...process.env, CAWS_HOME: home }, encoding: 'utf8' }
+      );
+      expect(output.status).toBe(0);
+      if (jsonOutput) {
+        expect(JSON.parse(output.stdout).digest).toBe(result.digest);
+        expect(JSON.parse(output.stdout).refreshedBaseLibraries).toEqual(expected);
+      } else
+        for (const item of expected) {
+          expect(output.stdout).toContain('library refresh: ' + item.name);
+          expect(output.stdout).toContain('before: ' + item.beforeSha256);
+          expect(output.stdout).toContain('after: ' + item.afterSha256);
+          expect(output.stdout).toContain('packaged source: ' + item.source.path);
+          expect(output.stdout).toContain('source mode: ' + item.source.mode.toString(8));
+          expect(output.stdout).toContain('installed mode: 755');
+        }
+    }
+    expect(fixtureState(home)).toEqual(cliBefore);
+  }
+);
+
+test.each([
+  ['duplicate', ['lib/heredoc.sh', 'lib/heredoc.sh']],
+  ['empty', []],
+  ['escape', ['lib/../scope-guard.sh']],
+  ['absolute', ['/lib/heredoc.sh']],
+  ['handler', ['scope-guard.sh']],
+  ['dispatcher', ['dispatch/pre_tool_use.sh']],
+  ['policy', ['system-policy.json']],
+  ['unknown', ['lib/not-registered.sh']],
+  ['nested', ['lib/nested/heredoc.sh']],
+])('library refresh rejects %s without changing installed state', (_kind, refreshBaseLibraries) => {
+  const home = path.join(root, 'machine');
+  const base = install(home, false);
+  const before = fixtureState(home);
+  expect(() =>
+    install(home, true, { baseRuntimeDigest: base.digest, refreshBaseLibraries })
+  ).toThrow(/refresh/i);
+  expect(fixtureState(home)).toEqual(before);
+});
+
+test.each(['symlink', 'hardlink', 'mode', 'missing', 'changed during capture'])(
+  'library refresh rejects %s before publication',
+  (kind) => {
+    const home = path.join(root, 'machine');
+    const templates = path.join(root, 'templates');
+    fs.cpSync(path.join(__dirname, '../../templates/hook-packs'), templates, { recursive: true });
+    const base = install(home, false, { templatesRoot: templates });
+    const member = path.join(templates, 'shared/lib/heredoc.sh');
+    const ino = fs.statSync(member).ino;
+    if (kind === 'symlink' || kind === 'hardlink') {
+      const saved = path.join(root, 'library-source');
+      fs.renameSync(member, saved);
+      if (kind === 'symlink') fs.symlinkSync(saved, member);
+      else fs.linkSync(saved, member);
+    }
+    if (kind === 'mode') fs.chmodSync(member, 0o666);
+    if (kind === 'missing') fs.unlinkSync(member);
+    const before = fixtureState(home),
+      original = fs.readFileSync;
+    let changed = false;
+    const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+      const bytes = original(file, ...args);
+      if (
+        kind === 'changed during capture' &&
+        !changed &&
+        typeof file === 'number' &&
+        fs.fstatSync(file).ino === ino
+      ) {
+        changed = true;
+        fs.appendFileSync(member, '\n# concurrent change\n');
+      }
+      return bytes;
+    });
+    try {
+      expect(() =>
+        install(home, true, {
+          templatesRoot: templates,
+          baseRuntimeDigest: base.digest,
+          refreshBaseLibraries: ['lib/heredoc.sh'],
+        })
+      ).toThrow();
+    } finally {
+      spy.mockRestore();
+    }
+    if (kind === 'changed during capture') expect(changed).toBe(true);
+    expect(fixtureState(home)).toEqual(before);
+  }
+);
+
+test.each(['absent from base', 'unregistered but present'])(
+  'library refresh refuses a verified base member %s',
+  (kind) => {
+    const home = path.join(root, 'machine');
+    const base = install(home, false);
+    const priorRoot = path.join(home, 'lib/runtimes', base.digest);
+    const manifest = JSON.parse(fs.readFileSync(path.join(priorRoot, 'manifest.json')));
+    const name = kind === 'absent from base' ? 'lib/heredoc.sh' : 'lib/not-registered.sh';
+    if (kind === 'absent from base') {
+      fs.unlinkSync(path.join(priorRoot, name));
+      delete manifest[name];
+    } else {
+      const bytes = '#!/bin/sh\n# unregistered fixture library\n';
+      fs.writeFileSync(path.join(priorRoot, name), bytes, { mode: 0o755 });
+      manifest[name] = sha(bytes);
+    }
+    const bytes = JSON.stringify(manifest),
+      digest = sha(bytes);
+    fs.writeFileSync(path.join(priorRoot, 'manifest.json'), bytes);
+    fs.renameSync(priorRoot, path.join(home, 'lib/runtimes', digest));
+    fs.writeFileSync(
+      path.join(home, 'state/adapter-runtime.json'),
+      JSON.stringify({ version: 1, digest, previous_digest: null })
+    );
+    expect(verifyRuntime(home, digest)).toEqual(manifest);
+    const before = fixtureState(home);
+    expect(() =>
+      install(home, true, {
+        baseRuntimeDigest: digest,
+        refreshBaseLibraries: [name],
+      })
+    ).toThrow(/existing registered packaged base library/);
+    expect(fixtureState(home)).toEqual(before);
+  }
+);
+
+test('library refresh requires explicit base and native inputs before creating a home', () => {
+  const home = path.join(root, 'absent-home');
+  for (const options of [{}, { nativeImage: '/absent' }, { baseRuntimeDigest: 'a'.repeat(64) }])
+    expect(() =>
+      installMachineRuntime({ home, ...options, refreshBaseLibraries: ['lib/heredoc.sh'] })
+    ).toThrow(/refresh/i);
+  expect(() => rollbackMachineRuntime({ home, refreshBaseLibraries: ['lib/heredoc.sh'] })).toThrow(
+    /only valid/
+  );
+  expect(fs.existsSync(home)).toBe(false);
+});
+
 test.each([
   ['duplicate', ['scope-guard.sh', 'scope-guard.sh']],
   ['empty', []],
