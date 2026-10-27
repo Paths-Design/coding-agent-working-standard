@@ -1,9 +1,11 @@
 id: CAWS-SPARSE-SCOPE-ENFORCEMENT-001
 title: 'Enforce canonical scope authority in sparse linked checkouts'
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed canonical sparse scope authority and complete native patch target component behavior, established by retained OLD199 RED and corrected 48-case Codex-adapter/simulated-effect GREEN. Corrected A1-A4 typed citations verify source commit existence/reachability only; actual raw execution and relevant assertions inspected separately by Root and independent peer. Installed-native qualification and global adoption remain separate under cutover owner.'
 created_at: '2026-10-27T20:09:31.298Z'
-updated_at: '2026-10-27T22:07:00.958Z'
+updated_at: '2026-10-27T22:09:46.333Z'
 created_by_session: '01a17efa-5ae7-79f1-9981-66151c4a7631'
 blast_radius:
   modules:
