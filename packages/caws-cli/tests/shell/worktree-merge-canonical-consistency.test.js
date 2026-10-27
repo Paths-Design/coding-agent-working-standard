@@ -147,3 +147,41 @@ test('A2: --apply names a stale linked checkout rather than misidentifying the c
   expect(warning).toMatch(/would be overwritten|not uptodate/i);
   expect(warning).toContain('Preserve or commit the local changes first');
 });
+
+test.each(['close', 'merge event'])(
+  'A3: default output retains the stale linked path after %s failure',
+  (phase) => {
+    const { repo, checkout } = setup({ linked: true, dirty: true });
+    const target = path.join(repo, '.caws', phase === 'close' ? 'specs' : 'events.jsonl');
+    const priorMode = fs.statSync(target).mode & 0o777;
+    const indexBefore = git(checkout, ['write-tree']);
+    const out = [],
+      errors = [];
+    fs.chmodSync(target, phase === 'close' ? 0o555 : 0o444);
+    let code;
+    try {
+      code = runWorktreeMergeCommand({
+        cwd: checkout,
+        name: 'wt-shell-stale',
+        apply: true,
+        noClose: phase !== 'close',
+        env: { ...process.env, CAWS_SESSION_ID: SESSION_ID },
+        out: (line) => out.push(line),
+        err: (line) => errors.push(line),
+      });
+    } finally {
+      fs.chmodSync(target, priorMode);
+    }
+    expect(code).toBe(1);
+    expect(git(repo, ['show', 'main:payload.txt'])).toBe('lane');
+    expect(git(checkout, ['write-tree'])).toBe(indexBefore);
+    expect(fs.readFileSync(path.join(checkout, 'payload.txt'), 'utf8')).toBe(
+      'local uncommitted edit\n'
+    );
+    const text = errors.join('\n');
+    expect(text).toContain(checkout);
+    expect(text).toContain('STALE');
+    expect(text).toMatch(/would be overwritten|not uptodate/i);
+    expect(text).toContain(`git -C '${checkout}' read-tree -u -m `);
+  }
+);

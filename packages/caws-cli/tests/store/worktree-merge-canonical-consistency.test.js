@@ -79,12 +79,13 @@ function seedMerge(repo, name, specId) {
   return { caws, wt };
 }
 
-function merge(caws, name) {
+function merge(caws, name, options = {}) {
   return mergeWorktree(caws, {
     name,
     session: SESSION,
     sessionCandidates: CANDIDATES,
     actor: ACTOR,
+    ...options,
   });
 }
 
@@ -196,7 +197,7 @@ test('A1: an unregistered linked base checkout refreshes while the canonical bra
   expect(data.base_checkout_sync).toEqual([{ path: parent, state: 'in_sync' }]);
   expect(data.canonical_checkout_state).toBe('in_sync');
   const event = mergedEvent(caws);
-  expect(event.data.base_checkout_sync).toEqual(data.base_checkout_sync);
+  expect(event.data).not.toHaveProperty('base_checkout_sync');
   expect(validateEventBody(eventBody(event)).ok).toBe(true);
 });
 
@@ -232,7 +233,7 @@ test('A2: overlapping linked checkout edits remain byte-identical with an audita
   expect(fs.readFileSync(path.join(parent, 'payload.txt'), 'utf8')).toBe('lane\n');
   expect(git(parent, ['status', '--short', '--', 'payload.txt'])).toBe('');
   const event = mergedEvent(caws);
-  expect(event.data.base_checkout_sync).toEqual(data.base_checkout_sync);
+  expect(event.data).not.toHaveProperty('base_checkout_sync');
   expect(validateEventBody(eventBody(event)).ok).toBe(true);
 });
 
@@ -342,7 +343,7 @@ test.each([
       sync_error: expect.stringMatching(expectedError),
       repair_command: expect.stringContaining('read-tree -u -m'),
     });
-    expect(mergedEvent(caws).data.base_checkout_sync).toEqual(data.base_checkout_sync);
+    expect(mergedEvent(caws).data).not.toHaveProperty('base_checkout_sync');
   }
 );
 
@@ -370,7 +371,7 @@ test('CAS contention retries discovery and preserves the eventual linked checkou
   expect(fs.readFileSync(path.join(parent, 'payload.txt'), 'utf8')).toBe('lane\n');
 });
 
-test('the additive checkout payload validates while legacy events and strict nested shapes remain supported', () => {
+test('the persisted merge payload preserves the strict installed-reader contract', () => {
   const body = {
     event: 'worktree_merged',
     ts: '2026-10-26T12:00:00.000Z',
@@ -380,7 +381,7 @@ test('the additive checkout payload validates while legacy events and strict nes
   const validate = (entry) =>
     validateEventBody({ ...body, data: { ...body.data, base_checkout_sync: [entry] } });
   expect(validateEventBody(body).ok).toBe(true);
-  expect(validate({ path: '/actual checkout', state: 'in_sync' }).ok).toBe(true);
+  expect(validate({ path: '/actual checkout', state: 'in_sync' }).ok).toBe(false);
   expect(
     validate({
       path: '/actual checkout',
@@ -388,7 +389,7 @@ test('the additive checkout payload validates while legacy events and strict nes
       sync_error: 'refused',
       repair_command: 'git -C /actual read-tree -u -m old new',
     }).ok
-  ).toBe(true);
+  ).toBe(false);
   expect(validate({ state: 'in_sync' }).ok).toBe(false);
   expect(validate({ path: '/actual checkout', state: 'unknown' }).ok).toBe(false);
   expect(validate({ path: '/actual checkout', state: 'stale' }).ok).toBe(false);
@@ -397,3 +398,40 @@ test('the additive checkout payload validates while legacy events and strict nes
   ).toBe(false);
   expect(validate({ path: '/actual checkout', state: 'in_sync', extra: true }).ok).toBe(false);
 });
+
+test.each(['close', 'merge event'])(
+  'A3: stale linked checkout observations survive a later %s failure',
+  (phase) => {
+    const repo = mkRepo('caws-linked-partial-');
+    const { caws, wt } = seedMerge(repo, 'wt-linked-partial', 'LINKED-PARTIAL-001');
+    const parent = linkedBase(repo);
+    const indexBefore = git(parent, ['write-tree']);
+    fs.writeFileSync(path.join(parent, 'payload.txt'), 'preserved linked edit\n');
+    const target = path.join(caws, phase === 'close' ? 'specs' : 'events.jsonl');
+    const priorMode = fs.statSync(target).mode & 0o777;
+    fs.chmodSync(target, phase === 'close' ? 0o555 : 0o444);
+    let result;
+    try {
+      result = merge(caws, 'wt-linked-partial', { noClose: phase !== 'close' });
+    } finally {
+      fs.chmodSync(target, priorMode);
+    }
+    expect(result.ok).toBe(false);
+    expect(git(repo, ['show', 'main:payload.txt'])).toBe('lane');
+    expect(git(parent, ['write-tree'])).toBe(indexBefore);
+    expect(fs.readFileSync(path.join(parent, 'payload.txt'), 'utf8')).toBe(
+      'preserved linked edit\n'
+    );
+    expect(fs.existsSync(wt)).toBe(true);
+    expect(mergedEvent(caws)).toBeUndefined();
+    const diagnostic = result.errors[0];
+    expect(diagnostic.data.base_checkout_sync[0]).toEqual({
+      path: parent,
+      state: 'stale',
+      sync_error: expect.stringMatching(/would be overwritten|not uptodate/i),
+      repair_command: expect.stringContaining('read-tree -u -m'),
+    });
+    expect(diagnostic.narrowRepair).toContain(parent);
+    expect(diagnostic.narrowRepair).toContain(diagnostic.data.base_checkout_sync[0].repair_command);
+  }
+);

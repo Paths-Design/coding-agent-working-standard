@@ -2924,12 +2924,49 @@ export function mergeWorktree(
     );
   }
   const mergeCommit = casOutcome.mergeCommit;
+  // A later lifecycle failure cannot undo the ref or erase the checkout
+  // observation. Keep it in diagnostics even when no merge event is appended.
+  const attachCheckoutState = (diagnostic: Diagnostic): Diagnostic => {
+    const stale = casOutcome.baseCheckoutSync
+      .filter((checkout) => checkout.state === 'stale')
+      .map(
+        (checkout) =>
+          `Base checkout is STALE: ${checkout.path}\n` +
+          `  Safe refresh failed: ${checkout.sync_error}\n` +
+          `  Preserve local edits and inspect HEAD before retrying:\n    ${checkout.repair_command}`
+      );
+    // Preserve the established diagnostic shape when checkout refresh worked.
+    // Only failed refreshes need additional state and recovery instructions.
+    if (stale.length === 0) return diagnostic;
+    return {
+      ...diagnostic,
+      data: {
+        ...diagnostic.data,
+        merge_commit: mergeCommit,
+        base_checkout_sync: casOutcome.baseCheckoutSync,
+        canonical_checkout_state: casOutcome.canonicalCheckoutState,
+      },
+      ...(stale.length > 0
+        ? {
+            narrowRepair: [
+              diagnostic.narrowRepair,
+              `Merge commit ${mergeCommit} already advanced ${baseBranch}.`,
+              ...stale,
+            ]
+              .filter(Boolean)
+              .join('\n'),
+          }
+        : {}),
+    };
+  };
   if (!/^[0-9a-f]{7,40}$/.test(mergeCommit)) {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_WRITE_FAILED,
-        `Unexpected merge commit shape from git: ${mergeCommit}`,
-        { subject: input.name }
+      attachCheckoutState(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_WRITE_FAILED,
+          `Unexpected merge commit shape from git: ${mergeCommit}`,
+          { subject: input.name }
+        )
       )
     );
   }
@@ -2962,7 +2999,7 @@ export function mergeWorktree(
   // disk. loadSpecOrError re-reads through the canonical parser.
   const preCloseState = loadSpecOrError(cawsDir, specId);
   if (!isOk(preCloseState)) {
-    return err(preCloseState.errors);
+    return err(preCloseState.errors.map(attachCheckoutState));
   }
   const specWasAlreadyClosed = preCloseState.value.lifecycleState === 'closed';
 
@@ -3007,29 +3044,31 @@ export function mergeWorktree(
 
   if (!isOk(closeResult)) {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Merge succeeded (commit ${mergeCommit}) but spec close failed. The bound spec remains active.`,
-        {
-          subject: input.name,
-          // CAWS-DEFECT-MERGE-SPLIT-STATE-RECOVERY-01: the recovery lives in
-          // narrowRepair, which renders unconditionally. It used to sit in
-          // `data`, which renderDiagnostics prints ONLY under --data — so an
-          // operator hitting this was told what broke and nothing about what to
-          // do, at the exact moment three surfaces had come apart.
-          narrowRepair: splitStateRepair({
-            name: input.name,
-            specId,
-            mergeCommit,
-            baseBranch,
-            worktreeDestroyed: false,
-          }),
-          data: {
-            merge_commit: mergeCommit,
-            spec_id: specId,
-            close_errors: closeResult.errors.map((d) => d.message),
-          },
-        }
+      attachCheckoutState(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+          `Merge succeeded (commit ${mergeCommit}) but spec close failed. The bound spec remains active.`,
+          {
+            subject: input.name,
+            // CAWS-DEFECT-MERGE-SPLIT-STATE-RECOVERY-01: the recovery lives in
+            // narrowRepair, which renders unconditionally. It used to sit in
+            // `data`, which renderDiagnostics prints ONLY under --data — so an
+            // operator hitting this was told what broke and nothing about what to
+            // do, at the exact moment three surfaces had come apart.
+            narrowRepair: splitStateRepair({
+              name: input.name,
+              specId,
+              mergeCommit,
+              baseBranch,
+              worktreeDestroyed: false,
+            }),
+            data: {
+              merge_commit: mergeCommit,
+              spec_id: specId,
+              close_errors: closeResult.errors.map((d) => d.message),
+            },
+          }
+        )
       )
     );
   }
@@ -3044,28 +3083,30 @@ export function mergeWorktree(
   // genuinely closed on disk, just by an earlier close.)
   if (closeResult.value.kind !== 'success') {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Merge succeeded (commit ${mergeCommit}) but spec close transaction rolled back; the bound spec remains active. Worktree has NOT been destroyed.`,
-        {
-          subject: input.name,
-          narrowRepair: splitStateRepair({
-            name: input.name,
-            specId,
-            mergeCommit,
-            baseBranch,
-            worktreeDestroyed: false,
-          }),
-          data: {
-            merge_commit: mergeCommit,
-            spec_id: specId,
-            close_outcome_kind: closeResult.value.kind,
-            close_cause:
-              closeResult.value.kind === 'partial_failure_recovered'
-                ? closeResult.value.cause
-                : undefined,
-          },
-        }
+      attachCheckoutState(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+          `Merge succeeded (commit ${mergeCommit}) but spec close transaction rolled back; the bound spec remains active. Worktree has NOT been destroyed.`,
+          {
+            subject: input.name,
+            narrowRepair: splitStateRepair({
+              name: input.name,
+              specId,
+              mergeCommit,
+              baseBranch,
+              worktreeDestroyed: false,
+            }),
+            data: {
+              merge_commit: mergeCommit,
+              spec_id: specId,
+              close_outcome_kind: closeResult.value.kind,
+              close_cause:
+                closeResult.value.kind === 'partial_failure_recovered'
+                  ? closeResult.value.cause
+                  : undefined,
+            },
+          }
+        )
       )
     );
   }
@@ -3104,7 +3145,8 @@ export function mergeWorktree(
       // checkout refresh are separate operations. Record whether the latter
       // landed so a successful merge cannot silently leave a rollback staged
       // in the canonical index.
-      base_checkout_sync: casOutcome.baseCheckoutSync,
+      // Keep this payload readable by installed strict readers. Per-checkout
+      // observations are carried by the command result and failure diagnostics.
       canonical_checkout_state: casOutcome.canonicalCheckoutState,
       ...(casOutcome.canonicalCheckoutSyncError !== undefined
         ? { canonical_checkout_sync_error: casOutcome.canonicalCheckoutSyncError }
@@ -3136,25 +3178,27 @@ export function mergeWorktree(
   );
   if (!mergedTxn.ok) {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Merge succeeded and spec_closed event appended, but worktree_merged event append failed. The worktree was not destroyed.`,
-        {
-          subject: input.name,
-          narrowRepair: splitStateRepair({
-            name: input.name,
-            specId,
-            mergeCommit,
-            baseBranch,
-            specClosed: !specLeftOpen,
-            mergedEventAppended: false,
-            worktreeDestroyed: false,
-          }),
-          data: {
-            merge_commit: mergeCommit,
-            merged_cause: mergedTxn.errors,
-          },
-        }
+      attachCheckoutState(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+          `Merge succeeded and spec_closed event appended, but worktree_merged event append failed. The worktree was not destroyed.`,
+          {
+            subject: input.name,
+            narrowRepair: splitStateRepair({
+              name: input.name,
+              specId,
+              mergeCommit,
+              baseBranch,
+              specClosed: !specLeftOpen,
+              mergedEventAppended: false,
+              worktreeDestroyed: false,
+            }),
+            data: {
+              merge_commit: mergeCommit,
+              merged_cause: mergedTxn.errors,
+            },
+          }
+        )
       )
     );
   }
@@ -3168,29 +3212,31 @@ export function mergeWorktree(
   // record that this lane's commits landed under governance. Refuse instead.
   if (mergedTxn.value.kind !== 'success') {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Merge succeeded (commit ${mergeCommit}) but worktree_merged event append rolled back; the provenance ledger is missing the merge record. Worktree has NOT been destroyed.`,
-        {
-          subject: input.name,
-          narrowRepair: splitStateRepair({
-            name: input.name,
-            specId,
-            mergeCommit,
-            baseBranch,
-            specClosed: !specLeftOpen,
-            mergedEventAppended: false,
-            worktreeDestroyed: false,
-          }),
-          data: {
-            merge_commit: mergeCommit,
-            merged_outcome_kind: mergedTxn.value.kind,
-            merged_cause:
-              mergedTxn.value.kind === 'partial_failure_recovered'
-                ? mergedTxn.value.cause
-                : undefined,
-          },
-        }
+      attachCheckoutState(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+          `Merge succeeded (commit ${mergeCommit}) but worktree_merged event append rolled back; the provenance ledger is missing the merge record. Worktree has NOT been destroyed.`,
+          {
+            subject: input.name,
+            narrowRepair: splitStateRepair({
+              name: input.name,
+              specId,
+              mergeCommit,
+              baseBranch,
+              specClosed: !specLeftOpen,
+              mergedEventAppended: false,
+              worktreeDestroyed: false,
+            }),
+            data: {
+              merge_commit: mergeCommit,
+              merged_outcome_kind: mergedTxn.value.kind,
+              merged_cause:
+                mergedTxn.value.kind === 'partial_failure_recovered'
+                  ? mergedTxn.value.cause
+                  : undefined,
+            },
+          }
+        )
       )
     );
   }
@@ -3217,25 +3263,27 @@ export function mergeWorktree(
     // The merge + close + merged event all succeeded. The destroy
     // failed. Surface as partial-failure with a manual recovery hint.
     return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `Merge succeeded but post-merge worktree destroy failed. Run caws worktree destroy ${input.name} manually.`,
-        {
-          subject: input.name,
-          narrowRepair: splitStateRepair({
-            name: input.name,
-            specId,
-            mergeCommit,
-            baseBranch,
-            specClosed: !specLeftOpen,
-            mergedEventAppended: true,
-            worktreeDestroyed: false,
-          }),
-          data: {
-            merge_commit: mergeCommit,
-            destroy_errors: destroyResult.errors.map((d) => d.message),
-          },
-        }
+      attachCheckoutState(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+          `Merge succeeded but post-merge worktree destroy failed. Run caws worktree destroy ${input.name} manually.`,
+          {
+            subject: input.name,
+            narrowRepair: splitStateRepair({
+              name: input.name,
+              specId,
+              mergeCommit,
+              baseBranch,
+              specClosed: !specLeftOpen,
+              mergedEventAppended: true,
+              worktreeDestroyed: false,
+            }),
+            data: {
+              merge_commit: mergeCommit,
+              destroy_errors: destroyResult.errors.map((d) => d.message),
+            },
+          }
+        )
       )
     );
   }
