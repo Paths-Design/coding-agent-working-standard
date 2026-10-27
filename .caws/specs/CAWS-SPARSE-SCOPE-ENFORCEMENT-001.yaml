@@ -49,3 +49,12 @@ non_functional:
 contracts:
   - name: 'sparse-checkout-scope'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "complete-targets-events.jsonl:124, Bats case 12 and committed fixture controls: genuine CLI-created sparse linked leaf has no local .caws, exact owned binding, and admits scope.in using leaf CLI cwd. Component acceptance only; cwd=/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/rooted-scope-enforcement/packages/caws-cli. Raw command/output inspected separately. Artifact and commit existence checked manually; installed --verify rejects this absolute external artifact path and would not execute the recorded Bats command. No installed native-host acceptance."
+    recorded_at: "2026-10-27T21:58:01.824Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/scope-guard.bats"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/complete-targets-events.jsonl"
+    commit_sha: eb0e884ed46cc2aa68f763c04877b0bb8d3b8bc6
