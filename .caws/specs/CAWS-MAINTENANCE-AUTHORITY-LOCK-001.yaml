@@ -51,3 +51,8 @@ evidence:
     evidence_ref: "Final f1db9b1 build plus six suites63tests actual exit0. All four maintenance apply paths refuse held lifecycle lock, preserve authority bytes and retry after release; previews remain read-only. Raw checks.json and archive-checks.json under root maintenance-authority-lock-01. No full Rust fence or installed execution claim."
     recorded_at: "2026-10-27T14:28:24.065Z"
     commit_sha: f1db9b1c9eb97f10d6789efd7766d593446da28c
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Final f1db9b1 tests exercise before-acquire registry/spec/policy/residue changes and refuse stale exact source/archive bytes including UTF8 collisions. Actual initial14RED, wrappers21pass1RED then fixed; archive3RED before final63pass. Direct source and independent committed peer followup inspected. External writers ignoring lock not fenced."
+    recorded_at: "2026-10-27T14:28:34.533Z"
+    commit_sha: f1db9b1c9eb97f10d6789efd7766d593446da28c
