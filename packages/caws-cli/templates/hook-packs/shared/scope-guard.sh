@@ -96,6 +96,22 @@ if [[ -z "$FILE_PATH" ]]; then
   exit 0
 fi
 
+# Infrastructure and authority-load failures are hard blocks, never strikes.
+# Define this before governance discovery so missing canonical state cannot
+# silently turn an adopted linked checkout into an ungoverned project.
+_scope_env_block() {
+  local msg="$1"
+  local _id="CAWS scope-guard"
+  command -v guard_identity >/dev/null 2>&1 && _id="$(guard_identity scope-guard)"
+  local _reprieve='Session-scoped escape for THIS guard (one session, expires): caws reprieve grant --current --handlers scope-guard.sh --reason "<why>" --approved-by "<approver>" --expires-at "<iso-ts>".'
+  command -v guard_reprieve_hint >/dev/null 2>&1 && _reprieve="$(guard_reprieve_hint scope-guard.sh)"
+  if command -v emit_block >/dev/null 2>&1; then
+    emit_block "$_id: $msg $_reprieve"
+  else
+    printf '%s\n' "$_id: $msg $_reprieve" >&2
+  fi
+}
+
 emit_scope_progression() {
   local detail="$1"
   # Optional 2nd arg: the bound spec id (authoritative mode). When known, the
@@ -318,6 +334,12 @@ SESSION_REPO_ROOT="$PROJECT_DIR"
 if [[ -n "$PROJECT_WORKTREE_ROOT" ]]; then
   SESSION_REPO_ROOT="${PROJECT_WORKTREE_ROOT%/.caws/worktrees/*}"
 fi
+# The retained shared library resolves Git-linked checkouts outside the stock
+# path as well. Keep PROJECT_DIR, HOOK_CWD and WORK_DIR in the leaf checkout;
+# only specification discovery and repository containment use this root.
+if declare -F resolve_canonical_dir >/dev/null 2>&1; then
+  SESSION_REPO_ROOT="$(resolve_canonical_dir "$PROJECT_DIR")"
+fi
 
 # A worktree root inferred from the target path or the hook cwd confers
 # WORK_DIR ONLY when it is a linked worktree of the repository this session
@@ -363,14 +385,29 @@ fi
 # was removed in pack v8. v11 projects only have .caws/specs/; lite-mode
 # .caws/scope.json is a v10 artifact. Consumers with a legacy
 # .caws/scope.json get a doctor finding (not a hook branch).
-if [[ -d "$WORK_DIR/.caws/specs" ]]; then
-  SPECS_BASE="$WORK_DIR"
-else
-  SPECS_BASE="$PROJECT_DIR"
-fi
+SPECS_BASE="$SESSION_REPO_ROOT"
 
-# No specs directory means no v11 governance to enforce.
+# Policy/specification and binding artifacts declare governance, including
+# damaged files and dangling links. Operational residue such as a duplication
+# cache does not adopt a project merely by creating its .caws directory.
+_scope_has_governance_marker() {
+  local root="${1:-}" marker
+  [[ -n "$root" ]] || return 1
+  for marker in policy.yaml specs worktrees.json claims/bridge.json; do
+    if [[ -e "$root/.caws/$marker" || -L "$root/.caws/$marker" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 if [[ ! -d "$SPECS_BASE/.caws/specs" ]]; then
+  if _scope_has_governance_marker "$SPECS_BASE" ||
+     _scope_has_governance_marker "$PROJECT_DIR" ||
+     _scope_has_governance_marker "${CAWS_MACHINE_POLICY_ROOT:-}"; then
+    _scope_env_block "cannot load canonical governance at '$SPECS_BASE/.caws/specs'. Scope authority is missing or invalid; restore canonical governance before editing."
+    exit 2
+  fi
   exit 0
 fi
 
@@ -440,27 +477,11 @@ done
 # Fail closed on an ENVIRONMENT fault (no CLI / no jq / unparseable diagnostic)
 # with a direct hard block, NOT the progressive-strike ramp: a missing toolchain
 # is not a scope strike, and emit_block does not depend on strike-file state.
-_scope_env_block() {
-  local msg="$1"
-  local _id="CAWS scope-guard"
-  command -v guard_identity >/dev/null 2>&1 && _id="$(guard_identity scope-guard)"
-  # Fail-closed infra blocks still name the session-scoped escape: a session
-  # wedged by missing infrastructure needs the same sanctioned off-ramp as a
-  # scope refusal, or it starts inventing one.
-  local _reprieve='Session-scoped escape for THIS guard (one session, expires): caws reprieve grant --current --handlers scope-guard.sh --reason "<why>" --approved-by "<approver>" --expires-at "<iso-ts>".'
-  command -v guard_reprieve_hint >/dev/null 2>&1 && _reprieve="$(guard_reprieve_hint scope-guard.sh)"
-  if command -v emit_block >/dev/null 2>&1; then
-    emit_block "$_id: $msg $_reprieve"
-  else
-    printf '%s\n' "$_id: $msg $_reprieve" >&2
-  fi
-}
-
 if ! command -v caws >/dev/null 2>&1; then
   # Fail closed: without the CLI we cannot evaluate scope. Refuse rather than
   # silently admit, and do NOT resurrect an inline parser.
   _scope_env_block "cannot evaluate scope — the \`caws\` CLI is not on PATH. Scope.in/scope.out cannot be enforced, so the edit is refused rather than silently admitted. Install/restore the caws CLI and retry."
-  exit 0
+  exit 2
 fi
 
 # The target lane supplies scope authority even when the harness cwd is canonical.
@@ -475,7 +496,7 @@ if ! SCOPE_JSON="$(cd "$WORK_DIR" && caws scope show "$REL_PATH" --json 2>/dev/n
    || [[ -z "$SCOPE_JSON" ]] || ! command -v jq >/dev/null 2>&1 \
    || ! printf '%s' "$SCOPE_JSON" | jq -e . >/dev/null 2>&1; then
   _scope_env_block "refused '$REL_PATH' but could not render the structured diagnostic (\`caws scope show --json\` unavailable or unparseable). The edit is refused rather than silently admitted. Diagnose: caws scope show $REL_PATH."
-  exit 0
+  exit 2
 fi
 
 _jq() { printf '%s' "$SCOPE_JSON" | jq -r "$1 // empty" 2>/dev/null; }
@@ -492,8 +513,8 @@ SC_CLAIMANTS="$(printf '%s' "$SCOPE_JSON" | jq -r '(.ambiguousClaimants // []) |
 # fall back to weaker union-mode checks (preserves the prior malformed-bound-spec
 # refusal — the kernel now surfaces it as one_sided/no_authority).
 if [[ "$SC_BINDING" == "one_sided" ]]; then
-  emit_scope_progression "Your worktree's bound spec did not load (missing or invalid YAML), so scope cannot be enforced authoritatively and the edit is refused rather than falling back to weaker union-mode checks. Fix the bound spec, then retry. Diagnose: caws scope show $REL_PATH."
-  exit 0
+  _scope_env_block "Your worktree's bound spec did not load (missing or invalid YAML), so scope cannot be enforced authoritatively and the edit is refused rather than falling back to weaker union-mode checks. Fix the bound spec, then retry. Diagnose: caws scope show $REL_PATH."
+  exit 2
 fi
 
 # More than one active spec claims this path: ambiguous authority. Surface the
@@ -510,7 +531,8 @@ if [[ "$SC_DECISION" == "reject" && "$SC_RULE" == *scope_out* ]]; then
   if [[ "$SC_MODE" == "union" ]]; then
     emit_scope_progression "This file is marked out-of-scope by pattern '${SC_PATTERN:-<unknown>}'. Mode: union (no authoritative spec bound). An unrelated spec may be blocking this edit. Diagnose: caws scope show $REL_PATH."
   else
-    emit_scope_progression "This file is marked out-of-scope by pattern '${SC_PATTERN:-<unknown>}' in spec '${SC_BOUND_SPEC:-<unknown>}'. Mode: authoritative (checking only your bound spec)."
+    emit_block "CAWS scope-guard: '$REL_PATH' is marked out-of-scope by pattern '${SC_PATTERN:-<unknown>}' in spec '${SC_BOUND_SPEC:-<unknown>}'. Mode: authoritative (checking only your bound spec). The edit is refused before any write. Diagnose: caws scope show $REL_PATH."
+    exit 2
   fi
   exit 0
 fi
