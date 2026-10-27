@@ -15,11 +15,14 @@ scope:
     - '.gitignore'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Only the managed ignore block changes; runtime custody stays local while specs, policy, and waivers remain versioned.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'The repository has a stale managed ignore block and the native runtime creates custody records'
+    when: 'The managed block is synchronized with the shipped v4 entries'
+    then: >-
+      Git ignores renderer and plan snapshot custody at the required paths,
+      authority paths remain versionable, the rest of gitignore is byte-identical,
+      and the managed block is idempotent.
 non_functional: {}
 contracts: []
