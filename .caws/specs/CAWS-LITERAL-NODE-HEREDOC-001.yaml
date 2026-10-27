@@ -76,3 +76,10 @@ evidence:
     command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/bash-write-guard-heredoc.bats"
     exit_code: 0
     commit_sha: "79d7b7b870283dbc2750f6b8be14aedd708cfb1f"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "PASS bounded component: unchanged caws_blank_heredoc_bodies API and no new imports; source-level compatibility with current callers and retained43 helper callers, Bash3.2 strict helper checks, cat/tee regressions cases1-9 and focused 26-case suite pass. Lane-local build exit0 and pack-fingerprint Jest14 checks exit0; unpublished shared123 fingerprint recalculated. Actual installed43/native caller qualification remains separate. Corrected governance CLI12.2.0-rc.2 shipping117 doctor exits1 for restricted global PreToolUse matcher, load0; this global registration finding is not a component pass or a claim to repair newCLI45 teardown. Raw inspected external output: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/heredoc-prefix-events.jsonl line118 final26 GREEN exit0, line99 prefix RED exit1. Earlier controls: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/heredoc-implementation-events.jsonl lines145 old-helper RED and182 new22 GREEN. Bats cwd: /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/literal-node-heredoc/packages/caws-cli. Root and independent peer separately inspected actual raw output and relevant assertions. --verify rederives commit existence/reachability only, never executes recorded Bats. Component only; actual retained43/native whole-workflow qualification remains separately owed by Root/Parent."
+    recorded_at: "2026-10-27T23:32:41.435Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/bash-write-guard-heredoc.bats"
+    exit_code: 0
+    commit_sha: "79d7b7b870283dbc2750f6b8be14aedd708cfb1f"
