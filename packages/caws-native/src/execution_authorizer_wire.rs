@@ -838,3 +838,334 @@ mod tests {
         assert!(!accepts(&req, &value));
     }
 }
+// Discovery returns lexical candidates only; it never produces a permit,
+// authority revision, physical EOF, child exit, or launch authority.
+const DISCOVERY_PROTOCOL: &str = "caws.execution.program-discovery.v1";
+
+/// Owns the exact draft bytes and the existing analyze request framing.
+/// No debug representation: the draft can contain private source and input.
+pub(crate) struct DiscoveryRequest {
+    request: RequestRecord,
+}
+impl DiscoveryRequest {
+    pub(crate) fn new(original_draft: Vec<u8>) -> Result<Self, WireError> {
+        let draft = crate::execution_prepared::PreparedRecord::decode(original_draft.clone())
+            .map_err(|_| WireError::Record)?;
+        if !draft.value().profile.utilities.is_empty() {
+            return Err(WireError::Record);
+        }
+        let request = RequestRecord::new(
+            Phase::Analyze,
+            draft.value().invocation_id.clone(),
+            original_draft,
+            None,
+            None,
+        )?;
+        Ok(Self { request })
+    }
+    pub(crate) fn encode(&self) -> Result<Vec<u8>, WireError> {
+        self.request.encode()
+    }
+    pub(crate) fn record_bytes(&self) -> &[u8] {
+        self.request.record_bytes()
+    }
+    /// Only call after a complete frame, real pipe EOF and exit status zero.
+    /// This function checks bytes and correlation; it cannot prove those I/O facts.
+    pub(crate) fn correlate_reply(&self, payload: &[u8]) -> Result<ProgramCandidates, WireError> {
+        if payload.is_empty() || payload.len() > REPLY_LIMIT {
+            return Err(WireError::Frame);
+        }
+        // Serde structs and enum variants otherwise accept non-object or
+        // non-string representations. Deserialize original bytes again below
+        // so duplicate fields remain an error even if Value collapsed them.
+        let shape: serde_json::Value =
+            serde_json::from_slice(payload).map_err(|_| WireError::Schema)?;
+        let object = shape.as_object().ok_or(WireError::Schema)?;
+        if object
+            .get("status")
+            .and_then(serde_json::Value::as_str)
+            .is_none()
+        {
+            return Err(WireError::Schema);
+        }
+        let reply: DiscoveryReply =
+            serde_json::from_slice(payload).map_err(|_| WireError::Schema)?;
+        if reply.protocol != DISCOVERY_PROTOCOL
+            || reply.invocation_id != self.request.envelope.invocation_id
+            || reply.execution_digest != self.request.envelope.execution_digest
+        {
+            return Err(WireError::Correlation);
+        }
+        if reply.commands.len() > 256 || reply.reason_codes.len() > 32 {
+            return Err(WireError::Schema);
+        }
+        let mut previous: Option<&[u8]> = None;
+        for command in &reply.commands {
+            let bytes = command.as_bytes();
+            if bytes.is_empty()
+                || bytes.len() > 4096
+                || bytes.contains(&0)
+                || previous.is_some_and(|prior| prior >= bytes)
+            {
+                return Err(WireError::Schema);
+            }
+            previous = Some(bytes);
+        }
+        if reply
+            .reason_codes
+            .iter()
+            .any(|reason| !REASON_CODES.contains(&reason.as_str()))
+        {
+            return Err(WireError::Schema);
+        }
+        match reply.status {
+            DiscoveryStatus::Observed if !reply.reason_codes.is_empty() => {
+                return Err(WireError::Schema);
+            }
+            DiscoveryStatus::Unresolved
+                if !reply.commands.is_empty() || reply.reason_codes.is_empty() =>
+            {
+                return Err(WireError::Schema);
+            }
+            _ => {}
+        }
+        Ok(ProgramCandidates { reply })
+    }
+}
+
+#[derive(Clone, Copy, Deserialize, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DiscoveryStatus {
+    Observed,
+    Unresolved,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DiscoveryReply {
+    protocol: String,
+    invocation_id: String,
+    execution_digest: String,
+    status: DiscoveryStatus,
+    commands: Vec<String>,
+    reason_codes: Vec<String>,
+}
+/// Validated advisory lexical spellings, not images or authority.
+pub(crate) struct ProgramCandidates {
+    reply: DiscoveryReply,
+}
+impl ProgramCandidates {
+    pub(crate) fn status(&self) -> DiscoveryStatus {
+        self.reply.status
+    }
+    pub(crate) fn commands(&self) -> &[String] {
+        &self.reply.commands
+    }
+    pub(crate) fn reason_codes(&self) -> &[String] {
+        &self.reply.reason_codes
+    }
+}
+
+#[cfg(test)]
+mod discovery_tests {
+    use super::*;
+    use serde_json::{Value, json};
+
+    fn draft() -> Vec<u8> {
+        let state = b"{}";
+        let image = json!({"path":"/bin/bash","sha256":"a".repeat(64)});
+        serde_json::to_vec_pretty(&json!({
+            "schema":"caws.execution.prepared.v1","invocationId":"invocation",
+            "association":{"kind":"codex-mcp-v1","sessionId":"session","threadId":"thread",
+                "callId":"call","callerAnchor":"/project","serverEnvironmentId":"host"},
+            "projectRoot":"/project",
+            "execution":{"executable":image,"argv":["/bin/bash","--noprofile","--norc","-c","true"],
+                "cwd":"/project","environment":[],"stdinBase64":""},
+            "profile":{"kind":"bash-clean-v1","source":"true","utilities":[]},
+            "sandbox":{"stateBase64":"e30=","stateSha256":format!("{:x}",Sha256::digest(state)),
+                "launcher":image,"environmentAnchor":"/sandbox"},
+            "limits":{"preparationDeadlineUnixMs":1900000000000u64,"jobTimeoutMs":1000,
+                "terminationGraceMs":100,"maxOutputBytes":4096}
+        }))
+        .unwrap()
+    }
+    fn request() -> DiscoveryRequest {
+        DiscoveryRequest::new(draft()).unwrap()
+    }
+    fn observed(req: &DiscoveryRequest) -> Value {
+        json!({"protocol":DISCOVERY_PROTOCOL,"invocationId":req.request.envelope.invocation_id,
+            "executionDigest":req.request.envelope.execution_digest,"status":"observed",
+            "commands":[],"reasonCodes":[]})
+    }
+    fn accepts(req: &DiscoveryRequest, value: &Value) -> bool {
+        req.correlate_reply(&serde_json::to_vec(value).unwrap())
+            .is_ok()
+    }
+    #[test]
+    fn original_draft_uses_existing_analyze_frame_and_empty_builtins_are_observed() {
+        let bytes = draft();
+        let req = DiscoveryRequest::new(bytes.clone()).unwrap();
+        assert_eq!(req.record_bytes(), bytes);
+        let frame = req.encode().unwrap();
+        let wire = RequestRecord::decode(&frame[4..]).unwrap();
+        assert_eq!(wire.record_bytes(), bytes);
+        assert!(wire.envelope.phase == Phase::Analyze);
+        assert!(wire.envelope.expected_authority_revision.as_ref().is_none());
+        assert!(wire.envelope.fence.as_ref().is_none());
+        let parsed = req
+            .correlate_reply(&serde_json::to_vec(&observed(&req)).unwrap())
+            .unwrap();
+        assert_eq!(parsed.status(), DiscoveryStatus::Observed);
+        assert!(parsed.commands().is_empty());
+        assert!(parsed.reason_codes().is_empty());
+        let mut bad: Value = serde_json::from_slice(&bytes).unwrap();
+        bad["profile"]["utilities"] = json!([{"path":"/usr/bin/cat","sha256":"a".repeat(64)}]);
+        assert!(DiscoveryRequest::new(serde_json::to_vec(&bad).unwrap()).is_err());
+    }
+    #[test]
+    fn rejects_wrong_protocol_identity_digest_and_authorizer_confusion() {
+        let req = request();
+        let base = observed(&req);
+        for (key, value) in [
+            ("protocol", json!("caws.execution.authorizer.v1")),
+            ("invocationId", json!("other")),
+            ("executionDigest", json!("0".repeat(64))),
+        ] {
+            let mut wrong = base.clone();
+            wrong[key] = value;
+            assert!(!accepts(&req, &wrong));
+        }
+        let authorizer = json!({"protocol":"caws.execution.authorizer.v1","phase":"analyze",
+            "invocationId":req.request.envelope.invocation_id,
+            "executionDigest":req.request.envelope.execution_digest,"decision":"allow",
+            "authorityRevision":"r","reasonCodes":[]});
+        assert!(!accepts(&req, &authorizer));
+        assert!(
+            req.request
+                .correlate_reply(&serde_json::to_vec(&base).unwrap())
+                .is_err()
+        );
+    }
+    #[test]
+    fn required_fields_duplicates_unknown_and_representation_are_rejected() {
+        let req = request();
+        let base = observed(&req);
+        for key in base.as_object().unwrap().keys() {
+            let mut missing = base.clone();
+            missing.as_object_mut().unwrap().remove(key);
+            assert!(!accepts(&req, &missing), "missing {key}");
+            let original = serde_json::to_string(&base).unwrap();
+            let duplicate = format!("{{{key:?}:{},{}", base[key], &original[1..]);
+            assert!(
+                req.correlate_reply(duplicate.as_bytes()).is_err(),
+                "duplicate {key}"
+            );
+        }
+        let mut extra = base.clone();
+        extra["authorityRevision"] = json!("r");
+        assert!(!accepts(&req, &extra));
+        for status in [
+            json!({"observed":null}),
+            json!(1),
+            json!(null),
+            json!("allow"),
+        ] {
+            let mut value = base.clone();
+            value["status"] = status;
+            assert!(!accepts(&req, &value));
+        }
+        let positional = json!([
+            base["protocol"],
+            base["invocationId"],
+            base["executionDigest"],
+            base["status"],
+            base["commands"],
+            base["reasonCodes"]
+        ]);
+        assert!(!accepts(&req, &positional));
+    }
+    #[test]
+    fn command_count_bytes_nul_and_utf8_order_are_semantic() {
+        let req = request();
+        let base = observed(&req);
+        for (commands, good) in [
+            (json!(["/bin/cat", "cat", "é"]), true),
+            (json!(["é", "cat"]), false),
+            (json!(["cat", "cat"]), false),
+            (json!([""]), false),
+            (json!(["a\u{0}b"]), false),
+            (json!(["a".repeat(4096)]), true),
+            (json!(["é".repeat(2048)]), true),
+            (json!(["é".repeat(2049)]), false),
+            (json!([1]), false),
+            (json!(null), false),
+        ] {
+            let mut value = base.clone();
+            value["commands"] = commands;
+            assert_eq!(accepts(&req, &value), good);
+        }
+        for (count, good) in [(256, true), (257, false)] {
+            let mut value = base.clone();
+            value["commands"] = json!((0..count).map(|i| format!("cmd{i:03}")).collect::<Vec<_>>());
+            assert_eq!(accepts(&req, &value), good);
+        }
+    }
+    #[test]
+    fn status_reasons_and_frame_limit_are_fail_closed() {
+        let req = request();
+        let mut value = observed(&req);
+        value["reasonCodes"] = json!(["source_unresolved"]);
+        assert!(!accepts(&req, &value));
+        value["status"] = json!("unresolved");
+        assert!(accepts(&req, &value));
+        let result = req
+            .correlate_reply(&serde_json::to_vec(&value).unwrap())
+            .unwrap();
+        assert_eq!(result.status(), DiscoveryStatus::Unresolved);
+        assert_eq!(result.reason_codes(), &["source_unresolved"]);
+        value["commands"] = json!(["cat"]);
+        assert!(!accepts(&req, &value));
+        value["commands"] = json!([]);
+        value["reasonCodes"] = json!([]);
+        assert!(!accepts(&req, &value));
+        value["reasonCodes"] = json!(["imaginary"]);
+        assert!(!accepts(&req, &value));
+        value["reasonCodes"] = json!(vec!["source_denied"; 33]);
+        assert!(!accepts(&req, &value));
+        for reason in [
+            "invalid_frame",
+            "invalid_record",
+            "identity_unverified",
+            "context_unresolved",
+            "unsupported_profile",
+            "source_unresolved",
+            "source_denied",
+            "binding_unavailable",
+            "foreign_owner",
+            "scope_refused",
+            "authority_changed",
+            "fence_unverified",
+            "deadline_expired",
+            "cancelled",
+            "infrastructure_unavailable",
+        ] {
+            value["reasonCodes"] = json!([reason]);
+            assert!(accepts(&req, &value), "{reason}");
+        }
+        let mut bytes = serde_json::to_vec(&observed(&req)).unwrap();
+        bytes.resize(65_536, b' ');
+        assert!(req.correlate_reply(&bytes).is_ok());
+        bytes.push(b' ');
+        assert!(matches!(req.correlate_reply(&bytes), Err(WireError::Frame)));
+        assert!(matches!(req.correlate_reply(&[]), Err(WireError::Frame)));
+        let mut decoder = FrameDecoder::reply();
+        let payload = serde_json::to_vec(&observed(&req)).unwrap();
+        let mut frame = (payload.len() as u32).to_be_bytes().to_vec();
+        frame.extend_from_slice(&payload);
+        decoder.push(&frame).unwrap();
+        decoder.push(&[0]).unwrap_err();
+        assert!(
+            decoder.finish().is_err(),
+            "trailing byte must not yield a reply"
+        );
+    }
+}
