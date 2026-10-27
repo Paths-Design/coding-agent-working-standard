@@ -50,6 +50,8 @@ const {
   createWorktree,
   bindWorktreeRepair,
   destroyWorktree,
+  pruneWorktree,
+  untrackWorktree,
   mergeWorktree,
 } = require('../../dist/store/worktrees-writer');
 const { initProject } = require('../../dist/store/init-store');
@@ -553,25 +555,12 @@ describe('destroyWorktree — inject on worktree_destroyed [classify: external-h
       destroyWorktree(caws, { name: 'wt-d', session: SESSION, sessionCandidates: CANDIDATES })
     );
 
-    // OBSERVED POSTURE (recorded, not idealized): destroyWorktree performs the
-    // EXTERNAL git-worktree removal BEFORE the event append. So when the event
-    // is injected-to-fail, the txn rolls back the CONTROL-PLANE writes (registry
-    // entry removed cleanly, no worktree_destroyed event) but the external
-    // filesystem removal already happened and is NOT un-done. The writer returns
-    // partial_failure_recovered — which is truthful about the GOVERNANCE state
-    // but the worktree dir is permanently gone.
-    expect(result.ok).toBe(true);
-    expect(result.value.kind).toBe('partial_failure_recovered');
-    // EXTERNAL-HALF-STATE: the git worktree dir is gone (external destruction is
-    // irreversible) even though the destroy "recovered". This is the residue a
-    // later repair slice must reconcile; the harness records it, does not fix it.
+    // Control-plane rollback does not reverse the physical Git removal.
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((d) => d.message).join(' ')).toMatch(/worktree|physical/i);
     expect(fs.existsSync(path.join(caws, 'worktrees', 'wt-d'))).toBe(false);
-    // Control-plane is internally consistent: registry no longer lists wt-d AND
-    // no worktree_destroyed event landed — so governance state is coherent (the
-    // half-state is purely external).
     const reg = JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8'));
-    const map = reg.worktrees ?? reg;
-    expect('wt-d' in map).toBe(false);
+    expect(reg['wt-d']).toBeDefined();
     expect(readEventsRaw(caws).map((e) => e.event)).not.toContain('worktree_destroyed');
     // Audit integrity holds.
     expect(chainIsVerifiable(caws).ok).toBe(true);
@@ -1029,5 +1018,459 @@ describe('create registry augmentation failure', () => {
     expect(chainIsVerifiable(caws).ok).toBe(true);
     expect(fs.existsSync(path.join(caws, 'state.lock'))).toBe(false);
     expect(fs.existsSync(worktreePath)).toBe(false);
+  });
+});
+
+describe('retirement authority race and compensation', () => {
+  function fixture(op) {
+    const root = mkRepo(`retirement-${op}-`);
+    const caws = setupCaws(root);
+    seedBoundableSpec(caws, 'WT-RETIRE-001');
+    const created = createWorktree(caws, {
+      name: 'wt-retire',
+      specId: 'WT-RETIRE-001',
+      session: SESSION,
+      actor: ACTOR,
+    });
+    expect(created.ok && created.value.kind).toBe('success');
+    const wtPath = path.join(caws, 'worktrees', 'wt-retire');
+    if (op === 'prune') execFileSync('git', ['-C', root, 'worktree', 'remove', wtPath]);
+    const input = {
+      name: 'wt-retire',
+      session: SESSION,
+      sessionCandidates: CANDIDATES,
+      actor: ACTOR,
+      reason: 'fixture retirement',
+    };
+    const invoke = () =>
+      ({ destroy: destroyWorktree, prune: pruneWorktree, untrack: untrackWorktree })[op](
+        caws,
+        input
+      );
+    return { caws, root, wtPath, input, invoke };
+  }
+
+  test.each([
+    ['untrack', false, true],
+    ['destroy', true, true],
+    ['destroy', false, false],
+  ])('%s handles an absent recorded base with abandon=%s', (op, abandon, admitted) => {
+    const { caws, wtPath, input, invoke } = fixture(op);
+    const registryPath = path.join(caws, 'worktrees.json');
+    const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    registry['wt-retire'].baseBranch = 'absent-recorded-base';
+    fs.writeFileSync(registryPath, JSON.stringify(registry));
+    input.abandonUnmerged = abandon;
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    const result = invoke();
+    expect(result.ok && result.value.kind === 'success').toBe(admitted);
+    if (!admitted) expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+    expect(fs.existsSync(wtPath)).toBe(op === 'untrack' || !admitted);
+  });
+
+  test.each([
+    ['invalid JSON', '{', 'store.read.json_invalid'],
+    ['array registry', '[]', 'store.registry.not_object'],
+  ])('%s retains loader diagnostics', (_label, raw, rule) => {
+    const { caws, invoke } = fixture('untrack');
+    fs.writeFileSync(path.join(caws, 'worktrees.json'), raw);
+    const result = invoke();
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((d) => d.rule)).toContain(rule);
+  });
+
+  test.each(['destroy', 'prune', 'untrack'])(
+    '%s preserves competing owner at lock acquisition',
+    (op) => {
+      const { caws, wtPath, invoke } = fixture(op);
+      let competing;
+      beforeCreateLock((dir) => {
+        const registry = path.join(dir, 'worktrees.json');
+        const value = JSON.parse(fs.readFileSync(registry, 'utf8'));
+        value['wt-retire'].owner.session_id = 'competitor';
+        fs.writeFileSync(registry, JSON.stringify(value, null, 2) + '\n');
+        competing = createAuthorityBytes(dir, 'WT-RETIRE-001');
+      });
+      const result = invoke();
+      expect(result.ok).toBe(false);
+      expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(competing);
+      if (op !== 'prune') expect(fs.existsSync(wtPath)).toBe(true);
+    }
+  );
+
+  test.each(['destroy', 'prune', 'untrack'])(
+    '%s preserves competing spec edits at lock acquisition',
+    (op) => {
+      const { caws, wtPath, invoke } = fixture(op);
+      let competing;
+      beforeCreateLock((dir) => {
+        const spec = path.join(dir, 'specs', 'WT-RETIRE-001.yaml');
+        const source = fs.readFileSync(spec, 'utf8');
+        expect(source).toContain('payload.txt');
+        fs.writeFileSync(spec, source.replace('payload.txt', 'competing-scope.txt'));
+        competing = createAuthorityBytes(dir, 'WT-RETIRE-001');
+      });
+      const result = invoke();
+      expect(result.ok).toBe(false);
+      expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(competing);
+      if (op !== 'prune') expect(fs.existsSync(wtPath)).toBe(true);
+    }
+  );
+
+  test.each(['destroy', 'prune', 'untrack'])('%s compensates a partial registry write', (op) => {
+    const { caws, invoke } = fixture(op);
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    const registry = path.join(caws, 'worktrees.json');
+    const original = atomicWrite.writeFileAtomic;
+    let injected = false;
+    jest.spyOn(atomicWrite, 'writeFileAtomic').mockImplementation((file, bytes, options) => {
+      if (file === registry && !injected) {
+        injected = true;
+        fs.writeFileSync(file, '{partially-written');
+        return { ok: false, errors: [{ rule: 'test.partial_write', message: 'partial write' }] };
+      }
+      return original(file, bytes, options);
+    });
+    const result = invoke();
+    expect(injected).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+    expect(chainIsVerifiable(caws).ok).toBe(true);
+  });
+
+  test.each(['destroy', 'prune', 'untrack'])('%s compensates a partial spec write', (op) => {
+    const { caws, invoke } = fixture(op);
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    const spec = path.join(caws, 'specs', 'WT-RETIRE-001.yaml');
+    const original = atomicWrite.writeFileAtomic;
+    let injected = false;
+    jest.spyOn(atomicWrite, 'writeFileAtomic').mockImplementation((file, bytes, options) => {
+      if (file === spec && !injected) {
+        injected = true;
+        fs.writeFileSync(file, 'partially-written: [');
+        return {
+          ok: false,
+          errors: [{ rule: 'test.partial_write', message: 'partial spec write' }],
+        };
+      }
+      return original(file, bytes, options);
+    });
+    const result = invoke();
+    expect(injected).toBe(true);
+    // Failed file writes return an error even after compensation. Event
+    // append rollback, by contrast, can return partial_failure_recovered.
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((d) => d.rule)).toContain('store.lifecycle.write_failed');
+    if (op === 'destroy')
+      expect(result.errors.map((d) => d.rule)).toContain(
+        'store.lifecycle.partial_failure_unrecovered'
+      );
+    expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+    expect(chainIsVerifiable(caws).ok).toBe(true);
+  });
+
+  test.each(['destroy', 'prune', 'untrack'])('%s reports failed registry compensation', (op) => {
+    const { caws, invoke } = fixture(op);
+    const registry = path.join(caws, 'worktrees.json');
+    const original = atomicWrite.writeFileAtomic;
+    let attempts = 0;
+    jest.spyOn(atomicWrite, 'writeFileAtomic').mockImplementation((file, bytes, options) => {
+      if (file === registry && ++attempts <= 2) {
+        if (attempts === 1) fs.writeFileSync(file, '{partially-written');
+        return { ok: false, errors: [{ rule: 'test.partial_write', message: 'injected failure' }] };
+      }
+      return original(file, bytes, options);
+    });
+    const result = invoke();
+    expect(attempts).toBeGreaterThanOrEqual(2);
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((d) => d.rule)).toContain(
+      'store.lifecycle.partial_failure_unrecovered'
+    );
+    expect(fs.readFileSync(registry, 'utf8')).toBe('{partially-written');
+  });
+
+  test.each(['destroy', 'prune', 'untrack'])(
+    '%s refuses invalid-byte to valid-replacement ABA lookalike',
+    (op) => {
+      const { caws, wtPath, invoke } = fixture(op);
+      const spec = path.join(caws, 'specs', 'WT-RETIRE-001.yaml');
+      fs.appendFileSync(spec, Buffer.from([10, 35, 32, 0x80, 10]));
+      let competing;
+      beforeCreateLock((dir) => {
+        const original = fs.readFileSync(spec);
+        const index = original.lastIndexOf(0x80);
+        expect(index).toBeGreaterThan(-1);
+        fs.writeFileSync(
+          spec,
+          Buffer.concat([
+            original.subarray(0, index),
+            Buffer.from('\ufffd'),
+            original.subarray(index + 1),
+          ])
+        );
+        competing = createAuthorityBytes(dir, 'WT-RETIRE-001');
+      });
+      const result = invoke();
+      expect(result.ok).toBe(false);
+      expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(competing);
+      if (op !== 'prune') expect(fs.existsSync(wtPath)).toBe(true);
+    }
+  );
+
+  test.each(['destroy', 'prune', 'untrack'])(
+    '%s refuses valid-replacement to invalid-byte lookalike',
+    (op) => {
+      const { caws, wtPath, invoke } = fixture(op);
+      const spec = path.join(caws, 'specs', 'WT-RETIRE-001.yaml');
+      fs.appendFileSync(spec, '\n# \ufffd\n');
+      let competing;
+      beforeCreateLock((dir) => {
+        const original = fs.readFileSync(spec);
+        const index = original.lastIndexOf(Buffer.from('\ufffd'));
+        expect(index).toBeGreaterThan(-1);
+        fs.writeFileSync(
+          spec,
+          Buffer.concat([
+            original.subarray(0, index),
+            Buffer.from([0x80]),
+            original.subarray(index + 3),
+          ])
+        );
+        competing = createAuthorityBytes(dir, 'WT-RETIRE-001');
+      });
+      const result = invoke();
+      expect(result.ok).toBe(false);
+      expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(competing);
+      if (op !== 'prune') expect(fs.existsSync(wtPath)).toBe(true);
+    }
+  );
+
+  test.each(['destroy', 'prune', 'untrack'])(
+    '%s preserves unchanged invalid bytes in a spec comment',
+    (op) => {
+      const { caws, invoke } = fixture(op);
+      const spec = path.join(caws, 'specs', 'WT-RETIRE-001.yaml');
+      const comment = Buffer.from([10, 35, 32, 0x80, 10]);
+      fs.appendFileSync(spec, comment);
+      const result = invoke();
+      expect(result.ok && result.value.kind).toBe('success');
+      expect(fs.readFileSync(spec).includes(comment)).toBe(true);
+    }
+  );
+
+  test('destroy timeout uses bounded SIGKILL and reports indeterminate physical effects without authority writes', () => {
+    const { caws, invoke } = fixture('destroy');
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    const child = require('child_process');
+    const actual = child.execFileSync;
+    let observed;
+    jest.spyOn(child, 'execFileSync').mockImplementation((command, args, options) => {
+      if (args[0] === 'worktree' && args[1] === 'remove') {
+        observed = { command, args, options };
+        const failure = new Error('timed out');
+        failure.code = 'ETIMEDOUT';
+        throw failure;
+      }
+      return actual(command, args, options);
+    });
+    const result = invoke();
+    expect(observed).toBeDefined();
+    expect(observed.options.timeout).toBe(10000);
+    expect(observed.options.killSignal).toBe('SIGKILL');
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((d) => d.message).join(' ')).toMatch(
+      /physical effects may be incomplete/i
+    );
+    expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+    expect(chainIsVerifiable(caws).ok).toBe(true);
+  });
+
+  test('destroy second-event failure reports chained event and physical residue', () => {
+    const { caws, wtPath, invoke } = fixture('destroy');
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    const result = withFault('spec_deactivated', invoke);
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((d) => d.rule)).toContain(
+      'store.lifecycle.partial_failure_unrecovered'
+    );
+    expect(result.errors.map((d) => d.message).join(' ')).toMatch(
+      /physical removal was not reversed/i
+    );
+    const after = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    expect(after.slice(0, 2)).toEqual(before.slice(0, 2));
+    expect(fs.existsSync(wtPath)).toBe(false);
+    expect(readEventsRaw(caws).map((e) => e.event)).toContain('worktree_destroyed');
+    expect(readEventsRaw(caws).map((e) => e.event)).not.toContain('spec_deactivated');
+    expect(chainIsVerifiable(caws).ok).toBe(true);
+  });
+
+  test.each([
+    ['destroy', 'worktree_destroyed'],
+    ['prune', 'worktree_pruned'],
+    ['untrack', 'worktree_untracked'],
+  ])('%s restores exact authority on event failure', (op, event) => {
+    const { caws, wtPath, invoke } = fixture(op);
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    const result = withFault(event, invoke);
+    expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+    expect(chainIsVerifiable(caws).ok).toBe(true);
+    if (op === 'destroy') {
+      expect(result.ok).toBe(false);
+      expect(fs.existsSync(wtPath)).toBe(false);
+      expect(result.errors.map((d) => d.message).join(' ')).toMatch(/worktree|physical/i);
+    } else {
+      expect(result.ok && result.value.kind).toBe('partial_failure_recovered');
+    }
+  });
+
+  test('destroy refuses a branch advanced at the lifecycle lock seam', () => {
+    const { caws, wtPath, invoke } = fixture('destroy');
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    beforeCreateLock(() => {
+      fs.writeFileSync(path.join(wtPath, 'new-work'), 'owned');
+      execFileSync('git', ['-C', wtPath, 'add', 'new-work']);
+      execFileSync('git', ['-C', wtPath, 'commit', '-qm', 'new work']);
+    });
+    const result = invoke();
+    expect(result.ok).toBe(false);
+    expect(fs.readFileSync(path.join(wtPath, 'new-work'), 'utf8')).toBe('owned');
+    expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+  });
+
+  test.each(['destroy', 'untrack'])('%s refuses dirt appearing at the lock seam', (op) => {
+    const { caws, wtPath, invoke } = fixture(op);
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    beforeCreateLock(() => fs.writeFileSync(path.join(wtPath, 'new-work'), 'owned'));
+    const result = invoke();
+    expect(result.ok).toBe(false);
+    expect(fs.readFileSync(path.join(wtPath, 'new-work'), 'utf8')).toBe('owned');
+    expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+  });
+
+  test.each(['destroy', 'untrack'])('%s refuses checkout disappearance at the lock seam', (op) => {
+    const { caws, root, wtPath, invoke } = fixture(op);
+    const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+    beforeCreateLock(() => execFileSync('git', ['-C', root, 'worktree', 'remove', wtPath]));
+    const result = invoke();
+    expect(result.ok).toBe(false);
+    expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+  });
+
+  test.each(
+    ['destroy', 'prune', 'untrack'].flatMap((op) =>
+      ['fsync', 'partial-write'].map((failure) => [op, failure])
+    )
+  )('%s refuses recovered classification after event %s', (op, failure) => {
+    const { caws, invoke } = fixture(op);
+    const audit = path.join(caws, 'events.jsonl');
+    const before = fs.readFileSync(audit);
+    const realOpen = fs.openSync;
+    const realWrite = fs.writeFileSync;
+    const realFsync = fs.fsyncSync;
+    let eventFd;
+    let injected = false;
+    jest.spyOn(fs, 'openSync').mockImplementation((file, flags, ...rest) => {
+      const fd = realOpen(file, flags, ...rest);
+      if (file === audit && flags === 'a') eventFd = fd;
+      return fd;
+    });
+    jest.spyOn(fs, 'writeFileSync').mockImplementation((file, data, ...rest) => {
+      if (file === eventFd && failure === 'partial-write' && !injected) {
+        injected = true;
+        realWrite(file, String(data).slice(0, 12), ...rest);
+        throw Object.assign(new Error('injected partial append'), { code: 'EIO' });
+      }
+      return realWrite(file, data, ...rest);
+    });
+    jest.spyOn(fs, 'fsyncSync').mockImplementation((fd) => {
+      if (fd === eventFd && failure === 'fsync' && !injected) {
+        injected = true;
+        throw Object.assign(new Error('injected append fsync'), { code: 'EIO' });
+      }
+      return realFsync(fd);
+    });
+    const result = invoke();
+    expect(injected).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((d) => d.rule)).toContain(
+      'store.lifecycle.partial_failure_unrecovered'
+    );
+    expect(result.errors.map((d) => d.message).join(' ')).toMatch(
+      /audit changed|append outcome is ambiguous/i
+    );
+    expect(fs.readFileSync(audit).equals(before)).toBe(false);
+  });
+
+  test.each(['destroy', 'untrack'])(
+    '%s decides dirt from captured status, not a transient clean read',
+    (op) => {
+      const { caws, wtPath, invoke } = fixture(op);
+      fs.writeFileSync(path.join(wtPath, 'owned-dirt'), 'keep');
+      const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
+      const child = require('child_process');
+      const actual = child.execFileSync;
+      let statuses = 0;
+      jest.spyOn(child, 'execFileSync').mockImplementation((command, args, options) => {
+        if (args[0] === 'status' && args[1] === '--porcelain' && options.cwd === wtPath) {
+          statuses++;
+          if (statuses === 2) return '';
+        }
+        return actual(command, args, options);
+      });
+      const result = invoke();
+      expect(result.ok).toBe(false);
+      expect(statuses).toBe(1);
+      expect(fs.readFileSync(path.join(wtPath, 'owned-dirt'), 'utf8')).toBe('keep');
+      expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
+    }
+  );
+
+  test('destroy bases demotion on the captured branch tip, not a transient fork tip', () => {
+    const { caws, wtPath, input, invoke } = fixture('destroy');
+    fs.writeFileSync(path.join(wtPath, 'new-work'), 'committed');
+    execFileSync('git', ['-C', wtPath, 'add', 'new-work']);
+    execFileSync('git', ['-C', wtPath, 'commit', '-qm', 'new work']);
+    input.abandonUnmerged = true;
+    const entry = JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8'))[
+      'wt-retire'
+    ];
+    const child = require('child_process');
+    const actual = child.execFileSync;
+    let mutableTipReads = 0;
+    jest.spyOn(child, 'execFileSync').mockImplementation((command, args, options) => {
+      if (args[0] === 'rev-parse' && args[1] === entry.branch) {
+        mutableTipReads++;
+        return entry.baseSha + '\n';
+      }
+      return actual(command, args, options);
+    });
+    const result = invoke();
+    expect(result.ok && result.value.kind).toBe('success');
+    expect(mutableTipReads).toBe(0);
+    expect(fs.readFileSync(path.join(caws, 'specs', 'WT-RETIRE-001.yaml'), 'utf8')).toMatch(
+      /^lifecycle_state: active$/m
+    );
+  });
+
+  test('destroy checks ancestry of captured commit IDs, not mutable ref names', () => {
+    const { caws, invoke } = fixture('destroy');
+    const entry = JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8'))[
+      'wt-retire'
+    ];
+    const child = require('child_process');
+    const actual = child.execFileSync;
+    let ancestry;
+    jest.spyOn(child, 'execFileSync').mockImplementation((command, args, options) => {
+      if (args[0] === 'merge-base' && args[1] === '--is-ancestor') ancestry = args.slice(2);
+      return actual(command, args, options);
+    });
+    const result = invoke();
+    expect(result.ok && result.value.kind).toBe('success');
+    expect(ancestry).toHaveLength(2);
+    expect(ancestry[0]).toMatch(/^[a-f0-9]{40,64}$/);
+    expect(ancestry[1]).toMatch(/^[a-f0-9]{40,64}$/);
+    expect(ancestry).not.toContain(entry.branch);
+    expect(ancestry).not.toContain(entry.baseBranch);
   });
 });
