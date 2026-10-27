@@ -84,6 +84,7 @@ export interface CreateWorktreeInput {
   /** Optional: new branch name for the worktree. Defaults to the
    *  worktree name. */
   readonly branch?: string;
+  readonly linkNodeModules?: boolean;
   readonly session: SessionIdentity;
   readonly actor: EventBody['actor'];
   readonly now?: () => Date;
@@ -1266,7 +1267,7 @@ export function createWorktree(
       cause: txnOutcome.value.cause,
     });
   }
-  const artifactLinks = linkWorktreeArtifacts(repoRoot, wtPath);
+  const artifactLinks = linkWorktreeArtifacts(repoRoot, wtPath, input.linkNodeModules);
   const autoCommitOutcome = autoCommitTransition(
     cawsDir,
     input.specId,
