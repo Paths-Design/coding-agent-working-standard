@@ -245,7 +245,9 @@ test.each([
     const refusing = ['early-refusal', 'pointer-failure'].includes(scenario);
     const f = cacheFixture(refusing ? ['block-dangerous.sh'] : []);
     try {
-      const native = path.resolve(__dirname, '../../../caws-native/target/debug/caws-native');
+      const native =
+        process.env.CAWS_TEST_NATIVE_EXECUTABLE ||
+        path.resolve(__dirname, '../../../caws-native/target/debug/caws-native');
       const engine = path.resolve(__dirname, '../../dist/runtime/engine-entry.js');
       const payload = {
         cwd: f.repo,
@@ -951,4 +953,286 @@ test.each([
     }
   },
   20000
+);
+
+const shortcutRoutes = ['installed-bootstrap', 'native-engine-compat'];
+// Explicit native executable input makes this a real Rust consumer probe.
+// The ordinary suite still exercises both immutable adapter/engine routes.
+if (process.env.CAWS_TEST_NATIVE_EXECUTABLE) shortcutRoutes.push('rust-native-compat');
+test.each(shortcutRoutes)(
+  'Codex PostToolUse %s scans authored patch sections and reports applied edits',
+  async (route) => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'shortcut-post-')));
+    const repo = path.join(root, 'project');
+    const home = path.join(root, 'machine');
+    const put = (file, data) => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, typeof data === 'string' ? data : JSON.stringify(data));
+    };
+    const environment = {
+      ...process.env,
+      HOME: root,
+      CAWS_HOME: home,
+      CODEX_THREAD_ID: 'shortcut-test',
+      CAWS_TRAP_KILL: '0',
+      CAWS_HOOK_ADVISORY_DEDUP: '0',
+    };
+    try {
+      fs.mkdirSync(repo);
+      expect(cp.spawnSync('git', ['init', '-q'], { cwd: repo, env: environment }).status).toBe(0);
+      put(path.join(repo, '.caws/policy.yaml'), 'version: 1\n');
+      fs.mkdirSync(path.join(repo, '.caws/specs'));
+      const installed = installMachineRuntime({ home, templatesRoot: templates });
+      const runtime = path.join(home, 'lib/runtimes', installed.digest);
+      const defaults = JSON.parse(fs.readFileSync(path.join(runtime, 'system-policy.json')));
+      const policy = {
+        disabled: {
+          post_tool_use: defaults.events.post_tool_use
+            .map((entry) => entry.split(' ')[0])
+            .filter((name) => name !== 'shortcut-language-check.sh'),
+        },
+        extensions: {},
+        handlers: {},
+        libraries: {},
+      };
+      validateSystemPolicy(repo, policy, {
+        files: [...installed.files],
+        defaults: defaults.events,
+      });
+      put(path.join(home, 'surfaces/codex/settings.json'), { version: 1, enabled: true });
+      put(
+        path.join(
+          home,
+          'state/projects',
+          crypto.createHash('sha256').update(repo).digest('hex') + '.json'
+        ),
+        { version: 1, root: repo, surfaces: { codex: policy } }
+      );
+      const first = path.join(repo, 'first.js');
+      const second = path.join(repo, 'second.js');
+      put(first, '// TODO already existed\nconst x = 2;\n');
+      put(second, 'const clean = 1;\n');
+      const strikes = path.join(root, '.caws/state/sessions/shortcut-test/strikes.json');
+      let counter = 0;
+      let lastStderr = '';
+      async function runTool(toolName, toolInput, expectedExit = 0) {
+        const payload = {
+          hook_event_name: 'PostToolUse',
+          cwd: repo,
+          session_id: 'shortcut-test',
+          tool_name: toolName,
+          tool_input: toolInput,
+        };
+        if (route === 'installed-bootstrap' || route === 'rust-native-compat') {
+          const binary =
+            route === 'rust-native-compat'
+              ? process.env.CAWS_TEST_NATIVE_EXECUTABLE
+              : path.join(home, 'bin/caws-hook');
+          expect(path.isAbsolute(binary)).toBe(true);
+          const args =
+            route === 'rust-native-compat'
+              ? [
+                  'invoke',
+                  '--engine',
+                  path.resolve(__dirname, '../../dist/runtime/engine-entry.js'),
+                  '--node',
+                  process.execPath,
+                  '--surface',
+                  'codex',
+                  '--event',
+                  'post_tool_use',
+                  '--runtime-digest',
+                  installed.digest,
+                  '--timeout-ms',
+                  '15000',
+                  '--configuration',
+                  'system',
+                ]
+              : ['codex', 'post_tool_use', '--system'];
+          const result = cp.spawnSync(binary, args, {
+            cwd: repo,
+            env: environment,
+            input: JSON.stringify(payload),
+            encoding: 'utf8',
+            timeout: 15000,
+          });
+          expect(result.error).toBeUndefined();
+          lastStderr = result.stderr;
+          expect(result.status).toBe(expectedExit);
+          return result.stdout;
+        }
+        const request = {
+          schema: 'caws.runtime.request.v1',
+          id: 'shortcut-post-' + ++counter,
+          runtimeDigest: installed.digest,
+          surface: 'codex',
+          event: 'post_tool_use',
+          configuration: 'system',
+          caller: { processId: process.pid, cwd: repo, environment },
+          deadlineEpochMs: Date.now() + 15000,
+          inputJson: JSON.stringify(payload),
+          payload,
+        };
+        const invocation = await prepareRuntimeInvocation(request, new AbortController().signal);
+        expect(invocation.active).toBe(true);
+        const { nativeResult } = await invocation.dispatch();
+        await invocation.acknowledgeHandoff(true);
+        lastStderr = Buffer.from(nativeResult.stderr).toString();
+        expect(nativeResult.exitCode).toBe(expectedExit);
+        return Buffer.from(nativeResult.stdout).toString();
+      }
+      const runPatch = (command, expectedExit = 0) =>
+        runTool('apply_patch', { command }, expectedExit);
+      const patch = (lines) => ['*** Begin Patch', ...lines, '*** End Patch'].join('\n');
+      const noNewStub = patch([
+        `*** Update File: ${first}`,
+        '@@',
+        ' // TODO already existed',
+        '-const x = 1;',
+        '+const x = 2;',
+        `*** Update File: ${second}`,
+        '@@',
+        '-const clean = 0;',
+        '+const clean = 1;',
+      ]);
+      await runPatch(noNewStub);
+      expect(fs.existsSync(strikes)).toBe(false);
+      const deletion = patch([`*** Update File: ${first}`, '@@', '-const old = 1;']);
+      await runPatch(deletion);
+      expect(fs.existsSync(strikes)).toBe(false);
+      const secondFileStub = patch([
+        `*** Update File: ${first}`,
+        '@@',
+        '-a',
+        '+b',
+        `*** Update File: ${second}`,
+        '@@',
+        '+// TODO newly introduced',
+      ]);
+      for (let count = 1; count <= 3; count++) {
+        const output = await runPatch(secondFileStub, count === 3 ? 2 : 0);
+        expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(count);
+        expect(output).toContain('second.js');
+        expect(output).toMatch(/PostToolUse|already applied/i);
+        expect(output).not.toMatch(/permissionDecision"\s*:\s*"deny/i);
+        if (count === 3) expect(JSON.parse(output).decision).toBe('block');
+        else expect(JSON.parse(output).hookSpecificOutput.hookEventName).toBe('PostToolUse');
+      }
+      // Each call counts at most once, even if multiple eligible files match.
+      const runAndCount = async (command, count, named) => {
+        const output = await runPatch(command, 2);
+        expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(count);
+        if (named) expect(output).toContain(named);
+      };
+      await runAndCount(
+        patch([
+          `*** Add File: ${repo}/tests/excluded.js`,
+          '+// TODO test fixture',
+          `*** Add File: ${repo}/added.js`,
+          '+// TODO new added source',
+        ]),
+        4,
+        'added.js'
+      );
+      await runAndCount(
+        patch([
+          `*** Update File: ${first}`,
+          `*** Move to: ${repo}/moved.js`,
+          '@@',
+          '-const x = 1;',
+          '+// TODO moved source',
+        ]),
+        5,
+        'moved.js'
+      );
+      await runAndCount(
+        patch([
+          `*** Add File: ${repo}/a.js`,
+          '+// TODO one',
+          `*** Add File: ${repo}/b.js`,
+          '+// TODO two',
+        ]),
+        6,
+        'a.js'
+      );
+      // A full file deletion and malformed patch must not scan the disk fallback.
+      await runPatch(patch([`*** Delete File: ${first}`]));
+      await runPatch(`*** Begin Patch\n*** Update File: ${first}\nunknown`);
+      expect(lastStderr).toContain('authored content unavailable; no strike recorded');
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(6);
+      // Direct Edit: identical old lines, empty/deletion and missing fields never
+      // charge old content, including filenames carrying a literal LF.
+      const lfPath = path.join(repo, 'owned\nlane.js');
+      put(lfPath, '// TODO existing\n');
+      await runTool('Edit', {
+        file_path: lfPath,
+        old_string: '// TODO existing\n',
+        new_string: '// TODO existing\n',
+      });
+      await runTool('Edit', {
+        file_path: lfPath,
+        old_string: '// TODO existing\n',
+        new_string: '',
+      });
+      await runTool('Edit', { file_path: lfPath, old_string: '// TODO existing\n' });
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(6);
+      const lfOutput = await runTool(
+        'Edit',
+        {
+          file_path: lfPath,
+          old_string: '// TODO existing\n',
+          new_string: '// TODO existing\n// TODO new duplicate\n',
+        },
+        2
+      );
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(7);
+      expect(lfOutput).toContain('owned\\nlane.js');
+      // Identical old/new lines are a multiset: an excess second copy is new.
+      await runTool(
+        'Edit',
+        {
+          file_path: lfPath,
+          old_string: '// TODO repeat\n',
+          new_string: '// TODO repeat\n// TODO repeat\n',
+        },
+        2
+      );
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(8);
+      // Lexer sees surrounding unchanged block-comment context but charges only
+      // the added lowercase marker. References count the complete new fragment.
+      const contextPatch = patch([
+        `*** Update File: ${second}`,
+        '@@',
+        ' /*',
+        '+ todo implement this',
+        ' */',
+      ]);
+      const blockOutput = await runPatch(contextPatch, 2);
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(9);
+      expect(blockOutput).toContain('line 2 of the edit');
+      expect(blockOutput).toContain('todo implement this');
+      const editOutput = await runTool(
+        'Edit',
+        { file_path: second, old_string: '/*\n */', new_string: '/*\n todo implement this\n */' },
+        2
+      );
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(10);
+      expect(editOutput).toContain('line 2 of the edit');
+      // Existing lowercase marker in unchanged comment context remains uncharged.
+      await runTool('Edit', {
+        file_path: second,
+        old_string: '/*\n todo existing\n */',
+        new_string: '/*\n todo existing\n */\nconst value = 1;',
+      });
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(10);
+      // Two independent hunks do not share synthetic comment state.
+      await runPatch(patch([`*** Update File: ${second}`, '@@', ' /*', '@@', '+todo standalone']));
+      expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(10);
+      await runPatch(patch([`*** Delete File: ${first}`]));
+      expect(lastStderr).not.toContain('authored content unavailable');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  },
+  120000
 );

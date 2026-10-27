@@ -61,62 +61,133 @@ parse_hook_input || exit 0
 # shellcheck source=guard-strikes.sh
 source "$SCRIPT_DIR/guard-strikes.sh" 2>/dev/null || exit 0
 
-FILE_PATH="$HOOK_FILE_PATH"
-TOOL_NAME="$HOOK_TOOL_NAME"
-
-case "$TOOL_NAME" in
-  Write | Edit) ;;
-  *) exit 0 ;;
-esac
-
-[[ -z "$FILE_PATH" ]] && exit 0
-
-# Skip generated / vendored / build output.
-case "$FILE_PATH" in
-  */node_modules/* | */dist/* | */build/* | */coverage/* | */.next/* | */out/* | */vendor/*)
-    exit 0
-    ;;
-esac
-
-# Skip non-source artifacts: markdown/docs and lockfiles routinely contain
-# the word "placeholder"/"TODO" as prose. The hook targets code.
-case "$(basename "$FILE_PATH")" in
-  *.md | *.markdown | *.txt | *.lock | *-lock.json | package-lock.json | *.min.js | *.bundle.js | *.map)
-    exit 0
-    ;;
-esac
-
-# Test files are exempt from strikes (TODO/placeholder is routine in specs).
-case "$FILE_PATH" in
-  *.test.* | *.spec.* | */tests/* | */__tests__/* | */test/* | */fixtures/*)
-    exit 0
-    ;;
-esac
-
-# The content to scan: prefer the tool payload (works on untracked files and
-# is exactly what the agent just wrote). Write -> .content; Edit -> .new_string.
-# An Edit payload is a fragment, so its line numbers count from the fragment's
-# first line, not the file's.
-CONTENT=""
-CONTENT_IS_FRAGMENT=0
-if [[ -n "${HOOK_TOOL_INPUT_JSON:-}" ]] && command -v jq >/dev/null 2>&1; then
-  CONTENT=$(printf '%s' "$HOOK_TOOL_INPUT_JSON" | jq -r '.content // .new_string // empty' 2>/dev/null || printf '')
-  if [[ -n "$CONTENT" && "$TOOL_NAME" == Edit ]]; then
-    CONTENT_IS_FRAGMENT=1
-  fi
+# PostToolUse is notification after the mutation. Preserve the progressive
+# counter, but never tell Codex it denied an operation that already completed.
+if [[ "${CAWS_AGENT_SURFACE:-}" == codex && "${HOOK_EVENT_NAME:-}" == PostToolUse ]]; then
+  guard_emit_warning_allow() { emit_additional_context "$1 The edit was already applied." PostToolUse; }
+  guard_emit_permission_ask() { emit_additional_context "$1 The edit was already applied." PostToolUse; }
+  guard_emit_block() { emit_block "$1 The edit was already applied; further progress is blocked."; }
 fi
-# Fallback: read the file from disk if the payload had no content field.
-if [[ -z "$CONTENT" ]] && [[ -f "$FILE_PATH" ]]; then
-  CONTENT=$(cat "$FILE_PATH" 2>/dev/null || printf '')
-fi
-[[ -z "$CONTENT" ]] && exit 0
+
+# Retain new-side context for the lexer; exact-line multisets mark only excess
+# added copies as authored, without deleting context or renumbering lines. The original input remains untouched for
+# other guards. A malformed or unavailable payload is unknown, not disk content.
+# Large dispatcher payloads are read from its scoped file instead of the env.
+extract_authored() {
+  node -e '
+const fs = require("node:fs");
+const MAX = 16 * 1024 * 1024;
+function unknown() { process.stderr.write("[shortcut-language] authored content unavailable; no strike recorded\n"); process.exit(1); }
+function object(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
+function markAuthored(fragments, removed) {
+  const counts = new Map();
+  for (const line of removed) counts.set(line, (counts.get(line) || 0) + 1);
+  return fragments.map((fragment) => {
+    const authored = [];
+    fragment.forEach((row, index) => {
+      if (!row.added) return;
+      const count = counts.get(row.text) || 0;
+      if (count) counts.set(row.text, count - 1);
+      else authored.push(index + 1);
+    });
+    return { content: fragment.map((row) => row.text).join("\n"), authored };
+  });
+}
+try {
+  const chunks = []; let length = 0; const buffer = Buffer.alloc(65536);
+  for (;;) {
+    const n = fs.readSync(0, buffer, 0, buffer.length, null);
+    if (!n) break;
+    length += n; if (length > MAX) unknown();
+    chunks.push(Buffer.from(buffer.subarray(0, n)));
+  }
+  const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const tool = object(data) && Object.hasOwn(data, "tool_input") ? data.tool_input : data;
+  if (!object(tool)) unknown();
+  const name = process.env.HOOK_ORIGINAL_TOOL_NAME || process.env.HOOK_TOOL_NAME || "";
+  const rows = [];
+  if (name === "apply_patch") {
+    const command = tool.command;
+    if (typeof command !== "string" || command.includes("\0")) unknown();
+    const lines = command.split("\n");
+    if (lines.at(-1) === "") lines.pop();
+    if (lines.length < 3 || lines[0] !== "*** Begin Patch" || lines.at(-1) !== "*** End Patch") unknown();
+    let i = 1; const seen = new Set();
+    while (i < lines.length - 1) {
+      const header = lines[i];
+      const mode = ["Add", "Update", "Delete"].find((m) => header.startsWith("*** " + m + " File: "));
+      if (!mode) unknown();
+      let file = header.slice(("*** " + mode + " File: ").length);
+      if (!file || seen.has(file)) unknown();
+      seen.add(file); i++;
+      if (mode === "Update" && i < lines.length - 1 && lines[i].startsWith("*** Move to: ")) {
+        file = lines[i].slice("*** Move to: ".length);
+        if (!file) unknown(); i++;
+      }
+      const removed = []; let hunk = false;
+      const fragments = mode === "Add" ? [[]] : [];
+      while (i < lines.length - 1 && !["*** Add File: ", "*** Update File: ", "*** Delete File: "].some((x) => lines[i].startsWith(x))) {
+        const line = lines[i++];
+        if (mode === "Delete") unknown();
+        if (mode === "Update" && (line === "@@" || line.startsWith("@@ "))) {
+          hunk = true; fragments.push([]);
+        } else if (mode === "Update" && line === "*** End of File") { if (!hunk) unknown(); }
+        else if (line.startsWith("+")) {
+          if (mode === "Update" && !hunk) unknown();
+          fragments[fragments.length - 1].push({ text: line.slice(1), added: true });
+        } else if (mode === "Update" && line.startsWith("-")) {
+          if (!hunk) unknown(); removed.push(line.slice(1));
+        } else if (mode === "Update" && line.startsWith(" ")) {
+          if (!hunk) unknown();
+          fragments[fragments.length - 1].push({ text: line.slice(1), added: false });
+        } else unknown();
+      }
+      if (mode === "Update" && !hunk) unknown();
+      if (mode === "Delete") rows.push({ path: file, content: "", authored: [], fragment: true });
+      for (const fragment of markAuthored(fragments, removed))
+        rows.push({ path: file, ...fragment, fragment: mode !== "Add" });
+    }
+    if (!rows.length) unknown();
+  } else if (name === "Write" || name === "Edit") {
+    const value = tool[name === "Write" ? "content" : "new_string"];
+    const file = process.env.HOOK_FILE_PATH || "";
+    if (typeof value !== "string" || !file || value.includes("\0")) unknown();
+    let removed = [];
+    if (name === "Edit") {
+      if (typeof tool.old_string !== "string" || tool.old_string.includes("\0")) unknown();
+      removed = tool.old_string.split("\n");
+    }
+    const fragment = value.split("\n").map((text) => ({ text, added: true }));
+    const marked = markAuthored([fragment], removed)[0];
+    rows.push({ path: file, ...marked, fragment: name === "Edit" });
+  }
+  for (const row of rows) process.stdout.write(JSON.stringify(row) + "\n");
+} catch { unknown(); }
+'
+}
+
+scan_authored() {
+  local FILE_PATH="$1" CONTENT="$2" CONTENT_IS_FRAGMENT="$3"
+  [[ -z "$FILE_PATH" || -z "$CONTENT" ]] && return 0
+  case "$FILE_PATH" in
+    */node_modules/* | */dist/* | */build/* | */coverage/* | */.next/* | */out/* | */vendor/*) return 0 ;;
+  esac
+  case "$(basename "$FILE_PATH")" in
+    *.md | *.markdown | *.txt | *.lock | *-lock.json | package-lock.json | *.min.js | *.bundle.js | *.map) return 0 ;;
+  esac
+  case "$FILE_PATH" in
+    *.test.* | *.spec.* | */tests/* | */__tests__/* | */test/* | */fixtures/*) return 0 ;;
+  esac
 
 # Every candidate is a record "<line-no>\t<kind>\t<text>". CODE_RECORDS are the
 # whole content lines (kind "code"). COMMENT_RECORDS carry only the text inside
 # comments: kind "doc" for /** … */ blocks and leading-star fragments, "note"
 # for every other comment.
 TAB=$'\t'
-CODE_RECORDS=$(printf '%s\n' "$CONTENT" | awk '{ print NR "\tcode\t" $0 }')
+filter_authored() {
+  awk -F "\t" 'NR == FNR { if ($1 ~ /^[0-9]+$/) authored[$1] = 1; next } authored[$1]' "$authored_file" -
+}
+CODE_RECORDS=$(printf '%s\n' "$CONTENT" | awk '{ print NR "\tcode\t" $0 }' | filter_authored)
 
 # A lexer-lite, not a parser. It tracks /* */ and <!-- --> across lines and
 # takes the leftmost // /* <!-- # opener on each line. An opener must follow
@@ -187,7 +258,7 @@ function mask(s,   n, i, j, k, c, d) {
     delete instr
   }
 }'
-COMMENT_RECORDS=$(printf '%s\n' "$CONTENT" | awk "$_COMMENT_AWK" 2>/dev/null || true)
+COMMENT_RECORDS=$(printf '%s\n' "$CONTENT" | awk "$_COMMENT_AWK" 2>/dev/null | filter_authored || true)
 
 # Determiner / preposition words that, immediately before a keyword, mark it as
 # a REFERENCED NOUN (a description of the concept) rather than an ACTIVE marker.
@@ -279,7 +350,7 @@ strip_id_shaped() {
   sed -E -e "s/[A-Z0-9][-_]($1)/ID/g" -e "s/($1)[-_][A-Z0-9]/ID/g"
 }
 COMMENT_SCAN=$(printf '%s\n' "$COMMENT_RECORDS" | strip_id_shaped "$_MK_COMMENT")
-CODE_SCAN=$(printf '%s\n' "$CONTENT" | awk "$_STRIP_STRINGS_AWK" | awk '{ print NR "\tcode\t" $0 }' | strip_id_shaped "$_MK_CODE")
+CODE_SCAN=$(printf '%s\n' "$CONTENT" | awk "$_STRIP_STRINGS_AWK" | awk '{ print NR "\tcode\t" $0 }' | filter_authored | strip_id_shaped "$_MK_CODE")
 
 take "incomplete-work marker (TO""DO/FIX""ME/XX""X/HA""CK/TB""D)" \
   "$(first_active "$COMMENT_SCAN" -i "\\b($_MK_COMMENT)\\b")"
@@ -292,12 +363,12 @@ take "not-implemented / deferred-work language" \
   "$(first_active "$CODE_RECORDS" -i 'not implemented|implement later|coming soon')"
 take "placeholder used as stub language in a comment" "$(placeholder_hit)"
 
-[[ -z "$MATCH" ]] && exit 0
+[[ -z "$MATCH" ]] && return 0
 
 # Quote the whole source line (not just the comment fragment) so the message
 # shows where the stub sits; strip leading whitespace, cap length.
 LINE_NO="${MATCH%%"$TAB"*}"
-[[ "$LINE_NO" =~ ^[0-9]+$ ]] || exit 0
+[[ "$LINE_NO" =~ ^[0-9]+$ ]] || return 0
 LINE_TEXT=$(printf '%s\n' "$CONTENT" | sed -n "${LINE_NO}p" | sed 's/^[[:space:]]*//' | cut -c1-120)
 LINE_REF="line ${LINE_NO}"
 [[ "$CONTENT_IS_FRAGMENT" -eq 1 ]] && LINE_REF="line ${LINE_NO} of the edit"
@@ -305,7 +376,7 @@ LINE_REF="line ${LINE_NO}"
 BASE="Shortcut-language advisory in ${FILE_PATH}: ${PATTERN_DESC} — ${LINE_REF}: \"${LINE_TEXT}\". CAWS doctrine (\"No fake implementations\") asks for complete code in committed source, not TODO/placeholder stubs."
 MSG1="${BASE} (strike 1 of 3 — advisory.)"
 MSG2="${BASE} (strike 2 of 3 — please resolve before continuing.)"
-MSG3="${BASE} (strike 3 — blocked. Replace the placeholder/stub with a real implementation, or move the work to a tracked spec.)"
+MSG3="${BASE} (strike 3 — replace the placeholder/stub with a real implementation, or move the work to a tracked spec.)"
 
 guard_enforce_progressive_strikes \
   "${HOOK_SESSION_ID:-unknown}" \
@@ -313,8 +384,26 @@ guard_enforce_progressive_strikes \
   "${HOOK_CWD:-}" \
   "$MSG1" "$MSG2" "$MSG3"
 
-# guard_enforce_progressive_strikes emits the decision JSON. For strikes 1/2
-# it is an allow/ask (exit 0). For strike 3 it emits a block decision; exit 0
-# is correct for PostToolUse (the tool already ran) — the block decision in
-# the JSON is what the harness honors.
+  return 1
+}
+
+records=$(mktemp "${TMPDIR:-/tmp}/caws-shortcut-XXXXXX") || exit 0
+authored_file=$(mktemp "${TMPDIR:-/tmp}/caws-shortcut-lines-XXXXXX") || { rm -f "$records"; exit 0; }
+trap 'rm -f "$records" "$authored_file"' EXIT
+if [[ "${HOOK_PAYLOAD_TRUNCATED:-0}" == 1 && -n "${HOOK_PAYLOAD_FILE:-}" ]]; then
+  extract_authored < "$HOOK_PAYLOAD_FILE" > "$records" || exit 0
+else
+  printf '%s' "${HOOK_TOOL_INPUT_JSON:-}" | extract_authored > "$records" || exit 0
+fi
+while IFS= read -r row; do
+  file=$(printf '%s' "$row" | jq -rj '.path'; printf '.')
+  file=${file%.}
+  content=$(printf '%s' "$row" | jq -rj '.content'; printf '.')
+  content=${content%.}
+  fragment=$(printf '%s' "$row" | jq -r 'if .fragment then 1 else 0 end')
+  printf '%s' "$row" | jq -r '.authored[]' > "$authored_file"
+  # Keep the first awk input nonempty even for a known-empty authored set.
+  [[ -s "$authored_file" ]] || printf '\n' > "$authored_file"
+  scan_authored "$file" "$content" "$fragment" || break
+done < "$records"
 exit 0

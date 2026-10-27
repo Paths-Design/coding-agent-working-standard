@@ -73,7 +73,7 @@ scan() {
   [[ "$tool" == Edit ]] && field=new_string
   envelope=$(jq -nc --arg t "$tool" --arg fp "$fp" --arg f "$field" --arg c "$content" \
     --arg s "$SESSION" --arg cwd "$CAWS_TEST_REPO" \
-    '{session_id:$s, cwd:$cwd, tool_name:$t, tool_input:{file_path:$fp, ($f):$c}}')
+    '{session_id:$s, cwd:$cwd, tool_name:$t, tool_input:({file_path:$fp, ($f):$c} + (if $t == "Edit" then {old_string:""} else {} end))}')
   run _invoke_shortcut "$home" <<<"$envelope"
   STRIKES="$home/.caws/state/sessions/$SESSION/strikes.json"
 }
