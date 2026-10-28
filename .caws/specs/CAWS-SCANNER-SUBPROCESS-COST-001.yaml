@@ -7,7 +7,7 @@ updated_at: '2026-10-28T11:37:59.383Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'Shared secret advisory scanner and installed hook pack identity'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -24,5 +24,11 @@ acceptance:
     given: 'Write/Edit content or an existing-file patch target with synthetic matching and near-miss patterns'
     when: 'the installed scanner executes including Bash 3.2 and nocasematch'
     then: 'advisory output matches the prior scanner semantics without exposing token values'
+  - id: A2
+    given: 'a clean or matching file ranging from one to 5301 lines'
+    when: 'the scanner evaluates it'
+    then: >-
+      scanner regex evaluation does not launch per-line external grep processes and
+      still finds a matching final line
 non_functional: {}
 contracts: []
