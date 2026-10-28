@@ -1,0 +1,83 @@
+id: CAWS-NODE-PROCESS-RUNTIME-001
+title: 'Bind developer and test child Node processes to the selected runtime'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Land reviewed bounded developer/test child-runtime candidate70546ea82d90ea1547d551eaa122ee165c8d97e7. Existing A1-A4 pass records15105-15108 verified exactly; A3/A4 each executed one selected test in the actual clean candidate and record test_verified_at70546. Full focused102/102, final five gates over five files, formatting and doctor0 with0E4W6I retained. Immutable capture/drift checks, policy and floors unchanged. Windows proof covers key composition only; npm local-bin precedence is preserved. Original refused metadata spelling stays refused and the installed legacy scanner gap remains QA-owned and blocks broader adoption. No Native-entry integration, heavy/full campaign, image/package/runtime activation, strict/global/Python or publication acceptance is asserted.'
+created_at: '2026-10-28T19:50:34.020Z'
+updated_at: '2026-10-28T20:37:44.970Z'
+created_by_session: '01a181ec-11d5-7270-8073-29aac2fd949d'
+blast_radius:
+  modules:
+    - 'Developer/test launcher child environment composition and process fixture boundaries'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/run-tests.js'
+    - 'packages/caws-cli/scripts/run-mutation.mjs'
+    - 'packages/caws-cli/scripts/lib/node-process-env.cjs'
+  out: []
+  support:
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-cli/tests/shell/run-tests-exit-code.test.js
+invariants:
+  - 'Do not change mutation-input-identity.mjs or normalize within captureMutationInputs/assertInputsUnchanged: initial mismatch, captured-input drift and sandbox runtime substitution must retain strict refusal before build.'
+  - 'Derive the child environment from the canonical actual process.execPath directory without hardcoded versions/shims or import-time process.env mutation; preserve unrelated environment and handle Windows PATH key casing coherently.'
+  - 'Retain preparation/Jest/cleanup signal, spawn-error and nonzero verdict precedence; do not weaken identity, score, verdict, mutation floors or sentinel controls; keep intentionally unbound mismatch probes unbound.'
+acceptance:
+  - id: A1
+    given: 'An explicitly selected Node executable and an ambient PATH resolving a conflicting Node, with the ordinary test launcher and observable fixture npm/npx children'
+    when: 'The ordinary launcher starts preparation, Jest and cleanup through its real child launch boundary without an external PATH correction'
+    then: 'Parent and child runtime identities match the canonical selected executable, unrelated environment is preserved and the conflicting Node sentinel remains untouched.'
+  - id: A2
+    given: 'The selected Node executable, conflicting ambient PATH and a complete lightweight mutation fixture including copied launcher dependencies'
+    when: 'The mutation command binds its child environment once before initial capture and propagates it through actual npm build, Stryker and sandbox child launches'
+    then: 'Observed parent, build, Stryker and sandbox Node identities match the selected executable, the fixture succeeds without caller PATH correction and the conflict sentinel remains untouched.'
+  - id: A3
+    given: 'Intentionally unbound direct capture probes, a post-capture PATH substitution and a sandbox runtime substitution'
+    when: 'Existing immutable capture, assertInputsUnchanged and sandbox runtime checks evaluate those probes'
+    then: 'Initial mismatch and subsequent drift remain specifically refused, sandbox substitution refuses before build and immutable identity, score, verdict and floor checks remain unchanged.'
+  - id: A4
+    given: 'The bounded launcher/helper/fixture candidate and retained failed baseline, preparation, Jest and cleanup signal, spawn-error and nonzero controls'
+    when: 'The two targeted Jest files run under explicitly selected Node22 with mismatched ambient PATH, required doctor and gates are inspected and a normal committed candidate receives independent review'
+    then: 'Real process and shell selection tests support semantic runtime and failure-precedence claims, existing verdict behavior stays fail-closed, raw failures and warnings remain visible and no heavy mutation, full-suite, installed-image or publication acceptance is inferred.'
+observability:
+  - 'Retain original failed baseline and actual command/cwd/revision/exit/stdout/stderr with observed parent/npm/build/Stryker/sandbox executable identities and unchanged conflict sentinel.'
+rollback:
+  - 'Use a separately reviewed normal revert of the narrow launcher/helper/fixture commit if semantic runtime or fail-closed controls regress; preserve governance and failed-run evidence.'
+non_functional:
+  security:
+    - 'This slice changes only developer/test child composition, not hooks, trust, private/global configuration, native runtime, installed image or credential handling.'
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "PASS: ordinary launcher reaches its real default npm/npx child boundary under deliberately conflicting ambient Node PATH. Actual npm scripts and an env-node Jest fixture report canonical selected runtime and preserved unrelated environment for preparation/Jest/cleanup; positive conflict sentinel remains absent. A copied-launcher control removing only env binding reaches the conflicting Node stub and returns nonzero. Import-purity and frozen-input checks retain unrelated environment; Windows PATH casing is simulated dictionary composition only. npm intentionally prepends local .bin: the failing local Node stub test proves nonzero propagation, not detection of a successful foreign local Node override. Bounded developer/test launcher acceptance at 70546ea82d90ea1547d551eaa122ee165c8d97e7. Actual raw /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/node-runtime-repair-events.jsonl SHA256 af542bd5dac11c5d3d06e860c4e621c0107c8ba0ae025770bdee6926b9a4dc1b line51/item26: absolute selected Node22.19.0 whole tests/ci/mutation-contract.test.js and tests/shell/run-tests-exit-code.test.js, exit0,102/102,no skips,46.228s from /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/node-process-runtime/packages/caws-cli, with no external PATH alignment. Line10/item4 independently observes ambient Node20.5.0. --verify here checks commit reachability and committed artifact existence only; the recorded command is not executed, citation relevance remains agent-chosen, and no test or host execution is inferred from existence. Finite process fixtures establish this slice, not a mutation score, actual Windows process launch, arbitrary executable authentication, successful foreign package-local Node detection, full-suite/installed-image/strict-native/Python/global-cutover or publication qualification."
+    recorded_at: "2026-10-28T20:20:32.375Z"
+    command: "/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node ../../node_modules/jest/bin/jest.js --runInBand tests/ci/mutation-contract.test.js tests/shell/run-tests-exit-code.test.js"
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/shell/run-tests-exit-code.test.js
+    commit_sha: "70546ea82d90ea1547d551eaa122ee165c8d97e7"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "PASS: decisive whole mutation-command fixture RAW-spawns actual run-mutation.mjs under conflicting PATH without the aligning fixture helper, so deleting the production main binding makes capture refuse before build. Runtime preload observations assert canonical selected executable at parent/run-mutation, npm CLI, outer build, finite fixture Stryker child, sandbox capture and sandbox build; both builds complete, unrelated environment survives, positive conflict sentinel is absent and receipt is input-build-report-bound. Ordinary fixture spawn boundaries align explicit process.execPath children and copies carry the new helper; captured input records include its exact bytes. Stryker is a finite explicit fixture, not an executed heavy mutation campaign or mutation coverage proof. Bounded developer/test launcher acceptance at 70546ea82d90ea1547d551eaa122ee165c8d97e7. Actual raw /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/node-runtime-repair-events.jsonl SHA256 af542bd5dac11c5d3d06e860c4e621c0107c8ba0ae025770bdee6926b9a4dc1b line51/item26: absolute selected Node22.19.0 whole tests/ci/mutation-contract.test.js and tests/shell/run-tests-exit-code.test.js, exit0,102/102,no skips,46.228s from /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/node-process-runtime/packages/caws-cli, with no external PATH alignment. Line10/item4 independently observes ambient Node20.5.0. --verify here checks commit reachability and committed artifact existence only; the recorded command is not executed, citation relevance remains agent-chosen, and no test or host execution is inferred from existence. Finite process fixtures establish this slice, not a mutation score, actual Windows process launch, arbitrary executable authentication, successful foreign package-local Node detection, full-suite/installed-image/strict-native/Python/global-cutover or publication qualification."
+    recorded_at: "2026-10-28T20:20:54.516Z"
+    command: "/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node ../../node_modules/jest/bin/jest.js --runInBand tests/ci/mutation-contract.test.js tests/shell/run-tests-exit-code.test.js"
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/ci/mutation-contract.test.js
+    commit_sha: "70546ea82d90ea1547d551eaa122ee165c8d97e7"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Bounded A3 at candidate70546ea82d90ea1547d551eaa122ee165c8d97e7: the cited sandbox substitution counterexample is verified through actual selected-test execution from the clean owned candidate leaf. Existing whole102 run exit0/no skips at /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/node-runtime-repair-events.jsonl line51/item26 (SHA256 af542bd5dac11c5d3d06e860c4e621c0107c8ba0ae025770bdee6926b9a4dc1b) also covers direct initial mismatch, subsequent PATH substitution and helper-byte drift refusals. Sandbox build marker remains absent on runtime substitution. Capture API unchanged SHA256 f47eaf2ede7feb194eeceb0d8258ec8bcb39979a381aed8ff26f852aa7f0b34a; identity/score/floor checks remain strict. Original implementation-artifact metadata command stays refused before execution in /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/node-runtime-land-stderr.log and node-runtime-land-events.jsonl line22/item11; no retry or resolution claim. Legacy installed scanner argument-role gap remains open with QA and blocks broader adoption. Test-nodeid --verify executes the selected test here; prior commit/artifact verification checked existence only. Finite fixture proof, not a mutation score, Windows process-launch, successful foreign local override detection, whole installed/global/strict/Python readiness or publication."
+    recorded_at: "2026-10-28T20:32:46.967Z"
+    test_nodeid: "packages/caws-cli/tests/ci/mutation-contract.test.js::a substituted sandbox Node executable is refused before the sandbox build"
+    commit_sha: "70546ea82d90ea1547d551eaa122ee165c8d97e7"
+    test_verified_at: "70546ea82d90ea1547d551eaa122ee165c8d97e7"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Bounded A4 at reviewed final70546ea82d90ea1547d551eaa122ee165c8d97e7: normal semantic citation executes the real ordinary-launcher regression in this clean owned leaf before writing. Actual retained /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/node-runtime-repair-events.jsonl SHA256 af542bd5dac11c5d3d06e860c4e621c0107c8ba0ae025770bdee6926b9a4dc1b line51/item26 records complete102/102/no skips/exit0 under explicit Node22 and ambient Node20 PATH without external alignment; line55/item29 final five gates0 over five files; line53/item28 formatting0; line17/item8 doctor0 0E4W6I/load0. Existing preparation/Jest/cleanup signal/spawn-error/nonzero precedence controls remain unchanged. Root grounded committed diff/raw results and independent peer feedback; local override comment correction is committed separately. Windows proof is simulated key composition only; npm local-bin precedence remains, and its deliberately failing stub proves failure propagation, not successful foreign runtime detection. Retain original RED2fail and focused8GREEN in node-runtime-implement-events.jsonl, earlier33fail/47pass corroboration, formatting failures and auxiliary refused read; none are counted as passes. The original metadata refusal remains node-runtime-land-stderr.log, and the installed scanner gap remains open with QA and blocks broader adoption. Four doctor warnings retained: unbound-active backlog, release lifecycle residue, pack95-v127 lag and33-file body drift. Selected test verification executes here; commit/artifact existence alone did not. No heavy/full campaign, mutation score, installed/global/strict/Python acceptance, runtime change, merge or publication claim."
+    recorded_at: "2026-10-28T20:33:25.283Z"
+    test_nodeid: "packages/caws-cli/tests/shell/run-tests-exit-code.test.js::ordinary launcher binds real npm and env-node children despite conflicting ambient PATH"
+    commit_sha: "70546ea82d90ea1547d551eaa122ee165c8d97e7"
+    test_verified_at: "70546ea82d90ea1547d551eaa122ee165c8d97e7"

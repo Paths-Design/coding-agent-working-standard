@@ -30,6 +30,7 @@
         "src/kernel/worktree/freshness.ts",
         "src/kernel/worktree/transitions.ts",
         "src/shell/analysis/analyze.ts",
+        "src/shell/analysis/caws-read-metadata.ts",
         "src/shell/analysis/git-context.ts",
         "src/shell/analysis/inspection-prefix.ts",
         "src/shell/analysis/inspection-profiles.ts",
@@ -289,6 +290,7 @@
       "buildCommand": "node scripts/build-cli.js",
       "targets": [
         { "source": "src/shell/analysis/analyze.ts" },
+        { "source": "src/shell/analysis/caws-read-metadata.ts" },
         { "source": "src/shell/analysis/git-context.ts" },
         { "source": "src/shell/analysis/inspection-prefix.ts" },
         { "source": "src/shell/analysis/inspection-profiles.ts" },

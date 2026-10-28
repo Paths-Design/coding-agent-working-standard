@@ -1,3 +1,5 @@
+import { CAWS_READ_COMMANDS } from './analysis/caws-read-metadata';
+import type { CawsOperandRole, CawsCommandEffect } from './analysis/caws-read-metadata';
 // Single-source command metadata for the v11 CLI surface
 // (CAWS-CLI-HELP-METADATA-AUTHORITY-001).
 //
@@ -28,14 +30,14 @@
 //     same-slice scope.in is the discipline that keeps it honest.
 
 import { EVIDENCE_STATUSES, SPEC_MODES, SPEC_RESOLUTIONS } from '../kernel';
-import { SPECS_LIST_STATUSES } from '../store/specs-writer';
-import { EXECUTABLE_TEST_RUNNERS, SELECTABLE_TEST_RUNNERS } from '../store/evidence-rederive';
 import { KNOWN_SURFACES } from '../init/hook-packs/register';
 import { MIGRATABLE_SOURCE_VERSIONS } from '../store/migration-versions';
 import { WORKTREE_PHYSICAL_CLEANUP_STATES, WORKTREE_PRUNE_STATES } from './commands/worktree';
 
 /** A positional argument on a command. */
 export interface CommandArgMeta {
+  /** Explicit literal operand contract for reviewed inspection commands. */
+  readonly valueRole?: CawsOperandRole;
   /** Argument name as it appears in usage, e.g. "id" or "path". */
   readonly name: string;
   /** Whether the argument is required (`<name>`) or optional (`[name]`). */
@@ -51,6 +53,9 @@ export interface CommandArgMeta {
  * own.
  */
 export interface CommandOptionMeta {
+  /** Unknown by default; inspection requires an explicitly reviewed read effect. */
+  readonly effect?: CawsCommandEffect;
+  readonly valueRole?: CawsOperandRole;
   /** Full Commander flag string, e.g. "--mode <mode>", "--ack <sha>", "--apply". */
   readonly flag: string;
   /** When true, register.ts uses `.requiredOption()` (Commander pre-validates). */
@@ -90,6 +95,8 @@ export interface CommandOptionMeta {
 
 /** A leaf command (one that has an `.action()` handler). */
 export interface LeafCommandMeta {
+  /** Absence grants no inspection admission. Options retain their own effects. */
+  readonly effect?: CawsCommandEffect;
   readonly kind: 'leaf';
   /** Command name as passed to `.command()` (without the `<arg>` suffix). */
   readonly name: string;
@@ -145,14 +152,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   name: 'specs',
   description:
     'Manage CAWS spec lifecycle (create/list/show/recover/restore/commit/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/verify-acs/close/reopen/archive/prune-archive/migrate/validate/relocate)',
-  options: [
-    {
-      flag: '--status <status>',
-      description: 'Compatibility handoff to caws specs list --status <status>',
-      allowedValues: SPECS_LIST_STATUSES,
-    },
-    DATA_OPTION,
-  ],
+  options: CAWS_READ_COMMANDS['specs'].options,
   subcommands: [
     {
       kind: 'leaf',
@@ -258,67 +258,9 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         DATA_OPTION,
       ],
     },
-    {
-      kind: 'leaf',
-      name: 'list',
-      description: 'List specs. By default excludes archived specs.',
-      options: [
-        {
-          flag: '--status <status>',
-          description: 'Filter by lifecycle status',
-          allowedValues: SPECS_LIST_STATUSES,
-        },
-        {
-          flag: '--lifecycle <state>',
-          description: 'Alias for --status; filter by lifecycle state',
-          allowedValues: SPECS_LIST_STATUSES,
-        },
-        {
-          flag: '--state <state>',
-          description: 'Alias for --status; filter by lifecycle state',
-          allowedValues: SPECS_LIST_STATUSES,
-        },
-        { flag: '--active', description: 'Alias for --status active' },
-        { flag: '--draft', description: 'Alias for --status draft' },
-        { flag: '--closed', description: 'Alias for --status closed' },
-        { flag: '--archived', description: 'Include archived specs in the listing' },
-        {
-          flag: '--session-id <id>',
-          description:
-            'Session work-surface view: list only specs this session relates to (created it, holds its bridge claim, or owns a worktree bound to it), each with its binding state and suggested action. Includes archived specs unless --status narrows the view.',
-        },
-        DATA_OPTION,
-      ],
-    },
-    {
-      kind: 'leaf',
-      name: 'show',
-      argument: { name: 'id', required: true, description: 'Spec id to show' },
-      description:
-        'Show a spec by id. Defaults to active specs only; pass --archived to recover an archived spec body from the event log + git history.',
-      options: [
-        DATA_OPTION,
-        {
-          flag: '--archived',
-          description:
-            'Recover an archived spec body. Move-shaped archives are read from .caws/specs/.archive/ when present; tombstone-shaped archives fall back to git show <blob_sha>.',
-        },
-      ],
-    },
-    {
-      kind: 'leaf',
-      name: 'recover',
-      argument: { name: 'id', required: true, description: 'Archived spec id to recover' },
-      description:
-        'Recover an archived spec body. Reads .caws/events.jsonl for the spec_archived event, prefers an on-disk .caws/specs/.archive/<id>.yaml body for move-shaped archives, and falls back to git history/blob recovery. Prints to stdout (or --out <path>) and does not mutate .caws/specs/.',
-      options: [
-        DATA_OPTION,
-        {
-          flag: '--out <path>',
-          description: 'Write the recovered body to this path instead of stdout',
-        },
-      ],
-    },
+    CAWS_READ_COMMANDS['specs list'],
+    CAWS_READ_COMMANDS['specs show'],
+    CAWS_READ_COMMANDS['specs recover'],
     {
       kind: 'leaf',
       name: 'restore',
@@ -584,39 +526,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         DATA_OPTION,
       ],
     },
-    {
-      kind: 'leaf',
-      name: 'verify-acs',
-      argument: {
-        name: 'id',
-        required: true,
-        description: 'Spec id whose recorded acceptance evidence to re-derive',
-      },
-      description:
-        "Re-derive the spec's recorded acceptance evidence against reality instead of trusting its status field. Per criterion: the cited commit_sha must exist and be reachable from a ref, the cited artifact_path must be present at that revision, and the cited test_nodeid must exist (or, with --run, execute and pass). Three verdicts, never collapsed: verified (the check ran and passed), refuted (it ran and failed, or the citation names nothing), not_rederived (nothing mechanical was declared, or the check could not run). A criterion with only narrative evidence is not_rederived, and every verdict derived from an agent-supplied field is tagged [agent-cited] — re-derivation proves a citation is real, not that it is relevant; the tag never means the check did not run. Read-only: writes nothing. A recorded command is never executed. Exit 1 when any criterion is refuted; with --strict, also when any is not_rederived.",
-      options: [
-        {
-          flag: '--run',
-          description:
-            "Execute cited tests instead of only checking they exist. jest is resolved from the repository's own node_modules/.bin, walking up to the repo root — never npx. pytest is not repo-resolved: it runs as python3 -m pytest against whatever python3 is first on PATH, so a different ambient interpreter can change the verdict. Default: existence check only, which reports not_rederived, never pass",
-        },
-        {
-          flag: '--strict',
-          description:
-            'Exit 1 when any criterion is not_rederived (default: exit 1 only on refuted)',
-        },
-        {
-          flag: '--runner <name>',
-          // The executable/detected-only split is DERIVED from the same constant
-          // the dispatch reads, so a runner that gains an execution arm moves
-          // between these two lists without anyone remembering to edit prose.
-          description: `Override test-runner detection. Only ${EXECUTABLE_TEST_RUNNERS.join(', ')} execute under --run; naming ${SELECTABLE_TEST_RUNNERS.filter((r) => !EXECUTABLE_TEST_RUNNERS.includes(r)).join(', ')} reports unavailable and verifies nothing`,
-          allowedValues: SELECTABLE_TEST_RUNNERS,
-        },
-        { flag: '--json', description: 'Emit the verify-acs.v1 report as JSON' },
-        DATA_OPTION,
-      ],
-    },
+    CAWS_READ_COMMANDS['specs verify-acs'],
     {
       kind: 'leaf',
       name: 'reopen',
@@ -803,18 +713,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         DATA_OPTION,
       ],
     },
-    {
-      kind: 'leaf',
-      name: 'validate',
-      argument: {
-        name: 'file',
-        required: true,
-        description: 'Path to the spec YAML file to validate',
-      },
-      description:
-        "Validate a spec YAML FILE on disk using the CLI's own bundled parser and the kernel parse->shape->semantics pipeline. Path-shaped (takes a file path, not a spec id); does NOT resolve .caws/, read canonical state, or mutate anything. Exits 0 when valid, non-zero with a rendered diagnostic when invalid or unreadable. Lets hooks/CI validate spec YAML without carrying their own parser dependency — works for any consumer project regardless of language.",
-      options: [DATA_OPTION],
-    },
+    CAWS_READ_COMMANDS['specs validate'],
     {
       kind: 'leaf',
       name: 'relocate',
@@ -871,20 +770,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
         DATA_OPTION,
       ],
     },
-    {
-      kind: 'leaf',
-      name: 'list',
-      description:
-        'List registered worktrees with branch, lane divergence from base (ahead/behind), spec binding, and owner.',
-      options: [
-        {
-          flag: '--json',
-          description:
-            'Emit the same facts as machine-readable JSON, with full owner session ids and null divergence counts where a ref does not resolve',
-        },
-        DATA_OPTION,
-      ],
-    },
+    CAWS_READ_COMMANDS['worktree list'],
     {
       kind: 'leaf',
       name: 'ensure',
@@ -1095,17 +981,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
         DATA_OPTION,
       ],
     },
-    {
-      kind: 'leaf',
-      name: 'review',
-      argument: { name: 'name', required: true, description: 'Registered worktree name to review' },
-      description:
-        'Read-only human-review gate (WORKTREE-REVIEW-SURFACE-001): renders exactly what `caws worktree merge <name>` would land — the exact commit list in base..branch (never counts-only), a per-commit scope-provenance table flagging out-of-scope paths with the refusal merge raises, the lane diffstat, the bound spec’s acceptance criteria with their recorded evidence status (the close-gate authority), and the owner’s lease work_state (visibility only). Never mutates .caws/, never appends events, never touches git refs or any working tree. A missing worktree exits 1; a rendered report exits 0; an empty lane renders honestly without fabricated rows.',
-      options: [
-        { flag: '--json', description: 'Emit the same review report as machine-readable JSON.' },
-        DATA_OPTION,
-      ],
-    },
+    CAWS_READ_COMMANDS['worktree review'],
   ],
 };
 
@@ -1327,34 +1203,9 @@ export const INIT_COMMAND_META: GroupCommandMeta = {
   ],
 };
 
-export const DOCTOR_COMMAND_META: LeafCommandMeta = {
-  kind: 'leaf',
-  name: 'doctor',
-  description: 'Run drift detection against the current .caws/ state',
-  options: [
-    { flag: '--data', description: 'Show structured data block on findings/diagnostics' },
-    {
-      flag: '--repair-plan',
-      description: 'Emit a read-only repair plan derived from doctor findings',
-    },
-    { flag: '--json', description: 'Emit the repair plan as JSON with --repair-plan' },
-  ],
-};
+export const DOCTOR_COMMAND_META: LeafCommandMeta = CAWS_READ_COMMANDS['doctor'];
 
-export const STATUS_COMMAND_META: LeafCommandMeta = {
-  kind: 'leaf',
-  name: 'status',
-  description: 'Read-only dashboard: project, current context, claim, and doctor findings',
-  options: [
-    { flag: '--data', description: 'Show structured data block on rendered diagnostics' },
-    { flag: '--specs', description: 'Render only the focused specs panel' },
-    { flag: '--worktrees', description: 'Render only the focused worktrees panel' },
-    { flag: '--agents', description: 'Render only the focused agents panel' },
-    { flag: '--doctor', description: 'Render only the focused doctor panel' },
-    { flag: '--short', description: 'Render a compact read-only status summary' },
-    { flag: '--json', description: 'Emit selected status panels as JSON' },
-  ],
-};
+export const STATUS_COMMAND_META: LeafCommandMeta = CAWS_READ_COMMANDS['status'];
 
 export const TUI_COMMAND_META: LeafCommandMeta = {
   kind: 'leaf',
@@ -1430,92 +1281,10 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
   name: 'scope',
   description: 'Evaluate file paths against the bound spec scope',
   subcommands: [
-    {
-      kind: 'leaf',
-      name: 'show',
-      argument: { name: 'path', required: true, description: 'File path to evaluate' },
-      description: 'Explain the scope decision for <path>; always exits 0',
-      options: [
-        { flag: '--data', description: 'Show structured data block' },
-        {
-          flag: '--spec <id>',
-          description:
-            'Evaluate against a named spec as read-only context instead of current worktree authority',
-        },
-        {
-          flag: '--json',
-          description:
-            'Emit the scope decision as a single-line stable JSON contract (for hooks/tooling)',
-        },
-      ],
-    },
-    {
-      kind: 'leaf',
-      name: 'check',
-      argument: { name: 'path', required: true, description: 'File path to enforce' },
-      description:
-        'Enforce the scope decision for <path>; exits 0 on admit, 1 otherwise. --json emits the same decision/remediation contract as scope show while preserving check exit codes.',
-      options: [
-        { flag: '--data', description: 'Show structured data block' },
-        {
-          flag: '--spec <id>',
-          description:
-            'Evaluate against a named spec as read-only context instead of current worktree authority',
-        },
-        {
-          flag: '--json',
-          description:
-            'Emit the scope decision and remediation guidance as a single-line JSON contract',
-        },
-      ],
-    },
-    {
-      kind: 'leaf',
-      name: 'plan',
-      description:
-        'Evaluate multiple paths in one read-only run and group remediation commands. Always exits 0 after a successful plan, even when planned decisions include refusals.',
-      options: [
-        {
-          flag: '--path <path>',
-          description: 'Path to evaluate; repeat for multiple paths',
-          collect: true,
-          defaultValue: [],
-        },
-        {
-          flag: '--paths-file <file>',
-          description:
-            'Read newline-delimited paths from a file. Blank lines and # comments are ignored.',
-        },
-        {
-          flag: '--spec <id>',
-          description:
-            'Evaluate every path against a named spec as read-only context instead of current worktree authority',
-        },
-        {
-          flag: '--json',
-          description: 'Emit per-path decisions, counts, and grouped remediation commands as JSON',
-        },
-        { flag: '--data', description: 'Show structured data block on diagnostics' },
-      ],
-    },
-    {
-      kind: 'leaf',
-      name: 'contention',
-      argument: {
-        name: 'path',
-        required: true,
-        description: 'File path to check for cross-worktree claims',
-      },
-      description:
-        'Report which other active worktrees (same base branch) have a bound spec whose scope.in claims <path>; always exits 0',
-      options: [
-        {
-          flag: '--json',
-          description:
-            'Emit the contention result as a single-line stable JSON contract (for hooks/tooling)',
-        },
-      ],
-    },
+    CAWS_READ_COMMANDS['scope show'],
+    CAWS_READ_COMMANDS['scope check'],
+    CAWS_READ_COMMANDS['scope plan'],
+    CAWS_READ_COMMANDS['scope contention'],
   ],
 };
 
@@ -1753,32 +1522,8 @@ export const GATES_COMMAND_META: GroupCommandMeta = {
   description:
     'Inspect and run quality gates against the current changes (list/explain/run; policy-driven)',
   subcommands: [
-    {
-      kind: 'leaf',
-      name: 'list',
-      description:
-        'List policy-declared gates, modes, thresholds, risk-tier budgets, and effective waiver ids. Read-only; does not run evaluators or append gate_evaluated events.',
-      options: [
-        { flag: '--spec <id>', description: 'Optional spec id for spec-scoped waiver matching' },
-        {
-          flag: '--json',
-          description: 'Emit gate summaries, risk tiers, and waiver policy as JSON.',
-        },
-        DATA_OPTION,
-      ],
-    },
-    {
-      kind: 'leaf',
-      name: 'explain',
-      argument: { name: 'gate', required: true, description: 'Gate id to explain' },
-      description:
-        'Explain one policy gate: enabled state, mode, thresholds, waiver policy, and effective waiver ids. Read-only; validates the gate id against policy.gates.',
-      options: [
-        { flag: '--spec <id>', description: 'Optional spec id for spec-scoped waiver matching' },
-        { flag: '--json', description: 'Emit the gate explanation as JSON.' },
-        DATA_OPTION,
-      ],
-    },
+    CAWS_READ_COMMANDS['gates list'],
+    CAWS_READ_COMMANDS['gates explain'],
     {
       kind: 'leaf',
       name: 'run',
@@ -1843,54 +1588,9 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
         { flag: '--actor-id <id>', description: 'Override actor id (defaults to session id)' },
       ],
     },
-    {
-      kind: 'leaf',
-      name: 'list',
-      description:
-        'Read typed evidence events for a spec from the hash-chained events log. Read-only; verifies the event chain before listing. Filters to test|gate|ac|human_decision evidence and can narrow by --type.',
-      options: [
-        {
-          flag: '--spec <id>',
-          required: true,
-          description: 'Spec id whose evidence should be listed',
-        },
-        {
-          flag: '--type <kind>',
-          description: 'Optional evidence kind filter: test | gate | ac | human_decision',
-        },
-        { flag: '--json', description: 'Emit the evidence list as JSON.' },
-        DATA_OPTION,
-      ],
-    },
-    {
-      kind: 'leaf',
-      name: 'show',
-      argument: {
-        name: 'event-ref',
-        required: true,
-        description: 'Event sequence number, full event hash, or unique event-hash prefix.',
-      },
-      description:
-        'Show one event from the hash-chained events log by sequence number, exact event hash, or unique event-hash prefix. Read-only; verifies the event chain before resolving the reference.',
-      options: [{ flag: '--json', description: 'Emit the matched event as JSON.' }, DATA_OPTION],
-    },
-    {
-      kind: 'leaf',
-      name: 'schema',
-      description:
-        'Print the kernel-derived payload schema and a copy-pasteable example command for one evidence kind. Read-only; does not read or write .caws/events.jsonl. For test|gate|human_decision the example is a `caws evidence record` call; for ac it is the `caws specs evidence` call that actually writes the closure authority.',
-      options: [
-        {
-          flag: '--type <kind>',
-          required: true,
-          description: 'Evidence kind: test | gate | ac | human_decision',
-        },
-        {
-          flag: '--json',
-          description: 'Emit schema, required fields, and example command as JSON.',
-        },
-      ],
-    },
+    CAWS_READ_COMMANDS['evidence list'],
+    CAWS_READ_COMMANDS['evidence show'],
+    CAWS_READ_COMMANDS['evidence schema'],
   ],
 };
 
@@ -1900,39 +1600,8 @@ export const EVENTS_COMMAND_META: GroupCommandMeta = {
   name: 'events',
   description: 'Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)',
   subcommands: [
-    {
-      kind: 'leaf',
-      name: 'list',
-      description:
-        'Summarize the current hash-chained events log. Read-only; verifies the chain, reports counts, latest event, recent events, and chain_rotated archive status.',
-      options: [
-        {
-          flag: '--json',
-          description: 'Emit chain summary, rotations, and recent events as JSON.',
-        },
-        {
-          flag: '--limit <n>',
-          description: 'Number of recent events to include (default: 20; use 0 for summary only)',
-        },
-        DATA_OPTION,
-      ],
-    },
-    {
-      kind: 'leaf',
-      name: 'show',
-      argument: {
-        name: 'event-ref',
-        required: true,
-        description:
-          'Event sequence number, full event hash, unique event-hash prefix, or latest-rotation.',
-      },
-      description:
-        'Show one event after verifying the current hash chain. The special ref latest-rotation shows the newest chain_rotated event with archive presence/digest/line-count status.',
-      options: [
-        { flag: '--json', description: 'Emit the matched event and rotation status as JSON.' },
-        DATA_OPTION,
-      ],
-    },
+    CAWS_READ_COMMANDS['events list'],
+    CAWS_READ_COMMANDS['events show'],
     {
       kind: 'leaf',
       name: 'migrate',
@@ -1993,13 +1662,7 @@ export const EVENTS_COMMAND_META: GroupCommandMeta = {
         },
       ],
     },
-    {
-      kind: 'leaf',
-      name: 'verify-archive',
-      description:
-        'Verify that the archive file named in the most recent chain_rotated event byte-matches its committed digest + line count.',
-      options: [],
-    },
+    CAWS_READ_COMMANDS['events verify-archive'],
   ],
 };
 
@@ -2043,24 +1706,8 @@ export const WAIVER_COMMAND_META: GroupCommandMeta = {
         DATA_OPTION,
       ],
     },
-    {
-      kind: 'leaf',
-      name: 'list',
-      description:
-        'List waivers (gate-run-only; hooks consult reprieves, not waivers). By default excludes revoked and expired records.',
-      options: [
-        { flag: '--include-revoked', description: 'Include revoked waivers' },
-        { flag: '--include-expired', description: 'Include expired waivers' },
-        DATA_OPTION,
-      ],
-    },
-    {
-      kind: 'leaf',
-      name: 'show',
-      argument: { name: 'id', required: true, description: 'Waiver id to show' },
-      description: 'Show a waiver, including its derived effectiveness at now.',
-      options: [DATA_OPTION],
-    },
+    CAWS_READ_COMMANDS['waiver list'],
+    CAWS_READ_COMMANDS['waiver show'],
     {
       kind: 'leaf',
       name: 'revoke',
@@ -2157,23 +1804,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
         DATA_OPTION,
       ],
     },
-    {
-      kind: 'leaf',
-      name: 'show',
-      description:
-        'Show the reprieve for the current (or named) session, if any, including its derived active/expired state.',
-      options: [
-        { flag: '--current', description: 'Resolve the session from env (default)' },
-        { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
-        {
-          flag: '--surface <name>',
-          description:
-            'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store',
-        },
-        { flag: '--json', description: 'Emit the record as JSON.' },
-        DATA_OPTION,
-      ],
-    },
+    CAWS_READ_COMMANDS['reprieve show'],
     {
       kind: 'leaf',
       name: 'revoke',
@@ -2196,21 +1827,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
         DATA_OPTION,
       ],
     },
-    {
-      kind: 'leaf',
-      name: 'list',
-      description:
-        "List active guard reprieves across sessions, with each one's handlers, expiry, and derived active/expired state.",
-      options: [
-        {
-          flag: '--surface <name>',
-          description:
-            'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store',
-        },
-        { flag: '--json', description: 'Emit the list as JSON.' },
-        DATA_OPTION,
-      ],
-    },
+    CAWS_READ_COMMANDS['reprieve list'],
   ],
 };
 
@@ -2292,53 +1909,8 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
         DATA_OPTION,
       ],
     },
-    {
-      kind: 'leaf',
-      name: 'list',
-      description: 'List active / stale / stopped agents. Read-only.',
-      options: [
-        { flag: '--include-stale', description: 'Include stale (active-but-TTL-expired) records' },
-        { flag: '--include-stopped', description: 'Include stopped records' },
-        {
-          flag: '--active',
-          description:
-            'Active-only (overrides --include-* flags); TTL-classified active, not raw status field',
-        },
-        {
-          flag: '--stale-ttl <duration>',
-          description:
-            'TTL for stale classification as a duration, e.g. 30m, 2h (default: 30m; units: s, m, h/hr, d; combine as 1h30m). Mutually exclusive with --stale-ttl-ms.',
-        },
-        {
-          flag: '--stale-ttl-ms <ms>',
-          description:
-            'TTL for stale classification in milliseconds (default: 1800000 = 30m). Prefer --stale-ttl.',
-        },
-        { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
-        DATA_OPTION,
-      ],
-    },
-    {
-      kind: 'leaf',
-      name: 'show',
-      argument: { name: 'id', required: true, description: 'Session id of the lease to show' },
-      description:
-        'Show one lease by session id, with its derived TTL liveness classification. Read-only.',
-      options: [
-        {
-          flag: '--stale-ttl <duration>',
-          description:
-            'TTL for the derived liveness classification as a duration, e.g. 30m, 2h (default: 30m; units: s, m, h/hr, d; combine as 1h30m); the persisted status is unaffected. Mutually exclusive with --stale-ttl-ms.',
-        },
-        {
-          flag: '--stale-ttl-ms <ms>',
-          description:
-            'TTL for the derived liveness classification in milliseconds (default: 1800000 = 30m); the persisted status is unaffected. Prefer --stale-ttl.',
-        },
-        { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
-        DATA_OPTION,
-      ],
-    },
+    CAWS_READ_COMMANDS['agents list'],
+    CAWS_READ_COMMANDS['agents show'],
     {
       kind: 'leaf',
       name: 'work-state',
@@ -2411,16 +1983,7 @@ export const WORKING_TREE_COMMAND_META: GroupCommandMeta = {
   description:
     "Working-tree overlap advisory surface (WORKING-TREE-PROVENANCE-GUARD-001): `check` reports whether another active session's claimed/modified paths overlap the current dirty tree (read-only, non-mutating); `ack` records the operator's explicit per-session, per-path acknowledgement that cleans up that overlap. Never authority — neither command changes scope, claim, ownership, or lifecycle state.",
   subcommands: [
-    {
-      kind: 'leaf',
-      name: 'check',
-      description:
-        "Report working-tree overlap with OTHER active sessions, read-only. Consumes the same predicate the PreToolUse guard uses. Exit 0 if no overlap, exit 1 if another session's claimed_paths / last_modified_paths overlap the dirty tree (scriptable precondition). Never mutates the tree or any .caws/ state.",
-      options: [
-        { flag: '--json', description: 'Emit the overlap report as machine-readable JSON.' },
-        DATA_OPTION,
-      ],
-    },
+    CAWS_READ_COMMANDS['working-tree check'],
     {
       kind: 'leaf',
       name: 'ack',
@@ -2465,13 +2028,7 @@ export const GOAL_COMMAND_META: GroupCommandMeta = {
         "Bind this session to a spec's acceptance criteria. Refuses a spec that does not load or declares no criteria, because either would surface at stop time as an unactionable refusal. Only verdict=verified counts as met; not_rederived is narrative-only evidence and does not pass.",
       options: [DATA_OPTION],
     },
-    {
-      kind: 'leaf',
-      name: 'show',
-      description:
-        "Report this session's goal binding and the gate's consecutive-block count, read-only. Reports the counter; never edits it. Always exits 0.",
-      options: [DATA_OPTION],
-    },
+    CAWS_READ_COMMANDS['goal show'],
     {
       kind: 'leaf',
       name: 'clear',
@@ -2696,84 +2253,9 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
         DATA_OPTION,
       ],
     },
-    {
-      kind: 'leaf',
-      name: 'inbox',
-      description:
-        'List undelivered messages addressed to you without consuming them. Read-only; poll remains the delivery-consuming command.',
-      options: [
-        {
-          flag: '--me <session_id>',
-          description: 'Endpoint inbox to list (default: this session id; ignored with --all)',
-        },
-        { flag: '--limit <n>', description: 'Maximum messages to print from the waiting queue' },
-        {
-          flag: '--all',
-          description:
-            'List every undelivered message in the repo (all recipients), oldest-first, annotated with recipient and age. Read-only (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).',
-        },
-        { flag: '--json', description: 'Emit JSON ({ok, read_only, me, waiting, messages})' },
-        DATA_OPTION,
-      ],
-    },
-    {
-      kind: 'leaf',
-      name: 'history',
-      description:
-        'Show retained channel history between this session and another endpoint, each message annotated with its delivery state ([queued] vs [delivered]). Read-only; message bodies are communication, not authority.',
-      options: [
-        { flag: '--me <session_id>', description: 'This endpoint (default: this session id)' },
-        { flag: '--with <session_id>', description: 'Other endpoint in the channel (required)' },
-        {
-          flag: '--limit <n>',
-          description: 'Maximum recent messages to print, preserving log order',
-        },
-        { flag: '--json', description: 'Emit JSON ({ok, read_only, channel, total, messages})' },
-        DATA_OPTION,
-      ],
-    },
-    {
-      kind: 'leaf',
-      name: 'status',
-      description:
-        'Observe one message\'s delivery state (queued vs delivered, with timestamps) — lets a sender distinguish "queued" from "seen" without polling the recipient. Read-only.',
-      argument: {
-        name: 'message_id',
-        required: false,
-        description: 'Id of the message to observe (primary positional form; --id is the alias)',
-      },
-      options: [
-        {
-          flag: '--id <message_id>',
-          description: 'Id of the message to observe (alias for the positional)',
-        },
-        {
-          flag: '--mine',
-          description:
-            'Dead-letter view: list YOUR sent messages that are still undelivered instead of observing one id (CAWS-MESSAGE-BEHAVIOR-001).',
-        },
-        {
-          flag: '--queued',
-          description:
-            'With --mine: restrict to still-undelivered sends (required pairing for the dead-letter view).',
-        },
-        {
-          flag: '--older-than <duration>',
-          description:
-            'With --mine --queued: only list sends queued at least this long, e.g. 30m, 2h (default 1h; units: s, m, h/hr, d; combine as 1h30m). Mutually exclusive with --older-than-ms.',
-        },
-        {
-          flag: '--older-than-ms <ms>',
-          description:
-            'With --mine --queued: the same window in milliseconds (default 3600000 = 1h). Prefer --older-than.',
-        },
-        {
-          flag: '--json',
-          description: 'Emit JSON ({ok, read_only, message, delivered, delivered_at?})',
-        },
-        DATA_OPTION,
-      ],
-    },
+    CAWS_READ_COMMANDS['message inbox'],
+    CAWS_READ_COMMANDS['message history'],
+    CAWS_READ_COMMANDS['message status'],
     {
       kind: 'leaf',
       name: 'prune',

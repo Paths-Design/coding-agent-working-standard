@@ -651,7 +651,9 @@ import { isAdapterCoveredSurface } from './types';
 // Node/entry; unavailable classification preserves raw outer-shell input.
 // v126: include the managed-hook growth stance in the Bash analysis and copy
 // operand libraries; their executable behavior is unchanged.
-export const SHARED_PACK_VERSION = 126;
+// v127: secret advisories retain line/category order and shell-option semantics
+// while matching token expressions without per-line external processes.
+export const SHARED_PACK_VERSION = 127;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
