@@ -1,9 +1,10 @@
 id: CAWS-CUTOVER-FIXTURE-CONTRACTS-001
 title: 'Restore archive retirement and fixture fidelity for local cutover'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: cutover-fixture-contracts
 created_at: '2026-10-28T07:41:47.580Z'
-updated_at: '2026-10-28T07:41:47.580Z'
+updated_at: '2026-10-28T07:43:47.140Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
