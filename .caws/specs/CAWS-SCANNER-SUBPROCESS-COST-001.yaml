@@ -1,10 +1,11 @@
 id: CAWS-SCANNER-SUBPROCESS-COST-001
 title: 'Preserve secret advisories without per-line subprocess fanout'
 mode: fix
-lifecycle_state: active
-worktree: scanner-subprocess-cost
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Committed scanner d60a368 preserves installed-parser advisory semantics and removes per-line grep launches. Baseline cost failure, C and UTF8 installed tests, fingerprint controls, build, gates, and independent review recorded in A1-A3. Actual native callback latency and machine adoption remain parent cutover obligations.'
 created_at: '2026-10-28T11:37:59.383Z'
-updated_at: '2026-10-28T11:39:44.752Z'
+updated_at: '2026-10-28T12:14:17.812Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
