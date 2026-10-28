@@ -64,3 +64,10 @@ evidence:
     command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/bash-write-guard-heredoc.bats"
     exit_code: 0
     commit_sha: "2fa1d7747c64594eac7a85cf1ddae04f7c907415"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "PASS bounded Source component: cases15-22 and30-32 retain conservative bodies for unsupported/unquoted/multiple/unterminated heredocs, unknown prefixes and visible alias/function/eval/source/hash/enable/assignment/wrapper/substitution/continuation/operator syntax, including after supported inspections. Original harmless alias execution proof remains valid. Actual worktree guard refuses alias shell sparse-checkout operations with exit2, specific agent-issued sparse-checkout reason and unchanged simulated sentinel. No hostile shell operation is executed; arbitrary plaintext and Node file-sink admission are not introduced. Inspected raw external log /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/read-prefix-implementation-events.jsonl: line125 OLDcd8f RED exit1, line161 preserved intermediate physical-path oracle failure exit1 with guard2 and unchanged sentinel, line167 final Bats34 GREEN exit0. Actual Bats cwd /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/node-read-prefix/packages/caws-cli. Root directly inspected committed source and actual raw checks separately; peer feedback is review context, not acceptance authority. --verify here rederives commit existence/reachability only and never executes the recorded Bats command. Bounded Source component only: exact new installed-helper selection, original prefixed native command execution and genuine-host lookup verification remain REQUIRED Parent qualification. No installed/global/full-Rust or Python-retirement completion is inferred."
+    recorded_at: "2026-10-28T01:18:13.392Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/bash-write-guard-heredoc.bats"
+    exit_code: 0
+    commit_sha: "2fa1d7747c64594eac7a85cf1ddae04f7c907415"
