@@ -44,3 +44,9 @@ acceptance:
     then: 'corrected behaviors pass without hiding remaining publication failures, whose repair and successful ordinary push remain parent obligations'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inherited Git environment is removed by worker setup; explicit empty GIT_PREFIX remains rejected by real mutation view. Red four failures/100 and green114 retained. Production Git policies unchanged. Root inspected raw evidence at /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/prepush-repair-green-01.log. --verify verifies commit existence only; external logs are narrative references. Previous absolute artifact_path citation was refused without writing, corrected here."
+    recorded_at: "2026-10-28T07:27:12.518Z"
+    commit_sha: "5d81f937c7348a3cefd21d92219bddd71ac61215"
