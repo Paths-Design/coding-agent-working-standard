@@ -407,7 +407,7 @@ describe('bounded shell analysis contract', () => {
     ],
     ['policies.js', 'sedPolicy(args, ctx, node);', 'void 0;', 'sed-execution-command', 'allow'],
     [
-      'policies.js',
+      'inspection-profiles.js',
       'sort: /^-[bdfginrMu]+$/',
       'sort: /-[bdfginrMu]+$/',
       'profile-reader-sort-attached-output',
