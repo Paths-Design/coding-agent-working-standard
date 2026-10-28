@@ -797,6 +797,67 @@ test('a conflicting destination refuses staging before an unverifiable record is
   assertSources();
 });
 
+// The window between observing the marker and opening it for writing is an
+// in-run race; a descriptor that is not the observed file must never be
+// reclassified as a stored record and relinquished.
+test('a marker replaced between observation and its writable open refuses staging', () => {
+  successful(stage());
+  const marker = path.join(pkg, markerName);
+  const licenses = licenseState();
+  const prefix = `
+    import fs from 'node:fs';
+    const open = fs.openSync;
+    const marker = ${JSON.stringify(marker)};
+    let faults = 0;
+    fs.openSync = function(file, flags, ...args) {
+      if (file === marker && flags === (fs.constants.O_RDWR | fs.constants.O_NOFOLLOW) && faults === 0) {
+        faults++;
+        const foreign = ${JSON.stringify(path.join(pkg, 'foreign-marker'))};
+        fs.writeFileSync(foreign, fs.readFileSync(marker), { mode: 0o600 });
+        fs.renameSync(foreign, marker);
+      }
+      return open.call(fs, file, flags, ...args);
+    };`;
+  const result = invoke('stageLicenseTransport', prefix);
+  const data = custodyDiagnostic(result);
+  expect(data.checkpoint).toBe('marker_open');
+  expect(data.failedPredicate).toBe('path_identity');
+  expect(JSON.parse(result.stderr).faults).toBe(1);
+  expect(relinquishedFiles()).toEqual([]);
+  expect(fs.existsSync(marker)).toBe(true);
+  expect(licenseState()).toEqual(licenses);
+  assertSources();
+});
+
+// A destination preserved by the early survey is re-verified before staging
+// reports it, so a change during custody work cannot ship as "preserved".
+test('a preserved destination changed during custody work refuses staging', () => {
+  write(path.join(pkg, 'LICENSE'), sources[0][1]);
+  expect(successful(stage())).toEqual({
+    created: transports.slice(1).map(([name]) => name),
+    preserved: ['LICENSE'],
+  });
+  const marker = path.join(pkg, markerName);
+  const prefix = `
+    import fs from 'node:fs';
+    const open = fs.openSync;
+    let faults = 0;
+    fs.openSync = function(file, flags, ...args) {
+      if (file === ${JSON.stringify(marker)} && flags === (fs.constants.O_RDWR | fs.constants.O_NOFOLLOW) && faults === 0) {
+        faults++;
+        fs.writeFileSync(${JSON.stringify(path.join(pkg, 'LICENSE'))}, 'foreign bytes');
+      }
+      return open.call(fs, file, flags, ...args);
+    };`;
+  const result = invoke('stageLicenseTransport', prefix);
+  refused(result, /preserved destination changed during staging: LICENSE/);
+  expect(JSON.parse(result.stderr).faults).toBe(1);
+  expect(fs.readFileSync(path.join(pkg, 'LICENSE'), 'utf8')).toBe('foreign bytes');
+  expect(relinquishedFiles()).toEqual([]);
+  expect(ledger().phase).toBe('ready');
+  assertSources();
+});
+
 test('real marker write followed by failure retains uncertain ownership and exact created bytes', () => {
   const prefix = `
     import fs from 'node:fs';

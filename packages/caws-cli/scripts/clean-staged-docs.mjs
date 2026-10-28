@@ -64,7 +64,10 @@ const custody = (message) => {
 // earlier run is matched on every recorded field except dev, and the device is
 // checked relationally instead: the object must be on the package root's
 // filesystem now, which still scopes its inode number to one filesystem.
-// Observations within one run keep comparing dev exactly.
+// Observations within one run keep comparing dev exactly. st_dev cannot tell a
+// reboot from a metadata-preserving clone or restore of the whole package, so
+// custody follows such a clone: what passes is an exact replica, at the same
+// path, of a transport this tool created.
 const deviceOf = (root) => String(fs.lstatSync(root, { bigint: true }).dev);
 function durableMismatch(recorded, observed, device) {
   const differing = Object.keys(recorded).filter(
@@ -284,7 +287,14 @@ function openMarker(root, device) {
   const fd = fs.openSync(file, fs.constants.O_RDWR | fs.constants.O_NOFOLLOW);
   try {
     const stat = fs.fstatSync(fd, { bigint: true });
-    const handle = { file, fd, ...observed, data: markerData(observed.bytes, stat, device) };
+    const handle = { file, fd, ...observed };
+    // A descriptor that is not the observed file is an in-run race, refused here
+    // before the record can be classified (and staging would relinquish it).
+    if (!same(identity(stat), observed.identity)) {
+      current(handle, 'marker_open');
+      fail(`ownership marker changed while opening: ${file}`);
+    }
+    handle.data = markerData(observed.bytes, stat, device);
     current(handle, 'marker_open');
     return handle;
   } catch (error) {
@@ -389,12 +399,16 @@ export function stageLicenseTransport(packageRoot = PKG_ROOT) {
     // Survey destinations first so a conflict refuses before any record moves.
     const missing = [];
     const preserved = [];
+    const surveyed = [];
     for (const source of sources) {
       const destination = read(path.join(root, source.name), true);
       if (!destination) missing.push(source);
       else if (!destination.bytes.equals(source.observed.bytes))
         fail(`conflicting destination: ${source.name}`);
-      else preserved.push(source.name);
+      else {
+        preserved.push(source.name);
+        surveyed.push({ name: source.name, destination });
+      }
     }
     let marker = null;
     let relinquished;
@@ -415,7 +429,20 @@ export function stageLicenseTransport(packageRoot = PKG_ROOT) {
         raise([error, closing], 'License staging and ownership descriptor close failed');
       relinquished = relinquishMarker(root, error);
     }
-    const result = (body) => (relinquished ? { ...body, relinquished } : body);
+    // Nothing owned rereads an unowned preserved file, so re-verify every surveyed
+    // destination before reporting it preserved.
+    const result = (body) => {
+      for (const { name, destination } of surveyed) {
+        const now = read(path.join(root, name), true);
+        if (
+          !now ||
+          !same(now.identity, destination.identity) ||
+          !now.bytes.equals(destination.bytes)
+        )
+          fail(`preserved destination changed during staging: ${name}`);
+      }
+      return relinquished ? { ...body, relinquished } : body;
+    };
     let failure;
     try {
       if (!missing.length) return result({ created: [], preserved });
