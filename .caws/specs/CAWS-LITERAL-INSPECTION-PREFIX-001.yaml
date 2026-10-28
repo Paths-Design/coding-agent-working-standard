@@ -84,3 +84,9 @@ contracts:
   - name: 'inspection-prefix-status-controls'
     type: contract-test
     path: 'packages/caws-cli/tests/shell/hooks-inspection-prefix.test.js'
+evidence:
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "UNCHECKED: the full unchanged actual05 call has not been replayed through the selected installed runtime and genuine native host. Preserved original input/refusal: /Users/darianrosebrook/.codex/caws-native-harness/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/user/.codex/sessions/2026/10/27/rollout-2026-10-27T20-18-59-01a18084-a323-72e0-94fc-c839a37fb236.jsonl lines73/76: fake JavaScript target and pre-execution refusal2. Source Bats exercises the exact05 prefix with a representative body, prior04 prefix and Node-first controls; that does not discharge the full raw call. Parent ART05/Root successor06 retain exact installed/genuine replay and host lookup/selection qualification. Source commit39084d43ae9f4253a2320243f9068029a4b84a19 exists; --verify here checks commit existence/reachability only and executes no recorded command or test. No waiver and no full-call execution claim."
+    recorded_at: "2026-10-28T05:22:15.003Z"
+    commit_sha: "39084d43ae9f4253a2320243f9068029a4b84a19"
