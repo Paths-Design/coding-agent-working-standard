@@ -49,9 +49,10 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Inherited Git environment is removed by worker setup; explicit empty GIT_PREFIX remains rejected by real mutation view. Red four failures/100 and green114 retained. Production Git policies unchanged. Root inspected raw evidence at /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/prepush-repair-green-01.log. --verify verifies commit existence only; external logs are narrative references. Previous absolute artifact_path citation was refused without writing, corrected here."
-    recorded_at: "2026-10-28T07:27:12.518Z"
-    commit_sha: "5d81f937c7348a3cefd21d92219bddd71ac61215"
+    evidence_ref: "Committed 90b39fbaa repairs all five native child launches across both analysis suites. Retained explicit Node22 and Node25 invocations injected parent GIT_CONFIG_PARAMETERS and GIT_PREFIX; baseline reproduced198 failures, incomplete repair1 failure, final1618 passed on both. New actual Jest child control has no inner setup call and retains explicit hostile Git config rejection plus PATH/artifact/mutant inputs. Raw external logs ART06/subprocess-env-red-01.log, green-01.log, green-02.log, node25-01.log; this test-node verification executes its matched test but does not independently verify the external launch environment."
+    recorded_at: "2026-10-28T11:18:07.807Z"
+    test_nodeid: "packages/caws-cli/tests/ci/git-fixture-isolation.test.js::Jest passes its isolated environment"
+    test_verified_at: "90b39fbaa34437b868e327435a3b9ec4c79a0c1c"
   - criterion_id: A2
     status: pass
     evidence_ref: "Actual workflow guard admits exact registered copy-roles.sh and refuses three nearby shadow names; red guard failures and green114 retained. Root inspected raw evidence at /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/prepush-repair-green-01.log. --verify verifies commit existence only; external logs are narrative references. Previous absolute artifact_path citation was refused without writing, corrected here."
