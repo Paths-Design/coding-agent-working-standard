@@ -1,7 +1,7 @@
 {
   "shared": {
-    "version": 124,
-    "fingerprint": "39a420d4d2fd7e486ad4ef59977e1b45e02801dadcf488a0052f8b6b6f05edf7"
+    "version": 125,
+    "fingerprint": "681752380ff24c1dd8888da45b6d640d7e1344b49b10af703033562df867e059"
   },
   "claude-code": {
     "version": 25,

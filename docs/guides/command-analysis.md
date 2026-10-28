@@ -10,6 +10,50 @@ audience: consumer
 
 # Bounded command analysis
 
+## Literal inspection prefixes
+
+`caws hooks inspection-prefix` reads shell source from stdin without executing
+it or loading project authority. Its fixed response is
+`caws.inspection-prefix.v1:allow`, `:unsupported`, or `:error`, followed by LF.
+Exit 0 means positively classified, 1 means unsupported syntax or argument
+roles, and 2 means a parse, runtime or resource failure. An analysis or
+mutation-view allow result does not substitute for this predicate.
+
+The pinned structural parser accepts complete newline-separated simple commands
+with literal operands, including quoted operands. Reader, Git and sed argument
+roles share definitions with effect analysis. The closed subset includes reader
+utilities, explicit Git inspection subcommands, `git branch --show-current`,
+`pwd` with its modeled options, and sed print/delete/quit scripts. Assignments,
+redirections, expansions, substitutions, operators, wrappers, control
+structures, lookup mutations, execution/output options and unknown commands are
+unsupported. This syntax policy assumes trusted ordinary executable lookup and
+Git configuration; it does not authenticate executable identity or grant
+ownership.
+
+The classifier limits input to 32 KiB, 64 commands, 4096 AST objects and
+depth 64. A supervisor limits synchronous parsing in a worker to two seconds,
+with a 64 MiB old-generation heap and 2 MiB stack. Input collection has a
+separate two-second deadline. Submitted source is inert data.
+
+`caws_blank_heredoc_bodies(input)` uses the predicate for a nonempty prefix
+before a complete standalone quoted bare Node heredoc. The selected library
+derives its physical managed generation from its own location and checks the
+dispatcher's selected shared path and digest. It invokes only that generation's
+absolute `native/node` and compiled `inspection-prefix-entry.js`, clearing
+modeled Node startup controls. Ambient `CAWS_BIN` or `PATH` cannot select
+classification. Only exit 0 with the exact versioned positive response permits
+body projection. Missing, old, relocated or unmatched layouts and
+protocol/runtime failures retain raw input. This relies on managed snapshot
+verification and a trusted host, not stronger protection against filesystem
+races. Fixtures exercise the binding contract; installed loader selection
+requires separate native qualification.
+
+The projection preserves prefix, header, delimiter, suffix and trailing bytes,
+replacing only body lines with blank lines. The Node-first form needs no prefix
+classifier. Cat/tee file-sink behavior remains separate. Node is executable
+data, never a file sink or a read-only command: callers must retain the original
+raw command for interpreter-write checks and inspect outer writes independently.
+
 ## Active write-guard integration
 
 The diagnostic commands have different exit contracts. `caws hooks analyze`

@@ -20,6 +20,7 @@ import type { Command } from 'commander';
 import { Option } from 'commander';
 import {
   runHooksAnalyzeCommand,
+  runHooksInspectionPrefixCommand,
   runHooksMutationViewCommand,
   type HooksAnalyzeOptions,
   type HooksMutationViewOptions,
@@ -628,6 +629,10 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   const hooksCmd = program.command('hooks');
   applyGroupMeta(hooksCmd, HOOKS_COMMAND_META);
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'inspection-prefix')).action(async () => {
+    exit(await runHooksInspectionPrefixCommand());
+  });
 
   defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'analyze')).action(
     async (opts: HooksAnalyzeOptions) => {
