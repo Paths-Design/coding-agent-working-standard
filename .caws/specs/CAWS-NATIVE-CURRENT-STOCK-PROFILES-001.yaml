@@ -36,5 +36,12 @@ acceptance:
     then: >-
       paired selected-shell results and hostile source controls establish qualified
       behavior while custom or unproved cases retain their selected path
+  - id: A3
+    given: 'current utility helpers with quoted Node heredoc projection'
+    when: 'utility analysis encounters a program shape not implemented by its native consumer'
+    then: >-
+      the selected shell route handles that shape without false ignored-staging
+      notices, while ordinary native cases and actual staged-ignored-file warnings
+      remain correct
 non_functional: {}
 contracts: []
