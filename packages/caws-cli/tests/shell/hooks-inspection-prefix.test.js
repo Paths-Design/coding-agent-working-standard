@@ -86,6 +86,54 @@ function project(f, input = raw, env = {}, lib = f.lib) {
   return child.stdout;
 }
 
+describe('Git optional unified-count roles', () => {
+  const { inspectGitOptions } = require('../../dist/shell/analysis/inspection-profiles.js');
+  const hostile = ['-U', '--unified'].flatMap((option) =>
+    ['--output=target', '--ext-diff'].map((next) => [option, next])
+  );
+  test.each(hostile)('%s does not consume following %s', (option, next) => {
+    const issues = [];
+    expect(inspectGitOptions('diff', [option, next], (code) => issues.push(code))).toEqual([
+      option,
+      next,
+    ]);
+    expect(issues).toEqual(next.startsWith('--output=') ? ['git-option-unmodeled'] : []);
+    expect(invoke(`git diff ${option} ${next}\n`)).toEqual({ status: 1, stdout: unsupported });
+  });
+  test.each(['-U', '-U3', '--unified', '--unified=3'])(
+    '%s remains a readonly count flag',
+    (option) => {
+      expect(invoke(`git diff ${option}\n`)).toEqual({ status: 0, stdout: allow });
+      expect(invoke(`git diff ${option} -- --output=literal --ext-diff\n`)).toEqual({
+        status: 0,
+        stdout: allow,
+      });
+    }
+  );
+  test('required Git data operands keep their distinct role', () => {
+    const issues = [];
+    expect(
+      inspectGitOptions('log', ['--grep', '--ext-diff', '--oneline'], (code) => issues.push(code))
+    ).toEqual(['--oneline']);
+    expect(issues).toEqual([]);
+  });
+  test.each(hostile)('%s followed by %s retains the Node body', (option, next) => {
+    const f = fixture();
+    const input = `git diff ${option} ${next}\n` + "node <<'N'\nconst f=x=>x;\nN\n";
+    expect(project(f, input)).toBe(input);
+  });
+  test.each(['-U', '-U3', '--unified', '--unified=3'])(
+    '%s permits body-only projection with literal path data',
+    (option) => {
+      const f = fixture();
+      const prefix = `git diff ${option} -- --output=literal --ext-diff\n`;
+      expect(project(f, prefix + "node <<'N'\nconst f=x=>x;\nN\n")).toBe(
+        prefix + "node <<'N'\n\nN\n"
+      );
+    }
+  );
+});
+
 describe('pure structural inspection prefix', () => {
   test.each([
     'git diff -- .gitignore\ncat .caws/policy.yaml\n',

@@ -45,12 +45,14 @@ export const GIT_EXECUTION_OPTIONS: Record<string, RegExp> = {
 export const GIT_DATA_OPTIONS: Record<string, readonly string[]> = {
   log: ['-n', '--max-count', '--grep', '--author', '--committer', '--since', '--until'],
   show: [],
-  diff: ['-U', '--unified'],
+  // Unified context counts are optional and attached. The next token must
+  // retain its own option/path role, including output or execution options.
+  diff: [],
   commit: ['-m', '--message', '-F', '--file'],
   grep: ['-e', '-f'],
 };
 export const GIT_DIFF_FLAGS =
-  /^(?:-[psw]|-U[0-9]+|--(?:stat|numstat|shortstat|name-only|name-status|check|raw|patch|no-patch|quiet|exit-code|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+))$/;
+  /^(?:-[psw]|-U[0-9]*|--(?:stat|numstat|shortstat|name-only|name-status|check|raw|patch|no-patch|quiet|exit-code|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified(?:=[0-9]+)?))$/;
 export const GIT_OPTION_FLAGS: Record<string, RegExp> = {
   status: /^(?:-[sbz]+|--(?:short|branch|porcelain(?:=v[12])?|ignored|untracked-files(?:=.*)?))$/,
   diff: GIT_DIFF_FLAGS,
