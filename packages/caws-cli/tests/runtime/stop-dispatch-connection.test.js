@@ -605,7 +605,7 @@ function seedStopLease() {
   return { file, before: fs.readFileSync(file) };
 }
 
-test.each(['current helpers', 'changed ordered handler'])(
+test.each(['changed current helper', 'changed ordered handler'])(
   'Stop preflight refuses %s before prefix or lease effects',
   async (kind) => {
     installRealStopSources();
@@ -614,9 +614,7 @@ test.each(['current helpers', 'changed ordered handler'])(
       installReviewedStopLibraries();
       fs.appendFileSync(selection.handlers[0].path, '# changed source\n');
     } else {
-      expect(selection.libraries['agent-surface.sh'].sha256).not.toBe(
-        'f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a'
-      );
+      fs.appendFileSync(selection.libraries['agent-surface.sh'].path, '# changed source\n');
     }
     const lease = seedStopLease();
     const prepared = await prepare();
@@ -647,7 +645,7 @@ test('late helper drift after an eligible Stop prefix preserves the lease and re
       'preflight'
     );
     trace.push('prefix');
-    fs.appendFileSync(selection.libraries['heredoc.sh'].path, '# drift after prefix\n');
+    fs.appendFileSync(selection.libraries['agent-surface.sh'].path, '# drift after prefix\n');
     return completedPrefix;
   });
   stock.tryExecuteStockHandler.mockImplementation(async (handler, options) => {
