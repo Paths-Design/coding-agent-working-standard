@@ -67,20 +67,27 @@ fi
 [[ -z "$CONTENT" ]] && exit 0
 
 HITS=""
+SCAN_NOCASEMATCH=0
+if shopt -q nocasematch; then SCAN_NOCASEMATCH=1; fi
 
 # High-confidence patterns only (low false-positive rate).
+# Token matching uses shell EREs instead of two processes per content line.
+# The private-key case keeps the incoming shell option; token EREs retain the
+# case-sensitive behavior of grep even when the caller enables nocasematch.
 while IFS= read -r line; do
   case "$line" in
     *PRIVATE_KEY*|*private_key*) HITS="${HITS}  • private key material\n" ;;
   esac
+  if [[ "$SCAN_NOCASEMATCH" == 1 ]]; then shopt -u nocasematch; fi
   # AWS-style access key: AKIA[0-9A-Z]{16}
-  if printf '%s' "$line" | grep -qE 'AKIA[0-9A-Z]{16}'; then
+  if [[ "$line" =~ AKIA[0-9A-Z]{16} ]]; then
     HITS="${HITS}  • possible AWS access key\n"
   fi
   # GitHub token: ghp_, gho_, ghu_, ghs_, ghr_
-  if printf '%s' "$line" | grep -qE 'gh[pousr]_[A-Za-z0-9_]{36,}'; then
+  if [[ "$line" =~ gh[pousr]_[A-Za-z0-9_]{36,} ]]; then
     HITS="${HITS}  • possible GitHub token\n"
   fi
+  if [[ "$SCAN_NOCASEMATCH" == 1 ]]; then shopt -s nocasematch; fi
 done <<< "$CONTENT"
 
 if [[ -n "$HITS" ]]; then
