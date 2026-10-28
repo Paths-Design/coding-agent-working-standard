@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: license-boot-custody
 created_at: '2026-10-27T23:43:29.535Z'
-updated_at: '2026-10-27T23:43:56.801Z'
+updated_at: '2026-10-28T00:03:43.403Z'
 created_by_session: '4126b194-a8f5-4ff4-aed5-f071b045cfda'
 blast_radius:
   modules:
@@ -19,6 +19,8 @@ scope:
     - 'packages/caws-cli/tests/docs/package-license-transport.test.js'
     - 'packages/caws-cli/.gitignore'
   out: []
+  support:
+    - packages/caws-cli/.license-transport.json
 invariants:
   - 'Cleanup never unlinks a license file it cannot prove it created: every recorded field except the boot-scoped device number must match, the object must sit on the package root filesystem now, and owned bytes must hash to the recorded sha256.'
   - 'Staging never deletes or overwrites a license file or an ownership record; relinquishing moves the record inode aside intact and only reduces deletion authority.'
