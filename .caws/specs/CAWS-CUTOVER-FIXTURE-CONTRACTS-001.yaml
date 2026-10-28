@@ -47,3 +47,8 @@ evidence:
     evidence_ref: "Archive15-case full check passed in fixture-contracts-green-01.log after RED6fail9pass; actual tracked/ignored teardown, archive bytes, events and clean no-op audit asserted. Later live-precedence and EACCES selection controls2pass. Raw logs under /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/ (archive-retirement*, fixture-contracts*). --verify checks commit existence only. No whole publication/native/global cutover claim."
     recorded_at: "2026-10-28T08:13:55.135Z"
     commit_sha: dc63da0f1c70234521c80881a673e16a0207db95
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Four real lifecycle-lock-seam changes (archive bytes/removal, new live body/dangling live link) refuse before teardown and preserve competitor state, registry/events. Malformed/wrongID/active/bound terminal inputs refuse. Existing retirement/destroy harness50pass32notselected. External writers ignoring lifecycle lock are outside this claim. Raw logs under /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/ (archive-retirement*, fixture-contracts*). --verify checks commit existence only. No whole publication/native/global cutover claim."
+    recorded_at: "2026-10-28T08:14:17.153Z"
+    commit_sha: dc63da0f1c70234521c80881a673e16a0207db95
