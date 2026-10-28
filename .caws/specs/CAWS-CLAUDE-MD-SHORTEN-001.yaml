@@ -59,3 +59,8 @@ evidence:
     evidence_ref: "At 28d174363, against the installed caws 12.2.0-rc.2 snapshot: every `caws <group> <sub>` named in CLAUDE.md (19 command paths) printed help whose Usage line names that exact path; flags --takeover, scope show --spec, worktree create --spec, amend-scope --add, specs show --archived and reprieve grant --all-repos appear in their help. Negative control: `caws parallel setup`, which CLAUDE.md says does not exist, fell through to top-level Usage and was rejected by the check."
     recorded_at: "2026-10-28T01:18:56.030Z"
     commit_sha: "28d174363"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "At 28d174363: ./node_modules/.bin/prettier (3.6.2) --check CLAUDE.md docs/agents/scope-discipline.md docs/release-procedure.md CONTRIBUTING.md docs/architecture/repo-local-hook-policy.md -> \"All matched files use Prettier code style!\", exit 0. The pre-commit prettier pass on both commits reported all files unchanged."
+    recorded_at: "2026-10-28T01:18:58.243Z"
+    commit_sha: "28d174363"
