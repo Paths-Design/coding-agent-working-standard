@@ -350,6 +350,8 @@ describe('bounded shell analysis contract', () => {
       process.execPath,
       ['-e', RUNNER, path.resolve(__dirname, '../../dist/shell/analysis/analyze.js'), activeMutant],
       {
+        // Jest isolates process.env in its VM; native children need that snapshot explicitly.
+        env: { ...process.env },
         input: JSON.stringify(requests),
         encoding: 'utf8',
         shell: false,
@@ -556,6 +558,10 @@ describe('bounded shell analysis contract', () => {
         fs.cpSync(path.resolve(__dirname, '../../dist/shell/analysis'), moduleDir, {
           recursive: true,
         });
+        fs.copyFileSync(
+          path.resolve(__dirname, '../../dist/shell/duration.js'),
+          path.join(temp, 'duration.js')
+        );
         fs.mkdirSync(path.join(temp, 'node_modules'));
         fs.symlinkSync(
           path.dirname(path.dirname(require.resolve('unbash'))),
@@ -571,6 +577,7 @@ describe('bounded shell analysis contract', () => {
           process.execPath,
           ['-e', RUNNER, path.join(moduleDir, 'analyze.js')],
           {
+            env: { ...process.env },
             input: JSON.stringify([request]),
             encoding: 'utf8',
             shell: false,

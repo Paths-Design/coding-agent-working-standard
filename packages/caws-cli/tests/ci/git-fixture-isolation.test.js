@@ -79,6 +79,60 @@ test('worker setup isolates inherited Git context while explicit hostile cases r
   });
 });
 
+test('Jest passes its isolated environment to native children while explicit Git configuration remains hostile', () => {
+  const view = path.resolve(__dirname, '../../dist/shell/analysis/mutation-view.js');
+  const result = spawnSync(
+    process.execPath,
+    [
+      '-e',
+      `
+    const { projectMutationView } = require(${JSON.stringify(view)});
+    (async () => {
+      const inherited = Object.keys(process.env).filter(key => key.startsWith('GIT_'));
+      const input = { command: 'git status --short', cwd: process.cwd(), project: process.cwd() };
+      const clean = await projectMutationView(input);
+      process.env.GIT_CONFIG_PARAMETERS = "'core.sshCommand'='ssh -o ServerAliveInterval=30'";
+      const hostile = await projectMutationView(input);
+      console.log(JSON.stringify({ inherited, cleanIssues: clean.issues, hostileIssues: hostile.issues,
+        path: process.env.PATH, ordinary: process.env.FIXTURE_SENTINEL,
+        artifact: process.env.CAWS_EVIDENCE_DIR, mutant: process.env.__STRYKER_ACTIVE_MUTANT__ }));
+    })().catch(error => { console.error(error); process.exitCode = 1; });
+  `,
+    ],
+    {
+      cwd: root(),
+      encoding: 'utf8',
+      timeout: 30000,
+      // Do not require the setup inside the child: this exercises the Jest VM boundary.
+      env: {
+        ...process.env,
+        FIXTURE_SENTINEL: 'preserved',
+        CAWS_EVIDENCE_DIR: 'retained-artifacts',
+        __STRYKER_ACTIVE_MUTANT__: 'preserved-mutant',
+      },
+    }
+  );
+  expect(result.error).toBeUndefined();
+  expect(result.signal).toBeNull();
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe('');
+  const observed = JSON.parse(result.stdout);
+  expect(observed.inherited).toEqual([]);
+  expect(observed.cleanIssues).toEqual([]);
+  expect(observed.hostileIssues).toEqual([
+    expect.objectContaining({
+      code: 'git-environment',
+      message: expect.stringContaining('GIT_CONFIG_PARAMETERS'),
+    }),
+  ]);
+  expect(observed).toMatchObject({
+    path: process.env.PATH,
+    ordinary: 'preserved',
+    artifact: 'retained-artifacts',
+    mutant: 'preserved-mutant',
+  });
+});
+
 test('an interrupted copy fails once, removes its partial destination, and retains diagnostic custody', () => {
   const original = Object.assign(new Error('copy interrupted'), { code: 'ENOENT' });
   let destination;

@@ -30,6 +30,7 @@ setup_file() {
   cp "$CAWS_TEST_HOOKS_DIR/lib/heredoc.sh" "$CAWS_TEST_PREFIX_LIB"
   cp "$(command -v node)" "$CAWS_TEST_PREFIX_GENERATION/native/node"
   cp -R "$CLI_PKG_ROOT/dist/shell/analysis" "$CAWS_TEST_PREFIX_GENERATION/native-prefix/node_modules/@paths.design/caws-cli/dist/shell/"
+  cp "$CLI_PKG_ROOT/dist/shell/duration.js" "$CAWS_TEST_PREFIX_GENERATION/native-prefix/node_modules/@paths.design/caws-cli/dist/shell/"
   local parser_root
   parser_root="$(node -p 'require("path").dirname(require("path").dirname(require.resolve("unbash")))')"
   cp -R "$parser_root" "$CAWS_TEST_PREFIX_GENERATION/native-prefix/node_modules/unbash"
@@ -90,6 +91,10 @@ _read_prefix() {
 # the full unchanged installed/native call remains a separate qualification.
 _postcommit_prefix() {
   printf 'git rev-parse HEAD\ngit show --stat --oneline HEAD\ngit status --short'
+}
+
+_caws_read_prefix() {
+  printf '/opt/reviewed/bin/caws specs show EXAMPLE-001\ncaws status --short'
 }
 
 # ── guard-level (end to end through the real oracle) ────────────────────────
@@ -615,6 +620,98 @@ _postcommit_prefix() {
   local guard_status="$status"
   if [[ "$guard_status" == 0 ]]; then printf changed > "$marker"; fi
   printf 'actual06 alias guard exit=%s sentinel=%s\n' "$guard_status" "$(cat "$marker")"
+  assert_equal "$guard_status" 2
+  assert_output --partial 'BLOCKED: agent-issued git sparse-checkout'
+  assert_equal "$(cat "$marker")" sentinel
+}
+
+@test "CAWS reader prefix: only the body is projected and false JS shell targets disappear" {
+  local prefix input expected ending
+  prefix="$(_caws_read_prefix)"
+  for ending in '' $'\n' $'\n\n'; do
+    input="$prefix"$'\nnode <<\'NODE\'\nconst rows=x.map(x=>JSON.parse(x));\nNODE'"$ending"
+    expected="$prefix"$'\nnode <<\'NODE\'\n\nNODE'"$ending"
+    _run_blank_exact "$input"
+    assert_success
+    assert_output "${expected}__END__"
+    _run_shell_view caws_bash_mutation_candidates "$input"
+    assert_success
+    assert_output ''
+  done
+}
+
+@test "CAWS effects and unknown options retain raw Node input" {
+  local command input
+  for command in 'caws specs recover EXAMPLE-001 --out target' \
+    'caws specs verify-acs EXAMPLE-001 --run' 'caws status --unknown' \
+    'caws specs show' 'caws specs show EXAMPLE-001 extra' 'env caws status'; do
+    input="$command"$'\nnode <<\'N\'\nconst rows=x.map(x=>JSON.parse(x));\nN\n'
+    _run_blank_exact "$input"
+    assert_success
+    assert_output "${input}__END__"
+  done
+}
+
+@test "CAWS reader prefix: raw Node foreign write refuses before simulated effects" {
+  local foreign="$BATS_TEST_TMPDIR/caws-foreign" physical_foreign target input
+  mkdir -p "$foreign"
+  git -C "$foreign" init -q -b main
+  physical_foreign="$(cd "$foreign" && pwd -P)"
+  target="$foreign/sentinel.txt"
+  printf sentinel > "$target"
+  input="$(_caws_read_prefix)"$'\n'"$(printf 'node <<%s\nrequire("fs").writeFileSync("%s", "changed");\nJS\n' "'JS'" "$target")"
+  _run_blank "$input"
+  assert_success
+  refute_output --partial 'writeFileSync'
+  _run_shell_view caws_bash_interpreter_write_literals "$input"
+  assert_success
+  assert_line "$target"
+  _run_bwg "$input"
+  local guard_status="$status"
+  if [[ "$guard_status" == 0 ]]; then printf changed > "$target"; fi
+  printf 'CAWS Node guard exit=%s target=%s sentinel=%s\n' "$guard_status" "$target" "$(cat "$target")"
+  assert_equal "$guard_status" 2
+  assert_output --partial "BLOCKED: this Bash command mutates a file inside a DIFFERENT repository ($physical_foreign)"
+  assert_equal "$(cat "$target")" sentinel
+}
+
+@test "CAWS reader prefix: outer writes before and after retain specific refusal" {
+  _seed_foreign_worktree
+  local target input body position
+  target="$(_foreign_payload)"
+  printf sentinel > "$target"
+  body=$'node <<\'JS\'\nconst rows=x.map(x=>JSON.parse(x));\nJS'
+  for position in before after; do
+    if [[ "$position" == before ]]; then
+      input="$(_caws_read_prefix)"$'\n'"echo changed > $target"$'\n'"$body"
+    else
+      input="$(_caws_read_prefix)"$'\n'"$body"$'\n'"echo changed > $target"
+    fi
+    _run_shell_view caws_bash_mutation_candidates "$input"
+    assert_success
+    assert_line "$target"
+    _run_bwg "$input"
+    local guard_status="$status"
+    if [[ "$guard_status" == 0 ]]; then printf changed > "$target"; fi
+    printf 'CAWS outer %s guard exit=%s sentinel=%s\n' "$position" "$guard_status" "$(cat "$target")"
+    assert_equal "$guard_status" 2
+    assert_output --partial "BLOCKED: this Bash command mutates worktree 'wt-seed''s payload"
+    assert_equal "$(cat "$target")" sentinel
+  done
+}
+
+@test "CAWS reader prefix: lookup override refuses before simulated effects" {
+  _seed_foreign_worktree
+  local marker="$BATS_TEST_TMPDIR/caws-lookup-sentinel" input
+  input="$(_caws_read_prefix)"$'\nshopt -s expand_aliases\nalias node=sh\nnode <<\'SH\'\ngit sparse-checkout disable\nSH'
+  _run_blank "$input"
+  assert_success
+  assert_output "$input"
+  printf sentinel > "$marker"
+  run_guard worktree-guard.sh "$(hook_envelope Bash '' "$input")"
+  local guard_status="$status"
+  if [[ "$guard_status" == 0 ]]; then printf changed > "$marker"; fi
+  printf 'CAWS lookup guard exit=%s sentinel=%s\n' "$guard_status" "$(cat "$marker")"
   assert_equal "$guard_status" 2
   assert_output --partial 'BLOCKED: agent-issued git sparse-checkout'
   assert_equal "$(cat "$marker")" sentinel

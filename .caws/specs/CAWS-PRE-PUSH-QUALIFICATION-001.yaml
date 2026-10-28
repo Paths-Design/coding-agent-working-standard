@@ -3,9 +3,9 @@ title: 'Restore truthful pre-push qualification for native cutover publication'
 mode: fix
 lifecycle_state: closed
 resolution: completed
-closure_notes: 'Completed bounded publication check repair at 5d81f937c: isolated inherited Git context with explicit hostile controls, exact filename exception, managed headers and pack126 fingerprint. Focused checks114 plus command regression1605 and required gates pass; independent review and root source/raw discharge complete. Remaining publication suite failures, native eligibility, ordinary push and actual Rust cutover remain parent obligations.'
+closure_notes: 'Completed corrected child-process fixture isolation at90b39fbaa. Deliberately inherited Git inputs reproduce198 failures before repair; all1618 focused checks pass on Node22 and25 after allfive spawns receive the sanitized Jest environment. Explicit hostile Git cases, mutation propagation, ordinary PATH and artifact fields remain exercised. Doctor/gates and independent review complete, dual evidence readback verified. Full ordinary publication and actual Rust cutover remain root obligations.'
 created_at: '2026-10-28T06:46:27.028Z'
-updated_at: '2026-10-28T07:31:01.605Z'
+updated_at: '2026-10-28T11:30:04.628Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
@@ -22,6 +22,8 @@ scope:
     - 'packages/caws-cli/templates/hook-packs/shared/lib/copy-roles.sh'
     - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - packages/caws-cli/tests/shell/command-analysis.test.js
+    - packages/caws-cli/tests/shell/mutation-view.test.js
   out: []
 invariants:
   - 'Preserve production refusal contracts and gate failure propagation; no environment override or gate bypass'
@@ -48,9 +50,10 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Inherited Git environment is removed by worker setup; explicit empty GIT_PREFIX remains rejected by real mutation view. Red four failures/100 and green114 retained. Production Git policies unchanged. Root inspected raw evidence at /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/prepush-repair-green-01.log. --verify verifies commit existence only; external logs are narrative references. Previous absolute artifact_path citation was refused without writing, corrected here."
-    recorded_at: "2026-10-28T07:27:12.518Z"
-    commit_sha: "5d81f937c7348a3cefd21d92219bddd71ac61215"
+    evidence_ref: "Committed 90b39fbaa repairs all five native child launches across both analysis suites. Retained explicit Node22 and Node25 invocations injected parent GIT_CONFIG_PARAMETERS and GIT_PREFIX; baseline reproduced198 failures, incomplete repair1 failure, final1618 passed on both. New actual Jest child control has no inner setup call and retains explicit hostile Git config rejection plus PATH/artifact/mutant inputs. Raw external logs ART06/subprocess-env-red-01.log, green-01.log, green-02.log, node25-01.log; this test-node verification executes its matched test but does not independently verify the external launch environment."
+    recorded_at: "2026-10-28T11:18:07.807Z"
+    test_nodeid: "packages/caws-cli/tests/ci/git-fixture-isolation.test.js::Jest passes its isolated environment"
+    test_verified_at: "90b39fbaa34437b868e327435a3b9ec4c79a0c1c"
   - criterion_id: A2
     status: pass
     evidence_ref: "Actual workflow guard admits exact registered copy-roles.sh and refuses three nearby shadow names; red guard failures and green114 retained. Root inspected raw evidence at /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/prepush-repair-green-01.log. --verify verifies commit existence only; external logs are narrative references. Previous absolute artifact_path citation was refused without writing, corrected here."
@@ -63,6 +66,6 @@ evidence:
     commit_sha: "5d81f937c7348a3cefd21d92219bddd71ac61215"
   - criterion_id: A4
     status: pass
-    evidence_ref: "Builds0, focused114 and regression1605 pass. Gate events14873-14877 pass exact eight-file candidate. Doctor0E/5W/7I load0. Independent Terra review inspected commit/raw logs; root grounded cited boundaries, no concrete defect. Remaining publication/native eligibility failures and final ordinary push remain parent obligations; remaining baseline18fail/50pass retained. No overall publication or activation claim. Root inspected raw evidence at /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/prepush-repair-git-regression-01.log. --verify verifies commit existence only; external logs are narrative references. Previous absolute artifact_path citation was refused without writing, corrected here."
-    recorded_at: "2026-10-28T07:27:51.032Z"
-    commit_sha: "5d81f937c7348a3cefd21d92219bddd71ac61215"
+    evidence_ref: "Reopened bounded A1 correction committed90b39fbaa, build0, exact3testfile gates5pass doctor0E5W7I. Deliberately inherited Git environment reproduces198fail then passes1618/3 on explicit Node22.19 and25.9 executables; retained invocation and ART06/subprocess-env-* logs identify conditions. Independent Terra review inspected committeddiff/rawlog/source, no established defect; root grounded all5native-child environment snapshots and newcontrol actual-child/hostile assertions. Earlier A2/A3 source unchanged and retained. Commitverify establishes reachability only; normal fullpublication and actualRustswitch remain parentobligations. Failed push02 and incomplete focusedgreen01 preserved."
+    recorded_at: "2026-10-28T11:20:54.509Z"
+    commit_sha: "90b39fbaa34437b868e327435a3b9ec4c79a0c1c"
