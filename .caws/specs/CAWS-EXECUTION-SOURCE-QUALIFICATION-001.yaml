@@ -54,6 +54,17 @@ acceptance:
     given: 'committed Source candidate with matching runtime and test bytes'
     when: 'the full six-file execution mutation campaign and baseline execute in an isolated owned checkout'
     then: 'every target meets the unchanged 80 percent floor with nonzero selected tests and retained input-build-report identity'
+  - id: A2
+    given: >-
+      The committed joined Source candidate includes extracted pure inspection
+      decisions and unchanged floor requirements
+    when: >-
+      The complete eight-file analysis mutation campaign executes against matching
+      isolated source, tests and build outputs
+    then: >-
+      Every analysis target meets its unchanged 80 percent floor with nonzero tests
+      and retained input-build-report identity; topology checks alone do not satisfy
+      acceptance
 observability:
   - 'Retain raw baseline, mutation reports, source identity and nonzero exit outcomes outside the lane before cleanup'
 rollback:
