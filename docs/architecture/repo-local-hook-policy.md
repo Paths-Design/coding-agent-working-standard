@@ -291,3 +291,63 @@ key meaning "the whole frozen list wins" re-creates the fork. It also asserts an
 exact key set, so adding a key would hard-block every repo on an older pinned
 runtime — which is why all three top-level keys are declared in v1 even before
 each is consumed.
+
+## Which hook copy governs a surface
+
+Guard scripts exist in two places at once, and **which one executes depends on
+the surface, not on the file**:
+
+| Copy                                                               | Executed by             | In the CAWS repo                                     |
+| ------------------------------------------------------------------ | ----------------------- | ---------------------------------------------------- |
+| `~/.caws` (machine runtime, via `~/.caws/bin/caws-hook`)           | machine-routed surfaces | `claude-code`, `codex`                               |
+| `.caws/hooks/dispatch/<event>.sh` (project-local, exec'd directly) | project-wired surfaces  | `qwen-code`, `kimi-code`, `opencode`, `zcode`, `dsh` |
+
+The asymmetry is the trap, and it points the opposite way from the obvious
+guess. From a Claude Code session, `.claude/settings.json` carries no hook
+commands and your guards come from `~/.caws` — so editing `.caws/hooks/` does
+nothing you can observe. **It is still not a no-op.** That same edit is live
+governance for every project-wired surface: the qwen and kimi shims and the
+opencode plugin exec `$ROOT/.caws/hooks/dispatch/<event>.sh` directly, and the
+opencode plugin **fails OPEN** when that tree is absent or incomplete. So an
+"inert" experiment there can silently disarm another harness's guard plane.
+
+Three consequences:
+
+- **Never delete or prune `.caws/hooks/` as dead weight.** It is live runtime
+  code for five surfaces here, and it hosts the human-only escape hatches
+  (`reset-danger-latch.sh`, `reset-strikes.sh`) that live block messages
+  instruct the user to run by that exact path.
+- **A stale project pack is invisible from Claude.**
+  `doctor.hooks.installed_pack_version_lag` can sit at an old version while
+  every Claude session looks healthy, because Claude never reads that copy.
+  Treat that warning as real; refresh with
+  `caws init --agent-surface <an-already-wired-surface>` so the shared core
+  updates without re-registering a machine-routed surface.
+- **The install set is per surface, and retirement reads the whole repo.**
+  `ADAPTER_COVERED_SURFACES` (today: `dsh`) omits the four telemetry rows —
+  `agent-heartbeat.sh`, `agent-stop.sh`, `session-log.sh`,
+  `session_log_renderer.py` — because that harness's own adapter owns
+  `.caws/sessions/` and `.caws/leases/`. Init for a covered surface also retires
+  managed copies, but **only rows no co-installed surface still claims**: a row
+  stays if any installed pack's install set contains it (`sharedPackForSurface`
+  decides, so the rule needs no update when the covered set changes). The
+  general invariant is that init never removes a file another installed surface
+  still installs — without it, initializing one surface silently strips the
+  telemetry plane from every project-wired surface sharing
+  `.caws/hooks/dispatch`, and `run_handlers` treats the missing handlers as
+  `missing` + `continue`, so nothing reports the loss. An absent telemetry row
+  is therefore **not** evidence of version lag — check `git log --diff-filter=D`
+  on the path before restoring it. `--plan` shows both halves under "Telemetry
+  rows (adapter-covered surface owns this plane)" — what it would unlink, and
+  what it keeps and for whom — and as `telemetry_retirement` (`retire` /
+  `retained` / `retainedFor`) in `--plan --json`.
+
+Reprieves are human-granted exceptions stored in
+`~/.caws/state/sessions/<session>/`. Storage is machine-wide; **reach is not** —
+a grant covers one session in the repo it was granted from, and `--all-repos` is
+what widens it. `--surface` records harness identity and selects legacy lookup;
+it does not partition new grants. `caws reprieve grant` requires an explicit
+target, handlers, reason, approver and one expiry choice, and refuses a grant
+that covers part of a handler set jointly enforcing one boundary — naming the
+co-handlers, because lifting one channel of a two-channel boundary reads to an
+agent as authorization for the other.
