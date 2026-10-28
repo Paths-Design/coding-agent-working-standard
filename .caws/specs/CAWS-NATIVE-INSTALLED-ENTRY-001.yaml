@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-installed-entry
 created_at: '2026-10-22T01:32:17.915Z'
-updated_at: '2026-10-28T17:57:55.790Z'
+updated_at: '2026-10-28T20:42:40.017Z'
 created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
 blast_radius:
   modules:
@@ -132,6 +132,10 @@ scope:
     - packages/caws-cli/src/shell/analysis/caws-read-metadata.ts
     - packages/caws-cli/src/store/evidence-rederive.ts
     - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/scripts/run-tests.js
+    - packages/caws-cli/scripts/run-mutation.mjs
+    - packages/caws-cli/scripts/lib/node-process-env.cjs
+    - packages/caws-cli/tests/shell/run-tests-exit-code.test.js
 invariants:
   - 'Existing Python-readable bin/caws-hook and legacy registrations remain intact during staged installation; no native failure triggers legacy fallback'
   - 'Selected native image identities derive from one verified generation manifest; per-generation metadata contains no self-referential runtime digest'
