@@ -41,3 +41,11 @@ acceptance:
     then: 'it reports no formatting issues'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "At 28d174363 (worktree claude-md-shorten, dist built): npx jest guard-copy-no-waiver-for-hook-blocks + agent-recovery-path-drift + agent-doc-examples -> 3/3 suites, 35/35 tests. The 5 CLAUDE.md assertions (Governed paths bounded; no waiver escape; reprieve/policy.yaml/nothing-for-no-verify; no .claude/hooks/reset- paths) passed. Negative control: rewriting \"--no-verify ...: nothing\" made exactly the lifts test fail; restored file byte-identical."
+    recorded_at: "2026-10-28T01:18:22.274Z"
+    test_nodeid: packages/caws-cli/tests/hooks/guard-copy-no-waiver-for-hook-blocks.test.js
+    commit_sha: "28d174363"
+    test_verified_at: "28d17436308764d55c249d724d7538cccba8978d"
