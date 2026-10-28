@@ -1,0 +1,68 @@
+id: CAWS-LITERAL-INSPECTION-PREFIX-001
+title: 'Share structural literal inspection-prefix policy with heredoc callers'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-28T03:50:18.553Z'
+updated_at: '2026-10-28T03:50:18.553Z'
+created_by_session: '01a17f02-2191-7702-8805-227272637592'
+blast_radius:
+  modules:
+    - 'Pure structural inspection-prefix adapter and factored shared inspection argument profiles'
+    - 'Hooks stdin CLI surface, retained43-compatible heredoc caller, focused tests and managed pack metadata'
+    - 'Authoritative command-analysis guide at repo root'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/analysis/inspection-prefix.ts'
+    - 'packages/caws-cli/src/shell/analysis/inspection-profiles.ts'
+    - 'packages/caws-cli/src/shell/analysis/policies.ts'
+    - 'packages/caws-cli/src/shell/commands/hooks.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/bash-write-guard-heredoc.bats'
+    - 'packages/caws-cli/tests/shell/hooks-inspection-prefix.test.js'
+    - 'docs/guides/command-analysis.md'
+  out: []
+invariants:
+  - 'Preserve genuine session identity, actual caller context, hooks, trust, policies, concurrent work and the foreign archive. No takeover, force, history rewrite, guard exception or manual governance writes.'
+  - 'Proposed pure caws hooks inspection-prefix stdin prefix API returns0 only for complete newline-separated simple literal inspection commands matching shared closed argument profiles,1 for unsupported input and2 for parse or runtime failure. Authority creation does not accept the interface; Root and Parent critique remains applicable before implementation.'
+  - 'Reuse the pinned unbash structural parser and factor existing reader, Git and sed argument-role definitions into shared profiles instead of adding a duplicated whitelist. Analyze or mutation-view allow is not an inspection-prefix predicate.'
+  - 'Reject assignments, redirects, shell expansions/substitutions, wrappers, compound/control structures and lookup mutations. Literal quoted operands are supported structurally. Trusted ambient command lookup and Git configuration assumptions remain explicit, never authenticated by this syntax predicate.'
+  - 'Preserve caws_blank_heredoc_bodies(input) signature for retained43 callers. A nonempty prefix delegates to the pinned new CLI; unavailable old CLI or any error retains raw input conservatively. Existing empty-prefix Node-first projection remains supported.'
+  - 'Preserve exact prefix, header, terminator, suffix, line counts and trailing bytes, original raw Node interpreter-write scanning and file-sink behavior. This predicate grants neither ownership nor Node-effects admission.'
+  - 'Do not refresh current Bash handlers, strict profiles, mutation-view or interpreter-effects broadly, add shadow retained handlers or vendored dependencies, or change global/private runtime, configuration or authority outside the owned Source unit.'
+acceptance:
+  - id: A1
+    given: 'The unchanged actual05 inspection-prefix call including routine Git diff, the prior04 six-line prefix, varied reader-family commands with literal quoted operands, and existing Node-first forms'
+    when: 'The proposed shared structural inspection-prefix adapter and heredoc caller project a complete quoted Node heredoc'
+    then: 'Supported complete inspection commands admit the prefix without fixture-only matching, only the body is projected away, false JavaScript shell targets disappear, and exact prefix/header/terminator/suffix bytes, line counts and trailing newlines remain preserved.'
+  - id: A2
+    given: 'Hostile lookup mutations, assignments, redirects, expansions/substitutions, wrappers, compound/control structures, unsupported options or argument roles, unknown commands, and genuine raw Node fs writes or outer writes'
+    when: 'The predicate and actual relevant guards inspect original commands'
+    then: 'Unsupported syntax declines projection conservatively with the declared status, visible executable shell operations are retained, and raw interpreter writes and outer mutations retain specific guard refusals and unchanged simulated sentinels without blanket Node or ownership admission.'
+  - id: A3
+    given: 'The packaged new CLI with its pinned parser dependency and a retained43-compatible helper invocation using the unchanged API'
+    when: 'Source tests exercise prefix stdin admission, unsupported and parse/runtime statuses, pinned CLI invocation, unavailable old CLI and failure paths'
+    then: 'The declared adapter is reachable through the packaged command surface, failure preserves raw input and Node-first/file-sink contracts remain compatible, without adopting a strict profile or inferring actual installed whole-image qualification.'
+  - id: A4
+    given: 'The bounded Source candidate and its declared parser/policy, command surface, helper, tests, metadata and documentation paths'
+    when: 'Relevant build, focused CLI/Bats tests, fingerprints, doctor findings and declared gates are inspected and a normal committed candidate receives independent review before normal acceptance and landing'
+    then: 'Concrete command/revision/exit/raw evidence supports bounded component claims, findings and failures remain visible, and installed native workflow, global cutover, strict qualification and Python retirement remain separate Root/Parent obligations.'
+observability:
+  - 'Retain exact command, cwd, source revision, exit status, selected adapter/guard behavior and raw output in the existing native transcript. No new progress ledger or installed-runtime inference.'
+rollback:
+  - 'Use an ordinary governed source revert of the bounded candidate and matching pack metadata if hostile or compatibility checks refute the implementation.'
+non_functional:
+  security:
+    - 'Inspection classification is pure syntax/argument-role policy under explicit lookup/config assumptions, not execution, ownership, native host authorization or Node payload read-only proof.'
+contracts:
+  - name: 'inspection-prefix-stdin'
+    type: api
+    path: 'packages/caws-cli/src/shell/analysis/inspection-prefix.ts'
+  - name: 'inspection-prefix-status-controls'
+    type: contract-test
+    path: 'packages/caws-cli/tests/shell/hooks-inspection-prefix.test.js'
