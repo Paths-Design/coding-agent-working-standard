@@ -8,7 +8,7 @@ updated_at: '2026-10-28T09:22:12.654Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'Native stock handler selection, source closure and paired consumer qualification'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
