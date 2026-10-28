@@ -1,0 +1,42 @@
+id: CAWS-CUTOVER-FIXTURE-CONTRACTS-001
+title: 'Restore archive retirement and fixture fidelity for local cutover'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-28T07:41:47.580Z'
+updated_at: '2026-10-28T07:41:47.580Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'Worktree retirement and installed runtime verification'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js'
+    - 'packages/caws-cli/tests/adapter/system-runtime.test.js'
+    - 'packages/caws-cli/tests/hooks/codex-bash-write-execution-context.test.js'
+    - 'packages/caws-cli/tests/shell/session-resolver-parity.test.js'
+  out: []
+invariants:
+  - 'Archive authority remains immutable and revalidated under the lifecycle transaction lock'
+  - 'Test fixtures preserve original payload transport and physical path contracts without weakening guard refusal'
+acceptance:
+  - id: A1
+    given: 'an archived bound worktree'
+    when: 'retirement plans and applies'
+    then: 'tracked or ignored archive bytes remain unchanged and safe teardown succeeds with a clean no-op audit'
+  - id: A2
+    given: 'changed or contradictory archive authority'
+    when: 'retirement applies'
+    then: 'the operation refuses before destructive effects'
+  - id: A3
+    given: 'installed ownership and command context fixtures'
+    when: 'real consumers execute'
+    then: 'canonical physical roots and original payload replay exercise ownership decisions while unavailable or hostile metadata remains refused'
+  - id: A4
+    given: 'owner and foreign session writes'
+    when: 'the registered path guard runs'
+    then: 'owner admission and foreign refusal remain established independently of conventional directory wording'
+non_functional: {}
+contracts: []
