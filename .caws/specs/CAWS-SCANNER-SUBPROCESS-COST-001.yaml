@@ -39,3 +39,9 @@ acceptance:
       historical reference pins remain unchanged
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Root inspected committed scanner and installed Codex parser fixture. Baseline scanner-red-03 passes10 semantic tests and fails only process cost; C and en_US.UTF-8 green logs each pass11 on /bin/bash3.2.57. Controls preserve exact line/category order, repeated categories and one hit per category per line, synthetic value redaction, content/new_string/existing-file precedence, token thresholds and private-key nocasematch while token ERE remains case-sensitive. External raw logs ART06/scanner-red-01,red-02,red-03,green-c-01,green-utf8-01 retain fixture correction history. Commit verification establishes reachability, not execution. Actual native callback and global installation remain root obligations."
+    recorded_at: "2026-10-28T12:03:53.091Z"
+    commit_sha: d60a3684fe1bd70258e794f26ddd8cfe15d7281a
