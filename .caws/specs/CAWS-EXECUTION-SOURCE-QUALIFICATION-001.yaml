@@ -4,7 +4,7 @@ mode: chore
 lifecycle_state: active
 worktree: execution-qualification
 created_at: '2026-10-27T17:30:32.605Z'
-updated_at: '2026-10-27T18:24:30.632Z'
+updated_at: '2026-10-28T09:18:14.631Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -41,6 +41,12 @@ scope:
     - packages/caws-cli/LICENSE.spdx
     - .stryker-execution-*/**
     - node_modules/
+    - packages/caws-cli/src/shell/analysis/
+    - packages/caws-cli/tests/shell/command-analysis.test.js
+    - packages/caws-cli/tests/shell/interpreter-effects.test.js
+    - packages/caws-cli/tests/shell/mutation-view.test.js
+    - packages/caws-cli/tests/fixtures/command-analysis/
+    - .stryker-analysis-*/**
 invariants:
   - 'Qualification never changes tracked source or lowers the six per-file 80 percent floors'
 acceptance:
