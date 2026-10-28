@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-installed-entry
 created_at: '2026-10-22T01:32:17.915Z'
-updated_at: '2026-10-27T20:06:52.281Z'
+updated_at: '2026-10-28T01:32:15.739Z'
 created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
 blast_radius:
   modules:
@@ -86,6 +86,18 @@ scope:
     - packages/caws-native/tests/installed_deadline.rs
     - packages/caws-native/tests/invoke.rs
     - packages/caws-native/tests/sqlite_identity.rs
+    - packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh
+    - packages/caws-cli/tests/hooks/bats/bash-write-guard-heredoc.bats
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/.gitignore
+    - packages/caws-cli/scripts/clean-staged-docs.mjs
+    - packages/caws-cli/tests/docs/package-license-transport.test.js
+    - CLAUDE.md
+    - CONTRIBUTING.md
+    - docs/agents/scope-discipline.md
+    - docs/architecture/repo-local-hook-policy.md
+    - docs/release-procedure.md
 invariants:
   - 'Existing Python-readable bin/caws-hook and legacy registrations remain intact during staged installation; no native failure triggers legacy fallback'
   - 'Selected native image identities derive from one verified generation manifest; per-generation metadata contains no self-referential runtime digest'

@@ -3,9 +3,9 @@ title: 'Project literal direct Node heredoc bodies out of outer shell targets'
 mode: fix
 lifecycle_state: closed
 resolution: completed
-closure_notes: 'Completed bounded literal Node-first quoted heredoc shell projection, preserved raw interpreter writes and conservative lookup/unsupported forms; old-helper false targets and prefix-override bypass reproduced RED then 26-case GREEN with unchanged sentinels. A1-A4 component evidence recorded and verified for commit existence only; actual raw execution inspected separately. Installed retained43/native full-workflow and global machine configuration remain separate Root/cutover obligations.'
+closure_notes: 'Completed bounded Node-first quoted heredoc projection and hostile prefix preservation; A1 wording matches the already tested first-nonblank contract. Reused inspected source/raw RED-GREEN and independent review without new execution. Actual retained43/native full workflow and global configuration remain separate.'
 created_at: '2026-10-27T22:56:23.420Z'
-updated_at: '2026-10-27T23:36:26.799Z'
+updated_at: '2026-10-27T23:45:32.537Z'
 created_by_session: '01a17f02-2191-7702-8805-227272637592'
 blast_radius:
   modules:
@@ -26,7 +26,10 @@ invariants:
   - 'Preserve the existing helper API and all unlisted base-library bytes; no typed Bash profile fallback or shadow legacy copy. Parent owns immutable retained43 distribution and explicit base-library refresh API.'
 acceptance:
   - id: A1
-    given: 'One complete single direct node command with a wholly single-quoted or double-quoted heredoc delimiter and matching terminator'
+    given: >-
+      One complete single direct node command whose quoted heredoc header is on the
+      first nonblank line, with a wholly single-quoted or double-quoted delimiter
+      and matching terminator
     when: 'Outer-shell mutation targets are projected'
     then: 'The literal body is excluded from outer-shell targets so JavaScript arrows and literal greater-than characters are data, while the header, delimiter, line count and before/after shell text are preserved.'
   - id: A2
@@ -58,8 +61,8 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "PASS bounded component: final26 cases10-14 establish selected helper identity, first-nonblank-line complete literal single/double-quoted Node body projection with exact header/terminator/line count/leading blanks/following shell bytes; lexical view emits no fake JSON.parse or greater-than target. Earlier old-helper RED exposes those false targets. Raw inspected external output: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/heredoc-prefix-events.jsonl line118 final26 GREEN exit0, line99 prefix RED exit1. Earlier controls: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/heredoc-implementation-events.jsonl lines145 old-helper RED and182 new22 GREEN. Bats cwd: /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/literal-node-heredoc/packages/caws-cli. Root and independent peer separately inspected actual raw output and relevant assertions. --verify rederives commit existence/reachability only, never executes recorded Bats. Component only; actual retained43/native whole-workflow qualification remains separately owed by Root/Parent."
-    recorded_at: "2026-10-27T23:32:08.457Z"
+    evidence_ref: "Metadata alignment to the agreed first-nonblank supported form; no code or test execution changed. Root and independent peer inspected final79d7 source and heredoc-prefix-events.jsonl:99 RED /118 GREEN (26 cases), plus original heredoc-implementation-events.jsonl:145 RED. Raw external artifacts under /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01. Commit verification confirms existence/reachability only; recorded Bats command is not executed. Actual retained43/native full-workflow remains separate."
+    recorded_at: "2026-10-27T23:44:56.758Z"
     command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/bash-write-guard-heredoc.bats"
     exit_code: 0
     commit_sha: "79d7b7b870283dbc2750f6b8be14aedd708cfb1f"

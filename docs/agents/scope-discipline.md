@@ -1,11 +1,10 @@
 # Scope discipline — procedure
 
 Operational procedure for staying in scope and avoiding strike lockouts in this
-CAWS-governed repo. The _doctrine_ (why this matters, the load-bearing
-invariants) lives in the root `CLAUDE.md` under **Scope is an agreement** and
-**Pre-edit admission**. This file is the _how_ those sections point to: the
-checklists, the strike-state mechanics, and the recovery steps. Read the
-doctrine first; reach here for the recipe.
+CAWS-governed repo. The rules live in the root `CLAUDE.md` under **Scope and
+pre-edit admission**. This file is the _how_ that section points to: the
+reasoning behind the rules, the checklists, the strike-state mechanics, and the
+recovery steps. Read the rules first; reach here for the recipe.
 
 ## Pre-edit admission protocol (mandatory)
 
@@ -57,6 +56,70 @@ If any target returns REFUSE:
 (Legacy fallback, only if `amend-scope` cannot express the change: hand-edit +
 commit the canonical spec, then `git cherry-pick` to the worktree — but that
 cherry-pick engages the danger latch and needs a human reset. Avoid it.)
+
+### Why admission runs before the edit
+
+**The worktree-before-code ordering invariant.** For a new spec, the worktree
+must exist _before_ any file is written under that spec's authority:
+
+```
+author spec → caws specs validate .caws/specs/<id>.yaml → commit spec → caws worktree create <name> --spec <id> → cd into it → then write
+```
+
+This is not a multi-agent nicety — the worktree is what _confers write
+authority_. Working solo does not exempt you; skipping it produces NO AUTHORITY
+on every path and a strike on every edit.
+
+**Demote intuition; trust proof.** If your mental model says "this file is
+obviously in scope" but you haven't run `caws scope show`, your mental model has
+no authority — the kernel's scope decision is the only authority. The cost of
+four `caws scope show` calls is ~six seconds; the cost of one strike +
+amendment + reset + explanation is several minutes of your turn and the user's.
+The asymmetry is severe.
+
+**Why this is doctrine and not just a hook:** the hook fires _after_ the edit
+attempt — by then the strike is on the counter, the file is hot, and recovery
+needs user intervention. The preflight is the only thing that prevents the
+strike, because it runs before the edit, in your reasoning, not after, in the
+kernel's enforcement. An edit-before-proof creates the same "guard exists but
+the invariant was bypassed" drift class (half-state worktrees, stale bindings,
+unfiled defects) that failure-lineage Entry 21 names as a load-bearing v11
+lesson.
+
+Scope amendments are welcome (they're auditable); what burns time is discovering
+the gap one strike at a time. Plan scope before editing, not after the strike.
+
+### Scope is an agreement; sparse checkout is not scope
+
+A spec's `scope.in` is the explicit surface you agree to touch for this slice;
+everything else (READMEs, sibling source, meta/process files) is out-of-scope
+**on purpose**, not by accident — that bounded blast radius is the isolation
+CAWS exists to provide. When a legitimate edit falls outside the surface, the
+answer is never "bypass the guard" — it is to widen the agreement with
+`caws specs amend-scope <id> --add <path>` (auditable, attributed to a commit),
+or to do non-slice work from the canonical checkout under no binding.
+
+Two things a first-timer conflates — kept separate:
+
+- **The linked-worktree sparse checkout (`/*` + `!/.caws/specs/`) materializes
+  everything except `.caws/specs/`.** `CLAUDE.md`, `package.json`, and every
+  source file at the repo root and below are present in your worktree the moment
+  it is created. There is no "the file wasn't checked out, so I can't bring it
+  into scope" problem. Bringing any in-tree path into scope after checkout is
+  purely a control-plane op — `amend-scope` — and the worktree's
+  `caws scope check` ADMITs it immediately, no re-checkout and no
+  `git cherry-pick`.
+- **`.caws/specs/` is the one thing sparse-checkout withholds**, because the
+  canonical `.caws/specs/` at the main checkout is the _only_ authority for spec
+  content. Never read/edit `<worktree>/.caws/specs/*` and never
+  `git sparse-checkout disable` — both re-open the v10.2 split-brain class and
+  are refused by the worktree guards. Read specs from any cwd via
+  `caws specs show <id>` / `caws specs list` (they resolve through canonical).
+  Scope is enforced by `scope-guard.sh` reading `scope.in`/`scope.out` from
+  canonical; sparse checkout is a _materialization/recovery_ invariant, not the
+  authority or scope-enforcement model. (`caws worktree repair-sparse <name>`
+  non-destructively restores the invariant if a tree ends up with materialized
+  `.caws/specs/*`.)
 
 ### Post-edit verification (every commit)
 
