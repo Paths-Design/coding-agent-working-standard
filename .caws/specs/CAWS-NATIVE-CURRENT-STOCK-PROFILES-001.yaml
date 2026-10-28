@@ -43,5 +43,12 @@ acceptance:
       the selected shell route handles that shape without false ignored-staging
       notices, while ordinary native cases and actual staged-ignored-file warnings
       remain correct
+  - id: A4
+    given: 'the committed integrated profiles and preserved historical fixtures'
+    when: 'focused stock, containment and Stop verification runs'
+    then: >-
+      current-template positives and hostile controls pass without reducing
+      rejection contracts or replacing current coverage solely with historical
+      profiles
 non_functional: {}
 contracts: []
