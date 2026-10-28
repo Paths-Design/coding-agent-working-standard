@@ -59,7 +59,7 @@ acceptance:
       The committed joined Source candidate includes extracted pure inspection
       decisions and unchanged floor requirements
     when: >-
-      The complete eight-file analysis mutation campaign executes against matching
+      The complete nine-file analysis mutation campaign executes against matching
       isolated source, tests and build outputs
     then: >-
       Every analysis target meets its unchanged 80 percent floor with nonzero tests
