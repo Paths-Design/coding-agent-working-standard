@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-STOP-PREFLIGHT-001
 title: 'Qualify native Stop consumer before prefix effects'
 mode: fix
-lifecycle_state: active
-worktree: native-stop-preflight
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded native Stop ordering repair ca7d3e055: early incompatible closure refusal before prefix, late helper drift refusal without lease write/replay. Three decisive cases passed including CLI-executed verification, independent read-only Terra review, doctor0E and policy gates5. Four current-template helper eligibility tests remain open in parent substrate work; full suite is not green and this commit is excluded from frozen local cutover a29. No installed or full-runtime completion claim.'
 created_at: '2026-10-28T07:33:55.335Z'
-updated_at: '2026-10-28T07:34:09.532Z'
+updated_at: '2026-10-28T09:00:48.946Z'
 created_by_session: '01a17e93-bd80-7d10-8716-c94886f5eb65'
 blast_radius:
   modules:
