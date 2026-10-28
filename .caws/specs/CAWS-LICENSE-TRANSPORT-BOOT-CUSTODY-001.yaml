@@ -107,3 +107,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/docs/package-license-transport.test.js
     commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
     test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Re-derived here: mutation-contract suite (its sandbox build imports clean-staged-docs.mjs and calls stageLicenseTransport). License transport suite re-derived under A4-A6 (67/67). Observed this session at HEAD 879979004 in the worktree, NOT re-derived by --verify: npm run build exit 0 (\"caws-cli build complete\"); jest over license + mutation-contract + cli-api-reference-coverage suites 144/144; eslint exit 0. Unrelated pre-existing failure: scripts/install-cli-snapshot.test.mjs fails 9/9 identically on unmodified main 89cd56c35 (fixture lacks src/init/repo-hook-policy.ts) and stubs both transport scripts (lines 139-153), so it exercises none of this code. Not run: full jest suite, CI on Linux, a real reboot."
+    recorded_at: "2026-10-28T00:58:51.618Z"
+    test_nodeid: packages/caws-cli/tests/ci/mutation-contract.test.js
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
