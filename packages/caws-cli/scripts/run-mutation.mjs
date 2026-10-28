@@ -16,6 +16,7 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { nodeProcessEnv } from './lib/node-process-env.cjs';
 import { validateMutationPolicy } from './validate-mutation-policy.mjs';
 import { assertMutationReport, appendSummary } from './assert-mutation-report.mjs';
 import {
@@ -246,12 +247,15 @@ export async function main(argv) {
         fs.unlinkSync(artifact);
       }
     }
+    // Bind once at the command boundary. Subsequent capture/drift checks remain strict.
+    const childEnv = nodeProcessEnv();
+    process.env.PATH = childEnv.PATH;
     const inputOptions = { packageRoot, policy, surfaceId: options.surface };
     const inputIdentity = captureMutationInputs(inputOptions);
     record.inputIdentity = inputIdentity;
     const npm = resolveNpmCommand();
     const startedAtMs = Date.now();
-    const build = await runStreaming(npm.command, npm.args);
+    const build = await runStreaming(npm.command, npm.args, childEnv);
     record.build = {
       command: [npm.command, ...npm.args],
       cwd: packageRoot,
@@ -291,7 +295,7 @@ export async function main(argv) {
     const strykerArgs = ['run', surface.config, '--logLevel', 'info'];
     if (options.dryRunOnly) strykerArgs.push('--dryRunOnly');
     const result = await runStreaming(process.execPath, [strykerBin, ...strykerArgs], {
-      ...process.env,
+      ...childEnv,
       CAWS_MUTATION_RUN_CONTEXT: contextFile,
       CAWS_MUTATION_TEMP_DIR: tempDirName,
     });
