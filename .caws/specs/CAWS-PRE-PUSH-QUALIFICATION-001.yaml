@@ -1,10 +1,11 @@
 id: CAWS-PRE-PUSH-QUALIFICATION-001
 title: 'Restore truthful pre-push qualification for native cutover publication'
 mode: fix
-lifecycle_state: active
-worktree: pre-push-qualification
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed bounded publication check repair at 5d81f937c: isolated inherited Git context with explicit hostile controls, exact filename exception, managed headers and pack126 fingerprint. Focused checks114 plus command regression1605 and required gates pass; independent review and root source/raw discharge complete. Remaining publication suite failures, native eligibility, ordinary push and actual Rust cutover remain parent obligations.'
 created_at: '2026-10-28T06:46:27.028Z'
-updated_at: '2026-10-28T06:49:25.379Z'
+updated_at: '2026-10-28T07:31:01.605Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
