@@ -49,8 +49,13 @@ acceptance:
     then: 'it refuses, creates no fresh marker, and preserves every record it observed'
   - id: A6
     given: 'an unverifiable stored record'
-    when: 'cleanup runs'
-    then: 'it refuses with a message naming the failed predicate and the staging remedy, and a staging run that relinquishes yields a licenseTransportNotice that stage-consumer-docs writes to stderr naming the reason, retained path and sha256'
+    when: 'cleanup runs, and separately staging runs through the real build entry (stage-consumer-docs.mjs)'
+    then: >-
+      cleanup refuses with a message naming the failed predicate and the staging
+      remedy; staging that relinquishes writes a stderr notice itself (so every
+      caller, including the build via inherited stdio, surfaces it) naming the
+      reason, the retained path, the sha256, and that no license file was deleted;
+      staging that relinquishes nothing writes no notice
   - id: A7
     given: 'the real caws-cli package after the change'
     when: 'npm run build runs and the license transport and mutation-contract suites run'
