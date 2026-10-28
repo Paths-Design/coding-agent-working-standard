@@ -649,7 +649,9 @@ import { isAdapterCoveredSurface } from './types';
 // v125: share structural inspection argument profiles with a bounded pure
 // classifier. Selected managed heredoc libraries bind to their generation's
 // Node/entry; unavailable classification preserves raw outer-shell input.
-export const SHARED_PACK_VERSION = 125;
+// v126: include the managed-hook growth stance in the Bash analysis and copy
+// operand libraries; their executable behavior is unchanged.
+export const SHARED_PACK_VERSION = 126;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
