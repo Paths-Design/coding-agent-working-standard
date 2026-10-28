@@ -1,0 +1,57 @@
+id: CAWS-LITERAL-NODE-READ-PREFIX-001
+title: 'Project literal Node heredocs after finite read-only inspection prefixes'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-28T00:18:55.837Z'
+updated_at: '2026-10-28T00:18:55.837Z'
+created_by_session: '01a17f02-2191-7702-8805-227272637592'
+blast_radius:
+  modules:
+    - 'Shared heredoc outer-shell projection helper and focused Bash guard regressions'
+    - 'Shared hook pack version and canonical fingerprint metadata'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh'
+    - 'packages/caws-cli/tests/hooks/bats/bash-write-guard-heredoc.bats'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'Preserve genuine session identity, actual caller context, hooks, trust, guard policy and concurrent work; no guard exception or authority forgery.'
+  - 'Recognize only finite whole-line literal inspection prefixes needed by consumer04: pwd -P, git rev-parse --show-toplevel or HEAD, git branch --show-current, git status --short, and cat literal AGENTS.md or a proven equivalent plain literal path class. Do not infer interpreter identity from arbitrary plaintext.'
+  - 'Reject lookup or state changes, assignments, wrappers, continuations, substitutions, expansion, control operators and unknown prefix commands conservatively; retain the prior echo/plain-prefix negative.'
+  - 'Retain the original raw command for interpreter-write checks and the unchanged helper API. No global Node file sink, read-only Node claim, typed profile fallback, current Bash handler change, native source change or shadow retained handler.'
+  - 'Only helper, existing focused tests and two managed pack metadata files may change. Parent owns runtime distribution and global installed-native qualification.'
+acceptance:
+  - id: A1
+    given: 'The exact consumer04 finite literal read-only inspection prefix followed by one complete wholly quoted Node heredoc containing JSON.parse arrows, or the previously supported Node-first form'
+    when: 'The helper produces the outer-shell projection'
+    then: 'Only the literal heredoc body is projected out, with correct shell view and no fake JSON.parse target, preserving header, terminator, line count, outer inspection commands and exact trailing newlines, while retaining the original Node-first regression.'
+  - id: A2
+    given: 'A prefix containing aliases, functions, eval, source, hash, enable, assignments, wrappers, continuations, substitutions, expansion, control operators or unknown commands, or unsupported unquoted, multiple or unterminated heredocs'
+    when: 'Projection and relevant guards inspect the command'
+    then: 'Conservative visibility is retained without blanking executable shell operations, and the actual alias sparse-policy negative still refuses with exit2 and unchanged simulated sentinel.'
+  - id: A3
+    given: 'Genuine raw Node fs writes or real outer-shell writes before or after a heredoc, including a foreign-path negative'
+    when: 'The original raw interpreter checker and actual relevant guard adjudicate the command'
+    then: 'Write targets remain observable and foreign mutations refuse with the exact reason and path before effects, with unchanged sentinels and no blanket Node admission.'
+  - id: A4
+    given: 'The packaged helper, unchanged API and finite-prefix candidate within the four authorized paths'
+    when: 'The selected helper identity, focused suite including the existing 26 cases, hostile regressions, canonical fingerprint, lane-local build, declared gates, source commit and independent review are inspected'
+    then: 'The bounded source component has concrete compatible evidence while installed native whole-workflow and global cutover qualification remain separate Root obligations, with no installed or global proof inferred.'
+observability:
+  - 'Retain command, cwd, checked revision, raw RED/GREEN exits and outputs in the existing native transcript; no new progress ledger.'
+rollback:
+  - 'Use an ordinary governed revert of the bounded source candidate and matching pack metadata if regression or hostile controls fail.'
+non_functional:
+  security:
+    - 'Do not claim absolute interpreter identity from literal projection; preserve raw interpreter writes, outer-shell mutations and worktree policy, with no blanket Node admission.'
+contracts:
+  - name: 'literal-inspection-prefix-projection'
+    type: api
+    path: 'packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh'
+  - name: 'read-prefix-hostile-controls'
+    type: contract-test
+    path: 'packages/caws-cli/tests/hooks/bats/bash-write-guard-heredoc.bats'
