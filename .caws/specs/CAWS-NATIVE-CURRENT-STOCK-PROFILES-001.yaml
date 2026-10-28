@@ -20,7 +20,7 @@ scope:
     - 'packages/caws-cli/tests/runtime/fixtures/agent-surface-empty-lookup.sh'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Exact selected-source and execution preconditions qualify each native consumer; custom paths, bytes, startup, overrides or unqualified semantics preserve selected shell behavior or fail before effects. Preserve current-template positives and historical profile controls.'
 acceptance:
   - id: A1
     given: 'TODO'
