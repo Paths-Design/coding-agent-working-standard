@@ -34,9 +34,10 @@ invariants:
   - 'Proposed pure caws hooks inspection-prefix stdin prefix API returns0 only for complete newline-separated simple literal inspection commands matching shared closed argument profiles,1 for unsupported input and2 for parse or runtime failure. Authority creation does not accept the interface; Root and Parent critique remains applicable before implementation.'
   - 'Reuse the pinned unbash structural parser and factor existing reader, Git and sed argument-role definitions into shared profiles instead of adding a duplicated whitelist. Analyze or mutation-view allow is not an inspection-prefix predicate.'
   - 'Reject assignments, redirects, shell expansions/substitutions, wrappers, compound/control structures and lookup mutations. Literal quoted operands are supported structurally. Trusted ambient command lookup and Git configuration assumptions remain explicit, never authenticated by this syntax predicate.'
-  - 'Preserve caws_blank_heredoc_bodies(input) signature for retained43 callers. A nonempty prefix delegates to the pinned new CLI; unavailable old CLI or any error retains raw input conservatively. Existing empty-prefix Node-first projection remains supported.'
   - 'Preserve exact prefix, header, terminator, suffix, line counts and trailing bytes, original raw Node interpreter-write scanning and file-sink behavior. This predicate grants neither ownership nor Node-effects admission.'
   - 'Do not refresh current Bash handlers, strict profiles, mutation-view or interpreter-effects broadly, add shadow retained handlers or vendored dependencies, or change global/private runtime, configuration or authority outside the owned Source unit.'
+  - 'Preserve caws_blank_heredoc_bodies(input) signature. For a nonempty prefix derive the physical managed generation only from the selected library BASH_SOURCE, invoke its absolute native/node and absolute native-prefix/node_modules/@paths.design/caws-cli/dist/shell/analysis/inspection-prefix-entry.js, and clear Node startup controls. Ambient CAWS_BIN, Node or PATH cannot select the classifier. Require exit0 plus the exact versioned positive response; unavailable/old layout, errors, signals, malformed output or exhausted budgets preserve raw input. Node-first empty-prefix projection remains independent.'
+  - 'Bound input bytes, command count, AST visits and output; supervise synchronous parsing in a resource-limited worker thread with a real wall-clock deadline. The diagnostic CLI and generation entry share this pure classifier. The existing managed-snapshot loader/hash and trusted host are assumed; no stronger TOCTOU, ambient identity or Node-effects guarantee is claimed.'
 acceptance:
   - id: A1
     given: 'The unchanged actual05 inspection-prefix call including routine Git diff, the prior04 six-line prefix, varied reader-family commands with literal quoted operands, and existing Node-first forms'
@@ -47,9 +48,19 @@ acceptance:
     when: 'The predicate and actual relevant guards inspect original commands'
     then: 'Unsupported syntax declines projection conservatively with the declared status, visible executable shell operations are retained, and raw interpreter writes and outer mutations retain specific guard refusals and unchanged simulated sentinels without blanket Node or ownership admission.'
   - id: A3
-    given: 'The packaged new CLI with its pinned parser dependency and a retained43-compatible helper invocation using the unchanged API'
-    when: 'Source tests exercise prefix stdin admission, unsupported and parse/runtime statuses, pinned CLI invocation, unavailable old CLI and failure paths'
-    then: 'The declared adapter is reachable through the packaged command surface, failure preserves raw input and Node-first/file-sink contracts remain compatible, without adopting a strict profile or inferring actual installed whole-image qualification.'
+    given: >-
+      The packaged new CLI/parser and a selected helper in the real physical managed
+      layout, using the unchanged retained43 caller signature
+    when: >-
+      Source fixtures exercise the absolute generation Node/compiled-entry path,
+      exact positive protocol, hostile CAWS_BIN/PATH/Node startup settings,
+      missing/old entry, errors/signals and byte/command/AST/wall-clock resource
+      failures
+    then: >-
+      Only a bounded positively classified complete prefix permits masking; all
+      binding/protocol/runtime failures retain raw input, Node-first and cat/tee
+      remain supported, no strict profile or environment-controlled fake trust hook
+      is introduced, and installed whole-image qualification remains separate.
   - id: A4
     given: 'The bounded Source candidate and its declared parser/policy, command surface, helper, tests, metadata and documentation paths'
     when: 'Relevant build, focused CLI/Bats tests, fingerprints, doctor findings and declared gates are inspected and a normal committed candidate receives independent review before normal acceptance and landing'
