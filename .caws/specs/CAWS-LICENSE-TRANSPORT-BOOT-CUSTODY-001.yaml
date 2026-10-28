@@ -1,10 +1,11 @@
 id: CAWS-LICENSE-TRANSPORT-BOOT-CUSTODY-001
 title: 'License transport custody survives reboots; staging relinquishes unverifiable ownership'
 mode: fix
-lifecycle_state: active
-worktree: license-boot-custody
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge license-boot-custody at 6a46e761d478458faf24b399163f381988e1be72'
 created_at: '2026-10-27T23:43:29.535Z'
-updated_at: '2026-10-28T00:03:43.403Z'
+updated_at: '2026-10-28T01:02:15.409Z'
 created_by_session: '4126b194-a8f5-4ff4-aed5-f071b045cfda'
 blast_radius:
   modules:
