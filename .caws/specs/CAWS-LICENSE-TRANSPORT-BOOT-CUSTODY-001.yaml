@@ -64,3 +64,11 @@ rollback:
   - 'Revert the fix commit; markers written by the fixed script remain schema-v1 and are read by the reverted code (a dev mismatch then refuses as before; recover with --recover-license-ownership).'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Test bumps recorded dev on marker+all owned entries (reboot simulation; live dev differs, other fields equal). Asserts: staging returns exactly {created:[],preserved:[all 3]} with empty stderr and marker bytes untouched; after rm -rf dist, restaging creates the 2 dist transports, keeps LICENSE owned, no relinquished files; cleanup returns removed=[all 3], all transports and marker gone. Tests-first: failed against pre-fix code with \"ownership marker identity or schema is invalid\". Mutant M2 (compare absolute dev) killed 10 tests incl. this. Not exercised: a real reboot."
+    recorded_at: "2026-10-28T00:46:46.482Z"
+    test_nodeid: "packages/caws-cli/tests/docs/package-license-transport.test.js::a reboot-renumbered device keeps custody through restaging and cleanup"
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
