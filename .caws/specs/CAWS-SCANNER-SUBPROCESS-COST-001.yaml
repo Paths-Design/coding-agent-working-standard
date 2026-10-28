@@ -1,0 +1,59 @@
+id: CAWS-SCANNER-SUBPROCESS-COST-001
+title: 'Preserve secret advisories without per-line subprocess fanout'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Committed scanner d60a368 preserves installed-parser advisory semantics and removes per-line grep launches. Baseline cost failure, C and UTF8 installed tests, fingerprint controls, build, gates, and independent review recorded in A1-A3. Actual native callback latency and machine adoption remain parent cutover obligations.'
+created_at: '2026-10-28T11:37:59.383Z'
+updated_at: '2026-10-28T12:14:17.812Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'Shared secret advisory scanner and installed hook pack identity'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/scan-secrets.sh'
+    - 'packages/caws-cli/tests/hooks/bats/scan-secrets.bats'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'Preserve line order, category order, repeated advisory hits, redaction, input selection, shell option behavior and advisory-only authority; retain original callback deadline.'
+acceptance:
+  - id: A1
+    given: 'Write/Edit content or an existing-file patch target with synthetic matching and near-miss patterns'
+    when: 'the installed scanner executes including Bash 3.2 and nocasematch'
+    then: 'advisory output matches the prior scanner semantics without exposing token values'
+  - id: A2
+    given: 'a clean or matching file ranging from one to 5301 lines'
+    when: 'the scanner evaluates it'
+    then: >-
+      scanner regex evaluation does not launch per-line external grep processes and
+      still finds a matching final line
+  - id: A3
+    given: 'the updated scanner package'
+    when: 'pack checks and integration review run'
+    then: >-
+      the shared pack version and fingerprint identify the changed bytes while
+      historical reference pins remain unchanged
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Root inspected committed scanner and installed Codex parser fixture. Baseline scanner-red-03 passes10 semantic tests and fails only process cost; C and en_US.UTF-8 green logs each pass11 on /bin/bash3.2.57. Controls preserve exact line/category order, repeated categories and one hit per category per line, synthetic value redaction, content/new_string/existing-file precedence, token thresholds and private-key nocasematch while token ERE remains case-sensitive. External raw logs ART06/scanner-red-01,red-02,red-03,green-c-01,green-utf8-01 retain fixture correction history. Commit verification establishes reachability, not execution. Actual native callback and global installation remain root obligations."
+    recorded_at: "2026-10-28T12:03:53.091Z"
+    commit_sha: d60a3684fe1bd70258e794f26ddd8cfe15d7281a
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Existing-file apply_patch fixture uses installed Codex normalization and intercepts exact scanner grep patterns. Old scanner executes2grep at first1line case and fails; committed scanner reaches matching final lines at1,128,5301 with no scanner grep calls, asserts actual file line counts and advisory match. Source loop contains no grep invocation. Cost assertion targets original regression, not arbitrary subprocesses or wall time. C/UTF8 raw green logs pass11 each. No native timeout cause or installed callback latency claim; live consumer verification follows image qualification."
+    recorded_at: "2026-10-28T12:03:54.132Z"
+    commit_sha: d60a3684fe1bd70258e794f26ddd8cfe15d7281a
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Shared pack127 fingerprint6862356328b1e2637e8afa47487882b17436b2a690f8bb121376dead9f986453 derived by actual pack-fingerprint test; initial mismatch retained. Full package and historical Stop-profile controls23/23 passed. Historical reference inventory unchanged. Initial expanded shared test-name citation was refused without writing because the source uses a parameterized id; corrected citation matches the actual shared test template across packs. Build and83-script shell syntax lint0, doctor0E5W7I and gates5pass4files. Independent Terra inspected committed source and raw results; root grounded semantics and bounded cost. Package identity verification is not adoption."
+    recorded_at: "2026-10-28T12:06:19.750Z"
+    test_nodeid: "packages/caws-cli/tests/init/pack-fingerprint.test.js::pack fingerprint is unchanged"
+    test_verified_at: d60a3684fe1bd70258e794f26ddd8cfe15d7281a

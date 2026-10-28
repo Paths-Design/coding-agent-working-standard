@@ -35,6 +35,8 @@ const LIBRARIES: Readonly<Record<string, readonly string[]>> = {
     'f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a',
     // Exact '{}' bypasses only the empty override-map lookup; source tiers stay ordered.
     '9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32',
+    // Exact-path fallback is dormant with the selected nonempty checkout below.
+    '455dbfc2bfcf3a5ca891449e1a5f51ce7d9a9a1203ff680bc5fa90fe933e5a8f',
   ],
   'parse-input.sh': [
     // Host execution-workdir validation and separate session/command coordinates.
@@ -50,11 +52,38 @@ const LIBRARIES: Readonly<Record<string, readonly string[]>> = {
     '7719c904cce6073598717e6a90d82e1c88e99482f79afbfd12b35d23f6d7e86e',
   ],
   'session-id.sh': ['cf662f10e6d3477cecbf5deabd8d2b63284f6f4ac14fa7070725ff8502515c53'],
-  'caws-state.sh': ['2d27e94fbc3303ca96d7729720d8d7570ec772bc0f9a02d5b1bf46b98f4931e1'],
+  'caws-state.sh': [
+    '2d27e94fbc3303ca96d7729720d8d7570ec772bc0f9a02d5b1bf46b98f4931e1',
+    '8a3484f121b0751e566cb7173406c1eb296154af3c1fa08ca09927acd7fdf837',
+  ],
   'guard-message.sh': ['7b8a131c93cefb31c4205564f4429586325a292924ea809c396b4b154004e148'],
   'agent-pid.sh': ['f075356c6fe4179ac14ff3e1131ba355690f55a2ced04dd2f42df6aa0f8ff800'],
-  'bash-mutation-targets.sh': ['3b40bcc29a9793c85c7db4f01c0e4650429be46db504df774e3ff95d6ab8f6ac'],
-  'heredoc.sh': ['75643e42630f6077959da625f50f6cdf888ed82e4d0d983a560378d928cc5e0d'],
+  'bash-mutation-targets.sh': [
+    '3b40bcc29a9793c85c7db4f01c0e4650429be46db504df774e3ff95d6ab8f6ac',
+    'd545511184b6513b2f40ca5b37d8bf2a45b0914626293f45884df50cc50ef3b5',
+  ],
+  'heredoc.sh': [
+    '75643e42630f6077959da625f50f6cdf888ed82e4d0d983a560378d928cc5e0d',
+    'dbb2382397ba26846021f10d8c7dddd721f15efe6de5c5f4efd4ce53403a41b0',
+  ],
+};
+const STARTUP_SOURCES: Readonly<Record<string, readonly string[]>> = {
+  'handler-env.sh': ['901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7'],
+  'runtime-paths.sh': ['c2cc098b08c110723c2d1805170ba2d73a855f0864e5792bb7a88a2c3def7f08'],
+  'lib/session-cache.sh': ['eea9bb74ec74d07931eb13ac45e6822a348ce7fb49e4a7baa9d590e321e093cb'],
+  'lib/agent-surface.sh': LIBRARIES['agent-surface.sh']!,
+  // Agent and utility handlers also source the shared parser directly, even
+  // when startup selected the Codex parser. A surface selection cannot
+  // authenticate that shared file; retain this conservative common closure.
+  'lib/parse-input.sh': LIBRARIES['parse-input.sh']!.filter(
+    (value) => value !== 'c33d320efef119f826de58b145344288264b985f10d911b435645f6d851444fc'
+  ),
+  'lib/session-id.sh': LIBRARIES['session-id.sh']!,
+  'lib/agent-pid.sh': LIBRARIES['agent-pid.sh']!,
+};
+const CODEX_LIBRARIES: Readonly<Record<string, string>> = {
+  'parse-input.sh': 'c33d320efef119f826de58b145344288264b985f10d911b435645f6d851444fc',
+  'emit.sh': '7719c904cce6073598717e6a90d82e1c88e99482f79afbfd12b35d23f6d7e86e',
 };
 const DIRECT = {
   classifier: '97c50613224a981d73469883bbf8371b036a33ef9777618ff23e82e9f91ff018',
@@ -125,7 +154,10 @@ function compatible(handler: SelectedHandler, context: StockHandlerContext): boo
     handler.args.length ||
     !Object.hasOwn(HANDLERS, handler.name) ||
     handler.path !== join(selection.runtimeDirectory, handler.name) ||
-    handler.sha256 !== HANDLERS[handler.name]
+    handler.sha256 !== HANDLERS[handler.name] ||
+    !selection.checkout ||
+    !isAbsolute(selection.checkout) ||
+    selection.hooksDirectory !== selection.runtimeDirectory
   )
     return false;
   const startup =
@@ -135,13 +167,20 @@ function compatible(handler: SelectedHandler, context: StockHandlerContext): boo
       : '');
   if (
     startup ||
-    Object.entries(environment).some(([key, value]) => /^_(?:CAWS|HOOK).*LOADED/.test(key) && value)
+    Object.entries(environment).some(
+      ([key, value]) =>
+        Boolean(value) && (/^_(?:CAWS|HOOK).*LOADED/.test(key) || key.startsWith('BASH_FUNC_'))
+    ) ||
+    environment.CAWS_BASH_ANALYSIS_REQUIRED === '1'
   )
     return false;
-  const required =
+  const extra =
     handler.name === 'hook-utilities.sh'
-      ? ['parse-input.sh', 'heredoc.sh', 'bash-mutation-targets.sh']
-      : Object.keys(LIBRARIES);
+      ? ['heredoc.sh', 'bash-mutation-targets.sh']
+      : handler.name === 'block-dangerous.sh'
+        ? ['caws-state.sh', 'guard-message.sh', 'bash-mutation-targets.sh']
+        : [];
+  const required = ['agent-surface.sh', 'parse-input.sh', 'session-id.sh', 'emit.sh', ...extra];
   try {
     assertMachinePath(selection.runtimeDirectory, handler.path);
     if (sha(handler.path) !== handler.sha256) return false;
@@ -150,8 +189,15 @@ function compatible(handler: SelectedHandler, context: StockHandlerContext): boo
       if (
         !library ||
         selection.libraryOverrides[name] ||
-        !['shared', 'surface'].includes(library.kind) ||
-        !LIBRARIES[name]!.includes(library.sha256)
+        !(
+          library.kind === 'shared' ||
+          (library.kind === 'surface' &&
+            selection.surface === 'codex' &&
+            (name === 'parse-input.sh' || name === 'emit.sh'))
+        ) ||
+        !(library.kind === 'surface'
+          ? library.sha256 === CODEX_LIBRARIES[name]
+          : LIBRARIES[name]!.includes(library.sha256) && library.sha256 !== CODEX_LIBRARIES[name])
       )
         return false;
       const expected =
@@ -162,18 +208,42 @@ function compatible(handler: SelectedHandler, context: StockHandlerContext): boo
       assertMachinePath(selection.runtimeDirectory, library.path);
       if (sha(library.path) !== library.sha256) return false;
     }
-    if (handler.name === 'agent-heartbeat.sh' || handler.name === 'agent-stop.sh') {
-      for (const [name, expected] of Object.entries({
-        'handler-env.sh': '901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7',
-        'runtime-paths.sh': 'c2cc098b08c110723c2d1805170ba2d73a855f0864e5792bb7a88a2c3def7f08',
-        'lib/session-cache.sh': 'eea9bb74ec74d07931eb13ac45e6822a348ce7fb49e4a7baa9d590e321e093cb',
-      })) {
-        const dependency = join(selection.runtimeDirectory, name);
-        assertMachinePath(selection.runtimeDirectory, dependency);
-        if (sha(dependency) !== expected) return false;
-      }
-      return true;
+    const routing: Readonly<Record<string, string>> = {
+      CAWS_PROJECT_DIR: selection.checkout,
+      CAWS_MACHINE_POLICY_ROOT: selection.canonical,
+      CAWS_MACHINE_RUNTIME: '1',
+      CAWS_SYSTEM_RUNTIME: '1',
+      CAWS_AGENT_SURFACE: selection.surface,
+      CAWS_SHARED_LIB_DIR: join(selection.runtimeDirectory, 'lib'),
+      CAWS_MACHINE_ADAPTER_LIB_DIR: join(
+        selection.runtimeDirectory,
+        'surfaces',
+        selection.surface,
+        'lib'
+      ),
+      CAWS_MACHINE_LIBRARIES: '{}',
+      HOOKS_DIR: selection.runtimeDirectory,
+    };
+    for (const [name, expected] of Object.entries(routing))
+      if (environment[name] && environment[name] !== expected) return false;
+    // Codex can source a checkout-local runtime bootstrap before the machine
+    // fallback. Only proven absence admits that fallback; links/errors decline.
+    const projectRuntime = join(selection.checkout, '.caws/hooks/runtime-paths.sh');
+    assertMachinePath(selection.checkout, projectRuntime);
+    try {
+      lstatSync(projectRuntime);
+      return false;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return false;
     }
+    const direct: Record<string, readonly string[]> = { ...STARTUP_SOURCES };
+    for (const name of extra) direct['lib/' + name] = LIBRARIES[name]!;
+    for (const [name, expected] of Object.entries(direct)) {
+      const dependency = join(selection.runtimeDirectory, name);
+      assertMachinePath(selection.runtimeDirectory, dependency);
+      if (!lstatSync(dependency).isFile() || !expected.includes(sha(dependency))) return false;
+    }
+    if (handler.name === 'agent-heartbeat.sh' || handler.name === 'agent-stop.sh') return true;
     const file =
       handler.name === 'hook-utilities.sh'
         ? join(selection.runtimeDirectory, 'lib/hook-utilities.py')
@@ -256,10 +326,11 @@ function noDangerLatch(selection: ActiveInvocationSelection): boolean {
   return true;
 }
 
-/** Selection check is repeated immediately before lease application. */
-function assertNativeStopAgentSelection(
+/** Check before prefix effects and repeat immediately before lease application. */
+export function assertNativeStopAgentSelection(
   handler: SelectedHandler,
-  context: StockHandlerContext
+  context: StockHandlerContext,
+  phase: 'preflight' | 'lease' = 'lease'
 ): void {
   const { request, selection, environment } = context;
   const chain = [
@@ -286,7 +357,11 @@ function assertNativeStopAgentSelection(
     (environment.CAWS_BIN && environment.CAWS_BIN !== 'caws') ||
     !compatible(handler, context)
   )
-    throw new Error('Native Stop agent consumer changed after prefix; shell replay refused');
+    throw new Error(
+      phase === 'preflight'
+        ? 'Native Stop agent consumer is ineligible before prefix'
+        : 'Native Stop agent consumer changed after prefix; shell replay refused'
+    );
   for (const [index, selected] of selection.handlers.entries()) {
     const expected = chain[index]!;
     assertMachinePath(selection.runtimeDirectory, selected.path);
@@ -299,7 +374,11 @@ function assertNativeStopAgentSelection(
       selected.path !== join(selection.runtimeDirectory, expected[0]) ||
       sha(selected.path) !== selected.sha256
     )
-      throw new Error('Native Stop ordered source changed before lease application');
+      throw new Error(
+        phase === 'preflight'
+          ? 'Native Stop ordered source is ineligible before prefix'
+          : 'Native Stop ordered source changed before lease application'
+      );
   }
 }
 
@@ -368,6 +447,10 @@ export function tryExecuteStockHandler(
     return executeAgentHeartbeat(context);
   }
   if (handler.name === 'hook-utilities.sh') {
+    // The current shell helper projects bounded Node heredocs before tokenizing.
+    // The typed utility tokenizer implements only file-sink heredocs. Keep all
+    // heredoc-shaped payloads on the selected shell until that consumer agrees.
+    if (typeof toolInput.command === 'string' && toolInput.command.includes('<<')) return null;
     const policy = environment.CAWS_OPTIONAL_HOOK_POLICY;
     let text: string | null = null;
     if (policy) {

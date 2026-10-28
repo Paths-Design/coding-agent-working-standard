@@ -1,0 +1,86 @@
+id: CAWS-NATIVE-CURRENT-STOCK-PROFILES-001
+title: 'Qualify current selected stock consumers without widening custom-source admission'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed exact source-role and direct-dependency qualification for current stock consumers, with historical fixtures retained and unimplemented utility heredoc semantics delegated to selected shell. Actual213 tests7suites passed; source build0, doctor0E, gates5; independent read-only Terra feedback grounded. A1-A3 cited component tests reexecuted by specs evidence at ad6b188 and all four spec/event records dual-read. This closes bounded stock qualification only: actual installed Rust host delivery, signal effects, full command equivalence, concurrent-source interleavings and global cutover remain parent obligations.'
+created_at: '2026-10-28T09:22:08.224Z'
+updated_at: '2026-10-28T10:37:37.147Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'Native stock handler selection, source closure and paired consumer qualification'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/runtime/guard-utilities.ts'
+    - 'packages/caws-cli/tests/runtime/stock-handlers.test.js'
+    - 'packages/caws-cli/tests/runtime/containment.test.js'
+    - 'packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js'
+    - 'packages/caws-cli/tests/runtime/fixtures/agent-surface-empty-lookup.sh'
+  out: []
+invariants:
+  - 'Exact selected-source and execution preconditions qualify each native consumer; custom paths, bytes, startup, overrides or unqualified semantics preserve selected shell behavior or fail before effects. Preserve current-template positives and historical profile controls.'
+acceptance:
+  - id: A1
+    given: 'current exact Stop and heartbeat sources with selected checkout context'
+    when: 'typed native consumers replace their selected shell paths'
+    then: >-
+      observable lease and output behavior agrees for canonical and linked
+      checkouts; incompatible source, startup, overrides and CLI retain refusal or
+      fallback with no unauthorized effects
+  - id: A2
+    given: 'current exact protective guard sources'
+    when: 'native classifier and containment routes are selected'
+    then: >-
+      paired selected-shell results and hostile source controls establish qualified
+      behavior while custom or unproved cases retain their selected path
+  - id: A3
+    given: 'current utility helpers with quoted Node heredoc projection'
+    when: 'utility analysis encounters a program shape not implemented by its native consumer'
+    then: >-
+      the selected shell route handles that shape without false ignored-staging
+      notices, while ordinary native cases and actual staged-ignored-file warnings
+      remain correct
+  - id: A4
+    given: 'the committed integrated profiles and preserved historical fixtures'
+    when: 'focused stock, containment and Stop verification runs'
+    then: >-
+      current-template positives and hostile controls pass without reducing
+      rejection contracts or replacing current coverage solely with historical
+      profiles
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "ab4b551 implementation plus ad6b188 comment clarification. ART06/stock-profiles-final-01.log SHA3fbe2f4c0b29670e573cd34d767aa9170376046d6377fc2485274b2d15587a8f contains actual213passed7suites exit0. Four canonical/linked heartbeat and Stop pairs observe actual self lease transition, unchanged peer bytes, selected identity/root/branch fields and stdout/stderr. Current source, startup, override, CLI, deadline and late-Git controls pass; early/late Stop source refusal preserves lease and forbids replay. Variable timestamp/PID byte equality and actual Rust host delivery excluded. Raw artifact remains external; prior absolute artifact citation was refused with nothing written. This citation runs the paired tests and verifies source reachability."
+    recorded_at: "2026-10-28T10:33:28.330Z"
+    test_nodeid: "packages/caws-cli/tests/runtime/stock-handlers.test.js::shell and native update the same"
+    exit_code: 0
+    commit_sha: ad6b18858
+    test_verified_at: ad6b18858cdb79744e48e3fa022a73307945983e
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "ab4b551/ad6b188: final213passed includes current and two preserved historical source profiles, selected-source quiet and staged-deletion decision agreement, unchanged Git index, rehashed custom source fallback, separate shared/surface parser and emitter placement refusals, seven direct/transitive source mutations, project runtime bootstrap file/link/ENOTDIR refusal and routing/startup negatives. Containment contract suite consumes validated receipts under exact source admission; no actual process signal is claimed. Unqualified classifier outcomes retain selected shell behavior; not an exhaustive all-command equivalence claim. ART06/stock-profiles-final-01.log SHA3fbe2f4c0b29670e573cd34d767aa9170376046d6377fc2485274b2d15587a8f retained; cited pair re-executes."
+    recorded_at: "2026-10-28T10:35:24.957Z"
+    test_nodeid: "packages/caws-cli/tests/runtime/stock-handlers.test.js::selected shell and native agree"
+    exit_code: 0
+    commit_sha: ad6b18858
+    test_verified_at: ad6b18858cdb79744e48e3fa022a73307945983e
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "ab4b551/ad6b188 retains selected shell for heredoc-shaped utility commands because native utility tokenization lacks current Node projection. Two actual handler-executor cases use real compiled inspection-prefix entry and Node image in a bound-generation fixture: quoted Node and read-prefixed Node comments containing git add -f private.generated emit no false block, launch exactly one selected shell and preserve ignored sentinel/index. Existing eight ordinary cwd/ignored-file cases retain native selection and real ignored-staging refusals. ART06/stock-profiles-final-01.log SHA3fbe2f4c0b29670e573cd34d767aa9170376046d6377fc2485274b2d15587a8f. No user payload executed; fixture does not claim immutable installed image or native host delivery."
+    recorded_at: "2026-10-28T10:36:05.228Z"
+    test_nodeid: "packages/caws-cli/tests/runtime/stock-handlers.test.js::current utility"
+    exit_code: 0
+    commit_sha: ad6b18858
+    test_verified_at: ad6b18858cdb79744e48e3fa022a73307945983e
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Final staged implementation ab4b551 (ad6b188 changes comment only) built normally with exit0 then actual focused Node22 Jest ran stock-handlers, containment, stop-dispatch-connection, agent-heartbeat, agent-stop-late-context, agent-stop-output and stop-lease-context:213passed7suites60.872s, no skips. ART06/stock-profiles-final-01.log SHA3fbe2f4c0b29670e573cd34d767aa9170376046d6377fc2485274b2d15587a8f and build-02.log SHA066dc278fed034056aa42b627ef7994db2f1bcf8a849e9ad1d04978e6977e15c retained externally. Baseline46failed89passed and intermediate failed attempts preserved. Historical exact-empty agent-surface fixture SHA9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32 reproduced from f7a5af5; current-template positives remain. Doctor0E5W7I, five gates pass four paths. Independent Terra review no established defect; no installed runtime or complete production retirement claim. This commit verification checks reachability, not rerunning the full recorded tests."
+    recorded_at: "2026-10-28T10:36:52.016Z"
+    exit_code: 0
+    commit_sha: ad6b18858

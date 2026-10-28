@@ -66,7 +66,7 @@ import { assertMatchedCliIdentityReceipt, type MatchedCliIdentityReceipt } from 
 import type { NativeStopLeaseContextPort } from './stop-lease-context';
 import type { NativeSessionSealPort } from './session-publication-client';
 import { executeNativeSessionSeal } from './session-seal-runtime';
-import type { NativeSessionSealExecution } from './stock-handlers';
+import { assertNativeStopAgentSelection, type NativeSessionSealExecution } from './stock-handlers';
 import type { NativeResult } from './types';
 import type { NativeStopAdmission } from './live-protocol';
 import {
@@ -569,6 +569,9 @@ export async function prepareRuntimeInvocation(
           if (!cli) throw new Error('Native Stop requires its actual CLI identity owner');
           await cli.revalidate();
           if (signal.aborted) throw signal.reason;
+          const agent = selection.handlers[3];
+          if (!agent) throw new Error('Native Stop agent consumer is ineligible before prefix');
+          assertNativeStopAgentSelection(agent, options, 'preflight');
           const prefix = await nativeStopPrefix.capture(selection.canonical);
           journal.append('stop_prefix_completed', {
             status: prefix.status,

@@ -26,6 +26,12 @@ const agentSurfaceProfiles = [
   {
     name: 'exact-empty JSON lookup',
     sha256: '9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32',
+    revision: 'f7a5af5097f151efa3079935fa2bc235c23ac6ad',
+    fixture: 'fixtures/agent-surface-empty-lookup.sh',
+  },
+  {
+    name: 'current exact-path lookup',
+    sha256: '455dbfc2bfcf3a5ca891449e1a5f51ce7d9a9a1203ff680bc5fa90fe933e5a8f',
     revision: null,
     fixture: null,
   },
@@ -84,6 +90,52 @@ function select(name = 'block-dangerous.sh') {
   };
   selection.handlers = [handler];
   return handler;
+}
+function useCodexLibraries() {
+  for (const name of ['parse-input.sh', 'emit.sh']) {
+    const file = path.join(runtime, 'surfaces/codex/lib', name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.copyFileSync(path.join(templates, 'codex/hooks/lib', name), file);
+    selection.libraries[name] = { path: file, sha256: digest(file), kind: 'surface' };
+  }
+}
+async function selectedShell(handler) {
+  const native = jest
+    .spyOn(require('../../dist/runtime/stock-handlers'), 'tryExecuteStockHandler')
+    .mockReturnValue(null);
+  try {
+    return await createHandlerExecutor(context())(handler, selection.handlers.indexOf(handler));
+  } finally {
+    native.mockRestore();
+  }
+}
+function useBoundPrefixGeneration() {
+  const generation = path.join(directory, 'machine/lib/runtimes', selection.runtimeDigest);
+  fs.mkdirSync(path.dirname(generation), { recursive: true });
+  fs.renameSync(runtime, generation);
+  for (const library of Object.values(selection.libraries))
+    library.path = path.join(generation, path.relative(runtime, library.path));
+  runtime = generation;
+  selection.runtimeDirectory = runtime;
+  selection.hooksDirectory = runtime;
+  fs.mkdirSync(path.join(runtime, 'native'));
+  fs.copyFileSync(
+    process.execPath,
+    path.join(runtime, 'native/node'),
+    fs.constants.COPYFILE_FICLONE
+  );
+  fs.chmodSync(path.join(runtime, 'native/node'), 0o755);
+  const installed = path.join(runtime, 'native-prefix/node_modules/@paths.design/caws-cli');
+  fs.mkdirSync(installed, { recursive: true });
+  fs.cpSync(path.resolve(__dirname, '../../dist'), path.join(installed, 'dist'), {
+    recursive: true,
+  });
+  // Real compiled prefix classifier and its workspace dependencies; no mocked
+  // allow response. This exercises the helper's generation-bound source route.
+  fs.symlinkSync(
+    path.resolve(__dirname, '../../../../node_modules'),
+    path.join(installed, 'node_modules')
+  );
 }
 function command(value) {
   request.payload = {
@@ -367,6 +419,296 @@ test('a canonical latch prevents native admission from a different checkout', ()
   expect(tryExecuteStockHandler(handler, context())).toBeNull();
   expect(fs.existsSync(path.join(project, '.codex/hooks/state'))).toBe(false);
 });
+
+test.each([
+  'handler-env.sh',
+  'runtime-paths.sh',
+  'lib/agent-surface.sh',
+  'lib/parse-input.sh',
+  'lib/session-cache.sh',
+  'lib/session-id.sh',
+  'lib/agent-pid.sh',
+])('selected Codex parser does not conceal changed direct source %s', async (name) => {
+  useCodexLibraries();
+  useHeartbeatCli();
+  command('echo safe');
+  const heartbeat = jest
+    .spyOn(require('../../dist/runtime/agent-heartbeat'), 'executeAgentHeartbeat')
+    .mockResolvedValue({ exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) });
+  for (const consumer of ['block-dangerous.sh', 'agent-heartbeat.sh', 'hook-utilities.sh']) {
+    const handler = select(consumer);
+    expect(await tryExecuteStockHandler(handler, context())).not.toBeNull();
+  }
+  const file = path.join(runtime, name);
+  fs.appendFileSync(file, '\n# unreviewed direct source\n');
+  for (const library of Object.values(selection.libraries))
+    if (library.path === file) library.sha256 = digest(file);
+  heartbeat.mockClear();
+  for (const consumer of ['block-dangerous.sh', 'agent-heartbeat.sh', 'hook-utilities.sh']) {
+    const handler = select(consumer);
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+    if (consumer === 'block-dangerous.sh')
+      expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+  }
+  expect(heartbeat).not.toHaveBeenCalled();
+});
+
+test.each(['parse-input.sh', 'emit.sh'])(
+  'reviewed %s bytes cannot move between shared and surface source roles',
+  (name) => {
+    useCodexLibraries();
+    command('echo safe');
+    const handler = select();
+    expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
+    const shared = path.join(runtime, 'lib', name);
+    const surface = selection.libraries[name].path;
+    const sharedBytes = fs.readFileSync(shared);
+    const surfaceBytes = fs.readFileSync(surface);
+    fs.writeFileSync(surface, sharedBytes);
+    selection.libraries[name].sha256 = digest(surface);
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+    expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+    fs.writeFileSync(surface, surfaceBytes);
+    fs.writeFileSync(shared, surfaceBytes);
+    selection.libraries[name] = { path: shared, sha256: digest(shared), kind: 'shared' };
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+  }
+);
+
+test.each(['file', 'dangling-link', 'non-directory'])(
+  'checkout runtime bootstrap %s cannot inherit machine source qualification',
+  (kind) => {
+    useCodexLibraries();
+    command('echo safe');
+    const handler = select();
+    expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
+    const hooks = path.join(project, '.caws/hooks');
+    fs.mkdirSync(path.dirname(hooks), { recursive: true });
+    if (kind === 'non-directory') fs.writeFileSync(hooks, 'not a directory');
+    else {
+      fs.mkdirSync(hooks);
+      const file = path.join(hooks, 'runtime-paths.sh');
+      if (kind === 'file') fs.copyFileSync(path.join(runtime, 'runtime-paths.sh'), file);
+      else fs.symlinkSync('missing-runtime', file);
+    }
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+    expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+  }
+);
+
+test.each([
+  ['CAWS_PROJECT_DIR', '/different/checkout'],
+  ['CAWS_SHARED_LIB_DIR', '/different/lib'],
+  ['CAWS_MACHINE_ADAPTER_LIB_DIR', '/different/surface'],
+  ['CAWS_MACHINE_LIBRARIES', '{"emit.sh":"custom"}'],
+  ['CAWS_BASH_ANALYSIS_REQUIRED', '1'],
+])('unqualified %s routing keeps the selected source', (name, value) => {
+  command('echo safe');
+  const handler = select();
+  expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
+  environment[name] = value;
+  expect(tryExecuteStockHandler(handler, context())).toBeNull();
+  expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+});
+
+test.each(['quiet', 'staged deletion'])(
+  'current guard selected shell and native agree for %s without changing the index',
+  async (kind) => {
+    fs.writeFileSync(path.join(project, 'owned.txt'), 'owned\n');
+    git('add', 'owned.txt');
+    git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      'commit',
+      '-qm',
+      'seed'
+    );
+    if (kind === 'staged deletion') {
+      fs.unlinkSync(path.join(project, 'owned.txt'));
+      git('add', '-u');
+    }
+    const before = fs.readFileSync(path.join(project, '.git/index'));
+    command(kind === 'quiet' ? 'echo safe' : 'git commit -m unrelated');
+    const handler = select();
+    const native = await tryExecuteStockHandler(handler, context());
+    expect(native).not.toBeNull();
+    const shell = await selectedShell(handler);
+    captureResult('native-pair', native);
+    captureResult('shell-pair', shell);
+    expect(shell.exitCode).toBe(native.exitCode);
+    const decode = (bytes) => (bytes.length ? JSON.parse(Buffer.from(bytes).toString()) : null);
+    expect(decode(shell.stdout)).toEqual(decode(native.stdout));
+    expect(Buffer.from(shell.stderr)).toEqual(Buffer.from(native.stderr));
+    expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(before);
+  }
+);
+
+test.each([
+  [
+    'quoted Node',
+    "node <<'NODE'\n/*\ngit add -f private.generated\n*/\nconst fs = require('fs'); fs.readFileSync('tracked.txt','utf8');\nNODE",
+  ],
+  [
+    'read prefix',
+    "git status --short\nnode <<'NODE'\n/*\ngit add -f private.generated\n*/\nconst fs = require('fs'); fs.readFileSync('tracked.txt','utf8');\nNODE",
+  ],
+])('current utility %s preserves shell heredoc projection and unchanged files', async (_, body) => {
+  useBoundPrefixGeneration();
+  const policy = path.join(project, 'utility-policy.json');
+  fs.writeFileSync(policy, JSON.stringify({ version: 1, ignored_staging: true }));
+  environment.CAWS_OPTIONAL_HOOK_POLICY = policy;
+  fs.writeFileSync(path.join(project, '.gitignore'), '*.generated\n');
+  fs.writeFileSync(path.join(project, 'private.generated'), 'sentinel\n');
+  fs.writeFileSync(path.join(project, 'tracked.txt'), 'tracked\n');
+  git('add', 'tracked.txt');
+  const before = fs.readFileSync(path.join(project, '.git/index'));
+  command(body);
+  const handler = select('hook-utilities.sh');
+  expect(tryExecuteStockHandler(handler, context())).toBeNull();
+  const spawn = jest.spyOn(require('node:child_process'), 'spawn');
+  const result = await createHandlerExecutor(context())(handler, 0);
+  captureResult('utility-heredoc', result);
+  expect(spawn).toHaveBeenCalledTimes(1);
+  expect(result.exitCode).toBe(0);
+  expect(Buffer.from(result.stdout).toString()).toBe('');
+  expect(Buffer.from(result.stderr).toString()).toBe('');
+  expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(before);
+  expect(fs.readFileSync(path.join(project, 'private.generated'), 'utf8')).toBe('sentinel\n');
+});
+
+test.each([
+  ['heartbeat', 'canonical'],
+  ['heartbeat', 'linked'],
+  ['Stop', 'canonical'],
+  ['Stop', 'linked'],
+])(
+  'current %s shell and native update the same %s lease and preserve its peer',
+  async (consumer, kind) => {
+    const canonical = project;
+    fs.mkdirSync(path.join(canonical, '.caws/specs'), { recursive: true });
+    fs.writeFileSync(path.join(canonical, '.caws/policy.yaml'), 'version: 1\n');
+    fs.writeFileSync(path.join(canonical, 'owned.txt'), 'owned\n');
+    git('add', 'owned.txt');
+    git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      'commit',
+      '-qm',
+      'seed'
+    );
+    if (kind === 'linked') {
+      const linked = path.join(directory, 'linked');
+      git('worktree', 'add', '-q', '-b', 'paired', linked);
+      project = linked;
+      selection.checkout = linked;
+    }
+    useHeartbeatCli();
+    request.caller.cwd = project;
+    request.caller.processId = process.pid;
+    command('echo safe');
+    const platform = consumer === 'Stop' ? 'opencode' : 'codex';
+    if (consumer === 'Stop') {
+      selection.surface = request.surface = platform;
+      selection.event = request.event = 'stop';
+    }
+    const { heartbeatAgentActivity } = require('../../dist/application/agent-heartbeat');
+    const gitDir = git('rev-parse', '--path-format=absolute', '--git-dir').trim();
+    const common = git('rev-parse', '--path-format=absolute', '--git-common-dir').trim();
+    const seed = (session) =>
+      heartbeatAgentActivity({
+        cawsDir: path.join(canonical, '.caws'),
+        identity: { session_id: session, platform },
+        now: () => new Date('2000-01-01T00:00:00Z'),
+        reason: 'manual_register',
+        context: {
+          repo_root: canonical,
+          cwd: project,
+          git_common_dir: common,
+          git_dir: gitDir,
+          hook_pid: process.pid,
+        },
+      });
+    expect(seed('fixture').ok).toBe(true);
+    expect(seed('untouched-peer').ok).toBe(true);
+    const file = path.join(canonical, '.caws/leases/fixture.json');
+    const peerFile = path.join(canonical, '.caws/leases/untouched-peer.json');
+    const before = fs.readFileSync(file);
+    const peer = fs.readFileSync(peerFile);
+    let handler, native;
+    if (consumer === 'Stop') {
+      selection.handlers = [
+        'goal-ac-gate.sh',
+        'plan-transcript-finalize.sh',
+        'session-log.sh',
+        'agent-stop.sh',
+      ].map((name) => select(name));
+      handler = selection.handlers[3];
+      const { assertNativeStopAgentSelection } = require('../../dist/runtime/stock-handlers');
+      const { executeAgentStop } = require('../../dist/runtime/agent-stop');
+      assertNativeStopAgentSelection(handler, context(), 'preflight');
+      // Component parity with real Git and store effects. Native owner/permit
+      // custody is exercised separately by the Stop dispatch connection suite.
+      native = await executeAgentStop(
+        context(),
+        {
+          observe: async () => ({
+            status: 'resolved',
+            commonDir: git('rev-parse', '--path-format=absolute', '--git-common-dir').trim(),
+          }),
+        },
+        () => assertNativeStopAgentSelection(handler, context())
+      );
+    } else {
+      handler = select('agent-heartbeat.sh');
+      native = await tryExecuteStockHandler(handler, context());
+    }
+    expect(native).not.toBeNull();
+    const nativeLease = JSON.parse(fs.readFileSync(file));
+    const changedField = consumer === 'Stop' ? 'stopped_at' : 'last_active';
+    expect(nativeLease[changedField]).not.toBe(JSON.parse(before)[changedField]);
+    expect(Number.isFinite(Date.parse(nativeLease[changedField]))).toBe(true);
+    expect(nativeLease).toMatchObject({
+      session_id: 'fixture',
+      platform,
+      status: consumer === 'Stop' ? 'stopped' : 'active',
+      repo_root: canonical,
+      cwd: project,
+      git_common_dir: common,
+      git_dir: gitDir,
+    });
+    expect(fs.readFileSync(peerFile)).toEqual(peer);
+    fs.writeFileSync(file, before);
+    const shell = await selectedShell(handler);
+    const shellLease = JSON.parse(fs.readFileSync(file));
+    expect(shellLease[changedField]).not.toBe(JSON.parse(before)[changedField]);
+    expect(Number.isFinite(Date.parse(shellLease[changedField]))).toBe(true);
+    for (const key of [
+      'session_id',
+      'platform',
+      'status',
+      'repo_root',
+      'cwd',
+      'git_common_dir',
+      'git_dir',
+      'branch',
+    ])
+      expect(shellLease[key]).toEqual(nativeLease[key]);
+    expect(shell.exitCode).toBe(native.exitCode);
+    expect(Buffer.from(shell.stdout)).toEqual(Buffer.from(native.stdout));
+    expect(Buffer.from(shell.stderr)).toEqual(Buffer.from(native.stderr));
+    expect(fs.readFileSync(peerFile)).toEqual(peer);
+    captureResult('lease-native', native);
+    captureResult('lease-shell', shell);
+    fs.writeFileSync(
+      path.join(directory, 'paired-leases.json'),
+      JSON.stringify({ before: JSON.parse(before), nativeLease, shellLease }, null, 2)
+    );
+  }
+);
 
 test('native quiet allow and advisory use the actual classifier envelope contract', () => {
   command('echo safe');

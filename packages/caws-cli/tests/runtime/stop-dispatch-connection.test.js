@@ -14,6 +14,7 @@ const { createCliIdentityUnitDomain } = require('../helpers/cli-identity-unit-do
 const { heartbeatAgentActivity } = require('../../dist/application/agent-heartbeat');
 const stock = require('../../dist/runtime/stock-handlers');
 const realExecuteStockHandler = stock.tryExecuteStockHandler;
+const realStopSelection = stock.assertNativeStopAgentSelection;
 const eligibility = require('../../dist/runtime/eligibility');
 const publication = require('../../dist/runtime/session-store-publication');
 const executor = require('../../dist/runtime/handler-executor');
@@ -237,6 +238,8 @@ beforeEach(() => {
     trace.push(handler.name);
     return completedHandler;
   });
+  // Synthetic handler chains exercise composition with selection as an explicit unit boundary.
+  jest.spyOn(stock, 'assertNativeStopAgentSelection').mockImplementation(() => {});
   jest.spyOn(eligibility, 'handlerEligibility').mockReturnValue({ status: 'run' });
   nativePublication = jest
     .spyOn(publication, 'executeNativeStopPublication')
@@ -554,6 +557,110 @@ function installRealStopSources() {
   copy('runtime-paths.sh', 'shared/runtime-paths.sh');
   copy('lib/session-cache.sh', 'shared/lib/session-cache.sh');
 }
+
+function installReviewedStopLibraries() {
+  const fixtures = {
+    'agent-surface.sh': [
+      'agent-surface-json-lookup.sh',
+      'f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a',
+    ],
+    'caws-state.sh': [
+      'reviewed-stock/caws-state.sh',
+      '2d27e94fbc3303ca96d7729720d8d7570ec772bc0f9a02d5b1bf46b98f4931e1',
+    ],
+    'bash-mutation-targets.sh': [
+      'reviewed-stock/bash-mutation-targets.sh',
+      '3b40bcc29a9793c85c7db4f01c0e4650429be46db504df774e3ff95d6ab8f6ac',
+    ],
+    'heredoc.sh': [
+      'reviewed-stock/heredoc.sh',
+      '75643e42630f6077959da625f50f6cdf888ed82e4d0d983a560378d928cc5e0d',
+    ],
+  };
+  for (const [name, [file, expected]] of Object.entries(fixtures)) {
+    const content = fs.readFileSync(path.join(__dirname, 'fixtures', file));
+    expect(crypto.createHash('sha256').update(content).digest('hex')).toBe(expected);
+    fs.writeFileSync(selection.libraries[name].path, content);
+    selection.libraries[name].sha256 = expected;
+  }
+}
+
+function seedStopLease() {
+  const seeded = heartbeatAgentActivity({
+    cawsDir: path.join(root, '.caws'),
+    identity: { session_id: 'supplied', platform: 'opencode' },
+    now: () => new Date(),
+    reason: 'manual_register',
+    context: {
+      repo_root: root,
+      cwd: root,
+      git_common_dir: path.join(root, '.git'),
+      git_dir: path.join(root, '.git'),
+      hook_pid: process.pid,
+      hostname: 'unit-domain',
+    },
+  });
+  expect(seeded.ok).toBe(true);
+  const file = path.join(root, '.caws/leases/supplied.json');
+  return { file, before: fs.readFileSync(file) };
+}
+
+test.each(['changed current helper', 'changed ordered handler'])(
+  'Stop preflight refuses %s before prefix or lease effects',
+  async (kind) => {
+    installRealStopSources();
+    stock.assertNativeStopAgentSelection.mockRestore();
+    if (kind === 'changed ordered handler') {
+      installReviewedStopLibraries();
+      fs.appendFileSync(selection.handlers[0].path, '# changed source\n');
+    } else {
+      fs.appendFileSync(selection.libraries['agent-surface.sh'].path, '# changed source\n');
+    }
+    const lease = seedStopLease();
+    const prepared = await prepare();
+    await expect(prepared.dispatch(undefined, decode())).rejects.toThrow(/before prefix/);
+    expect(prefix.capture).not.toHaveBeenCalled();
+    expect(nativePublication).not.toHaveBeenCalled();
+    expect(stock.tryExecuteStockHandler).not.toHaveBeenCalled();
+    expect(lateGit.observe).not.toHaveBeenCalled();
+    expect(compatibility).not.toHaveBeenCalled();
+    expect(fs.readFileSync(lease.file)).toEqual(lease.before);
+  }
+);
+
+test('late helper drift after an eligible Stop prefix preserves the lease and refuses replay', async () => {
+  installRealStopSources();
+  installReviewedStopLibraries();
+  stock.assertNativeStopAgentSelection.mockRestore();
+  const lease = seedStopLease();
+  prefix.capture.mockImplementation(async () => {
+    realStopSelection(
+      selection.handlers[3],
+      {
+        request,
+        selection,
+        environment: request.caller.environment,
+        signal: controller.signal,
+      },
+      'preflight'
+    );
+    trace.push('prefix');
+    fs.appendFileSync(selection.libraries['agent-surface.sh'].path, '# drift after prefix\n');
+    return completedPrefix;
+  });
+  stock.tryExecuteStockHandler.mockImplementation(async (handler, options) => {
+    trace.push(handler.name);
+    return handler.name === 'agent-stop.sh'
+      ? realExecuteStockHandler(handler, options)
+      : completedHandler;
+  });
+  const prepared = await prepare();
+  await expect(prepared.dispatch(undefined, decode())).rejects.toThrow(/changed after prefix/);
+  expect(prefix.capture).toHaveBeenCalledTimes(1);
+  expect(nativePublication).toHaveBeenCalledTimes(1);
+  expect(compatibility).not.toHaveBeenCalled();
+  expect(fs.readFileSync(lease.file)).toEqual(lease.before);
+});
 
 // Native prefix/publication ports remain boundary doubles. Records, eligibility,
 // composition, CLI identity, late consumer and lease transitions are real.

@@ -4,7 +4,7 @@ mode: chore
 lifecycle_state: active
 worktree: execution-qualification
 created_at: '2026-10-27T17:30:32.605Z'
-updated_at: '2026-10-27T18:24:30.632Z'
+updated_at: '2026-10-28T09:18:14.631Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -41,13 +41,30 @@ scope:
     - packages/caws-cli/LICENSE.spdx
     - .stryker-execution-*/**
     - node_modules/
+    - packages/caws-cli/src/shell/analysis/
+    - packages/caws-cli/tests/shell/command-analysis.test.js
+    - packages/caws-cli/tests/shell/interpreter-effects.test.js
+    - packages/caws-cli/tests/shell/mutation-view.test.js
+    - packages/caws-cli/tests/fixtures/command-analysis/
+    - .stryker-analysis-*/**
 invariants:
-  - 'Qualification never changes tracked source or lowers the six per-file 80 percent floors'
+  - 'Candidate source and test repairs occur only before campaign freeze within admitted paths; tracked source, tests, dependencies and build outputs remain unchanged while either campaign runs, and no per-file mutation floor is lowered'
 acceptance:
   - id: A1
     given: 'committed Source candidate with matching runtime and test bytes'
     when: 'the full six-file execution mutation campaign and baseline execute in an isolated owned checkout'
     then: 'every target meets the unchanged 80 percent floor with nonzero selected tests and retained input-build-report identity'
+  - id: A2
+    given: >-
+      The committed joined Source candidate includes extracted pure inspection
+      decisions and unchanged floor requirements
+    when: >-
+      The complete eight-file analysis mutation campaign executes against matching
+      isolated source, tests and build outputs
+    then: >-
+      Every analysis target meets its unchanged 80 percent floor with nonzero tests
+      and retained input-build-report identity; topology checks alone do not satisfy
+      acceptance
 observability:
   - 'Retain raw baseline, mutation reports, source identity and nonzero exit outcomes outside the lane before cleanup'
 rollback:
@@ -60,6 +77,6 @@ contracts:
 evidence:
   - criterion_id: A1
     status: unchecked
-    evidence_ref: "Frozen Source f650 remains tracked-identical. Full six-file attempt a20f9bb6-7a87-42f7-a1f6-da749590294b built0 and passed194 selected baseline tests/42s, instrumented6files1985mutants, then exited1 because shared canonical @stryker-mutator/core replacement-worker entry disappeared. No mutation report/per-file score verdict; criterion unavailable, not pass or a demonstrated semantic Source failure. Both owned campaigns exited naturally and released locks. Raw QA report directory and log retained with recursive/cmp equality outside lane at ~/.codex/artifacts/01a151c0-4722-76a0-9814-eb680a4be9b2/guard-source-qualification/f650798001903ced4a6eed4234409cf7abbbba31/qa-failed-a20f9bb6; terminal mutation-run.json SHA256c1435ae846fbbf15e7d3bd412536f1009bfba1774570086fc9d3525a07e89dac. Root awaits operator retirement of two owned dependency symlinks after installed43 guard refusal, then private physical dependencies and fresh unchanged6file80 run. No source edits/floor lowering/native qualification."
-    recorded_at: "2026-10-27T18:32:12.461Z"
-    commit_sha: f650798001903ced4a6eed4234409cf7abbbba31
+    evidence_ref: "Continuation14980: owned QA remains clean0b99d80da, three commits above Sourcec8. Production/test repairc2 unchanged; docs-only0b adds explicit check-to-mutation serialization/conditional-operation requirement to PROPOSED unimplemented retirement contract. docscheck0b0 retained at reports/dependency-isolation/owned-retirement-docs-0b99d80da.log. Existing c2 joined2232pass13suites/build0/docs0/5gates0 retained; these do not satisfy full mutation or native adoption. New negative source check: policies.ts491-496 refuses unknown read destinations; authorizer reasons cannot filter that refusal. Parent normal push02 terminal1 and canonical freeze released; full campaign remains HOLD pending Source caws-read-metadata implementation. That pure executable predicate will join whole-file analysis mutation at unchanged80; actual final target count/spec/CI update after source inspection, likely9; execution6 unchanged. Source native patch exact export5targets/65066bytepatch/67292byterequest timed out; invocation29964 known Started+dispatchStarted only per owners, terminal/effects unresolved; owners retain hook-only transport/deadline investigation, no retry/bypass by Root. Parent owns pending explicit child env repairs only in command-analysis, mutation-view and ci/git-fixture-isolation tests; preserve during normal integration, explicit hostile request.environment and mutant propagation must remain. No active QA process. Next join final dependency/source plus fixtures, validate, freeze once and launch sustained capped2 surfaces sequentially. Preserve raw reports before destructive QA merge; archivecopy refusal remains. Root retains source/fourdocs/landing/push; native custody/canary/rollback and adoption unqualified."
+    recorded_at: "2026-10-28T11:02:21.287Z"
+    commit_sha: "0b99d80da9cac236cf0647de0229b4376e494f7f"
