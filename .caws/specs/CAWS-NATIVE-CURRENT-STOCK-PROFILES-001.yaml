@@ -77,3 +77,9 @@ evidence:
     exit_code: 0
     commit_sha: ad6b18858
     test_verified_at: ad6b18858cdb79744e48e3fa022a73307945983e
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Final staged implementation ab4b551 (ad6b188 changes comment only) built normally with exit0 then actual focused Node22 Jest ran stock-handlers, containment, stop-dispatch-connection, agent-heartbeat, agent-stop-late-context, agent-stop-output and stop-lease-context:213passed7suites60.872s, no skips. ART06/stock-profiles-final-01.log SHA3fbe2f4c0b29670e573cd34d767aa9170376046d6377fc2485274b2d15587a8f and build-02.log SHA066dc278fed034056aa42b627ef7994db2f1bcf8a849e9ad1d04978e6977e15c retained externally. Baseline46failed89passed and intermediate failed attempts preserved. Historical exact-empty agent-surface fixture SHA9fb104eab8cc5955157dd2da7dc25c19a4bfcd008aa148cfacfba842c9310c32 reproduced from f7a5af5; current-template positives remain. Doctor0E5W7I, five gates pass four paths. Independent Terra review no established defect; no installed runtime or complete production retirement claim. This commit verification checks reachability, not rerunning the full recorded tests."
+    recorded_at: "2026-10-28T10:36:52.016Z"
+    exit_code: 0
+    commit_sha: ad6b18858
