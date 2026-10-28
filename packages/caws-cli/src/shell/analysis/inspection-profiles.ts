@@ -1,3 +1,5 @@
+import { isCawsReadInvocation, isCawsLiteralExecutable } from './caws-read-metadata';
+
 /** Pure argument-role definitions shared by effect analysis and prefix inspection.
  * These profiles assume normal executable lookup and trusted Git configuration.
  * They do not authenticate executables, discover repositories or grant authority.
@@ -263,6 +265,7 @@ export function inspectSedArguments(
 
 /** Closed inspection subset, independent of contextual effects/ownership policy. */
 export function isInspectionInvocation(argv: readonly string[]): boolean {
+  if (isCawsLiteralExecutable(argv[0])) return isCawsReadInvocation(argv);
   const name = argv[0]?.replace(/^\/(?:usr\/)?bin\//, '');
   if (!name || name.includes('/')) return false;
   const args = argv.slice(1);
