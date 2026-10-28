@@ -1,10 +1,11 @@
 id: CAWS-NODE-PROCESS-RUNTIME-001
 title: 'Bind developer and test child Node processes to the selected runtime'
 mode: fix
-lifecycle_state: active
-worktree: node-process-runtime
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Land reviewed bounded developer/test child-runtime candidate70546ea82d90ea1547d551eaa122ee165c8d97e7. Existing A1-A4 pass records15105-15108 verified exactly; A3/A4 each executed one selected test in the actual clean candidate and record test_verified_at70546. Full focused102/102, final five gates over five files, formatting and doctor0 with0E4W6I retained. Immutable capture/drift checks, policy and floors unchanged. Windows proof covers key composition only; npm local-bin precedence is preserved. Original refused metadata spelling stays refused and the installed legacy scanner gap remains QA-owned and blocks broader adoption. No Native-entry integration, heavy/full campaign, image/package/runtime activation, strict/global/Python or publication acceptance is asserted.'
 created_at: '2026-10-28T19:50:34.020Z'
-updated_at: '2026-10-28T19:51:07.555Z'
+updated_at: '2026-10-28T20:37:44.970Z'
 created_by_session: '01a181ec-11d5-7270-8073-29aac2fd949d'
 blast_radius:
   modules:
