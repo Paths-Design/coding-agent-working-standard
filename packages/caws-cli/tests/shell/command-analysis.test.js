@@ -100,14 +100,11 @@ const inspectionPrefixes = [
   ['utf8-byte-limit', 'cat "' + '\u00e9'.repeat(16382) + '"', 2],
   ['command-limit', Array(64).fill('cat f').join('\n'), 0],
   ['over-command-limit', Array(65).fill('cat f').join('\n'), 2],
-  ['node-limit', 'cat ' + 'x '.repeat(1500), 2],
-  [
-    'depth-limit',
-    Array(40)
-      .fill(0)
-      .reduce((s) => `cat $(${s})`, 'cat f'),
-    2,
-  ],
+  // Plain words need not materialize parts, so use more actual Word nodes
+  // than the 4096-node cap. Nested substitutions have lazy scripts; nested
+  // subshells provide the structured depth this predicate bounds.
+  ['node-limit', 'cat ' + 'x '.repeat(5000), 2],
+  ['depth-limit', '( '.repeat(80) + 'cat f' + ' )'.repeat(80), 2],
 ].map(([id, source, status]) => ({ id: `inspection-${id}`, source, status }));
 require('../fixtures/command-analysis/git-context-cases.cjs')(
   path.resolve(__dirname, '../../dist/shell/analysis/git-context.js')

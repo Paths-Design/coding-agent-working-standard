@@ -361,6 +361,31 @@ describe('private authorizer component observations, without USER execution', ()
       expect(fs.readFileSync(target, 'utf8')).toBe('must be preserved\n');
     }
   });
+  test.each([
+    ['assignment', 'HISTFILE={{HISTORY}}; value=$(HISTFILESIZE=0; printf x); true'],
+    ['prefix', 'HISTFILE={{HISTORY}}; value=$(HISTFILESIZE=0 printf x); true'],
+    ['quoted', 'HISTFILE={{HISTORY}}; value="$(HISTFILESIZE=0; printf x)"; true'],
+    ['nested', 'HISTFILE={{HISTORY}}; value=$(inner=$(HISTFILESIZE=0; printf x); printf x); true'],
+    ['heredoc', "value=$(printf x <<'EOF'\ndata\nEOF\n); true"],
+    ['here-string', 'value=$(printf x <<< data); true'],
+  ])('holds implicit effects in lazy word children: %s', async (_name, pattern) => {
+    const f = authorityFixture();
+    const history = path.join(f.root, 'lazy-history');
+    fs.writeFileSync(history, 'must be preserved\n');
+    const command = pattern.replace('{{HISTORY}}', JSON.stringify(history));
+    const result = await observe(f, command);
+    expect({ command, decision: result.decision }).toEqual({ command, decision: 'unresolved' });
+    expect(result.reasonCodes).toEqual(['unsupported_profile']);
+    expect(fs.readFileSync(history, 'utf8')).toBe('must be preserved\n');
+  });
+  test('allows inert reader substitutions in lazy word children without executing them', async () => {
+    const f = authorityFixture();
+    for (const command of ['value=$(printf x); true', 'value="$(printf x)"; true']) {
+      const result = await observe(f, command);
+      expect(result.decision).toBe('allow');
+      expect(result.reasonCodes).toEqual([]);
+    }
+  });
   test('holds PATH changes before a profiled utility, preserving the original PATH control', async () => {
     const f = authorityFixture();
     const directory = path.join(f.lane, 'replacement-bin');
