@@ -18,11 +18,11 @@ scope:
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Preserve line order, category order, repeated advisory hits, redaction, input selection, shell option behavior and advisory-only authority; retain original callback deadline.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'Write/Edit content or an existing-file patch target with synthetic matching and near-miss patterns'
+    when: 'the installed scanner executes including Bash 3.2 and nocasematch'
+    then: 'advisory output matches the prior scanner semantics without exposing token values'
 non_functional: {}
 contracts: []
