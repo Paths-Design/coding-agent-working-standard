@@ -1536,6 +1536,13 @@ export const HOOKS_COMMAND_META: GroupCommandMeta = {
   subcommands: [
     {
       kind: 'leaf',
+      name: 'inspection-prefix',
+      description:
+        'Classify complete newline-separated literal inspection commands from stdin without execution or project authority. Fixed versioned response; exits 0 only for positive classification, 1 for unsupported syntax/roles, 2 for parse/runtime/budget failure. Trusted executable lookup and Git configuration are caller assumptions.',
+      options: [],
+    },
+    {
+      kind: 'leaf',
       name: 'mutation-view',
       description:
         'Project bounded shell tokens for the write guard without execution. Reads {command} JSON on stdin. Facts confer no write authority. Exits 0 for a valid projection (including unresolved issues), 2 for unavailable analysis.',

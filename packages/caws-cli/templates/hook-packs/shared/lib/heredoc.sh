@@ -57,6 +57,48 @@
 # Commands whose heredoc payload is written out, never executed.
 CAWS_HEREDOC_FILE_SINKS="${CAWS_HEREDOC_FILE_SINKS:-cat tee}"
 
+# Only the admitted shared generation may supply prefix classification. The
+# dispatcher/handler executor overwrites these selection coordinates; they are
+# compared to this file, never used to choose an ambient CLI. Project/user/
+# surface overrides and transformed service images cannot borrow sibling tools.
+# Snapshot byte verification and normal host lookup are loader/host contracts;
+# this adds no executable attestation or stronger TOCTOU claim.
+_caws_bound_inspection_prefix() (
+  local source="${BASH_SOURCE[0]}" shared selected generation digest parent reply
+  [[ "$source" == /* && "${source##*/}" == heredoc.sh && ! -L "$source" ]] || return 1
+  shared="$(CDPATH='' cd -P -- "${source%/*}" 2>/dev/null && pwd -P)" || return 1
+  [[ "$shared" == */lib && "$source" -ef "$shared/heredoc.sh" ]] || return 1
+  generation="${shared%/lib}"; digest="${generation##*/}"; parent="${generation%/*}"
+  [[ "$parent" == */lib/runtimes && "$digest" =~ ^[a-f0-9]{64}$ &&
+     "$digest" == "${CAWS_ADAPTER_RUNTIME_DIGEST:-}" ]] || return 1
+  [[ "${CAWS_SHARED_LIB_DIR:-}" == /* ]] || return 1
+  selected="$(CDPATH='' cd -P -- "$CAWS_SHARED_LIB_DIR" 2>/dev/null && pwd -P)" || return 1
+  [[ "$selected" == "$shared" ]] || return 1
+  local node="$generation/native/node"
+  local entry="$generation/native-prefix/node_modules/@paths.design/caws-cli/dist/shell/analysis/inspection-prefix-entry.js"
+  [[ -x "$node" && -f "$entry" && ! -L "$node" && ! -L "$entry" ]] || return 1
+  # Keep this list aligned with nodeStartupBinding: no startup preload, module
+  # search injection, cache/coverage/warning writes or OpenSSL configuration.
+  unset NODE_OPTIONS NODE_PATH NODE_V8_COVERAGE NODE_COMPILE_CACHE
+  unset NODE_REDIRECT_WARNINGS NODE_REPL_EXTERNAL_MODULE NODE_REPL_HISTORY
+  unset NODE_ICU_DATA OPENSSL_CONF OPENSSL_ENGINES
+  set -o pipefail
+  reply="$(
+    if printf '%s' "$1" | "$node" "$entry" 2>/dev/null | (
+      # Preserve record bytes, reject NUL, and cap capture even for an old or
+      # malformed entry. The selected entry supervises parser wall/heap limits.
+      local value='' character='' count=0
+      while IFS= read -r -d '' -n 1 character; do
+        [[ -n "$character" ]] || exit 1
+        count=$((count + 1)); [[ "$count" -le 80 ]] || exit 1
+        value+="$character"
+      done
+      printf '%sx' "$value"
+    ); then printf 0; else printf 1; fi
+  )"
+  [[ "$reply" == $'caws.inspection-prefix.v1:allow\nx0' ]]
+)
+
 # Echo $1 with every safelisted heredoc BODY replaced by blank lines.
 # Line count and the delimiter lines are preserved so a caller reporting a
 # position still points at the right place.
@@ -75,13 +117,9 @@ caws_blank_heredoc_bodies() {
   # Buffer/look ahead before projecting Node: an unfinished or ambiguous
   # heredoc must not erase any payload. This deliberately recognizes only one
   # standalone bare `node <<'DELIM'` / `node <<"DELIM"` header, with no options,
-  # wrapper, redirects, continuation, or second heredoc. Before the header,
-  # accept only blank lines or the complete literal inspection forms below.
-  # Each form has a closed argument grammar: cat accepts one plain path whose
-  # leading character cannot be an option, with no shell expansion or syntax.
-  # Every other line permanently declines projection, including visible lookup
-  # changes after an otherwise admitted inspection. This is not a denylist of
-  # mutators and does not treat arbitrary plaintext as evidence of Node identity.
+  # wrapper, redirects, continuation, or second heredoc. Buffer the whole prefix
+  # and ask one bound structural classifier only after the terminator is known.
+  # Its argument-role policy is shared with analysis, not a second shell regex.
   #
   # Like the callers' literal command view, this assumes normal command lookup
   # supplied by the host. It does not authenticate ambient aliases/functions or
@@ -90,31 +128,37 @@ caws_blank_heredoc_bodies() {
   local node_rest="${input#*<<}"
   local node_single="^[[:blank:]]*node[[:blank:]]+<<[[:blank:]]*'([^']+)'[[:blank:]]*$"
   local node_double='^[[:blank:]]*node[[:blank:]]+<<[[:blank:]]*"([^"\\]+)"[[:blank:]]*$'
-  local node_inspection='^[[:blank:]]*(pwd[[:blank:]]+-P|git[[:blank:]]+(rev-parse[[:blank:]]+(--show-toplevel|HEAD)|branch[[:blank:]]+--show-current|status[[:blank:]]+--short)|cat[[:blank:]]+[[:alnum:]_./][-[:alnum:]_./]*)[[:blank:]]*$'
-  local node_prefix_ok=1 node_body=0 node_offset=0 node_start=0 node_delim="" node_blanks=""
+  local node_prefix='' node_body=0 node_offset=0 node_start=0 node_delim="" node_blanks=""
+  local node_nonblank=$'[^ \t\n]'
   if [[ "$node_rest" != *"<<"* ]]; then
     while IFS= read -r line || [[ -n "$line" ]]; do
       if [[ "$node_body" == 1 ]]; then
         if [[ "$line" == "$node_delim" ]]; then
+          # Only Bash's blank command separators qualify for the independent
+          # Node-first path. CR/VT/FF are not empty shell statements.
+          if [[ "$node_prefix" =~ $node_nonblank ]] && ! _caws_bound_inspection_prefix "$node_prefix"; then
+            printf '%s' "$input"
+            return 0
+          fi
           # Slice the original string, including its exact trailing newlines.
           # Only body lines become blank; header and terminator are untouched.
           printf '%s%s%s' "${input:0:node_start}" "$node_blanks" "${input:node_offset}"
           return 0
         fi
         node_blanks+=$'\n'
-      elif [[ "$node_prefix_ok" == 1 ]]; then
+      else
         if [[ "$line" =~ $node_single || "$line" =~ $node_double ]]; then
           node_delim="${BASH_REMATCH[1]}"
           if [[ ! "$node_delim" =~ [[:cntrl:]] ]]; then
             node_body=1
             node_start=$((node_offset + ${#line} + 1))
+            node_prefix="${input:0:node_offset}"
           fi
-        elif [[ ! "$line" =~ ^[[:blank:]]*$ && ! "$line" =~ $node_inspection ]]; then
-          node_prefix_ok=0
         fi
       fi
       node_offset=$((node_offset + ${#line} + 1))
     done <<< "$input"
+    if [[ "$node_body" == 1 ]]; then printf '%s' "$input"; return 0; fi
   fi
 
   while IFS= read -r line || [[ -n "$line" ]]; do

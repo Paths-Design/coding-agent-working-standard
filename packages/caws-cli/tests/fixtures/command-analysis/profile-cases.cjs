@@ -290,7 +290,7 @@ for (const [id, command, decision, reason] of [
   ['git-log-format-extension', "git log --format='%(exec)'", 'unresolved', 'git-option-unmodeled'],
   ['git-log-missing-data', 'git log --grep', 'unresolved', 'git-option-unmodeled'],
   ['git-grep-missing-data', 'git grep -e', 'unresolved', 'git-option-unmodeled'],
-  ['git-diff-missing-data', 'git diff --unified', 'unresolved', 'git-option-unmodeled'],
+  ['git-diff-default-unified', 'git diff --unified', 'allow'],
   ['git-commit-missing-data', 'git commit --message', 'unresolved', 'git-option-unmodeled'],
   [
     'git-global-extension',

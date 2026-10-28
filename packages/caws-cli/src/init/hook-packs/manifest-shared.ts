@@ -646,7 +646,10 @@ import { isAdapterCoveredSurface } from './types';
 // heredoc, preserving bytes and rejecting visible lookup changes or shell syntax.
 // Raw interpreter checks and the helper API remain unchanged; ambient command
 // lookup is a host assumption, never authenticated by this projection.
-export const SHARED_PACK_VERSION = 124;
+// v125: share structural inspection argument profiles with a bounded pure
+// classifier. Selected managed heredoc libraries bind to their generation's
+// Node/entry; unavailable classification preserves raw outer-shell input.
+export const SHARED_PACK_VERSION = 125;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
