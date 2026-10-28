@@ -49,3 +49,8 @@ evidence:
     test_nodeid: packages/caws-cli/tests/hooks/guard-copy-no-waiver-for-hook-blocks.test.js
     commit_sha: "28d174363"
     test_verified_at: "28d17436308764d55c249d724d7538cccba8978d"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "At 28d174363: CLAUDE.md is 250 lines / 13236 bytes (was 598 / 35343). A grep -F of 45 distinctive phrases from every removed or condensed passage found all 45 in destinations CLAUDE.md names (docs/release-procedure.md, docs/agents/scope-discipline.md, CONTRIBUTING.md, docs/architecture/repo-local-hook-policy.md, docs/NPM_PUBLISHING_TEST.md, .claude/rules/worktree-isolation.md, docs/guides/coding-rigor.md, docs/guides/hook-packs.md) or in CLAUDE.md itself. Codex peer review found two meaning changes (scope-proof applicability, gate-only-if-fix-cannot-ship); both restored in 28d174363. Not checked: semantic equivalence beyond those phrases."
+    recorded_at: "2026-10-28T01:18:53.384Z"
+    commit_sha: "28d174363"
