@@ -731,6 +731,7 @@ describe('mutation policy topology contract', () => {
     const config = require(path.join(PACKAGE_ROOT, 'stryker.analysis.conf.js'));
     expect(config.mutate).toEqual([
       'src/shell/analysis/analyze.ts',
+      'src/shell/analysis/caws-read-metadata.ts',
       'src/shell/analysis/git-context.ts',
       'src/shell/analysis/inspection-prefix.ts',
       'src/shell/analysis/inspection-profiles.ts',
