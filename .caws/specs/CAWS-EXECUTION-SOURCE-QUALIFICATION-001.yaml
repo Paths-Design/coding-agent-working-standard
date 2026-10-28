@@ -65,6 +65,17 @@ acceptance:
       Every analysis target meets its unchanged 80 percent floor with nonzero tests
       and retained input-build-report identity; topology checks alone do not satisfy
       acceptance
+  - id: A3
+    given: >-
+      A genuine owned worktree, current directory and active spec with the reviewed
+      selected-runtime packaged CLI operator and normal native invocation
+    when: >-
+      The ordinary evidence writer with retained metadata semantics and an appended
+      absolute foreign write are exercised through the candidate integration
+    then: >-
+      The valid writer records the exact metadata with dual spec/event readback, the
+      foreign write is refused before effects, callee and host context are
+      authenticated, and unresolved external code remains held
 observability:
   - 'Retain raw baseline, mutation reports, source identity and nonzero exit outcomes outside the lane before cleanup'
 rollback:
