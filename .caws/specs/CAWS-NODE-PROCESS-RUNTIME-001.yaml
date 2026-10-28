@@ -1,0 +1,47 @@
+id: CAWS-NODE-PROCESS-RUNTIME-001
+title: 'Bind developer and test child Node processes to the selected runtime'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-28T19:50:34.020Z'
+updated_at: '2026-10-28T19:50:34.020Z'
+created_by_session: '01a181ec-11d5-7270-8073-29aac2fd949d'
+blast_radius:
+  modules:
+    - 'Developer/test launcher child environment composition and process fixture boundaries'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/run-tests.js'
+    - 'packages/caws-cli/scripts/run-mutation.mjs'
+    - 'packages/caws-cli/scripts/lib/node-process-env.cjs'
+  out: []
+invariants:
+  - 'Do not change mutation-input-identity.mjs or normalize within captureMutationInputs/assertInputsUnchanged: initial mismatch, captured-input drift and sandbox runtime substitution must retain strict refusal before build.'
+  - 'Derive the child environment from the canonical actual process.execPath directory without hardcoded versions/shims or import-time process.env mutation; preserve unrelated environment and handle Windows PATH key casing coherently.'
+  - 'Retain preparation/Jest/cleanup signal, spawn-error and nonzero verdict precedence; do not weaken identity, score, verdict, mutation floors or sentinel controls; keep intentionally unbound mismatch probes unbound.'
+acceptance:
+  - id: A1
+    given: 'An explicitly selected Node executable and an ambient PATH resolving a conflicting Node, with the ordinary test launcher and observable fixture npm/npx children'
+    when: 'The ordinary launcher starts preparation, Jest and cleanup through its real child launch boundary without an external PATH correction'
+    then: 'Parent and child runtime identities match the canonical selected executable, unrelated environment is preserved and the conflicting Node sentinel remains untouched.'
+  - id: A2
+    given: 'The selected Node executable, conflicting ambient PATH and a complete lightweight mutation fixture including copied launcher dependencies'
+    when: 'The mutation command binds its child environment once before initial capture and propagates it through actual npm build, Stryker and sandbox child launches'
+    then: 'Observed parent, build, Stryker and sandbox Node identities match the selected executable, the fixture succeeds without caller PATH correction and the conflict sentinel remains untouched.'
+  - id: A3
+    given: 'Intentionally unbound direct capture probes, a post-capture PATH substitution and a sandbox runtime substitution'
+    when: 'Existing immutable capture, assertInputsUnchanged and sandbox runtime checks evaluate those probes'
+    then: 'Initial mismatch and subsequent drift remain specifically refused, sandbox substitution refuses before build and immutable identity, score, verdict and floor checks remain unchanged.'
+  - id: A4
+    given: 'The bounded launcher/helper/fixture candidate and retained failed baseline, preparation, Jest and cleanup signal, spawn-error and nonzero controls'
+    when: 'The two targeted Jest files run under explicitly selected Node22 with mismatched ambient PATH, required doctor and gates are inspected and a normal committed candidate receives independent review'
+    then: 'Real process and shell selection tests support semantic runtime and failure-precedence claims, existing verdict behavior stays fail-closed, raw failures and warnings remain visible and no heavy mutation, full-suite, installed-image or publication acceptance is inferred.'
+observability:
+  - 'Retain original failed baseline and actual command/cwd/revision/exit/stdout/stderr with observed parent/npm/build/Stryker/sandbox executable identities and unchanged conflict sentinel.'
+rollback:
+  - 'Use a separately reviewed normal revert of the narrow launcher/helper/fixture commit if semantic runtime or fail-closed controls regress; preserve governance and failed-run evidence.'
+non_functional:
+  security:
+    - 'This slice changes only developer/test child composition, not hooks, trust, private/global configuration, native runtime, installed image or credential handling.'
+contracts: []
