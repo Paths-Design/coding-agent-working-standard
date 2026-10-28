@@ -4,6 +4,7 @@ import { basename, dirname, isAbsolute, relative } from 'node:path';
 import { analyzeCommand } from '../shell/analysis/analyze';
 import { classifyInterpreterEffects } from '../shell/analysis/interpreter-effects';
 import { loadParser } from '../shell/analysis/load-parser';
+import type { SyntaxNode } from '../shell/analysis/parser-types';
 import type { Argument } from '../shell/analysis/types';
 import { inside, sensitiveBinding } from '../shell/analysis/policies';
 import { evaluatePath } from '../kernel';
@@ -294,37 +295,38 @@ async function inspectSource(
   // Bash's special variables have startup/read/assignment semantics outside
   // ordinary scalar tracking. A syntax scan only narrows admission; the bounded
   // analyzer below must independently accept every other part of the source.
-  const tree: unknown = (await loadParser()).parse(record.profile.source);
-  const pending: unknown[] = [tree];
-  let nodes = 0;
+  const { parse, forEachChild } = await loadParser();
+  const pending: { node: SyntaxNode; depth: number }[] = [
+    { node: parse(record.profile.source), depth: 0 },
+  ];
+  let nodes = 1;
   while (pending.length) {
-    if (++nodes > 16384) refuse('source_unresolved');
-    const value = pending.pop();
-    if (value === null || typeof value !== 'object') continue;
-    const row = value as Record<string, unknown>;
+    const { node, depth } = pending.pop()!;
+    // Decoded backtick scripts use reconstructed source coordinates. They
+    // cannot be joined to the submitted bytes, even if their syntax is valid.
+    if (node.type === 'Script' && (node.source !== undefined || node.errors?.length))
+      refuse('source_unresolved');
     // Bash can materialize either form in a temporary file. The core analyzer
     // also handles HereDoc before its redirection observer, so this profile
     // check must inspect the syntax tree rather than depend on that observer.
-    if (row.type === 'HereDoc' || row.type === 'HereString') refuse('unsupported_profile');
+    if (node.type === 'HereDoc' || node.type === 'HereString') refuse('unsupported_profile');
     if (
-      row.type === 'Assignment' &&
-      typeof row.name === 'string' &&
-      (SPECIAL_BINDING.test(row.name) || PROFILE_CONTROL.test(row.name))
+      node.type === 'Assignment' &&
+      (SPECIAL_BINDING.test(node.name) || PROFILE_CONTROL.test(node.name))
     )
       refuse('unsupported_profile');
     if (
-      row.type === 'For' &&
-      row.name !== null &&
-      typeof row.name === 'object' &&
-      'value' in row.name &&
-      typeof row.name.value === 'string' &&
-      (SPECIAL_BINDING.test(row.name.value) || PROFILE_CONTROL.test(row.name.value))
+      node.type === 'For' &&
+      (SPECIAL_BINDING.test(node.name.value) || PROFILE_CONTROL.test(node.name.value))
     )
       refuse('unsupported_profile');
-    for (const child of Object.values(row)) {
-      if (Array.isArray(child)) pending.push(...child);
-      else if (child !== null && typeof child === 'object') pending.push(child);
-    }
+    // Word.parts and substitution.script are lazy prototype getters, omitted
+    // by Object.values. The parser's semantic traversal materializes these
+    // children without executing source. Bound scheduling as well as depth.
+    forEachChild(node, (child) => {
+      if (++nodes > 16384 || depth >= 64) refuse('source_unresolved');
+      pending.push({ node: child, depth: depth + 1 });
+    });
   }
   if (
     basename(record.execution.executable.path) !== 'bash' ||

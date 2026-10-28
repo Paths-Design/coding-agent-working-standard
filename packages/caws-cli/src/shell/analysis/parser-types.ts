@@ -10,4 +10,5 @@ export type {
   Statement,
   Word,
   WordPart,
+  SyntaxNode,
 } from 'unbash/dist/types';

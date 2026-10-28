@@ -330,22 +330,19 @@ describe('private authorizer component observations, without USER execution', ()
   test('holds special assignments which can truncate a history file without an explicit write operand', async () => {
     const f = authorityFixture();
     const target = path.join(f.root, 'history');
-    fs.writeFileSync(target, 'must be preserved\n');
     // Fixed semantic oracle in a disposable fixture, never authorization of
-    // submitted source: HISTFILESIZE has a filesystem effect even under -c.
-    execFileSync(
-      '/bin/bash',
-      [
-        '--noprofile',
-        '--norc',
-        '-c',
-        'HISTFILE=$1; HISTFILESIZE=0; true',
-        'history-oracle',
-        target,
-      ],
-      { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } }
-    );
-    expect(fs.readFileSync(target, 'utf8')).toBe('');
+    // submitted source: HISTFILESIZE has a filesystem effect even under -c,
+    // including inside a command substitution's child shell.
+    for (const oracle of [
+      'HISTFILE=$1; HISTFILESIZE=0; true',
+      'HISTFILE=$1; value=$(HISTFILESIZE=0; printf x); true',
+    ]) {
+      fs.writeFileSync(target, 'must be preserved\n');
+      execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', oracle, 'history-oracle', target], {
+        env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' },
+      });
+      expect(fs.readFileSync(target, 'utf8')).toBe('');
+    }
     fs.writeFileSync(target, 'must be preserved\n');
     for (const command of [
       `HISTFILE=${JSON.stringify(target)}; HISTFILESIZE=0; true`,
@@ -366,6 +363,7 @@ describe('private authorizer component observations, without USER execution', ()
     ['prefix', 'HISTFILE={{HISTORY}}; value=$(HISTFILESIZE=0 printf x); true'],
     ['quoted', 'HISTFILE={{HISTORY}}; value="$(HISTFILESIZE=0; printf x)"; true'],
     ['nested', 'HISTFILE={{HISTORY}}; value=$(inner=$(HISTFILESIZE=0; printf x); printf x); true'],
+    ['loop', 'HISTFILE={{HISTORY}}; value=$(for HISTFILESIZE in 0; do printf x; done); true'],
     ['heredoc', "value=$(printf x <<'EOF'\ndata\nEOF\n); true"],
     ['here-string', 'value=$(printf x <<< data); true'],
   ])('holds implicit effects in lazy word children: %s', async (_name, pattern) => {
@@ -385,6 +383,18 @@ describe('private authorizer component observations, without USER execution', ()
       expect(result.decision).toBe('allow');
       expect(result.reasonCodes).toEqual([]);
     }
+  });
+  test.each([
+    ['decoded backticks', 'value=`printf \\`printf x\\``; true'],
+    ['semantic node budget', 'true ' + "'x' ".repeat(9000)],
+    ['semantic depth budget', '( '.repeat(80) + 'true' + ' )'.repeat(80)],
+    ['nested parse error', 'value=$(if); true'],
+  ])('holds unresolved lazy syntax and resource limits: %s', async (_name, command) => {
+    const f = authorityFixture();
+    const result = await observe(f, command);
+    expect(result.decision).toBe('unresolved');
+    expect(result.reasonCodes).toEqual(['source_unresolved']);
+    expect(fs.readdirSync(path.join(f.lane, 'src'))).toEqual([]);
   });
   test('holds PATH changes before a profiled utility, preserving the original PATH control', async () => {
     const f = authorityFixture();

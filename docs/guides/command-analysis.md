@@ -611,6 +611,12 @@ Startup and lookup controls such as `EXECIGNORE`, `BASH_COMPAT` and
 this profile. Parsing never runs submitted expansions or executes source to
 discover effects.
 
+The profile scan follows the parser's semantic child API, including lazy word
+parts and substitution scripts. Enumerating JavaScript object properties misses
+those children. Semantic node scheduling and depth are bounded; malformed or
+reconstructed-source scripts remain unresolved. The independent analyzer must
+also accept the complete source.
+
 The child neither acquires/releases the launch fence nor spawns a user program.
 Its input-completion timeout ends at EOF. The native owner must independently
 enforce the original monotonic preparation deadline across startup and analysis;
@@ -732,6 +738,31 @@ analysis fixtures cannot substitute for the host integration rows:
 | Revocation ordering                   | Pause just before launch, commit revocation through the real writer, then resume: zero launches under the shared fence. Reverse ordering demonstrates only the explicitly bounded post-spawn cancellation promise.  |
 | Permit lifecycle                      | Replay, expiry, cancellation and cross-invocation reuse each produce zero launches. No caller can manufacture a permit from a serialized decision.                                                                  |
 | Failure and cleanup                   | Deadline, output cap, broken stdin, spawn failure and cancellation preserve bounded partial output, reaping and honest outcomes; ambiguous completion never retries itself.                                         |
+
+### Proposed owned lifecycle operations
+
+Source analysis alone cannot distinguish an intentional retirement of owned
+edits from an unpreserved discard. The installed path-restore guard requires a
+human even when the exact edits have been committed in another owned lane. The
+complete boundary design therefore includes a typed retirement operation; the
+private source authorizer does not implement it.
+
+Preparation identifies the owned source lane, exact paths, expected current
+bytes and index state, replacement bytes, and the immutable preserving commit in
+an owned destination lane. Authorization verifies that provenance and scope
+against canonical authority. Launch rechecks the expected state under the
+applicable serialization contract before retiring only those entries. Foreign
+ownership, missing preserved bytes, ambiguous path identity or intervening edits
+leave the source untouched. Retry after a completed retirement returns its
+recorded outcome rather than discarding newer work.
+
+Qualification requires a real owned transfer to complete without a manual
+override, with byte-identical recovery from the preserving commit. Paired cases
+must refuse changed source or index bytes, foreign ownership, an absent commit,
+an alias replacement and an authority change between preparation and mutation.
+An interruption must either preserve the original entries or leave an explicit,
+recoverable partial outcome. This is a proposed lifecycle contract, not evidence
+that general path discards or cleanup commands are safe to admit.
 
 Investigate the pinned host's final resolved launch integration and bypass
 inventory first. Implement the smallest proven integration plus an owned
