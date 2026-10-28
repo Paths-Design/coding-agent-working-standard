@@ -66,3 +66,10 @@ evidence:
     exit_code: 0
     artifact_path: packages/caws-cli/tests/ci/mutation-contract.test.js
     commit_sha: "70546ea82d90ea1547d551eaa122ee165c8d97e7"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Bounded A3 at candidate70546ea82d90ea1547d551eaa122ee165c8d97e7: the cited sandbox substitution counterexample is verified through actual selected-test execution from the clean owned candidate leaf. Existing whole102 run exit0/no skips at /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/node-runtime-repair-events.jsonl line51/item26 (SHA256 af542bd5dac11c5d3d06e860c4e621c0107c8ba0ae025770bdee6926b9a4dc1b) also covers direct initial mismatch, subsequent PATH substitution and helper-byte drift refusals. Sandbox build marker remains absent on runtime substitution. Capture API unchanged SHA256 f47eaf2ede7feb194eeceb0d8258ec8bcb39979a381aed8ff26f852aa7f0b34a; identity/score/floor checks remain strict. Original implementation-artifact metadata command stays refused before execution in /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/node-runtime-land-stderr.log and node-runtime-land-events.jsonl line22/item11; no retry or resolution claim. Legacy installed scanner argument-role gap remains open with QA and blocks broader adoption. Test-nodeid --verify executes the selected test here; prior commit/artifact verification checked existence only. Finite fixture proof, not a mutation score, Windows process-launch, successful foreign local override detection, whole installed/global/strict/Python readiness or publication."
+    recorded_at: "2026-10-28T20:32:46.967Z"
+    test_nodeid: "packages/caws-cli/tests/ci/mutation-contract.test.js::a substituted sandbox Node executable is refused before the sandbox build"
+    commit_sha: "70546ea82d90ea1547d551eaa122ee165c8d97e7"
+    test_verified_at: "70546ea82d90ea1547d551eaa122ee165c8d97e7"
