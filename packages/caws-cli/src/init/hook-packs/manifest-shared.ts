@@ -642,7 +642,11 @@ import { isAdapterCoveredSurface } from './types';
 // handling of unsupported forms. Require the header as the first nonblank line
 // so preceding command-lookup overrides cannot hide shell operations in a body.
 // File-sink policy and helper API are preserved.
-export const SHARED_PACK_VERSION = 123;
+// v124: admit finite complete literal inspection prefixes before a quoted Node
+// heredoc, preserving bytes and rejecting visible lookup changes or shell syntax.
+// Raw interpreter checks and the helper API remain unchanged; ambient command
+// lookup is a host assumption, never authenticated by this projection.
+export const SHARED_PACK_VERSION = 124;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

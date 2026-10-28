@@ -62,6 +62,12 @@ _run_shell_view() {
   run bash -eu -o pipefail -c 'source "$1/lib/heredoc.sh"; source "$1/lib/bash-mutation-targets.sh"; "$2" "$3"' _ "$CAWS_TEST_HOOKS_DIR" "$1" "$2"
 }
 
+# The six separate inspection lines from consumer04. These strings are input
+# to projection/guard APIs only; neither this prefix nor a hostile suffix runs.
+_read_prefix() {
+  printf 'pwd -P\ngit rev-parse --show-toplevel\ngit rev-parse HEAD\ngit branch --show-current\ngit status --short\ncat AGENTS.md'
+}
+
 # ── guard-level (end to end through the real oracle) ────────────────────────
 
 @test "A1b control: a redirect to a foreign worktree payload DOES block (the block path is live)" {
@@ -342,5 +348,147 @@ _run_shell_view() {
     run_guard worktree-guard.sh "$(hook_envelope Bash '' "$input")"
     assert_equal "$status" 2
     assert_output --partial 'BLOCKED: agent-issued git sparse-checkout'
+  done
+}
+
+@test "read prefix: consumer04 six lines preserve exact bytes around only the projected Node body" {
+  local prefix input expected quote trailing
+  prefix="$(_read_prefix)"
+  for quote in "'" '"'; do
+    for trailing in '' $'\n' $'\n\n'; do
+      input="$prefix"$'\n'"node <<${quote}NODE${quote}"$'\nconst rows = ["1"].map(l=>JSON.parse(l));\nNODE\ncaws status --json'"$trailing"
+      expected="$prefix"$'\n'"node <<${quote}NODE${quote}"$'\n\nNODE\ncaws status --json'"$trailing"
+      _run_blank_exact "$input"
+      assert_success
+      assert_output "${expected}__END__"
+    done
+  done
+}
+
+@test "read prefix: consumer04 arrow has no fake target while inspection and suffix command views survive" {
+  local input
+  input="$(_read_prefix)"$'\nnode <<\'NODE\'\nconst rows = ["1"].map(l=>JSON.parse(l));\nNODE\ncaws status --json'
+  _run_shell_view caws_bash_mutation_candidates "$input"
+  assert_success
+  assert_output ''
+  _run_shell_view caws_bash_command_lines "$input"
+  assert_success
+  assert_output $'git rev-parse --show-toplevel\ngit rev-parse HEAD\ngit branch --show-current\ngit status --short\ncaws status --json'
+  _run_bwg "$input"
+  assert_success
+  refute_output --partial 'BLOCKED'
+  refute_output --partial 'UNRESOLVED'
+}
+
+@test "read prefix: each finite inspection member accepts horizontal whitespace and literal dot path" {
+  local prefix input expected
+  for prefix in $' \tpwd\t-P  ' 'git rev-parse --show-toplevel' $'git\trev-parse\tHEAD\t' \
+    ' git branch --show-current ' 'git status --short' 'cat AGENTS.md' $'\tcat\t./AGENTS.md  ' \
+    'cat package.json' 'cat ./docs/file.md' 'cat ../AGENTS.md' 'cat /tmp/read_only.txt' 'cat ./-literal-file'; do
+    input=$'\n'"$prefix"$'\n\tnode <<"JS"\nconst f = x => x > 0;\nJS\n'
+    expected=$'\n'"$prefix"$'\n\tnode <<"JS"\n\nJS\n'
+    _run_blank_exact "$input"
+    assert_success
+    assert_output "${expected}__END__"
+  done
+}
+
+@test "read prefix: unsupported line after valid inspections keeps shell operations visible" {
+  local unsafe input
+  for unsafe in 'alias node=sh' $'shopt -s expand_aliases\nalias node=sh' \
+    'node() { sh; }' 'function node { sh; }' 'eval alias node=sh' 'source ./lookup.sh' '. ./lookup.sh' \
+    'hash -p /bin/sh node' 'builtin hash -p /bin/sh node' 'enable -f /tmp/override.so node' \
+    'builtin enable -n node' 'PATH=/other/bin' 'export PATH=/other/bin' 'VAR=x' \
+    'env node' 'command pwd -P' 'pwd -P; hash -p /bin/sh node' 'pwd -P && cat AGENTS.md' \
+    'pwd -P | cat' 'cat AGENTS.md > /tmp/output' $'pwd -P \\\ncat AGENTS.md' \
+    'cat $(printf AGENTS.md)' 'cat "$file"' 'cat `printf AGENTS.md`' \
+    'git -c alias.status=other status --short' 'git status --short extra' 'pwd -P # comment' \
+    'cat AGENTS.md other-file' 'cat --help' 'cat -' 'cat AGENTS.md*' 'cat AGENTS?.md' \
+    'cat [AGENTS].md' 'cat ~/AGENTS.md' 'cat <AGENTS.md' 'echo plain-prefix' 'if true; then'; do
+    input="$(_read_prefix)"$'\n'"$unsafe"$'\nnode <<\'SH\'\ngit sparse-checkout disable\nSH'
+    _run_blank "$input"
+    assert_success
+    assert_output "$input"
+    _run_shell_view caws_bash_command_lines "$input"
+    assert_success
+    assert_line 'git sparse-checkout disable'
+  done
+}
+
+@test "read prefix: visible alias after inspections still refuses shell policy before simulated effects" {
+  _seed_foreign_worktree
+  local input marker="$BATS_TEST_TMPDIR/prefix-sentinel"
+  input="$(_read_prefix)"$'\nshopt -s expand_aliases\nalias node=sh\nnode <<\'SH\'\ngit sparse-checkout disable\nSH'
+  printf sentinel > "$marker"
+  run_guard worktree-guard.sh "$(hook_envelope Bash '' "$input")"
+  local guard_status="$status"
+  if [[ "$guard_status" == 0 ]]; then printf changed > "$marker"; fi
+  printf 'prefixed alias guard exit=%s sentinel=%s\n' "$guard_status" "$(cat "$marker")"
+  assert_equal "$guard_status" 2
+  assert_output --partial 'BLOCKED: agent-issued git sparse-checkout'
+  assert_equal "$(cat "$marker")" sentinel
+}
+
+@test "read prefix: incomplete unquoted or multiple heredocs remain conservative" {
+  local body input
+  for body in $'node <<JS\n$(touch /foreign/file)\nJS' \
+    $'node <<\'JS\'\nconst f = x => x;' \
+    $'node <<\'JS\' <<\'OTHER\'\ngit sparse-checkout disable\nJS\nOTHER' \
+    $'node <<\'JS\'\nconst f = x => x;\nJS\nnode <<\'OTHER\'\nconst g = x => x;\nOTHER'; do
+    input="$(_read_prefix)"$'\n'"$body"
+    _run_blank "$input"
+    assert_success
+    assert_output "$input"
+  done
+}
+
+@test "read prefix: raw foreign Node write remains visible and refuses before simulated effects" {
+  local foreign="$BATS_TEST_TMPDIR/prefixed-foreign" physical_foreign target input
+  mkdir -p "$foreign"
+  git -C "$foreign" init -q -b main
+  physical_foreign="$(cd "$foreign" && pwd -P)"
+  target="$foreign/sentinel.txt"
+  printf sentinel > "$target"
+  input="$(_read_prefix)"$'\n'"$(printf 'node <<%s\nrequire("fs").writeFileSync("%s", "changed");\nJS\n' "'JS'" "$target")"
+  _run_blank "$input"
+  assert_success
+  refute_output --partial 'writeFileSync'
+  _run_shell_view caws_bash_interpreter_write_literals "$input"
+  assert_success
+  assert_line "$target"
+  _run_bwg "$input"
+  local guard_status="$status"
+  if [[ "$guard_status" == 0 ]]; then printf changed > "$target"; fi
+  printf 'prefixed Node write guard exit=%s target=%s sentinel=%s\n' "$guard_status" "$target" "$(cat "$target")"
+  assert_equal "$guard_status" 2
+  assert_output --partial "BLOCKED: this Bash command mutates a file inside a DIFFERENT repository ($physical_foreign)"
+  assert_equal "$(cat "$target")" sentinel
+}
+
+@test "read prefix: real outer writes before or after remain targets and refuse" {
+  _seed_foreign_worktree
+  local input body target position
+  target="$(_foreign_payload)"
+  printf sentinel > "$target"
+  body=$'node <<\'JS\'\nconst f = x => x > 0;\nJS'
+  for position in before after; do
+    if [[ "$position" == before ]]; then
+      input="$(_read_prefix)"$'\n'"echo changed > $target"$'\n'"$body"
+      _run_blank "$input"
+      assert_success
+      assert_output "$input"
+    else
+      input="$(_read_prefix)"$'\n'"$body"$'\n'"echo changed > $target"
+    fi
+    _run_shell_view caws_bash_mutation_candidates "$input"
+    assert_success
+    assert_line "$target"
+    if [[ "$position" == after ]]; then assert_output "$target"; fi
+    _run_bwg "$input"
+    local guard_status="$status"
+    if [[ "$guard_status" == 0 ]]; then printf changed > "$target"; fi
+    assert_equal "$guard_status" 2
+    assert_output --partial "BLOCKED: this Bash command mutates worktree 'wt-seed''s payload"
+    assert_equal "$(cat "$target")" sentinel
   done
 }
