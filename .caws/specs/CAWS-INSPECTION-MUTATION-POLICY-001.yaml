@@ -1,10 +1,11 @@
 id: CAWS-INSPECTION-MUTATION-POLICY-001
 title: 'Classify inspection prefix sources in mutation inventory'
 mode: fix
-lifecycle_state: active
-worktree: inspection-mutation-policy
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Classified three inspection-prefix sources as behavioral with exact singleton assertions and inventory206. All79 mutation contract checks and five gates pass; targets28 and floors unchanged. Independent read-only review and root discharge complete. No mutation score or installed activation claim.'
 created_at: '2026-10-28T07:32:06.309Z'
-updated_at: '2026-10-28T07:32:32.165Z'
+updated_at: '2026-10-28T07:49:10.597Z'
 created_by_session: '01a17eaf-022b-7533-a589-072448c40a0b'
 blast_radius:
   modules:
