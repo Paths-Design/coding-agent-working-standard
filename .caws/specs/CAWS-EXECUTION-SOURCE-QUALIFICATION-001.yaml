@@ -48,7 +48,7 @@ scope:
     - packages/caws-cli/tests/fixtures/command-analysis/
     - .stryker-analysis-*/**
 invariants:
-  - 'Qualification never changes tracked source or lowers the six per-file 80 percent floors'
+  - 'Candidate source and test repairs occur only before campaign freeze within admitted paths; tracked source, tests, dependencies and build outputs remain unchanged while either campaign runs, and no per-file mutation floor is lowered'
 acceptance:
   - id: A1
     given: 'committed Source candidate with matching runtime and test bytes'
