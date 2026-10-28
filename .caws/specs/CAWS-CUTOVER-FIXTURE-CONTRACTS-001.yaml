@@ -1,10 +1,11 @@
 id: CAWS-CUTOVER-FIXTURE-CONTRACTS-001
 title: 'Restore archive retirement and fixture fidelity for local cutover'
 mode: fix
-lifecycle_state: active
-worktree: cutover-fixture-contracts
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Archive-aware retirement restored with exact archive bytes and live-path absence revalidated under the lifecycle lock. New hostile controls,50 existing retirement regressions and20 Codex metadata/contract controls passed; physical-root and session ownership fixtures corrected. Independent review and root discharge complete. No full publication or actual native cutover claim.'
 created_at: '2026-10-28T07:41:47.580Z'
-updated_at: '2026-10-28T07:43:47.140Z'
+updated_at: '2026-10-28T08:16:30.408Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
