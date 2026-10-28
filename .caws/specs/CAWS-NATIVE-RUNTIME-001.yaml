@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-runtime-modernization
 created_at: '2026-10-18T22:36:56.919Z'
-updated_at: '2026-10-28T01:31:32.986Z'
+updated_at: '2026-10-28T05:13:42.491Z'
 created_by_session: '01a15107-5fd0-7872-8f9a-0bb7eb5f26ce'
 blast_radius:
   modules:
@@ -302,6 +302,15 @@ scope:
     - docs/agents/scope-discipline.md
     - docs/architecture/repo-local-hook-policy.md
     - docs/release-procedure.md
+    - docs/guides/command-analysis.md
+    - packages/caws-cli/src/shell/analysis/inspection-prefix-entry.ts
+    - packages/caws-cli/src/shell/analysis/inspection-prefix.ts
+    - packages/caws-cli/src/shell/analysis/inspection-profiles.ts
+    - packages/caws-cli/src/shell/analysis/policies.ts
+    - packages/caws-cli/src/shell/commands/hooks.ts
+    - packages/caws-cli/tests/fixtures/command-analysis/profile-cases.cjs
+    - packages/caws-cli/tests/shell/command-analysis.test.js
+    - packages/caws-cli/tests/shell/hooks-inspection-prefix.test.js
 invariants:
   - 'Canonical project governance remains authority; heartbeats, caches, requests and telemetry confer none.'
   - 'Required enforcement cannot be allowed by missing checks, transport errors, stale decisions or advisory failure.'
