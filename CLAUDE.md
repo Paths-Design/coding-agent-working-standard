@@ -36,14 +36,14 @@ governance hole: it pushes the blocked agent to route around the guard.
 Rationale and worked example: `docs/release-procedure.md`, "Runtime correctness
 blocks release".
 
-- **A known correctness bug in the CLI or kernel blocks release.** Fix it, or
-  gate the affected command so it fails loudly, before tagging.
+- **A known correctness bug in the CLI or kernel blocks release.** Fix it before
+  tagging; only if the fix genuinely cannot ship in time, gate the affected
+  command so it fails loudly.
 - **"Reports success while doing nothing" is the most dangerous class.**
   Prioritize it.
 - **Restore the sanctioned path; don't document a workaround.** The audited path
   must also be the easy path.
-- **File a spec and fix it under governance.** Never patch a control-plane bug
-  off-spec.
+- **File a spec and fix it under governance**; never patch one off-spec.
 - **Releases are tag-driven:** only a `caws-cli-v*` tag push publishes; branch
   pushes never do. Procedure: `docs/release-procedure.md`.
 
@@ -107,15 +107,15 @@ mid-implementation rewrite.
 
 A spec's `scope.in` is the surface you agreed to touch; everything else is out
 of scope on purpose. When a legitimate edit falls outside it, widen the
-agreement with `caws specs amend-scope <id> --add <path>`. Never bypass the
-guard.
+agreement with `caws specs amend-scope <id> --add <path>`, or do non-slice work
+from the canonical checkout under no binding. Never bypass the guard.
 
-**Prove scope before every write**, including probe scripts, scratch files and
-redirected output (do not write under `/tmp/`). Output a preflight block as text
-(branch, planned write targets marked CREATE/MODIFY, the
-`caws scope show <path>` result for each, and "No edits before this proof is
-complete."), then run the bare `caws scope show` calls and dispatch on the
-result:
+**Inside a bound worktree, prove scope before every write**, including probe
+scripts, scratch files and redirected output (do not write under `/tmp/`).
+Output a preflight block as text (branch, planned write targets marked
+CREATE/MODIFY, the `caws scope show <path>` result for each, and "No edits
+before this proof is complete."), then run the bare `caws scope show` calls and
+dispatch on the result:
 
 - **ADMIT**: proceed.
 - **REFUSE**: run **one** `caws specs amend-scope <SPEC-ID> --add <path>...`
@@ -124,11 +124,11 @@ result:
   checkout, and `amend-scope` cannot fix it. Create or enter the worktree, then
   rerun the proof.
 
-For a new spec the worktree must exist before any write: author →
-`caws specs validate .caws/specs/<id>.yaml` → commit spec →
-`caws worktree create <name> --spec <id>` → `cd` into it → write. Working solo
-does not exempt you. `caws scope show <path> --spec <id>` asks a hypothetical
-("would this fit that spec?") and is never write authority.
+For a new spec the worktree must exist before any file is written under that
+spec's authority: author → `caws specs validate .caws/specs/<id>.yaml` → commit
+spec → `caws worktree create <name> --spec <id>` → `cd` into it → write. Working
+solo does not exempt you. `caws scope show <path> --spec <id>` asks a
+hypothetical ("would this fit that spec?") and is never write authority.
 
 Linked worktrees materialize everything except `.caws/specs/`; canonical is the
 only spec authority. Never read or edit `<worktree>/.caws/specs/*` and never run
