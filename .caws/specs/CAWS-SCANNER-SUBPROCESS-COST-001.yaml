@@ -30,5 +30,11 @@ acceptance:
     then: >-
       scanner regex evaluation does not launch per-line external grep processes and
       still finds a matching final line
+  - id: A3
+    given: 'the updated scanner package'
+    when: 'pack checks and integration review run'
+    then: >-
+      the shared pack version and fingerprint identify the changed bytes while
+      historical reference pins remain unchanged
 non_functional: {}
 contracts: []
