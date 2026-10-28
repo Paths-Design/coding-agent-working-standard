@@ -36,10 +36,9 @@ contracts: []
 evidence:
   - criterion_id: A2
     status: pass
-    evidence_ref: "Committed ca7d3e055; ART06 stop-preflight-red-01.log and green-01.log both pass real admitted historical closure then helper byte drift during prefix, late refusal without replay or lease change; publication may already run and test asserts it. Exact historical fixtures match existing native pins. Fullsuite4failed27passed is retained, not hidden or declared green. Independent review grounded late actual consumer and assertion. No installed/cutover/strict-profile claim. Citation verification establishes node presence only."
-    recorded_at: "2026-10-28T08:52:53.181Z"
+    evidence_ref: "Commit ca7d3e055. ART06 red01 and green01 both pass admitted historical closure followed by helper drift during prefix, late refusal with unchanged lease and no replay; publication already ran. CLI --verify separately executed this exact1 test and reported passed at ca7d3e055 before recording the prior A2 event. This corrects the earlier presence-only description of that verification. Fullsuite4failed27passed remains visible; no installed/current-profile/full-runtime claim."
+    recorded_at: "2026-10-28T08:53:46.132Z"
     test_nodeid: "packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js::late helper drift after an eligible Stop prefix preserves the lease and refuses replay"
-    test_verified_at: ca7d3e0559a070d8530e0d4adf5294c57b5b7630
   - criterion_id: A1
     status: pass
     evidence_ref: "Commit ca7d3e055. ART06 red01 reproduced both early failures; green01 passed both real hostile early cases with prefix/publication/handler/lateGit/replay uncalled and seeded lease unchanged. Fullsuite4failed27passed remains current helper eligibility obligation. CLI verification selects both parameterized early cases by shared prefix; the earlier percent-s template citation was refused with no write. No fullprofile or cutover acceptance."
