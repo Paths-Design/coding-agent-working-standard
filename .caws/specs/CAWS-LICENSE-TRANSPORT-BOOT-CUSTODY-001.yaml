@@ -100,3 +100,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/docs/package-license-transport.test.js
     commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
     test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Cleanup refusal names predicate + remedy: each of the 6 test.each classes asserts JSON.parse(stderr).message matches /cleanup deletes only files it can prove it created; run `node scripts\\/stage-consumer-docs.mjs`/ alongside the class-specific reason (M6 drop-remedy killed 6). Notice: the same cases assert staged.stderr contains \"no license file was deleted\", the retainedAt name and the sha256; the reboot test asserts a non-relinquishing stage writes stderr \"\" exactly. Real build entry (runtime, not re-derived by --verify): planted incomplete JSON in the worktree package; node scripts/clean-staged-docs.mjs exit 2 with predicate+remedy; node scripts/stage-consumer-docs.mjs exit 0 printing the notice (reason, .license-transport.relinquished-9e240d4a-..., sha256 7e3eb5fc...). build-cli.js:165 runs it with stdio inherit (source trace)."
+    recorded_at: "2026-10-28T00:56:09.448Z"
+    test_nodeid: packages/caws-cli/tests/docs/package-license-transport.test.js
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
