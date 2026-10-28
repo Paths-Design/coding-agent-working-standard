@@ -25,3 +25,9 @@ acceptance:
     then: 'each source is classified once as behavioral and existing mutation floors remain unchanged'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Three bounded inspection sources classified exactly once in behavioral npm test; targets28 and floors unchanged. Root inspected diff and raw ART05 mutation-inventory-red-01.log four absence failures then mutation-inventory-green-01.log79pass, validator206/28, five gates pass, doctor0E. Independent Terra feedback grounded at actual hooks-inspection-prefix tests and run-tests entry; no concrete defect. Commit verification establishes existence only, not mutation score or installed activation. Integration validator remains required."
+    recorded_at: "2026-10-28T07:46:50.340Z"
+    commit_sha: "2d7329fa8"
