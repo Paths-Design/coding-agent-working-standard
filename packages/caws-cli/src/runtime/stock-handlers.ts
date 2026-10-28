@@ -256,10 +256,11 @@ function noDangerLatch(selection: ActiveInvocationSelection): boolean {
   return true;
 }
 
-/** Selection check is repeated immediately before lease application. */
-function assertNativeStopAgentSelection(
+/** Check before prefix effects and repeat immediately before lease application. */
+export function assertNativeStopAgentSelection(
   handler: SelectedHandler,
-  context: StockHandlerContext
+  context: StockHandlerContext,
+  phase: 'preflight' | 'lease' = 'lease'
 ): void {
   const { request, selection, environment } = context;
   const chain = [
@@ -286,7 +287,11 @@ function assertNativeStopAgentSelection(
     (environment.CAWS_BIN && environment.CAWS_BIN !== 'caws') ||
     !compatible(handler, context)
   )
-    throw new Error('Native Stop agent consumer changed after prefix; shell replay refused');
+    throw new Error(
+      phase === 'preflight'
+        ? 'Native Stop agent consumer is ineligible before prefix'
+        : 'Native Stop agent consumer changed after prefix; shell replay refused'
+    );
   for (const [index, selected] of selection.handlers.entries()) {
     const expected = chain[index]!;
     assertMachinePath(selection.runtimeDirectory, selected.path);
@@ -299,7 +304,11 @@ function assertNativeStopAgentSelection(
       selected.path !== join(selection.runtimeDirectory, expected[0]) ||
       sha(selected.path) !== selected.sha256
     )
-      throw new Error('Native Stop ordered source changed before lease application');
+      throw new Error(
+        phase === 'preflight'
+          ? 'Native Stop ordered source is ineligible before prefix'
+          : 'Native Stop ordered source changed before lease application'
+      );
   }
 }
 
