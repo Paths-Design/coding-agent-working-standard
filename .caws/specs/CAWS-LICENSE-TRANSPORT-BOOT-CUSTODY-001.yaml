@@ -72,3 +72,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/docs/package-license-transport.test.js::a reboot-renumbered device keeps custody through restaging and cleanup"
     commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
     test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Two parametrized cases (LICENSE, .license-transport.json): after a device shift, the object is replaced by a same-byte, same-mode file with a new inode; cleanup refuses with \"owned license replaced or changed (ino...)\" / \"ownership marker identity mismatch (ino[, birthtimeNs])\", the message never names device or sha256, and licenseState() (identity+bytes of all 3 transports) is unchanged, so nothing was deleted. Regex tolerates birthtimeNs absence for filesystems without btime (Linux CI); not run on Linux here."
+    recorded_at: "2026-10-28T00:47:24.270Z"
+    test_nodeid: "packages/caws-cli/tests/docs/package-license-transport.test.js::a device shift never admits a same-byte foreign"
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
