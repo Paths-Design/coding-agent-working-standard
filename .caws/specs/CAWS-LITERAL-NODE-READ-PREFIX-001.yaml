@@ -1,10 +1,11 @@
 id: CAWS-LITERAL-NODE-READ-PREFIX-001
 title: 'Project literal Node heredocs after finite read-only inspection prefixes'
 mode: fix
-lifecycle_state: active
-worktree: node-read-prefix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed bounded finite literal inspection-prefix support before a complete quoted Node heredoc. Original Node-first controls and exact consumer04 prefix projection pass; OLDcd8f false-target RED and intermediate physical-path oracle failure are preserved alongside final Bats34 GREEN, exact refusal reasons and unchanged simulated sentinels. A1-A4 source evidence was dual-read back and commit citations rederived only; actual execution output and source were inspected separately by Root. Shared pack124 fingerprint and helper API verified within the four-file unit. Exact new installed-helper selection, original prefixed native command execution with genuine-host lookup verification, installed/global workflow and cutover/strict/Python-retirement qualification remain REQUIRED Parent/Root obligations. Known metadataCLI117 restricted global matcher doctor1/load0 is not discharged.'
 created_at: '2026-10-28T00:18:55.837Z'
-updated_at: '2026-10-28T00:19:26.311Z'
+updated_at: '2026-10-28T01:21:30.722Z'
 created_by_session: '01a17f02-2191-7702-8805-227272637592'
 blast_radius:
   modules:
