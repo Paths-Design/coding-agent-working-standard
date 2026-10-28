@@ -40,3 +40,9 @@ evidence:
     recorded_at: "2026-10-28T08:52:53.181Z"
     test_nodeid: "packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js::late helper drift after an eligible Stop prefix preserves the lease and refuses replay"
     test_verified_at: ca7d3e0559a070d8530e0d4adf5294c57b5b7630
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Commit ca7d3e055. ART06 red01 reproduced both early failures; green01 passed both real hostile early cases with prefix/publication/handler/lateGit/replay uncalled and seeded lease unchanged. Fullsuite4failed27passed remains current helper eligibility obligation. CLI verification selects both parameterized early cases by shared prefix; the earlier percent-s template citation was refused with no write. No fullprofile or cutover acceptance."
+    recorded_at: "2026-10-28T08:53:45.232Z"
+    test_nodeid: "packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js::Stop preflight refuses"
+    test_verified_at: ca7d3e0559a070d8530e0d4adf5294c57b5b7630
