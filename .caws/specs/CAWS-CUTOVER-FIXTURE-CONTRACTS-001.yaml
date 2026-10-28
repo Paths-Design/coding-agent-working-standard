@@ -41,3 +41,9 @@ acceptance:
     then: 'owner admission and foreign refusal remain established independently of conventional directory wording'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Archive15-case full check passed in fixture-contracts-green-01.log after RED6fail9pass; actual tracked/ignored teardown, archive bytes, events and clean no-op audit asserted. Later live-precedence and EACCES selection controls2pass. Raw logs under /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/ (archive-retirement*, fixture-contracts*). --verify checks commit existence only. No whole publication/native/global cutover claim."
+    recorded_at: "2026-10-28T08:13:55.135Z"
+    commit_sha: dc63da0f1c70234521c80881a673e16a0207db95
