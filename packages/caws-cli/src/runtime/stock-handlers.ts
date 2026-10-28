@@ -72,8 +72,9 @@ const STARTUP_SOURCES: Readonly<Record<string, readonly string[]>> = {
   'runtime-paths.sh': ['c2cc098b08c110723c2d1805170ba2d73a855f0864e5792bb7a88a2c3def7f08'],
   'lib/session-cache.sh': ['eea9bb74ec74d07931eb13ac45e6822a348ce7fb49e4a7baa9d590e321e093cb'],
   'lib/agent-surface.sh': LIBRARIES['agent-surface.sh']!,
-  // Every handler also sources the shared parser directly, even when startup
-  // selected the Codex parser. A surface selection cannot authenticate it.
+  // Agent and utility handlers also source the shared parser directly, even
+  // when startup selected the Codex parser. A surface selection cannot
+  // authenticate that shared file; retain this conservative common closure.
   'lib/parse-input.sh': LIBRARIES['parse-input.sh']!.filter(
     (value) => value !== 'c33d320efef119f826de58b145344288264b985f10d911b435645f6d851444fc'
   ),
