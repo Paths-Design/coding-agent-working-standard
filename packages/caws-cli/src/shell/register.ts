@@ -18,6 +18,7 @@ import type { Command } from 'commander';
 // hidden option via `new Option(flag, desc).hideHelp()` — Commander's
 // `.option(...)` convenience method has no hide-from-help variant.
 import { Option } from 'commander';
+import { CAWS_HELP_OPTION, EVIDENCE_KINDS } from './analysis/caws-read-metadata';
 import {
   runHooksAnalyzeCommand,
   runHooksInspectionPrefixCommand,
@@ -243,7 +244,7 @@ function parseDataOption(
 }
 
 function isEvidenceKind(value: unknown): value is EvidenceKind {
-  return value === 'test' || value === 'gate' || value === 'ac' || value === 'human_decision';
+  return EVIDENCE_KINDS.some((kind) => kind === value);
 }
 
 // ── Metadata-driven help wiring (CAWS-CLI-HELP-METADATA-AUTHORITY-001) ──────
@@ -425,6 +426,7 @@ function guardExcessArguments(cmd: Command, leaf: LeafCommandMeta): void {
  * Returns the configured Command so the caller can attach `.action()`. */
 function defineLeaf(group: Command, leaf: LeafCommandMeta): Command {
   const cmd = group.command(leafCommandName(leaf)).description(leaf.description);
+  cmd.helpOption(CAWS_HELP_OPTION.flag, CAWS_HELP_OPTION.description);
   for (const opt of leaf.options) {
     applyOptionMeta(cmd, opt);
   }
@@ -435,6 +437,7 @@ function defineLeaf(group: Command, leaf: LeafCommandMeta): Command {
 /** Apply the group-level description from metadata to a Commander group. */
 function applyGroupMeta(group: Command, meta: GroupCommandMeta): void {
   group.description(meta.description);
+  group.helpOption(CAWS_HELP_OPTION.flag, CAWS_HELP_OPTION.description);
   for (const opt of meta.options ?? []) {
     applyOptionMeta(group, opt);
   }
@@ -445,6 +448,7 @@ function applyGroupMeta(group: Command, meta: GroupCommandMeta): void {
  * Returns the configured Command so the caller can attach `.action()`. */
 function defineFlat(program: Command, leaf: LeafCommandMeta): Command {
   const cmd = program.command(leafCommandName(leaf)).description(leaf.description);
+  cmd.helpOption(CAWS_HELP_OPTION.flag, CAWS_HELP_OPTION.description);
   for (const opt of leaf.options) {
     applyOptionMeta(cmd, opt);
   }

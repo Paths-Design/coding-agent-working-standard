@@ -121,6 +121,7 @@
         "src/kernel/worktree/identity.ts",
         "src/kernel/worktree/leases.ts",
         "src/kernel/worktree/ownership.ts",
+        "src/shell/analysis/caws-read-metadata.ts",
         "src/shell/analysis/inspection-prefix-entry.ts",
         "src/shell/analysis/inspection-prefix.ts",
         "src/shell/analysis/inspection-profiles.ts",
