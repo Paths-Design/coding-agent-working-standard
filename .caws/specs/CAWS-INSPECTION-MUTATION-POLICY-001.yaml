@@ -1,0 +1,26 @@
+id: CAWS-INSPECTION-MUTATION-POLICY-001
+title: 'Classify inspection prefix sources in mutation inventory'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-28T07:32:06.309Z'
+updated_at: '2026-10-28T07:32:06.309Z'
+created_by_session: '01a17eaf-022b-7533-a589-072448c40a0b'
+blast_radius:
+  modules:
+    - 'Mutation proof inventory'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/mutation-policy.json'
+    - 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+  out: []
+invariants:
+  - 'Preserve declared mutation targets and floors'
+acceptance:
+  - id: A1
+    given: 'inspection prefix implementation sources'
+    when: 'mutation policy validation and contract tests run'
+    then: 'each source is classified once as behavioral and existing mutation floors remain unchanged'
+non_functional: {}
+contracts: []
