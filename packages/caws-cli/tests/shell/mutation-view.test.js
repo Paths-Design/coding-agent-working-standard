@@ -668,6 +668,8 @@ describe('mutation view uses shared traversal without granting scope', () => {
         active,
       ],
       {
+        // Carry the setup-isolated Jest environment across the native process boundary.
+        env: { ...process.env },
         input: JSON.stringify(requests),
         shell: false,
         encoding: 'utf8',
@@ -1435,6 +1437,7 @@ describe('mutation projection preserves program roles and source custody', () =>
         active,
       ],
       {
+        env: { ...process.env },
         input: JSON.stringify(requests),
         shell: false,
         encoding: 'utf8',
@@ -1978,6 +1981,7 @@ describe('copy operand role observations', () => {
         active,
       ],
       {
+        env: { ...process.env },
         input: JSON.stringify(requests),
         encoding: 'utf8',
         timeout: 30000,
