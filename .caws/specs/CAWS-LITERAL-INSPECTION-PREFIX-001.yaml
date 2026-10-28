@@ -2,6 +2,7 @@ id: CAWS-LITERAL-INSPECTION-PREFIX-001
 title: 'Share structural literal inspection-prefix policy with heredoc callers'
 mode: fix
 lifecycle_state: active
+worktree: literal-inspection-caws-read
 created_at: '2026-10-28T03:50:18.553Z'
 updated_at: '2026-10-28T19:22:53.508Z'
 created_by_session: '01a17f02-2191-7702-8805-227272637592'
