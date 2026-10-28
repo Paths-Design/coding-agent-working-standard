@@ -1,0 +1,67 @@
+id: CAWS-CLAUDE-MD-SHORTEN-001
+title: 'Shorten root CLAUDE.md to the rules most tasks need; move the rest into the docs it names'
+mode: doc
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge claude-md-shorten at 16cfa6c7ef40b94680a4a62ee3b0e51be73ea684'
+created_at: '2026-10-28T00:05:43.172Z'
+updated_at: '2026-10-28T01:20:43.891Z'
+created_by_session: '14177db1-e780-48ce-8b34-d2661057b6f9'
+blast_radius:
+  modules:
+    - 'Root agent doctrine (CLAUDE.md) and the four docs it points moved material to'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'CLAUDE.md'
+    - 'docs/agents/scope-discipline.md'
+    - 'docs/release-procedure.md'
+    - 'CONTRIBUTING.md'
+    - 'docs/architecture/repo-local-hook-policy.md'
+  out: []
+invariants:
+  - 'No doctrine rule is deleted: a passage removed from CLAUDE.md is present in a destination doc CLAUDE.md names, or was already present in a named doc'
+  - 'Paths claimed by the active guard-contract-docs lane (docs/guides/hook-packs.md, docs/guides/worktree-isolation.md) are not edited'
+acceptance:
+  - id: A1
+    given: 'root CLAUDE.md at 598 lines (about 9k tokens per request per /usage)'
+    when: 'the rewrite lands'
+    then: 'CLAUDE.md is at most 250 lines and each removed passage is found by a distinctive-phrase grep in a destination doc that CLAUDE.md names'
+  - id: A2
+    given: 'the jest tests that read root CLAUDE.md (guard-copy-no-waiver-for-hook-blocks, agent-recovery-path-drift, agent-doc-examples)'
+    when: 'they run against the rewritten file'
+    then: 'all pass, with the Governed paths section still naming reprieve, policy.yaml spec edit and nothing-for-no-verify as the block lifts'
+  - id: A3
+    given: 'the installed caws CLI snapshot (12.2.0-rc.2)'
+    when: 'each caws command and flag named in the rewritten CLAUDE.md is looked up in its --help'
+    then: 'every one exists'
+  - id: A4
+    given: 'the five changed markdown files'
+    when: 'prettier --check runs with the repo config'
+    then: 'it reports no formatting issues'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "At 28d174363 (worktree claude-md-shorten, dist built): npx jest guard-copy-no-waiver-for-hook-blocks + agent-recovery-path-drift + agent-doc-examples -> 3/3 suites, 35/35 tests. The 5 CLAUDE.md assertions (Governed paths bounded; no waiver escape; reprieve/policy.yaml/nothing-for-no-verify; no .claude/hooks/reset- paths) passed. Negative control: rewriting \"--no-verify ...: nothing\" made exactly the lifts test fail; restored file byte-identical."
+    recorded_at: "2026-10-28T01:18:22.274Z"
+    test_nodeid: packages/caws-cli/tests/hooks/guard-copy-no-waiver-for-hook-blocks.test.js
+    commit_sha: "28d174363"
+    test_verified_at: "28d17436308764d55c249d724d7538cccba8978d"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "At 28d174363: CLAUDE.md is 250 lines / 13236 bytes (was 598 / 35343). A grep -F of 45 distinctive phrases from every removed or condensed passage found all 45 in destinations CLAUDE.md names (docs/release-procedure.md, docs/agents/scope-discipline.md, CONTRIBUTING.md, docs/architecture/repo-local-hook-policy.md, docs/NPM_PUBLISHING_TEST.md, .claude/rules/worktree-isolation.md, docs/guides/coding-rigor.md, docs/guides/hook-packs.md) or in CLAUDE.md itself. Codex peer review found two meaning changes (scope-proof applicability, gate-only-if-fix-cannot-ship); both restored in 28d174363. Not checked: semantic equivalence beyond those phrases."
+    recorded_at: "2026-10-28T01:18:53.384Z"
+    commit_sha: "28d174363"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "At 28d174363, against the installed caws 12.2.0-rc.2 snapshot: every `caws <group> <sub>` named in CLAUDE.md (19 command paths) printed help whose Usage line names that exact path; flags --takeover, scope show --spec, worktree create --spec, amend-scope --add, specs show --archived and reprieve grant --all-repos appear in their help. Negative control: `caws parallel setup`, which CLAUDE.md says does not exist, fell through to top-level Usage and was rejected by the check."
+    recorded_at: "2026-10-28T01:18:56.030Z"
+    commit_sha: "28d174363"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "At 28d174363: ./node_modules/.bin/prettier (3.6.2) --check CLAUDE.md docs/agents/scope-discipline.md docs/release-procedure.md CONTRIBUTING.md docs/architecture/repo-local-hook-policy.md -> \"All matched files use Prettier code style!\", exit 0. The pre-commit prettier pass on both commits reported all files unchanged."
+    recorded_at: "2026-10-28T01:18:58.243Z"
+    commit_sha: "28d174363"

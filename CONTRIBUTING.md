@@ -61,6 +61,18 @@ event set, and the newer build then fails with
 `System surface settings and native registration disagree` — which re-running
 `configure` alone will not fix.
 
+Preview each step with `--plan`. Migrate existing project registrations once
+with `caws init adapters migrate --agent-surface claude-code`, preserving custom
+behavior. Adding an event to `MACHINE_EVENTS` invalidates every configured
+surface on the machine, so plan that re-configure as part of the change.
+
+Verify with content, not version strings: two builds can both say `12.2.0-rc.2`
+and differ
+(`grep -c session_end "$(dirname "$(readlink -f "$(which caws)")")/init/native-hook-identification.js"`).
+Verify native SessionStart, protected-write refusal, Stop and session rendering
+inside Claude before claiming activation. Template availability is not proof.
+New projects inherit configured machine behavior; legacy packs use diff/port.
+
 ## Contribution Process
 
 ### 1. Create an Issue
@@ -199,6 +211,18 @@ describe('Working Spec Validation', () => {
   });
 });
 ```
+
+### Build and test pitfalls
+
+- **Don't `git stash` while turbo dist is built.** Stash reverts the working
+  tree but turbo's `dist/` reflects pre-stash source, so tests load stale
+  `../../dist/...`. If you must stash, force-rebuild
+  (`turbo run build --filter=@paths.design/caws-cli... --force`) both after the
+  stash and after the pop — turbo caches by source hash, not working-tree state.
+- **Babel parse errors point at the wrong line.** A redeclared `const` in a Jest
+  test produces a multi-page `parseExpression` trace, not "duplicate
+  declaration". First step: `grep -n "const <var> =" path/to/test.js` for two
+  declarations in the same `it()` block.
 
 ## Documentation Guidelines
 
