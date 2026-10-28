@@ -519,12 +519,26 @@ describe('mutation policy topology contract', () => {
   test('the live policy accounts for every kernel/store/shell/transcript source exactly once', () => {
     const result = runNode(VALIDATOR, ['--policy', POLICY, '--root', PACKAGE_ROOT]);
 
-    expect(result.status).toBe(0);
+    expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
-    // The inventory includes bounded analysis and the renderer-calendar adapter.
-    expect(result.stdout).toMatch(/^PASS: 203 source files accounted for exactly once$/m);
+    // The inventory includes bounded inspection-prefix analysis and its entry point.
+    expect(result.stdout).toMatch(/^PASS: 206 source files accounted for exactly once$/m);
     expect(result.stdout).toMatch(/^PASS: 28 mutation targets across 4 surfaces$/m);
+  });
+
+  test.each([
+    'src/shell/analysis/inspection-prefix-entry.ts',
+    'src/shell/analysis/inspection-prefix.ts',
+    'src/shell/analysis/inspection-profiles.ts',
+  ])('inspection source has one behavioral proof classification: %s', (source) => {
+    // hooks-inspection-prefix exercises parsing and entry-point refusals. This
+    // classification does not assert a mutation score or runtime activation.
+    expect(
+      loadPolicy()
+        .proofGroups.filter((group) => group.files.includes(source))
+        .map(({ id, strategy, command }) => ({ id, strategy, command }))
+    ).toEqual([{ id: 'behavioral', strategy: 'behavioral', command: 'npm test' }]);
   });
 
   test('session seal preparation is classified as behavioral parsing and rendering', () => {
