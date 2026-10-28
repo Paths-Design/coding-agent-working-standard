@@ -756,10 +756,18 @@ ownership, missing preserved bytes, ambiguous path identity or intervening edits
 leave the source untouched. Retry after a completed retirement returns its
 recorded outcome rather than discarding newer work.
 
+Ownership and matching bytes do not close the check-to-mutation race. This
+profile requires demonstrated serialization of the affected entries or suitable
+conditional filesystem operations; an advisory lock that other editors ignore
+does not establish that property. A platform or sharing arrangement without that
+contract leaves retirement unavailable. A preserving commit establishes
+recoverability, not permission to overwrite an intervening edit.
+
 Qualification requires a real owned transfer to complete without a manual
 override, with byte-identical recovery from the preserving commit. Paired cases
 must refuse changed source or index bytes, foreign ownership, an absent commit,
 an alias replacement and an authority change between preparation and mutation.
+An edit injected at the final check-to-mutation boundary must also be preserved.
 An interruption must either preserve the original entries or leave an explicit,
 recoverable partial outcome. This is a proposed lifecycle contract, not evidence
 that general path discards or cleanup commands are safe to admit.
