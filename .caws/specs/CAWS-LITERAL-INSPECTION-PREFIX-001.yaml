@@ -42,10 +42,15 @@ invariants:
   - 'The pure caws hooks inspection-prefix stdin prefix API returns0 only for complete newline-separated simple literal inspection commands matching shared closed argument profiles,1 for unsupported input and2 for parse or runtime failure. Source component evidence does not establish execution of the full unchanged actual05 call through the selected installed runtime and genuine native host.'
 acceptance:
   - id: A1
-    given: 'The unchanged actual05 inspection-prefix call including routine Git diff, the prior04 six-line prefix, varied reader-family commands with literal quoted operands, and existing Node-first forms'
+    given: >-
+      The unchanged actual05 inspection-prefix call including routine Git diff, the
+      full unchanged actual06 postcommit readback prefix/Node call, the prior04
+      six-line prefix, varied reader-family commands with literal quoted operands,
+      and existing Node-first forms
     when: >-
       The shared structural inspection-prefix adapter and heredoc caller project a
-      complete quoted Node heredoc, including replay of the full unchanged actual05
+      complete quoted Node heredoc, including replay of both the full unchanged
+      actual05 call and the full unchanged actual06 postcommit readback prefix/Node
       call through the selected installed runtime and genuine native host
     then: 'Supported complete inspection commands admit the prefix without fixture-only matching, only the body is projected away, false JavaScript shell targets disappear, and exact prefix/header/terminator/suffix bytes, line counts and trailing newlines remain preserved.'
   - id: A2
@@ -87,9 +92,7 @@ contracts:
 evidence:
   - criterion_id: A1
     status: unchecked
-    evidence_ref: "UNCHECKED: the full unchanged actual05 call has not been replayed through the selected installed runtime and genuine native host. Preserved original input/refusal: /Users/darianrosebrook/.codex/caws-native-harness/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/user/.codex/sessions/2026/10/27/rollout-2026-10-27T20-18-59-01a18084-a323-72e0-94fc-c839a37fb236.jsonl lines73/76: fake JavaScript target and pre-execution refusal2. Source Bats exercises the exact05 prefix with a representative body, prior04 prefix and Node-first controls; that does not discharge the full raw call. Parent ART05/Root successor06 retain exact installed/genuine replay and host lookup/selection qualification. Source commit39084d43ae9f4253a2320243f9068029a4b84a19 exists; --verify here checks commit existence/reachability only and executes no recorded command or test. No waiver and no full-call execution claim."
-    recorded_at: "2026-10-28T05:22:15.003Z"
-    commit_sha: "39084d43ae9f4253a2320243f9068029a4b84a19"
+    recorded_at: "2026-10-28T06:56:00.829Z"
   - criterion_id: A2
     status: pass
     evidence_ref: "PASS, bounded Source component only at39084d43ae9f4253a2320243f9068029a4b84a19. Hostile AST, lookup changes, unsupported options and argument roles retain raw input. Source helper/current typed guard controls preserve raw Node foreign-write and outside-write refusal2, exact target/repository reasons and unchanged simulated sentinels, not actual host protection. Actual inspected Bats35 exit0: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/inspection-prefix-continue-events.jsonl line199. Root actual Git falsifier /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/inspection-prefix-git-unified-falsifier.cjs proved old predicate0 plus real output files git-unified-output-short-control.txt and git-unified-output-long-control.txt in that directory; it was not rerun. Source fix evidence /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/inspection-prefix-unified-fix-events.jsonl line186 RED20, line256 prefix104/hooks100 passed in aggregate exit1 solely for obsolete optional-count fixture, line265 corrected contextual1146 passed exit0. Tests assert optional count flags do not swallow following output/execution flags, default/attached counts and literal -- paths admit, required data operands retain their roles, and existing mutation controls remain. Command below ran from /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/literal-inspection-prefix/packages/caws-cli, before normal follow-up commit; Root directly inspected source/raw and separately observed final pinnedNode22 pure API outputs, not installed execution. No blanket Node or write authority; installed native journey, strict/global qualification and Python retirement remain Root/Parent obligations. --verify here rederives commit existence/reachability only, never executes this recorded command."
