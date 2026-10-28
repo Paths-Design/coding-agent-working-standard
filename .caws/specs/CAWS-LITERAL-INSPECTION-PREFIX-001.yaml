@@ -44,14 +44,16 @@ acceptance:
   - id: A1
     given: >-
       The unchanged actual05 inspection-prefix call including routine Git diff, the
-      full unchanged actual06 postcommit readback prefix/Node call, the prior04
-      six-line prefix, varied reader-family commands with literal quoted operands,
-      and existing Node-first forms
+      full unchanged actual06 postcommit readback prefix/Node call, the full
+      unchanged actual07 CAWS specs-show evidence-readback prefix/Node call, the
+      prior04 six-line prefix, varied reader-family commands and authoritative CAWS
+      literal read-route families with literal quoted operands, and existing
+      Node-first forms
     when: >-
       The shared structural inspection-prefix adapter and heredoc caller project a
-      complete quoted Node heredoc, including replay of both the full unchanged
-      actual05 call and the full unchanged actual06 postcommit readback prefix/Node
-      call through the selected installed runtime and genuine native host
+      complete quoted Node heredoc, including replay of the full unchanged actual05,
+      actual06 postcommit readback and actual07 evidence-readback calls through the
+      selected installed runtime and genuine native host
     then: 'Supported complete inspection commands admit the prefix without fixture-only matching, only the body is projected away, false JavaScript shell targets disappear, and exact prefix/header/terminator/suffix bytes, line counts and trailing newlines remain preserved.'
   - id: A2
     given: 'Hostile lookup mutations, assignments, redirects, expansions/substitutions, wrappers, compound/control structures, unsupported options or argument roles, unknown commands, and genuine raw Node fs writes or outer writes'
@@ -92,9 +94,7 @@ contracts:
 evidence:
   - criterion_id: A1
     status: unchecked
-    evidence_ref: "UNCHECKED: A1 retains prior04, the full unchanged actual05 call, varied literal reader families and Node-first requirements, and additionally requires the full unchanged actual06 postcommit readback prefix/Node call through the selected installed runtime and genuine native host. Root's inspected genuine06 observation: original full05 command SHA25a3c1015068419cede8e31a58a8193e65118a1d3f5ae2c5c889a9fae5d65d8a returned0 with nine immutable matches in project06 under SID01a1812f-7f88-7042-b827-1ad3d952a9f1; doctor0/five gates0 and bootstrap commit4fb77b1 preceded the next failure. The exact next call and pre-execution refusal2 remain at /Users/darianrosebrook/.codex/caws-native-harness/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/user/.codex/sessions/2026/10/27/rollout-2026-10-27T23-25-37-01a1812f-7f88-7042-b827-1ad3d952a9f1.jsonl lines160/162 (custom_tool_call/name exec, original cmd JSON string retained in input). Its prefix is git rev-parse HEAD, git show --stat --oneline HEAD, git status --short before the original quoted Node body. IMAGE05 runtime662ed75aa78f60765c2095352e215feafba18c2795440ba591cb837a26d9720c refused fake relative target f.path!==.gitignore before any shell execution. Root's pure classifier observations identify the unsupported Git show presentation role; they are diagnosis, not proof of a repaired installed journey. Failed06 is preserved and was not retried, resumed, reordered or rerouted. Pending: bounded Source repair in this same spec, a new frozen installed candidate, exact full05 plus full06 replay and genuine full07 qualification under Root/Parent. Earlier Source-scoped A2-A4 passes remain historical at39084d43ae9f4253a2320243f9068029a4b84a19, not acceptance of future changed bytes or global cutover. This authority-only phase executed no consumer command, build or test and grants no A1 pass. --verify here checks only existence/reachability of that already integrated Source commit; it executes no recorded tests or raw calls. No waiver."
-    recorded_at: "2026-10-28T06:57:29.820Z"
-    commit_sha: "39084d43ae9f4253a2320243f9068029a4b84a19"
+    recorded_at: "2026-10-28T09:35:08.805Z"
   - criterion_id: A2
     status: pass
     evidence_ref: "PASS, Source-context and option-role behavior only at commit 59ad7c1e766ba569258687dd1946e12351bbc690. The shared Git show profile recognizes exact no-operand --oneline; the tests retain following --output, --ext-diff and --textconv roles, reject invalid attached/unknown options, and preserve literal paths after --. The actual 40-case Bats run in /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/literal-inspection-prefix/packages/caws-cli is recorded at /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/inspection-prefix-show-continue-events.jsonl item 17: exit 0. New controls report raw Node foreign-write, outer-write and lookup-override refusals with exit 2 and unchanged simulated sentinels; existing hostile roles remain conservative. Tests do not execute the original hostile JavaScript and do not prove actual native host delivery or protected-write prevention. Earlier unchanged shared classifier/helper safety controls are at Source commit 39084d43ae9f4253a2320243f9068029a4b84a19. --verify checks this cited commit's existence/reachability only; it does not rerun the Bats command."
