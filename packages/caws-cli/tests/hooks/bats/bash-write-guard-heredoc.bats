@@ -86,6 +86,12 @@ _read_prefix() {
   printf 'pwd -P\ngit rev-parse --show-toplevel\ngit rev-parse HEAD\ngit branch --show-current\ngit status --short\ncat AGENTS.md'
 }
 
+# The actual06 postcommit readback prefix. Payloads below are inert API inputs;
+# the full unchanged installed/native call remains a separate qualification.
+_postcommit_prefix() {
+  printf 'git rev-parse HEAD\ngit show --stat --oneline HEAD\ngit status --short'
+}
+
 # ── guard-level (end to end through the real oracle) ────────────────────────
 
 @test "A1b control: a redirect to a foreign worktree payload DOES block (the block path is live)" {
@@ -522,4 +528,94 @@ _read_prefix() {
   _run_shell_view caws_bash_mutation_candidates "$input"
   assert_success
   assert_output ''
+}
+
+@test "actual06 prefix: Git show oneline projects only the representative Node body" {
+  local prefix input expected ending
+  prefix="$(_postcommit_prefix)"
+  for ending in '' $'\n' $'\n\n'; do
+    input="$prefix"$'\nnode <<\'NODE\'\nconst fs=require("fs"),c=require("crypto");const rows=[{path:"file"}].filter(f=>f.path!==".gitignore").map(f=>f.path);\nNODE'"$ending"
+    expected="$prefix"$'\nnode <<\'NODE\'\n\nNODE'"$ending"
+    _run_blank_exact "$input"
+    assert_success
+    assert_output "${expected}__END__"
+    _run_shell_view caws_bash_mutation_candidates "$input"
+    assert_success
+    assert_output ''
+  done
+}
+
+@test "actual06 prefix: output execution and invalid oneline options retain the Node body" {
+  local option input
+  for option in '--oneline --output=target' '--oneline --ext-diff' '--oneline --textconv' '--oneline=unexpected'; do
+    input=$'git rev-parse HEAD\n'"git show --stat $option HEAD"$'\ngit status --short\nnode <<\'NODE\'\nconst f=x=>x;\nNODE'
+    _run_blank_exact "$input"
+    assert_success
+    assert_output "${input}__END__"
+  done
+}
+
+@test "actual06 prefix: raw Node foreign write refuses before simulated effects" {
+  local foreign="$BATS_TEST_TMPDIR/postcommit-foreign" physical_foreign target input
+  mkdir -p "$foreign"
+  git -C "$foreign" init -q -b main
+  physical_foreign="$(cd "$foreign" && pwd -P)"
+  target="$foreign/sentinel.txt"
+  printf sentinel > "$target"
+  input="$(_postcommit_prefix)"$'\n'"$(printf 'node <<%s\nrequire("fs").writeFileSync("%s", "changed");\nJS\n' "'JS'" "$target")"
+  _run_blank "$input"
+  assert_success
+  refute_output --partial 'writeFileSync'
+  _run_shell_view caws_bash_interpreter_write_literals "$input"
+  assert_success
+  assert_line "$target"
+  _run_bwg "$input"
+  local guard_status="$status"
+  if [[ "$guard_status" == 0 ]]; then printf changed > "$target"; fi
+  printf 'actual06 Node guard exit=%s target=%s sentinel=%s\n' "$guard_status" "$target" "$(cat "$target")"
+  assert_equal "$guard_status" 2
+  assert_output --partial "BLOCKED: this Bash command mutates a file inside a DIFFERENT repository ($physical_foreign)"
+  assert_equal "$(cat "$target")" sentinel
+}
+
+@test "actual06 prefix: real outer writes before and after the body retain refusal" {
+  _seed_foreign_worktree
+  local target input body position
+  target="$(_foreign_payload)"
+  printf sentinel > "$target"
+  body=$'node <<\'JS\'\nconst f=x=>x;\nJS'
+  for position in before after; do
+    if [[ "$position" == before ]]; then
+      input="$(_postcommit_prefix)"$'\n'"echo changed > $target"$'\n'"$body"
+    else
+      input="$(_postcommit_prefix)"$'\n'"$body"$'\n'"echo changed > $target"
+    fi
+    _run_shell_view caws_bash_mutation_candidates "$input"
+    assert_success
+    assert_line "$target"
+    _run_bwg "$input"
+    local guard_status="$status"
+    if [[ "$guard_status" == 0 ]]; then printf changed > "$target"; fi
+    printf 'actual06 outer %s guard exit=%s sentinel=%s\n' "$position" "$guard_status" "$(cat "$target")"
+    assert_equal "$guard_status" 2
+    assert_output --partial "BLOCKED: this Bash command mutates worktree 'wt-seed''s payload"
+    assert_equal "$(cat "$target")" sentinel
+  done
+}
+
+@test "actual06 prefix: lookup override keeps shell policy refusal before simulated effects" {
+  _seed_foreign_worktree
+  local marker="$BATS_TEST_TMPDIR/postcommit-lookup-sentinel" input
+  input="$(_postcommit_prefix)"$'\nshopt -s expand_aliases\nalias node=sh\nnode <<\'SH\'\ngit sparse-checkout disable\nSH'
+  _run_blank "$input"
+  assert_success
+  assert_output "$input"
+  printf sentinel > "$marker"
+  run_guard worktree-guard.sh "$(hook_envelope Bash '' "$input")"
+  local guard_status="$status"
+  if [[ "$guard_status" == 0 ]]; then printf changed > "$marker"; fi
+  printf 'actual06 alias guard exit=%s sentinel=%s\n' "$guard_status" "$(cat "$marker")"
+  assert_equal "$guard_status" 2
+  assert_output --partial 'BLOCKED: agent-issued git sparse-checkout'
+  assert_equal "$(cat "$marker")" sentinel
 }
