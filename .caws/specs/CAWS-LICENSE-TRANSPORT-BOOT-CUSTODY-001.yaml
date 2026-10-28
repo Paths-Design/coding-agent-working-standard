@@ -93,3 +93,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/docs/package-license-transport.test.js
     commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
     test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Carried by \"a failed relinquish rename refuses staging and leaves the record in place\" (injected renameSync throw: refused, faults=1, no notice, observedFile(marker) identical incl. ctime, no relinquished file, licenses unchanged) and \"a record swapped during relinquish is moved aside, never deleted, and no fresh record is made\" (foreign record swapped in before rename: refused \"ownership marker changed while being relinquished\", exactly one relinquished file holding the foreign bytes, no marker created). Mutant M4 (skip moved-inode/bytes check) killed. Related race refusals added after peer review: \"a marker replaced between observation and its writable open refuses staging\" (M8 killed) and \"a marker changed while staging holds it refuses instead of being relinquished\" (M3 killed). The swapped-out original is lost to the injected external rename, not to this code."
+    recorded_at: "2026-10-28T00:54:36.058Z"
+    test_nodeid: packages/caws-cli/tests/docs/package-license-transport.test.js
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
