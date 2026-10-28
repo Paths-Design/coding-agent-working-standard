@@ -9,7 +9,7 @@ let root, home, templates, invocations;
 beforeEach(() => {
   const parent = process.env.CAWS_SYSTEM_RUNTIME_ARTIFACT_DIR || os.tmpdir();
   fs.mkdirSync(parent, { recursive: true });
-  root = fs.mkdtempSync(path.join(parent, 'caws-system-runtime-'));
+  root = fs.realpathSync(fs.mkdtempSync(path.join(parent, 'caws-system-runtime-')));
   invocations = [];
   home = path.join(root, 'machine');
   templates = path.join(root, 'templates');
@@ -212,8 +212,16 @@ test('the machine ownership oracle evaluates YAML claims without depending on pr
         CAWS_ORACLE_SESSION_ID: 'unbound',
       },
     });
-  expect(check('src/claimed.ts').stdout).toContain('block_claimed:foreign:src/**');
-  expect(check('unclaimed/file.ts').stdout).toContain('pass:');
+  for (const [target, verdict] of [
+    ['src/claimed.ts', 'block_claimed:foreign:src/**'],
+    ['unclaimed/file.ts', 'pass:'],
+  ]) {
+    const result = check(target);
+    expect(result.error).toBeUndefined();
+    expect(result.signal).toBeNull();
+    expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+    expect(result.stdout).toContain(verdict);
+  }
   expect(fs.existsSync(path.join(p, 'node_modules'))).toBe(false);
 });
 
