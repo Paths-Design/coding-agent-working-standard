@@ -17,6 +17,7 @@ const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { nodeProcessEnv } = require('../../scripts/lib/node-process-env.cjs');
 const yaml = require('js-yaml');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '../..');
@@ -77,6 +78,7 @@ function makeTempDir(prefix = 'caws-mutation-contract-') {
 function runNode(script, args = []) {
   return spawnSync(process.execPath, [script, ...args], {
     cwd: PACKAGE_ROOT,
+    env: nodeProcessEnv(),
     encoding: 'utf8',
   });
 }
@@ -213,6 +215,7 @@ function qualificationFixture({ buildBody, coreBody } = {}) {
     'mutation-input-identity.mjs',
     'stryker-config.cjs',
     'clean-staged-docs.mjs',
+    'lib/node-process-env.cjs',
   ]) {
     put(`scripts/${file}`, fs.readFileSync(path.join(PACKAGE_ROOT, 'scripts', file)));
   }
@@ -348,6 +351,7 @@ function runBuiltinNamedPackageCapture(fixture, dependency, { changeBytes = fals
   `;
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: fixture.packageRoot,
+    env: nodeProcessEnv(),
     encoding: 'utf8',
     timeout: 15000,
   });
@@ -427,7 +431,13 @@ function runQualificationFixture(fixture, extraArgs = []) {
       'descriptive-fixture-label',
       ...extraArgs,
     ],
-    { cwd: fixture.packageRoot, encoding: 'utf8', timeout: 30000, maxBuffer: 4 * 1024 * 1024 }
+    {
+      cwd: fixture.packageRoot,
+      env: nodeProcessEnv(),
+      encoding: 'utf8',
+      timeout: 30000,
+      maxBuffer: 4 * 1024 * 1024,
+    }
   );
   retainChildObservation(fixture.repoRoot, result);
   const receiptPath = path.join(fixture.packageRoot, 'reports/mutation-store/mutation-run.json');
@@ -486,6 +496,7 @@ function runBoundAssertion(fixture, mutationReport) {
   `;
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: fixture.packageRoot,
+    env: nodeProcessEnv(),
     encoding: 'utf8',
     timeout: 15000,
   });
@@ -784,6 +795,7 @@ describe('mutation policy topology contract', () => {
     `;
       const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
         cwd: dir,
+        env: nodeProcessEnv(),
         encoding: 'utf8',
         timeout: 10000,
       });
@@ -854,6 +866,7 @@ describe('mutation policy topology contract', () => {
       `;
       const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
         cwd: dir,
+        env: nodeProcessEnv(),
         encoding: 'utf8',
         timeout: 15000,
       });
@@ -1149,6 +1162,204 @@ describe('builtin-named package dependency capture', () => {
 });
 
 describe('ordinary runner input and build binding mechanics', () => {
+  test.each(['initial capture', 'after capture'])(
+    'unbound %s still rejects a conflicting PATH before any build',
+    (phase) => {
+      const fixture = qualificationFixture();
+      const bin = path.join(fixture.repoRoot, 'conflicting');
+      fs.mkdirSync(bin);
+      const sentinel = path.join(fixture.repoRoot, 'conflict-sentinel');
+      fs.writeFileSync(
+        path.join(bin, 'node'),
+        '#!/bin/sh\nprintf touched >> "$CONFLICT_SENTINEL"\nexit 91\n',
+        { mode: 0o755 }
+      );
+      const script = `
+      import fs from 'node:fs';
+      import { captureMutationInputs, assertInputsUnchanged } from ${JSON.stringify('file://' + INPUT_IDENTITY)};
+      const options = { packageRoot: process.cwd(), surfaceId: 'store', policy: JSON.parse(fs.readFileSync('mutation-policy.json')) };
+      try {
+        const captured = captureMutationInputs(options);
+        console.log('initial capture succeeded');
+        process.env.PATH = ${JSON.stringify(bin)} + ${JSON.stringify(path.delimiter)} + process.env.PATH;
+        assertInputsUnchanged(captured, options);
+      } catch (error) { console.error(error.message); process.exitCode = 1; }
+    `;
+      const env = nodeProcessEnv({ ...process.env, CONFLICT_SENTINEL: sentinel });
+      if (phase === 'initial capture') env.PATH = bin + path.delimiter + env.PATH;
+      // Intentionally unbound API probes: never pass these through an aligning spawn wrapper.
+      const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+        cwd: fixture.packageRoot,
+        env,
+        encoding: 'utf8',
+        timeout: 15000,
+      });
+      retainChildObservation(fixture.repoRoot, result);
+      expect(result.error).toBeUndefined();
+      expect(result.signal).toBeNull();
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('PATH node differs from runner Node executable');
+      expect(result.stdout).toBe(phase === 'after capture' ? 'initial capture succeeded\n' : '');
+      expect(fs.existsSync(sentinel)).toBe(false);
+      expect(fs.existsSync(path.join(fixture.packageRoot, 'dist'))).toBe(false);
+    }
+  );
+
+  test('a substituted sandbox Node executable is refused before the sandbox build', () => {
+    const fixture = qualificationFixture({
+      coreBody: fixtureCoreBody({
+        beforeSandboxBuild: `
+      const foreignBin = path.join(context.repoRoot, 'foreign-runtime');
+      fs.mkdirSync(foreignBin);
+      fs.copyFileSync(process.execPath, path.join(foreignBin, 'node'), fs.constants.COPYFILE_FICLONE);
+      fs.chmodSync(path.join(foreignBin, 'node'), 0o755);
+      process.env.PATH = foreignBin + path.delimiter + process.env.PATH;
+    `,
+      }),
+    });
+    const marker = path.join(fixture.repoRoot, 'sandbox-build-ran');
+    fixture.put(
+      'scripts/build-fixture.cjs',
+      fixtureBuildBody(`
+      if (require('node:path').basename(process.cwd()) === 'sandbox-fixture') fs.writeFileSync(${JSON.stringify(marker)}, 'unexpected build');
+    `)
+    );
+    const result = runQualificationFixture(fixture);
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('missing sandbox input: tool:');
+    expect(result.receipt.build.status).toBe(0);
+    expect(result.receipt.stryker.status).toBe(0);
+    expect(result.receipt.error).toBe('missing executed sandbox build record');
+    expect(fs.existsSync(marker)).toBe(false);
+    const observed = JSON.parse(
+      fs.readFileSync(path.join(fixture.repoRoot, 'fixture-build-observation.json'), 'utf8')
+    );
+    expect(observed.status).toBe(1);
+    expect(observed.marker).toBeNull();
+  });
+
+  test('the copied environment helper remains part of immutable captured inputs', () => {
+    const fixture = qualificationFixture({
+      coreBody: fixtureCoreBody({
+        afterSandbox:
+          "fs.appendFileSync(path.join(context.packageRoot, 'scripts/lib/node-process-env.cjs'), '\\n// fixture drift\\n');",
+      }),
+    });
+    const result = runQualificationFixture(fixture);
+    expect(result.status).toBe(1);
+    expect(result.receipt.build.status).toBe(0);
+    expect(result.receipt.stryker.status).toBe(0);
+    expect(result.receipt.error).toContain(
+      'persistent authored/input drift: scripts/lib/node-process-env.cjs'
+    );
+  });
+
+  test('mutation command binds every real child despite conflicting ambient PATH', () => {
+    const exercise = (removeBinding) => {
+      const fixture = qualificationFixture({ coreBody: fixtureCoreBody() });
+      const bin = path.join(fixture.repoRoot, 'conflicting');
+      fs.mkdirSync(bin);
+      const sentinel = path.join(fixture.repoRoot, 'conflict-sentinel');
+      fs.writeFileSync(
+        path.join(bin, 'node'),
+        '#!/bin/sh\nprintf touched >> "$CONFLICT_SENTINEL"\nexit 91\n',
+        { mode: 0o755 }
+      );
+      const log = path.join(fixture.repoRoot, 'runtimes.jsonl');
+      const preload = path.join(fixture.repoRoot, 'observe-runtime.cjs');
+      fs.writeFileSync(
+        preload,
+        `const fs = require('node:fs');
+        fs.appendFileSync(process.env.RUNTIME_LOG, JSON.stringify({
+          node: fs.realpathSync(process.execPath), script: process.argv[1], cwd: process.cwd(),
+          kept: process.env.KEEP_ME }) + '\\n');`
+      );
+      const runner = path.join(fixture.packageRoot, 'scripts/run-mutation.mjs');
+      if (removeBinding) {
+        const source = fs.readFileSync(runner, 'utf8');
+        expect(source).toContain('process.env.PATH = childEnv.PATH;');
+        fs.writeFileSync(runner, source.replace('process.env.PATH = childEnv.PATH;', ''));
+      }
+      // Deliberately RAW: an aligning fixture spawn helper would hide a missing production binding.
+      const result = spawnSync(process.execPath, [runner, '--surface', 'store'], {
+        cwd: fixture.packageRoot,
+        encoding: 'utf8',
+        timeout: 30000,
+        env: {
+          ...process.env,
+          PATH: bin + path.delimiter + process.env.PATH,
+          NODE_OPTIONS: '--require ' + preload,
+          RUNTIME_LOG: log,
+          KEEP_ME: 'preserved',
+          CONFLICT_SENTINEL: sentinel,
+        },
+      });
+      retainChildObservation(fixture.repoRoot, result);
+      const receiptPath = path.join(
+        fixture.packageRoot,
+        'reports/mutation-store/mutation-run.json'
+      );
+      const receipt = fs.existsSync(receiptPath)
+        ? JSON.parse(fs.readFileSync(receiptPath, 'utf8'))
+        : null;
+      return {
+        fixture,
+        result,
+        receipt,
+        sentinel,
+        observations: fs.readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse),
+      };
+    };
+    const bound = exercise(false);
+    expect({
+      error: bound.result.error,
+      signal: bound.result.signal,
+      stderr: bound.result.stderr,
+      status: bound.result.status,
+    }).toEqual({ error: undefined, signal: null, stderr: '', status: 0 });
+    expect(bound.receipt.status).toBe('input-build-report-bound');
+    expect(
+      bound.observations.every(
+        (x) => x.node === fs.realpathSync(process.execPath) && x.kept === 'preserved'
+      )
+    ).toBe(true);
+    for (const script of [
+      'run-mutation.mjs',
+      'npm-cli.js',
+      'build-fixture.cjs',
+      'stryker.cjs',
+      'mutation-input-identity.mjs',
+    ]) {
+      expect(bound.observations.some((x) => path.basename(x.script) === script)).toBe(true);
+    }
+    expect(
+      bound.observations.filter((x) => path.basename(x.script) === 'build-fixture.cjs')
+    ).toHaveLength(2);
+    expect(
+      bound.observations.some(
+        (x) =>
+          path.basename(x.cwd) === 'sandbox-fixture' &&
+          path.basename(x.script) === 'build-fixture.cjs'
+      )
+    ).toBe(true);
+    expect(fs.existsSync(bound.sentinel)).toBe(false);
+    expect(bound.receipt.inputIdentity.files).toContainEqual(
+      expect.objectContaining({
+        path: 'scripts/lib/node-process-env.cjs',
+        sha256: createHash('sha256')
+          .update(fs.readFileSync(path.join(PACKAGE_ROOT, 'scripts/lib/node-process-env.cjs')))
+          .digest('hex'),
+      })
+    );
+    const unbound = exercise(true);
+    expect(unbound.result.status).toBe(1);
+    expect(unbound.result.stderr).toContain('PATH node differs from runner Node executable');
+    expect(unbound.receipt.build).toBeUndefined();
+    expect(unbound.observations).toHaveLength(1);
+    expect(fs.existsSync(unbound.sentinel)).toBe(false);
+  });
+
   test('outer and relocated sandbox builds consume the same package-local dependency values', () => {
     const fixture = qualificationFixture({
       buildBody: fixtureBuildBody(`
@@ -1548,7 +1759,7 @@ describe('ordinary runner input and build binding mechanics', () => {
     const result = spawnSync(process.execPath, ['-e', "require('./stryker.conf.cjs')"], {
       cwd: fixture.packageRoot,
       encoding: 'utf8',
-      env: { ...process.env, CAWS_MUTATION_TEMP_DIR: linked },
+      env: { ...nodeProcessEnv(), CAWS_MUTATION_TEMP_DIR: linked },
     });
 
     expect(result.status).toBe(1);
