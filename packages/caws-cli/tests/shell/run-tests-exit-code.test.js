@@ -178,7 +178,7 @@ test('ordinary launcher binds real npm and env-node children despite conflicting
     expect(unbound.status).not.toBe(0);
     expect(fs.readFileSync(sentinel, 'utf8')).toContain('touched');
     // npm intentionally prepends package-local .bin. Preserve that resolution
-    // contract and fail closed if a package explicitly supplies its own Node.
+    // contract and propagate the supplied Node stub's failure without masking it.
     fs.writeFileSync(runner, source);
     fs.unlinkSync(sentinel);
     const before = fs.readFileSync(log, 'utf8');
