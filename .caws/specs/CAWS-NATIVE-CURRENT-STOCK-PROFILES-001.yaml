@@ -52,3 +52,12 @@ acceptance:
       profiles
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "ab4b551 implementation plus ad6b188 comment clarification. ART06/stock-profiles-final-01.log SHA3fbe2f4c0b29670e573cd34d767aa9170376046d6377fc2485274b2d15587a8f contains actual213passed7suites exit0. Four canonical/linked heartbeat and Stop pairs observe actual self lease transition, unchanged peer bytes, selected identity/root/branch fields and stdout/stderr. Current source, startup, override, CLI, deadline and late-Git controls pass; early/late Stop source refusal preserves lease and forbids replay. Variable timestamp/PID byte equality and actual Rust host delivery excluded. Raw artifact remains external; prior absolute artifact citation was refused with nothing written. This citation runs the paired tests and verifies source reachability."
+    recorded_at: "2026-10-28T10:33:28.330Z"
+    test_nodeid: "packages/caws-cli/tests/runtime/stock-handlers.test.js::shell and native update the same"
+    exit_code: 0
+    commit_sha: ad6b18858
+    test_verified_at: ad6b18858cdb79744e48e3fa022a73307945983e
