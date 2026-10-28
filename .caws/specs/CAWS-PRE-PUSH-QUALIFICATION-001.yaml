@@ -1,10 +1,11 @@
 id: CAWS-PRE-PUSH-QUALIFICATION-001
 title: 'Restore truthful pre-push qualification for native cutover publication'
 mode: fix
-lifecycle_state: active
-worktree: prepush-subprocess-env
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed corrected child-process fixture isolation at90b39fbaa. Deliberately inherited Git inputs reproduce198 failures before repair; all1618 focused checks pass on Node22 and25 after allfive spawns receive the sanitized Jest environment. Explicit hostile Git cases, mutation propagation, ordinary PATH and artifact fields remain exercised. Doctor/gates and independent review complete, dual evidence readback verified. Full ordinary publication and actual Rust cutover remain root obligations.'
 created_at: '2026-10-28T06:46:27.028Z'
-updated_at: '2026-10-28T11:02:03.828Z'
+updated_at: '2026-10-28T11:30:04.628Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
