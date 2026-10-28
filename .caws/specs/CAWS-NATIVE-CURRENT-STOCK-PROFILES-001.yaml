@@ -1,0 +1,30 @@
+id: CAWS-NATIVE-CURRENT-STOCK-PROFILES-001
+title: 'Qualify current selected stock consumers without widening custom-source admission'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-28T09:22:08.224Z'
+updated_at: '2026-10-28T09:22:08.224Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/runtime/guard-utilities.ts'
+    - 'packages/caws-cli/tests/runtime/stock-handlers.test.js'
+    - 'packages/caws-cli/tests/runtime/containment.test.js'
+    - 'packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js'
+    - 'packages/caws-cli/tests/runtime/fixtures/agent-surface-empty-lookup.sh'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
