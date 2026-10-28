@@ -33,3 +33,10 @@ acceptance:
     then: 'late revalidation refuses without lease write or shell replay'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Committed ca7d3e055; ART06 stop-preflight-red-01.log and green-01.log both pass real admitted historical closure then helper byte drift during prefix, late refusal without replay or lease change; publication may already run and test asserts it. Exact historical fixtures match existing native pins. Fullsuite4failed27passed is retained, not hidden or declared green. Independent review grounded late actual consumer and assertion. No installed/cutover/strict-profile claim. Citation verification establishes node presence only."
+    recorded_at: "2026-10-28T08:52:53.181Z"
+    test_nodeid: "packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js::late helper drift after an eligible Stop prefix preserves the lease and refuses replay"
+    test_verified_at: ca7d3e0559a070d8530e0d4adf5294c57b5b7630
