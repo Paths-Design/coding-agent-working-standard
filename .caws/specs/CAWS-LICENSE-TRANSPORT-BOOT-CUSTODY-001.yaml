@@ -79,3 +79,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/docs/package-license-transport.test.js::a device shift never admits a same-byte foreign"
     commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
     test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Two cases inject a Proxy that reports dev+1 for one path (lstat and every fd opened on it, so the object reads self-consistently): (a) package root -> cleanup refuses \"ownership marker identity mismatch (device)\"; (b) owned leaf dist/transcripts/html311/LICENSE.txt -> refuses \"owned license replaced or changed (device): ...\"; faults>0 proves injection ran; licenseState() unchanged and marker phase still ready. Mutant M1 (drop device relation) killed both (3 tests at final HEAD). Simulated device split, not a real mount point."
+    recorded_at: "2026-10-28T00:48:25.902Z"
+    test_nodeid: "packages/caws-cli/tests/docs/package-license-transport.test.js::on another device refuses cleanup and deletes nothing"
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
