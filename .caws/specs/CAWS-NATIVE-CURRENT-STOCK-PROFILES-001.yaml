@@ -23,8 +23,11 @@ invariants:
   - 'Exact selected-source and execution preconditions qualify each native consumer; custom paths, bytes, startup, overrides or unqualified semantics preserve selected shell behavior or fail before effects. Preserve current-template positives and historical profile controls.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'current exact Stop and heartbeat sources with selected checkout context'
+    when: 'typed native consumers replace their selected shell paths'
+    then: >-
+      observable lease and output behavior agrees for canonical and linked
+      checkouts; incompatible source, startup, overrides and CLI retain refusal or
+      fallback with no unauthorized effects
 non_functional: {}
 contracts: []
