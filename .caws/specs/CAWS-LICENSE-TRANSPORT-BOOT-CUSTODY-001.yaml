@@ -86,3 +86,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/docs/package-license-transport.test.js::on another device refuses cleanup and deletes nothing"
     commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
     test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Carried by: test.each \"<class>: cleanup refuses with the remedy; staging relinquishes and deletes nothing\" over interrupted staging phase, interrupted cleaning phase, incomplete JSON, unknown schema, same-byte foreign marker, same-byte foreign owned license -> exact result {created:[],preserved:[3],relinquished:{reason,sha256,retainedAt}}, retained file has the original marker inode and bytes, it is the only relinquished file, marker path absent, licenseState() unchanged, later cleanup removed=[]; plus \"real marker write followed by failure retains uncertain ownership and exact created bytes\" (crash mid-staging: restaging relinquishes, creates only the 2 missing, cleanup removes only those, the pre-crash LICENSE stays) and \"partial cleanup failure ...\" (restaging recreates only LICENSE). Mutants M3/M5 killed. Real-package run: planted incomplete JSON, stage-consumer-docs exit 0, relinquished file kept inode 801923623 + sha 7e3eb5fc."
+    recorded_at: "2026-10-28T00:50:31.122Z"
+    test_nodeid: packages/caws-cli/tests/docs/package-license-transport.test.js
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
