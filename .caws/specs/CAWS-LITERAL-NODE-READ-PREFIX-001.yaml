@@ -56,3 +56,11 @@ contracts:
   - name: 'read-prefix-hostile-controls'
     type: contract-test
     path: 'packages/caws-cli/tests/hooks/bats/bash-write-guard-heredoc.bats'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "PASS bounded Source component: cases10-14 and27-29 verify selected packaged helper identity, original Node-first regression and exact consumer04 six-line literal inspection prefix followed by wholly quoted standalone Node. Only the body projects away; header, terminator, prefix/suffix bytes, line count and zero/one/two trailing newlines remain exact. Finite ordinary cat paths and horizontal-whitespace variants pass; lexical view has no fake JSON.parse target and preserves command views. OLD RED exposes the false target. Inspected raw external log /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/read-prefix-implementation-events.jsonl: line125 OLDcd8f RED exit1, line161 preserved intermediate physical-path oracle failure exit1 with guard2 and unchanged sentinel, line167 final Bats34 GREEN exit0. Actual Bats cwd /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/node-read-prefix/packages/caws-cli. Root directly inspected committed source and actual raw checks separately; peer feedback is review context, not acceptance authority. --verify here rederives commit existence/reachability only and never executes the recorded Bats command. Bounded Source component only: exact new installed-helper selection, original prefixed native command execution and genuine-host lookup verification remain REQUIRED Parent qualification. No installed/global/full-Rust or Python-retirement completion is inferred."
+    recorded_at: "2026-10-28T01:17:57.505Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/bash-write-guard-heredoc.bats"
+    exit_code: 0
+    commit_sha: "2fa1d7747c64594eac7a85cf1ddae04f7c907415"
