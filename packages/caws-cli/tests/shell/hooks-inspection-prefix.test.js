@@ -134,6 +134,58 @@ describe('Git optional unified-count roles', () => {
   );
 });
 
+describe('Git show presentation role', () => {
+  const { inspectGitOptions } = require('../../dist/shell/analysis/inspection-profiles.js');
+  const prefix = 'git rev-parse HEAD\ngit show --stat --oneline HEAD\ngit status --short\n';
+  test('the exact oneline flag admits the single query and actual06 newline prefix', () => {
+    expect(invoke('git show --stat --oneline HEAD\n')).toEqual({ status: 0, stdout: allow });
+    expect(invoke(prefix)).toEqual({ status: 0, stdout: allow });
+    const issues = [];
+    expect(
+      inspectGitOptions('show', ['--stat', '--oneline', 'HEAD'], (code) => issues.push(code))
+    ).toEqual(['--stat', '--oneline']);
+    expect(issues).toEqual([]);
+  });
+  test.each(['--output=target', '--ext-diff', '--textconv'])(
+    'following %s retains its own role and the Node body',
+    (next) => {
+      const issues = [];
+      expect(
+        inspectGitOptions('show', ['--stat', '--oneline', next, 'HEAD'], (code) =>
+          issues.push(code)
+        )
+      ).toEqual(['--stat', '--oneline', next]);
+      expect(issues).toEqual(next.startsWith('--output=') ? ['git-option-unmodeled'] : []);
+      const input = `git show --stat --oneline ${next} HEAD\n`;
+      expect(invoke(input)).toEqual({ status: 1, stdout: unsupported });
+      const f = fixture(),
+        body = input + "node <<'N'\nconst f=x=>x;\nN\n";
+      expect(project(f, body)).toBe(body);
+    }
+  );
+  test.each(['--oneline=unexpected', '--unknown-presentation'])(
+    'unmodeled %s is not admitted',
+    (flag) => {
+      expect(invoke(`git show --stat ${flag} HEAD\n`)).toEqual({ status: 1, stdout: unsupported });
+    }
+  );
+  test('literal path operands after -- do not acquire option roles', () => {
+    expect(
+      invoke('git show --stat --oneline HEAD -- --output=literal --ext-diff --textconv\n')
+    ).toEqual({ status: 0, stdout: allow });
+  });
+  test('actual06 prefix and representative body preserve exact surrounding bytes', () => {
+    const f = fixture();
+    for (const ending of ['', '\n', '\n\n']) {
+      const input =
+        prefix +
+        "node <<'NODE'\nconst fs=require('fs'),c=require('crypto');const rows=[{path:'file'}].filter(f=>f.path!=='.gitignore').map(f=>f.path);\nNODE" +
+        ending;
+      expect(project(f, input)).toBe(prefix + "node <<'NODE'\n\nNODE" + ending);
+    }
+  });
+});
+
 describe('pure structural inspection prefix', () => {
   test.each([
     'git diff -- .gitignore\ncat .caws/policy.yaml\n',

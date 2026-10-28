@@ -20,3 +20,9 @@ for (const key of [
   'CAWS_TRAP_KILL',
 ])
   delete process.env[key];
+
+// Git hooks export their own repository/configuration context. Fixture baselines
+// must start without it; individual tests set hostile Git inputs after setup.
+for (const key of Object.keys(process.env)) {
+  if (key.startsWith('GIT_')) delete process.env[key];
+}

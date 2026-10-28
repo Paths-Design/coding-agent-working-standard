@@ -54,8 +54,9 @@ jobs:
           # workflow already lost /duplicate-, /backup- and .backup once.
           # (^|/) rather than / so a repo-root shadow file is caught too.
           #
-          # ALLOW lists files whose NAME describes the anti-pattern they
-          # detect rather than being an instance of it. Entries are anchored
+          # ALLOW lists anti-pattern detectors and the registered copy/move
+          # operand-role helper. These are functional names, not shadow files.
+          # Entries are anchored
           # and exact: a prefix or substring entry would let a real shadow
           # file hide behind a legitimate neighbour.
           # The [-_](enhanced|new|final|copy) suffixes mirror
@@ -69,7 +70,7 @@ jobs:
           # blocking gate, so version suffixes stay advisory. This is pinned
           # by the "every tracked file passes the guard" test — re-adding the
           # rule fails it.
-          ALLOW='^(\.caws/hooks|packages/caws-cli/templates/hook-packs/shared)/duplicate-export-check\.sh$'
+          ALLOW='^((\.caws/hooks|packages/caws-cli/templates/hook-packs/shared)/duplicate-export-check\.sh|packages/caws-cli/templates/hook-packs/shared/lib/copy-roles\.sh)$'
           CHANGED=$(git diff --no-ext-diff --name-only "${BASE_REF}...${HEAD_REF}")
           BAD=$(printf '%s\n' "$CHANGED" | grep -Ev "$ALLOW" | \
             grep -E '(^|/)(copy|final|enhanced|v2)[.-]|(^|/)(new|duplicate|backup)-|[-_](enhanced|new|final|copy)\.|\.backup$| - copy\.' || true)

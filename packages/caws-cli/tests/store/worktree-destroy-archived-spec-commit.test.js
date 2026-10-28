@@ -18,6 +18,7 @@ const { createSpec, closeSpec, archiveSpec } = require('../../dist/store/specs-w
 const { createWorktree, destroyWorktree } = require('../../dist/store/worktrees-writer');
 const { autoCommit } = require('../../dist/store/git-autocommit');
 const { initProject } = require('../../dist/store/init-store');
+const lifecycleLock = require('../../dist/store/lifecycle-lock');
 
 const SESSION = { session_id: 'sess-destroy-archived', platform: 'jest' };
 const ACTOR = { kind: 'agent', id: 'destroy-archived-agent', session_id: SESSION.session_id };
@@ -124,6 +125,25 @@ afterAll(() => {
     }
   }
 });
+afterEach(() => jest.restoreAllMocks());
+
+function expectArchivedTeardown(repo, caws, specId, bytes) {
+  expect(fs.readFileSync(path.join(caws, 'specs/.archive', specId + '.yaml'))).toEqual(bytes);
+  expect(fs.existsSync(path.join(caws, 'specs', specId + '.yaml'))).toBe(false);
+  expect(fs.existsSync(path.join(caws, 'worktrees/wt'))).toBe(false);
+  expect(JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8')).wt).toBeUndefined();
+  const events = fs
+    .readFileSync(path.join(caws, 'events.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map(JSON.parse);
+  expect(events.filter((event) => event.event === 'worktree_destroyed')).toEqual([
+    expect.objectContaining({
+      data: expect.objectContaining({ worktree_name: 'wt', removed_git_worktree: true }),
+    }),
+  ]);
+  expect(stagedPaths(repo)).toBe('');
+}
 
 describe('A1: destroy of a worktree bound to an archived spec', () => {
   test('archived and gitignored body: committed no-op, never a git-add failure', () => {
@@ -134,15 +154,16 @@ describe('A1: destroy of a worktree bound to an archived spec', () => {
     expect(fs.existsSync(path.join(caws, 'specs', `${SPEC}.yaml`))).toBe(false);
     expect(git(repo, ['check-ignore', '--', `.caws/specs/.archive/${SPEC}.yaml`])).not.toBe('');
     const before = head(repo);
+    const archiveBytes = fs.readFileSync(archivedBody);
 
     const result = destroy(caws);
 
-    expect(result.ok).toBe(true);
-    expect(result.value.kind).toBe('success');
+    expect(result).toMatchObject({ ok: true, value: { kind: 'success' } });
     const audit = result.value.data.audit_commit;
     expect(audit).toEqual({ kind: 'committed', sha: '' });
     expect(head(repo)).toBe(before);
     expect(stagedPaths(repo)).toBe('');
+    expectArchivedTeardown(repo, caws, SPEC, archiveBytes);
   });
 
   test('archived and tracked body: unchanged by destroy, so committed no-op with a clean index', () => {
@@ -152,14 +173,125 @@ describe('A1: destroy of a worktree bound to an archived spec', () => {
       `.caws/specs/.archive/${SPEC}.yaml`
     );
     const before = head(repo);
+    const archiveBytes = fs.readFileSync(path.join(caws, 'specs/.archive', SPEC + '.yaml'));
 
     const result = destroy(caws);
 
-    expect(result.ok).toBe(true);
-    expect(result.value.kind).toBe('success');
+    expect(result).toMatchObject({ ok: true, value: { kind: 'success' } });
     expect(result.value.data.audit_commit).toEqual({ kind: 'committed', sha: '' });
     expect(head(repo)).toBe(before);
     expect(stagedPaths(repo)).toBe('');
+    expectArchivedTeardown(repo, caws, SPEC, archiveBytes);
+  });
+
+  test.each(['changed archive', 'missing archive', 'new live body', 'dangling live link'])(
+    'retirement revalidates archive selection under the lock: %s',
+    (change) => {
+      const SPEC = 'DAA-ARCHIVE-CAS-001';
+      const { repo, caws } = setup('daa-archive-cas-', SPEC, {
+        archive: true,
+        ignoreArchive: true,
+      });
+      const archived = path.join(caws, 'specs/.archive', SPEC + '.yaml');
+      const live = path.join(caws, 'specs', SPEC + '.yaml');
+      const bytes = fs.readFileSync(archived);
+      const registry = fs.readFileSync(path.join(caws, 'worktrees.json'));
+      const events = fs.readFileSync(path.join(caws, 'events.jsonl'));
+      const original = lifecycleLock.withLifecycleLock;
+      const lock = jest
+        .spyOn(lifecycleLock, 'withLifecycleLock')
+        .mockImplementation((dir, body, opts) => {
+          if (change === 'changed archive')
+            fs.appendFileSync(archived, '\n# concurrent archive change\n');
+          if (change === 'missing archive') fs.unlinkSync(archived);
+          if (change === 'new live body') fs.writeFileSync(live, bytes);
+          if (change === 'dangling live link')
+            fs.symlinkSync(path.join(repo, 'absent-target'), live);
+          return original(dir, body, opts);
+        });
+      const result = destroy(caws);
+      expect(lock).toHaveBeenCalledTimes(1);
+      expect(result.ok).toBe(false);
+      expect(result.errors.map((d) => d.message).join(' ')).toMatch(
+        /retirement authority|Authority changed/
+      );
+      expect(fs.existsSync(path.join(caws, 'worktrees/wt'))).toBe(true);
+      expect(fs.readFileSync(path.join(caws, 'worktrees.json'))).toEqual(registry);
+      expect(fs.readFileSync(path.join(caws, 'events.jsonl'))).toEqual(events);
+      if (change === 'changed archive')
+        expect(fs.readFileSync(archived)).toEqual(
+          Buffer.concat([bytes, Buffer.from('\n# concurrent archive change\n')])
+        );
+      if (change === 'missing archive') expect(fs.existsSync(archived)).toBe(false);
+      if (change === 'new live body') expect(fs.readFileSync(live)).toEqual(bytes);
+      if (change === 'dangling live link') expect(fs.lstatSync(live).isSymbolicLink()).toBe(true);
+      expect(stagedPaths(repo)).toBe('');
+    }
+  );
+
+  test.each(['wrong id', 'active', 'bound', 'malformed'])(
+    'invalid archived authority refuses before teardown: %s',
+    (change) => {
+      const SPEC = 'DAA-ARCHIVE-INVALID-001';
+      const { caws } = setup('daa-archive-invalid-', SPEC, { archive: true, ignoreArchive: true });
+      const archived = path.join(caws, 'specs/.archive', SPEC + '.yaml');
+      let source = fs.readFileSync(archived, 'utf8');
+      if (change === 'wrong id') source = source.replace(SPEC, 'DAA-OTHER-001');
+      if (change === 'active')
+        source = source.replace('lifecycle_state: archived', 'lifecycle_state: active');
+      if (change === 'bound') source += '\nworktree: wt\n';
+      if (change === 'malformed') source = 'broken: [\n';
+      fs.writeFileSync(archived, source);
+      const registry = fs.readFileSync(path.join(caws, 'worktrees.json'));
+      const events = fs.readFileSync(path.join(caws, 'events.jsonl'));
+      const result = destroy(caws);
+      expect(result.ok).toBe(false);
+      expect(fs.existsSync(path.join(caws, 'worktrees/wt'))).toBe(true);
+      expect(fs.readFileSync(archived, 'utf8')).toBe(source);
+      expect(fs.readFileSync(path.join(caws, 'worktrees.json'))).toEqual(registry);
+      expect(fs.readFileSync(path.join(caws, 'events.jsonl'))).toEqual(events);
+    }
+  );
+
+  test('a live spec takes precedence over its retained historical archive', () => {
+    const SPEC = 'DAA-LIVE-PRECEDENCE-001';
+    const { repo, caws } = setup('daa-live-precedence-', SPEC, {
+      archive: false,
+      ignoreArchive: true,
+    });
+    const live = path.join(caws, 'specs', SPEC + '.yaml');
+    const archived = path.join(caws, 'specs/.archive', SPEC + '.yaml');
+    const oldBytes = Buffer.from('id: DAA-HISTORICAL-001\nlifecycle_state: archived\n');
+    fs.mkdirSync(path.dirname(archived), { recursive: true });
+    fs.writeFileSync(archived, oldBytes);
+    const result = destroy(caws);
+    expect(result).toMatchObject({ ok: true, value: { kind: 'success' } });
+    expect(fs.readFileSync(archived)).toEqual(oldBytes);
+    expect(fs.readFileSync(live, 'utf8')).not.toMatch(/^worktree:/m);
+    expect(fs.existsSync(path.join(caws, 'worktrees/wt'))).toBe(false);
+    expect(stagedPaths(repo)).toBe('');
+  });
+
+  test('a failed live-path observation cannot select an archive', () => {
+    const SPEC = 'DAA-LIVE-UNOBSERVED-001';
+    const { caws } = setup('daa-live-unobserved-', SPEC, { archive: true, ignoreArchive: true });
+    const live = path.join(caws, 'specs', SPEC + '.yaml');
+    const events = fs.readFileSync(path.join(caws, 'events.jsonl'));
+    const registry = fs.readFileSync(path.join(caws, 'worktrees.json'));
+    const original = fs.lstatSync;
+    const observed = jest.spyOn(fs, 'lstatSync').mockImplementation((file, ...args) => {
+      if (file === live) throw Object.assign(new Error('denied observation'), { code: 'EACCES' });
+      return original(file, ...args);
+    });
+    const result = destroy(caws);
+    expect(observed).toHaveBeenCalledWith(live);
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((d) => d.message).join(' ')).toContain(
+      'Cannot select retirement authority'
+    );
+    expect(fs.existsSync(path.join(caws, 'worktrees/wt'))).toBe(true);
+    expect(fs.readFileSync(path.join(caws, 'events.jsonl'))).toEqual(events);
+    expect(fs.readFileSync(path.join(caws, 'worktrees.json'))).toEqual(registry);
   });
 
   test('live spec: destroy still lands an audit commit containing exactly the live spec path', () => {
