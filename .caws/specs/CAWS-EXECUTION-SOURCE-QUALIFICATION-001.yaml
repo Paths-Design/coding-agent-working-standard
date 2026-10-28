@@ -1,0 +1,65 @@
+id: CAWS-EXECUTION-SOURCE-QUALIFICATION-001
+title: 'Qualify the committed execution boundary source in isolation'
+mode: chore
+lifecycle_state: active
+worktree: execution-qualification
+created_at: '2026-10-27T17:30:32.605Z'
+updated_at: '2026-10-27T18:24:30.632Z'
+created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
+blast_radius:
+  modules:
+    - 'execution-qualification'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/reports/'
+  out: []
+  support:
+    - README.md
+    - docs/architecture/hook-pack-shared-core.md
+    - docs/guides/command-analysis.md
+    - docs/guides/hook-packs.md
+    - .github/workflows/mutation.yml
+    - packages/caws-cli/src/execution/
+    - packages/caws-cli/src/store/lifecycle-lock.ts
+    - packages/caws-cli/tests/execution/
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-cli/scripts/stryker-config.cjs
+    - packages/caws-cli/stryker.analysis.conf.js
+    - packages/caws-cli/stryker.execution.conf.js
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/package.json
+    - packages/caws-cli/tsconfig.vnext.json
+    - packages/caws-cli/src/init/hook-packs/surfaces.generated.ts
+    - packages/caws-cli/templates/hook-packs/shared/lib/surfaces-registry.sh
+    - packages/caws-cli/node_modules/
+    - packages/caws-cli/dist/
+    - packages/caws-cli/docs/
+    - packages/caws-cli/.license-transport.json
+    - packages/caws-cli/LICENSE
+    - packages/caws-cli/LICENSE.spdx
+    - .stryker-execution-*/**
+    - node_modules/
+invariants:
+  - 'Qualification never changes tracked source or lowers the six per-file 80 percent floors'
+acceptance:
+  - id: A1
+    given: 'committed Source candidate with matching runtime and test bytes'
+    when: 'the full six-file execution mutation campaign and baseline execute in an isolated owned checkout'
+    then: 'every target meets the unchanged 80 percent floor with nonzero selected tests and retained input-build-report identity'
+observability:
+  - 'Retain raw baseline, mutation reports, source identity and nonzero exit outcomes outside the lane before cleanup'
+rollback:
+  - 'Stop only the owned new campaign through an allowed operator path; preserve all evidence and source commits'
+non_functional: {}
+contracts:
+  - name: 'execution-source-proof'
+    type: contract-test
+    path: 'packages/caws-cli/tests/execution'
+evidence:
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "Frozen Source f650 remains tracked-identical. Full six-file attempt a20f9bb6-7a87-42f7-a1f6-da749590294b built0 and passed194 selected baseline tests/42s, instrumented6files1985mutants, then exited1 because shared canonical @stryker-mutator/core replacement-worker entry disappeared. No mutation report/per-file score verdict; criterion unavailable, not pass or a demonstrated semantic Source failure. Both owned campaigns exited naturally and released locks. Raw QA report directory and log retained with recursive/cmp equality outside lane at ~/.codex/artifacts/01a151c0-4722-76a0-9814-eb680a4be9b2/guard-source-qualification/f650798001903ced4a6eed4234409cf7abbbba31/qa-failed-a20f9bb6; terminal mutation-run.json SHA256c1435ae846fbbf15e7d3bd412536f1009bfba1774570086fc9d3525a07e89dac. Root awaits operator retirement of two owned dependency symlinks after installed43 guard refusal, then private physical dependencies and fresh unchanged6file80 run. No source edits/floor lowering/native qualification."
+    recorded_at: "2026-10-27T18:32:12.461Z"
+    commit_sha: f650798001903ced4a6eed4234409cf7abbbba31

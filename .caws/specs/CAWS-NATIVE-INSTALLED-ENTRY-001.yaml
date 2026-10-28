@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-installed-entry
 created_at: '2026-10-22T01:32:17.915Z'
-updated_at: '2026-10-26T08:10:05.227Z'
+updated_at: '2026-10-28T08:20:09.626Z'
 created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
 blast_radius:
   modules:
@@ -52,6 +52,10 @@ scope:
     - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
     - packages/caws-cli/tests/runtime/describe-entry.test.js
     - packages/caws-cli/tests/adapter/opencode-project-registration.test.js
+    - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-cli/src/runtime/journal.ts
+    - packages/caws-cli/tests/runtime/engine-core.test.js
+    - packages/caws-cli/tests/runtime/engine-routing.test.js
   out: []
   support:
     - packages/caws-cli/src/tooling/native-sqlite-build.ts
@@ -82,6 +86,39 @@ scope:
     - packages/caws-native/tests/installed_deadline.rs
     - packages/caws-native/tests/invoke.rs
     - packages/caws-native/tests/sqlite_identity.rs
+    - packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh
+    - packages/caws-cli/tests/hooks/bats/bash-write-guard-heredoc.bats
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/.gitignore
+    - packages/caws-cli/scripts/clean-staged-docs.mjs
+    - packages/caws-cli/tests/docs/package-license-transport.test.js
+    - CLAUDE.md
+    - CONTRIBUTING.md
+    - docs/agents/scope-discipline.md
+    - docs/architecture/repo-local-hook-policy.md
+    - docs/release-procedure.md
+    - docs/guides/command-analysis.md
+    - packages/caws-cli/src/shell/analysis/inspection-prefix-entry.ts
+    - packages/caws-cli/src/shell/analysis/inspection-prefix.ts
+    - packages/caws-cli/src/shell/analysis/inspection-profiles.ts
+    - packages/caws-cli/src/shell/analysis/policies.ts
+    - packages/caws-cli/src/shell/commands/hooks.ts
+    - packages/caws-cli/tests/fixtures/command-analysis/profile-cases.cjs
+    - packages/caws-cli/tests/shell/command-analysis.test.js
+    - packages/caws-cli/tests/shell/hooks-inspection-prefix.test.js
+    - .github/workflows/pr-checks.yml
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-analysis.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/copy-roles.sh
+    - packages/caws-cli/tests/ci/git-fixture-isolation.test.js
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-cli/tests/ci/release-path-integrity.test.js
+    - packages/caws-cli/tests/helpers/isolate-session-env.js
+    - packages/caws-cli/tests/hooks/codex-bash-write-execution-context.test.js
+    - packages/caws-cli/tests/shell/session-resolver-parity.test.js
+    - packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js
 invariants:
   - 'Existing Python-readable bin/caws-hook and legacy registrations remain intact during staged installation; no native failure triggers legacy fallback'
   - 'Selected native image identities derive from one verified generation manifest; per-generation metadata contains no self-referential runtime digest'
@@ -125,6 +162,14 @@ acceptance:
       idempotent, explicit continue or invalid policy refuses before writes, foreign
       handlers stay unchanged, and other events and harnesses gain no unsupported
       field
+  - id: A8
+    given: 'A verified retained legacy guard generation and a pinned native transport image'
+    when: 'Installation explicitly selects a base runtime digest before analysis'
+    then: >-
+      The new immutable generation preserves every base member byte and guard
+      policy, normalizes only supported permission modes, records the base manifest,
+      rejects unsafe or changed inputs before activation, and supports return to the
+      previous selected generation without changing harness registration.
 observability:
   - 'Raw commands and entry stdout/stderr/status, selected engine/handler execution witness, pointer/manifest/images before-after hashes and retained upgrade/rollback state'
 rollback:
@@ -153,3 +198,8 @@ evidence:
     evidence_ref: "Source bfb548e65ee6fc73f6a1bbc620dcb6791acfb468 and retained inert API fixtures implement valid legacy recovery with shared entry identity, pre-pointer refusal of invalid metadata/linked entries and dangling native markers, preserved predecessor and explicit known-byte mode repair. See /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/rollback-identity/final-native-fixtures and final-qualified-jest.json; direct Node18/22 source observations retain selectedA/previousB and unchanged maps. Two real private Python SessionStart consumers and rendered turn/audit artifacts succeed after reconciling existing main8a758936 dependency. Native fixture launchers are inert and never executed; actual compiled entry upgrade/selection race/rollback/repeat-install and no-postdispatch-fallback runtime matrix remains unqualified. Exact coherent package, genuine caller/owner and harness receipts required before A3 pass. --verify checks commit reachability, not execution."
     recorded_at: "2026-10-22T11:32:42.712Z"
     commit_sha: bfb548e65ee6fc73f6a1bbc620dcb6791acfb468
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "Explicit base selection implementation60d018; selector-red.log8fail oldcompiledbaseline, conventional selector-build.log0 and selector-all.log137pass, gates5pass6paths, packageESLint0. Actual published43 manifest113 copied and fully verified by production installer; private composite v2 image652c43... selectsfe88ca7... preservingbasebytes/provenance. Root artifact published43-compat-01/installed-HwGiqB/evidence.json and twelve rawcommandreceipts: plan/install0, actualcompiledentryGit/npm/Cargo/CAWSallow0, catastrophicpayloadrefusal2(noUSERexecution), rollback43/readback0, cachednativeentryreturn0, reinstallfe88/readback0. CompleteCLI60prefix packagef6d548 plus receiptselectedretainednative/stablepair; not claimnative source60/newexecutionwire. Fullhost/sharedcutover notestablished bythis boundedcriterion. Independentreview sourcequestionsdischarged against capturedbytes andactualgenerationprobe; reviewnotacceptanceauthority. Verify checkscommitexistence; rawlogs wereinspected separately."
+    recorded_at: "2026-10-27T19:01:29.352Z"
+    commit_sha: "60d0183431e56b4e02d8ff6f0a034b86efede41a"

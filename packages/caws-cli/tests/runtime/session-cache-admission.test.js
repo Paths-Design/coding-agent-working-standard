@@ -996,3 +996,29 @@ test.each([null, 'relative', '/missing-unused-host'])(
     expect(qualifyEnd()).toBe(true);
   }
 );
+
+test('current exact-path agent surface qualifies, but a changed selected body does not', () => {
+  const agent = selection.libraries['agent-surface.sh'];
+  expect(sha(fs.readFileSync(agent.path))).toBe(
+    '455dbfc2bfcf3a5ca891449e1a5f51ce7d9a9a1203ff680bc5fa90fe933e5a8f'
+  );
+  expect(qualify()).toBe(true);
+  fs.appendFileSync(agent.path, '\n# unreviewed behavior\n');
+  agent.sha256 = sha(fs.readFileSync(agent.path));
+  expect(qualify()).toBe(false);
+});
+
+test.each(['codex', 'claude-code'])(
+  'SessionEnd accepts exact-path agent surface only when selected and body identities match: %s',
+  (surface) => {
+    sessionEnd(surface);
+    const agent = selection.libraries['agent-surface.sh'];
+    expect(sha(fs.readFileSync(agent.path))).toBe(
+      '455dbfc2bfcf3a5ca891449e1a5f51ce7d9a9a1203ff680bc5fa90fe933e5a8f'
+    );
+    expect(qualifyEnd()).toBe(true);
+    fs.appendFileSync(agent.path, '\n# unreviewed behavior\n');
+    agent.sha256 = sha(fs.readFileSync(agent.path));
+    expect(qualifyEnd()).toBe(false);
+  }
+);

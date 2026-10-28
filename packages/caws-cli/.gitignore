@@ -9,5 +9,6 @@
 /LICENSE
 /.license-transport.json
 /.license-transport.lock
+/.license-transport.relinquished-*
 /dist/transcripts/unicode14/LICENSE.txt
 /dist/transcripts/html311/LICENSE.txt

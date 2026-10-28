@@ -37,6 +37,7 @@ import {
 import * as nodePath from 'node:path';
 
 import { analyzeCommand } from '../analysis/analyze';
+import { runInspectionPrefixStdin } from '../analysis/inspection-prefix-entry';
 import { projectMutationView } from '../analysis/mutation-view';
 import { loadParser } from '../analysis/load-parser';
 import type { Word, WordPart } from '../analysis/parser-types';
@@ -111,6 +112,11 @@ function repoContext(cwd: string): RepoContext | { error: string } {
 const isError = (v: RepoContext | { error: string }): v is { error: string } => 'error' in v;
 
 // ─── hooks analyze ─────────────────────────────────────────────────────────
+
+/** Pure bounded stdin inspection; no project/store/authority composition. */
+export async function runHooksInspectionPrefixCommand(): Promise<number> {
+  return runInspectionPrefixStdin();
+}
 
 export interface HooksAnalyzeOptions {
   readonly command?: string;

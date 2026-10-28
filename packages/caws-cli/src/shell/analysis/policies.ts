@@ -1,3 +1,13 @@
+import {
+  GIT_EXECUTION_OPTIONS,
+  GIT_READ_COMMANDS,
+  GIT_LITERAL_GLOBAL_FLAGS,
+  READER_SHORT,
+  NODE_STARTUP_CONTROLS,
+  inspectGitOptions,
+  inspectReaderArguments,
+  inspectSedArguments,
+} from './inspection-profiles';
 import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, relative, sep } from 'node:path';
 import type { AnalysisContext, Argument, Location, State, Value } from './types';
@@ -18,18 +28,7 @@ const SENSITIVE =
   /^(?:IFS|PATH|CDPATH|ENV|BASH_ENV|SHELLOPTS|BASHOPTS|GLOBIGNORE|POSIXLY_CORRECT|LANG|LC_.*|RIPGREP_CONFIG_PATH|GIT_CONFIG.*|PYTHONPATH|PYTHONHOME|PYTHONSTARTUP|PYTHONINSPECT|LD_.*|DYLD_.*)$/;
 /** Exact startup controls; similarly named application data is not a control. */
 export function nodeStartupBinding(name: string): boolean {
-  return [
-    'NODE_OPTIONS',
-    'NODE_PATH',
-    'NODE_V8_COVERAGE',
-    'NODE_COMPILE_CACHE',
-    'NODE_REDIRECT_WARNINGS',
-    'NODE_REPL_EXTERNAL_MODULE',
-    'NODE_REPL_HISTORY',
-    'NODE_ICU_DATA',
-    'OPENSSL_CONF',
-    'OPENSSL_ENGINES',
-  ].includes(name);
+  return NODE_STARTUP_CONTROLS.includes(name);
 }
 export function sensitiveBinding(name: string): boolean {
   return SENSITIVE.test(name) || nodeStartupBinding(name);
@@ -148,12 +147,7 @@ function gitPolicy(
         targets.push({ name: word.startsWith('--git-dir') ? 'GIT_DIR' : 'GIT_WORK_TREE', value });
       continue;
     }
-    if (
-      ['--no-pager', '--no-optional-locks', '--literal-pathspecs', '--no-replace-objects'].includes(
-        word
-      )
-    )
-      continue;
+    if (GIT_LITERAL_GLOBAL_FLAGS.includes(word)) continue;
     if (word === '--paginate') {
       ctx.reason(
         node,
@@ -172,62 +166,11 @@ function gitPolicy(
     break;
   }
   const commandArgs = words.slice(commandOffset);
-  const optionArgs: string[] = [];
-  const executionOptions: Record<string, RegExp> = {
-    fetch: /^--upload-pack(?:=|$)/,
-    pull: /^--upload-pack(?:=|$)/,
-    clone: /^--upload-pack(?:=|$)/,
-    'ls-remote': /^--upload-pack(?:=|$)/,
-    push: /^--(?:receive-pack|exec)(?:=|$)/,
-    diff: /^--(?:ext-diff|textconv)(?:=|$)/,
-    log: /^--(?:ext-diff|textconv)(?:=|$)/,
-    show: /^--(?:ext-diff|textconv)(?:=|$)/,
-    grep: /^--open-files-in-pager(?:=|$)/,
-    'cat-file': /^--(?:filters|textconv)(?:=|$)/,
-  };
-  const dataOptions: Record<string, readonly string[]> = {
-    log: ['-n', '--max-count', '--grep', '--author', '--committer', '--since', '--until'],
-    show: [],
-    diff: ['-U', '--unified'],
-    commit: ['-m', '--message', '-F', '--file'],
-    grep: ['-e', '-f'],
-  };
-  const diffFlags =
-    /^(?:-[psw]|-U[0-9]+|--(?:stat|numstat|shortstat|name-only|name-status|check|raw|patch|no-patch|quiet|exit-code|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+))$/;
-  const flags: Record<string, RegExp> = {
-    status: /^(?:-[sbz]+|--(?:short|branch|porcelain(?:=v[12])?|ignored|untracked-files(?:=.*)?))$/,
-    diff: diffFlags,
-    log: /^(?:-[psw]|-n[0-9]+|-U[0-9]+|--(?:oneline|graph|all|first-parent|no-merges|merges|no-walk|decorate(?:=.*)?|stat|numstat|shortstat|name-only|name-status|raw|patch|no-patch|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+|(?:max-count|grep|author|committer|since|until)=.*|(?:format|pretty)=(?:oneline|%H|%h|%s|%b|%B)))$/,
-    show: /^(?:-[psw]|-U[0-9]+|--(?:stat|numstat|shortstat|name-only|name-status|raw|patch|no-patch|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+|(?:format|pretty)=(?:oneline|%H|%h|%s|%b|%B)))$/,
-    'rev-parse':
-      /^--(?:verify|quiet|short(?:=[0-9]+)?|abbrev-ref|symbolic-full-name|show-toplevel|show-prefix|show-cdup|git-dir|absolute-git-dir|git-common-dir|is-inside-work-tree|is-bare-repository)$/,
-    'ls-files': /^(?:-[zsomcd]+|--(?:stage|others|exclude-standard|cached|modified|deleted))$/,
-    'ls-tree': /^(?:-[rzl]+|--(?:name-only|long|full-tree))$/,
-    grep: /^(?:-[nliIvowcHEFra]+|--(?:line-number|files-with-matches|fixed-strings|extended-regexp|ignore-case|count|color(?:=.*)?))$/,
-    add: /^(?:-[Aunv]+|--(?:all|update|dry-run|verbose))$/,
-    commit:
-      /^(?:-[aq]+|--(?:all|quiet|dry-run|allow-empty|signoff|no-gpg-sign|message=.*|file=.*))$/,
-  };
-  for (let index = 0; index < commandArgs.length; index++) {
-    const value = commandArgs[index]!;
-    if (value === '--') break;
-    if (dataOptions[subcommand]?.includes(value)) {
-      if (++index >= commandArgs.length)
-        ctx.reason(node, 'git-option-unmodeled', 'A data-only Git option is missing its operand.');
-      continue;
-    }
-    if (!value.startsWith('-') || value === '-') continue;
-    optionArgs.push(value);
-    if (executionOptions[subcommand]?.test(value)) continue;
-    if (!flags[subcommand]?.test(value)) {
-      ctx.reason(
-        node,
-        'git-option-unmodeled',
-        'This Git option has no admitted argument/effect role.'
-      );
-      break;
-    }
-  }
+  const executionOptions = GIT_EXECUTION_OPTIONS;
+  const optionArgs = inspectGitOptions(subcommand, commandArgs, (code, message, deny) =>
+    ctx.reason(node, code, message, deny)
+  );
+
   if (
     optionArgs.some((value) => executionOptions[subcommand]?.test(value)) ||
     (['fetch', 'pull', 'push', 'clone', 'ls-remote'].includes(subcommand) &&
@@ -371,93 +314,17 @@ function gitPolicy(
       ctx.trace(node, 'git-discovery', `Verified metadata ${discovered.directory}.`);
     }
   }
-  if (
-    reader &&
-    !['status', 'diff', 'log', 'show', 'rev-parse', 'ls-files', 'ls-tree'].includes(subcommand)
-  ) {
+  if (reader && !GIT_READ_COMMANDS.includes(subcommand)) {
     ctx.reason(node, 'substitution-effects', 'This Git command is not an admitted read producer.');
   }
 }
 
 function sedPolicy(args: Argument[], ctx: AnalysisContext, node: Location): void {
-  let options = true;
-  let hasScript = false;
-  function script(value: string | null): void {
-    hasScript = true;
-    if (value === null) {
-      ctx.reason(node, 'sed-script-unknown', 'Opaque data cannot prove a sed script safe.');
-      return;
-    }
-    // Admit a deliberately small grammar, not a blacklist of dangerous bytes.
-    const address = '(?:(?:[0-9]+|\\$)(?:,(?:[0-9]+|\\$))?)?';
-    const printOnly = new RegExp(`^\\s*${address}[pd=q]\\s*(?:;\\s*${address}[pd=q]\\s*)*$`);
-    if (printOnly.test(value)) {
-      ctx.trace(node, 'sed-script', 'Known print/delete/quit script; no execution or writes.');
-      return;
-    }
-    const execute = new RegExp(`^\\s*(?:${address}[pd=q]\\s*;\\s*)*${address}e(?:\\s|$)`);
-    // Recognize a complete substitution with an execution flag. Delimited
-    // fields consume escapes as pairs; letters in patterns/replacements are data.
-    const substitution = value.match(new RegExp(`^\\s*${address}s([^\\w\\s\\\\])`));
-    let executionFlag = false;
-    if (substitution) {
-      const delimiter = substitution[1]!;
-      let offset = substitution[0].length;
-      let fields = 0;
-      while (offset < value.length && fields < 2) {
-        const character = value[offset++]!;
-        if (character === '\\') offset++;
-        else if (character === delimiter) fields++;
-      }
-      executionFlag = fields === 2 && /^[0-9gIp]*e[0-9gIp]*\s*$/.test(value.slice(offset));
-    }
-    if (execute.test(value) || executionFlag) {
-      ctx.reason(
-        node,
-        'sed-execution',
-        'Sed script contains an execution-bearing command or substitution flag.',
-        true
-      );
-    } else
-      ctx.reason(
-        node,
-        'sed-script-unsupported',
-        'Sed script is outside the admitted non-executing grammar.'
-      );
-  }
-  for (let i = 0; i < args.length; i++) {
-    const value = args[i]!.value;
-    if (options && value === '--') {
-      options = false;
-      continue;
-    }
-    if (options && value !== null && value.startsWith('-') && value !== '-') {
-      if (['-n', '-E', '-r', '--quiet', '--silent', '--regexp-extended', '--posix'].includes(value))
-        continue;
-      if (value === '-e' || value === '--expression') {
-        script(args[++i]?.value ?? null);
-        continue;
-      }
-      if (value.startsWith('-e') || value.startsWith('--expression=')) {
-        script(value.startsWith('-e') ? value.slice(2) : value.slice(13));
-        continue;
-      }
-      ctx.reason(
-        node,
-        'sed-option',
-        'Sed script files, writes, and unmodeled options require a stronger proof.'
-      );
-      continue;
-    }
-    if (!hasScript) script(value);
-    else if (value === null && options)
-      ctx.reason(
-        node,
-        'sed-option-unknown',
-        'An opaque filename before -- can introduce sed options.'
-      );
-  }
-  if (!hasScript) ctx.reason(node, 'sed-script-missing', 'Sed has no proven script.');
+  inspectSedArguments(
+    args.map((arg) => arg.value),
+    (code, message, deny) => ctx.reason(node, code, message, deny),
+    (kind, detail) => ctx.trace(node, kind, detail)
+  );
 }
 
 /** Utility roles, rather than a command-wide rule that all variables are risky. */
@@ -631,98 +498,13 @@ export function inspectInvocation(
     if (!args.length) bindings.set('REPLY', null);
     return { ...state, bindings };
   }
-  if (
-    ['rg', 'grep', 'cat', 'head', 'tail', 'wc', 'ls', 'cut', 'tr', 'sort', 'uniq'].includes(name)
-  ) {
-    const known = args.map((arg) => arg.value);
-    const short: Record<string, RegExp> = {
-      rg: /^-[nliIvowcHFsSuaq0]+$/,
-      grep: /^-[nliIvowcHEFrsSa]+$/,
-      cat: /^-[benstuvAET]+$/,
-      head: /^-[ncvq](?:[0-9]+)?$/,
-      tail: /^-[ncvq](?:[0-9]+)?$/,
-      wc: /^-[clwmL]+$/,
-      ls: /^-[alhAdtrRS1]+$/,
-      cut: /^-[bcdf](?:.+)?$/,
-      tr: /^-[cdsC]+$/,
-      sort: /^-[bdfginrMu]+$/,
-      uniq: /^-[cdui]+$/,
-    };
-    const long: Record<string, RegExp> = {
-      rg: /^--(?:files|hidden|no-ignore|no-config|line-number|files-with-matches|fixed-strings|ignore-case|count|heading|no-heading|color(?:=.*)?|glob(?:=.*)?|type(?:=.*)?|encoding(?:=.*)?|replace(?:=.*)?)$/,
-      grep: /^--(?:line-number|files-with-matches|fixed-strings|extended-regexp|ignore-case|count|color(?:=.*)?)$/,
-      cat: /^--(?:number|number-nonblank|show-all)$/,
-      head: /^--(?:lines|bytes)(?:=.*)?$/,
-      tail: /^--(?:lines|bytes)(?:=.*)?$/,
-      wc: /^--(?:lines|bytes|words|chars)$/,
-      ls: /^--(?:all|almost-all|directory|human-readable|color(?:=.*)?)$/,
-      cut: /^--(?:bytes|characters|fields|delimiter)(?:=.*)?$/,
-      tr: /^--(?:delete|squeeze-repeats|complement)$/,
-      sort: /^--(?:numeric-sort|reverse|unique)$/,
-      uniq: /^--(?:count|repeated|unique|ignore-case)$/,
-    };
-    let options = true;
-    const dataOptions: Record<string, string[]> = {
-      rg: ['-e', '--regexp', '--glob', '--type', '-r', '--replace', '-E', '--encoding'],
-      grep: ['-e', '--regexp', '-f', '--file'],
-      head: ['-n', '-c', '--lines', '--bytes'],
-      tail: ['-n', '-c', '--lines', '--bytes'],
-      cut: ['-b', '-c', '-d', '-f', '--bytes', '--characters', '--delimiter', '--fields'],
-      sort: ['-k', '--key', '-S', '--buffer-size'],
-    };
-    let positional = 0;
-    for (let index = 0; index < known.length; index++) {
-      const value = known[index]!;
-      if (options && value === '--') {
-        options = false;
-        continue;
-      }
-      if (!options || value === '-' || (value !== null && !value.startsWith('-'))) {
-        if (name === 'uniq' && ++positional > 1) {
-          ctx.reason(
-            node,
-            'reader-output',
-            'uniq has a positional output file outside the read-only profile.'
-          );
-          return { ...state, filesystemChanged: true };
-        }
-        continue;
-      }
-      if (value === null) {
-        ctx.reason(
-          node,
-          'reader-option-unknown',
-          'Opaque reader operands require an explicit -- boundary.'
-        );
-        continue;
-      }
-      if (dataOptions[name]?.includes(value)) {
-        if (++index >= known.length)
-          ctx.reason(node, 'reader-option', 'Reader data option has no operand.');
-        continue;
-      }
-      if (
-        (name === 'rg' && /^--(?:pre|hostname-bin)(?:=|$)/.test(value)) ||
-        (name === 'sort' && /^--compress-program(?:=|$)/.test(value))
-      ) {
-        ctx.reason(node, 'reader-execution', 'This reader option invokes another program.', true);
-        return state;
-      }
-      // Both head and tail accept the historical numeric count spelling.
-      if ((name === 'head' || name === 'tail') && /^-[0-9]+$/.test(value)) continue;
-      if (
-        options &&
-        value !== null &&
-        value.startsWith('-') &&
-        value !== '-' &&
-        !short[name]!.test(value) &&
-        !long[name]!.test(value)
-      ) {
-        ctx.reason(node, 'reader-option', `Unmodeled ${name} option.`);
-        return state;
-      }
-    }
-    return state;
+  if (Object.prototype.hasOwnProperty.call(READER_SHORT, name)) {
+    const writes = inspectReaderArguments(
+      name,
+      args.map((arg) => arg.value),
+      (code, message, deny) => ctx.reason(node, code, message, deny)
+    );
+    return writes ? { ...state, filesystemChanged: true } : state;
   }
   ctx.reason(node, 'utility-unsupported', `No admitted argument-role profile for ${name}.`);
   // A consumer may recognize this application's write operands separately.

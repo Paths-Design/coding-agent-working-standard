@@ -634,7 +634,24 @@ import { isAdapterCoveredSurface } from './types';
 // v117: complete typed copy roles replace the source-byte destination heuristic.
 // Removal entries and registered physical roots retain distinct ownership checks;
 // observed registry or contained-scope failures cannot become empty admission.
-export const SHARED_PACK_VERSION = 117;
+// v122: scope-guard discovers canonical authority from sparse linked leaves
+// and hard-blocks authoritative exclusions and unavailable bound governance.
+// Native patches check every source/destination before emitting one advisory.
+// v123: project complete literal direct Node heredoc bodies out of outer-shell
+// target views while retaining raw interpreter-write analysis and conservative
+// handling of unsupported forms. Require the header as the first nonblank line
+// so preceding command-lookup overrides cannot hide shell operations in a body.
+// File-sink policy and helper API are preserved.
+// v124: admit finite complete literal inspection prefixes before a quoted Node
+// heredoc, preserving bytes and rejecting visible lookup changes or shell syntax.
+// Raw interpreter checks and the helper API remain unchanged; ambient command
+// lookup is a host assumption, never authenticated by this projection.
+// v125: share structural inspection argument profiles with a bounded pure
+// classifier. Selected managed heredoc libraries bind to their generation's
+// Node/entry; unavailable classification preserves raw outer-shell input.
+// v126: include the managed-hook growth stance in the Bash analysis and copy
+// operand libraries; their executable behavior is unchanged.
+export const SHARED_PACK_VERSION = 126;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

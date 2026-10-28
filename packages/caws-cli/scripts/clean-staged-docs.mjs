@@ -7,7 +7,8 @@
 // artifact. This script deletes that staged tree.
 // It also stages and cleans the three source-license transports, recording
 // ownership outside shipped paths so cleanup preserves preexisting files and
-// refuses changed or uncertain records.
+// refuses changed or uncertain records. Staging never deletes, so it relinquishes
+// such a record (moving it aside intact) instead of failing the build.
 //
 // Invoked at the START of prepack (beginning-clean is the real safety
 // invariant — postpack can be skipped by an interrupted publish, so the next
@@ -35,8 +36,14 @@ const LICENSES = Object.freeze([
 ]);
 const MARKER = '.license-transport.json';
 const LOCK = '.license-transport.lock';
+// No extension: mutation input identity counts package-root *.json as authored.
+const RELINQUISHED = '.license-transport.relinquished-';
 const ID_FIELDS = ['dev', 'ino', 'birthtimeNs', 'ctimeNs', 'mtimeNs', 'size', 'mode', 'nlink'];
 const STABLE_FIELDS = ['dev', 'ino', 'birthtimeNs', 'mode', 'nlink'];
+const REMEDY =
+  'cleanup deletes only files it can prove it created; run `node scripts/stage-consumer-docs.mjs` ' +
+  '(every build does) to relinquish this record: that deletes no license, leaves existing ones ' +
+  `unowned, and moves the record aside as ${RELINQUISHED}<uuid>`;
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const identity = (stat, fields = ID_FIELDS) =>
   Object.fromEntries(fields.map((key) => [key, String(stat[key])]));
@@ -44,6 +51,31 @@ const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const fail = (message) => {
   throw new Error(`License transport: ${message}`);
 };
+
+/** A stored record that cannot establish ownership: staging relinquishes it and
+ * cleanup refuses it. In-run races, symlinks and nonregular files use fail(). */
+class CustodyError extends Error {}
+const custody = (message) => {
+  throw new CustodyError(`License transport: ${message}`);
+};
+
+// Device numbers are not durable: APFS and other filesystems assign st_dev at
+// mount, so a reboot renumbers files that did not change. A record from an
+// earlier run is matched on every recorded field except dev, and the device is
+// checked relationally instead: the object must be on the package root's
+// filesystem now, which still scopes its inode number to one filesystem.
+// Observations within one run keep comparing dev exactly. st_dev cannot tell a
+// reboot from a metadata-preserving clone or restore of the whole package, so
+// custody follows such a clone: what passes is an exact replica, at the same
+// path, of a transport this tool created.
+const deviceOf = (root) => String(fs.lstatSync(root, { bigint: true }).dev);
+function durableMismatch(recorded, observed, device) {
+  const differing = Object.keys(recorded).filter(
+    (key) => key !== 'dev' && recorded[key] !== observed[key]
+  );
+  if (observed.dev !== device) differing.push('device');
+  return differing;
+}
 
 function raise(errors, label) {
   const present = errors.filter(Boolean);
@@ -203,12 +235,12 @@ function validIdentity(value, fields) {
 }
 
 function markerRecord(bytes) {
-  if (bytes.length > 16384) fail('ownership marker exceeds its finite profile');
+  if (bytes.length > 16384) custody('ownership marker exceeds its finite profile');
   let data;
   try {
     data = JSON.parse(bytes.toString('utf8'));
   } catch {
-    fail('ownership marker is not complete JSON');
+    custody('ownership marker is not complete JSON');
   }
   if (
     !data ||
@@ -218,7 +250,7 @@ function markerRecord(bytes) {
     data.entries.length > LICENSES.length ||
     !validIdentity(data.markerIdentity, STABLE_FIELDS)
   )
-    fail('ownership marker identity or schema is invalid');
+    custody('ownership marker schema is invalid');
   const names = new Set();
   for (const entry of data.entries) {
     if (
@@ -230,29 +262,39 @@ function markerRecord(bytes) {
       (entry.status === 'owned' && !validIdentity(entry.identity, ID_FIELDS)) ||
       (entry.status === 'planned' && entry.identity !== undefined)
     )
-      fail('ownership marker entry is invalid');
+      custody('ownership marker entry is invalid');
     names.add(entry.name);
   }
   if (data.phase !== 'ready' || data.entries.some((entry) => entry.status !== 'owned'))
-    fail('ownership marker is interrupted; ownership is uncertain');
+    custody('ownership marker is interrupted; ownership is uncertain');
   return data;
 }
 
-function markerData(bytes, stat) {
+function markerData(bytes, stat, device) {
   const data = markerRecord(bytes);
-  if (!same(data.markerIdentity, identity(stat, STABLE_FIELDS)))
-    fail('ownership marker identity or schema is invalid');
+  const differing = durableMismatch(data.markerIdentity, identity(stat, STABLE_FIELDS), device);
+  if (differing.length)
+    custody(
+      `ownership marker identity mismatch (${differing.join(', ')}); it is not the record it describes`
+    );
   return data;
 }
 
-function openMarker(root) {
+function openMarker(root, device) {
   const file = path.join(root, MARKER);
   const observed = read(file, true);
   if (!observed) return null;
   const fd = fs.openSync(file, fs.constants.O_RDWR | fs.constants.O_NOFOLLOW);
   try {
     const stat = fs.fstatSync(fd, { bigint: true });
-    const handle = { file, fd, ...observed, data: markerData(observed.bytes, stat) };
+    const handle = { file, fd, ...observed };
+    // A descriptor that is not the observed file is an in-run race, refused here
+    // before the record can be classified (and staging would relinquish it).
+    if (!same(identity(stat), observed.identity)) {
+      current(handle, 'marker_open');
+      fail(`ownership marker changed while opening: ${file}`);
+    }
+    handle.data = markerData(observed.bytes, stat, device);
     current(handle, 'marker_open');
     return handle;
   } catch (error) {
@@ -304,14 +346,47 @@ function createMarker(root) {
   }
 }
 
-function owned(root, entry) {
+function owned(root, entry, device) {
   const observed = read(path.join(root, entry.name), true);
   // A build can remove dist. Absence permits dropping a record, never deletion
   // or adoption of a newly present file, even one with identical bytes.
   if (!observed) return null;
-  if (!same(observed.identity, entry.identity) || hash(observed.bytes) !== entry.sha256)
-    fail(`owned license replaced or changed: ${entry.name}`);
+  const differing = durableMismatch(entry.identity, observed.identity, device);
+  if (hash(observed.bytes) !== entry.sha256) differing.push('sha256');
+  if (differing.length)
+    custody(`owned license replaced or changed (${differing.join(', ')}): ${entry.name}`);
   return observed;
+}
+
+/** Move an unverifiable record aside intact. The rename keeps its inode and bytes,
+ * so nothing is deleted; the record only stops granting deletion authority. */
+function relinquishMarker(root, cause) {
+  const file = path.join(root, MARKER);
+  const observed = read(file);
+  const retainedAt = `${RELINQUISHED}${randomUUID()}`;
+  const retained = path.join(root, retainedAt);
+  if (regular(retained, true)) fail(`relinquished record name already exists: ${retained}`);
+  fs.renameSync(file, retained);
+  const moved = read(retained);
+  if (
+    moved.identity.dev !== observed.identity.dev ||
+    moved.identity.ino !== observed.identity.ino ||
+    !moved.bytes.equals(observed.bytes)
+  )
+    fail(
+      `ownership marker changed while being relinquished; every record is kept, inspect ${retained}`
+    );
+  const record = {
+    reason: cause.message.replace(/^License transport: /, ''),
+    sha256: hash(observed.bytes),
+    retainedAt,
+  };
+  process.stderr.write(
+    `license transport: relinquished an unverifiable ownership record (${record.reason}); ` +
+      `no license file was deleted and existing ones are now unowned; the original record is ` +
+      `kept at ${retainedAt} (sha256 ${record.sha256})\n`
+  );
+  return record;
 }
 
 export function stageLicenseTransport(packageRoot = PKG_ROOT) {
@@ -320,24 +395,61 @@ export function stageLicenseTransport(packageRoot = PKG_ROOT) {
       ...item,
       observed: read(path.resolve(root, item.source)),
     }));
-    let marker = openMarker(root);
+    const device = deviceOf(root);
+    // Survey destinations first so a conflict refuses before any record moves.
+    const missing = [];
+    const preserved = [];
+    const surveyed = [];
+    for (const source of sources) {
+      const destination = read(path.join(root, source.name), true);
+      if (!destination) missing.push(source);
+      else if (!destination.bytes.equals(source.observed.bytes))
+        fail(`conflicting destination: ${source.name}`);
+      else {
+        preserved.push(source.name);
+        surveyed.push({ name: source.name, destination });
+      }
+    }
+    let marker = null;
+    let relinquished;
+    try {
+      marker = openMarker(root, device);
+      for (const entry of marker?.data.entries ?? []) owned(root, entry, device);
+    } catch (error) {
+      let closing;
+      if (marker) {
+        try {
+          fs.closeSync(marker.fd);
+        } catch (closeError) {
+          closing = closeError;
+        }
+        marker = null;
+      }
+      if (!(error instanceof CustodyError) || closing)
+        raise([error, closing], 'License staging and ownership descriptor close failed');
+      relinquished = relinquishMarker(root, error);
+    }
+    // Nothing owned rereads an unowned preserved file, so re-verify every surveyed
+    // destination before reporting it preserved.
+    const result = (body) => {
+      for (const { name, destination } of surveyed) {
+        const now = read(path.join(root, name), true);
+        if (
+          !now ||
+          !same(now.identity, destination.identity) ||
+          !now.bytes.equals(destination.bytes)
+        )
+          fail(`preserved destination changed during staging: ${name}`);
+      }
+      return relinquished ? { ...body, relinquished } : body;
+    };
     let failure;
     try {
-      for (const entry of marker?.data.entries ?? []) owned(root, entry);
-      const missing = [];
-      const preserved = [];
-      for (const source of sources) {
-        const destination = read(path.join(root, source.name), true);
-        if (!destination) missing.push(source);
-        else if (!destination.bytes.equals(source.observed.bytes))
-          fail(`conflicting destination: ${source.name}`);
-        else preserved.push(source.name);
-      }
-      if (!missing.length) return { created: [], preserved };
+      if (!missing.length) return result({ created: [], preserved });
       if (!marker) marker = createMarker(root);
       else {
         marker.data.phase = 'staging';
-        marker.data.entries = marker.data.entries.filter((entry) => owned(root, entry));
+        marker.data.entries = marker.data.entries.filter((entry) => owned(root, entry, device));
         writeMarker(marker);
       }
       const created = [];
@@ -371,7 +483,7 @@ export function stageLicenseTransport(packageRoot = PKG_ROOT) {
       }
       marker.data.phase = 'ready';
       writeMarker(marker);
-      return { created, preserved };
+      return result({ created, preserved });
     } catch (error) {
       failure = error;
       throw error;
@@ -389,38 +501,49 @@ export function stageLicenseTransport(packageRoot = PKG_ROOT) {
 
 export function cleanLicenseTransport(packageRoot = PKG_ROOT) {
   return withLock(packageRoot, (root) => {
-    // Refuse symlinks and nonregular leaves even when no marker owns them.
-    for (const item of LICENSES) regular(path.join(root, item.name), true);
-    const marker = openMarker(root);
-    if (!marker) return { removed: [] };
-    let failure;
     try {
-      for (const entry of marker.data.entries) owned(root, entry);
-      marker.data.phase = 'cleaning';
-      writeMarker(marker);
-      const removed = [];
-      for (const entry of [...marker.data.entries]) {
-        if (owned(root, entry)) {
-          fs.unlinkSync(path.join(root, entry.name));
-          removed.push(entry.name);
-        }
-        marker.data.entries = marker.data.entries.filter((item) => item.name !== entry.name);
-        writeMarker(marker);
-      }
-      current(marker, 'before_retire');
-      fs.unlinkSync(marker.file);
-      return { removed };
+      return cleanOwned(root);
     } catch (error) {
-      failure = error;
+      if (error instanceof CustodyError)
+        throw new CustodyError(`${error.message}; ${REMEDY}`, { cause: error });
       throw error;
-    } finally {
-      try {
-        fs.closeSync(marker.fd);
-      } catch (closing) {
-        raise([failure, closing], 'License cleanup and ownership descriptor close failed');
-      }
     }
   });
+}
+
+function cleanOwned(root) {
+  // Refuse symlinks and nonregular leaves even when no marker owns them.
+  for (const item of LICENSES) regular(path.join(root, item.name), true);
+  const device = deviceOf(root);
+  const marker = openMarker(root, device);
+  if (!marker) return { removed: [] };
+  let failure;
+  try {
+    for (const entry of marker.data.entries) owned(root, entry, device);
+    marker.data.phase = 'cleaning';
+    writeMarker(marker);
+    const removed = [];
+    for (const entry of [...marker.data.entries]) {
+      if (owned(root, entry, device)) {
+        fs.unlinkSync(path.join(root, entry.name));
+        removed.push(entry.name);
+      }
+      marker.data.entries = marker.data.entries.filter((item) => item.name !== entry.name);
+      writeMarker(marker);
+    }
+    current(marker, 'before_retire');
+    fs.unlinkSync(marker.file);
+    return { removed };
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    try {
+      fs.closeSync(marker.fd);
+    } catch (closing) {
+      raise([failure, closing], 'License cleanup and ownership descriptor close failed');
+    }
+  }
 }
 
 function syncDirectory(directory) {
@@ -441,9 +564,10 @@ function syncDirectory(directory) {
 }
 
 /** Relinquishment only: retained bytes never authorize deletion of license leaves.
- * A changed device identifier is tolerated only here, while retiring the exact
- * reviewed marker. Inode/birthtime/mode/link identity and current fd/path checks
- * still exclude same-byte foreign marker replacement. Ordinary cleanup is strict.
+ * Retires the exact reviewed, verified ready marker into evidence outside the
+ * package. Staging relinquishes unverifiable records by itself; this explicit path
+ * is for deliberately abandoning ownership. Inode/birthtime/mode/link identity and
+ * current fd/path checks still exclude same-byte foreign marker replacement.
  */
 export function recoverLicenseTransport(
   expectedSha256,
@@ -483,8 +607,8 @@ export function recoverLicenseTransport(
         const marker = { file, fd, ...observed };
         current(marker, 'marker_open');
         const data = markerRecord(observed.bytes);
-        // Do not infer a persistent filesystem identity from a device-number change.
-        // Recovery abandons all old deletion authority instead of rebinding it.
+        // Recovery abandons all old deletion authority instead of rebinding it, so
+        // it compares the durable fields only and needs no device relation.
         const preservedFields = STABLE_FIELDS.filter((key) => key !== 'dev');
         if (
           !same(

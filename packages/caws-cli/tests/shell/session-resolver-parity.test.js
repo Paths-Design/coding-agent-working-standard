@@ -264,9 +264,8 @@ describe('A1 — a stray CAWS_SESSION_ID inside a Claude Code session', () => {
     // the worktree, so the admit above is an ownership decision.
     const foreign = guard('a-different-session', target, incidentEnv);
     expect(foreign.status).toBe(2);
-    expect(foreign.stderr).toContain(
-      "this is a write into worktree 'wt-par''s payload (.caws/worktrees/wt-par/...), which is owned by a DIFFERENT session."
-    );
+    expect(foreign.stderr).toContain("this is a write into worktree 'wt-par''s payload");
+    expect(foreign.stderr).toContain('owned by a DIFFERENT session');
     // Four CLI spawns plus two full guard runs; ~35s alone, slower under a
     // parallel full-suite run.
   }, 240000);

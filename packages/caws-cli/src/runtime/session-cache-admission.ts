@@ -27,7 +27,11 @@ const LIBRARIES = {
 } as const;
 // Both stock lookups select no override for the enforced empty library map.
 // The newer source skips that JSON lookup; executable qualification is separate.
+const exactPathAgentSurface = '455dbfc2bfcf3a5ca891449e1a5f51ce7d9a9a1203ff680bc5fa90fe933e5a8f';
 const agentSurfaceProfiles = [
+  // The reviewed exact-path root fallback is dormant when this prefix runs:
+  // its dispatcher receives the selected nonempty CAWS_PROJECT_DIR.
+  exactPathAgentSurface,
   'f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a',
   PREFIX['lib/agent-surface.sh']!,
 ];
@@ -103,6 +107,14 @@ const SESSION_END_SOURCES: Readonly<Record<string, string>> = {
   'lib/guard-config.sh': 'c3d9d5b0f6ffb4eb6add5a3f27b2d3d2bf7f46d86b39614c351e8b5bba06c73c',
   'lib/guard-config.cjs': 'b7947a24da1670613bb43a548be9951d7fe3be6d4be2f9418607a35dac945a85',
 };
+
+// SessionEnd accepts only its original profile and the reviewed exact-path
+// root fallback; do not inherit other session-cache profile alternatives.
+function sessionEndIdentities(relative: string): readonly string[] {
+  const expected = SESSION_END_SOURCES[relative];
+  if (!expected) return [];
+  return relative === 'lib/agent-surface.sh' ? [expected, exactPathAgentSurface] : [expected];
+}
 
 /** Finite complete-prefix profile for the sole reviewed SessionEnd logger.
  * This admission is before any native effects. A later source change is fatal,
@@ -228,7 +240,7 @@ export function qualifiesForNativeSessionEndPrefix(context: {
         !library ||
         library.kind !== kind ||
         library.path !== path.join(selection.runtimeDirectory, relative) ||
-        library.sha256 !== SESSION_END_SOURCES[relative] ||
+        !sessionEndIdentities(relative).includes(library.sha256) ||
         !absent(home, path.join(home, 'surfaces', request.surface, 'lib', name)) ||
         (kind === 'shared' &&
           !absent(
@@ -240,8 +252,8 @@ export function qualifiesForNativeSessionEndPrefix(context: {
       required.add(relative);
     }
     for (const relative of required) {
-      const expected = SESSION_END_SOURCES[relative];
-      if (!expected || !pinned(selection.runtimeDirectory, relative, [expected])) return false;
+      const expected = sessionEndIdentities(relative);
+      if (!expected.length || !pinned(selection.runtimeDirectory, relative, expected)) return false;
     }
     return true;
   } catch {

@@ -126,6 +126,7 @@ HANDLERS=(
   # session that merges its own worktree is never bricked). Not wired by
   # default: it is a broad session-level cwd enforcement; uncomment to adopt.
   protected-paths.sh
+  shortcut-language-check.sh
   scan-secrets.sh
   # quiet-merge.sh MUST be the last interceptor: it emits
   # updatedInput which replaces any prior hook's updatedInput.

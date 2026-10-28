@@ -1,0 +1,35 @@
+id: CAWS-NATIVE-STOP-PREFLIGHT-001
+title: 'Qualify native Stop consumer before prefix effects'
+mode: fix
+lifecycle_state: active
+worktree: native-stop-preflight
+created_at: '2026-10-28T07:33:55.335Z'
+updated_at: '2026-10-28T07:34:09.532Z'
+created_by_session: '01a17e93-bd80-7d10-8716-c94886f5eb65'
+blast_radius:
+  modules:
+    - 'Native Stop dispatch and agent consumer admission'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/engine.ts'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js'
+    - 'packages/caws-cli/tests/runtime/fixtures/reviewed-stock/caws-state.sh'
+    - 'packages/caws-cli/tests/runtime/fixtures/reviewed-stock/bash-mutation-targets.sh'
+    - 'packages/caws-cli/tests/runtime/fixtures/reviewed-stock/heredoc.sh'
+  out: []
+invariants:
+  - 'Native Stop never starts prefix effects for an ineligible agent consumer; preserve late revalidation and prohibit replay after prefix effects'
+acceptance:
+  - id: A1
+    given: 'a native Stop grant with an incompatible selected agent closure'
+    when: 'dispatch begins'
+    then: 'refusal occurs before prefix, transcript store, publication, lease, and shell replay'
+  - id: A2
+    given: 'a qualified reviewed closure that changes during the prefix'
+    when: 'agent lease effects are reached'
+    then: 'late revalidation refuses without lease write or shell replay'
+non_functional: {}
+contracts: []

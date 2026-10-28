@@ -1,0 +1,81 @@
+id: CAWS-SPARSE-SCOPE-ENFORCEMENT-001
+title: 'Enforce canonical scope authority in sparse linked checkouts'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed canonical sparse scope authority and complete native patch target component behavior, established by retained OLD199 RED and corrected 48-case Codex-adapter/simulated-effect GREEN. Corrected A1-A4 typed citations verify source commit existence/reachability only; actual raw execution and relevant assertions inspected separately by Root and independent peer. Installed-native qualification and global adoption remain separate under cutover owner.'
+created_at: '2026-10-27T20:09:31.298Z'
+updated_at: '2026-10-27T22:09:46.333Z'
+created_by_session: '01a17efa-5ae7-79f1-9981-66151c4a7631'
+blast_radius:
+  modules:
+    - 'Shared Write/Edit scope guard and fixture-driven regression tests'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/scope-guard.sh'
+    - 'packages/caws-cli/tests/hooks/bats/scope-guard.bats'
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+  out: []
+invariants:
+  - 'CAWS_PROJECT_DIR and scope CLI cwd retain actual leaf checkout identity; canonical governance discovery does not change binding selection.'
+  - 'An explicit authoritative scope.out refusal blocks the first write before tool effect; missing or invalid linked governance cannot silently become ungoverned.'
+  - 'Existing advisory progression remains for legitimate non-authoritative or unmatched-scope cases.'
+acceptance:
+  - id: A1
+    given: 'a linked sparse lane with canonical bound governance and no local .caws directory'
+    when: 'the scope guard checks an admitted source file'
+    then: 'the guard allows the file using the leaf binding and CLI cwd.'
+  - id: A2
+    given: 'an authoritative bound spec with an explicit scope.out path'
+    when: 'the first Write or Edit targets that path'
+    then: 'the guard blocks immediately and a simulated guarded write leaves file bytes unchanged.'
+  - id: A3
+    given: 'a linked checkout whose canonical authority is missing or whose bound authority is invalid'
+    when: 'a governed write is attempted'
+    then: 'the guard emits a visible blocking diagnostic before any write effect.'
+  - id: A4
+    given: 'ordinary unmatched-scope or union advisory cases'
+    when: 'the guard checks a first violation'
+    then: 'existing advisory progression semantics remain intact.'
+observability:
+  - 'Structured guard decision and retained focused Bats logs identify allow, immediate block, and advisory outcomes.'
+rollback:
+  - 'Revert the logical source commit through an ordinary governed follow-up; do not modify installed runtime snapshots.'
+non_functional:
+  security:
+    - 'Canonical authority failure and explicit authoritative exclusions must refuse writes without a first-strike escape.'
+contracts:
+  - name: 'sparse-checkout-scope'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "A1: genuine CLI-created sparse linked fixture has no local .caws, exact owned leaf binding and admitted scope.in using leaf CLI cwd; GREEN case 12 and committed fixture controls. Raw external event log: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/complete-targets-events.jsonl (GREEN line 124; OLD199 RED line 103). Component behavior only; Bats cwd=/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/rooted-scope-enforcement/packages/caws-cli. --verify re-derives cited commit existence/reachability only and never executes the recorded Bats command. Actual raw output and relevant assertions inspected separately by Root and independent peer. Installed-native qualification/global adoption remain separate."
+    recorded_at: "2026-10-27T22:07:29.353Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/scope-guard.bats"
+    exit_code: 0
+    commit_sha: eb0e884ed46cc2aa68f763c04877b0bb8d3b8bc6
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "A2: first scalar Write/Edit and raw selected Codex-adapter multi-target/rename controls hard-refuse exit 2 before SIMULATED tool effects; protected/source unchanged (GREEN cases 13-14,23-28). OLD199 RED exposes causal exit-0 bypass with changed effects. These are not native host tool executions. Raw external event log: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/complete-targets-events.jsonl (GREEN line 124; OLD199 RED line 103). Component behavior only; Bats cwd=/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/rooted-scope-enforcement/packages/caws-cli. --verify re-derives cited commit existence/reachability only and never executes the recorded Bats command. Actual raw output and relevant assertions inspected separately by Root and independent peer. Installed-native qualification/global adoption remain separate."
+    recorded_at: "2026-10-27T22:07:37.348Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/scope-guard.bats"
+    exit_code: 0
+    commit_sha: eb0e884ed46cc2aa68f763c04877b0bb8d3b8bc6
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "A3: known missing canonical specs, malformed policy, one-sided invalid bound spec and later fault visibly block exit 2 before effects (GREEN cases 6-7,10,15-17,22,32,36). Cache-only operational residue is not adoption (cases 20-21). Raw external event log: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/complete-targets-events.jsonl (GREEN line 124; OLD199 RED line 103). Component behavior only; Bats cwd=/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/rooted-scope-enforcement/packages/caws-cli. --verify re-derives cited commit existence/reachability only and never executes the recorded Bats command. Actual raw output and relevant assertions inspected separately by Root and independent peer. Installed-native qualification/global adoption remain separate."
+    recorded_at: "2026-10-27T22:07:45.331Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/scope-guard.bats"
+    exit_code: 0
+    commit_sha: eb0e884ed46cc2aa68f763c04877b0bb8d3b8bc6
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "A4: ordinary unmatched/union advisory progression retained (GREEN cases 9,11); full scan emits at most one first advisory per tool and no strike if a later target hard-refuses (cases 33-34), with OLD199 RED distinguishing the prior advisory-first bypass. Raw external event log: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/complete-targets-events.jsonl (GREEN line 124; OLD199 RED line 103). Component behavior only; Bats cwd=/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/rooted-scope-enforcement/packages/caws-cli. --verify re-derives cited commit existence/reachability only and never executes the recorded Bats command. Actual raw output and relevant assertions inspected separately by Root and independent peer. Installed-native qualification/global adoption remain separate."
+    recorded_at: "2026-10-27T22:07:53.370Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/scope-guard.bats"
+    exit_code: 0
+    commit_sha: eb0e884ed46cc2aa68f763c04877b0bb8d3b8bc6

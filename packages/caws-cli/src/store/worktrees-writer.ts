@@ -704,7 +704,8 @@ function validateWorktreeName(name: string): Result<true> {
 
 function loadSpecOrError(
   cawsDir: string,
-  specId: string
+  specId: string,
+  p = specPath(cawsDir, specId)
 ): Result<{
   readonly source: string;
   readonly sourceBytes: Buffer;
@@ -714,7 +715,6 @@ function loadSpecOrError(
   readonly currentWorktree: string | undefined;
   readonly scopeIn: readonly string[];
 }> {
-  const p = specPath(cawsDir, specId);
   if (!fs.existsSync(p)) {
     return err(
       storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, `Spec "${specId}" not found at ${p}.`, {
@@ -1720,12 +1720,23 @@ function retirementSpecBytes(original: Buffer, patched: string, subject: string)
   return ok(Buffer.concat(output));
 }
 
+/** Only observed absence permits selection of archived authority. */
+function retirementPathAbsent(p: string): boolean {
+  try {
+    fs.lstatSync(p);
+    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true;
+    throw error;
+  }
+}
+
 /** Lock callers compare every authority byte used by the plan before effects. */
 function retirementTransaction(
   cawsDir: string,
   name: string,
   registryBytes: Buffer | null,
-  expectedSpec: { path: string; bytes: Buffer } | null,
+  expectedSpec: { path: string; bytes: Buffer; absentPath?: string } | null,
   plannedWrites: { path: string; contents: string }[],
   events: EventBody[],
   beforeMutation?: () => Result<boolean>
@@ -1735,7 +1746,8 @@ function retirementTransaction(
     if (
       registryBytes === null ||
       !fs.readFileSync(registryPath).equals(registryBytes) ||
-      (expectedSpec !== null && !fs.readFileSync(expectedSpec.path).equals(expectedSpec.bytes))
+      (expectedSpec !== null && !fs.readFileSync(expectedSpec.path).equals(expectedSpec.bytes)) ||
+      (expectedSpec?.absentPath !== undefined && !retirementPathAbsent(expectedSpec.absentPath))
     ) {
       return err(
         storeDiagnostic(
@@ -2232,13 +2244,50 @@ export function destroyWorktree(
   // carried a commit — undo the activation the bind conferred.
   const now = (input.now ?? (() => new Date()))().toISOString();
   const plannedWrites: { path: string; contents: string }[] = [];
-  let expectedSpec: { path: string; bytes: Buffer } | null = null;
+  let expectedSpec: { path: string; bytes: Buffer; absentPath?: string } | null = null;
   let demotionEvent: EventBody | null = null;
   let demotedSpecId: string | null = null;
   if (entry.specId !== undefined) {
-    const specInfo = loadSpecOrError(cawsDir, entry.specId);
+    const livePath = specPath(cawsDir, entry.specId);
+    let archived: boolean;
+    try {
+      archived = retirementPathAbsent(livePath);
+    } catch (error) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Cannot select retirement authority for "${input.name}": ${String(error)}`,
+          { subject: entry.specId }
+        )
+      );
+    }
+    // A restored live body takes precedence over a retained historical archive.
+    // Archive-only retirement reads terminal authority but never edits it.
+    const specInfo = loadSpecOrError(
+      cawsDir,
+      entry.specId,
+      archived ? path.join(cawsDir, 'specs', '.archive', `${entry.specId}.yaml`) : livePath
+    );
     if (!isOk(specInfo)) return err(specInfo.errors);
-    expectedSpec = { path: specInfo.value.path, bytes: specInfo.value.sourceBytes };
+    if (
+      archived &&
+      (specInfo.value.spec.id !== entry.specId ||
+        specInfo.value.lifecycleState !== 'archived' ||
+        specInfo.value.currentWorktree !== undefined)
+    ) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Archived spec "${entry.specId}" is not unbound terminal authority; refusing retirement.`,
+          { subject: entry.specId }
+        )
+      );
+    }
+    expectedSpec = {
+      path: specInfo.value.path,
+      bytes: specInfo.value.sourceBytes,
+      ...(archived ? { absentPath: livePath } : {}),
+    };
     if (
       specInfo.value.currentWorktree !== undefined &&
       specInfo.value.currentWorktree.length > 0 &&
@@ -2252,7 +2301,7 @@ export function destroyWorktree(
         )
       );
     }
-    {
+    if (!archived) {
       const newSpecBytes = patchSpecClearWorktree(specInfo.value.source);
       if (!isOk(newSpecBytes)) return err(newSpecBytes.errors);
       if (isOk(newSpecBytes)) {

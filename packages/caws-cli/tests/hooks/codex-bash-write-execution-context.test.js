@@ -10,6 +10,7 @@ const { createHash } = require('node:crypto');
 const PACKS = path.resolve(__dirname, '../../templates/hook-packs');
 const SHARED = path.join(PACKS, 'shared');
 const CODEX_PARSER = path.join(PACKS, 'codex/hooks/lib/parse-input.sh');
+const CLI = path.resolve(__dirname, '../../dist/index.js');
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 let root, repo, actualCwd, home, owned, foreign, hooks;
 function command(program, args, options = {}) {
@@ -86,7 +87,15 @@ afterEach(() => {
 });
 function run(
   commandText,
-  { host, input = {}, inherited = {}, surface = 'codex', event = 'PreToolUse', tool = 'Bash' } = {}
+  {
+    host,
+    input = {},
+    inherited = {},
+    surface = 'codex',
+    event = 'PreToolUse',
+    tool = 'Bash',
+    replay = 'payload',
+  } = {}
 ) {
   const payload = {
     tool_name: tool,
@@ -101,10 +110,13 @@ function run(
     '/bin/bash',
     [
       '-c',
-      'source "$1"; parse_hook_input || exit $?; printf "%s\\0" "${HOOK_EXECUTION_WORKDIR_STATUS:-}" "$HOOK_CWD" "${HOOK_SESSION_CWD:-}" "$CAWS_PROJECT_DIR" >&3; exec /bin/bash "$2"',
+      // Dispatch children receive parsed exports AND the original payload.
+      // Inline JSON is deliberately not exported by the real parser.
+      'source "$1"; parse_hook_input || exit $?; printf "%s\\0" "${HOOK_EXECUTION_WORKDIR_STATUS:-}" "$HOOK_CWD" "${HOOK_SESSION_CWD:-}" "$CAWS_PROJECT_DIR" >&3; { case "$3" in missing) : ;; malformed) printf "not-json" ;; *) if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then cat "$HOOK_PAYLOAD_FILE"; else printf "%s" "$HOOK_INPUT_JSON"; fi ;; esac; } | /bin/bash "$2"',
       'guard-context',
       parser,
       path.join(hooks, 'bash-write-guard.sh'),
+      replay,
     ],
     {
       cwd: actualCwd,
@@ -116,6 +128,7 @@ function run(
         CAWS_HOME: path.join(home, '.caws'),
         CAWS_PROJECT_DIR: repo,
         CAWS_AGENT_SURFACE: surface,
+        CAWS_BIN: CLI,
         CODEX_THREAD_ID: 'owner-session',
         CLAUDE_CODE_SESSION_ID: 'owner-session',
         CAWS_GUARD_NO_ASK: '0',
@@ -128,14 +141,17 @@ function run(
   );
   return { ...result, fields: String(result.output[3] || '').split('\0') };
 }
-function expectUnavailable(result) {
-  expect(result.status).toBe(0);
-  const decision = JSON.parse(result.stdout).hookSpecificOutput;
-  expect(decision.permissionDecision).toBe('deny');
-  expect(decision.permissionDecisionReason).toContain('unavailable-native-context');
-  expect(decision.permissionDecisionReason).toContain('No ownership conclusion was made');
+function expectUnqualifiedCodex(result) {
+  // A cwd observation is not the final shell/startup execution contract.
+  // docs/guides/command-analysis.md defines this reduced-producer refusal.
+  expect(result.status).toBe(2);
+  expect(result.stdout).toBe('');
+  expect(result.stderr).toContain('command mutation analyzer failed (execution-contract)');
   expect(result.stderr).not.toContain('owned by a DIFFERENT session');
   expect(result.stderr).not.toContain('claimed by an active worktree');
+}
+function expectUnavailable(result) {
+  expectUnqualifiedCodex(result);
   expect(result.fields.slice(0, 4)).toEqual(['unavailable', repo, repo, repo]);
 }
 test.each(['touch src/owned/file.js', 'touch docs/note.md', 'rm src/owned/*.js', 'git clean -fd'])(
@@ -146,17 +162,32 @@ test.each(['touch src/owned/file.js', 'touch docs/note.md', 'rm src/owned/*.js',
     expect(fs.existsSync(path.join(repo, 'src/owned/file.js'))).toBe(false);
   }
 );
-test('validated host cwd in the owner worktree permits the actual relative owner target', () => {
+test('validated host cwd does not qualify the reduced Codex execution contract', () => {
   const result = run('touch src/owned/file.js', { host: owned });
-  expect(result.status).toBe(0);
-  expect(result.stdout).toBe('');
+  expectUnqualifiedCodex(result);
   expect(result.fields.slice(0, 4)).toEqual(['resolved', owned, repo, repo]);
 });
-test('resolved host cwd does not disguise a foreign owner', () => {
+test('file-transported payload preserves the validated owner context', () => {
+  const result = run('touch src/owned/file.js', {
+    host: owned,
+    inherited: { CAWS_HOOK_INLINE_PAYLOAD_MAX_BYTES: '0' },
+  });
+  expectUnqualifiedCodex(result);
+  expect(result.fields.slice(0, 4)).toEqual(['resolved', owned, repo, repo]);
+});
+test.each(['missing', 'malformed'])(
+  'parsed exports cannot replace %s original metadata',
+  (replay) => {
+    const result = run('touch src/owned/file.js', { host: owned, replay });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('original tool metadata is missing or malformed');
+    expect(fs.existsSync(path.join(owned, 'src/owned/file.js'))).toBe(false);
+  }
+);
+test('resolved foreign cwd does not qualify the reduced Codex execution contract', () => {
   const result = run('touch src/foreign/file.js', { host: foreign });
-  expect(result.status).toBe(2);
-  expect(result.stderr).toContain("worktree 'foreign'");
-  expect(result.stderr).toContain('owned by a DIFFERENT session');
+  expectUnqualifiedCodex(result);
+  expect(result.fields.slice(0, 4)).toEqual(['resolved', foreign, repo, repo]);
 });
 test('inherited resolved status and command alias cannot turn session cwd into host context', () => {
   const result = run('touch src/owned/file.js', {
@@ -180,28 +211,42 @@ test('payload lookalike status fields do not substitute for host execution_workd
     })
   );
 });
-test('absolute owner path still allows with unavailable command context', () => {
+test('absolute owner path does not qualify missing Codex execution context', () => {
   const result = run('touch ' + path.join(owned, 'src/owned/file.js'));
-  expect(result.status).toBe(0);
-  expect(result.stdout).toBe('');
+  expectUnqualifiedCodex(result);
   expect(result.fields[0]).toBe('unavailable');
 });
-test('absolute foreign path still refuses with unavailable command context', () => {
+test('absolute foreign path does not qualify missing Codex execution context', () => {
   const result = run('touch ' + path.join(foreign, 'src/foreign/file.js'));
-  expect(result.status).toBe(2);
-  expect(result.stderr).toContain("worktree 'foreign'");
+  expectUnqualifiedCodex(result);
 });
-test('absolute canonical claimed path keeps the canonical scope refusal', () => {
+test('absolute canonical claimed path does not bypass the Codex execution contract', () => {
   const result = run('touch ' + path.join(repo, 'src/owned/file.js'));
-  expect(result.status).toBe(2);
-  expect(result.stderr).toContain('owned:src/owned');
-  expect(result.stderr).toContain('claimed by an active worktree');
+  expectUnqualifiedCodex(result);
 });
-test('unclaimed absolute canonical target still allows', () => {
+test('unclaimed absolute canonical target does not bypass the Codex execution contract', () => {
   const result = run('touch ' + path.join(repo, 'unclaimed.txt'));
-  expect(result.status).toBe(0);
-  expect(result.stdout).toBe('');
+  expectUnqualifiedCodex(result);
 });
+test.each(['owner', 'foreign', 'unclaimed'])(
+  'supported Bash profile preserves the %s ownership decision',
+  (kind) => {
+    const target =
+      kind === 'owner'
+        ? path.join(owned, 'src/owned/file.js')
+        : kind === 'foreign'
+          ? path.join(foreign, 'src/foreign/file.js')
+          : path.join(repo, 'unclaimed.txt');
+    const result = run('touch ' + target, { surface: 'claude-code' });
+    expect(result.status).toBe(kind === 'foreign' ? 2 : 0);
+    if (kind === 'foreign') {
+      expect(result.stderr).toContain("worktree 'foreign'");
+      expect(result.stderr).toContain('owned by a DIFFERENT session');
+    } else
+      expect({ stdout: result.stdout, stderr: result.stderr }).toEqual({ stdout: '', stderr: '' });
+    expect(fs.existsSync(target)).toBe(false);
+  }
+);
 test('a non-Codex harness keeps its existing payload-cwd ownership decision', () => {
   const result = run('touch src/owned/file.js', { surface: 'claude-code' });
   expect(result.status).toBe(2);

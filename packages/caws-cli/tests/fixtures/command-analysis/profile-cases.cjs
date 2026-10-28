@@ -277,6 +277,14 @@ for (const [id, command, decision, reason] of [
 for (const [id, command, decision, reason] of [
   ['git-status-flags', 'git status -sb --porcelain=v1 --ignored --untracked-files=all', 'allow'],
   ['git-diff-flags', 'git diff --no-ext-diff --no-textconv --stat --color=never -U3', 'allow'],
+  ['git-show-oneline', 'git show --stat --oneline HEAD', 'allow'],
+  ['git-show-oneline-readback', 'git rev-parse HEAD\ngit show --stat --oneline HEAD\ngit status --short', 'allow'],
+  ['git-show-oneline-output', 'git show --stat --oneline --output=target HEAD', 'unresolved', 'git-option-unmodeled'],
+  ['git-show-oneline-ext-diff', 'git show --stat --oneline --ext-diff HEAD', 'deny', 'git-execution'],
+  ['git-show-oneline-textconv', 'git show --stat --oneline --textconv HEAD', 'deny', 'git-execution'],
+  ['git-show-oneline-attached', 'git show --oneline=unexpected HEAD', 'unresolved', 'git-option-unmodeled'],
+  ['git-show-oneline-unknown', 'git show --oneline --unknown-presentation HEAD', 'unresolved', 'git-option-unmodeled'],
+  ['git-show-oneline-paths', 'git show --stat --oneline HEAD -- --output=literal --ext-diff --textconv', 'allow'],
   ['git-log-data', "git log -n 1 --grep '--ext-diff' -- '--textconv'", 'allow'],
   ['git-log-equals-data', "git log --grep='--ext-diff' --format=%h", 'allow'],
   ['git-grep-data', "git grep -e '--open-files-in-pager=tool' -- file", 'allow'],
@@ -290,7 +298,7 @@ for (const [id, command, decision, reason] of [
   ['git-log-format-extension', "git log --format='%(exec)'", 'unresolved', 'git-option-unmodeled'],
   ['git-log-missing-data', 'git log --grep', 'unresolved', 'git-option-unmodeled'],
   ['git-grep-missing-data', 'git grep -e', 'unresolved', 'git-option-unmodeled'],
-  ['git-diff-missing-data', 'git diff --unified', 'unresolved', 'git-option-unmodeled'],
+  ['git-diff-default-unified', 'git diff --unified', 'allow'],
   ['git-commit-missing-data', 'git commit --message', 'unresolved', 'git-option-unmodeled'],
   [
     'git-global-extension',
