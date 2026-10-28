@@ -57,3 +57,8 @@ evidence:
     evidence_ref: "Physical-root and raw payload replay fixtures corrected; pinned compiled CLI. Source hooks.ts246-253/docs command-analysis192-214 expressly refuse reduced Codex native execution despite directory observation; final20-case fixture tests that refusal plus supported Claude owner/foreign/unclaimed, original metadata missing/malformed and file transport. Production guard contract unchanged. Raw logs under /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/ (archive-retirement*, fixture-contracts*). --verify checks commit existence only. No whole publication/native/global cutover claim."
     recorded_at: "2026-10-28T08:14:29.395Z"
     commit_sha: dc63da0f1c70234521c80881a673e16a0207db95
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Session parity fixture passed in three green suites of fixture-contracts-green-01.log; real owner admission/foreign exit2 and named owner semantics retained, obsolete conventional path wording removed. Five gates pass; doctor0E/5W/8I. Independent Terrareviewdc63 and root source/raw discharge no concrete defect. Raw logs under /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/ (archive-retirement*, fixture-contracts*). --verify checks commit existence only. No whole publication/native/global cutover claim."
+    recorded_at: "2026-10-28T08:14:39.871Z"
+    commit_sha: dc63da0f1c70234521c80881a673e16a0207db95
