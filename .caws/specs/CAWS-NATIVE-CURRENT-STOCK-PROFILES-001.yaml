@@ -69,3 +69,11 @@ evidence:
     exit_code: 0
     commit_sha: ad6b18858
     test_verified_at: ad6b18858cdb79744e48e3fa022a73307945983e
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "ab4b551/ad6b188 retains selected shell for heredoc-shaped utility commands because native utility tokenization lacks current Node projection. Two actual handler-executor cases use real compiled inspection-prefix entry and Node image in a bound-generation fixture: quoted Node and read-prefixed Node comments containing git add -f private.generated emit no false block, launch exactly one selected shell and preserve ignored sentinel/index. Existing eight ordinary cwd/ignored-file cases retain native selection and real ignored-staging refusals. ART06/stock-profiles-final-01.log SHA3fbe2f4c0b29670e573cd34d767aa9170376046d6377fc2485274b2d15587a8f. No user payload executed; fixture does not claim immutable installed image or native host delivery."
+    recorded_at: "2026-10-28T10:36:05.228Z"
+    test_nodeid: "packages/caws-cli/tests/runtime/stock-handlers.test.js::current utility"
+    exit_code: 0
+    commit_sha: ad6b18858
+    test_verified_at: ad6b18858cdb79744e48e3fa022a73307945983e
