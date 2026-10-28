@@ -33,17 +33,20 @@ scope:
   out: []
 invariants:
   - 'Preserve genuine session identity, actual caller context, hooks, trust, policies, concurrent work and the foreign archive. No takeover, force, history rewrite, guard exception or manual governance writes.'
-  - 'Proposed pure caws hooks inspection-prefix stdin prefix API returns0 only for complete newline-separated simple literal inspection commands matching shared closed argument profiles,1 for unsupported input and2 for parse or runtime failure. Authority creation does not accept the interface; Root and Parent critique remains applicable before implementation.'
   - 'Reuse the pinned unbash structural parser and factor existing reader, Git and sed argument-role definitions into shared profiles instead of adding a duplicated whitelist. Analyze or mutation-view allow is not an inspection-prefix predicate.'
   - 'Reject assignments, redirects, shell expansions/substitutions, wrappers, compound/control structures and lookup mutations. Literal quoted operands are supported structurally. Trusted ambient command lookup and Git configuration assumptions remain explicit, never authenticated by this syntax predicate.'
   - 'Preserve exact prefix, header, terminator, suffix, line counts and trailing bytes, original raw Node interpreter-write scanning and file-sink behavior. This predicate grants neither ownership nor Node-effects admission.'
   - 'Do not refresh current Bash handlers, strict profiles, mutation-view or interpreter-effects broadly, add shadow retained handlers or vendored dependencies, or change global/private runtime, configuration or authority outside the owned Source unit.'
   - 'Preserve caws_blank_heredoc_bodies(input) signature. For a nonempty prefix derive the physical managed generation only from the selected library BASH_SOURCE, invoke its absolute native/node and absolute native-prefix/node_modules/@paths.design/caws-cli/dist/shell/analysis/inspection-prefix-entry.js, and clear Node startup controls. Ambient CAWS_BIN, Node or PATH cannot select the classifier. Require exit0 plus the exact versioned positive response; unavailable/old layout, errors, signals, malformed output or exhausted budgets preserve raw input. Node-first empty-prefix projection remains independent.'
   - 'Bound input bytes, command count, AST visits and output; supervise synchronous parsing in a resource-limited worker thread with a real wall-clock deadline. The diagnostic CLI and generation entry share this pure classifier. The existing managed-snapshot loader/hash and trusted host are assumed; no stronger TOCTOU, ambient identity or Node-effects guarantee is claimed.'
+  - 'The pure caws hooks inspection-prefix stdin prefix API returns0 only for complete newline-separated simple literal inspection commands matching shared closed argument profiles,1 for unsupported input and2 for parse or runtime failure. Source component evidence does not establish execution of the full unchanged actual05 call through the selected installed runtime and genuine native host.'
 acceptance:
   - id: A1
     given: 'The unchanged actual05 inspection-prefix call including routine Git diff, the prior04 six-line prefix, varied reader-family commands with literal quoted operands, and existing Node-first forms'
-    when: 'The proposed shared structural inspection-prefix adapter and heredoc caller project a complete quoted Node heredoc'
+    when: >-
+      The shared structural inspection-prefix adapter and heredoc caller project a
+      complete quoted Node heredoc, including replay of the full unchanged actual05
+      call through the selected installed runtime and genuine native host
     then: 'Supported complete inspection commands admit the prefix without fixture-only matching, only the body is projected away, false JavaScript shell targets disappear, and exact prefix/header/terminator/suffix bytes, line counts and trailing newlines remain preserved.'
   - id: A2
     given: 'Hostile lookup mutations, assignments, redirects, expansions/substitutions, wrappers, compound/control structures, unsupported options or argument roles, unknown commands, and genuine raw Node fs writes or outer writes'
