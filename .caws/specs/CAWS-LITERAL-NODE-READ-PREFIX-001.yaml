@@ -1,9 +1,10 @@
 id: CAWS-LITERAL-NODE-READ-PREFIX-001
 title: 'Project literal Node heredocs after finite read-only inspection prefixes'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: node-read-prefix
 created_at: '2026-10-28T00:18:55.837Z'
-updated_at: '2026-10-28T00:18:55.837Z'
+updated_at: '2026-10-28T00:19:26.311Z'
 created_by_session: '01a17f02-2191-7702-8805-227272637592'
 blast_radius:
   modules:
