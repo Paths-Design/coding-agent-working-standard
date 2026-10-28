@@ -55,3 +55,8 @@ evidence:
     evidence_ref: "Actual workflow guard admits exact registered copy-roles.sh and refuses three nearby shadow names; red guard failures and green114 retained. Root inspected raw evidence at /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/prepush-repair-green-01.log. --verify verifies commit existence only; external logs are narrative references. Previous absolute artifact_path citation was refused without writing, corrected here."
     recorded_at: "2026-10-28T07:27:25.893Z"
     commit_sha: "5d81f937c7348a3cefd21d92219bddd71ac61215"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Both shared library diffs are comments only. Header/fingerprint tests pass; shared pack126 fingerprint dba22ba22b935c8aa19c57542a50b4c10212780a5b74095c24c6f52b695f4c26. Other packs unchanged. Root inspected raw evidence at /Users/darianrosebrook/.codex/artifacts/01a171b1-ff30-7782-9755-aa02c6c6a3ae/local-rust-cutover-05/prepush-repair-green-01.log. --verify verifies commit existence only; external logs are narrative references. Previous absolute artifact_path citation was refused without writing, corrected here."
+    recorded_at: "2026-10-28T07:27:38.707Z"
+    commit_sha: "5d81f937c7348a3cefd21d92219bddd71ac61215"
