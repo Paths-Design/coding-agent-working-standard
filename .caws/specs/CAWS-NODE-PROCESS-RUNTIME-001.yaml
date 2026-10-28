@@ -3,7 +3,7 @@ title: 'Bind developer and test child Node processes to the selected runtime'
 mode: fix
 lifecycle_state: draft
 created_at: '2026-10-28T19:50:34.020Z'
-updated_at: '2026-10-28T19:50:34.020Z'
+updated_at: '2026-10-28T19:50:48.963Z'
 created_by_session: '01a181ec-11d5-7270-8073-29aac2fd949d'
 blast_radius:
   modules:
@@ -16,6 +16,9 @@ scope:
     - 'packages/caws-cli/scripts/run-mutation.mjs'
     - 'packages/caws-cli/scripts/lib/node-process-env.cjs'
   out: []
+  support:
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-cli/tests/shell/run-tests-exit-code.test.js
 invariants:
   - 'Do not change mutation-input-identity.mjs or normalize within captureMutationInputs/assertInputsUnchanged: initial mismatch, captured-input drift and sandbox runtime substitution must retain strict refusal before build.'
   - 'Derive the child environment from the canonical actual process.execPath directory without hardcoded versions/shims or import-time process.env mutation; preserve unrelated environment and handle Windows PATH key casing coherently.'
