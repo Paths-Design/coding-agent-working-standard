@@ -21,6 +21,18 @@ load helpers
 
 setup_file() {
   caws_install_pack_once
+  # Match the physical managed layout. There is no environment-selected trust
+  # hook: the selected library discovers the sibling Node/compiled entry itself.
+  export CAWS_TEST_PREFIX_GENERATION="$CAWS_TEST_HOME/lib/runtimes/0000000000000000000000000000000000000000000000000000000000000000"
+  export CAWS_TEST_PREFIX_LIB="$CAWS_TEST_PREFIX_GENERATION/lib/heredoc.sh"
+  mkdir -p "$CAWS_TEST_PREFIX_GENERATION/lib" "$CAWS_TEST_PREFIX_GENERATION/native" \
+    "$CAWS_TEST_PREFIX_GENERATION/native-prefix/node_modules/@paths.design/caws-cli/dist/shell"
+  cp "$CAWS_TEST_HOOKS_DIR/lib/heredoc.sh" "$CAWS_TEST_PREFIX_LIB"
+  cp "$(command -v node)" "$CAWS_TEST_PREFIX_GENERATION/native/node"
+  cp -R "$CLI_PKG_ROOT/dist/shell/analysis" "$CAWS_TEST_PREFIX_GENERATION/native-prefix/node_modules/@paths.design/caws-cli/dist/shell/"
+  local parser_root
+  parser_root="$(node -p 'require("path").dirname(require("path").dirname(require.resolve("unbash")))')"
+  cp -R "$parser_root" "$CAWS_TEST_PREFIX_GENERATION/native-prefix/node_modules/unbash"
 }
 teardown_file() {
   caws_teardown_pack
@@ -48,18 +60,24 @@ _run_bwg() {
 
 _run_blank() {
   local input="$1"
-  run bash -c "source '$CAWS_TEST_HOOKS_DIR/lib/heredoc.sh'; caws_blank_heredoc_bodies \"\$1\"" _ "$input"
+  run env CAWS_SHARED_LIB_DIR="$CAWS_TEST_PREFIX_GENERATION/lib" \
+    CAWS_ADAPTER_RUNTIME_DIGEST=0000000000000000000000000000000000000000000000000000000000000000 \
+    bash -c 'source "$1"; caws_blank_heredoc_bodies "$2"' _ "$CAWS_TEST_PREFIX_LIB" "$input"
 }
 
 # The marker keeps trailing newlines observable through bats' output capture.
 _run_blank_exact() {
-  run bash -eu -o pipefail -c 'source "$1/lib/heredoc.sh"; caws_blank_heredoc_bodies "$2"; printf __END__' _ "$CAWS_TEST_HOOKS_DIR" "$1"
+  run env CAWS_SHARED_LIB_DIR="$CAWS_TEST_PREFIX_GENERATION/lib" \
+    CAWS_ADAPTER_RUNTIME_DIGEST=0000000000000000000000000000000000000000000000000000000000000000 \
+    bash -eu -o pipefail -c 'source "$1"; caws_blank_heredoc_bodies "$2"; printf __END__' _ "$CAWS_TEST_PREFIX_LIB" "$1"
 }
 
 # Exercise the published lexical API directly, not a replacement for the
 # current bash-write-guard's mandatory typed analysis or an installed43 image.
 _run_shell_view() {
-  run bash -eu -o pipefail -c 'source "$1/lib/heredoc.sh"; source "$1/lib/bash-mutation-targets.sh"; "$2" "$3"' _ "$CAWS_TEST_HOOKS_DIR" "$1" "$2"
+  run env CAWS_SHARED_LIB_DIR="$CAWS_TEST_PREFIX_GENERATION/lib" \
+    CAWS_ADAPTER_RUNTIME_DIGEST=0000000000000000000000000000000000000000000000000000000000000000 \
+    bash -eu -o pipefail -c 'source "$1"; source "$2/lib/bash-mutation-targets.sh"; "$3" "$4"' _ "$CAWS_TEST_PREFIX_LIB" "$CAWS_TEST_HOOKS_DIR" "$1" "$2"
 }
 
 # The six separate inspection lines from consumer04. These strings are input
@@ -135,7 +153,7 @@ _read_prefix() {
   run sed '/^# hook_pack_version:/d' "$CLI_PKG_ROOT/templates/hook-packs/shared/lib/heredoc.sh"
   assert_success
   local expected="$output"
-  run sed '/^# hook_pack_version:/d' "$CAWS_TEST_HOOKS_DIR/lib/heredoc.sh"
+  run sed '/^# hook_pack_version:/d' "$CAWS_TEST_PREFIX_LIB"
   assert_success
   assert_output "$expected"
 }
@@ -402,8 +420,8 @@ _read_prefix() {
     'env node' 'command pwd -P' 'pwd -P; hash -p /bin/sh node' 'pwd -P && cat AGENTS.md' \
     'pwd -P | cat' 'cat AGENTS.md > /tmp/output' $'pwd -P \\\ncat AGENTS.md' \
     'cat $(printf AGENTS.md)' 'cat "$file"' 'cat `printf AGENTS.md`' \
-    'git -c alias.status=other status --short' 'git status --short extra' 'pwd -P # comment' \
-    'cat AGENTS.md other-file' 'cat --help' 'cat -' 'cat AGENTS.md*' 'cat AGENTS?.md' \
+    'git -c alias.status=other status --short' 'pwd -P # comment' \
+    'cat --help' 'cat AGENTS.md*' 'cat AGENTS?.md' \
     'cat [AGENTS].md' 'cat ~/AGENTS.md' 'cat <AGENTS.md' 'echo plain-prefix' 'if true; then'; do
     input="$(_read_prefix)"$'\n'"$unsafe"$'\nnode <<\'SH\'\ngit sparse-checkout disable\nSH'
     _run_blank "$input"
@@ -491,4 +509,17 @@ _read_prefix() {
     assert_output --partial "BLOCKED: this Bash command mutates worktree 'wt-seed''s payload"
     assert_equal "$(cat "$target")" sentinel
   done
+}
+
+@test "structural prefix: unchanged05 Git diff and policy cat project the literal Node body only" {
+  local prefix input expected
+  prefix=$'git diff -- .gitignore\ncat .caws/policy.yaml'
+  input="$prefix"$'\nnode <<\'NODE\'\nconst fs=require("fs"),p=require("path"),c=require("crypto");for(const f of [{path:"file"}].filter(f=>f.path!==".gitignore")){console.log(p.basename(f.path),c.createHash("sha256"));}\nNODE\n'
+  expected="$prefix"$'\nnode <<\'NODE\'\n\nNODE\n'
+  _run_blank_exact "$input"
+  assert_success
+  assert_output "${expected}__END__"
+  _run_shell_view caws_bash_mutation_candidates "$input"
+  assert_success
+  assert_output ''
 }

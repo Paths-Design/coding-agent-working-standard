@@ -7,6 +7,30 @@ const corpus = [
   ...require('../fixtures/command-analysis/contract.json'),
   ...require('../fixtures/command-analysis/profile-cases.cjs'),
   ...require('../fixtures/command-analysis/git-profile-cases.cjs'),
+  ...['-U', '--unified'].flatMap((option, index) => [
+    {
+      id: `git-unified-${index}-output`,
+      command: `git diff ${option} --output=target`,
+      decision: 'unresolved',
+      reason: 'git-option-unmodeled',
+      absentReasons: ['git-mapping-unresolved'],
+    },
+    {
+      id: `git-unified-${index}-execution`,
+      command: `git diff ${option} --ext-diff`,
+      decision: 'deny',
+      reason: 'git-execution',
+      absentReasons: ['git-mapping-unresolved'],
+    },
+  ]),
+  ...['-U', '-U3', '--unified', '--unified=3'].flatMap((option, index) => [
+    { id: `git-unified-${index}-bare`, command: `git diff ${option}`, decision: 'allow' },
+    {
+      id: `git-unified-${index}-path`,
+      command: `git diff ${option} -- --output=literal --ext-diff`,
+      decision: 'allow',
+    },
+  ]),
 ];
 const linkedRepository = require('../fixtures/command-analysis/git-fixture.cjs');
 const wordCases = require('../fixtures/command-analysis/abstract-words.cjs');
@@ -407,7 +431,7 @@ describe('bounded shell analysis contract', () => {
     ],
     ['policies.js', 'sedPolicy(args, ctx, node);', 'void 0;', 'sed-execution-command', 'allow'],
     [
-      'policies.js',
+      'inspection-profiles.js',
       'sort: /^-[bdfginrMu]+$/',
       'sort: /-[bdfginrMu]+$/',
       'profile-reader-sort-attached-output',
