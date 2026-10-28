@@ -470,6 +470,10 @@ describe('bounded shell analysis contract', () => {
         fs.cpSync(path.resolve(__dirname, '../../dist/shell/analysis'), moduleDir, {
           recursive: true,
         });
+        fs.copyFileSync(
+          path.resolve(__dirname, '../../dist/shell/duration.js'),
+          path.join(temp, 'duration.js')
+        );
         fs.mkdirSync(path.join(temp, 'node_modules'));
         fs.symlinkSync(
           path.dirname(path.dirname(require.resolve('unbash'))),

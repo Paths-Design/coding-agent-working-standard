@@ -4122,7 +4122,8 @@ export interface SpecsListResult {
   readonly archived: readonly ArchivedSpecsListEntry[];
 }
 
-export const SPECS_LIST_STATUSES = ['active', 'draft', 'closed', 'archived'] as const;
+export { SPECS_LIST_STATUSES } from '../shell/analysis/caws-read-metadata';
+import { SPECS_LIST_STATUSES } from '../shell/analysis/caws-read-metadata';
 export type SpecsListStatus = (typeof SPECS_LIST_STATUSES)[number];
 
 /**
