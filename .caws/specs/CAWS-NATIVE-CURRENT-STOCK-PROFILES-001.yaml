@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-CURRENT-STOCK-PROFILES-001
 title: 'Qualify current selected stock consumers without widening custom-source admission'
 mode: fix
-lifecycle_state: active
-worktree: native-current-stock-profiles
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed exact source-role and direct-dependency qualification for current stock consumers, with historical fixtures retained and unimplemented utility heredoc semantics delegated to selected shell. Actual213 tests7suites passed; source build0, doctor0E, gates5; independent read-only Terra feedback grounded. A1-A3 cited component tests reexecuted by specs evidence at ad6b188 and all four spec/event records dual-read. This closes bounded stock qualification only: actual installed Rust host delivery, signal effects, full command equivalence, concurrent-source interleavings and global cutover remain parent obligations.'
 created_at: '2026-10-28T09:22:08.224Z'
-updated_at: '2026-10-28T09:28:43.125Z'
+updated_at: '2026-10-28T10:37:37.147Z'
 created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
 blast_radius:
   modules:
