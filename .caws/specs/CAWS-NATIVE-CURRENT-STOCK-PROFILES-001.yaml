@@ -30,5 +30,11 @@ acceptance:
       observable lease and output behavior agrees for canonical and linked
       checkouts; incompatible source, startup, overrides and CLI retain refusal or
       fallback with no unauthorized effects
+  - id: A2
+    given: 'current exact protective guard sources'
+    when: 'native classifier and containment routes are selected'
+    then: >-
+      paired selected-shell results and hostile source controls establish qualified
+      behavior while custom or unproved cases retain their selected path
 non_functional: {}
 contracts: []
