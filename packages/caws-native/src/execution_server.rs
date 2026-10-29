@@ -43,6 +43,8 @@ use std::{
 const INPUT_LIMIT: usize = 1024 * 1024;
 const REPLY_LIMIT: usize = 2 * 1024 * 1024;
 const STARTUP_FD: i32 = 3;
+#[path = "execution_private_roots.rs"]
+mod private_roots;
 fn refused() -> io::Error {
     io::Error::other("execution boundary refused")
 }
@@ -273,6 +275,7 @@ struct Generation {
 struct NpmRuntime {
     root: String,
     entry: ProgramImage,
+    scratch_root: String,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -338,6 +341,7 @@ fn load_config(path: &Path) -> io::Result<Config> {
     if let Some(npm) = &config.npm {
         if !Path::new(&npm.root).is_absolute()
             || !Path::new(&npm.entry.path).is_absolute()
+            || !Path::new(&npm.scratch_root).is_absolute()
             || npm.entry.sha256.len() != 64
             || !npm
                 .entry
@@ -1875,6 +1879,7 @@ mod tests {
         config.npm = Some(NpmRuntime {
             root: npm_root.to_str().unwrap().into(),
             entry: image(&entry),
+            scratch_root: fixture.0.join("scratch").to_str().unwrap().into(),
         });
         let deadline = MonotonicDeadline::capture(Duration::from_secs(30)).unwrap();
         assert!(verify_generation(&config, &deadline).is_ok());
