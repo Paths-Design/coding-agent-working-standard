@@ -1,0 +1,49 @@
+id: CAWS-NATIVE-RECOVERY-QUALIFICATION-001
+title: 'Qualify installed native recovery after real Stop writes'
+mode: feature
+lifecycle_state: active
+worktree: native-recovery-qualification
+created_at: '2026-10-29T22:44:28.904Z'
+updated_at: '2026-10-29T22:59:57.536Z'
+created_by_session: '01a189ce-cbe3-7f83-bf11-71e6d786dca2'
+blast_radius:
+  modules:
+    - 'Installed OpenCode Stop recovery qualification and hostile evidence oracles'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/qualify-native-recovery.cjs'
+    - 'packages/caws-cli/tests/tooling/qualify-native-recovery.test.js'
+    - 'tmp/rust-cutover-recovery'
+  out: []
+invariants:
+  - 'Only owned original children are signalled; unknown custody stops further scenarios and no replay is inferred'
+  - 'Original production request deadline remains 30000ms and no compatibility agent-stop is substituted for typed native execution'
+acceptance:
+  - id: A1
+    given: 'explicit immutable package descriptor tools and prior generation'
+    when: 'the qualifier installs privately'
+    then: 'actual native engine Stop SQL publication and lease semantics are asserted and unqualified profile is refused explicitly'
+  - id: A2
+    given: 'actual original Stop output writes'
+    when: 'interruption and same-session owner restart execute'
+    then: 'durable original outcome remains fenced without replay while an independent project progresses and owned cleanup is observed'
+  - id: A3
+    given: 'real private writes and retained prior generation'
+    when: 'supported rollback runs'
+    then: 'ordinary operation executes through the selected prior generation and governance bytes remain intact'
+  - id: A4
+    given: 'hostile incomplete or contradictory evidence'
+    when: 'oracle checks run'
+    then: 'changed identity no write wrong fence replay lease contamination and unresolved cleanup each fail'
+observability:
+  - 'Retain exact command input output original child terminal and durable operation identities in ignored artifact root; no native acceptance from oracle fixtures'
+rollback:
+  - 'Remove only owned qualifier source through a subsequent governed change; retain failed runtime artifacts and uncertain process handles'
+non_functional:
+  security:
+    - 'Require physical pinned paths and private fresh home; no machine activation or live developer signals'
+contracts:
+  - name: 'native-recovery'
+    type: behavior

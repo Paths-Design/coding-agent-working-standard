@@ -1,0 +1,59 @@
+id: CAWS-DOC-GUIDANCE-CLI-001
+title: 'Align agent and README guidance with the CLI'
+mode: doc
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Corrected AGENTS.md and README CLI authoring, evidence routes, clean verification order, merge cwd/cleanup and partial-recovery guarantees, and Markdown tables. Validated installed 12.2.0-rc.2 help/plan/refusal and source contracts; 28 focused repository lifecycle tests and all policy gates passed. All three AC records and matching events were read back. Native harness setup and a full installed-CLI fixture lifecycle were not executed. User explicitly approved merging into main, spec closure and worktree removal.'
+created_at: '2026-10-29T05:32:02.892Z'
+updated_at: '2026-10-29T05:59:02.656Z'
+created_by_session: '01a1861e-58cc-7392-ac55-1ff3a6051998'
+blast_radius:
+  modules:
+    - 'Agent and developer documentation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'AGENTS.md'
+    - 'README.md'
+  out: []
+  support:
+    - tmp/doc-guidance-cli
+invariants:
+  - 'Operational examples use audited CLI writers and preserve worktree lifecycle boundaries'
+acceptance:
+  - id: A1
+    given: 'AGENTS.md and README.md'
+    when: 'the agent follows the documented authoring and evidence routes'
+    then: 'commands match CLI help, spec edits use CLI writers, and AC recording and rederivation are described accurately'
+  - id: A2
+    given: 'a clean isolated project and owned bound worktree'
+    when: 'the documented finish sequence runs from outside the lane'
+    then: 'merge closes the spec and removes the lane without a redundant destroy, and guidance describes checkout refresh and partial failures'
+  - id: A3
+    given: 'the command tables in AGENTS.md and README.md'
+    when: 'Markdown is formatted and command options are checked'
+    then: 'tables render with consistent columns and the revised guidance passes focused validation'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected both docs at 0a49f64ae against installed CLI 12.2.0-rc.2 help for create/amend/amend-scope/evidence/verify-acs and evidence record; FEAT-1 create --plan returned valid=true with no missing fields; live event-only AC probe returned shell.command.evidence_ac_wrong_surface exit 1. Audited CLI-only authoring and later-refutation wording; CLI probes establish syntax/refusal, not native harness execution."
+    recorded_at: "2026-10-29T05:54:42.487Z"
+    artifact_path: AGENTS.md
+    commit_sha: "0a49f64ae32f5776da9f6e107430a933f8db8096"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "28 focused existing tests passed from cwd /Users/darianrosebrook/Desktop/Projects/caws/packages/caws-cli across worktree-merge-cwd-self-destruct-guard, store/worktree-merge-canonical-consistency and shell/worktree-merge-canonical-consistency; raw output tmp/doc-guidance-cli/lifecycle-tests.log. Assertions exercise clean outside-lane completion, cwd refusal, checkout preservation/refresh and post-publication failures. Inspected installed worktrees-writer.js canonical read-tree refresh, partial-failure diagnostics and best-effort branch deletion. Tests exercised local compiled repository behavior; broader linked-checkout refresh is not claimed for installed CLI. Final prose limits refresh to the shared canonical-checkout case. Custom end-to-end CLI fixture execution was blocked by the native-context guard and supplied no behavioral evidence."
+    recorded_at: "2026-10-29T05:55:33.029Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --config /Users/darianrosebrook/Desktop/Projects/caws/packages/caws-cli/jest.config.js --selectProjects caws-cli --runInBand --runTestsByPath /Users/darianrosebrook/Desktop/Projects/caws/packages/caws-cli/tests/store/worktree-merge-cwd-self-destruct-guard.test.js /Users/darianrosebrook/Desktop/Projects/caws/packages/caws-cli/tests/store/worktree-merge-canonical-consistency.test.js /Users/darianrosebrook/Desktop/Projects/caws/packages/caws-cli/tests/shell/worktree-merge-canonical-consistency.test.js
+    exit_code: 0
+    artifact_path: AGENTS.md
+    commit_sha: "0a49f64ae32f5776da9f6e107430a933f8db8096"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Prettier check and git diff --check passed. Prettier Markdown AST parsed AGENTS.md one table and README.md two tables, every row two cells; raw format-check.txt and table-check.txt under tmp/doc-guidance-cli. Final example-plan.json reports FEAT-1 valid=true, diagnostics=[], missing_fields=[]. Independent read-only completion feedback was grounded at specs.ts verifyPendingEvidence and installed worktrees-writer branch-delete path; both corrections committed. All five policy gates passed on final two-file candidate; doctor 0E/5W baseline warnings."
+    recorded_at: "2026-10-29T05:54:45.829Z"
+    artifact_path: README.md
+    commit_sha: "0a49f64ae32f5776da9f6e107430a933f8db8096"

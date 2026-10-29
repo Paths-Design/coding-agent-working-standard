@@ -2,9 +2,9 @@ id: CAWS-EXECUTION-SOURCE-QUALIFICATION-001
 title: 'Qualify the committed execution boundary source in isolation'
 mode: chore
 lifecycle_state: active
-worktree: execution-qualification
+worktree: execution-qualification-landing
 created_at: '2026-10-27T17:30:32.605Z'
-updated_at: '2026-10-27T18:24:30.632Z'
+updated_at: '2026-10-29T10:35:39.218Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -41,13 +41,127 @@ scope:
     - packages/caws-cli/LICENSE.spdx
     - .stryker-execution-*/**
     - node_modules/
+    - packages/caws-cli/src/shell/analysis/
+    - packages/caws-cli/tests/shell/command-analysis.test.js
+    - packages/caws-cli/tests/shell/interpreter-effects.test.js
+    - packages/caws-cli/tests/shell/mutation-view.test.js
+    - packages/caws-cli/tests/fixtures/command-analysis/
+    - .stryker-analysis-*/**
+    - docs/internal/caws-runtime-modernization.md
+    - packages/caws-cli/scripts/qualify-stop-profile.mjs
+    - packages/caws-cli/src/init/machine-runtime-state.ts
+    - packages/caws-cli/src/init/native-hook-identification.ts
+    - packages/caws-cli/src/init/native-runtime-entry.ts
+    - packages/caws-cli/src/init/system-runtime.ts
+    - packages/caws-cli/src/runtime/cli-identity-loader.ts
+    - packages/caws-cli/src/runtime/describe-entry.ts
+    - packages/caws-cli/src/tooling/native-qualification-prepare-entry.ts
+    - packages/caws-cli/src/tooling/native-qualification-prepare.ts
+    - packages/caws-cli/src/tooling/native-sqlite-build.ts
+    - packages/caws-cli/tests/adapter/native-entry-registration.test.js
+    - packages/caws-cli/tests/adapter/native-runtime-entry.test.js
+    - packages/caws-cli/tests/adapter/opencode-project-registration.test.js
+    - packages/caws-cli/tests/runtime/cli-identity-loader.test.js
+    - packages/caws-cli/tests/runtime/describe-entry.test.js
+    - packages/caws-cli/tests/tooling/native-qualification-prepare.test.js
+    - packages/caws-cli/tests/tooling/native-sqlite-build.test.js
+    - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
+    - packages/caws-native/src/bin/caws-prepare-source.rs
+    - packages/caws-native/src/cli.rs
+    - packages/caws-native/src/context_git.rs
+    - packages/caws-native/src/context_git/original_project.rs
+    - packages/caws-native/src/context_git/render.rs
+    - packages/caws-native/src/context_git/stop.rs
+    - packages/caws-native/src/engine_custody.rs
+    - packages/caws-native/src/engine_custody/tests.rs
+    - packages/caws-native/src/engine_custody/worker.rs
+    - packages/caws-native/src/engine_custody/worker/tests.rs
+    - packages/caws-native/src/execution_authorizer_wire.rs
+    - packages/caws-native/src/execution_carrier.rs
+    - packages/caws-native/src/execution_child.rs
+    - packages/caws-native/src/execution_control.rs
+    - packages/caws-native/src/execution_fd_transport.rs
+    - packages/caws-native/src/execution_fence.rs
+    - packages/caws-native/src/execution_host.rs
+    - packages/caws-native/src/execution_ingress.rs
+    - packages/caws-native/src/execution_owner.rs
+    - packages/caws-native/src/execution_prepare.rs
+    - packages/caws-native/src/execution_prepared.rs
+    - packages/caws-native/src/installed_compatibility.rs
+    - packages/caws-native/src/installed_entry.rs
+    - packages/caws-native/src/installed_generation.rs
+    - packages/caws-native/src/lib.rs
+    - packages/caws-native/src/main.rs
+    - packages/caws-native/src/monotonic_deadline.rs
+    - packages/caws-native/src/native_generation.rs
+    - packages/caws-native/src/preparation_parent.rs
+    - packages/caws-native/src/process_effect.rs
+    - packages/caws-native/src/render_context.rs
+    - packages/caws-native/src/render_observation.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/sqlite_build_identity.rs
+    - packages/caws-native/src/stop_budget.rs
+    - packages/caws-native/src/stop_git.rs
+    - packages/caws-native/tests/engine_custody.rs
+    - packages/caws-native/tests/installed_compatibility.rs
+    - packages/caws-native/tests/installed_deadline.rs
+    - packages/caws-native/tests/installed_entry.rs
+    - packages/caws-native/tests/invoke.rs
+    - packages/caws-native/tests/preparation_parent.rs
+    - packages/caws-native/tests/sqlite_identity.rs
+    - scripts/install-cli-snapshot.mjs
+    - scripts/install-cli-snapshot.test.mjs
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/evidence-rederive.ts
+    - packages/caws-cli/tests/shell/caws-read-metadata.test.js
+    - packages/caws-cli/tests/shell/specs-evidence.test.js
+    - packages/caws-native/src/execution_server.rs
+    - packages/caws-native/src/bin/caws-execution.rs
+    - packages/caws-native/tests/execution_server.rs
+    - packages/caws-cli/tests/shell/specs-evidence-verify.test.js
+    - packages/caws-cli/scripts/mutation-input-identity.mjs
+    - packages/caws-cli/templates/hook-packs/runtime/dispatch.sh
+    - packages/caws-cli/templates/hook-packs/runtime/handler-env.sh
+    - packages/caws-cli/tests/adapter/machine-runtime.test.js
 invariants:
-  - 'Qualification never changes tracked source or lowers the six per-file 80 percent floors'
+  - 'Each campaign runs in its own immutable physical export: every captured source, test, script, documentation, dependency and build input remains unchanged throughout that run, no per-file floor is lowered, and results apply only to those captured inputs. Native-only repairs outside the captured Node inputs may proceed in the owned lane; any captured-input change requires fresh matching qualification before acceptance.'
 acceptance:
   - id: A1
-    given: 'committed Source candidate with matching runtime and test bytes'
-    when: 'the full six-file execution mutation campaign and baseline execute in an isolated owned checkout'
-    then: 'every target meets the unchanged 80 percent floor with nonzero selected tests and retained input-build-report identity'
+    given: >-
+      The isolated qualification lane contains the original six execution mutation
+      targets plus the dedicated evidence consumer target and selected fixture
+      suites.
+    when: >-
+      The frozen candidate completes the declared execution campaign without
+      exclusions, partial runs, or reduced floors.
+    then: >-
+      All seven execution targets individually meet the 80 percent floor, with exact
+      source, build, dependency and report identities and hostile writer controls
+      retained.
+  - id: A2
+    given: >-
+      The committed joined Source candidate includes extracted pure inspection
+      decisions and unchanged floor requirements
+    when: >-
+      The complete nine-file analysis mutation campaign executes against matching
+      isolated source, tests and build outputs
+    then: >-
+      Every analysis target meets its unchanged 80 percent floor with nonzero tests
+      and retained input-build-report identity; topology checks alone do not satisfy
+      acceptance
+  - id: A3
+    given: >-
+      A genuine owned worktree, current directory and active spec with the reviewed
+      selected-runtime packaged CLI operator and normal native invocation
+    when: >-
+      The ordinary evidence writer with retained metadata semantics and an appended
+      absolute foreign write are exercised through the candidate integration
+    then: >-
+      The valid writer records the exact metadata with dual spec/event readback, the
+      foreign write is refused before effects, callee and host context are
+      authenticated, and unresolved external code remains held
 observability:
   - 'Retain raw baseline, mutation reports, source identity and nonzero exit outcomes outside the lane before cleanup'
 rollback:
@@ -60,6 +174,15 @@ contracts:
 evidence:
   - criterion_id: A1
     status: unchecked
-    evidence_ref: "Frozen Source f650 remains tracked-identical. Full six-file attempt a20f9bb6-7a87-42f7-a1f6-da749590294b built0 and passed194 selected baseline tests/42s, instrumented6files1985mutants, then exited1 because shared canonical @stryker-mutator/core replacement-worker entry disappeared. No mutation report/per-file score verdict; criterion unavailable, not pass or a demonstrated semantic Source failure. Both owned campaigns exited naturally and released locks. Raw QA report directory and log retained with recursive/cmp equality outside lane at ~/.codex/artifacts/01a151c0-4722-76a0-9814-eb680a4be9b2/guard-source-qualification/f650798001903ced4a6eed4234409cf7abbbba31/qa-failed-a20f9bb6; terminal mutation-run.json SHA256c1435ae846fbbf15e7d3bd412536f1009bfba1774570086fc9d3525a07e89dac. Root awaits operator retirement of two owned dependency symlinks after installed43 guard refusal, then private physical dependencies and fresh unchanged6file80 run. No source edits/floor lowering/native qualification."
-    recorded_at: "2026-10-27T18:32:12.461Z"
-    commit_sha: f650798001903ced4a6eed4234409cf7abbbba31
+    evidence_ref: "Source04 execution ended incomplete during the 2026-10-29 reboot and has no report. Fresh physical Source05 execution export from immutable dd5762e245f5b4c714a35240e3e286bae6cbe415 archive SHA256 f16f686f1815e7163123424f7bf5d010d49b4da4b6844315efcbc721c8eb86ba, Node22.19.0 and npm ci 708 dependencies is running full nonincremental 7-file campaign with unchanged individual 80 percent floors; Stryker PID2420/session51421, retained external log /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/a7-qualified-source-05/execution/execution-full-01.log. At direct process/log check 263/2772 tested with 2 timeouts; no final report or floor verdict. This external log is manually inspected operational evidence, not a repo-relative artifact citation or completed test. Source a21 Native-only delta lies outside captured CLI/docs inputs. Full exclusive workflow unqualified."
+    recorded_at: "2026-10-29T19:42:25.066Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Current Source a21c33bd bounded A3 transaction. Same genuine SID 01a185e5 used private installed package digest 380e9c3f, runtime digest 523b2306, hooks SHA03985a68, host b7bee6fa and execution Native 76eb53c0. Manually inspected raw external logs /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/native-agent-workflow-09/a3-current-writer-reprobe-events.jsonl (valid caws_exec event39, exact opaque narrative and same actor in spec/ac_recorded), /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/native-agent-workflow-09/a3-current-mixed-reprobe-events.jsonl (writer plus unconditional foreign append refused analyze/unsupported_profile pre-USER), and /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/native-agent-workflow-09/a3-current-merge-close-events.jsonl (normal audit, private merge/closure). Before/after spec/event and protected/outside hashes were independently unchanged for the mixed refusal. Private pass event40, audit ce7b562, final private HEAD ecf7192. The first identical valid writer-only call failed analyze/context_unresolved before USER; reliability cause remains unqualified. Repo-relative artifact packages/caws-native/src/execution_owner.rs and Source commit a21c33bd pin the implementation only; existence verification does not execute the private scenario. Full exclusive npm/Git/merge/downstream/close and secure socket origin remain unqualified."
+    recorded_at: "2026-10-29T19:41:53.806Z"
+    artifact_path: packages/caws-native/src/execution_owner.rs
+    commit_sha: a21c33bdc7d24f9b1af884cfbdae234309d6ded9
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "Source04 analysis ended incomplete during the 2026-10-29 reboot and has no report. Fresh physical Source05 analysis export from immutable dd5762e245f5b4c714a35240e3e286bae6cbe415 archive SHA256 f16f686f1815e7163123424f7bf5d010d49b4da4b6844315efcbc721c8eb86ba, Node22.19.0 and npm ci 708 dependencies is running full nonincremental 9-file campaign with unchanged individual 80 percent floors; Stryker PID64201/session17155, retained external log /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/a7-qualified-source-05/analysis/analysis-full-01.log. At direct process/log check 709/5605 tested with no timeouts; no final report or floor verdict. This external log is manually inspected operational evidence, not a repo-relative artifact citation or completed test. Source a21 Native-only delta lies outside captured CLI/docs inputs. Full exclusive workflow unqualified."
+    recorded_at: "2026-10-29T19:42:34.933Z"

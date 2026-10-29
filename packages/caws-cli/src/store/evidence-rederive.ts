@@ -54,33 +54,13 @@ import {
   type Spec,
 } from '../kernel';
 
-export const TEST_RUNNERS = [
-  'pytest',
-  'jest',
-  'node',
-  'bats',
-  'vitest',
-  'cargo',
-  'go',
-  'unknown',
-] as const;
-export type TestRunner = (typeof TEST_RUNNERS)[number];
-/** Runners a caller may name as an override; `unknown` is a detection result, not a choice. */
-export const SELECTABLE_TEST_RUNNERS: readonly TestRunner[] = TEST_RUNNERS.filter(
-  (r) => r !== 'unknown'
-);
-/**
- * Runners this module can actually run. Selectable is a larger set than
- * executable: naming `--runner cargo` is accepted and reports `unavailable`,
- * because detection is implemented for every runner but execution is not.
- *
- * Exported so the dispatch below and the `--runner` help text derive the split
- * from ONE place. The help previously listed the selectable set with no hint
- * that three of its members verify nothing, and a reader wiring `--runner go`
- * into CI got a gate that reports success while checking nothing — the failure
- * class this repository's release stance names as the most dangerous.
- */
-export const EXECUTABLE_TEST_RUNNERS: readonly TestRunner[] = ['pytest', 'jest', 'node', 'bats'];
+export {
+  TEST_RUNNERS,
+  SELECTABLE_TEST_RUNNERS,
+  EXECUTABLE_TEST_RUNNERS,
+  type TestRunner,
+} from '../shell/analysis/caws-read-metadata';
+import { EXECUTABLE_TEST_RUNNERS, type TestRunner } from '../shell/analysis/caws-read-metadata';
 
 function isExecutableRunner(runner: TestRunner): boolean {
   return EXECUTABLE_TEST_RUNNERS.includes(runner);

@@ -1,3 +1,5 @@
+import { isCawsReadInvocation, isCawsLiteralExecutable } from './caws-read-metadata';
+
 /** Pure argument-role definitions shared by effect analysis and prefix inspection.
  * These profiles assume normal executable lookup and trusted Git configuration.
  * They do not authenticate executables, discover repositories or grant authority.
@@ -57,7 +59,7 @@ export const GIT_OPTION_FLAGS: Record<string, RegExp> = {
   status: /^(?:-[sbz]+|--(?:short|branch|porcelain(?:=v[12])?|ignored|untracked-files(?:=.*)?))$/,
   diff: GIT_DIFF_FLAGS,
   log: /^(?:-[psw]|-n[0-9]+|-U[0-9]+|--(?:oneline|graph|all|first-parent|no-merges|merges|no-walk|decorate(?:=.*)?|stat|numstat|shortstat|name-only|name-status|raw|patch|no-patch|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+|(?:max-count|grep|author|committer|since|until)=.*|(?:format|pretty)=(?:oneline|%H|%h|%s|%b|%B)))$/,
-  show: /^(?:-[psw]|-U[0-9]+|--(?:stat|numstat|shortstat|name-only|name-status|raw|patch|no-patch|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+|(?:format|pretty)=(?:oneline|%H|%h|%s|%b|%B)))$/,
+  show: /^(?:-[psw]|-U[0-9]+|--(?:oneline|stat|numstat|shortstat|name-only|name-status|raw|patch|no-patch|no-ext-diff|no-textconv|no-color|color(?:=.*)?|unified=[0-9]+|(?:format|pretty)=(?:oneline|%H|%h|%s|%b|%B)))$/,
   'rev-parse':
     /^--(?:verify|quiet|short(?:=[0-9]+)?|abbrev-ref|symbolic-full-name|show-toplevel|show-prefix|show-cdup|git-dir|absolute-git-dir|git-common-dir|is-inside-work-tree|is-bare-repository)$/,
   'ls-files': /^(?:-[zsomcd]+|--(?:stage|others|exclude-standard|cached|modified|deleted))$/,
@@ -263,6 +265,7 @@ export function inspectSedArguments(
 
 /** Closed inspection subset, independent of contextual effects/ownership policy. */
 export function isInspectionInvocation(argv: readonly string[]): boolean {
+  if (isCawsLiteralExecutable(argv[0])) return isCawsReadInvocation(argv);
   const name = argv[0]?.replace(/^\/(?:usr\/)?bin\//, '');
   if (!name || name.includes('/')) return false;
   const args = argv.slice(1);

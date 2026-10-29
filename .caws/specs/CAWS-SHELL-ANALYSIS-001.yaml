@@ -2,9 +2,9 @@ id: CAWS-SHELL-ANALYSIS-001
 title: 'Prove bounded shell behavior before worktree-isolation decisions'
 mode: fix
 lifecycle_state: active
-worktree: execution-boundary
+worktree: execution-boundary-landing
 created_at: '2026-10-19T02:30:42.300Z'
-updated_at: '2026-10-27T00:18:32.626Z'
+updated_at: '2026-10-29T21:41:18.768Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -48,8 +48,6 @@ scope:
     - packages/caws-cli/templates/hook-packs/shared/stop-worktree-check.sh
     - packages/caws-cli/tests/hooks/guard-path-identity.test.js
     - packages/caws-cli/templates/hook-packs/shared/lib/copy-roles.sh
-    - packages/caws-cli/src/execution/
-    - packages/caws-cli/tests/execution/
   out: []
   support:
     - docs/guides/command-analysis.md
@@ -73,6 +71,82 @@ scope:
     - packages/caws-cli/stryker.execution.conf.js
     - packages/caws-cli/scripts/stryker-config.cjs
     - packages/caws-cli/tsconfig.vnext.json
+    - docs/internal/caws-runtime-modernization.md
+    - packages/caws-cli/scripts/qualify-stop-profile.mjs
+    - packages/caws-cli/src/init/machine-runtime-state.ts
+    - packages/caws-cli/src/init/native-hook-identification.ts
+    - packages/caws-cli/src/init/native-runtime-entry.ts
+    - packages/caws-cli/src/init/system-runtime.ts
+    - packages/caws-cli/src/runtime/cli-identity-loader.ts
+    - packages/caws-cli/src/runtime/describe-entry.ts
+    - packages/caws-cli/src/tooling/native-qualification-prepare-entry.ts
+    - packages/caws-cli/src/tooling/native-qualification-prepare.ts
+    - packages/caws-cli/src/tooling/native-sqlite-build.ts
+    - packages/caws-cli/tests/adapter/native-entry-registration.test.js
+    - packages/caws-cli/tests/adapter/native-runtime-entry.test.js
+    - packages/caws-cli/tests/adapter/opencode-project-registration.test.js
+    - packages/caws-cli/tests/runtime/cli-identity-loader.test.js
+    - packages/caws-cli/tests/runtime/describe-entry.test.js
+    - packages/caws-cli/tests/tooling/native-qualification-prepare.test.js
+    - packages/caws-cli/tests/tooling/native-sqlite-build.test.js
+    - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
+    - packages/caws-native/src/bin/caws-prepare-source.rs
+    - packages/caws-native/src/cli.rs
+    - packages/caws-native/src/context_git.rs
+    - packages/caws-native/src/context_git/original_project.rs
+    - packages/caws-native/src/context_git/render.rs
+    - packages/caws-native/src/context_git/stop.rs
+    - packages/caws-native/src/engine_custody.rs
+    - packages/caws-native/src/engine_custody/tests.rs
+    - packages/caws-native/src/engine_custody/worker.rs
+    - packages/caws-native/src/engine_custody/worker/tests.rs
+    - packages/caws-native/src/execution_authorizer_wire.rs
+    - packages/caws-native/src/execution_carrier.rs
+    - packages/caws-native/src/execution_child.rs
+    - packages/caws-native/src/execution_control.rs
+    - packages/caws-native/src/execution_fd_transport.rs
+    - packages/caws-native/src/execution_fence.rs
+    - packages/caws-native/src/execution_host.rs
+    - packages/caws-native/src/execution_ingress.rs
+    - packages/caws-native/src/execution_owner.rs
+    - packages/caws-native/src/execution_prepare.rs
+    - packages/caws-native/src/execution_prepared.rs
+    - packages/caws-native/src/installed_compatibility.rs
+    - packages/caws-native/src/installed_entry.rs
+    - packages/caws-native/src/installed_generation.rs
+    - packages/caws-native/src/lib.rs
+    - packages/caws-native/src/main.rs
+    - packages/caws-native/src/monotonic_deadline.rs
+    - packages/caws-native/src/native_generation.rs
+    - packages/caws-native/src/preparation_parent.rs
+    - packages/caws-native/src/process_effect.rs
+    - packages/caws-native/src/render_context.rs
+    - packages/caws-native/src/render_observation.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/sqlite_build_identity.rs
+    - packages/caws-native/src/stop_budget.rs
+    - packages/caws-native/src/stop_git.rs
+    - packages/caws-native/tests/engine_custody.rs
+    - packages/caws-native/tests/installed_compatibility.rs
+    - packages/caws-native/tests/installed_deadline.rs
+    - packages/caws-native/tests/installed_entry.rs
+    - packages/caws-native/tests/invoke.rs
+    - packages/caws-native/tests/preparation_parent.rs
+    - packages/caws-native/tests/sqlite_identity.rs
+    - scripts/install-cli-snapshot.mjs
+    - scripts/install-cli-snapshot.test.mjs
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/evidence-rederive.ts
+    - packages/caws-cli/tests/shell/caws-read-metadata.test.js
+    - packages/caws-cli/tests/shell/specs-evidence.test.js
+    - packages/caws-native/src/execution_server.rs
+    - packages/caws-native/src/bin/caws-execution.rs
+    - packages/caws-native/tests/execution_server.rs
+    - packages/caws-cli/tests/shell/specs-evidence-verify.test.js
+    - packages/caws-cli/scripts/mutation-input-identity.mjs
+    - packages/caws-cli/src/execution/
+    - packages/caws-cli/tests/execution/
 invariants:
   - 'Analysis never executes submitted commands, expansions, scripts or redirections.'
   - 'Every possible shell-visible Git target and admitted execution-bearing argument satisfies the declared policy; unresolved syntax or values never become an allow proof.'
@@ -233,10 +307,10 @@ evidence:
     recorded_at: "2026-10-19T20:56:23.475Z"
     commit_sha: "4bde1f492b1d6633ce401330371a68c9367cdc11"
   - criterion_id: A5
-    status: pass
-    evidence_ref: "Scoped SOURCE/PRIVATE COMPONENT qualification at clean9413fd11; native/default/global adoption excluded. Final six-file qualification originalexec79307 naturally0, frozen9cf run9e8bbe6b-20fa-4648-aebb-329fe01ea060:4342mutants3734Killed606Survived2Timeout, all6 unchanged80floors pass evenzeroTimeoutcredit; reportSHA2f4b4d99222663638e4ac767fa23125c590f20315baf42b9fc1a8458079c34dd, receipt9d557829753715e621c85349ed2b1a2794a0959ae63b38a11d47803bee98556c. All6source/3gatedtest bytes independently equal current9413; whole9cf input snapshot is not relabeled current. Node22 full10Jest2293pass at8a; currentaffected3suites168pass, full197Bats0, producer17pass, normalbuild0, strict3docs0, doctor0E5W7I, fivegatesPASS60paths. All4docs committedfff5 plus guide8a/9413. Committed-candidate independent read-only peer findings grounded/reproduced/repaired (registeredrootEACCES, Nodeabsence); peer is not acceptance authority. Exact original packaged-smoke command/cwd/target ran unchanged under ordinary selected43 after trusted hostworkdir precondition genuinely changed, actualexec25185 terminal0; raw combined-packaged-smoke.log SHAd4b8c71039621f5b89c694549685987903beca16064a4ce5e691a297d1739b47, tarballc6f549d7bb61452204d75fc85da7ba4e38dea596a28f851aa9e2e244e24ef30b carries unbash6/Acorn8.15/loader/docs; benignallow/hostiledeny/no submitted sideeffect/lifecycle23/nativeprojection2; syntheticExecutionContext=true/nativeProducerVerified=false. Scoped rollback4selected/51unselected actualexec43130 terminal0: real private two-generation digest+library behavior, stableentryrepair target preserved, selfprevious pointer rejects unchanged, corruptactive restores verifiedprevious. Raw landing-9413fd11-rollback.json SHAfd0668e0856a00be84cd313f039e49e4e6dbba1407a205ea04a9097cea33146f. Raw files manually inspected in original Source packages/caws-cli/reports/mutation-analysis, retained physical checkout via supported untrack/freshsame-spec landing; no copycarrier. Snapshot doesnotprove Jestresolution orchange/restore exclusion;606survivors notgeneralcorrectness. This verify checks commitexistence only, not ignoredraw execution. A7unchecked; native fullchain/custody/canary/semanticrollback remain Parent/installedentry obligations; executionboundary proposed only; no globalinstall/cutover."
-    recorded_at: "2026-10-26T21:40:32.184Z"
-    commit_sha: "9413fd11bca0f2c0a336a5609ead7fd0237ae761"
+    status: unchecked
+    evidence_ref: "Clean continuation candidate09b7c30bbfedba810e7896b19fa3c7d3428368b4, original parent3a0e596db, all4requested docs joined. Current A7 pass event15231/private package380/runtime4123/direct13+actualstock dispatch/rollback remain their verified legacy generation; do not conflate with native adoption. Latest bounded Native final-checkpoint real-writer proof and explicit gaps are A11 unchecked event15249/hashb5a7eab1515d1f83e4455643adc72c71740e698f1de23ceaa8370cc8fb658341. Actual98 components0/22.80s, SourceSHA8a45bd7169c859b340e4459da2bcb7ad7aa8818fc9805481f4441b4e41170eda, full primary runtime observations ownSID/a7-real-writer-ordering-01/observations-05 and build-test-05; samechecks final control phase is Native-only production delta, fresh pinned matching native canary/full tuple checks remain owed. Independent peer scheduling counterexample independently traced/repaired at native checkpoint516 and consumer callback; followup read-only feedback not acceptance authority. Doctor0E5W7I/gates02 fivePASS99paths/rustfmt-diff0, clean normal commits ba193+09b7. Node04 full9/7 remain active immutable physical exports with unchanged captured inputs from dd5762; fresh QA A1 unchecked event15250 and A2 unchecked15251 carry exact commands/handles/UUIDs/report paths. No floor/identity/adjudication/Source closure verdict. Caws Stryker setup explicitly removes inherited session/project/machine authority; exports have no.caws, so release of original control-plane bindings does not change captured source/tests or fixture authority. Coordinator01a17941 explicitly accepts remaining Source fullqualification/reportadjudication, sole evidence after release, normal governed landing/all4docs and originpush via messageb53e3747. Clean release plan uses supported CLI untrack to preserve physical original QA and parent Git/raw reports; dryruns both0 and preserve physical paths, without retrying refused raw-copy carrier. Then receiving coordinator must acquire fresh SAMEspec parent/child bindings normally, ordinary merge preserved QAbranch, inspect exact captured-root correspondence, finish remaining A5/A11/A12 and QA1/2, gates/review, merge and push. No foreign takeover, force, historyrewrite or direct.caws edits authorized by handoff. Until release events and normal receiving binding are inspected, no completed authority transfer asserted. Unique reports/cache/symlinks remain in original physical lanes for inspection; no destructive cleanup of them. Earlier stopped/error attempts and guardrefusals remain retained; Native source-only proof does not rewrite historical generation identities. Native/global/strongOrigin and holistic exclusive npm-Git-lifecycle cutover unqualified. This is an accepted unfinished continuation, not completion, landing or publication."
+    recorded_at: "2026-10-29T13:23:10.001Z"
+    commit_sha: "09b7c30bbfedba810e7896b19fa3c7d3428368b4"
   - criterion_id: A6
     status: pass
     evidence_ref: "Scoped installed-private-package PASS at clean56ec137241f15ea8bc649b0dbc95e8a299b6a753, lineage089cab6f effect contract /cc96f991 option custody /cd1035b7 startup effects /56ec1372 assertion correction. Exact rebuilt8suite command exit0:1889passed,0failed/pending. Actual npm-packed isolated installation fixture exit0, tarballSHA91b4e390fbafc4291777018f0463f434447fa6a459e7f08ab14ac6ddc8564a62; Acorn8.15/unbash6/loader/docs shipped. Benign quoted arrow0,then-read0,quotedsearch0; same-project foreign Nodewrite2,other-repo Nodewrite2,nested shellwrite2; foreignread+ownedwrite0. Rebound initially-exported-empty coverage2,inactive emptycoverage0; trailingstartup/replacementsource/ambiguousprint2; option-boundary data0; malformed/unavailablebackend2. Lifecyclefixedstand-inexit23preserved. No submittedpayloadexecuted/sentinelsabsent. Rawcurrent+failedattempts and21source/976compiled hashes retained at /Users/darianrosebrook/.codex/artifacts/01a151c0-4722-76a0-9814-eb680a4be9b2/guard-coordination-20261021/candidate-56ec1372/inventory.json. Exact projection full-file mutation83.35%,891killed/178survived/0timeouts,report source==HEAD; unchanged classifier607mutants92.59% source==HEAD. Policies full-file mutation stillrunning: no quality completion or freshwhole6-filegate claimed. Doctor0E/3W/4I,gates5pass; independent read-only committed-candidate feedback grounded in predicate/consumer/tests, no peer-verdict authority. --verify selectedtest execution andcommit identity do not establish wholeAC or nativeproof. syntheticExecutionContext=true/nativeProducerVerified=false; deployed408c06a7 unchanged. A5/A7 remainunchecked: final-launch identity/context/routing/custody,full-chain nativecanary andwhole-machine rollback unproved; boundary is design only, no merge/install/cutover. Root retains pending policies quality check in owned shell-analysis; parent01a15a2a owns combined native integration."
@@ -245,10 +319,10 @@ evidence:
     commit_sha: "56ec137241f15ea8bc649b0dbc95e8a299b6a753"
     test_verified_at: "56ec137241f15ea8bc649b0dbc95e8a299b6a753"
   - criterion_id: A7
-    status: unchecked
-    evidence_ref: "SOURCE CHECKPOINT at9413: decoded original envelope conflict holds, project-preserving standalone lifecycle rewrite and status23 preservation are supported by synthetic installed fixture and full2293 baseline/current168affected+197Bats. Host transport has genuinely changed one coordinate: same Source actor/runtime43 top-level trusted execution_workdir now validates physical Source/package directory; actual hook record fe406db5-288a-4757-a876-7ebecd2285b2 (also3a93ab86/4a3f7b29) and installed launcher.py609-636/648-660/787/908 plus BWG154-170 independently inspected; fields not inserted by caller. That resolved precondition permitted unchanged original package recipe actual25185/0. It does not bind actualshell/login/startup/completeenv/stdin/finalargv or postguard updatedInput and later snapshot rewrites. Source hooks.ts native Codex execution-contract refusal remains, current package nativeprojection2, syntheticExecutionContext=true/nativeProducerVerified=false. Typed execution boundary is proposed only; no owned executor implemented, no native/default/globaladoption. Concrete external blocker: trusted host must prepare complete final-launch record after transformations, nonexecuting authorization plus private single-use permit consumed by same launch owner; changed fields invalidate before launch. Existing CAWS-NATIVE-INSTALLED-ENTRY-001 owner01a15984 and CAWS-NATIVE-RUNTIME-001 owner01a17052 retain installedentry/final-launch/canary/semanticrollback obligations; Parent accepted handoff49df, currentackbe206805. Source owner01a151c0 retains A7 bridge after no-close source landing and physical proof. Resumption trigger is trusted complete host launch contract plus actual correlated native/fullchain canary and native rollback evidence; caller metadata or parser-only rollout cannot lift A8. Verify is commitidentity only, not native proof."
-    recorded_at: "2026-10-26T21:41:11.686Z"
-    commit_sha: "9413fd11bca0f2c0a336a5609ead7fd0237ae761"
+    status: pass
+    evidence_ref: "Verified A7 legacy guard/lifecycle contract on clean750afa78d320c62f288c65c8a92c144b9de34ff5 and selected22 detached installedpackage380e9c3fa844fae667891756c1c4723a20070de7bd36c9b7a4beb512ec5c76e6, not genuine native final-launch/adoption. ActualSourcecaller matrix183exit0 retained ownSID/a7-final-owner-01/guard-caller-01.json+log covers originaltransportauthority, nativealias/source/shell/startup/cwd holds and ownership forwarding; inspected assertions target metadata semantics ratherthan shape. Currentinstalled a7-final-installed-01/attempt-NLN459 retains13directguardrows plus compiledfiniteallow0/foreignGitdeny1: originalpayloadfile overrides harmlessstdin/cache, decodedabsolute foreignworkdir reaches foreignoracle, command/shell/loginconflicts unresolved2, onlystandalone merge/destroy rewrite, quoted/compoundneighbors untouched. Full actualprivate stockbootstrap currentpackage proof at dispatch-XpHlAi/result.json: benignBash0 noask, merge/destroy permissionDecisionallow+canonicalcd then fixedstandins each exit23/exactstdoutstderr/canonicalcwd; quotedmention+foreignneighbor and compoundlifecycle+foreignneighbor each2 BEFOREupdatedInput, foreignmarkerabsent. Uses syntheticcompleteBash envelopes and fixedstandins, not actualmerge/destroy or nativehostapplied updatedInput; these final-launch/nativeprofile obligations remain A11/A12. Prior2eb failedstockdispatch-SNLqcS ASK frominternalBASHENVshim is retained. Runtime wrapperfix00d06 restores exactdispatch-entry BASHENVpresence/value, includingempty and genuineprior; no analyzerweakening or unknownstartup exemption. Hardened9actualhandlerPID+selectedshim-source-trace controls exit0 at a7-dispatch-startup-hardened-02; bothhandlers preloadselectedlibs, genuine/selfunsettingstartup staysunresolved. Olderunconditionalmarker and macOSstartup$0casewere inadequate; diagnostic andfailedattemptsretained, strongeroraclegrounded. Fulladapter64exit0/build0/doctor0/gates5PASS apply sameproductionwrapper; current750 test/docdelta verifiedfocused9/gates02 and matchingfreshsnapshot/currentdocs. Independentpeer concern discharged against exactPID/trace sourceassertions; not acceptanceauthority. KnownreducedCodexhookprojection remains execution-contractheld underA8. Native/global/Originadoption and completeSourceparentclosure remain unqualified; fullnew9/7 mutationfloors, A5/A11/A12, retainedrawQAartifacts and governedjoinedsource+all4docs landing/push stillowed."
+    recorded_at: "2026-10-29T11:17:58.587Z"
+    commit_sha: "750afa78d320c62f288c65c8a92c144b9de34ff5"
   - criterion_id: A8
     status: pass
     evidence_ref: "At83c native-contract-83c09689.json records7 executed assertions: all5native aliases held even with caller shell/login/workdir plus CLI --shell, bothdecoder decisions unresolved/execution-contract with no surrogate execution/tokens/lifecycle; literal diagnostic declared-context allow; mandatory guard harmless-looking native source refused2. CLIdecoder/mandatory bridge unchanged at4bde, independently source-inspected. Current real installed tarball d9055bb5999f97740007c3da925d109e1e1218b5ce5af0bfb90d1c5bb59cb0e7 repeats packagedCodexNativeProjection2. Original envelope always forwarded, no --command downgrade; trusted launcher surface gate precedes native qualification. Ignored reports under packages/caws-cli/reports/mutation-analysis/ manually inspected. This refusal is not benign admission/native qualification or rollout readiness. --verify checks commit identity only; generated evidence intentionally uncommitted."
@@ -273,6 +347,6 @@ evidence:
     commit_sha: "3054df0bb11632c77408a98821d9405bdc7a7cb2"
   - criterion_id: A11
     status: unchecked
-    evidence_ref: "Source f650798001903ced4a6eed4234409cf7abbbba31 and all four docs remain committed/tracked-clean. Prior normal joined build0, component197tests8suites0, Source gates5PASS35paths and doctor0E5W6I remain bounded component evidence. No complete six-file qualification: old868420cd and fresha20f9bb6 both exited1 naturally after shared canonical Stryker dependencies disappeared; no terminal mutation-report verdict. QA a20 built0, selected194tests42s,6files1985mutants before worker MODULE_NOT_FOUND. Failed attempts preserved outside disposable lanes at ~/.codex/artifacts/01a151c0-4722-76a0-9814-eb680a4be9b2/guard-source-qualification/f650798001903ced4a6eed4234409cf7abbbba31/{source-failed-868420cd,qa-failed-a20f9bb6}; terminal SHA oldbe364b15eb981ec36eb2e9d040ce485d09d2168266d7099fba138533471c8df3/newc1435ae846fbbf15e7d3bd412536f1009bfba1774570086fc9d3525a07e89dac, archive equality inspected. Installed npm ci.js86-94 directly demonstrates cleanup through a node_modules symlink; parent01a171b1 explicitly accepts setup/install recurrence prevention and canonical repair independently of Source qualification. Root private QA dependency isolation is blocked on operator retirement of two owned links after installed43 ask_uncertain:worktree-payload-no-entry:shell-analysis refusal; no in-band retry/override performed. First multiline paste became mkdir only, both links verified unchanged; corrected single-line operator request pending. Next: verify retired links, private physical deps, normal build/baseline and fresh all6 per-file80 run, retain terminal proof then governed no-close Source landing and normal push. Root retains this Source outcome. Nativeowner01a171b1/genuinehost01a17941 retain final owner/caller/sandbox/custody/canary/rollback and published-policy Rust compatibility obligations. Strict profile deliberately excludes npm/Cargo/Git/CAWS lifecycle; it cannot establish full workflow parity. A7/A11/A12 remain unchecked, native adoption unqualified. Verify checks commit identity only."
-    recorded_at: "2026-10-27T18:32:39.596Z"
-    commit_sha: f650798001903ced4a6eed4234409cf7abbbba31
+    evidence_ref: "Bounded real-writer and final Native checkpoint proof on clean Source09b7c30bb, not whole A11 acceptance. Committed ba193 adds actual Source in-process evaluator and real selected-runtime CLI scope writer tests;09b7 names the existing final liveness poll execution_user_spawn with identical checks/count/position immediately before job-deadline calculation and Command.spawn, moves held-writer attempt to that consumed-final-reply Native checkpoint, and adds control-loss zero-USER assertion. Actual production worker execution_server.rs1148 ignores phase labels and polls same private channel. Independent peer counterexample about earlier Source marker scheduling was independently grounded and repaired; earlier04/97 outputs retained narrower proof, not relabeled. Actual release offline locked jobs1 lib execution_ include-ignored run build-test-05 exited0:98 passed,0failed/ignored,22.80s after1m47 build. Source file SHA8a45bd7169c859b340e4459da2bcb7ad7aa8818fc9805481f4441b4e41170eda; lib-test binary142fa19c3f6d8d6032745add87fcbfecc67aa8556ddaef5903c4fc65b1299e12. Raw ownSID/a7-real-writer-ordering-01/observations-05 manifests retain exact prepared records and Node/Source/fixture/wrapper identities and bytes, callback order, CLI argv/status/streams, scope/specSHA/HEAD/events/USER/fence state. Before fence actual analyze allow then realCLI0 commits revocation/event; final_validate authority_changed, possiblefalse/noUSER/no custody. At execution_user_spawn after consumed final allow realCLI1 lock_contention preserves spec/hash/HEAD/events, USER absent/fencepresent; owner then0 and exact append once/fenceabsent; later sameCLI0 commits scope/event and marker remains once. New checkpoint loss artifact reachedtrue/Control/possiblefalse/no marker or custody/fenceabsent. Joined03 prior97 pass; joined01 missing discovery env and02 mistaken filename each exit101 with3 setupfailures retained. Rustfmt/diffcheck0, doctor0E5W7I, gates02 fivePASS over99committed/staged paths. Test callbacks deliberately synchronize and do not establish production nonblocking/fairness; syntheticTrustedInvocation true and realCarrierVerified false are explicit. Post-checkpoint interval supported by inspected source fence lifetime, not continuous runtime observation. Native production phase-label delta changes binary identity: older genuine host bc3 canary remains its own generation; fresh matching host checks/full executable-argv-env-startup observation and broader A11 altered-field/lifecycle adjudication remain OPEN. Node/docs captured inputs unchanged from dd5762; immutable04 full9/7 remain running with no floor verdict. Coordinator01a17941 explicitly accepted remaining qualification/report/evidence/landing/push responsibility in b53e3747; Source retains sole writer until explicit clean normal-authority release. Native/global/strongOrigin and full exclusive npm-Git-lifecycle workflow remain unqualified."
+    recorded_at: "2026-10-29T13:19:11.937Z"
+    commit_sha: "09b7c30bbfedba810e7896b19fa3c7d3428368b4"

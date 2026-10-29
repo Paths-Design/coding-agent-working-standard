@@ -2,12 +2,14 @@
 
 const { spawnSync } = require('child_process');
 const path = require('path');
+const { nodeProcessEnv } = require('./lib/node-process-env.cjs');
 
 const packageRoot = path.resolve(__dirname, '..');
 
 const realRun = (command, args) =>
   spawnSync(command, args, {
     cwd: packageRoot,
+    env: nodeProcessEnv(),
     stdio: 'inherit',
     shell: false,
   });

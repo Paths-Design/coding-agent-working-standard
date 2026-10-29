@@ -23,12 +23,33 @@ The pinned structural parser accepts complete newline-separated simple commands
 with literal operands, including quoted operands. Reader, Git and sed argument
 roles share definitions with effect analysis. The closed subset includes reader
 utilities, explicit Git inspection subcommands, `git branch --show-current`,
-`pwd` with its modeled options, and sed print/delete/quit scripts. Assignments,
-redirections, expansions, substitutions, operators, wrappers, control
-structures, lookup mutations, execution/output options and unknown commands are
-unsupported. This syntax policy assumes trusted ordinary executable lookup and
-Git configuration; it does not authenticate executable identity or grant
-ownership.
+`pwd` with its modeled options, sed print/delete/quit scripts, and explicitly
+reviewed CAWS read routes. Assignments, redirections, expansions, substitutions,
+operators, wrappers, control structures, lookup mutations, execution/output
+options and unknown commands are unsupported. This syntax policy assumes trusted
+ordinary executable lookup and Git configuration; it does not authenticate
+executable identity or grant ownership.
+
+CAWS read routes, option effects and literal operand roles live in the pure
+`src/shell/analysis/caws-read-metadata.ts` module. Normal CLI registration uses
+the same leaf definitions through the command catalog; inspection does not load
+the catalog's store/lifecycle dependencies. Reviewed families include specs,
+scope, status, doctor, worktree review/list, gates inspection, evidence readers,
+event readers, waiver/reprieve readers, agent readers, working-tree check, goal
+show and non-consuming message readers. Status/lifecycle/state and message-id
+aliases retain their declared roles. `specs recover --out` writes, and
+`specs verify-acs --run` executes tests: both decline projection. Unknown routes
+or options, unreviewed option effects, invalid enums, missing/excess operands
+and ambiguous option combinations also decline. This is a closed syntax
+contract, not a check that referenced specs, files or messages exist.
+
+Bare `caws` and literal absolute paths ending in `/caws` use the same contract
+under normal trusted lookup/configuration assumptions. The basename does not
+authenticate an arbitrary binary. Relative executable paths, wrappers,
+assignments and lookup changes are unsupported. This does not prove general Node
+payload safety or protection against a pre-existing shell function, hostile
+PATH, or startup configuration; original raw interpreter-write checks and the
+caller's trusted execution environment remain necessary.
 
 The classifier limits input to 32 KiB, 64 commands, 4096 AST objects and
 depth 64. A supervisor limits synchronous parsing in a worker to two seconds,
