@@ -1,0 +1,38 @@
+id: CAWS-EXCLUSIVE-NPM-TEST-001
+title: 'Admit bounded npm test through exclusive native execution'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-10-29T21:29:09.572Z'
+updated_at: '2026-10-29T21:29:09.572Z'
+created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
+blast_radius:
+  modules:
+    - 'Source discovery and final authorization for ordinary npm test under the managed host write ceiling'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/execution/'
+    - 'packages/caws-cli/tests/execution/'
+  out: []
+invariants:
+  - 'Admit only the exact foreground npm test command after independent discovery and final authorization; all other npm forms refuse before USER spawn.'
+  - 'The profile requires an authenticated Native host write ceiling with invocation-private output, tmp and cache roots; source text, model cwd and asserted paths do not confer authority.'
+  - 'No npm or test descendant receives the canonical CAWS fence or private startup control descriptors; the producer retains custody through verified settlement.'
+acceptance:
+  - id: A1
+    given: 'an owned worktree and installed exclusive native route with enforced host ceiling'
+    when: 'the same genuine agent invokes npm test before and after its bounded source edit'
+    then: 'actual npm and Node output is RED then GREEN with exact source and protected state readback'
+  - id: A2
+    given: 'bare npm, arguments, prefixes, compound source, changed package scripts, path shadowing or missing ceiling'
+    when: 'either Source phase evaluates the request'
+    then: 'execution refuses before USER and leaves source, protected state and canonical governance unchanged'
+  - id: A3
+    given: 'a real concurrent canonical lifecycle writer'
+    when: 'npm test holds a producer-owned fence through actual USER settlement or loses its reply'
+    then: 'the writer is refused while custody is uncertain and succeeds only after verified release'
+non_functional: {}
+contracts:
+  - name: 'npm-test-native-route'
+    type: behavior
