@@ -605,14 +605,19 @@ metadata, not default diagnostic output.
 
 `caws-execution --config <absolute-config>` implements a restricted MCP adapter.
 It requires a host-created local socket duplicated to stdin and stdout, with
-kernel peer process identity matching the live pinned direct host. A pipe, an
-asserted caller object or a pinned parent without authenticated input is
-insufficient. The configuration pins the native, host, Node, authorizer,
-discovery and writer images, and an exhaustive package/dependency generation
-manifest. The manifest resides outside its physical generation root. Missing,
-added, replaced or aliased generation files refuse. Protecting that generation
-from concurrent untrusted writes and proving the actual sandbox route are
-deployment obligations.
+kernel peer process identity matching the live pinned direct host. This checks
+the current peer process; it does not authenticate bytes queued before that
+process executes the pinned image. Darwin's freshly queried peer audit token
+also reflects the current executable generation. Qualification must distinguish
+genuine traffic, transferred endpoints and prequeued traffic across same-PID
+exec, with kernel observations tied to the consumed request. A pipe, an asserted
+caller object or a pinned parent without authenticated input is insufficient.
+The configuration pins the native, host, Node, authorizer, discovery and writer
+images, and an exhaustive package/dependency generation manifest. The manifest
+resides outside its physical generation root. Missing, added, replaced or
+aliased generation files refuse. Protecting that generation from concurrent
+untrusted writes and proving the actual sandbox route are deployment
+obligations.
 
 The paired host must implement the opt-in `authenticated_socket` transport. Its
 reviewed local MCP configuration uses the native executable directly:

@@ -18,6 +18,12 @@ const { randomUUID } = require('node:crypto');
 const packageRoot = path.resolve(__dirname, '..');
 const policy = JSON.parse(fs.readFileSync(path.join(packageRoot, 'mutation-policy.json'), 'utf8'));
 
+function typeCheckConsumers(surfaceId) {
+  return surfaceId === 'analysis'
+    ? ['src/shell/command-metadata.ts', 'src/shell/analysis/inspection-prefix-entry.ts']
+    : [];
+}
+
 function createJestConfig(surfaceId, tests) {
   const config = {
     rootDir: '.',
@@ -52,9 +58,7 @@ function createStrykerConfig(surfaceId) {
   // These are preprocessing inputs, never additional mutation targets.
   const typeCheckInputs = [
     ...surface.targets.map((target) => target.source),
-    ...(surfaceId === 'analysis'
-      ? ['src/shell/command-metadata.ts', 'src/shell/analysis/inspection-prefix-entry.ts']
-      : []),
+    ...typeCheckConsumers(surfaceId),
   ];
 
   // stage-consumer-docs resolves ../.. from the sandbox package. A sandbox
@@ -162,4 +166,4 @@ function createStrykerConfig(surfaceId) {
   return config;
 }
 
-module.exports = { createStrykerConfig };
+module.exports = { createStrykerConfig, typeCheckConsumers };

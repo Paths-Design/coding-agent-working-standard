@@ -1049,6 +1049,234 @@ describe('per-file mutation report contract', () => {
   });
 });
 
+describe('analysis type-consumer preprocessing identity', () => {
+  const authored = {
+    'src/shell/command-metadata.ts': "export const metadata = 'λ';\n",
+    'src/shell/analysis/inspection-prefix-entry.ts': "export const inspection = 'café';\n",
+  };
+  const prefix = '// @ts-nocheck\n';
+  const generator = 'scripts/fixture-generator.mjs';
+
+  function fixtureFor(mode = 'exact-prefix') {
+    const fixture = qualificationFixture({
+      coreBody: fixtureCoreBody({
+        beforeSandboxBuild: `
+          const consumers = ${JSON.stringify(Object.keys(authored))};
+          const mode = ${JSON.stringify(mode)};
+          const prefix = ${JSON.stringify(prefix)};
+          for (const file of consumers) {
+            const target = path.join(sandbox, file);
+            fs.writeFileSync(target, prefix + fs.readFileSync(target, 'utf8'));
+          }
+          const first = consumers[0];
+          if (mode === 'append-authored') fs.appendFileSync(path.join(sandbox, first), '// substituted suffix\\n');
+          if (mode === 'replace-authored') {
+            const target = path.join(sandbox, first);
+            fs.writeFileSync(target, fs.readFileSync(target, 'utf8').replace('metadata', 'metadatz'));
+          }
+          if (mode === 'prefix-generator' || mode === 'prefix-test') {
+            const file = mode === 'prefix-generator' ? ${JSON.stringify(generator)} : 'tests/store/a.test.js';
+            const target = path.join(sandbox, file);
+            fs.writeFileSync(target, prefix + fs.readFileSync(target, 'utf8'));
+          }
+          if (mode === 'captured-source-substitution' || mode === 'captured-identity-substitution') {
+            const forged = JSON.parse(fs.readFileSync(process.env.CAWS_MUTATION_RUN_CONTEXT, 'utf8'));
+            const source = forged.inputIdentity.typeConsumerSources[first].replace('metadata', 'metadatz');
+            forged.inputIdentity.typeConsumerSources[first] = source;
+            fs.writeFileSync(path.join(sandbox, first), prefix + source);
+            if (mode === 'captured-identity-substitution') {
+              const record = forged.inputIdentity.files.find(record => record.path === first);
+              record.sha256 = require('node:crypto').createHash('sha256').update(source).digest('hex');
+              record.size = Buffer.byteLength(source);
+              forged.inputIdentity.digest = require('node:crypto').createHash('sha256')
+                .update(JSON.stringify(forged.inputIdentity.files)).digest('hex');
+            }
+            fs.writeFileSync(process.env.CAWS_MUTATION_RUN_CONTEXT, JSON.stringify(forged));
+          }
+          fs.writeFileSync(path.join(context.repoRoot, 'type-consumer-observation.json'), JSON.stringify({
+            mode,
+            original: context.inputIdentity.typeConsumerSources,
+            sandbox: Object.fromEntries(consumers.map(file => [file, fs.readFileSync(path.join(sandbox, file), 'utf8')])),
+            context: JSON.parse(fs.readFileSync(process.env.CAWS_MUTATION_RUN_CONTEXT, 'utf8')).inputIdentity,
+          }));
+        `,
+        afterSandbox: `
+          const emitted = path.join(sandbox, 'dist/store/a.js');
+          const emittedBytes = fs.existsSync(emitted) ? fs.readFileSync(emitted) : null;
+          fs.writeFileSync(path.join(context.repoRoot, 'type-consumer-after-build.json'), JSON.stringify({
+            emittedSource: emittedBytes === null ? null : emittedBytes.toString('utf8'),
+            emittedSha256: emittedBytes === null ? null : require('node:crypto').createHash('sha256').update(emittedBytes).digest('hex'),
+            records: fs.readdirSync(context.sandboxBuildDir).map(file => JSON.parse(fs.readFileSync(path.join(context.sandboxBuildDir, file), 'utf8'))),
+          }));
+        `,
+      }),
+    });
+    fixture.policy.surfaces.analysis = fixture.policy.surfaces.store;
+    delete fixture.policy.surfaces.store;
+    fixture.put('mutation-policy.json', JSON.stringify(fixture.policy));
+    fixture.put(
+      'stryker.conf.cjs',
+      "module.exports = require('./scripts/stryker-config.cjs').createStrykerConfig('analysis');\n"
+    );
+    fixture.put(generator, '// authored generator input\n');
+    for (const [file, source] of Object.entries(authored)) {
+      fs.chmodSync(fixture.put(file, source), 0o640);
+    }
+    return fixture;
+  }
+
+  function observation(fixture) {
+    return JSON.parse(
+      fs.readFileSync(path.join(fixture.repoRoot, 'type-consumer-observation.json'), 'utf8')
+    );
+  }
+
+  test('the real runner/helper accepts exactly the two prefixed consumers bound to captured UTF8 bytes and original mode', () => {
+    const fixture = fixtureFor();
+    const result = runQualificationFixture(fixture, ['--surface', 'analysis']);
+    expect(result.error).toBeUndefined();
+    expect(result.signal).toBeNull();
+    expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+    expect(result.receipt.status).toBe('input-build-report-bound');
+    expect(result.receipt.surfaceId).toBe('analysis');
+    expect(result.receipt.sandboxBuilds).toHaveLength(1);
+    expect(result.receipt.sandboxBuilds[0].status).toBe(0);
+    const original = result.receipt.inputIdentity;
+    const sandbox = result.receipt.sandboxBuilds[0].inputIdentity;
+    expect(original.typeConsumerSources).toEqual(authored);
+    expect(Object.keys(sandbox.typeConsumerSources).sort()).toEqual(Object.keys(authored).sort());
+    for (const [file, source] of Object.entries(authored)) {
+      expect(Buffer.byteLength(source)).toBeGreaterThan(source.length);
+      expect(original.files.find((record) => record.path === file)).toEqual({
+        path: file,
+        sha256: createHash('sha256').update(source).digest('hex'),
+        size: Buffer.byteLength(source),
+        mode: 0o640,
+      });
+      expect(sandbox.typeConsumerSources[file]).toBe(prefix + source);
+      expect(sandbox.files.find((record) => record.path === file)).toEqual({
+        path: file,
+        sha256: createHash('sha256')
+          .update(prefix + source)
+          .digest('hex'),
+        size: Buffer.byteLength(prefix + source),
+        mode: 0o640,
+      });
+    }
+    expect(observation(fixture).sandbox).toEqual(
+      Object.fromEntries(Object.entries(authored).map(([file, source]) => [file, prefix + source]))
+    );
+    expect(result.receipt.discovery).toEqual({
+      sourceCount: 1,
+      declaredSourceCount: 1,
+      mutantCount: 5,
+      reportMutantCount: 5,
+    });
+  });
+
+  test.each([
+    ['append-authored', 'src/shell/command-metadata.ts'],
+    ['replace-authored', 'src/shell/command-metadata.ts'],
+    ['prefix-generator', generator],
+    ['prefix-test', 'tests/store/a.test.js'],
+  ])(
+    '%s is refused by the same runner/helper identity boundary despite a valid consumer prefix',
+    (mode, file) => {
+      const fixture = fixtureFor(mode);
+      const result = runQualificationFixture(fixture, ['--surface', 'analysis']);
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(`sandbox input detached from captured input: ${file}`);
+      expect(result.receipt.status).not.toBe('input-build-report-bound');
+      expect(result.receipt.error).toBe('missing executed sandbox build record');
+      expect(result.receipt.build.status).toBe(0);
+      const built = JSON.parse(
+        fs.readFileSync(path.join(fixture.repoRoot, 'fixture-build-observation.json'), 'utf8')
+      );
+      expect(built.status).toBe(1);
+      expect(fs.existsSync(path.join(built.sandbox, 'dist'))).toBe(false);
+      const observed = observation(fixture);
+      expect(observed.original).toEqual(authored);
+      expect(observed.sandbox['src/shell/command-metadata.ts'].startsWith(prefix)).toBe(true);
+      if (mode === 'append-authored' || mode === 'replace-authored') {
+        expect(observed.sandbox[file]).not.toBe(prefix + authored[file]);
+        if (mode === 'replace-authored')
+          expect(Buffer.byteLength(observed.sandbox[file])).toBe(
+            Buffer.byteLength(prefix + authored[file])
+          );
+      } else {
+        expect(fs.readFileSync(path.join(built.sandbox, file), 'utf8')).toBe(
+          prefix + fs.readFileSync(path.join(fixture.packageRoot, file), 'utf8')
+        );
+      }
+    }
+  );
+
+  test.each(['captured-source-substitution', 'captured-identity-substitution'])(
+    '%s cannot replace the captured authored source at helper or final record validation',
+    (mode) => {
+      const fixture = fixtureFor(mode);
+      const result = runQualificationFixture(fixture, ['--surface', 'analysis']);
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      const observed = observation(fixture);
+      const file = 'src/shell/command-metadata.ts';
+      const replacement = authored[file].replace('metadata', 'metadatz');
+      expect(observed.original).toEqual(authored);
+      expect(observed.context.typeConsumerSources[file]).toBe(replacement);
+      expect(observed.sandbox[file]).toBe(prefix + replacement);
+      const sourceHash = createHash('sha256').update(authored[file]).digest('hex');
+      const replacementHash = createHash('sha256').update(replacement).digest('hex');
+      expect(replacementHash).not.toBe(sourceHash);
+      const changedRecord = observed.context.files.find((record) => record.path === file);
+      expect(changedRecord.sha256).toBe(
+        mode === 'captured-source-substitution' ? sourceHash : replacementHash
+      );
+      expect(changedRecord.size).toBe(Buffer.byteLength(authored[file]));
+      expect(changedRecord.mode).toBe(0o640);
+      expect(result.receipt.status).not.toBe('input-build-report-bound');
+      const built = JSON.parse(
+        fs.readFileSync(path.join(fixture.repoRoot, 'fixture-build-observation.json'), 'utf8')
+      );
+      if (mode === 'captured-source-substitution') {
+        expect(result.stderr).toContain(`unbound type consumer source: ${file}`);
+        expect(result.receipt.error).toBe('missing executed sandbox build record');
+        expect(built.status).toBe(1);
+        expect(fs.existsSync(path.join(built.sandbox, 'dist'))).toBe(false);
+      } else {
+        expect(built.status).toBe(0);
+        expect(result.receipt.error).toContain(
+          `sandbox input detached from captured input: ${file}`
+        );
+        const emitted = JSON.parse(
+          fs.readFileSync(path.join(fixture.repoRoot, 'type-consumer-after-build.json'), 'utf8')
+        );
+        const expectedOutput = 'module.exports = 2;\n';
+        const expectedHash = createHash('sha256').update(expectedOutput).digest('hex');
+        expect(emitted.emittedSource).toBe(expectedOutput);
+        expect(emitted.emittedSha256).toBe(expectedHash);
+        expect(emitted.records).toHaveLength(1);
+        expect(emitted.records[0].status).toBe(0);
+        expect(
+          emitted.records[0].outputs.files.find((record) => record.path === 'dist/store/a.js')
+        ).toEqual({
+          path: 'dist/store/a.js',
+          sha256: expectedHash,
+          size: Buffer.byteLength(expectedOutput),
+          mode: 0o644,
+        });
+        expect(
+          emitted.records[0].inputIdentity.files.find((record) => record.path === file).sha256
+        ).toBe(
+          createHash('sha256')
+            .update(prefix + replacement)
+            .digest('hex')
+        );
+      }
+    }
+  );
+});
+
 describe('captured-input mutation report qualification', () => {
   test('matching original source and discovered test text preserves the per-file floor', () => {
     const fixture = qualificationFixture();

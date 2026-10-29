@@ -90,7 +90,8 @@ cannot grant admission. Existing registry read or format errors retain ownership
 uncertainty.
 
 The native `caws-execution` adapter implements a separate, restricted execution
-route with authenticated local socket input and a dedicated worker. Its
+route with local socket peer and host image checks and a dedicated worker. Those
+checks alone do not authenticate bytes queued before a same-PID exec. Its
 `caws-evidence-v1` consumer records one owned criterion through the canonical
 evidence transaction, verifies only requested artifact/commit citations, and
 returns an explicit pending audit commit. The normal continuation is
