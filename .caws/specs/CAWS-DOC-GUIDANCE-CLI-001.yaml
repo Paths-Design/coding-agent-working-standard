@@ -50,3 +50,9 @@ evidence:
     exit_code: 0
     artifact_path: AGENTS.md
     commit_sha: "0a49f64ae32f5776da9f6e107430a933f8db8096"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Prettier check and git diff --check passed. Prettier Markdown AST parsed AGENTS.md one table and README.md two tables, every row two cells; raw format-check.txt and table-check.txt under tmp/doc-guidance-cli. Final example-plan.json reports FEAT-1 valid=true, diagnostics=[], missing_fields=[]. Independent read-only completion feedback was grounded at specs.ts verifyPendingEvidence and installed worktrees-writer branch-delete path; both corrections committed. All five policy gates passed on final two-file candidate; doctor 0E/5W baseline warnings."
+    recorded_at: "2026-10-29T05:54:45.829Z"
+    artifact_path: README.md
+    commit_sha: "0a49f64ae32f5776da9f6e107430a933f8db8096"
