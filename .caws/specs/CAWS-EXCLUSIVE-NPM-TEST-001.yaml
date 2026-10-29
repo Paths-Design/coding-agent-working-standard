@@ -1,9 +1,10 @@
 id: CAWS-EXCLUSIVE-NPM-TEST-001
 title: 'Admit bounded npm test through exclusive native execution'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: exclusive-npm-test
 created_at: '2026-10-29T21:29:09.572Z'
-updated_at: '2026-10-29T21:29:09.572Z'
+updated_at: '2026-10-29T21:29:33.261Z'
 created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
 blast_radius:
   modules:
