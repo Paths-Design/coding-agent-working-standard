@@ -259,12 +259,20 @@ struct Config {
     discovery: ProgramImage,
     writer: ProgramImage,
     generation: Generation,
+    #[serde(default)]
+    npm: Option<NpmRuntime>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Generation {
     root: String,
     manifest: ProgramImage,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NpmRuntime {
+    root: String,
+    entry: ProgramImage,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -327,6 +335,19 @@ fn load_config(path: &Path) -> io::Result<Config> {
             return Err(refused());
         }
     }
+    if let Some(npm) = &config.npm {
+        if !Path::new(&npm.root).is_absolute()
+            || !Path::new(&npm.entry.path).is_absolute()
+            || npm.entry.sha256.len() != 64
+            || !npm
+                .entry
+                .sha256
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(refused());
+        }
+    }
     if Path::new(&config.authorizer.path)
         .parent()
         .ok_or_else(refused)?
@@ -354,6 +375,17 @@ fn verify_generation(config: &Config, deadline: &MonotonicDeadline) -> io::Resul
         if !Path::new(&image.path).starts_with(root) {
             return Err(refused());
         }
+    }
+    if let Some(npm) = &config.npm {
+        let npm_root = Path::new(&npm.root);
+        if npm_root == root
+            || !npm_root.starts_with(root)
+            || fs::canonicalize(npm_root)? != npm_root
+            || Path::new(&npm.entry.path) != npm_root.join("bin/npm-cli.js")
+        {
+            return Err(refused());
+        }
+        verify_generation_image(&npm.entry, deadline)?;
     }
     verify_generation_image(&config.generation.manifest, deadline)?;
     let mut bytes = Vec::new();
@@ -430,6 +462,12 @@ fn verify_generation(config: &Config, deadline: &MonotonicDeadline) -> io::Resul
     }
     if actual != expected {
         return Err(refused());
+    }
+    if let Some(npm) = &config.npm {
+        if !expected.contains(Path::new(&npm.entry.path)) {
+            return Err(refused());
+        }
+        verify_generation_image(&npm.entry, deadline)?;
     }
     verify_generation_image(&config.generation.manifest, deadline)
 }
@@ -1728,6 +1766,7 @@ mod tests {
                     root: root.to_str().unwrap().into(),
                     manifest: image(&manifest),
                 },
+                npm: None,
             }
         }
     }
@@ -1803,5 +1842,55 @@ mod tests {
         let mut bad = good;
         bad.as_object_mut().unwrap().remove("native");
         assert!(serde_json::from_value::<Config>(bad).is_err());
+    }
+
+    #[test]
+    fn npm_entry_is_inside_the_pinned_full_generation_inventory() {
+        let fixture = Fixture::new();
+        let mut config = fixture.config();
+        let root = Path::new(&config.generation.root);
+        let npm_root = root.join("npm");
+        fs::create_dir_all(npm_root.join("bin")).unwrap();
+        let entry = npm_root.join("bin/npm-cli.js");
+        fs::write(&entry, b"pinned npm entry").unwrap();
+        let image = |path: &Path| ProgramImage {
+            path: path.to_str().unwrap().into(),
+            sha256: format!("{:x}", Sha256::digest(fs::read(path).unwrap())),
+        };
+        let files = [
+            "authorizer.js",
+            "discovery.js",
+            "node",
+            "npm/bin/npm-cli.js",
+            "writer-main.js",
+        ];
+        fs::write(
+            &config.generation.manifest.path,
+            serde_json::to_vec(&json!({"schema":"caws.execution.generation.v1",
+                "files":files.map(|name| json!({"path":name,"sha256":image(&root.join(name)).sha256}))}))
+                .unwrap(),
+        )
+        .unwrap();
+        config.generation.manifest = image(Path::new(&config.generation.manifest.path));
+        config.npm = Some(NpmRuntime {
+            root: npm_root.to_str().unwrap().into(),
+            entry: image(&entry),
+        });
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(30)).unwrap();
+        assert!(verify_generation(&config, &deadline).is_ok());
+
+        fs::write(&entry, b"changed npm entry").unwrap();
+        assert!(verify_generation(&config, &deadline).is_err());
+        fs::write(&entry, b"pinned npm entry").unwrap();
+        fs::write(npm_root.join("unlisted.js"), b"unlisted runtime code").unwrap();
+        assert!(verify_generation(&config, &deadline).is_err());
+        fs::remove_file(npm_root.join("unlisted.js")).unwrap();
+
+        config.npm.as_mut().unwrap().root = fixture.0.to_str().unwrap().into();
+        assert!(verify_generation(&config, &deadline).is_err());
+        config.npm.as_mut().unwrap().root = npm_root.to_str().unwrap().into();
+        config.npm.as_mut().unwrap().entry.path =
+            root.join("writer-main.js").to_str().unwrap().into();
+        assert!(verify_generation(&config, &deadline).is_err());
     }
 }
