@@ -3,7 +3,7 @@ title: 'Admit bounded npm test through exclusive native execution'
 mode: feature
 lifecycle_state: active
 created_at: '2026-10-29T21:29:09.572Z'
-updated_at: '2026-10-29T21:33:57.975Z'
+updated_at: '2026-10-29T21:40:16.726Z'
 created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
 blast_radius:
   modules:
@@ -14,6 +14,14 @@ scope:
   in:
     - 'packages/caws-cli/src/execution/'
     - 'packages/caws-cli/tests/execution/'
+    - packages/caws-native/src/execution_server.rs
+    - packages/caws-native/src/execution_prepare.rs
+    - packages/caws-native/src/execution_prepared.rs
+    - packages/caws-native/src/execution_carrier.rs
+    - packages/caws-native/src/execution_owner.rs
+    - packages/caws-native/src/execution_fence.rs
+    - packages/caws-native/src/execution_authorizer_wire.rs
+    - packages/caws-native/tests/execution_server.rs
   out: []
   support:
     - packages/caws-cli/dist/
