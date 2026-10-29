@@ -391,7 +391,81 @@ fn control(stream: &mut UnixStream) -> Result<Option<&'static str>, String> {
     }
 }
 
+fn deadline_reason(error: caws_native::monotonic_deadline::DeadlineError) -> &'static str {
+    if error == caws_native::monotonic_deadline::DeadlineError::Expired {
+        "original_deadline_expired"
+    } else {
+        "invalid_original_deadline"
+    }
+}
+fn no_child_deadline(
+    configuration: &Configuration,
+    journal: &mut Journal<File>,
+    error: caws_native::monotonic_deadline::DeadlineError,
+) -> Result<(), String> {
+    let mut row = receipt(configuration, ReceiptState::NoChild, None);
+    row.reason = Some(deadline_reason(error).into());
+    row.error = Some(error.to_string());
+    journal.publish(&row)
+}
+fn observe_deadline(
+    original: &MonotonicDeadline,
+    failed: &mut bool,
+    reason: &mut Option<String>,
+    failure: &mut Option<String>,
+    discard_output: &mut bool,
+) {
+    if !*failed && let Err(error) = original.check() {
+        *failed = true;
+        reason.get_or_insert_with(|| deadline_reason(error).into());
+        failure.get_or_insert_with(|| error.to_string());
+        *discard_output = true;
+    }
+}
+
+// Only the Rust test harness can install a scheduling barrier. No worker
+// configuration field or production environment variable selects this seam.
+#[cfg(test)]
+pub(super) fn test_barrier(ready: RawFd, release: RawFd) -> io::Result<()> {
+    let byte = [1u8];
+    loop {
+        let written = unsafe { libc::write(ready, byte.as_ptr().cast(), 1) };
+        if written == 1 {
+            break;
+        }
+        if written < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+            continue;
+        }
+        return Err(io::Error::from_raw_os_error(libc::EPIPE));
+    }
+    let mut byte = [0u8];
+    loop {
+        let read = unsafe { libc::read(release, byte.as_mut_ptr().cast(), 1) };
+        if read == 1 {
+            return Ok(());
+        }
+        if read < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+            continue;
+        }
+        return Err(io::Error::from_raw_os_error(libc::EPIPE));
+    }
+}
+
 pub(crate) fn run(config_fd: RawFd) -> Result<(), String> {
+    #[cfg(test)]
+    {
+        run_inner(config_fd, || {}, None)
+    }
+    #[cfg(not(test))]
+    {
+        run_inner(config_fd, || {})
+    }
+}
+pub(super) fn run_inner(
+    config_fd: RawFd,
+    before_spawn: impl FnOnce(),
+    #[cfg(test)] pre_exec_barrier: Option<[RawFd; 2]>,
+) -> Result<(), String> {
     let WorkerInput {
         configuration,
         control: mut connection,
@@ -401,12 +475,18 @@ pub(crate) fn run(config_fd: RawFd) -> Result<(), String> {
     if !cfg!(target_os = "macos") {
         return Err("engine custodian group settlement is unsupported on this platform".into());
     }
+    let mut journal = Journal::new(file);
+    // Receive once after a correlated journal exists. Rejections attest NoChild
+    // without fabricating a Node PID, output bytes, group observation or exit.
+    let original_deadline = match MonotonicDeadline::receive(configuration.deadline) {
+        Ok(deadline) => deadline,
+        Err(error) => return no_child_deadline(&configuration, &mut journal, error),
+    };
     signals()?;
     nonblocking(connection.as_raw_fd()).map_err(|e| format!("control nonblocking: {e:?}"))?;
     for fd in [0, 1, 2] {
         nonblocking(fd).map_err(|e| format!("proxy nonblocking: {e:?}"))?;
     }
-    let mut journal = Journal::new(file);
     if let Some(reason) = control(&mut connection)? {
         let mut no_child = receipt(&configuration, ReceiptState::NoChild, None);
         no_child.reason = Some(reason.into());
@@ -419,6 +499,9 @@ pub(crate) fn run(config_fd: RawFd) -> Result<(), String> {
         journal.publish(&no_child)?;
         return Ok(());
     }
+    if let Err(error) = original_deadline.check() {
+        return no_child_deadline(&configuration, &mut journal, error);
+    }
     let sources = render
         .as_ref()
         .map(|fds| fds.each_ref().map(AsRawFd::as_raw_fd));
@@ -429,6 +512,7 @@ pub(crate) fn run(config_fd: RawFd) -> Result<(), String> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     remove_preloads(&mut command);
+    let original_envelope = original_deadline.envelope();
     unsafe {
         command.pre_exec(move || {
             if libc::setpgid(0, 0) != 0 {
@@ -441,15 +525,29 @@ pub(crate) fn run(config_fd: RawFd) -> Result<(), String> {
                     }
                 }
             }
-            Ok(())
+            #[cfg(test)]
+            if let Some([ready, release]) = pre_exec_barrier {
+                test_barrier(ready, release)?;
+            }
+            caws_native::monotonic_deadline::check_before_exec(original_envelope)
+                .map_err(io::Error::from_raw_os_error)
         });
+    }
+    before_spawn();
+    if let Err(error) = original_deadline.check() {
+        return no_child_deadline(&configuration, &mut journal, error);
     }
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
             let mut no_child = receipt(&configuration, ReceiptState::NoChild, None);
-            no_child.reason = Some("spawn_failed".into());
-            no_child.error = Some(format!("engine spawn: {error:?}"));
+            if error.raw_os_error() == Some(libc::ETIMEDOUT) {
+                no_child.reason = Some("original_deadline_expired".into());
+                no_child.error = Some(format!("engine spawn: errno {}", libc::ETIMEDOUT));
+            } else {
+                no_child.reason = Some("spawn_failed".into());
+                no_child.error = Some(format!("engine spawn: {error:?}"));
+            }
             journal.publish(&no_child)?;
             return Ok(());
         }
@@ -492,7 +590,18 @@ pub(crate) fn run(config_fd: RawFd) -> Result<(), String> {
     let mut next_step = Instant::now();
     let mut last_pending: Option<Receipt> = None;
     let mut liveness = ControlLiveness::default();
+    let mut deadline_failed = false;
     loop {
+        observe_deadline(
+            &original_deadline,
+            &mut deadline_failed,
+            &mut reason,
+            &mut failure,
+            &mut discard_output,
+        );
+        // Expiry stops admission and callback delivery. Existing custody-only
+        // cleanup retries retain this exact Child; they cannot renew admission.
+
         for (pipe, ready) in [(out_fd, &mut out_ready), (err_fd, &mut err_ready)] {
             if !*ready && let Some(pipe) = pipe {
                 match nonblocking(pipe) {
@@ -549,6 +658,13 @@ pub(crate) fn run(config_fd: RawFd) -> Result<(), String> {
                 }
             }
         }
+        observe_deadline(
+            &original_deadline,
+            &mut deadline_failed,
+            &mut reason,
+            &mut failure,
+            &mut discard_output,
+        );
         if reason.is_none() && !input_eof && input.capacity() > 0 {
             match read_channel(0, &mut input) {
                 Ok(eof) => input_eof = eof,
@@ -558,6 +674,13 @@ pub(crate) fn run(config_fd: RawFd) -> Result<(), String> {
                 }
             }
         }
+        observe_deadline(
+            &original_deadline,
+            &mut deadline_failed,
+            &mut reason,
+            &mut failure,
+            &mut discard_output,
+        );
         if reason.is_none() {
             if let Some(pipe) = &stdin
                 && let Err(error) = write_channel(pipe.as_raw_fd(), &mut input)
@@ -601,6 +724,16 @@ pub(crate) fn run(config_fd: RawFd) -> Result<(), String> {
             err.discard();
         } else {
             for (fd, queue) in [(1, &mut out), (2, &mut err)] {
+                observe_deadline(
+                    &original_deadline,
+                    &mut deadline_failed,
+                    &mut reason,
+                    &mut failure,
+                    &mut discard_output,
+                );
+                if deadline_failed {
+                    break;
+                }
                 if let Err(error) = write_channel(fd, queue) {
                     row.frontend_output_errno = error.raw_os_error();
                     discard_output = true;

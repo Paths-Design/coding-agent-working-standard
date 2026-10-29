@@ -16,12 +16,15 @@ use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-const SCHEMA: &str = "caws.runtime.native-entry.v1";
+const SCHEMA_V1: &str = "caws.runtime.native-entry.v1";
+const SCHEMA_V2: &str = "caws.runtime.native-entry.v2";
+pub(crate) const INSTALLED_INVOCATION_PROTOCOL: &str = "invoke-installed-v1";
+pub(crate) const MAX_ORIGINAL_TIMEOUT_MS: u64 = 30_000;
 const METADATA: &str = "native-entry.json";
 const MAX_MANIFEST: u64 = 8 * 1024 * 1024;
 pub(crate) const MAX_METADATA: u64 = 64 * 1024;
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(from = "NativeEntryWire")]
 pub(crate) struct NativeEntry {
     schema: String,
     pub(crate) native_executable: String,
@@ -29,6 +32,88 @@ pub(crate) struct NativeEntry {
     pub(crate) engine_entry: String,
     pub(crate) describe_entry: String,
     pub(crate) timeout_ms: u64,
+    installed_invocation: Option<InstalledInvocation>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct InstalledInvocation {
+    protocol: String,
+    max_original_timeout_ms: u64,
+}
+
+// Distinct exact wire shapes prevent null/optional capability fields from
+// silently upgrading historical metadata. Reading v1 is not receiver admission.
+#[derive(Deserialize)]
+#[serde(tag = "schema", deny_unknown_fields, rename_all_fields = "camelCase")]
+enum NativeEntryWire {
+    #[serde(rename = "caws.runtime.native-entry.v1")]
+    V1 {
+        native_executable: String,
+        node_executable: String,
+        engine_entry: String,
+        describe_entry: String,
+        timeout_ms: u64,
+    },
+    #[serde(rename = "caws.runtime.native-entry.v2")]
+    V2 {
+        native_executable: String,
+        node_executable: String,
+        engine_entry: String,
+        describe_entry: String,
+        timeout_ms: u64,
+        installed_invocation: InstalledInvocation,
+    },
+}
+impl From<NativeEntryWire> for NativeEntry {
+    fn from(wire: NativeEntryWire) -> Self {
+        match wire {
+            NativeEntryWire::V1 {
+                native_executable,
+                node_executable,
+                engine_entry,
+                describe_entry,
+                timeout_ms,
+            } => Self {
+                schema: SCHEMA_V1.into(),
+                native_executable,
+                node_executable,
+                engine_entry,
+                describe_entry,
+                timeout_ms,
+                installed_invocation: None,
+            },
+            NativeEntryWire::V2 {
+                native_executable,
+                node_executable,
+                engine_entry,
+                describe_entry,
+                timeout_ms,
+                installed_invocation,
+            } => Self {
+                schema: SCHEMA_V2.into(),
+                native_executable,
+                node_executable,
+                engine_entry,
+                describe_entry,
+                timeout_ms,
+                installed_invocation: Some(installed_invocation),
+            },
+        }
+    }
+}
+impl NativeEntry {
+    fn valid(&self) -> bool {
+        match (&*self.schema, &self.installed_invocation) {
+            (SCHEMA_V1, None) => (1..=120_000).contains(&self.timeout_ms),
+            (SCHEMA_V2, Some(capability)) => {
+                (1..=MAX_ORIGINAL_TIMEOUT_MS).contains(&self.timeout_ms)
+                    && capability.protocol == INSTALLED_INVOCATION_PROTOCOL
+                    && capability.max_original_timeout_ms == MAX_ORIGINAL_TIMEOUT_MS
+            }
+            _ => false,
+        }
+    }
 }
 #[derive(Debug)]
 enum Route {
@@ -784,7 +869,7 @@ impl Selection {
             )?)
             .map_err(|e| format!("Malformed native entry: {e}"))?;
             verify.checkpoint()?;
-            if entry.schema != SCHEMA || !(1..=120_000).contains(&entry.timeout_ms) {
+            if !entry.valid() {
                 return Err("Unsupported native entry schema or timeout".into());
             }
             for name in [
@@ -866,6 +951,52 @@ impl Selection {
             self.member_path(&entry.node_executable, verify)?,
             self.member_path(&entry.engine_entry, verify)?,
         ))
+    }
+
+    /// Capability from the selected manifest, never inferred from CLI version,
+    /// native filename, or the mere existence of a paired build receipt.
+    pub(crate) fn installed_invocation_entry(&self) -> Result<&NativeEntry, String> {
+        let entry = self
+            .native_entry()
+            .ok_or("Exact generation has no native entry")?;
+        if entry.schema != SCHEMA_V2 || !entry.valid() {
+            return Err("Selected generation does not support invoke-installed-v1".into());
+        }
+        Ok(entry)
+    }
+
+    /// Bind installed dispatch to this already verified generation. This adds
+    /// no pointer read or full hash pass. The receiver retains its receipt and
+    /// performs its existing final revalidation before consuming the binding.
+    pub(crate) fn validate_installed_invocation(
+        &self,
+        running_native: &Path,
+        node: &Path,
+        engine: &Path,
+        configured_timeout_ms: u64,
+        original_deadline: &caws_native::monotonic_deadline::MonotonicDeadline,
+        verify: &mut Verification<'_>,
+    ) -> Result<(), String> {
+        original_deadline
+            .check()
+            .map_err(|error| error.to_string())?;
+        verify.checkpoint()?;
+        if verify.expires() > original_deadline.expires() {
+            return Err("Installed verification exceeds original deadline".into());
+        }
+        let entry = self.installed_invocation_entry()?;
+        let original = original_deadline.envelope();
+        if configured_timeout_ms != entry.timeout_ms
+            || original.expires_ns - original.started_ns > entry.timeout_ms * 1_000_000
+        {
+            return Err("Installed invocation timeout differs from selected generation".into());
+        }
+        let (selected_native, selected_node, selected_engine) = self.native_paths(verify)?;
+        if running_native != selected_native || node != selected_node || engine != selected_engine {
+            return Err("Invocation paths differ from admitted native generation".into());
+        }
+        verify.checkpoint()?;
+        original_deadline.check().map_err(|error| error.to_string())
     }
 
     pub(crate) fn revalidate(&self, verify: &mut Verification<'_>) -> Result<(), String> {

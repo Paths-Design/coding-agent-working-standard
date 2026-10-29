@@ -667,6 +667,16 @@ impl OriginalStopCaptureFailure {
             _ => true,
         }
     }
+    pub fn retry_cleanup_until(
+        &mut self,
+        original: &crate::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> std::result::Result<(), String> {
+        match self {
+            Self::Project { failure, .. } => failure.retry_cleanup_until(original, until),
+            _ => Ok(()),
+        }
+    }
     pub fn retry_cleanup(&mut self) -> std::result::Result<(), String> {
         match self {
             Self::Project { failure, .. } => failure.retry_cleanup(),

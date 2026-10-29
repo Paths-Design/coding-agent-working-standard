@@ -209,7 +209,15 @@ function installGeneratorFixture(packageRoot) {
     'scripts/generate-runtime-assets.mjs',
     'src/runtime/advisory-truncate-entry.ts',
     'src/runtime/utf8.ts',
+    'src/runtime/guard-config-entry.ts',
+    'src/runtime/guard-config-loader.ts',
+    'src/init/repo-hook-policy.ts',
+    'src/runtime/json-custody.ts',
+    'src/runtime/reprieve-entry.ts',
+    'src/runtime/reprieve-reader.ts',
     'templates/hook-packs/shared/advisory_truncate.cjs',
+    'templates/hook-packs/shared/lib/guard-config.cjs',
+    'templates/hook-packs/shared/lib/reprieve-reader.cjs',
   ]) {
     const destination = path.join(packageRoot, relative);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
@@ -251,6 +259,7 @@ snapshotScenario(
     );
     installGeneratorFixture(packageRoot);
     const first = installObserved(root, { packageRoot, cawsHome, binPath });
+    assert.equal(Object.hasOwn(first, 'bootstrapInventories'), false);
     assert.deepEqual(transportEvents(packageRoot), ['stage', 'clean']);
     assert.equal(fs.existsSync(path.join(packageRoot, 'fixture-transport.txt')), false);
     const invoke = () => invokeObserved(root, binPath, ['doctor']);
@@ -294,6 +303,450 @@ snapshotScenario(
     assert.equal(fs.readFileSync(binPath, 'utf8'), 'user executable');
   }
 );
+
+function bootstrapFixture(root) {
+  const options = mechanicsFixture(root);
+  const metadataPath = path.join(options.packageRoot, 'package.json');
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+  metadata.bin = { caws: 'dist/index.js' };
+  fs.writeFileSync(metadataPath, JSON.stringify(metadata));
+  fs.writeFileSync(
+    path.join(options.packageRoot, 'dist/index.js'),
+    "#!/usr/bin/env node\nconsole.log(process.argv.includes('--json') ? JSON.stringify({digest: 'a'.repeat(64)}) : 'candidate');\n"
+  );
+  fs.mkdirSync(path.join(options.packageRoot, 'dist/tooling'));
+  fs.writeFileSync(
+    path.join(options.packageRoot, 'dist/tooling/native-qualification-prepare-entry.js'),
+    '// fixture entry identity only; does not perform preparation\n'
+  );
+  fs.writeFileSync(path.join(options.packageRoot, 'dist/credentials.js'), 'module.exports = {};\n');
+  fs.writeFileSync(
+    path.join(options.packageRoot, 'dist/credentials-guide.md'),
+    'Public module documentation.\n'
+  );
+  fs.writeFileSync(
+    path.join(options.packageRoot, 'dist/certificate.pem'),
+    'Public certificate filename fixture; no key material.\n'
+  );
+  return { ...options, bootstrapInventories: 'v1' };
+}
+
+// Faults enter after the normal installer has retained its release and applied
+// final entry permissions, immediately before optional inventory capture.
+function atInventoryBoundary(options, mutate, body) {
+  const originalChmod = fs.chmodSync;
+  let retained;
+  fs.chmodSync = function (file, ...args) {
+    const result = originalChmod.call(fs, file, ...args);
+    const suffix = '/install/node_modules/@paths.design/caws-cli/dist/index.js';
+    if (
+      String(file).startsWith(path.join(options.cawsHome, 'lib/cli') + path.sep) &&
+      String(file).endsWith(suffix)
+    ) {
+      retained = String(file).slice(0, -suffix.length);
+      mutate(retained);
+    }
+    return result;
+  };
+  try {
+    body(() => retained);
+  } finally {
+    fs.chmodSync = originalChmod;
+  }
+}
+
+function observedInventoryRows(root) {
+  const rows = [];
+  function visit(file, relative) {
+    const stat = fs.lstatSync(file);
+    const common = { path: relative, mode: stat.mode & 0o7777 };
+    if (stat.isDirectory()) {
+      rows.push({ ...common, type: 'directory' });
+      for (const child of fs.readdirSync(file))
+        visit(path.join(file, child), relative === '.' ? child : `${relative}/${child}`);
+    } else if (stat.isSymbolicLink()) {
+      rows.push({ ...common, type: 'symlink', target: fs.readlinkSync(file) });
+    } else {
+      assert.equal(stat.isFile(), true);
+      const bytes = fs.readFileSync(file);
+      rows.push({
+        ...common,
+        type: 'file',
+        sizeBytes: bytes.length,
+        sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+      });
+    }
+  }
+  visit(root, '.');
+  return rows.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
+snapshotScenario(
+  'bootstrap inventory v1 reports the retained complete prefix and Git view through normal CLI JSON',
+  'caws-cli-bootstrap-',
+  root => {
+    const options = bootstrapFixture(root);
+    const result = invokeObserved(root, process.execPath, [
+      fileURLToPath(new URL('./install-cli-snapshot.mjs', import.meta.url)),
+      '--package',
+      options.packageRoot,
+      '--caws-home',
+      options.cawsHome,
+      '--bin',
+      options.binPath,
+      '--bootstrap-inventories',
+      'v1',
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    const installed = JSON.parse(result.stdout);
+    assert.equal(fs.readlinkSync(options.binPath), installed.target);
+    assert.deepEqual(Object.keys(installed.bootstrapInventories).sort(), ['gitView', 'prefix']);
+    for (const [key, suffix] of [
+      ['prefix', 'install'],
+      ['gitView', 'probe/.git'],
+    ]) {
+      const inventory = installed.bootstrapInventories[key];
+      const expectedRoot = fs.realpathSync(path.join(installed.release, suffix));
+      assert.deepEqual(Object.keys(inventory).sort(), ['entry', 'prefix', 'rows']);
+      assert.equal(inventory.prefix, expectedRoot);
+      assert.equal(
+        inventory.entry,
+        key === 'prefix'
+          ? path.join(expectedRoot, 'node_modules/@paths.design/caws-cli/dist/index.js')
+          : expectedRoot
+      );
+      assert.deepEqual(inventory.rows, observedInventoryRows(expectedRoot));
+      assert.equal(inventory.rows[0].path, '.');
+      assert.equal(inventory.rows[0].type, 'directory');
+    }
+    const rows = installed.bootstrapInventories.prefix.rows;
+    assert.equal(
+      rows.find(row => row.path === 'node_modules/@paths.design/caws-cli/dist/index.js').mode,
+      0o755
+    );
+    assert.equal(
+      rows.find(row => row.path === 'node_modules/.bin/caws').target,
+      '../@paths.design/caws-cli/dist/index.js'
+    );
+    for (const name of [
+      'credentials.js',
+      'credentials-guide.md',
+      'certificate.pem',
+      'tooling/native-qualification-prepare-entry.js',
+    ])
+      assert.equal(
+        rows.find(row => row.path === `node_modules/@paths.design/caws-cli/dist/${name}`).type,
+        'file'
+      );
+    assert.equal(
+      installed.bootstrapInventories.gitView.rows.some(
+        row => row.path === 'config' && row.type === 'file'
+      ),
+      true
+    );
+  }
+);
+
+snapshotScenario(
+  'unknown bootstrap inventory version refuses before filesystem or installer effects',
+  'caws-cli-bootstrap-version-',
+  root => {
+    const options = bootstrapFixture(root);
+    const before = installationState(options);
+    assert.throws(
+      () => installObserved(root, { ...options, bootstrapInventories: 'v2' }),
+      /Expected --bootstrap-inventories v1/
+    );
+    assert.deepEqual(installationState(options), before);
+    assert.deepEqual(transportEvents(options.packageRoot), []);
+  }
+);
+
+const bootstrapFaults = [
+  [
+    'missing-cli-entry',
+    /required entry absent/,
+    (release, dist) => fs.unlinkSync(path.join(dist, 'index.js')),
+  ],
+  [
+    'missing-preparation-entry',
+    /required entry absent/,
+    (release, dist) =>
+      fs.unlinkSync(path.join(dist, 'tooling/native-qualification-prepare-entry.js')),
+  ],
+  [
+    'special-permissions',
+    /special permission bits/,
+    (release, dist) => fs.chmodSync(path.join(dist, 'credentials.js'), 0o4644),
+  ],
+  [
+    'credential-data',
+    /protected member name/,
+    (release, dist) =>
+      fs.writeFileSync(path.join(dist, 'credentials.json'), 'synthetic sentinel, never read'),
+  ],
+  [
+    'private-key-name',
+    /protected member name/,
+    (release, dist) =>
+      fs.writeFileSync(path.join(dist, 'private-key.pem'), 'synthetic sentinel, never read'),
+  ],
+  [
+    'credential-directory',
+    /protected member name/,
+    release => fs.mkdirSync(path.join(release, 'probe/.git/.ssh')),
+  ],
+  [
+    'root-alias',
+    /canonical path/,
+    release => {
+      fs.renameSync(path.join(release, 'install'), path.join(release, 'held-install'));
+      fs.symlinkSync('held-install', path.join(release, 'install'));
+    },
+  ],
+  [
+    'non-bin-link',
+    /only relative npm .bin/,
+    (release, dist) => fs.symlinkSync('credentials.js', path.join(dist, 'link')),
+  ],
+  [
+    'absolute-bin-link',
+    /only relative npm .bin/,
+    release =>
+      fs.symlinkSync(
+        path.join(release, 'install/package.json'),
+        path.join(release, 'install/node_modules/.bin/absolute')
+      ),
+  ],
+  [
+    'escaping-bin-link',
+    /link escapes root/,
+    release =>
+      fs.symlinkSync(
+        '../../../probe/.git/config',
+        path.join(release, 'install/node_modules/.bin/escape')
+      ),
+  ],
+  [
+    'directory-bin-link',
+    /inventoried regular file/,
+    release =>
+      fs.symlinkSync(
+        '../@paths.design/caws-cli/dist',
+        path.join(release, 'install/node_modules/.bin/directory')
+      ),
+  ],
+  [
+    'dangling-bin-link',
+    /ENOENT/,
+    release =>
+      fs.symlinkSync('../absent', path.join(release, 'install/node_modules/.bin/dangling')),
+  ],
+  [
+    'oversized-file',
+    /file byte limit/,
+    (release, dist) => {
+      const file = path.join(dist, 'oversized');
+      fs.writeFileSync(file, '');
+      fs.truncateSync(file, 512 * 1024 * 1024 + 1);
+    },
+  ],
+  [
+    'oversized-tree',
+    /total byte limit/,
+    (release, dist) => {
+      for (let i = 0; i < 5; i++) {
+        const file = path.join(dist, `large-${i}`);
+        fs.writeFileSync(file, '');
+        fs.truncateSync(file, 512 * 1024 * 1024);
+      }
+    },
+  ],
+];
+for (const [name, reason, mutate] of bootstrapFaults) {
+  snapshotScenario(
+    `bootstrap ${name} refuses before hashing or activating and retains the unselected release`,
+    `caws-cli-bootstrap-${name}-`,
+    root => {
+      const options = bootstrapFixture(root);
+      const before = activationState(options.binPath);
+      const originalOpen = fs.openSync;
+      let retained,
+        inventoryReads = 0;
+      fs.openSync = function (file, ...args) {
+        if (retained && typeof file === 'string' && file.startsWith(retained + path.sep))
+          inventoryReads++;
+        return originalOpen.call(fs, file, ...args);
+      };
+      try {
+        atInventoryBoundary(
+          options,
+          release => {
+            mutate(release, path.join(release, 'install/node_modules/@paths.design/caws-cli/dist'));
+            retained = release;
+          },
+          () => {
+            assert.throws(
+              () => installObserved(root, options),
+              error => {
+                assert.match(error.message, reason);
+                assert.match(error.message, /unselected release retained/);
+                assert.equal(error.message.includes(retained), true);
+                return true;
+              }
+            );
+          }
+        );
+      } finally {
+        fs.openSync = originalOpen;
+      }
+      assert.equal(
+        inventoryReads,
+        0,
+        'metadata admission must precede content reads in both roots'
+      );
+      assert.equal(fs.statSync(retained).isDirectory(), true);
+      assert.deepEqual(activationState(options.binPath), before);
+      assert.equal(fs.existsSync(`${options.binPath}.caws-install.lock`), false);
+      assert.deepEqual(fs.readdirSync(path.join(options.cawsHome, 'lib/cli')), [
+        path.basename(retained),
+      ]);
+    }
+  );
+}
+
+for (const fault of ['protected-env-name', 'non-utf8-name', 'member-count']) {
+  snapshotScenario(
+    `bootstrap ${fault} stops directory enumeration before any content read`,
+    `caws-cli-bootstrap-${fault}-`,
+    root => {
+      const options = bootstrapFixture(root);
+      const before = activationState(options.binPath);
+      const originalOpen = fs.openSync;
+      const originalOpendir = fs.opendirSync;
+      let retained,
+        supplied = 0,
+        closed = 0,
+        contentOpens = 0;
+      fs.openSync = function (file, ...args) {
+        if (retained && typeof file === 'string' && file.startsWith(retained + path.sep))
+          contentOpens++;
+        return originalOpen.call(fs, file, ...args);
+      };
+      fs.opendirSync = function (directory, ...args) {
+        if (!retained || directory !== path.join(retained, 'install'))
+          return originalOpendir.call(fs, directory, ...args);
+        return {
+          readSync() {
+            if (supplied >= (fault === 'member-count' ? 200001 : 1)) return null;
+            supplied++;
+            // Only inject names into the directory API; no environment file or
+            // protected content is created, opened or read by this fixture.
+            return {
+              name:
+                fault === 'non-utf8-name'
+                  ? Buffer.from([0xff])
+                  : Buffer.from(fault === 'protected-env-name' ? '.env' : `member-${supplied}`),
+            };
+          },
+          closeSync() {
+            closed++;
+          },
+        };
+      };
+      try {
+        atInventoryBoundary(
+          options,
+          release => {
+            retained = release;
+          },
+          () => {
+            const reason =
+              fault === 'protected-env-name'
+                ? /protected member name/
+                : fault === 'non-utf8-name'
+                  ? /invalid member name/
+                  : /member count\/name budget exceeded/;
+            assert.throws(() => installObserved(root, options), reason);
+          }
+        );
+      } finally {
+        fs.openSync = originalOpen;
+        fs.opendirSync = originalOpendir;
+      }
+      assert.equal(supplied, fault === 'member-count' ? 200000 : 1);
+      assert.equal(closed, 1);
+      assert.equal(contentOpens, 0);
+      assert.deepEqual(activationState(options.binPath), before);
+      assert.equal(fs.statSync(retained).isDirectory(), true);
+      assert.equal(fs.existsSync(`${options.binPath}.caws-install.lock`), false);
+    }
+  );
+}
+
+for (const fault of ['same-size-replacement', 'added-member', 'retargeted-link']) {
+  snapshotScenario(
+    `bootstrap ${fault} during hashing refuses activation and retains observed effects`,
+    `caws-cli-bootstrap-${fault}-`,
+    root => {
+      const options = bootstrapFixture(root);
+      const before = activationState(options.binPath);
+      const originalOpen = fs.openSync,
+        originalRead = fs.readSync;
+      let retained,
+        target,
+        watched,
+        injected = false;
+      fs.openSync = function (file, ...args) {
+        const fd = originalOpen.call(fs, file, ...args);
+        if (file === target) watched = fd;
+        return fd;
+      };
+      fs.readSync = function (fd, ...args) {
+        const result = originalRead.call(fs, fd, ...args);
+        if (fd === watched && result > 0 && !injected) {
+          injected = true;
+          if (fault === 'same-size-replacement') {
+            const size = fs.statSync(target).size;
+            fs.unlinkSync(target);
+            fs.writeFileSync(target, Buffer.alloc(size, 'x'));
+          } else if (fault === 'added-member') {
+            fs.writeFileSync(path.join(retained, 'install/added-after-enumeration'), 'new member');
+          } else {
+            const link = path.join(retained, 'install/node_modules/.bin/caws');
+            fs.unlinkSync(link);
+            fs.symlinkSync('../@paths.design/caws-cli/dist/credentials.js', link);
+          }
+        }
+        return result;
+      };
+      try {
+        atInventoryBoundary(
+          options,
+          release => {
+            retained = release;
+            target = path.join(
+              release,
+              'install/node_modules/@paths.design/caws-cli/dist/credentials.js'
+            );
+          },
+          () => assert.throws(() => installObserved(root, options), /changed|membership/)
+        );
+      } finally {
+        fs.openSync = originalOpen;
+        fs.readSync = originalRead;
+      }
+      assert.equal(
+        injected,
+        true,
+        'hostile change must actually occur while a captured file is read'
+      );
+      assert.deepEqual(activationState(options.binPath), before);
+      assert.equal(fs.statSync(retained).isDirectory(), true);
+      assert.equal(fs.existsSync(`${options.binPath}.caws-install.lock`), false);
+    }
+  );
+}
 
 snapshotScenario(
   'snapshot refuses missing or stale typed runtime assets before creating installation state',

@@ -269,8 +269,22 @@ test('backward wall clock does not renew the loader original monotonic deadline'
     wall = Date.now();
   await load();
   jest.spyOn(Date, 'now').mockReturnValue(wall - 60000);
-  jest.spyOn(performance, 'now').mockReturnValue(start + 60000);
-  await expect(load()).rejects.toThrow(/deadline/);
+  // Node 18 inherits a read-only method; an own descriptor controls the same
+  // clock without assigning through that inherited property.
+  const ownNow = Object.getOwnPropertyDescriptor(performance, 'now');
+  Object.defineProperty(performance, 'now', {
+    configurable: true,
+    value: () => start + 60000,
+  });
+  try {
+    expect(performance.now()).toBe(start + 60000);
+    const stat = jest.spyOn(fsp, 'lstat');
+    await expect(load()).rejects.toThrow(/deadline/);
+    expect(stat).not.toHaveBeenCalled();
+  } finally {
+    if (ownNow) Object.defineProperty(performance, 'now', ownNow);
+    else delete performance.now;
+  }
 });
 test('ordinary engine original signal survives delayed first comparison and backward wall clock', async () => {
   const identity = require('../../dist/runtime/cli-identity');
@@ -337,4 +351,40 @@ test('ordinary engine original signal survives delayed first comparison and back
     jest.useRealTimers();
     process.exitCode = savedExit;
   }
+});
+
+test('loads a manifest-bound v2 capability entry while retaining the v1 baseline', async () => {
+  const entry = JSON.parse(members['native-entry.json']);
+  entry.schema = 'caws.runtime.native-entry.v2';
+  entry.installedInvocation = { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 30000 };
+  add('native-entry.json', entry);
+  publish();
+  expect((await load()).node.sha256).toBe(source.node.sha256);
+});
+test.each(['missing', 'null', 'extra', 'protocol', 'maximum', 'timeout', 'v1 capability'])(
+  'rejects manifest-bound malformed installed entry: %s',
+  async (kind) => {
+    const entry = JSON.parse(members['native-entry.json']);
+    entry.schema = 'caws.runtime.native-entry.v2';
+    entry.installedInvocation = { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 30000 };
+    if (kind === 'missing') delete entry.installedInvocation;
+    if (kind === 'null') entry.installedInvocation = null;
+    if (kind === 'extra') entry.installedInvocation.renew = true;
+    if (kind === 'protocol') entry.installedInvocation.protocol = 'invoke';
+    if (kind === 'maximum') entry.installedInvocation.maxOriginalTimeoutMs = 120000;
+    if (kind === 'timeout') entry.timeoutMs = 30001;
+    if (kind === 'v1 capability') entry.schema = 'caws.runtime.native-entry.v1';
+    add('native-entry.json', entry);
+    publish();
+    await expect(load()).rejects.toThrow(/fields|capability|running entry/);
+  }
+);
+test('v2 capability cannot vouch for changed metadata bytes after admission', async () => {
+  const entry = JSON.parse(members['native-entry.json']);
+  entry.schema = 'caws.runtime.native-entry.v2';
+  entry.installedInvocation = { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 30000 };
+  add('native-entry.json', entry);
+  publish();
+  fs.appendFileSync(path.join(root, 'native-entry.json'), ' ');
+  await expect(load()).rejects.toThrow(/content changed/);
 });

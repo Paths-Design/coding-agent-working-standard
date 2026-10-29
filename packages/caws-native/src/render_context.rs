@@ -113,6 +113,29 @@ impl Failure {
             remote: None,
         }
     }
+    /// Installed capture/custodied factories can retain only remote queries:
+    /// their local selection/pinning errors have no query Child. A local-only
+    /// component failure is retained explicitly rather than given a fresh wait.
+    pub fn retry_cleanup_until(
+        &mut self,
+        original: &crate::monotonic_deadline::MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        let local = if self
+            .cause
+            .as_ref()
+            .is_some_and(ProjectFailure::retained_uncertain)
+        {
+            Err("local Render query custody requires its retained local owner; no frontend wait performed".into())
+        } else {
+            Ok(())
+        };
+        let remote = self.remote.as_mut().map_or(Ok(()), |failure| {
+            failure.retry_cleanup_until(original, until)
+        });
+        self.sync_remote();
+        local.and(remote)
+    }
     pub fn retry_cleanup(&mut self) -> Result<(), String> {
         let local = self
             .cause
