@@ -47,6 +47,43 @@ function fixture() {
     },
   };
 }
+function npmFixture() {
+  const input = fixture();
+  const node = image('/generation/node');
+  const entry = image('/generation/npm/bin/npm-cli.js');
+  input.execution.executable = node;
+  input.execution.argv = [node.path, entry.path, 'test'];
+  input.execution.stdinBase64 = '';
+  input.profile = {
+    kind: 'npm-test-v1',
+    source: 'npm test',
+    utilities: [],
+    npm: {
+      runtime: {
+        node,
+        entry,
+        root: '/generation/npm',
+        generationManifestSha256: 'b'.repeat(64),
+      },
+      project: {
+        packageJson: image('/project/package.json'),
+        npmrc: null,
+        testScript: 'node tests/run.js',
+        pathShadowSha256: 'c'.repeat(64),
+      },
+    },
+  };
+  input.sandbox.writeCeiling = {
+    schema: 'caws.execution.write-ceiling.v1',
+    launchId: 'd'.repeat(64),
+    invocationRoot: '/private/run',
+    outputRoot: '/private/run/output',
+    tmpRoot: '/private/run/tmp',
+    cacheRoot: '/private/run/cache',
+    manifestSha256: 'e'.repeat(64),
+  };
+  return input;
+}
 const encode = (value) => Buffer.from(JSON.stringify(value));
 const decode = (value) => decodePreparedExecution(encode(value));
 function at(value, path) {
@@ -61,6 +98,68 @@ function reject(value) {
 }
 
 describe('private prepared execution record', () => {
+  test('retains one exact npm test route with pinned runtime, project and host ceiling', () => {
+    const input = npmFixture();
+    const result = decode(input);
+    expect(result).toEqual(input);
+    expect(Object.isFrozen(result.profile.npm.project)).toBe(true);
+    expect(Object.isFrozen(result.sandbox.writeCeiling)).toBe(true);
+  });
+
+  test('refuses npm argv, image, project or ceiling substitutions before authorization', () => {
+    const mutations = [
+      (r) => {
+        r.profile.source = 'npm test -- --watch';
+      },
+      (r) => {
+        r.execution.argv[2] = 'install';
+      },
+      (r) => {
+        r.execution.argv[1] = '/other/npm-cli.js';
+      },
+      (r) => {
+        r.execution.executable = { ...r.execution.executable, sha256: 'f'.repeat(64) };
+      },
+      (r) => {
+        r.profile.npm.runtime.entry.path = '/generation/npm/other.js';
+      },
+      (r) => {
+        r.profile.npm.project.packageJson.sha256 = 'not-a-digest';
+      },
+      (r) => {
+        r.profile.npm.project.npmrc = {};
+      },
+      (r) => {
+        r.profile.npm.project.testScript = '';
+      },
+      (r) => {
+        r.profile.utilities = [image('/usr/bin/true')];
+      },
+      (r) => {
+        r.execution.stdinBase64 = 'YQ==';
+      },
+      (r) => {
+        delete r.sandbox.writeCeiling;
+      },
+      (r) => {
+        r.sandbox.writeCeiling.tmpRoot = '/project/tmp';
+      },
+      (r) => {
+        r.sandbox.writeCeiling.manifestSha256 = '0';
+      },
+    ];
+    for (const mutate of mutations) {
+      const input = npmFixture();
+      mutate(input);
+      reject(input);
+    }
+    const missing = npmFixture();
+    delete missing.profile.npm.project.npmrc;
+    reject(missing);
+    const extra = npmFixture();
+    extra.profile.npm.project.pretest = 'node alter.js';
+    reject(extra);
+  });
   test('retains the dedicated consumer kind and direct argv without replacing original source', () => {
     const input = fixture();
     input.profile.kind = 'caws-evidence-v1';

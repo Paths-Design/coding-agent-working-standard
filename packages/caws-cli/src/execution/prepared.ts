@@ -29,10 +29,25 @@ export interface PreparedExecutionV1 {
     readonly stdinBase64: string;
   };
   readonly profile: {
-    readonly kind: 'bash-clean-v1' | 'caws-evidence-v1';
+    readonly kind: 'bash-clean-v1' | 'caws-evidence-v1' | 'npm-test-v1';
     readonly source: string;
     /** Captured utility images; a manifest entry does not admit arbitrary programs. */
     readonly utilities: readonly ProgramImage[];
+    /** Exact npm route; present only for npm-test-v1. */
+    readonly npm?: {
+      readonly runtime: {
+        readonly node: ProgramImage;
+        readonly entry: ProgramImage;
+        readonly root: string;
+        readonly generationManifestSha256: string;
+      };
+      readonly project: {
+        readonly packageJson: ProgramImage;
+        readonly npmrc: ProgramImage | null;
+        readonly testScript: string;
+        readonly pathShadowSha256: string;
+      };
+    };
   };
   readonly sandbox: {
     /** Original opaque state bytes, including unknown policy fields. */
@@ -41,6 +56,16 @@ export interface PreparedExecutionV1 {
     readonly launcher: ProgramImage;
     /** Actual sandbox/server anchor, independent of callerAnchor and execution.cwd. */
     readonly environmentAnchor: string;
+    /** Producer-created private roots bound to the host manifest; npm only. */
+    readonly writeCeiling?: {
+      readonly schema: 'caws.execution.write-ceiling.v1';
+      readonly launchId: string;
+      readonly invocationRoot: string;
+      readonly outputRoot: string;
+      readonly tmpRoot: string;
+      readonly cacheRoot: string;
+      readonly manifestSha256: string;
+    };
   };
   readonly limits: {
     /** Correlation only. The Rust owner retains the original monotonic preparation deadline. */

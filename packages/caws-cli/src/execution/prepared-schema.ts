@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { isAbsolute } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { parseJsonSource } from '../runtime/json-custody';
 import type { PreparedExecutionV1 } from './prepared';
@@ -34,7 +34,7 @@ function identity(value: unknown): void {
   nativeText(value, 256);
   insist(!/\p{Cc}/u.test(value));
 }
-function nativePath(value: unknown): void {
+function nativePath(value: unknown): asserts value is string {
   nativeText(value, 4096);
   insist(isAbsolute(value));
 }
@@ -144,8 +144,20 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
     }
     insist(environmentBytes <= 131072);
     bytes(execution.stdinBase64, 524288);
-    const profile = object(root.profile, ['kind', 'source', 'utilities']);
-    insist(profile.kind === 'bash-clean-v1' || profile.kind === 'caws-evidence-v1');
+    const npmProfile =
+      root.profile !== null &&
+      typeof root.profile === 'object' &&
+      !Array.isArray(root.profile) &&
+      (root.profile as Record<string, unknown>).kind === 'npm-test-v1';
+    const profile = object(
+      root.profile,
+      npmProfile ? ['kind', 'source', 'utilities', 'npm'] : ['kind', 'source', 'utilities']
+    );
+    insist(
+      profile.kind === 'bash-clean-v1' ||
+        profile.kind === 'caws-evidence-v1' ||
+        profile.kind === 'npm-test-v1'
+    );
     nativeText(profile.source, 65536, true);
     if (profile.kind === 'bash-clean-v1')
       insist(
@@ -156,7 +168,37 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
           execution.argv[3] === '-c' &&
           execution.argv[4] === profile.source
       );
-    else insist(execution.argv.length >= 5 && execution.argv[0] === executable.path);
+    else if (profile.kind === 'caws-evidence-v1')
+      insist(execution.argv.length >= 5 && execution.argv[0] === executable.path);
+    else {
+      insist(profile.source === 'npm test' && execution.stdinBase64 === '');
+      const npm = object(profile.npm, ['runtime', 'project']);
+      const runtime = object(npm.runtime, ['node', 'entry', 'root', 'generationManifestSha256']);
+      const node = image(runtime.node);
+      const entry = image(runtime.entry);
+      nativePath(runtime.root);
+      digest(runtime.generationManifestSha256);
+      insist(entry.path === join(runtime.root, 'bin', 'npm-cli.js'));
+      const project = object(npm.project, [
+        'packageJson',
+        'npmrc',
+        'testScript',
+        'pathShadowSha256',
+      ]);
+      image(project.packageJson);
+      if (project.npmrc !== null) image(project.npmrc);
+      nativeText(project.testScript, 65536);
+      digest(project.pathShadowSha256);
+      insist(
+        Array.isArray(execution.argv) &&
+          execution.argv.length === 3 &&
+          execution.argv[0] === node.path &&
+          execution.argv[1] === entry.path &&
+          execution.argv[2] === 'test' &&
+          executable.path === node.path &&
+          executable.sha256 === node.sha256
+      );
+    }
     insist(Array.isArray(profile.utilities) && profile.utilities.length <= 32);
     const paths = new Set<string>();
     for (const utility of profile.utilities) {
@@ -164,12 +206,13 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
       insist(!paths.has(row.path as string));
       paths.add(row.path as string);
     }
-    const sandbox = object(root.sandbox, [
-      'stateBase64',
-      'stateSha256',
-      'launcher',
-      'environmentAnchor',
-    ]);
+    if (npmProfile) insist(profile.utilities.length === 0);
+    const sandbox = object(
+      root.sandbox,
+      npmProfile
+        ? ['stateBase64', 'stateSha256', 'launcher', 'environmentAnchor', 'writeCeiling']
+        : ['stateBase64', 'stateSha256', 'launcher', 'environmentAnchor']
+    );
     digest(sandbox.stateSha256);
     const state = bytes(sandbox.stateBase64, 262144);
     insist(createHash('sha256').update(state).digest('hex') === sandbox.stateSha256);
@@ -178,6 +221,27 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
     JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(state));
     image(sandbox.launcher);
     nativePath(sandbox.environmentAnchor);
+    if (npmProfile) {
+      const ceiling = object(sandbox.writeCeiling, [
+        'schema',
+        'launchId',
+        'invocationRoot',
+        'outputRoot',
+        'tmpRoot',
+        'cacheRoot',
+        'manifestSha256',
+      ]);
+      insist(ceiling.schema === 'caws.execution.write-ceiling.v1');
+      digest(ceiling.launchId);
+      digest(ceiling.manifestSha256);
+      for (const key of ['invocationRoot', 'outputRoot', 'tmpRoot', 'cacheRoot'])
+        nativePath(ceiling[key]);
+      insist(
+        ceiling.outputRoot === join(ceiling.invocationRoot as string, 'output') &&
+          ceiling.tmpRoot === join(ceiling.invocationRoot as string, 'tmp') &&
+          ceiling.cacheRoot === join(ceiling.invocationRoot as string, 'cache')
+      );
+    }
     const limits = object(root.limits, [
       'preparationDeadlineUnixMs',
       'jobTimeoutMs',
