@@ -1,0 +1,34 @@
+id: CAWS-DOC-GUIDANCE-CLI-001
+title: 'Align agent and README guidance with the CLI'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-10-29T05:32:02.892Z'
+updated_at: '2026-10-29T05:32:02.892Z'
+created_by_session: '01a1861e-58cc-7392-ac55-1ff3a6051998'
+blast_radius:
+  modules:
+    - 'Agent and developer documentation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'AGENTS.md'
+    - 'README.md'
+  out: []
+invariants:
+  - 'Operational examples use audited CLI writers and preserve worktree lifecycle boundaries'
+acceptance:
+  - id: A1
+    given: 'AGENTS.md and README.md'
+    when: 'the agent follows the documented authoring and evidence routes'
+    then: 'commands match CLI help, spec edits use CLI writers, and AC recording and rederivation are described accurately'
+  - id: A2
+    given: 'a clean isolated project and owned bound worktree'
+    when: 'the documented finish sequence runs from outside the lane'
+    then: 'merge closes the spec and removes the lane without a redundant destroy, and guidance describes checkout refresh and partial failures'
+  - id: A3
+    given: 'the command tables in AGENTS.md and README.md'
+    when: 'Markdown is formatted and command options are checked'
+    then: 'tables render with consistent columns and the revised guidance passes focused validation'
+non_functional: {}
+contracts: []
