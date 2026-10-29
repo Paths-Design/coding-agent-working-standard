@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-RECOVERY-QUALIFICATION-001
 title: 'Qualify installed native recovery after real Stop writes'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-recovery-qualification
 created_at: '2026-10-29T22:44:28.904Z'
-updated_at: '2026-10-29T22:44:28.904Z'
+updated_at: '2026-10-29T22:44:40.845Z'
 created_by_session: '01a189ce-cbe3-7f83-bf11-71e6d786dca2'
 blast_radius:
   modules:
