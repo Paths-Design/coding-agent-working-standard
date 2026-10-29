@@ -56,3 +56,8 @@ non_functional: {}
 contracts:
   - name: 'codex-original-file-tool'
     type: behavior
+evidence:
+  - criterion_id: A4
+    status: unchecked
+    evidence_ref: "Authentic final-image file-tool proof remains owed. Child native-file-tools created root-owned from parent9f87d3e1 with exact source paths scoped; implementation-under-test remains frozen in root-owned parent pending human-terminal worktree-guard exception. Existing five-source hashes retained in root/lead context. Six-file lane-to-lane copy was refused by global43f2 worktree-guard because HOOK_CWD remains canonical despite requested workdir; no copy executed. Installed guard317-345 infers main target by string and canonical caller; stash461 and path-restore475 are also refused. App attach for CAWS-created lane is unavailable. Parent directdoccommit was separately refused by commit-msg because7lanes target parent; no fake merge/WIP label used. Human exception request pending for one exact transfer and byte-verified parent cleanup, no force/global activation/foreign edits. Native final-image file route, protected negative, valid repetitions and full workflow are not exercised. Compile attempt on frozen source returned2 on nonexistent PolicyLoadResult.diagnostics; author identified two additional parity fixes. Existing 2suite baseline mixed stale-dist/newcompile reads, engine-routing14failures, pathologicalstock suite interrupted only exact ownedJest producer81961 afteridentitycheck; terminal130 and directobservedchildren absent, not exhaustive escapeddescendant proof. Raw original file564 retry success onba7b is historicalcompatibility only, not this typed route."
+    recorded_at: "2026-10-29T23:41:28.096Z"
