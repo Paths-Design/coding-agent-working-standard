@@ -632,6 +632,12 @@ The generation inventory also requires a separate check of actual dependency
 resolution and protected system inputs; enumerating files does not prove that
 Node never loads an import outside that tree.
 
+The tool's description advertises its configured shell-quoted Node/writer
+prefix, accepted flags, citation limits and audit continuation. An agent obtains
+the invocation from tool discovery. The result retains stdout and stderr as
+base64 bytes; decoding stdout exposes the writer's typed result. Advertised
+paths are configuration, and execution independently revalidates them.
+
 For one literal invocation of the pinned Node and `writer-main.js` entry,
 discovery returns `execution: {kind: 'caws-evidence-v1', argv: [...]}`. This
 plan is advisory. Native preparation freezes the direct executable and argv with

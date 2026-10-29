@@ -31,7 +31,7 @@ impl Fixture {
         Self(root)
     }
     fn config(&self, wrong_host: bool) -> PathBuf {
-        let generation = self.0.join("generation");
+        let generation = self.0.join("configured agent's generation");
         fs::create_dir(&generation).unwrap();
         for name in ["node", "authorizer.js", "discovery.js", "writer-main.js"] {
             fs::write(generation.join(name), name).unwrap();
@@ -71,7 +71,7 @@ fn real_binary_advertises_context_and_exposes_only_source_and_cwd() {
     let stdout_fd: OwnedFd = endpoint.into();
     let mut child = Command::new(env!("CARGO_BIN_EXE_caws-execution"))
         .arg("--config")
-        .arg(config)
+        .arg(&config)
         .stdin(Stdio::from(stdin_fd))
         .stdout(Stdio::from(stdout_fd))
         .stderr(Stdio::piped())
@@ -102,6 +102,58 @@ fn real_binary_advertises_context_and_exposes_only_source_and_cwd() {
     let list: Value = serde_json::from_str(&line).unwrap();
     assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 1);
     assert_eq!(list["result"]["tools"][0]["name"], "caws_exec");
+    let description = list["result"]["tools"][0]["description"].as_str().unwrap();
+    let prefix = description
+        .split_once("Configured evidence writer prefix:\n")
+        .expect("configured writer prefix marker")
+        .1
+        .split_once('\n')
+        .unwrap()
+        .0;
+    // Interpret the advertised words with an independent shell consumer. The
+    // prefix paths are inert fixture files; printf prints argv without running
+    // the configured Node or writer, so quoting errors cannot hide in mocks.
+    let words = Command::new("/bin/bash")
+        .args(["--noprofile", "--norc", "-c"])
+        .arg(format!("printf '%s\\0' {prefix}"))
+        .output()
+        .unwrap();
+    assert!(words.status.success());
+    let configured: Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
+    let mut expected = configured["node"]["path"]
+        .as_str()
+        .unwrap()
+        .as_bytes()
+        .to_vec();
+    expected.push(0);
+    expected.extend(configured["writer"]["path"].as_str().unwrap().as_bytes());
+    expected.push(0);
+    assert_eq!(words.stdout, expected);
+    for required in [
+        "pass, fail, or unchecked",
+        "--ac AC_ID",
+        "--evidence-ref 'CITATION'",
+        "--command 'DESCRIPTION'",
+        "--exit-code INTEGER",
+        "--artifact-path 'RELATIVE_PATH'",
+        "--commit-sha COMMIT_SHA",
+        "40 lowercase hexadecimal",
+        "--verify requires both --artifact-path and --commit-sha",
+        "citations only and never runs tests",
+        "inside quoted CITATION or DESCRIPTION remain inert data",
+        "stdoutBase64, stderrBase64",
+        "Decode the base64 stdout",
+        "caws specs commit SPEC_ID",
+        "clean status before merge",
+        "inspect the canonical spec and events",
+        "configured, not a live generation or authority verification",
+        "Other closed Bash profiles remain available",
+    ] {
+        assert!(
+            description.contains(required),
+            "missing usable contract: {required}"
+        );
+    }
     assert_eq!(
         list["result"]["tools"][0]["inputSchema"]["properties"],
         json!({"source":{"type":"string"},"cwd":{"type":"string"}})

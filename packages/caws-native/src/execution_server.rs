@@ -485,6 +485,22 @@ fn result(id: Value, value: Value, error: bool) -> Value {
     json!({"jsonrpc":"2.0","id":id,"result":{"isError":error,
         "content":[{"type":"text","text":value.to_string()}]}})
 }
+fn tool_description(config: &Config) -> String {
+    let quote = |path: &str| format!("'{}'", path.replace('\'', "'\\''"));
+    format!(
+        "Execute source admitted by closed CAWS Bash profiles.\n\
+Configured evidence writer prefix:\n{} {}\n\
+Append this grammar to that configured prefix as one literal command:\n\
+specs evidence SPEC_ID --ac AC_ID --status STATUS --evidence-ref 'CITATION' [--command 'DESCRIPTION'] [--exit-code INTEGER] [--artifact-path 'RELATIVE_PATH'] [--commit-sha COMMIT_SHA] [--verify]\n\
+Replace the capitalized placeholders with evidence for the active owned spec. STATUS is pass, fail, or unchecked. AC_ID starts with a letter or digit and contains only letters, digits, underscore, dot, or hyphen. CITATION must be nonblank. Each flag occurs at most once. INTEGER is a decimal safe integer; RELATIVE_PATH is a normalized repository-relative path; COMMIT_SHA is exactly 40 lowercase hexadecimal characters. Use literal shell words and quote data; this writer grammar admits no expansions, substitutions, operators, redirections, or general CLI commands.\n\
+--verify requires both --artifact-path and --commit-sha. Verification checks citations only and never runs tests. --command and --exit-code record supplied evidence; they do not execute a command or establish a fresh test result. Program names, braces, and operators inside quoted CITATION or DESCRIPTION remain inert data.\n\
+Results contain exitCode, stdoutBase64, stderrBase64, and userSpawnMayHaveOccurred. Decode the base64 stdout to inspect the writer's auditCommit, specSha256, eventSequence, and auditCommitContinuation or its publication-failure disposition.\n\
+For a pending audit, use the ordinary authorized CLI workflow: caws specs commit SPEC_ID, then check clean status before merge or closure. After failed publication, inspect the canonical spec and events before considering any retry.\n\
+These paths are configured, not a live generation or authority verification. Each execution still validates its native context, pins, source profile, authority, and fence. Other closed Bash profiles remain available under their existing authorization rules.",
+        quote(&config.node.path),
+        quote(&config.writer.path),
+    )
+}
 fn execution_result(id: Value, value: Value) -> Value {
     let error = value.get("ok") != Some(&Value::Bool(true));
     result(id, value, error)
@@ -962,7 +978,7 @@ pub fn main_entry() -> i32 {
             Some("notifications/initialized") => continue,
             Some("ping") => json!({"jsonrpc":"2.0","id":id,"result":{}}),
             Some("tools/list") => json!({"jsonrpc":"2.0","id":id,"result":{"tools":[{
-                "name":"caws_exec","description":"Execute bounded source through native CAWS authorization",
+                "name":"caws_exec","description":tool_description(&config),
                 "inputSchema":{"type":"object","additionalProperties":false,"required":["source"],
                     "properties":{"source":{"type":"string"},"cwd":{"type":"string"}}}}]}}),
             Some("tools/call") => {
