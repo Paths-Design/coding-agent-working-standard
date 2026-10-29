@@ -1,0 +1,55 @@
+id: CAWS-NATIVE-FILE-TOOLS-001
+title: 'Carry authentic Codex file tools through typed stock pre-write enforcement'
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-10-29T23:24:56.819Z'
+updated_at: '2026-10-29T23:24:56.819Z'
+created_by_session: '01a1861e-58cc-7392-ac55-1ff3a6051998'
+blast_radius:
+  modules:
+    - 'Codex original file-tool normalization and complete stock pre-write runtime'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/engine.ts'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/runtime/session-cache-admission.ts'
+    - 'packages/caws-cli/src/runtime/codex-file-tools.ts'
+    - 'packages/caws-cli/src/runtime/file-tool-handlers.ts'
+    - 'packages/caws-cli/tests/runtime/file-tools.test.js'
+    - 'packages/caws-cli/tests/runtime/engine-routing.test.js'
+    - 'packages/caws-cli/tests/runtime/engine-core.test.js'
+    - 'packages/caws-cli/tests/runtime/stock-handlers.test.js'
+    - 'packages/caws-cli/tests/runtime/session-cache-admission.test.js'
+    - 'packages/caws-cli/mutation-policy.json'
+  out: []
+invariants:
+  - 'Preserve exact original input and every ordered Add Update Delete Move target; malformed inventories refuse before target effects'
+  - 'Preserve selected guard order and owner scope latch progressive-strike reprieve and secret-scan semantics; legacy and custom routes retain their complete compatibility path before effects'
+  - 'No source test or runtime guard bypass; final joined image and Python retirement remain parent obligations'
+acceptance:
+  - id: A1
+    given: 'raw apply_patch and direct Write Edit inputs including the retained byte-pinned564 request'
+    when: 'typed normalization runs'
+    then: 'exact ordered complete source and destination inventory and identities are preserved while malformed ambiguous and authored fake metadata controls refuse correctly'
+  - id: A2
+    given: 'the exact complete stock Codex pre-write profile and actual policy ownership scope latch and secret state'
+    when: 'the real typed engine and authenticated cache prefix admit or refuse file edits'
+    then: 'the complete selected ten-handler behavior and effect order are preserved with semantic hostile controls and no skipped guard'
+  - id: A3
+    given: 'unsupported custom selected libraries or handler profiles'
+    when: 'the request enters the runtime'
+    then: 'complete compatibility selection occurs before heartbeat or other prefix effects and cannot masquerade as typed retirement'
+  - id: A4
+    given: 'a source-pinned private installed joined image'
+    when: 'the authentic native file tool repeats the original patch and attempts a multi-target protected edit'
+    then: 'the intended source edit completes and protected refusal precedes every target write with actual callback and host effect evidence'
+observability:
+  - 'Retain raw native callbacks input hashes selection and terminal journals actual host file_change and before-after target state; tests alone do not establish consumer execution'
+rollback:
+  - 'Use normal governed source history and preserve compatibility registration; never change the selected global runtime for this development slice'
+non_functional: {}
+contracts:
+  - name: 'codex-original-file-tool'
+    type: behavior
