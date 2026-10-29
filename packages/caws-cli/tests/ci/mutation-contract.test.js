@@ -864,13 +864,18 @@ describe('mutation policy topology contract', () => {
     }
   );
 
-  test.each(['kernel', 'store', 'shell', 'single'])(
+  test.each(['kernel', 'store', 'shell', 'analysis', 'execution', 'single'])(
     '%s installed preprocessing changes selected targets while preserving generator and test inputs',
     (surface) => {
       const single = surface === 'single' ? qualificationFixture() : null;
       const dir = single ? single.packageRoot : fs.realpathSync(makeTempDir('caws-preprocessor-'));
       const config = single ? null : createStrykerConfig(surface);
       const targets = single ? ['src/store/a.ts'] : config.mutate;
+      const typeConsumers =
+        surface === 'analysis'
+          ? ['src/shell/command-metadata.ts', 'src/shell/analysis/inspection-prefix-entry.ts']
+          : [];
+      const suppressed = [...targets, ...typeConsumers];
       const protectedFiles = [
         'scripts/generate-runtime-assets.mjs',
         'src/runtime/advisory-truncate-entry.ts',
@@ -881,8 +886,8 @@ describe('mutation policy topology contract', () => {
       const testFile = single ? 'tests/store/a.test.js' : loadPolicy().surfaces[surface].tests[0];
       protectedFiles.push(testFile);
       const originals = {};
-      for (const file of [...targets, ...protectedFiles]) {
-        const content = targets.includes(file)
+      for (const file of [...suppressed, ...protectedFiles]) {
+        const content = suppressed.includes(file)
           ? 'export const fixture: number = 1;\n'
           : single && file === testFile
             ? single.testSource
@@ -910,7 +915,7 @@ describe('mutation policy topology contract', () => {
             : JSON.stringify(config)
         };
         const targets = ${JSON.stringify(targets)};
-        const files = ${JSON.stringify([...targets, ...protectedFiles])};
+        const files = ${JSON.stringify([...suppressed, ...protectedFiles])};
         const project = new Project(fs, Object.fromEntries(files.map(file => [path.resolve(file), { mutate: targets.includes(file) }])), undefined);
         const warnings = [];
         const processor = new DisableTypeChecksPreprocessor({ warn: (...args) => warnings.push(String(args[0])) },
@@ -935,7 +940,7 @@ describe('mutation policy topology contract', () => {
       expect(result.status).toBe(0);
       const observed = JSON.parse(result.stdout);
       expect(observed.warnings).toEqual([]);
-      for (const file of targets) {
+      for (const file of suppressed) {
         expect(observed.observations[file]).toEqual({
           matched: true,
           content: '// @ts-nocheck\n' + originals[file],
