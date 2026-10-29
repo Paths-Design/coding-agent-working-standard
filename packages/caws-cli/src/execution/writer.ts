@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { TextDecoder } from 'node:util';
-import { parseAndValidateSpec } from '../kernel';
+import { parseAndValidateSpec, type Diagnostic } from '../kernel';
 import { parseJsonSource } from '../runtime/json-custody';
 import { loadEvents } from '../store/events-store';
 import { recordSpecEvidence } from '../store/specs-writer';
@@ -135,6 +135,142 @@ export interface ExecutionEvidenceResult {
   readonly auditCommitContinuation: readonly ['caws', 'specs', 'commit', string];
 }
 
+export type ExecutionEvidencePublicationDisposition =
+  | 'transaction-recovered'
+  | 'recovery-required'
+  | 'published-unconfirmed';
+export type ExecutionEvidencePublicationReason =
+  | 'store-reported-recovery'
+  | 'store-reported-unrecovered'
+  | 'store-returned-error'
+  | 'writer-dispatch-failed'
+  | 'publication-unconfirmed';
+type ExecutionEvidenceStoreRule =
+  | 'store.lifecycle.partial_failure_unrecovered'
+  | 'store.lifecycle.plan_rejected'
+  | 'store.lifecycle.write_failed';
+export interface ExecutionEvidenceFailureOutcome {
+  readonly operation: 'caws-evidence-v1';
+  readonly outcome: 'publication-failure';
+  readonly specId: string;
+  readonly criterionId: string;
+  readonly disposition: ExecutionEvidencePublicationDisposition;
+  readonly reason: ExecutionEvidencePublicationReason;
+  readonly storeRule?: ExecutionEvidenceStoreRule;
+  readonly recovery: {
+    readonly specPath: string;
+    readonly eventsPath: '.caws/events.jsonl';
+    readonly retry: 'inspect-before-retry';
+    readonly instruction: string;
+  };
+}
+
+/** Publication has been dispatched. A transportable closed outcome replaces
+ * arbitrary thrown messages and prevents uncertain state from becoming a
+ * zero-effects refusal at the process boundary. */
+export class ExecutionEvidencePublicationFailure extends Error {
+  constructor(readonly outcome: ExecutionEvidenceFailureOutcome) {
+    super('Execution evidence publication requires inspection');
+    this.name = 'ExecutionEvidencePublicationFailure';
+  }
+  static unconfirmed(specId: string, criterionId: string): ExecutionEvidencePublicationFailure {
+    return publicationFailure(
+      specId,
+      criterionId,
+      'published-unconfirmed',
+      'publication-unconfirmed'
+    );
+  }
+}
+
+function publicationFailure(
+  id: string,
+  criterionId: string,
+  disposition: ExecutionEvidencePublicationDisposition,
+  reason: ExecutionEvidencePublicationReason,
+  instruction?: string,
+  storeRule?: ExecutionEvidenceStoreRule
+): ExecutionEvidencePublicationFailure {
+  const specPath = `.caws/specs/${id}.yaml`;
+  return new ExecutionEvidencePublicationFailure({
+    operation: 'caws-evidence-v1',
+    outcome: 'publication-failure',
+    specId: id,
+    criterionId,
+    disposition,
+    reason,
+    ...(storeRule !== undefined ? { storeRule } : {}),
+    recovery: {
+      specPath,
+      eventsPath: '.caws/events.jsonl',
+      retry: 'inspect-before-retry',
+      instruction:
+        instruction ??
+        `Inspect ${specPath} and .caws/events.jsonl before retrying. ` +
+          'The spec and event append may have changed independently. Do NOT hand-author entries into events.jsonl.',
+    },
+  });
+}
+
+/** Retain only the store's known single-spec/ac_recorded recovery template.
+ * Failure reasons and arbitrary diagnostic messages are never transported.
+ * Unrecognized templates fall back to the fixed inspect-both instruction. */
+function boundedStoreRecovery(
+  diagnostic: Diagnostic,
+  specPath: string,
+  id: string
+): string | undefined {
+  const data = diagnostic.data;
+  if (
+    !data ||
+    typeof data.recovery_instruction !== 'string' ||
+    data.recovery_instruction.length > 8192
+  )
+    return undefined;
+  const ownedPaths = (value: unknown): value is string[] =>
+    Array.isArray(value) && value.length <= 1 && value.every((item) => item === specPath);
+  const failures = data.rollback_failed;
+  if (
+    !ownedPaths(data.writes_completed) ||
+    !ownedPaths(data.rolled_back) ||
+    !Array.isArray(failures) ||
+    failures.length > 1 ||
+    !failures.every(
+      (item: unknown) =>
+        item !== null &&
+        typeof item === 'object' &&
+        !Array.isArray(item) &&
+        (item as Record<string, unknown>).path === specPath
+    )
+  )
+    return undefined;
+  const lines = [
+    'Lifecycle transaction left the repository in a partial state.',
+    `  ${data.writes_completed.length} file write(s) completed before failure.`,
+    `  ${data.rolled_back.length} successfully rolled back; ${failures.length} rollback failure(s).`,
+    '',
+    'Files that may need manual inspection:',
+    ...failures.map(() => `  ${specPath} (rollback failed)`),
+    '',
+    'Events that were NOT appended (1):',
+    `  ac_recorded (spec_id=${id})`,
+    '',
+    'Required action: review each listed file against the planned event payload above to',
+    'determine whether to redo the lifecycle transition or to manually restore prior state.',
+    'Do NOT hand-author entries into events.jsonl.',
+  ];
+  if (data.recovery_instruction !== lines.join('\n')) return undefined;
+  // The store's append failure can include an fsync failure after bytes were
+  // written. Its historical NOT-appended sentence is not a ledger observation.
+  return lines
+    .map((line) =>
+      line === 'Events that were NOT appended (1):'
+        ? 'Event append not confirmed (1); inspect .caws/events.jsonl:'
+        : line.replace(specPath, `.caws/specs/${id}.yaml`)
+    )
+    .join('\n');
+}
+
 /** Private direct-child consumer. Its callers must provide the actual native
  * inherited fence; supplying the same public environment without fd3 refuses. */
 export function runExecutionEvidenceWriter(argv: readonly string[]): ExecutionEvidenceResult {
@@ -207,59 +343,101 @@ export function runExecutionEvidenceWriter(argv: readonly string[]): ExecutionEv
     platform: 'codex',
   };
   const { verify: _verify, ...input } = args;
-  const result = recordSpecEvidence(
-    cawsDir,
-    { ...input, actor, now: () => recordedAt },
-    {
-      kind: 'bounded-execution',
-      fence,
-      expectedSource,
-      validate,
+  let storeSucceeded = false;
+  try {
+    const result = recordSpecEvidence(
+      cawsDir,
+      { ...input, actor, now: () => recordedAt },
+      {
+        kind: 'bounded-execution',
+        fence,
+        expectedSource,
+        validate,
+      }
+    );
+    if (!result.ok) {
+      const unrecovered = result.errors.find(
+        (diagnostic) => diagnostic.rule === 'store.lifecycle.partial_failure_unrecovered'
+      );
+      throw publicationFailure(
+        args.id,
+        args.criterionId,
+        unrecovered ? 'recovery-required' : 'published-unconfirmed',
+        unrecovered ? 'store-reported-unrecovered' : 'store-returned-error',
+        unrecovered ? boundedStoreRecovery(unrecovered, specPath, args.id) : undefined,
+        result.errors
+          .map((diagnostic) => diagnostic.rule)
+          .find((rule): rule is ExecutionEvidenceStoreRule =>
+            [
+              'store.lifecycle.partial_failure_unrecovered',
+              'store.lifecycle.plan_rejected',
+              'store.lifecycle.write_failed',
+            ].includes(rule)
+          )
+      );
     }
-  );
-  requireValue(result.ok && result.value.kind === 'success');
-  requireValue(verifyInheritedFence(cawsDir, fence), 'fence_unverified');
-  const after = loadEvents(cawsDir);
-  const publishedSource = fs.readFileSync(specPath, 'utf8');
-  const spec = parseAndValidateSpec(publishedSource);
-  requireValue(after.ok && spec.ok);
-  const event = after.value.events.at(-1);
-  const entries =
-    spec.value.evidence?.filter((entry) => entry.criterion_id === args.criterionId) ?? [];
-  requireValue(
-    after.value.events.length === before.value.events.length + 1 &&
-      event?.event === 'ac_recorded' &&
-      event.spec_id === args.id
-  );
-  const expected = {
-    criterion_id: args.criterionId,
-    status: args.status,
-    evidence_ref: args.evidenceRef,
-    ...(args.command !== undefined ? { command: args.command } : {}),
-    ...(args.exitCode !== undefined ? { exit_code: args.exitCode } : {}),
-    ...(args.artifactPath !== undefined ? { artifact_path: args.artifactPath } : {}),
-    ...(args.commitSha !== undefined ? { commit_sha: args.commitSha } : {}),
-  };
-  requireValue(entries.length === 1);
-  for (const [name, value] of Object.entries(expected)) {
+    if (result.value.kind === 'partial_failure_recovered') {
+      throw publicationFailure(
+        args.id,
+        args.criterionId,
+        'transaction-recovered',
+        'store-reported-recovery'
+      );
+    }
+    storeSucceeded = true;
+    requireValue(verifyInheritedFence(cawsDir, fence), 'fence_unverified');
+    const after = loadEvents(cawsDir);
+    const publishedSource = fs.readFileSync(specPath, 'utf8');
+    const spec = parseAndValidateSpec(publishedSource);
+    requireValue(after.ok && spec.ok);
+    const event = after.value.events.at(-1);
+    const entries =
+      spec.value.evidence?.filter((entry) => entry.criterion_id === args.criterionId) ?? [];
     requireValue(
-      (entries[0] as unknown as Record<string, unknown>)[name] === value &&
-        (event.data as Record<string, unknown>)[name] === value
+      after.value.events.length === before.value.events.length + 1 &&
+        event?.event === 'ac_recorded' &&
+        event.spec_id === args.id
+    );
+    const expected = {
+      criterion_id: args.criterionId,
+      status: args.status,
+      evidence_ref: args.evidenceRef,
+      ...(args.command !== undefined ? { command: args.command } : {}),
+      ...(args.exitCode !== undefined ? { exit_code: args.exitCode } : {}),
+      ...(args.artifactPath !== undefined ? { artifact_path: args.artifactPath } : {}),
+      ...(args.commitSha !== undefined ? { commit_sha: args.commitSha } : {}),
+    };
+    requireValue(entries.length === 1);
+    for (const [name, value] of Object.entries(expected)) {
+      requireValue(
+        (entries[0] as unknown as Record<string, unknown>)[name] === value &&
+          (event.data as Record<string, unknown>)[name] === value
+      );
+    }
+    requireValue(
+      entries[0]!.recorded_at === recordedAt.toISOString() && event.ts === recordedAt.toISOString()
+    );
+    requireValue(JSON.stringify(event.actor) === JSON.stringify(actor));
+    requireValue(
+      entries[0]!.test_nodeid === undefined && entries[0]!.test_verified_at === undefined
+    );
+    return {
+      operation: 'caws-evidence-v1',
+      specId: args.id,
+      criterionId: args.criterionId,
+      verification: args.verify ? 'citation-only' : 'not-requested',
+      auditCommit: 'pending',
+      eventSequence: event.seq,
+      specSha256: createHash('sha256').update(publishedSource).digest('hex'),
+      auditCommitContinuation: ['caws', 'specs', 'commit', args.id],
+    };
+  } catch (error) {
+    if (error instanceof ExecutionEvidencePublicationFailure) throw error;
+    throw publicationFailure(
+      args.id,
+      args.criterionId,
+      'published-unconfirmed',
+      storeSucceeded ? 'publication-unconfirmed' : 'writer-dispatch-failed'
     );
   }
-  requireValue(
-    entries[0]!.recorded_at === recordedAt.toISOString() && event.ts === recordedAt.toISOString()
-  );
-  requireValue(JSON.stringify(event.actor) === JSON.stringify(actor));
-  requireValue(entries[0]!.test_nodeid === undefined && entries[0]!.test_verified_at === undefined);
-  return {
-    operation: 'caws-evidence-v1',
-    specId: args.id,
-    criterionId: args.criterionId,
-    verification: args.verify ? 'citation-only' : 'not-requested',
-    auditCommit: 'pending',
-    eventSequence: event.seq,
-    specSha256: createHash('sha256').update(publishedSource).digest('hex'),
-    auditCommitContinuation: ['caws', 'specs', 'commit', args.id],
-  };
 }

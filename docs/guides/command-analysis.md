@@ -649,6 +649,12 @@ canonical tree before merge and closure. Recording alone is unfinished work. The
 inherited execution environment is closed; the consumer separately checks the
 numeric macOS startup field added by the operating system.
 
+Transaction failure responses distinguish recovered writes, recovery-required
+partial state and publication whose readback is unconfirmed. They retain bounded
+recovery coordinates and require inspection of the spec and event log before a
+retry. A failed response after dispatch does not assert zero effects. Native
+replies preserve the exit code, bounded output and possible-spawn disposition.
+
 This route is source implementation. Genuine host-channel authentication, worker
 descriptor survival through the actual sandbox launcher, useful writer
 admission, foreign-write refusal, cancellation, full workflow, native canary and

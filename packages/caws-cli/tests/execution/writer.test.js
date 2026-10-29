@@ -353,3 +353,172 @@ test('missing promisor objects refuse without launching a configured executable 
   ).toThrow();
   expect(fs.readFileSync(sentinel, 'utf8')).toBe('fetch');
 });
+
+function publicationFaultScript(f, mode, secret) {
+  return `
+    const fs = require('node:fs');
+    const specPath = ${JSON.stringify(f.specPath)};
+    const eventsPath = ${JSON.stringify(path.join(f.caws, 'events.jsonl'))};
+    const mode = ${JSON.stringify(mode)};
+    const secret = ${JSON.stringify(secret)};
+    const open = fs.openSync, close = fs.closeSync, sync = fs.fsyncSync;
+    const rename = fs.renameSync, read = fs.readFileSync;
+    let appendAttempted = false, eventFd, eventOpen = false, eventCommitted = false;
+    fs.openSync = (pathname, flags, ...rest) => {
+      if (pathname === eventsPath && flags === 'a') {
+        appendAttempted = true;
+        if (mode === 'append-recovered' || mode === 'append-rollback-failed') throw new Error(secret);
+        eventFd = open(pathname, flags, ...rest); eventOpen = true; return eventFd;
+      }
+      return open(pathname, flags, ...rest);
+    };
+    fs.closeSync = (fd) => { if (fd === eventFd) eventOpen = false; return close(fd); };
+    fs.fsyncSync = (fd) => {
+      if (eventOpen && fd === eventFd && mode === 'append-fsync-recovered') throw new Error(secret);
+      const result = sync(fd);
+      if (eventOpen && fd === eventFd) eventCommitted = true;
+      return result;
+    };
+    fs.renameSync = (source, target) => {
+      if (appendAttempted && target === specPath && mode === 'append-rollback-failed') throw new Error(secret);
+      return rename(source, target);
+    };
+    fs.readFileSync = (pathname, ...rest) => {
+      if (eventCommitted && pathname === specPath && mode === 'readback-failed') throw new Error(secret);
+      return read(pathname, ...rest);
+    };
+    if (mode === 'report-failed') {
+      const write = process.stdout.write.bind(process.stdout);
+      let failed = false;
+      process.stdout.write = (...parts) => {
+        if (!failed) { failed = true; throw new Error(secret); }
+        return write(...parts);
+      };
+    }
+    process.argv.splice(1, 0, ${JSON.stringify(entry)});
+    require(${JSON.stringify(entry)});
+  `;
+}
+
+test.each([
+  ['append-recovered', 'transaction-recovered', 'store-reported-recovery'],
+  ['append-rollback-failed', 'recovery-required', 'store-reported-unrecovered'],
+  ['append-fsync-recovered', 'transaction-recovered', 'store-reported-recovery'],
+  ['readback-failed', 'published-unconfirmed', 'publication-unconfirmed'],
+  ['report-failed', 'published-unconfirmed', 'publication-unconfirmed'],
+])(
+  'reports %s through actual transaction IO with inspect-before-retry and no sensitive payload',
+  (mode, disposition, reason) => {
+    const f = fixture();
+    const secret = 'submitted-private-metadata-never-report';
+    const argv = args(f, ['--command', secret]);
+    argv[argv.indexOf('--evidence-ref') + 1] = secret;
+    const before = state(f);
+    const priorEvents = loadEvents(f.caws);
+    expect(priorEvents.ok).toBe(true);
+    const result = execute(f, argv, { script: publicationFaultScript(f, mode, secret) });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    const report = JSON.parse(result.stdout);
+    expect(report).toMatchObject({
+      operation: 'caws-evidence-v1',
+      outcome: 'publication-failure',
+      specId: 'EXEC-001',
+      criterionId: 'A1',
+      disposition,
+      reason,
+      recovery: {
+        specPath: '.caws/specs/EXEC-001.yaml',
+        eventsPath: '.caws/events.jsonl',
+        retry: 'inspect-before-retry',
+      },
+    });
+    expect(result.stderr).toBe(
+      `caws execution evidence publication requires inspection: ${disposition}/${reason}\n`
+    );
+    expect(result.stderr).not.toContain('refused');
+    expect(result.stdout + result.stderr).not.toContain(secret);
+    expect(result.stdout + result.stderr).not.toContain(f.root);
+    expect(report.recovery.instruction).toContain('.caws/events.jsonl');
+    expect(report.recovery.instruction).toContain('Do NOT hand-author entries into events.jsonl.');
+    expect(report.recovery).not.toHaveProperty('retry_safe');
+    const after = state(f);
+    const events = loadEvents(f.caws);
+    expect(events.ok).toBe(true);
+    if (mode === 'append-recovered' || mode === 'append-fsync-recovered') {
+      expect(after.spec).toBe(before.spec);
+    } else {
+      expect(after.spec).not.toBe(before.spec);
+      expect(evidence(f)).toEqual([
+        {
+          criterion_id: 'A1',
+          status: 'pass',
+          evidence_ref: secret,
+          command: secret,
+          artifact_path: 'src/proof.txt',
+          commit_sha: f.sha,
+          recorded_at: expect.any(String),
+        },
+      ]);
+    }
+    if (mode === 'append-recovered' || mode === 'append-rollback-failed') {
+      expect(after.events).toBe(before.events);
+      expect(events.value.events).toEqual(priorEvents.value.events);
+    } else {
+      expect(events.value.events.length).toBe(priorEvents.value.events.length + 1);
+      expect(events.value.events.at(-1)).toMatchObject({
+        event: 'ac_recorded',
+        spec_id: 'EXEC-001',
+        data: { criterion_id: 'A1', evidence_ref: secret, command: secret },
+      });
+    }
+    if (mode === 'append-rollback-failed') {
+      expect(report.storeRule).toBe('store.lifecycle.partial_failure_unrecovered');
+      expect(report.recovery.instruction).toContain('.caws/specs/EXEC-001.yaml (rollback failed)');
+      expect(report.recovery.instruction).toContain(
+        'Event append not confirmed (1); inspect .caws/events.jsonl:'
+      );
+      expect(report.recovery.instruction).not.toContain('NOT appended');
+    }
+  }
+);
+
+test.each(['throw', 'unsafe-recovery'])(
+  'sanitizes %s at the dispatched store boundary without ordinary refusal or automatic retry',
+  (mode) => {
+    const f = fixture();
+    const before = state(f);
+    const secret = 'untrusted-store-error-payload-must-not-escape';
+    const store = path.resolve(__dirname, '../../dist/store/specs-writer.js');
+    const script = `
+    const store = require(${JSON.stringify(store)});
+    let calls = 0;
+    store.recordSpecEvidence = () => {
+      if (++calls > 1) throw new Error('automatic retry occurred');
+      ${mode === 'throw' ? `throw new Error(${JSON.stringify(secret)});` : `return { ok: false, errors: [{ rule: 'store.lifecycle.partial_failure_unrecovered', message: ${JSON.stringify(secret)}, data: { recovery_instruction: ${JSON.stringify(secret)} } }] };`}
+    };
+    process.argv.splice(1, 0, ${JSON.stringify(entry)});
+    require(${JSON.stringify(entry)});
+    if (calls !== 1) throw new Error('store dispatch count changed');
+  `;
+    const result = execute(f, args(f), { script });
+    expect(result.status).toBe(1);
+    const report = JSON.parse(result.stdout);
+    expect(report.disposition).toBe(
+      mode === 'throw' ? 'published-unconfirmed' : 'recovery-required'
+    );
+    expect(report.reason).toBe(
+      mode === 'throw' ? 'writer-dispatch-failed' : 'store-reported-unrecovered'
+    );
+    expect(result.stderr).toBe(
+      `caws execution evidence publication requires inspection: ${report.disposition}/${report.reason}\n`
+    );
+    expect(report.recovery.retry).toBe('inspect-before-retry');
+    expect(report.recovery.instruction).toBe(
+      'Inspect .caws/specs/EXEC-001.yaml and .caws/events.jsonl before retrying. The spec and event append may have changed independently. Do NOT hand-author entries into events.jsonl.'
+    );
+    expect(result.stdout + result.stderr).not.toContain(secret);
+    expect(result.stderr).not.toContain('refused');
+    expect(state(f)).toEqual(before);
+  }
+);

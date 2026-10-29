@@ -485,6 +485,36 @@ fn result(id: Value, value: Value, error: bool) -> Value {
     json!({"jsonrpc":"2.0","id":id,"result":{"isError":error,
         "content":[{"type":"text","text":value.to_string()}]}})
 }
+fn execution_result(id: Value, value: Value) -> Value {
+    let error = value.get("ok") != Some(&Value::Bool(true));
+    result(id, value, error)
+}
+
+fn worker_reply(outcome: OwnerOutcome) -> Value {
+    match outcome {
+        OwnerOutcome::Completed(done) => {
+            json!({"ok":done.status.success(),"stdoutBase64":STANDARD.encode(done.stdout),
+            "stderrBase64":STANDARD.encode(done.stderr),"exitCode":done.status.code(),"userSpawnMayHaveOccurred":true})
+        }
+        OwnerOutcome::Failed(mut f) => {
+            settle(f.child.take());
+            let mut stdout = Vec::new();
+            let mut stderr = Vec::new();
+            let mut exit_code = None;
+            if let Some(mut job) = f.job_failure.take() {
+                settle(job.retained_child.take());
+                if let execution_child::FailureKind::Nonzero(status) = &job.kind {
+                    exit_code = status.code();
+                }
+                stdout = job.stdout;
+                stderr = job.stderr;
+            }
+            let fence_released = f.fence.as_mut().is_none_or(|f| f.try_release().is_ok());
+            json!({"ok":false,"reason":format!("{:?}",f.reason),"userSpawnMayHaveOccurred":f.user_spawn_may_have_occurred,
+                "fenceReleased":fence_released,"exitCode":exit_code,"stdoutBase64":STANDARD.encode(stdout),"stderrBase64":STANDARD.encode(stderr)})
+        }
+    }
+}
 
 /// Cancellation, EOF and reply loss never kill a worker which may own a USER
 /// child in another process group. Signal the control socket, drain bounded
@@ -866,25 +896,7 @@ fn worker(config: &Config) -> io::Result<()> {
         Arc::new(AtomicBool::new(false)),
         &live,
     );
-    let reply = match outcome {
-        OwnerOutcome::Completed(done) => {
-            json!({"ok":true,"stdoutBase64":STANDARD.encode(done.stdout),
-            "stderrBase64":STANDARD.encode(done.stderr),"exitCode":done.status.code(),"userSpawnMayHaveOccurred":true})
-        }
-        OwnerOutcome::Failed(mut f) => {
-            settle(f.child.take());
-            let mut stdout = Vec::new();
-            let mut stderr = Vec::new();
-            if let Some(mut job) = f.job_failure.take() {
-                settle(job.retained_child.take());
-                stdout = job.stdout;
-                stderr = job.stderr;
-            }
-            let fence_released = f.fence.as_mut().is_none_or(|f| f.try_release().is_ok());
-            json!({"ok":false,"reason":format!("{:?}",f.reason),"userSpawnMayHaveOccurred":f.user_spawn_may_have_occurred,
-                "fenceReleased":fence_released,"stdoutBase64":STANDARD.encode(stdout),"stderrBase64":STANDARD.encode(stderr)})
-        }
-    };
+    let reply = worker_reply(outcome);
     write_json(&reply)
 }
 
@@ -956,10 +968,7 @@ pub fn main_entry() -> i32 {
             Some("tools/call") => {
                 let possible = Cell::new(false);
                 match execute_call(&config, &path, &input, &peer, &line, &possible) {
-                    Ok(v) => {
-                        let error = v.get("ok") != Some(&Value::Bool(true));
-                        result(id, v, error)
-                    }
+                    Ok(v) => execution_result(id, v),
                     Err(_) => result(
                         id,
                         json!({"ok":false,"reason":"NativeBoundaryRefused","userSpawnMayHaveOccurred":possible.get()}),
@@ -984,6 +993,71 @@ mod tests {
     use sha2::{Digest, Sha256};
     use std::sync::atomic::AtomicU64;
     static NEXT: AtomicU64 = AtomicU64::new(0);
+    #[test]
+    fn consumer_exit_status_controls_mcp_error_without_losing_structured_stdout() {
+        for code in [0, 1] {
+            let source = json!({"status":if code == 0 {"published"} else {"partial_publication"},
+                "eventPublished":true,"specPublished":code == 0})
+            .to_string();
+            let source_stdout = format!("{source}\n").into_bytes();
+            let output = Command::new("/bin/sh")
+                .args(["-c", "printf '%s\\n' \"$2\"; exit \"$1\"", "fixture"])
+                .arg(code.to_string())
+                .arg(source)
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(code));
+            assert_eq!(output.stdout, source_stdout);
+            let reply = worker_reply(OwnerOutcome::Completed(execution_child::Completed {
+                status: output.status,
+                stdout: output.stdout.clone(),
+                stderr: output.stderr.clone(),
+            }));
+            assert_eq!(reply["ok"], code == 0);
+            assert_eq!(reply["exitCode"], code);
+            assert_eq!(reply["userSpawnMayHaveOccurred"], true);
+            let mcp = execution_result(json!(42), reply);
+            assert_eq!(mcp["result"]["isError"], code != 0);
+            let detail: Value =
+                serde_json::from_str(mcp["result"]["content"][0]["text"].as_str().unwrap())
+                    .unwrap();
+            assert_eq!(
+                STANDARD
+                    .decode(detail["stdoutBase64"].as_str().unwrap())
+                    .unwrap(),
+                source_stdout
+            );
+            if code == 1 {
+                // The real owner currently classifies nonzero child exit as a
+                // job failure; retain its code and exact Source result too.
+                let reply = worker_reply(OwnerOutcome::Failed(execution_owner::OwnerFailure {
+                    reason: execution_owner::Refusal::JobIo,
+                    child: None,
+                    fence: None,
+                    job_failure: Some(execution_child::Failure {
+                        kind: execution_child::FailureKind::Nonzero(output.status),
+                        stdout: output.stdout,
+                        stderr: output.stderr,
+                        retained_child: None,
+                        cleanup_detail: None,
+                    }),
+                    user_spawn_may_have_occurred: true,
+                }));
+                assert_eq!(reply["exitCode"], 1);
+                assert_eq!(reply["userSpawnMayHaveOccurred"], true);
+                assert_eq!(
+                    STANDARD
+                        .decode(reply["stdoutBase64"].as_str().unwrap())
+                        .unwrap(),
+                    source_stdout
+                );
+                assert_eq!(
+                    execution_result(json!(43), reply)["result"]["isError"],
+                    true
+                );
+            }
+        }
+    }
     struct Fixture(PathBuf);
     impl Fixture {
         fn new() -> Self {
