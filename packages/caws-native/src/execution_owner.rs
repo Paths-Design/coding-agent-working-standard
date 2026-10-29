@@ -769,6 +769,7 @@ mod consumer_tests {
     use crate::execution_child::{self, FailureKind, TerminationGrace};
     use serde_json::Value;
     use std::{
+        cell::{Cell, RefCell},
         io::{BufRead, BufReader},
         process::{Child, Command, Stdio},
         sync::{Arc, atomic::AtomicBool},
@@ -784,8 +785,27 @@ const scripts = {
   foreign: 'printf forbidden > ../foreign.txt',
   cancel: 'printf forbidden > src/cancel.txt',
   output: 'printf 12345678; printf abcdefgh >&2',
+  revoke_before: 'printf once >> src/result.txt',
+  revoke_held: 'printf once >> src/result.txt',
 };
 if (!Object.hasOwn(scripts, which)) throw new Error('unknown test fixture');
+if (which.startsWith('revoke_')) {
+  const fs = require('node:fs'), path = require('node:path');
+  const {spawnSync} = require('node:child_process');
+  const yaml = require(require.resolve('js-yaml', {paths:[path.dirname(process.argv[1])]}));
+  // The reader fixture uses valid JSON-as-YAML. The real writer deliberately
+  // edits YAML source nodes, so construct its native fixture in ordinary YAML.
+  fs.writeFileSync(f.specPath, yaml.dump(f.spec));
+  const git = (...args) => {
+    const r = spawnSync('/usr/bin/git', ['-c','core.hooksPath=/dev/null',
+      '-c','commit.gpgsign=false', ...args],
+      {cwd:f.root, env:process.env, encoding:'utf8', timeout:5000});
+    if (r.status !== 0) throw new Error('controlled fixture Git setup failed: '+r.stderr);
+  };
+  git('add','--force','--','.caws/specs/EXEC-001.yaml','.caws/worktrees.json','.caws/policy.yaml');
+  git('commit','-qm','fixture authority baseline');
+  f.record.limits.preparationDeadlineUnixMs = Date.now()+30000;
+}
 fixtureModule.source(f, scripts[which]);
 if (which === 'output') f.record.limits.maxOutputBytes = 12;
 process.stdout.write(JSON.stringify({record:f.record, root:f.root, caws:f.caws,
@@ -821,10 +841,50 @@ process.stdin.resume();
         child: Child,
         data: Value,
         clean: bool,
+        private_home: Option<PathBuf>,
     }
     impl Fixture {
         fn create(case: &str, node: &str, fixture_path: &str) -> Self {
-            let mut child = Command::new(node)
+            Self::create_with_environment(case, node, fixture_path, false)
+        }
+        fn create_with_environment(
+            case: &str,
+            node: &str,
+            fixture_path: &str,
+            isolated: bool,
+        ) -> Self {
+            let mut command = Command::new(node);
+            let private_home = isolated.then(|| {
+                let home = std::env::temp_dir().join(format!(
+                    "caws-ordering-home-{}-{}",
+                    std::process::id(),
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos()
+                ));
+                fs::create_dir(&home).unwrap();
+                command
+                    .env_clear()
+                    .env("HOME", &home)
+                    .env("CAWS_HOME", home.join(".caws"))
+                    .env(
+                        "PATH",
+                        format!(
+                            "{}:/usr/bin:/bin",
+                            Path::new(node).parent().unwrap().display()
+                        ),
+                    )
+                    .env("CODEX_THREAD_ID", "thread-owned")
+                    .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                    .env("GIT_CONFIG_SYSTEM", "/dev/null")
+                    .env("GIT_AUTHOR_NAME", "Native ordering fixture")
+                    .env("GIT_AUTHOR_EMAIL", "fixture@example.invalid")
+                    .env("GIT_COMMITTER_NAME", "Native ordering fixture")
+                    .env("GIT_COMMITTER_EMAIL", "fixture@example.invalid");
+                home
+            });
+            let mut child = command
                 .arg("-e")
                 .arg(SETUP)
                 .arg(fixture_path)
@@ -847,6 +907,7 @@ process.stdin.resume();
                 child,
                 data,
                 clean: false,
+                private_home,
             }
         }
         fn text(&self, key: &str) -> &str {
@@ -863,6 +924,9 @@ process.stdin.resume();
                 !self.path("root").exists(),
                 "fixture cleanup must remove root"
             );
+            if let Some(home) = &self.private_home {
+                fs::remove_dir_all(home).expect("private machine fixture cleanup");
+            }
             self.clean = true;
         }
     }
@@ -984,6 +1048,405 @@ process.stdin.resume();
             required("CAWS_TEST_AUTHORIZER_ENTRY"),
             required("CAWS_TEST_AUTHORITY_FIXTURE"),
         )
+    }
+
+    // This wrapper runs the actual Source evaluator in its own authorizer
+    // process. It observes completed evaluations, never manufactures replies
+    // or interposes a second Node parent between Source and the native owner.
+    fn ordering_entry(f: &Fixture, entry: &str) -> PathBuf {
+        let wrapper = f.path("root").join("ordering-authorizer.cjs");
+        let body = format!(
+            r#"const fs=require('node:fs'),path=require('node:path');
+const entry={entry};
+const root={root};
+const {{readAuthorizerInput}}=require(entry);
+const {{decodeAuthorizerRequest,encodeAuthorizerReply}}=require(path.join(path.dirname(entry),'protocol.js'));
+const {{evaluatePreparedExecution}}=require(path.join(path.dirname(entry),'authorizer.js'));
+(async()=>{{
+  const {{request,record}}=decodeAuthorizerRequest(await readAuthorizerInput(process.stdin));
+  if(record.projectRoot!==root) throw new Error('fixture root mismatch');
+  const reply=await evaluatePreparedExecution(record,request);
+  const marker=path.join(root,request.phase+'.json');
+  fs.writeFileSync(marker+'.pending',JSON.stringify(reply));
+  fs.renameSync(marker+'.pending',marker);
+  process.stdout.write(encodeAuthorizerReply(reply));
+}})().catch(()=>{{process.stderr.write('ordering fixture infrastructure failure\n');process.exitCode=2;}});
+"#,
+            entry = serde_json::to_string(entry).unwrap(),
+            root = serde_json::to_string(f.text("root")).unwrap(),
+        );
+        fs::write(&wrapper, body).unwrap();
+        wrapper
+    }
+
+    fn ordering_observation(name: &str, value: &Value) {
+        eprintln!("ordering observation {name}: {value}");
+        if let Ok(dir) = std::env::var("CAWS_TEST_OBSERVATION_DIR") {
+            let dir = Path::new(&dir);
+            assert!(dir.is_absolute(), "observation directory must be absolute");
+            fs::create_dir_all(dir).unwrap();
+            fs::write(
+                dir.join(format!("{name}.json")),
+                serde_json::to_vec_pretty(value).unwrap(),
+            )
+            .unwrap();
+        }
+    }
+
+    fn ordering_manifest(
+        name: &str,
+        f: &Fixture,
+        node: &str,
+        entry: &str,
+        fixture: &str,
+        wrapper: &Path,
+    ) {
+        let identity = |path: &str| {
+            let pin = image(path.into());
+            serde_json::json!({"path":pin.path,"sha256":pin.sha256})
+        };
+        ordering_observation(
+            name,
+            &serde_json::json!({"preparedRecord":f.data["record"],
+                "configuredNode":identity(node),"configuredSourceAuthorizer":identity(entry),
+                "configuredAuthorityFixture":identity(fixture),
+                "wrapper":identity(wrapper.to_str().unwrap()),"wrapperBody":fs::read_to_string(wrapper).unwrap(),
+                "nativePreparationBudgetMs":30000,"cliServiceBudgetMs":5000,
+                "syntheticTrustedInvocation":true,"realCarrierVerified":false}),
+        );
+    }
+
+    fn ordering_state(f: &Fixture) -> Value {
+        let bytes = fs::read(f.path("caws").join("specs/EXEC-001.yaml")).unwrap();
+        let text = std::str::from_utf8(&bytes).unwrap();
+        // These controlled fixture paths are plain YAML scalars. Do not treat
+        // this small observation reader as a general spec/authority parser.
+        let scope: Vec<_> = text
+            .lines()
+            .skip_while(|line| *line != "  in:")
+            .skip(1)
+            .take_while(|line| line.starts_with("    - "))
+            .map(|line| line.trim_start().strip_prefix("- ").unwrap())
+            .collect();
+        assert!(!scope.is_empty(), "fixture scope.in must parse");
+        let events = fs::read_to_string(f.path("caws").join("events.jsonl")).unwrap_or_default();
+        let events: Vec<Value> = events
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        // The fixture has a loose, local main ref. Observe it without an
+        // unbounded subprocess inside the owner's cancellation callback.
+        let git = f.path("root").join(".git");
+        assert_eq!(
+            fs::read_to_string(git.join("HEAD")).unwrap(),
+            "ref: refs/heads/main\n"
+        );
+        let head = fs::read_to_string(git.join("refs/heads/main")).unwrap();
+        serde_json::json!({"scopeIn":scope,"specSha256":format!("{:x}",Sha256::digest(&bytes)),
+            "head":head.trim(),"events":events,
+            "fencePresent":f.path("caws").join("state.lock").exists(),
+            "userMarker":fs::read_to_string(f.path("lane").join("src/result.txt")).ok()})
+    }
+
+    fn revoke_scope(f: &Fixture, node: &str, entry: &str) -> Value {
+        let cli = Path::new(entry)
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("index.js");
+        assert!(
+            cli.is_file(),
+            "real CLI entry must be beside execution directory"
+        );
+        let args = [
+            cli.to_str().unwrap(),
+            "specs",
+            "amend-scope",
+            "EXEC-001",
+            "--remove",
+            "src/",
+            "--add",
+            "allowed-after-revocation/",
+        ];
+        let home = f
+            .private_home
+            .as_ref()
+            .expect("ordering fixture private home");
+        let mut command = pipe_command(node);
+        command
+            .args(args)
+            .current_dir(f.path("root"))
+            .env_clear()
+            .env("HOME", home)
+            .env("CAWS_HOME", home.join(".caws"))
+            .env(
+                "PATH",
+                format!(
+                    "{}:/usr/bin:/bin",
+                    Path::new(node).parent().unwrap().display()
+                ),
+            )
+            .env("CODEX_THREAD_ID", "thread-owned")
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .env("GIT_AUTHOR_NAME", "Native ordering fixture")
+            .env("GIT_AUTHOR_EMAIL", "fixture@example.invalid")
+            .env("GIT_COMMITTER_NAME", "Native ordering fixture")
+            .env("GIT_COMMITTER_EMAIL", "fixture@example.invalid");
+        let child = command.spawn().expect("real CLI scope writer spawn");
+        let result = execution_child::service_child(
+            child,
+            &[],
+            Instant::now() + Duration::from_secs(5),
+            &Arc::new(AtomicBool::new(false)),
+            262144,
+            262144,
+            524288,
+            TerminationGrace::new(Duration::from_millis(100)).unwrap(),
+            &|_| Ok(()),
+        );
+        let argv: Vec<String> = std::iter::once(node.to_owned())
+            .chain(args.iter().map(|value| value.to_string()))
+            .collect();
+        match result {
+            Ok(done) => {
+                serde_json::json!({"argv":argv,
+                "status":done.status.code(),"stdout":String::from_utf8(done.stdout).unwrap(),
+                "stderr":String::from_utf8(done.stderr).unwrap()})
+            }
+            Err(mut problem) => {
+                if let FailureKind::Nonzero(status) = &problem.kind {
+                    assert!(
+                        problem.retained_child.is_none(),
+                        "completed CLI must be settled"
+                    );
+                    return serde_json::json!({"argv":argv,"status":status.code(),
+                        "stdout":String::from_utf8(problem.stdout).unwrap(),
+                        "stderr":String::from_utf8(problem.stderr).unwrap()});
+                }
+                if let Some(child) = problem.retained_child.take() {
+                    let (retained, _) = execution_child::stop_child(
+                        child,
+                        TerminationGrace::new(Duration::from_millis(100)).unwrap(),
+                    );
+                    assert!(retained.is_none(), "CLI fixture child custody must settle");
+                }
+                panic!(
+                    "real CLI writer failed to complete within bounded fixture call: {:?}",
+                    problem.kind
+                );
+            }
+        }
+    }
+
+    fn phase_observation(f: &Fixture, phase: &str) -> Option<Value> {
+        fs::read(f.path("root").join(format!("{phase}.json")))
+            .ok()
+            .map(|bytes| serde_json::from_slice(&bytes).unwrap())
+    }
+
+    fn owner_observation(outcome: &OwnerOutcome) -> Value {
+        match outcome {
+            OwnerOutcome::Completed(done) => {
+                serde_json::json!({"kind":"completed", "exitCode":done.status.code(),
+                "stdout":String::from_utf8_lossy(&done.stdout),"stderr":String::from_utf8_lossy(&done.stderr)})
+            }
+            OwnerOutcome::Failed(problem) => {
+                serde_json::json!({"kind":"failed","reason":format!("{:?}",problem.reason),
+                "userSpawnMayHaveOccurred":problem.user_spawn_may_have_occurred,
+                "childRetained":problem.child.is_some(),"fenceRetained":problem.fence.is_some(),
+                "authorizerRefusal":problem.authorizer_refusal})
+            }
+        }
+    }
+
+    fn assert_scope_revocation(before: &Value, after: &Value) {
+        assert_eq!(before["scopeIn"], serde_json::json!(["src/"]));
+        assert_eq!(
+            after["scopeIn"],
+            serde_json::json!(["allowed-after-revocation/"])
+        );
+        assert_ne!(before["specSha256"], after["specSha256"]);
+        assert_ne!(before["head"], after["head"]);
+        let amendments = |state: &Value| {
+            state["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|event| event["event"] == "spec_scope_amended")
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        let prior = amendments(before);
+        let events = amendments(after);
+        assert_eq!(events.len(), prior.len() + 1);
+        let event = events.last().unwrap();
+        assert_eq!(event["spec_id"], "EXEC-001");
+        assert_eq!(event["actor"]["session_id"], "thread-owned");
+        assert_eq!(
+            event["data"]["added_in"],
+            serde_json::json!(["allowed-after-revocation/"])
+        );
+        assert_eq!(event["data"]["removed_in"], serde_json::json!(["src/"]));
+        assert_eq!(event["data"]["resulting_scope_in"], after["scopeIn"]);
+    }
+
+    #[test]
+    #[ignore = "requires explicit external real Source fixture, Node, and built authorizer entry"]
+    fn real_scope_writer_revokes_after_analyze_before_native_fence() {
+        let (node, entry, source) = config();
+        let f = Fixture::create_with_environment("revoke_before", &node, &source, true);
+        let wrapper = ordering_entry(&f, &entry);
+        ordering_manifest(
+            "revoke-before-manifest",
+            &f,
+            &node,
+            &entry,
+            &source,
+            &wrapper,
+        );
+        let before = ordering_state(&f);
+        ordering_observation("revoke-before-initial", &before);
+        let attempted = Cell::new(false);
+        let writer = RefCell::new(None);
+        let ordering = RefCell::new(Vec::<Value>::new());
+        let control = |phase: &'static str| {
+            if !attempted.get() && phase_observation(&f, "analyze").is_some() {
+                attempted.set(true);
+                let analyzed = phase_observation(&f, "analyze").unwrap();
+                let state = ordering_state(&f);
+                ordering.borrow_mut().push(serde_json::json!({"event":"analyze-completed-before-cli","nativeControlPhase":phase,"reply":analyzed,"state":state}));
+                let result = revoke_scope(&f, &node, &entry);
+                let after = ordering_state(&f);
+                ordering.borrow_mut().push(serde_json::json!({"event":"cli-completed-before-fence","nativeControlPhase":phase,"status":result["status"],"state":after}));
+                ordering_observation(
+                    "revoke-before-writer",
+                    &serde_json::json!({"analyze":analyzed,"before":state,"writer":result,"after":after}),
+                );
+                let valid = analyzed["decision"] == "allow"
+                    && state["fencePresent"] == false
+                    && state["userMarker"].is_null()
+                    && result["status"] == 0;
+                *writer.borrow_mut() = Some(result);
+                if !valid {
+                    return Err("ordering fixture writer prerequisite failed".to_owned());
+                }
+            }
+            Ok(())
+        };
+        let outcome = run_with_control(&f, &node, wrapper.to_str().unwrap(), false, &control);
+        let detail = match &outcome {
+            OwnerOutcome::Failed(problem) => {
+                serde_json::to_value(&problem.authorizer_refusal).unwrap()
+            }
+            OwnerOutcome::Completed(_) => Value::Null,
+        };
+        let final_state = ordering_state(&f);
+        ordering.borrow_mut().push(serde_json::json!({"event":"owner-returned","finalValidate":phase_observation(&f,"final_validate"),"owner":owner_observation(&outcome),"state":final_state}));
+        ordering_observation(
+            "revoke-before-outcome",
+            &serde_json::json!({"owner":owner_observation(&outcome),"authorizerRefusal":detail,"state":final_state,"wrapper":image(wrapper.to_str().unwrap().into()).sha256,"callbackOrder":ordering.borrow().clone()}),
+        );
+        let refused = failed(outcome);
+        assert!(attempted.get());
+        assert_eq!(writer.borrow().as_ref().unwrap()["status"], 0);
+        assert_eq!(refused.reason, Refusal::Denied);
+        assert!(!refused.possible);
+        assert_no_custody(&refused);
+        assert_eq!(detail["phase"], "final_validate");
+        assert_eq!(detail["decision"], "unresolved");
+        assert_eq!(
+            detail["reasonCodes"],
+            serde_json::json!(["authority_changed"])
+        );
+        assert_scope_revocation(&before, &final_state);
+        assert!(final_state["userMarker"].is_null());
+        assert_eq!(final_state["fencePresent"], false);
+        f.finish();
+    }
+
+    #[test]
+    #[ignore = "requires explicit external real Source fixture, Node, and built authorizer entry"]
+    fn real_scope_writer_refuses_after_final_validate_until_native_fence_release() {
+        let (node, entry, source) = config();
+        let f = Fixture::create_with_environment("revoke_held", &node, &source, true);
+        let wrapper = ordering_entry(&f, &entry);
+        ordering_manifest("revoke-held-manifest", &f, &node, &entry, &source, &wrapper);
+        let before = ordering_state(&f);
+        ordering_observation("revoke-held-initial", &before);
+        let attempted = Cell::new(false);
+        let writer = RefCell::new(None);
+        let ordering = RefCell::new(Vec::<Value>::new());
+        let control = |phase: &'static str| {
+            if !attempted.get() && phase_observation(&f, "final_validate").is_some() {
+                attempted.set(true);
+                let validated = phase_observation(&f, "final_validate").unwrap();
+                let state = ordering_state(&f);
+                ordering.borrow_mut().push(serde_json::json!({"event":"final-validate-completed-before-cli","nativeControlPhase":phase,"analyze":phase_observation(&f,"analyze"),"reply":validated,"state":state}));
+                let result = revoke_scope(&f, &node, &entry);
+                let after = ordering_state(&f);
+                ordering.borrow_mut().push(serde_json::json!({"event":"cli-refused-under-fence","nativeControlPhase":phase,"status":result["status"],"state":after}));
+                ordering_observation(
+                    "revoke-held-writer",
+                    &serde_json::json!({"analyze":phase_observation(&f,"analyze"),"finalValidate":validated,"before":state,"writer":result,"after":after}),
+                );
+                let valid = validated["decision"] == "allow"
+                    && state["fencePresent"] == true
+                    && state["userMarker"].is_null()
+                    && result["status"] == 1
+                    && result["stderr"]
+                        .as_str()
+                        .unwrap()
+                        .contains("store.lifecycle.lock_contention")
+                    && state["specSha256"] == after["specSha256"]
+                    && state["events"] == after["events"]
+                    && state["head"] == after["head"]
+                    && after["fencePresent"] == true
+                    && after["userMarker"].is_null();
+                *writer.borrow_mut() = Some(result);
+                if !valid {
+                    return Err("ordering fixture fence prerequisite failed".to_owned());
+                }
+            }
+            Ok(())
+        };
+        let outcome = run_with_control(&f, &node, wrapper.to_str().unwrap(), false, &control);
+        let after_owner = ordering_state(&f);
+        ordering.borrow_mut().push(serde_json::json!({"event":"owner-returned","owner":owner_observation(&outcome),"state":after_owner}));
+        ordering_observation(
+            "revoke-held-owner",
+            &serde_json::json!({"owner":owner_observation(&outcome),"state":after_owner,"wrapper":image(wrapper.to_str().unwrap().into()).sha256,"callbackOrder":ordering.borrow().clone()}),
+        );
+        let done = match outcome {
+            OwnerOutcome::Completed(done) => done,
+            OwnerOutcome::Failed(problem) => {
+                let s = consume_failure(problem);
+                panic!(
+                    "held-fence owner refused: {:?}, possible={}",
+                    s.reason, s.possible
+                );
+            }
+        };
+        assert!(attempted.get());
+        assert_eq!(writer.borrow().as_ref().unwrap()["status"], 1);
+        assert!(done.status.success());
+        assert_eq!(after_owner["userMarker"], "once");
+        assert_eq!(after_owner["fencePresent"], false);
+        assert_eq!(before["scopeIn"], after_owner["scopeIn"]);
+        assert_eq!(before["specSha256"], after_owner["specSha256"]);
+        assert_eq!(before["events"], after_owner["events"]);
+        assert_eq!(before["head"], after_owner["head"]);
+        let later = revoke_scope(&f, &node, &entry);
+        let after_writer = ordering_state(&f);
+        ordering_observation(
+            "revoke-held-later-writer",
+            &serde_json::json!({"writer":later,"after":after_writer}),
+        );
+        assert_eq!(later["status"], 0);
+        assert_scope_revocation(&before, &after_writer);
+        assert_eq!(after_writer["userMarker"], "once");
+        f.finish();
     }
     #[test]
     #[ignore = "requires explicit external real Source fixture, Node, and built authorizer entry"]
