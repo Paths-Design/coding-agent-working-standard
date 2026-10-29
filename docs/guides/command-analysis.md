@@ -614,6 +614,24 @@ added, replaced or aliased generation files refuse. Protecting that generation
 from concurrent untrusted writes and proving the actual sandbox route are
 deployment obligations.
 
+The paired host must implement the opt-in `authenticated_socket` transport. Its
+reviewed local MCP configuration uses the native executable directly:
+
+```toml
+[mcp_servers.caws_execution]
+command = "/absolute/pinned/caws-execution"
+args = ["--config", "/absolute/reviewed/execution.json"]
+local_stdio_transport = "authenticated_socket"
+```
+
+The configuration contract preserves ordinary pipe transport as the default;
+pipes, HTTP and executor placement do not authenticate this route. A stock host
+without this extension cannot supply the required channel. Qualification applies
+to the observed paired host and adapter identities, rather than a product name.
+The generation inventory also requires a separate check of actual dependency
+resolution and protected system inputs; enumerating files does not prove that
+Node never loads an import outside that tree.
+
 For one literal invocation of the pinned Node and `writer-main.js` entry,
 discovery returns `execution: {kind: 'caws-evidence-v1', argv: [...]}`. This
 plan is advisory. Native preparation freezes the direct executable and argv with
