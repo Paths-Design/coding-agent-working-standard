@@ -1,9 +1,10 @@
 id: CAWS-DOC-GUIDANCE-CLI-001
 title: 'Align agent and README guidance with the CLI'
 mode: doc
-lifecycle_state: draft
+lifecycle_state: active
+worktree: doc-guidance-cli
 created_at: '2026-10-29T05:32:02.892Z'
-updated_at: '2026-10-29T05:32:02.892Z'
+updated_at: '2026-10-29T05:32:06.694Z'
 created_by_session: '01a1861e-58cc-7392-ac55-1ff3a6051998'
 blast_radius:
   modules:
