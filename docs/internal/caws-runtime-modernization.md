@@ -4,7 +4,7 @@ authority: working
 status: active
 title: CAWS native runtime migration tracker
 owner: CAWS runtime maintainers
-updated: 2026-10-25
+updated: 2026-10-29
 audience: maintainer
 ---
 
@@ -29,19 +29,31 @@ passing unit tests, or the existence of this document.
 
 ## Source location and progress
 
-Published source checkpoint `dabdb0eb26c7c8dc885972c152b5d3277071f732` includes
-the installed-deadline receiver `72fb7557`, in addition to reviewed CLI identity
-and late Stop context (`63745eb9b0`), shared/Codex pack metadata (`7fd6be290`)
-and host-workdir cache admission (`0888c0cdf`). Source publication does not
-establish native-image qualification or selected execution. The
+Integration checkpoint `9f87d3e1baeb8328b5a51047f641a98abc5137ee` joins the
+parent's `28ef8482` source with main, including the stock scanner and Stop
+preflight repairs. Source integration does not establish package qualification
+or selected execution. The
 [canonical parent evidence](../../.caws/specs/CAWS-NATIVE-RUNTIME-001.yaml)
-records unchecked A1/A7 outcomes, including receiver boundary event13732. The
-retained genuine private CLI attempt03 reviews domain `67cb0b92…11f538a4` for 21
-packages and 2083 regular prefix files. Its 3014.670208ms carrier match and
-revalidation is a fixture observation under the original 30000ms budget, not
-native request custody, image admission, rollback or machine adoption. Native
-preparation is held at the deployed guard refusal on a pinned Node read; Root
-retains the required owner coordination and full installed qualification.
+retains failed A2 and unchecked cutover criteria.
+
+The retained ART07 descriptor `ae99243f…adfdb` binds source `289605cc`, CLI
+package `183382f8` and its native build receipts. It omits both the Stop profile
+and CLI identity domain. Its private checks cannot substitute for a refreshed,
+coherent package with the qualified typed Stop path. The older combined
+`55080eb1` image has a Stop profile; its bytes remain historical evidence.
+
+The original 564-byte `apply_patch` request has a successful genuine retry on
+private runtime `ba7b6e70`. Both decoded requests hash to
+`7d5506225ce9c9e61742a44898dddc0545e23ab7fef5a2c33f19c57d649a47fc`. The Source
+transcript for session `01a181ec-11d5-7270-8073-29aac2fd949d` records the
+timeout at lines 317/319 and the successful retry at 404/408;
+`scope-enforcement-context-01/caws-read-source-image07-events.jsonl` records the
+actual file change at lines 15/16 and intended diff at 21. Canonical native
+pre/post journals `67500-1793205613371034000` and `69833-1793205621919350000`
+reach exit zero through compatibility dispatch. This establishes that bounded
+file-tool retry; the final pinned image must exercise the same case through its
+actual selected route. Python parsing and shell guards remain part of the
+retained successful path.
 
 The retained source lineage includes main merge
 `1c39bd3cd708076d54a34bfec10d8992de8f3286`, reconciled candidate
@@ -95,10 +107,40 @@ selected-machine adoption are separate states.
 
 ## Ownership and execution
 
-- Bound lane owner and cutover coordinator: Codex chat
-  `01a17052-3ea7-79b1-86be-7296991f8fd0`, following the user's lead transfer.
-  The live registry records this owner for both `native-runtime-modernization`
-  and `native-session-publication`.
+- Bound parent and installed-entry lane owner and cutover coordinator: Codex
+  chat `01a1861e-58cc-7392-ac55-1ff3a6051998`, through the user's explicit
+  takeover authorization. The registry and prior-owner audit record both
+  `native-runtime-modernization` and `native-installed-entry`.
+- `native-session-publication` remains owned by chat
+  `01a17052-3ea7-79b1-86be-7296991f8fd0`; it is outside that takeover.
+- The coordinator owns Git, acceptance and integration for three delegated
+  implementation chunks: typed Codex file-tool enforcement in
+  `native-file-tools` (`CAWS-NATIVE-FILE-TOOLS-001`); native CLI hooks
+  inspection in `native-hooks-inspection` (`CAWS-NATIVE-HOOKS-INSPECTION-001`);
+  and actual installed recovery qualification in `native-recovery-qualification`
+  (`CAWS-NATIVE-RECOVERY-QUALIFICATION-001`). Native file-hook identity and
+  registry ownership match the parent. Child CLI identity remains distinct.
+- Chat `01a17941-cbb6-7b92-b5c7-0ba8f5f238d3` retains its execution, npm and
+  frozen Source05 mutation qualification work. Its retry4 logs retain the
+  restarted campaigns; no final report or per-file floor verdict is established.
+  Final-image applicability requires matching captured inputs or
+  requalification.
+- The origin probe under `CAWS-RUST-CUTOVER-ORIGIN-001` remains unexecuted after
+  the installed guard refusal. A validated execution route and actual genuine
+  host positive plus hostile transferred/prequeued-channel controls remain owed.
+- The parent is a protected base for existing lanes. The six owned tracker and
+  file-tool changes moved byte-for-byte to `native-file-tools` under the user's
+  repo-scoped worktree-guard exception; only those parent changes were restored.
+  Parent state is clean, and the exception is revoked with no active handlers.
+  File-tool compilation and consumer qualification remain in progress.
+- Recovery qualifier candidate `935bf9de` has 53 passing evidence/filesystem/SQL
+  checks and independent source feedback. Its installed CLI entry preflight and
+  output-preservation bracket across owner restart require repairs before native
+  execution. Real native scenarios and recovery acceptance remain unearned.
+- The source inventory contains 46 tracked Python files: 14 installed hook
+  copies, 16 package templates, 13 pytest files and three developer tools.
+  Embedded Python and selected custom consumers remain additional retirement
+  obligations; a stock-path replacement does not retire those consumers.
 - Prior coordinators: Codex chats `01a164bc-7a2b-75e2-be81-5da9d0a29252` and
   `01a15a2a-5057-75d0-a7e5-69d676673add`. The live worktree registry and
   `caws claim` identify the current owner; this tracker grants no authority.
@@ -11155,9 +11197,34 @@ acceptance remains 0/8.
 
 ## Ordered next work
 
-The lead integrates three outcomes. The immediate assignments below precede the
-detailed retained dependency list; completing a bounded assignment does not
-complete its parent outcome.
+The coordinator integrates the delegated chunks with the execution chat's
+candidate, keeping these consumer steps and final acceptance distinct:
+
+1. Complete typed file-tool pre-write enforcement and native hooks inspection,
+   then exercise the original real file-tool edit and protected-target refusal.
+   Preserve complete original patch inventory, handler order, owner/scope/latch
+   checks, custom selections and explicit unavailable outcomes.
+2. Freeze the joined CLI, runtime, native executables, dependencies, guards and
+   observed registration. Generate fresh Stop and CLI identity profiles from
+   those bytes. A successful historical image or a partially qualified package
+   can support a reversible probe but cannot earn final-image acceptance.
+3. Run the actual installed 30000ms typed Stop/publication consumer, then loss
+   after persistent writes, same-session restart with durable Unknown and no
+   replay, independent project progress and ordinary old-reader work after
+   rollback. Qualifier oracle tests alone do not establish those behaviors.
+4. Complete the same-session everyday file/Bash/npm/Git/test/evidence/review/
+   merge/Stop/rendering workflow and origin/launch enforcement. Judge the full
+   execution and analysis mutation reports against every unchanged per-file
+   floor and their actual source/build/dependency applicability.
+5. Qualify cold/warm deadlines, overload, cross-project isolation and upgrades
+   under the thirteen-session/four-repository workload; complete Python consumer
+   retirement, package qualification and documentation. Record earned parent
+   acceptance through the single writer before machine adoption, then verify
+   selected execution and rollback.
+
+The detailed dependency history below retains earlier observations and their
+limits. The execution sequence above governs the next consumer increments;
+completion of a bounded assignment does not complete its parent outcome.
 
 E357 establishes actual prefix completion followed by expiry after original
 reservation. Root owns verification-cost reduction, the retained owner's
