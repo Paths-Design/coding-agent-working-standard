@@ -10,6 +10,7 @@ const corePackage = require.resolve('@stryker-mutator/core/package.json');
 const strykerBin = path.resolve(path.dirname(corePackage), require(corePackage).bin.stryker);
 
 function canary(disruption) {
+  fs.mkdirSync(path.join(packageRoot, 'reports/execution-boundary'), { recursive: true });
   const root = fs.mkdtempSync(
     path.join(packageRoot, 'reports/execution-boundary/coverage-canary-')
   );

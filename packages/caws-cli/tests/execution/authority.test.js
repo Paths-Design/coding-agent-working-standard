@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const childProcess = require('node:child_process');
 const {
   readExecutionAuthority,
   ExecutionAuthorityUnavailable,
@@ -16,7 +17,119 @@ function refuse(fixture, reason) {
   expect(caught).toBeInstanceOf(ExecutionAuthorityUnavailable);
   if (reason) expect(caught.reason).toBe(reason);
 }
+
+// Deterministic child-I/O timing model, not a real sleep or sandbox proof.
+// Completed requests still use the real fixed Git for their canonical output;
+// only completion/timeout at the child boundary is controlled here.
+function authorityWithChildDurations(fixture, durations) {
+  const originalExec = childProcess.execFileSync;
+  const queries = [];
+  const spy = jest
+    .spyOn(childProcess, 'execFileSync')
+    .mockImplementation((program, args, options) => {
+      const argument = args?.[2];
+      const elapsedMs = durations[argument];
+      const observed = {
+        program,
+        args,
+        cwd: options?.cwd,
+        env: options?.env,
+        elapsedMs,
+        outcome: 'pending',
+      };
+      queries.push(observed);
+      if (
+        program !== '/usr/bin/git' ||
+        args?.[0] !== 'rev-parse' ||
+        args?.[1] !== '--path-format=absolute' ||
+        args.length !== 3 ||
+        !['--git-common-dir', '--show-toplevel'].includes(argument)
+      ) {
+        observed.outcome = 'unexpected-child';
+        throw new Error('Unexpected child at fixed-Git boundary');
+      }
+      const budget = options?.timeout;
+      if (!Number.isSafeInteger(budget) || budget <= 0 || budget > 5000) {
+        observed.outcome = 'unbounded-child';
+        throw new Error('A child query requires a finite bounded budget');
+      }
+      if (elapsedMs >= budget) {
+        observed.outcome = 'timed-out';
+        throw Object.assign(new Error('Controlled child timeout'), { code: 'ETIMEDOUT' });
+      }
+      const output = originalExec(program, args, options);
+      observed.outcome = 'completed';
+      return output;
+    });
+  let authority;
+  let error;
+  try {
+    authority = readExecutionAuthority(fixture.record);
+  } catch (caught) {
+    error = caught;
+  } finally {
+    spy.mockRestore();
+  }
+  return { authority, error, queries };
+}
+
 describe('current execution authority snapshot', () => {
+  test('a delayed but valid fixed-Git child still derives the real owned checkout under a finite bound', () => {
+    const f = authorityFixture();
+    const observed = authorityWithChildDurations(f, {
+      '--git-common-dir': 4041,
+      '--show-toplevel': 25,
+    });
+    expect({
+      reason: observed.error?.reason,
+      outcomes: observed.queries.map((query) => query.outcome),
+    }).toEqual({
+      reason: undefined,
+      outcomes: ['completed', 'completed'],
+    });
+    expect(observed.authority.canonical).toBe(f.root);
+    expect(observed.authority.pin).toBe(f.lane);
+    expect(observed.authority.binding.kind).toBe('bound');
+    expect(observed.authority.binding.worktreeName).toBe('owned');
+    expect(observed.authority.binding.spec.id).toBe('EXEC-001');
+    expect(observed.queries.map((query) => query.elapsedMs)).toEqual([4041, 25]);
+    for (const query of observed.queries) {
+      expect(query.program).toBe('/usr/bin/git');
+      expect(query.cwd).toBe(f.lane);
+      expect(query.env).toEqual({
+        PATH: '/usr/bin:/bin',
+        LC_ALL: 'C',
+        GIT_CONFIG_NOSYSTEM: '1',
+        GIT_CONFIG_GLOBAL: '/dev/null',
+      });
+    }
+  });
+  test('an over-budget child is refused without falling back or starting the second query', () => {
+    const f = authorityFixture();
+    const observed = authorityWithChildDurations(f, {
+      '--git-common-dir': 5001,
+      '--show-toplevel': 25,
+    });
+    expect(observed.authority).toBeUndefined();
+    expect(observed.error).toBeInstanceOf(ExecutionAuthorityUnavailable);
+    expect(observed.error.reason).toBe('context_unresolved');
+    expect(
+      observed.queries.map((query) => ({ argument: query.args[2], outcome: query.outcome }))
+    ).toEqual([{ argument: '--git-common-dir', outcome: 'timed-out' }]);
+  });
+  test('a delayed valid child cannot substitute for current ownership', () => {
+    const f = authorityFixture();
+    f.registry.owned.owner.session_id = 'foreign-thread';
+    fs.writeFileSync(f.registryPath, JSON.stringify(f.registry));
+    const observed = authorityWithChildDurations(f, {
+      '--git-common-dir': 4041,
+      '--show-toplevel': 25,
+    });
+    expect(observed.authority).toBeUndefined();
+    expect(observed.error).toBeInstanceOf(ExecutionAuthorityUnavailable);
+    expect(observed.error.reason).toBe('foreign_owner');
+    expect(observed.queries.map((query) => query.outcome)).toEqual(['completed', 'completed']);
+  });
   test('uses actual current thread, exact linked checkout and LF paths rather than lineage or target claims', () => {
     const f = authorityFixture();
     const result = readExecutionAuthority(f.record);

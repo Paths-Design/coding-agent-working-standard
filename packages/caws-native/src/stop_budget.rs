@@ -31,6 +31,33 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+/// A transaction bound can retain the original native clock without replacing
+/// its interval. Legacy callers pass Instant; native callers pass original().
+#[derive(Clone, Copy)]
+pub struct BudgetDeadline<'deadline> {
+    expires: Instant,
+    original: Option<&'deadline crate::monotonic_deadline::MonotonicDeadline>,
+}
+impl<'deadline> BudgetDeadline<'deadline> {
+    pub fn original(
+        original: &'deadline crate::monotonic_deadline::MonotonicDeadline,
+        expires: Instant,
+    ) -> Self {
+        Self {
+            expires: expires.min(original.expires()),
+            original: Some(original),
+        }
+    }
+}
+impl<'deadline> From<Instant> for BudgetDeadline<'deadline> {
+    fn from(expires: Instant) -> Self {
+        Self {
+            expires,
+            original: None,
+        }
+    }
+}
+
 const COUNTER: &CStr = c"stop-undeliverable.json";
 const LOCK: &CStr = c".stop-undeliverable.lock";
 const MAX_COUNTER_BYTES: usize = 1024;
@@ -186,8 +213,15 @@ struct Observed {
     inode: Option<Inode>,
 }
 
-fn deadline(expires: Instant) -> Result<(), Unavailable> {
-    if Instant::now() >= expires {
+fn deadline(expires: BudgetDeadline<'_>) -> Result<(), Unavailable> {
+    if let Some(original) = expires.original {
+        original.check().map_err(|error| Unavailable {
+            kind: UnavailableKind::Deadline,
+            operation: "original monotonic deadline",
+            source: Some(io::Error::other(error)),
+        })?;
+    }
+    if Instant::now() >= expires.expires {
         Err(Unavailable::new(
             UnavailableKind::Deadline,
             "transaction deadline expired",
@@ -218,7 +252,12 @@ fn filesystem_anchor() -> Result<OwnedFd, Unavailable> {
     )
 }
 
-fn mkdir_if_absent(parent: RawFd, name: &CStr, expires: Instant) -> Result<(), Unavailable> {
+fn mkdir_if_absent<'deadline>(
+    parent: RawFd,
+    name: &CStr,
+    expires: impl Into<BudgetDeadline<'deadline>>,
+) -> Result<(), Unavailable> {
+    let expires = expires.into();
     deadline(expires)?;
     if unsafe { libc::mkdirat(parent, name.as_ptr(), 0o700) } != 0
         && io::Error::last_os_error().raw_os_error() != Some(libc::EEXIST)
@@ -292,12 +331,13 @@ fn safe_file(raw: RawFd) -> Result<libc::stat, Unavailable> {
     Ok(value)
 }
 
-fn directory_at(
+fn directory_at<'deadline>(
     parent: RawFd,
     name: &CStr,
     create: bool,
-    expires: Instant,
+    expires: impl Into<BudgetDeadline<'deadline>>,
 ) -> Result<OwnedFd, Unavailable> {
+    let expires = expires.into();
     deadline(expires)?;
     let flags = libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC;
     // SAFETY: parent is live and name is a nul-terminated single component.
@@ -318,11 +358,12 @@ fn directory_at(
 }
 
 impl StopBudget {
-    pub fn open(
+    pub fn open<'deadline>(
         home: &Path,
         identity: BudgetIdentity,
-        expires: Instant,
+        expires: impl Into<BudgetDeadline<'deadline>>,
     ) -> Result<Self, Unavailable> {
+        let expires = expires.into();
         deadline(expires)?;
         if !home.is_absolute()
             || home
@@ -364,7 +405,11 @@ impl StopBudget {
         Ok(Self { directory })
     }
 
-    pub fn charge(&self, expires: Instant) -> Result<Charge, Unavailable> {
+    pub fn charge<'deadline>(
+        &self,
+        expires: impl Into<BudgetDeadline<'deadline>>,
+    ) -> Result<Charge, Unavailable> {
+        let expires = expires.into();
         let _lock = self.lock(expires)?;
         let previous = self.read(expires)?;
         let (next, result) = if previous.count >= 3 {
@@ -377,7 +422,11 @@ impl StopBudget {
     }
 
     /// Call only after successful nonblocking native handoff, never for a guard refusal.
-    pub fn reset(&self, expires: Instant) -> Result<(), Unavailable> {
+    pub fn reset<'deadline>(
+        &self,
+        expires: impl Into<BudgetDeadline<'deadline>>,
+    ) -> Result<(), Unavailable> {
+        let expires = expires.into();
         let _lock = self.lock(expires)?;
         let previous = self.read(expires)?;
         if previous.count != 0 {
@@ -386,13 +435,18 @@ impl StopBudget {
         Ok(())
     }
 
-    fn lock(&self, expires: Instant) -> Result<OwnedFd, Unavailable> {
+    fn lock<'deadline>(
+        &self,
+        expires: impl Into<BudgetDeadline<'deadline>>,
+    ) -> Result<OwnedFd, Unavailable> {
+        let expires = expires.into();
         deadline(expires)?;
         safe_directory(self.directory.as_raw_fd())?;
         let flags = libc::O_RDWR | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC;
         // Darwin can return ENOENT to simultaneous nonexclusive O_CREAT opens.
         // Exclusive creation selects one creator; contenders open the existing
         // stable lock inode. No counter transaction is replayed.
+        deadline(expires)?;
         let mut raw = unsafe {
             libc::openat(
                 self.directory.as_raw_fd(),
@@ -411,6 +465,7 @@ impl StopBudget {
             }
         }
         let lock = fd(raw, "open transaction lock")?;
+        deadline(expires)?;
         if created && unsafe { libc::fchmod(lock.as_raw_fd(), 0o600) } != 0 {
             return Err(Unavailable::io("set private lock permissions"));
         }
@@ -428,7 +483,8 @@ impl StopBudget {
                 return Err(Unavailable::io("acquire transaction lock"));
             }
             thread::sleep(
-                Duration::from_millis(2).min(expires.saturating_duration_since(Instant::now())),
+                Duration::from_millis(2)
+                    .min(expires.expires.saturating_duration_since(Instant::now())),
             );
         }
         safe_file(lock.as_raw_fd())?;
@@ -443,7 +499,11 @@ impl StopBudget {
         Ok(lock)
     }
 
-    fn read(&self, expires: Instant) -> Result<Observed, Unavailable> {
+    fn read<'deadline>(
+        &self,
+        expires: impl Into<BudgetDeadline<'deadline>>,
+    ) -> Result<Observed, Unavailable> {
+        let expires = expires.into();
         deadline(expires)?;
         let raw = unsafe {
             libc::openat(
@@ -463,12 +523,13 @@ impl StopBudget {
         read_opened_counter(&mut File::from(file), value, expires)
     }
 
-    fn replace(
+    fn replace<'deadline>(
         &self,
         count: u8,
         previous: Option<Inode>,
-        expires: Instant,
+        expires: impl Into<BudgetDeadline<'deadline>>,
     ) -> Result<(), Unavailable> {
+        let expires = expires.into();
         deadline(expires)?;
         let mut temporary = Temporary::create(self.directory.as_raw_fd(), expires)?;
         let mut bytes = serde_json::to_vec(&Counter {
@@ -520,7 +581,11 @@ struct Temporary {
     renamed: bool,
 }
 impl Temporary {
-    fn create(parent: RawFd, expires: Instant) -> Result<Self, Unavailable> {
+    fn create<'deadline>(
+        parent: RawFd,
+        expires: impl Into<BudgetDeadline<'deadline>>,
+    ) -> Result<Self, Unavailable> {
+        let expires = expires.into();
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| {
@@ -547,11 +612,12 @@ impl Temporary {
         ))
     }
 
-    fn candidate(
+    fn candidate<'deadline>(
         parent: RawFd,
         name: CString,
-        expires: Instant,
+        expires: impl Into<BudgetDeadline<'deadline>>,
     ) -> Result<Option<Self>, Unavailable> {
+        let expires = expires.into();
         deadline(expires)?;
         let raw = unsafe {
             libc::openat(
@@ -570,6 +636,7 @@ impl Temporary {
             file: File::from(fd(raw, "create exclusive budget temporary")?),
             renamed: false,
         };
+        deadline(expires)?;
         if unsafe { libc::fchmod(value.file.as_raw_fd(), 0o600) } != 0 {
             return Err(Unavailable::io("set private temporary permissions"));
         }
@@ -578,11 +645,12 @@ impl Temporary {
     }
 }
 
-fn read_opened_counter(
+fn read_opened_counter<'deadline>(
     reader: &mut impl Read,
     value: libc::stat,
-    expires: Instant,
+    expires: impl Into<BudgetDeadline<'deadline>>,
 ) -> Result<Observed, Unavailable> {
+    let expires = expires.into();
     deadline(expires)?;
     if value.st_size < 0 || value.st_size as u64 > MAX_COUNTER_BYTES as u64 {
         return Err(Unavailable::new(
@@ -633,7 +701,12 @@ fn read_opened_counter(
     })
 }
 
-fn write_bytes(writer: &mut impl Write, bytes: &[u8], expires: Instant) -> Result<(), Unavailable> {
+fn write_bytes<'deadline>(
+    writer: &mut impl Write,
+    bytes: &[u8],
+    expires: impl Into<BudgetDeadline<'deadline>>,
+) -> Result<(), Unavailable> {
+    let expires = expires.into();
     let mut remaining = bytes;
     while !remaining.is_empty() {
         deadline(expires)?;
@@ -814,6 +887,39 @@ mod tests {
         let a_stat = fs::metadata(fixture.directory("CaseA")).unwrap();
         let b_stat = fs::metadata(fixture.directory("casea")).unwrap();
         assert_ne!((a_stat.dev(), a_stat.ino()), (b_stat.dev(), b_stat.ino()));
+    }
+
+    #[test]
+    fn native_expiry_prevents_open_charge_and_reset_without_a_fresh_transaction() {
+        use crate::monotonic_deadline::MonotonicDeadline;
+        let original = MonotonicDeadline::capture(Duration::from_millis(1)).unwrap();
+        thread::sleep(Duration::from_millis(2));
+        let unopened = Fixture::new();
+        kind(
+            StopBudget::open(
+                &unopened.home,
+                BudgetIdentity::resolve(Some("expiry"), Some(PROJECT)).unwrap(),
+                BudgetDeadline::original(&original, soon()),
+            ),
+            UnavailableKind::Deadline,
+        );
+        assert!(!unopened.home.join("state").exists());
+        let fixture = Fixture::new();
+        let state = fixture.budget("expiry");
+        assert_eq!(state.charge(soon()).unwrap(), Charge::Refuse);
+        let before = fs::read(fixture.directory("expiry").join(COUNTER.to_str().unwrap())).unwrap();
+        kind(
+            state.charge(BudgetDeadline::original(&original, soon())),
+            UnavailableKind::Deadline,
+        );
+        kind(
+            state.reset(BudgetDeadline::original(&original, soon())),
+            UnavailableKind::Deadline,
+        );
+        assert_eq!(
+            fs::read(fixture.directory("expiry").join(COUNTER.to_str().unwrap())).unwrap(),
+            before
+        );
     }
 
     #[test]

@@ -19,6 +19,7 @@
         "src/execution/fence.ts",
         "src/execution/prepared-schema.ts",
         "src/execution/protocol.ts",
+        "src/execution/writer.ts",
         "src/kernel/evidence/canonical-json.ts",
         "src/kernel/evidence/rederive.ts",
         "src/kernel/evidence/verify.ts",
@@ -113,6 +114,7 @@
         "src/execution/authorizer-main.ts",
         "src/execution/program-discovery-main.ts",
         "src/execution/program-discovery.ts",
+        "src/execution/writer-main.ts",
         "src/kernel/diagnostics/construct.ts",
         "src/kernel/doctor/history.ts",
         "src/kernel/doctor/inspect.ts",
@@ -270,6 +272,7 @@
         { "source": "src/execution/fence.ts" },
         { "source": "src/execution/prepared-schema.ts" },
         { "source": "src/execution/protocol.ts" },
+        { "source": "src/execution/writer.ts" },
         { "source": "src/store/lifecycle-lock.ts" }
       ],
       "tests": [
@@ -279,7 +282,8 @@
         "tests/execution/fence.test.js",
         "tests/execution/prepared-schema.test.js",
         "tests/execution/program-discovery.test.js",
-        "tests/execution/protocol.test.js"
+        "tests/execution/protocol.test.js",
+        "tests/execution/writer.test.js"
       ]
     },
     "analysis": {
@@ -300,6 +304,7 @@
         { "source": "src/shell/analysis/words.ts" }
       ],
       "tests": [
+        "tests/shell/caws-read-metadata.test.js",
         "tests/shell/command-analysis.test.js",
         "tests/shell/interpreter-effects.test.js",
         "tests/shell/mutation-view.test.js"

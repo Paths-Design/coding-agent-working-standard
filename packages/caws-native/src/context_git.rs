@@ -2,6 +2,7 @@
 //! custodian retains the actual Git Child until group settlement and both EOFs.
 //! Executable metadata detects ordinary replacement; it does not bind exec to
 //! an immutable file description or attest a wrapper's transitive programs.
+use crate::monotonic_deadline::MonotonicDeadline;
 use crate::owned_group::{GroupSettlement, settlement_before_reap, stop_before_reap};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
@@ -363,6 +364,7 @@ impl ContextGitOwner {
             control_eof: false,
             active: self.active.clone(),
             cancelled: false,
+            cleanup_requested: false,
             delivered: false,
         })
     }
@@ -390,6 +392,7 @@ pub struct PendingGit {
     control_eof: bool,
     active: Arc<AtomicBool>,
     cancelled: bool,
+    cleanup_requested: bool,
     delivered: bool,
 }
 impl PendingGit {
@@ -406,6 +409,7 @@ impl PendingGit {
             control_eof: false,
             active,
             cancelled: false,
+            cleanup_requested: false,
             delivered: false,
         }
     }
@@ -449,6 +453,20 @@ impl PendingGit {
         }
     }
     pub fn advance(&mut self) -> Result<Option<Vec<u8>>, String> {
+        self.advance_checked(|| Ok(()))
+    }
+    pub fn advance_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Result<Option<Vec<u8>>, String> {
+        self.advance_checked(|| frontend_cleanup_check(original, until).map(|_| ()))
+    }
+    fn advance_checked(
+        &mut self,
+        mut check: impl FnMut() -> Result<(), String>,
+    ) -> Result<Option<Vec<u8>>, String> {
+        check()?;
         if self.delivered {
             return Ok(None);
         }
@@ -466,6 +484,7 @@ impl PendingGit {
         if self.validated.is_some() {
             if !self.control_eof {
                 let mut trailing = [0u8; 1];
+                check()?;
                 match stream.read(&mut trailing) {
                     Ok(0) => self.control_eof = true,
                     Ok(_) => {
@@ -490,6 +509,7 @@ impl PendingGit {
             let Some(child) = self.child.as_mut() else {
                 return Err("missing original context Git custodian Child".into());
             };
+            check()?;
             match child
                 .try_wait()
                 .map_err(|e| format!("context Git custodian reap: {e}"))?
@@ -510,6 +530,7 @@ impl PendingGit {
             return Ok(self.validated.take());
         }
         if self.written < self.input.len() {
+            check()?;
             match stream.write(&self.input[self.written..]) {
                 Ok(0) => return Err("context Git configuration write made no progress".into()),
                 Ok(n) => self.written += n,
@@ -524,6 +545,7 @@ impl PendingGit {
                 Err(e) => return Err(format!("context Git configuration: {e}")),
             }
         } else if self.cancelled {
+            check()?;
             match stream.write(b"S") {
                 Ok(1) => self.cancelled = false,
                 Ok(_) => (),
@@ -539,6 +561,7 @@ impl PendingGit {
             }
         }
         let mut bytes = [0u8; 16_384];
+        check()?;
         match stream.read(&mut bytes) {
             Ok(0) => return Err("context Git custodian closed without a complete result".into()),
             Ok(n) => self.output.extend_from_slice(&bytes[..n]),
@@ -561,6 +584,7 @@ impl PendingGit {
         if end + 1 != self.output.len() {
             return Err("context Git custodian sent trailing result bytes".into());
         }
+        check()?;
         let row: ResultFrame = serde_json::from_slice(&self.output[..end])
             .map_err(|e| format!("context Git result decode: {e}"))?;
         if row.schema != RESULT_SCHEMA
@@ -604,6 +628,68 @@ impl PendingGit {
         }
         self.delivered = true;
         Ok(Some(self.output[..end].to_vec()))
+    }
+    /// Frontend cleanup cannot add time to the retained original invocation.
+    /// Expiry leaves this value holding its actual custodian and uncertain frame.
+    pub fn cancel_and_settle_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Result<Option<Vec<u8>>, String> {
+        if !self.cleanup_requested {
+            self.cleanup_requested = true;
+            self.cancel();
+            if let Some(stream) = &mut self.control {
+                if self.cancelled {
+                    let _ = stream.write(b"S");
+                    self.cancelled = false;
+                }
+                // EOF requests owned cleanup even if the best-effort stop byte
+                // could not be delivered. No configuration is resumed afterward.
+                let _ = stream.shutdown(std::net::Shutdown::Write);
+            }
+        }
+        let until = until.min(original.expires());
+        loop {
+            if self.delivered {
+                if self.active.load(Ordering::Acquire) {
+                    return Err("context Git cleanup remains uncertain after delivered result; native custodian retains original Child".into());
+                }
+                // An immediate no-Git result still retains its actual custodian
+                // until that original Child is observed exiting successfully.
+                if let Some(child) = self.child.as_mut() {
+                    frontend_cleanup_check(original, until)?;
+                    match child.try_wait().map_err(|e| e.to_string())? {
+                        Some(status) if status.success() => {
+                            self.child.take();
+                        }
+                        Some(status) => {
+                            return Err(format!(
+                                "context Git custodian exited abnormally: {status}"
+                            ));
+                        }
+                        None => {
+                            frontend_cleanup_poll(original, until, &mut [])?;
+                            continue;
+                        }
+                    }
+                }
+                return Ok(None);
+            }
+            frontend_cleanup_check(original, until)?;
+            if let Some(frame) =
+                self.advance_checked(|| frontend_cleanup_check(original, until).map(|_| ()))?
+            {
+                frontend_cleanup_check(original, until)?;
+                return if self.active.load(Ordering::Acquire) || self.child.is_some() {
+                    Err("context Git result retained uncertain custodian cleanup".into())
+                } else {
+                    Ok(Some(frame))
+                };
+            }
+            let mut fds = self.interests();
+            frontend_cleanup_poll(original, until, &mut fds)?;
+        }
     }
     pub fn cancel_and_settle(&mut self, deadline: Instant) -> Result<Option<Vec<u8>>, String> {
         if self.delivered {
@@ -686,6 +772,40 @@ fn configure_signals() -> io::Result<()> {
         }
     }
     Ok(())
+}
+/// A frontend observation bound, never a new operation or cleanup allowance.
+/// Custodians keep their separate actual-child responsibility after it expires.
+pub(crate) fn frontend_cleanup_check(
+    original: &MonotonicDeadline,
+    until: Instant,
+) -> Result<Instant, String> {
+    original
+        .check()
+        .map_err(|error| format!("frontend cleanup deadline: {error}; custody retained"))?;
+    let until = until.min(original.expires());
+    if Instant::now() >= until {
+        return Err("frontend cleanup deadline expired; custody retained".into());
+    }
+    Ok(until)
+}
+pub(crate) fn frontend_cleanup_poll(
+    original: &MonotonicDeadline,
+    until: Instant,
+    fds: &mut [libc::pollfd],
+) -> Result<(), String> {
+    let until = frontend_cleanup_check(original, until)?;
+    let milliseconds = until
+        .saturating_duration_since(Instant::now())
+        .min(TICK)
+        .as_millis() as i32;
+    let result = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, milliseconds) };
+    if result < 0 && io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
+        return Err(format!(
+            "frontend cleanup poll: {}",
+            io::Error::last_os_error()
+        ));
+    }
+    frontend_cleanup_check(original, until).map(|_| ())
 }
 fn tick(fds: &mut [libc::pollfd]) {
     unsafe {
@@ -1190,6 +1310,62 @@ fn run_owned_query(
     }
 }
 
+#[cfg(test)]
+mod frontend_cleanup_tests {
+    use super::*;
+
+    #[test]
+    fn frontend_bound_uses_both_original_clock_and_earlier_reserve() {
+        let original = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+        let expired_reserve = Instant::now() - Duration::from_millis(1);
+        assert_eq!(
+            frontend_cleanup_check(&original, expired_reserve).unwrap_err(),
+            "frontend cleanup deadline expired; custody retained"
+        );
+        assert!(original.check().is_ok());
+        let short = MonotonicDeadline::capture(Duration::from_millis(5)).unwrap();
+        while short.check().is_ok() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let error =
+            frontend_cleanup_check(&short, Instant::now() + Duration::from_secs(1)).unwrap_err();
+        assert!(error.contains("Original monotonic deadline expired"));
+    }
+
+    #[test]
+    fn bounded_cancellation_cannot_clear_delivered_uncertainty() {
+        let request = Request {
+            schema: REQUEST_SCHEMA.into(),
+            id: "bounded-fixture".into(),
+            runtime_digest: "a".repeat(64),
+            token: "b".repeat(64),
+            ordinal: 1,
+            operation: Operation::Checkout,
+            executable: "/usr/bin/git".into(),
+            cwd: "/".into(),
+        };
+        let active = Arc::new(AtomicBool::new(true));
+        let mut pending = PendingGit::immediate(
+            request.clone(),
+            result(&request, "cleanup_unsettled", "custody retained"),
+            active.clone(),
+        );
+        let frame = pending.advance().unwrap().expect("actual uncertain frame");
+        let row: ResultFrame = serde_json::from_slice(&frame).unwrap();
+        assert_eq!(row.status, "cleanup_unsettled");
+        let original = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+        let error = pending
+            .cancel_and_settle_until(&original, original.expires())
+            .unwrap_err();
+        assert!(error.contains("cleanup remains uncertain"));
+        assert!(
+            active.load(Ordering::Acquire),
+            "uncertain frame cannot release ownership"
+        );
+        assert!(pending.cleanup_requested);
+        assert!(pending.delivered);
+    }
+}
 #[cfg(test)]
 #[path = "context_git/tests.rs"]
 mod tests;

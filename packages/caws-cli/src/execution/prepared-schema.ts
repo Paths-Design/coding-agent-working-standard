@@ -145,16 +145,18 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
     insist(environmentBytes <= 131072);
     bytes(execution.stdinBase64, 524288);
     const profile = object(root.profile, ['kind', 'source', 'utilities']);
-    insist(profile.kind === 'bash-clean-v1');
+    insist(profile.kind === 'bash-clean-v1' || profile.kind === 'caws-evidence-v1');
     nativeText(profile.source, 65536, true);
-    insist(
-      execution.argv.length === 5 &&
-        execution.argv[0] === executable.path &&
-        execution.argv[1] === '--noprofile' &&
-        execution.argv[2] === '--norc' &&
-        execution.argv[3] === '-c' &&
-        execution.argv[4] === profile.source
-    );
+    if (profile.kind === 'bash-clean-v1')
+      insist(
+        execution.argv.length === 5 &&
+          execution.argv[0] === executable.path &&
+          execution.argv[1] === '--noprofile' &&
+          execution.argv[2] === '--norc' &&
+          execution.argv[3] === '-c' &&
+          execution.argv[4] === profile.source
+      );
+    else insist(execution.argv.length >= 5 && execution.argv[0] === executable.path);
     insist(Array.isArray(profile.utilities) && profile.utilities.length <= 32);
     const paths = new Set<string>();
     for (const utility of profile.utilities) {

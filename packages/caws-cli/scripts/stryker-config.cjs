@@ -18,6 +18,12 @@ const { randomUUID } = require('node:crypto');
 const packageRoot = path.resolve(__dirname, '..');
 const policy = JSON.parse(fs.readFileSync(path.join(packageRoot, 'mutation-policy.json'), 'utf8'));
 
+function typeCheckConsumers(surfaceId) {
+  return surfaceId === 'analysis'
+    ? ['src/shell/command-metadata.ts', 'src/shell/analysis/inspection-prefix-entry.ts']
+    : [];
+}
+
 function createJestConfig(surfaceId, tests) {
   const config = {
     rootDir: '.',
@@ -45,6 +51,15 @@ function createStrykerConfig(surfaceId) {
       `Unknown mutation surface "${surfaceId}". Expected one of: ${Object.keys(policy.surfaces).join(', ')}`
     );
   }
+
+  // Instrumented exports can acquire wider inferred types in their callers.
+  // Suppress those two analysis consumers as well as the mutated targets;
+  // the ordinary build still typechecks the pristine source before Stryker.
+  // These are preprocessing inputs, never additional mutation targets.
+  const typeCheckInputs = [
+    ...surface.targets.map((target) => target.source),
+    ...typeCheckConsumers(surfaceId),
+  ];
 
   // stage-consumer-docs resolves ../.. from the sandbox package. A sandbox
   // nested under the package would resolve to the original package instead
@@ -78,14 +93,13 @@ function createStrykerConfig(surfaceId) {
     // Jest's exact testMatch below owns file selection. Core turns testFiles
     // into file-path testFilter values for static/off-coverage mutants, while
     // the Jest runner treats testFilter as test names and then runs no tests.
-    // Only instrumented targets require type-check suppression. The default
+    // Only instrumented targets and their affected type consumers require
+    // type-check suppression. The default
     // rewrites every JS/TS file, including the runtime asset generator and
     // its digest inputs, which makes its ordinary --check build fail. Keep
     // authored generators, non-target sources and tests byte-identical.
     disableTypeChecks:
-      surface.targets.length === 1
-        ? surface.targets[0].source
-        : `{${surface.targets.map((target) => target.source).join(',')}}`,
+      typeCheckInputs.length === 1 ? typeCheckInputs[0] : `{${typeCheckInputs.join(',')}}`,
     // Surfaces can run concurrently. Stryker excludes only its own tempDirName
     // by default, so sibling sandboxes would be copied while being removed.
     // Keep authored source/tests; exclude only generated run artifacts.
@@ -152,4 +166,4 @@ function createStrykerConfig(surfaceId) {
   return config;
 }
 
-module.exports = { createStrykerConfig };
+module.exports = { createStrykerConfig, typeCheckConsumers };

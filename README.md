@@ -89,6 +89,16 @@ path allowlists can permit a write. Unavailable or ambiguous payload ownership
 cannot grant admission. Existing registry read or format errors retain ownership
 uncertainty.
 
+The native `caws-execution` adapter implements a separate, restricted execution
+route with local socket peer and host image checks and a dedicated worker. Those
+checks alone do not authenticate bytes queued before a same-PID exec. Its
+`caws-evidence-v1` consumer records one owned criterion through the canonical
+evidence transaction, verifies only requested artifact/commit citations, and
+returns an explicit pending audit commit. The normal continuation is
+`caws specs commit <id>`. This source implementation does not qualify native
+adoption or replace the reduced Codex hook producer; see the guide's
+[writer contract](docs/guides/command-analysis.md#dedicated-evidence-consumer).
+
 Native adoption requires complete final-launch context, custody through later
 rewrites, generation-bound Node and analyzer CLI identities, an isolated canary
 and rollback. A validated host execution directory establishes only that

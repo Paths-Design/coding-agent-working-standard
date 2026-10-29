@@ -3,8 +3,9 @@
 use crate::{
     native_generation::GenerationReceipt, selection_observation::GenerationValidationScope,
 };
+use caws_native::monotonic_deadline::MonotonicDeadline;
 use caws_native::{context_git::stop as git, session_cache_wire::OriginalStopCapture};
-use std::cell::RefCell;
+use std::{cell::RefCell, time::Instant};
 #[must_use = "retained Stop Git custody must reach the root cleanup owner"]
 #[derive(Debug)]
 pub(crate) enum Failure {
@@ -46,6 +47,17 @@ impl Failure {
             Self::Retained(e) => e.custodian_retained(),
         }
     }
+    pub(crate) fn retry_cleanup_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        match self {
+            Self::Invalidated(_) => Ok(()),
+            Self::Retained(failure) => failure.retry_cleanup_until(original, until),
+        }
+    }
+    #[cfg(test)]
     pub(crate) fn retry_cleanup(&mut self) -> Result<(), String> {
         match self {
             Self::Invalidated(_) => Ok(()),
@@ -61,7 +73,16 @@ pub(crate) trait CustodiedFailure {
     fn diagnostic(&self) -> &str;
     fn custodian_retained(&self) -> bool;
     fn cleanup_settled(&self) -> bool;
+    #[cfg(test)]
     fn retry_cleanup(&mut self) -> Result<(), String>;
+}
+/// The callback root can wait only on owners with an explicit bounded implementation.
+pub(crate) trait BoundedCustodiedFailure: CustodiedFailure {
+    fn retry_cleanup_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String>;
 }
 impl CustodiedFailure for Failure {
     fn diagnostic(&self) -> &str {
@@ -73,8 +94,18 @@ impl CustodiedFailure for Failure {
     fn cleanup_settled(&self) -> bool {
         Failure::cleanup_settled(self)
     }
+    #[cfg(test)]
     fn retry_cleanup(&mut self) -> Result<(), String> {
         Failure::retry_cleanup(self)
+    }
+}
+impl BoundedCustodiedFailure for Failure {
+    fn retry_cleanup_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        Failure::retry_cleanup_until(self, original, until)
     }
 }
 pub(crate) struct RetainedFailures<F: CustodiedFailure> {
@@ -136,6 +167,7 @@ impl<F: CustodiedFailure> RetainedFailures<F> {
             Ok(value) => self.check().map(|()| value),
         }
     }
+    #[cfg(test)]
     pub(crate) fn settle_cleanup(&mut self) -> Option<String> {
         let mut unproven = Vec::new();
         for failure in &mut self.failures {
@@ -146,6 +178,48 @@ impl<F: CustodiedFailure> RetainedFailures<F> {
                 if failure.custodian_retained() {
                     std::thread::sleep(std::time::Duration::from_millis(5));
                 }
+            }
+            if !failure.cleanup_settled() {
+                unproven.push(failure.diagnostic().to_owned());
+            }
+        }
+        (!unproven.is_empty()).then(|| {
+            format!(
+                "Stop Git terminal cleanup remains unproven: {}; no observation or operation retry",
+                unproven.join("; ")
+            )
+        })
+    }
+}
+
+impl<F: BoundedCustodiedFailure> RetainedFailures<F> {
+    pub(crate) fn settle_cleanup_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Option<String> {
+        let until = until.min(original.expires());
+        let mut unproven = Vec::new();
+        for failure in &mut self.failures {
+            // One best-effort owned cancellation is permitted even after
+            // expiry; the bounded implementation must not wait in that case.
+            if failure.custodian_retained() {
+                let _ = failure.retry_cleanup_until(original, until);
+            }
+            while failure.custodian_retained() && original.check().is_ok() && Instant::now() < until
+            {
+                let remaining = until.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    break;
+                }
+                if original.check().is_err() {
+                    break;
+                }
+                std::thread::sleep(remaining.min(std::time::Duration::from_millis(5)));
+                if original.check().is_err() || Instant::now() >= until {
+                    break;
+                }
+                let _ = failure.retry_cleanup_until(original, until);
             }
             if !failure.cleanup_settled() {
                 unproven.push(failure.diagnostic().to_owned());
@@ -301,6 +375,7 @@ mod custody_tests {
         diagnostic: &'static str,
         retained: bool,
         settled_after_retry: bool,
+        keep_retained: bool,
         attempts: Rc<Cell<usize>>,
         drops: Rc<Cell<usize>>,
     }
@@ -322,12 +397,32 @@ mod custody_tests {
         fn retry_cleanup(&mut self) -> Result<(), String> {
             assert!(self.retained, "must not retry terminal unproven failure");
             self.attempts.set(self.attempts.get() + 1);
+            if self.keep_retained {
+                assert!(
+                    self.attempts.get() <= 32,
+                    "retained cleanup retry exceeded finite regression guard"
+                );
+                return Err("still retained after retry".into());
+            }
             self.retained = false;
             if self.settled_after_retry {
                 Ok(())
             } else {
                 Err("terminal unproven".into())
             }
+        }
+    }
+    impl BoundedCustodiedFailure for OwnedFailure {
+        fn retry_cleanup_until(
+            &mut self,
+            original: &MonotonicDeadline,
+            until: Instant,
+        ) -> Result<(), String> {
+            original.check().map_err(|error| error.to_string())?;
+            if Instant::now() >= until.min(original.expires()) {
+                return Err("frontend cleanup deadline expired".into());
+            }
+            self.retry_cleanup()
         }
     }
     fn owned(
@@ -341,9 +436,47 @@ mod custody_tests {
             diagnostic,
             retained,
             settled_after_retry: settled,
+            keep_retained: false,
             attempts: attempts.clone(),
             drops: drops.clone(),
         }
+    }
+
+    #[test]
+    fn retained_retry_exhausts_only_the_original_frontend_bound_without_dropping_owner() {
+        let attempts = Rc::new(Cell::new(0));
+        let drops = Rc::new(Cell::new(0));
+        let mut failure = owned("permanently retained", true, false, &attempts, &drops);
+        failure.keep_retained = true;
+        let mut custody = RetainedFailures::default();
+        let _: Result<(), String> = custody.retain(Err(failure));
+        let original = MonotonicDeadline::capture(std::time::Duration::from_secs(1)).unwrap();
+        let until = Instant::now() + std::time::Duration::from_millis(10);
+        let message = custody.settle_cleanup_until(&original, until).unwrap();
+        assert!(
+            original.check().is_ok(),
+            "caller reserve expires before original budget"
+        );
+        assert!(message.contains("permanently retained"));
+        assert!(message.contains("terminal cleanup remains unproven"));
+        assert!(attempts.get() > 0);
+        assert!(custody.failures[0].custodian_retained());
+        assert!(!custody.failures[0].cleanup_settled());
+        assert_eq!(
+            drops.get(),
+            0,
+            "bounded frontend return cannot discard its owner"
+        );
+        let before = attempts.get();
+        assert!(custody.settle_cleanup_until(&original, until).is_some());
+        assert_eq!(
+            attempts.get(),
+            before,
+            "an expired bound cannot renew a cleanup attempt"
+        );
+        assert_eq!(drops.get(), 0);
+        drop(custody);
+        assert_eq!(drops.get(), 1);
     }
 
     #[test]

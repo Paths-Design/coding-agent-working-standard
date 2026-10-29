@@ -60,6 +60,8 @@ import { STORE_RULES } from './rules';
 import { insertTopLevelScalarAfter, removeTopLevelScalar, setTopLevelScalar } from './yaml-patch';
 import { readYamlSource, readYamlSourceBytes } from './yaml-store';
 import { evidenceSpans } from './yaml-evidence-spans';
+import { verifyInheritedFence } from '../execution/fence';
+import type { FenceObservation } from '../execution/prepared';
 
 // ─── Common types ────────────────────────────────────────────────────────
 
@@ -3875,10 +3877,32 @@ function yamlScalar(value: string): string {
     .replace(/\u2029/g, '\\u2029');
 }
 
+/** Internal execution-consumer policy. The borrowed descriptor must be the
+ * native parent's live execution fence; this never acquires or releases it.
+ * Normal CLI callers retain their existing lock and audit-commit behavior. */
+export interface ExecutionEvidenceWritePolicy {
+  readonly kind: 'bounded-execution';
+  readonly fence: FenceObservation;
+  readonly expectedSource: string;
+  readonly validate: () => void;
+}
+
 export function recordSpecEvidence(
   cawsDir: string,
-  input: RecordSpecEvidenceInput
+  input: RecordSpecEvidenceInput,
+  execution?: ExecutionEvidenceWritePolicy
 ): Result<SpecWriterOutcome> {
+  if (execution !== undefined) {
+    if (execution.kind !== 'bounded-execution' || !verifyInheritedFence(cawsDir, execution.fence)) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          'Execution evidence fence is unavailable.'
+        )
+      );
+    }
+    execution.validate();
+  }
   const idValidation = validateSpecId(input.id);
   if (!idValidation.ok) return idValidation;
 
@@ -3896,6 +3920,14 @@ export function recordSpecEvidence(
   const sourceResult = readYamlSource(targetPath);
   if (!isOk(sourceResult)) return err(sourceResult.errors);
   const originalBytes = sourceResult.value;
+  if (execution !== undefined && originalBytes !== execution.expectedSource) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        'Execution evidence source changed before planning.'
+      )
+    );
+  }
   const parsed = parseAndValidateSpec(originalBytes);
   if (!isOk(parsed)) {
     return err(
@@ -4022,19 +4054,39 @@ export function recordSpecEvidence(
   } as unknown as EventBody;
 
   const repoRoot = repoRootFromCawsDir(cawsDir);
-  const wasDirtyBeforeWrite = isPathDirty(repoRoot, specRelPath(cawsDir, input.id, repoRoot));
+  const wasDirtyBeforeWrite =
+    execution === undefined
+      ? isPathDirty(repoRoot, specRelPath(cawsDir, input.id, repoRoot))
+      : false;
 
-  const txnResult = withLifecycleLock(cawsDir, () =>
+  const transact = () =>
     runLifecycleTransaction({
       cawsDir,
       plannedWrites: [{ path: targetPath, contents: patched }],
       events: [event],
-    })
-  );
+    });
+  if (execution !== undefined) {
+    execution.validate();
+    const currentSource = readYamlSource(targetPath);
+    if (
+      !verifyInheritedFence(cawsDir, execution.fence) ||
+      !currentSource.ok ||
+      currentSource.value !== originalBytes
+    ) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          'Execution evidence changed before publication.'
+        )
+      );
+    }
+  }
+  const txnResult = execution === undefined ? withLifecycleLock(cawsDir, transact) : transact();
   if (!txnResult.ok) {
     return err(txnResult.errors);
   }
   const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
+  if (execution !== undefined) return outcome;
   return attachAutoCommit(outcome, cawsDir, input.id, 'evidence', wasDirtyBeforeWrite);
 }
 

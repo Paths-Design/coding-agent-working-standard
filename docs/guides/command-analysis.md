@@ -96,6 +96,16 @@ verdict. Existing utility operand rules and the claim oracle determine whether a
 recognized write is authorized. A missing or malformed backend fails closed
 without falling back to the legacy lexer.
 
+The machine adapter's Bash preload is hook infrastructure. Its dispatcher
+retains whether `BASH_ENV` was present and its value before installing that
+preload; handler children restore this fact before downstream analysis. An unset
+value stays absent, an empty value stays present, and a genuine prior startup
+file remains an unresolved startup fact. This does not recover the environment
+before the dispatcher's own startup or qualify native execution. Installed
+consumer checks must inspect the returned decision: a hook can exit zero with
+`permissionDecision: ask`, which requests approval rather than admitting the
+command.
+
 Every recognized interpreter invocation has an independent coverage entry and an
 effect result: `readonly`, `finite-writes`, or `unresolved`. Issue-free
 responses require ordered coverage to match every interpreter row. The v2 bridge
@@ -583,12 +593,13 @@ It accepts the existing authorizer `analyze` frame over a draft prepared record
 whose utility manifest is empty. Its distinct
 `caws.execution.program-discovery.v1` reply contains `invocationId`, the draft's
 `executionDigest`, `status` (`observed` or `unresolved`), unique lexical
-`commands` and closed `reasonCodes`. The bounded analyzer, initial bindings and
-`command` wrapper handling are shared with final authorization. Bare builtins
-are omitted; utility spellings are not resolved images or trusted hashes. At
-most 256 candidates of 4096 UTF-8 bytes each are observed; excessive count or
-encoded output produces an unresolved result with an empty list. Replies fit the
-same 64 KiB bound and contain no permission or authority revision.
+`commands`, a nullable typed `execution` plan and closed `reasonCodes`. The
+bounded analyzer, initial bindings and `command` wrapper handling are shared
+with final authorization. Bare builtins are omitted; utility spellings are not
+resolved images or trusted hashes. At most 256 candidates of 4096 UTF-8 bytes
+each are observed; excessive count or encoded output produces an unresolved
+result with an empty list. Replies fit the same 64 KiB bound and contain no
+permission or authority revision.
 
 The native producer must independently resolve and hash those candidates,
 deduplicate physical images and freeze the final record. Its execution digest
@@ -599,6 +610,95 @@ cannot replace either phase, establish native origin or execute submitted
 expansions. The owner's original monotonic preparation budget includes this
 child; discovery does not start a new budget. Candidate names are private
 metadata, not default diagnostic output.
+
+### Dedicated evidence consumer
+
+`caws-execution --config <absolute-config>` implements a restricted MCP adapter.
+It requires a host-created local socket duplicated to stdin and stdout, with
+kernel peer process identity matching the live pinned direct host. This checks
+the current peer process; it does not authenticate bytes queued before that
+process executes the pinned image. Darwin's freshly queried peer audit token
+also reflects the current executable generation. Qualification must distinguish
+genuine traffic, transferred endpoints and prequeued traffic across same-PID
+exec, with kernel observations tied to the consumed request. A pipe, an asserted
+caller object or a pinned parent without authenticated input is insufficient.
+The configuration pins the native, host, Node, authorizer, discovery and writer
+images, and an exhaustive package/dependency generation manifest. The manifest
+resides outside its physical generation root. Missing, added, replaced or
+aliased generation files refuse. Protecting that generation from concurrent
+untrusted writes and proving the actual sandbox route are deployment
+obligations.
+
+The paired host must implement the opt-in `authenticated_socket` transport. Its
+reviewed local MCP configuration uses the native executable directly:
+
+```toml
+[mcp_servers.caws_execution]
+command = "/absolute/pinned/caws-execution"
+args = ["--config", "/absolute/reviewed/execution.json"]
+local_stdio_transport = "authenticated_socket"
+```
+
+The configuration contract preserves ordinary pipe transport as the default;
+pipes, HTTP and executor placement do not authenticate this route. A stock host
+without this extension cannot supply the required channel. Qualification applies
+to the observed paired host and adapter identities, rather than a product name.
+The generation inventory also requires a separate check of actual dependency
+resolution and protected system inputs; enumerating files does not prove that
+Node never loads an import outside that tree.
+
+The tool's description advertises its configured shell-quoted Node/writer
+prefix, accepted flags, citation limits and audit continuation. An agent obtains
+the invocation from tool discovery. The result retains stdout and stderr as
+base64 bytes; decoding stdout exposes the writer's typed result. Advertised
+paths are configuration, and execution independently revalidates them.
+
+For one literal invocation of the pinned Node and `writer-main.js` entry,
+discovery returns `execution: {kind: 'caws-evidence-v1', argv: [...]}`. This
+plan is advisory. Native preparation freezes the direct executable and argv with
+the original source in the prepared digest, and both authorizer phases compare
+the literal source with that exact invocation. This elaboration explicitly
+selects the restricted consumer; it does not preserve the broader effects of the
+general CLI index. Compounds, redirects, substitutions, arbitrary file callees,
+unknown or repeated options, test citations and foreign specs remain held.
+Quoted evidence references and command descriptions remain inert data.
+
+The consumer accepts `specs evidence <owned-active-spec>` with `--ac`,
+`--status pass|fail|unchecked`, `--evidence-ref`, and optional `--command`,
+`--exit-code`, `--artifact-path`, `--commit-sha` and `--verify`. Verification
+requires a normalized relative artifact path and a full commit identity. It
+checks only that requested artifact/commit citation; it establishes neither test
+success nor semantic satisfaction of the criterion. The normal CLI verifier also
+limits a record-time check to its requested criterion, while retaining that
+criterion's declared test behavior.
+
+Only this trusted direct child borrows descriptor 3 and the lifecycle fence
+through completion. Its actor derives from the authenticated association. It
+revalidates ownership and exact spec bytes under the held fence, then calls the
+sole `recordSpecEvidence` transaction and reads back the evidence entry and
+matching `ac_recorded` event. It does not reacquire the fence, run project
+tests, discover an actor through legacy process/session helpers, or auto-commit
+through project Git configuration. Generic user execution receives no private
+descriptor and releases the launch fence after spawn.
+
+The result reports `auditCommit: 'pending'`, the exact spec digest and the
+supported continuation `caws specs commit <id>`. The agent must execute that
+normal governed command, including its project hooks, and verify a clean
+canonical tree before merge and closure. Recording alone is unfinished work. The
+inherited execution environment is closed; the consumer separately checks the
+numeric macOS startup field added by the operating system.
+
+Transaction failure responses distinguish recovered writes, recovery-required
+partial state and publication whose readback is unconfirmed. They retain bounded
+recovery coordinates and require inspection of the spec and event log before a
+retry. A failed response after dispatch does not assert zero effects. Native
+replies preserve the exit code, bounded output and possible-spawn disposition.
+
+This route is source implementation. Genuine host-channel authentication, worker
+descriptor survival through the actual sandbox launcher, useful writer
+admission, foreign-write refusal, cancellation, full workflow, native canary and
+rollback require their own observed qualification. The reduced hook producer
+remains held and native adoption remains unqualified until those checks pass.
 
 Authority derives from the verified native caller coordinate, actual thread
 owner, canonical policy, active spec and unique worktree or bridge binding.
@@ -632,6 +732,12 @@ Startup and lookup controls such as `EXECIGNORE`, `BASH_COMPAT` and
 this profile. Parsing never runs submitted expansions or executes source to
 discover effects.
 
+The profile scan follows the parser's semantic child API, including lazy word
+parts and substitution scripts. Enumerating JavaScript object properties misses
+those children. Semantic node scheduling and depth are bounded; malformed or
+reconstructed-source scripts remain unresolved. The independent analyzer must
+also accept the complete source.
+
 The child neither acquires/releases the launch fence nor spawns a user program.
 Its input-completion timeout ends at EOF. The native owner must independently
 enforce the original monotonic preparation deadline across startup and analysis;
@@ -656,10 +762,11 @@ integration must associate the call with its authenticated session, provide
 every effective execution parameter, and require the CAWS result for every
 explicitly covered execution entry point. A host integration may replace the
 covered tool or veto its final spawn; either route must demonstrate that another
-covered tool cannot bypass the boundary. The inspected CAWS native runtime
-launches hook engines, not user commands. Its identity resolver accepts payload
-and environment identifiers; those are not authenticated caller proof. No
-existing inspected entry point establishes both properties. An unavailable
+covered tool cannot bypass the boundary. The standard native hook entry point
+launches hook engines. Its identity resolver accepts payload and environment
+identifiers; those are not authenticated caller proof. The separate restricted
+`caws-execution` adapter retains the qualification limits described above.
+Hook-runtime observations do not establish complete mediation. An unavailable
 integration leaves native activation unavailable; a voluntarily invoked wrapper
 does not establish complete mediation.
 
@@ -754,6 +861,39 @@ analysis fixtures cannot substitute for the host integration rows:
 | Permit lifecycle                      | Replay, expiry, cancellation and cross-invocation reuse each produce zero launches. No caller can manufacture a permit from a serialized decision.                                                                  |
 | Failure and cleanup                   | Deadline, output cap, broken stdin, spawn failure and cancellation preserve bounded partial output, reaping and honest outcomes; ambiguous completion never retries itself.                                         |
 
+### Proposed owned lifecycle operations
+
+Source analysis alone cannot distinguish an intentional retirement of owned
+edits from an unpreserved discard. The installed path-restore guard requires a
+human even when the exact edits have been committed in another owned lane. The
+complete boundary design therefore includes a typed retirement operation; the
+private source authorizer does not implement it.
+
+Preparation identifies the owned source lane, exact paths, expected current
+bytes and index state, replacement bytes, and the immutable preserving commit in
+an owned destination lane. Authorization verifies that provenance and scope
+against canonical authority. Launch rechecks the expected state under the
+applicable serialization contract before retiring only those entries. Foreign
+ownership, missing preserved bytes, ambiguous path identity or intervening edits
+leave the source untouched. Retry after a completed retirement returns its
+recorded outcome rather than discarding newer work.
+
+Ownership and matching bytes do not close the check-to-mutation race. This
+profile requires demonstrated serialization of the affected entries or suitable
+conditional filesystem operations; an advisory lock that other editors ignore
+does not establish that property. A platform or sharing arrangement without that
+contract leaves retirement unavailable. A preserving commit establishes
+recoverability, not permission to overwrite an intervening edit.
+
+Qualification requires a real owned transfer to complete without a manual
+override, with byte-identical recovery from the preserving commit. Paired cases
+must refuse changed source or index bytes, foreign ownership, an absent commit,
+an alias replacement and an authority change between preparation and mutation.
+An edit injected at the final check-to-mutation boundary must also be preserved.
+An interruption must either preserve the original entries or leave an explicit,
+recoverable partial outcome. This is a proposed lifecycle contract, not evidence
+that general path discards or cleanup commands are safe to admit.
+
 Investigate the pinned host's final resolved launch integration and bypass
 inventory first. Implement the smallest proven integration plus an owned
 prepared record and hostile custody tests before widening tool support. Change
@@ -776,7 +916,8 @@ producing admission, but does not qualify a rollout that blocks benign commands.
 Native adoption requires demonstrated execution-contract support and an isolated
 canary before replacing the deployed runtime.
 
-The declared analysis topology contains three suites:
+The declared analysis topology contains four suites:
+`tests/shell/caws-read-metadata.test.js`,
 `tests/shell/command-analysis.test.js`,
 `tests/shell/interpreter-effects.test.js` and
 `tests/shell/mutation-view.test.js`. Together they check bounded decisions,
@@ -790,6 +931,7 @@ cd packages/caws-cli
 npm run build
 node ../../node_modules/jest/bin/jest.js --config jest.config.js \
   --selectProjects caws-cli --runInBand --runTestsByPath \
+  tests/shell/caws-read-metadata.test.js \
   tests/shell/command-analysis.test.js \
   tests/shell/interpreter-effects.test.js \
   tests/shell/mutation-view.test.js \
@@ -803,7 +945,7 @@ node ../../node_modules/jest/bin/jest.js --config jest.config.js \
 npm run mutation:run:analysis
 ```
 
-The mutation command uses `mutation-policy.json` and the declared three-suite
+The mutation command uses `mutation-policy.json` and the declared four-suite
 topology through `stryker.analysis.conf.js`. It must cover all nine registered
 sources: `analyze.ts`, `caws-read-metadata.ts`, `git-context.ts`,
 `inspection-prefix.ts`, `inspection-profiles.ts`, `interpreter-effects.ts`,
@@ -816,6 +958,13 @@ verdicts and unallowed exclusions do not pass. A single-file diagnostic,
 aggregate score, narrowed test configuration or Stryker process exit zero does
 not establish this full contract. Retain raw commands, actual statuses, source
 and test identities, failed attempts and meaningful survivor analysis.
+
+The execution campaign retains the original six targets (`authority.ts`,
+`authorizer.ts`, `fence.ts`, `prepared-schema.ts`, `protocol.ts` and
+`store/lifecycle-lock.ts`) and adds the dedicated `execution/writer.ts` consumer
+as a seventh target at the same per-file floor. Its declared suites include the
+writer's inherited-fence, hostile-helper and exact publication checks. A passing
+consumer fixture or inventory validator does not establish mutation scores.
 
 Use repository-installed Bats for `tests/hooks/bats/worktree-pin-guard.bats` and
 the mandatory guard fixtures in isolated HOME/CAWS_HOME. Check benign admission,

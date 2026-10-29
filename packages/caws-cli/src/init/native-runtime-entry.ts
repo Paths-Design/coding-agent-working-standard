@@ -5,13 +5,18 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { sha } from './machine-runtime-state';
-import { loadNativeSqliteBuildWithStableEntry } from '../tooling/native-sqlite-build';
+import { isDeepStrictEqual } from 'node:util';
+import {
+  loadNativeSqliteBuildWithStableEntry,
+  validateNativeSqliteBuildIdentity,
+  type InstalledInvocationCapability,
+} from '../tooling/native-sqlite-build';
 import type { ReviewedFile } from '../tooling/sqlite-static-build';
 import { cliClosureDigest } from '../runtime/cli-identity-format';
 import type { ReviewedCliIdentity } from '../runtime/cli-identity';
 
 export const NATIVE_ENTRY_SCHEMA = 'caws.runtime.native-entry.v1' as const;
-export interface NativeEntryMetadata {
+export interface NativeEntryMetadataV1 {
   readonly schema: typeof NATIVE_ENTRY_SCHEMA;
   readonly nativeExecutable: string;
   readonly nodeExecutable: string;
@@ -19,6 +24,11 @@ export interface NativeEntryMetadata {
   readonly describeEntry: string;
   readonly timeoutMs: number;
 }
+export interface NativeEntryMetadataV2 extends Omit<NativeEntryMetadataV1, 'schema'> {
+  readonly schema: 'caws.runtime.native-entry.v2';
+  readonly installedInvocation: InstalledInvocationCapability;
+}
+export type NativeEntryMetadata = NativeEntryMetadataV1 | NativeEntryMetadataV2;
 interface Pin {
   readonly source: string;
   readonly sha256: string;
@@ -185,7 +195,12 @@ export function prepareNativeRuntimeEntry(input: NativeImageInput): PreparedNati
 
 function prepareNativeImage(
   input: NativeImageInput,
-  build?: { native: ReviewedFile; stableEntry: ReviewedFile; provenance: Buffer }
+  build?: {
+    native: ReviewedFile;
+    stableEntry: ReviewedFile;
+    provenance: Buffer;
+    installedInvocation: InstalledInvocationCapability;
+  }
 ): PreparedNativeEntry {
   keys(
     input,
@@ -386,7 +401,12 @@ function prepareNativeImage(
     if (modes.get(relative) === 0o755) executablePaths.add(`native-prefix/${relative}`);
   }
   const metadata: NativeEntryMetadata = {
-    schema: NATIVE_ENTRY_SCHEMA,
+    ...(build
+      ? {
+          schema: 'caws.runtime.native-entry.v2' as const,
+          installedInvocation: build.installedInvocation,
+        }
+      : { schema: NATIVE_ENTRY_SCHEMA }),
     nativeExecutable: 'native/caws-native',
     nodeExecutable: 'native/node',
     engineEntry: `native-prefix/${cli}/dist/runtime/engine-entry.js`,
@@ -890,6 +910,24 @@ export function prepareNativeRuntimeEntryFromBuild(
     !sameReviewedFile(input.completionReceipt, loaded.completionReceipt)
   )
     throw new Error('Native build selection identity mismatch');
+  if (loaded.build.observedIdentity?.schema !== 'caws.sqlite_build_identity.v2')
+    throw new Error(
+      'Native build lacks installed invocation capability; old receipts cannot produce entry v2'
+    );
+  const runtimeIdentity = loaded.build.artifacts.runtimeIdentity;
+  reviewedFile(runtimeIdentity, 'native runtime identity');
+  const diagnostic = validateNativeSqliteBuildIdentity(
+    JSON.parse(capture(runtimeIdentity.path, runtimeIdentity).bytes.toString('utf8')),
+    loaded.build.observedIdentity.compiledPrefixSha256
+  );
+  if (
+    diagnostic.schema !== 'caws.sqlite_build_identity.v2' ||
+    !isDeepStrictEqual(diagnostic, loaded.build.observedIdentity)
+  )
+    throw new Error('Native build installed invocation identity mismatch');
+  if (!Number.isSafeInteger(input.timeoutMs) || input.timeoutMs < 1 || input.timeoutMs > 30000)
+    throw new Error('Installed native timeout must be in 1..30000 milliseconds');
+  const installedInvocation = { ...diagnostic.installedInvocation };
   const { native, stableEntry } = loaded.build.artifacts;
   reviewedFile(native, 'native build artifact');
   reviewedFile(stableEntry, 'stable entry build artifact');
@@ -921,7 +959,7 @@ export function prepareNativeRuntimeEntryFromBuild(
         ? { cliIdentityDomain: input.cliIdentityDomain! }
         : {}),
     },
-    { native, stableEntry, provenance }
+    { native, stableEntry, provenance, installedInvocation }
   );
 }
 
