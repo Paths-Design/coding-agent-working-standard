@@ -236,9 +236,11 @@ mod macos {
         }
     }
 
-    /// Darwin reports the socketpair creator, not the current writer after an
-    /// endpoint transfer. The producer must retain exclusive peer custody and
-    /// keep its endpoint CLOEXEC. The pin is derived outside the startup frame.
+    /// Snapshot of the queried socket peer and its live process/image, not
+    /// per-message sender authentication. Rechecking these observations does
+    /// not authenticate prequeued bytes across exec. The producer must retain
+    /// exclusive endpoint custody and keep its endpoint CLOEXEC; channel origin
+    /// requires separate proof. The pin is derived outside the startup frame.
     pub(crate) struct ProducerPeer {
         process: ProcessInstance,
         path: PathBuf,
