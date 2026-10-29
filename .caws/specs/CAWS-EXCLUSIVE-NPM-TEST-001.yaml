@@ -3,7 +3,7 @@ title: 'Admit bounded npm test through exclusive native execution'
 mode: feature
 lifecycle_state: active
 created_at: '2026-10-29T21:29:09.572Z'
-updated_at: '2026-10-29T21:40:16.726Z'
+updated_at: '2026-10-29T21:45:56.189Z'
 created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
 blast_radius:
   modules:
@@ -26,6 +26,7 @@ scope:
   support:
     - packages/caws-cli/dist/
     - packages/caws-cli/node_modules/
+    - packages/caws-native/target/
 invariants:
   - 'Admit only the exact foreground npm test command after independent discovery and final authorization; all other npm forms refuse before USER spawn.'
   - 'The profile requires an authenticated Native host write ceiling with invocation-private output, tmp and cache roots; source text, model cwd and asserted paths do not confer authority.'
