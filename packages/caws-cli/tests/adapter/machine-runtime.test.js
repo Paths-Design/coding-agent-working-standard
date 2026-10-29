@@ -78,18 +78,19 @@ test.each(['unset', 'empty', 'file', 'self-unset', 'self-rebind'])(
       '\nexport CAWS_TEST_SELECTED_PRELOAD=selected\n'
     );
     const home = path.join(root, 'home');
-    installMachineRuntime({ home, templatesRoot: sources });
+    const installed = installMachineRuntime({ home, templatesRoot: sources });
     const observations = path.join(root, 'handler-environments');
     const report =
-      'printf \'%s|%s|%s|%s|%s\\n\' "${BASH_ENV+x}" "${BASH_ENV-}" ' +
+      'printf \'%s|%s|%s|%s|%s|%s\\n\' "${BASH_ENV+x}" "${BASH_ENV-}" ' +
       '"${CAWS_TEST_SELECTED_PRELOAD:-missing}" "${CAWS_TEST_PRIOR_STARTUP:-missing}" ' +
-      '"$(declare -F emit_additional_context >/dev/null && printf loaded)" >> "$STARTUP_OBSERVATIONS"\n';
+      '"$(declare -F emit_additional_context >/dev/null && printf loaded)" "$$" >> "$STARTUP_OBSERVATIONS"\n';
     const repo = repository('startup-facts', { 'first.sh': report, 'second.sh': report });
     const prior = path.join(root, 'original startup.sh');
     fs.writeFileSync(
       prior,
-      'export CAWS_TEST_PRIOR_STARTUP=ran\n' +
-        'case "$0" in */first.sh|*/second.sh)\n' +
+      'export CAWS_TEST_PRIOR_STARTUP="$$"\n' +
+        'printf \'%s|%s\\n\' "$$" "${BASH_SOURCE[1]-}" >> "$STARTUP_TRACE"\n' +
+        'case "${BASH_SOURCE[1]-}" in */handler-env.sh)\n' +
         (startup === 'self-unset'
           ? 'unset BASH_ENV\n'
           : startup === 'self-rebind'
@@ -105,13 +106,38 @@ test.each(['unset', 'empty', 'file', 'self-unset', 'self-rebind'])(
       CAWS_TEST_PRIOR_STARTUP: undefined,
       CAWS_TEST_SELECTED_PRELOAD: undefined,
       STARTUP_OBSERVATIONS: observations,
+      STARTUP_TRACE: path.join(root, 'startup-trace'),
     });
     expect(result.status).toBe(0);
     expect(result.stdout).toBe('');
-    expect(fs.readFileSync(observations, 'utf8').trim().split('\n')).toEqual([
-      `${startup === 'unset' ? '' : 'x'}|${original ?? ''}|selected|${startup === 'unset' || startup === 'empty' ? 'missing' : 'ran'}|loaded`,
-      `${startup === 'unset' ? '' : 'x'}|${original ?? ''}|selected|${startup === 'unset' || startup === 'empty' ? 'missing' : 'ran'}|loaded`,
-    ]);
+    const rows = fs
+      .readFileSync(observations, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => line.split('|'));
+    expect(rows).toHaveLength(2);
+    expect(rows[0][5]).toMatch(/^[1-9][0-9]*$/);
+    expect(rows[1][5]).toMatch(/^[1-9][0-9]*$/);
+    expect(rows[0][5]).not.toBe(rows[1][5]);
+    for (const row of rows)
+      expect(row).toEqual([
+        startup === 'unset' ? '' : 'x',
+        original ?? '',
+        'selected',
+        startup === 'unset' || startup === 'empty' ? 'missing' : row[5],
+        'loaded',
+        row[5],
+      ]);
+    if (startup !== 'unset' && startup !== 'empty') {
+      const trace = fs.readFileSync(path.join(root, 'startup-trace'), 'utf8').trim().split('\n');
+      expect(trace).toHaveLength(3);
+      expect(trace.slice(1)).toEqual(
+        rows.map(
+          (row) =>
+            `${row[5]}|${path.join(home, 'lib/runtimes', installed.digest, 'handler-env.sh')}`
+        )
+      );
+    }
   }
 );
 
@@ -132,7 +158,9 @@ test.each(['unset', 'empty', 'file', 'self-unset'])(
     const prior = path.join(root, 'analyzer startup.sh');
     fs.writeFileSync(
       prior,
-      startup === 'self-unset' ? 'case "$0" in */analyze.sh) unset BASH_ENV;; esac\n' : ':\n'
+      startup === 'self-unset'
+        ? 'case "${BASH_SOURCE[1]-}" in */handler-env.sh) unset BASH_ENV;; esac\n'
+        : ':\n'
     );
     const result = invoke(home, repo, 'analyzed-startup', 'pre_tool_use', {
       BASH_ENV: startup === 'unset' ? undefined : startup === 'empty' ? '' : prior,

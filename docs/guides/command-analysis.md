@@ -762,10 +762,11 @@ integration must associate the call with its authenticated session, provide
 every effective execution parameter, and require the CAWS result for every
 explicitly covered execution entry point. A host integration may replace the
 covered tool or veto its final spawn; either route must demonstrate that another
-covered tool cannot bypass the boundary. The inspected CAWS native runtime
-launches hook engines, not user commands. Its identity resolver accepts payload
-and environment identifiers; those are not authenticated caller proof. No
-existing inspected entry point establishes both properties. An unavailable
+covered tool cannot bypass the boundary. The standard native hook entry point
+launches hook engines. Its identity resolver accepts payload and environment
+identifiers; those are not authenticated caller proof. The separate restricted
+`caws-execution` adapter retains the qualification limits described above.
+Hook-runtime observations do not establish complete mediation. An unavailable
 integration leaves native activation unavailable; a voluntarily invoked wrapper
 does not establish complete mediation.
 

@@ -77,13 +77,13 @@ locations are quiet when the installed runtime is healthy.
 
 The execution root is the actual Git checkout; settings, extensions and
 governance resolve to its canonical root through Git's common directory.
-Inherited `GIT_*` variables cannot select another repository. Bash children
-preload the selected parser, session resolver and emitter. Project library
-declarations take priority over user adapter libraries, then packaged surface
-libraries, then shared defaults. Bootstrap libraries cannot be overridden.
-Explicit library entries apply at the `caws_source_lib` adapter seam; arbitrary
-directly sourced helper files require a reviewed handler override or an upstream
-fix.
+Inherited `GIT_*` variables cannot select another repository. Bash handler
+children preload the selected parser, session resolver and emitter. Project
+library declarations take priority over user adapter libraries, then packaged
+surface libraries, then shared defaults. Bootstrap libraries cannot be
+overridden. Explicit library entries apply at the `caws_source_lib` adapter
+seam; arbitrary directly sourced helper files require a reviewed handler
+override or an upstream fix.
 
 The machine dispatcher retains the presence and value of `BASH_ENV` before
 installing its handler preload. Each handler restores that retained startup fact
@@ -91,6 +91,8 @@ for downstream inspection; the adapter's own preload path is not user startup
 evidence. A genuine prior value remains visible, including an empty value or a
 prior script that changes the variable. This snapshot follows the dispatcher's
 own Bash startup and does not establish a native final-launch environment.
+Nested Bash helpers inherit the restored startup value; helpers that need
+selected adapter libraries must load them through the documented library seam.
 
 Codex maps exit 2 to a native refusal reason on stderr. Stop plain observations
 become a JSON `systemMessage`; structured decisions remain intact. The Codex
