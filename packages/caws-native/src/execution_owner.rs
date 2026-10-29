@@ -512,7 +512,8 @@ fn execute_inner(
         // attempt. Cancellation racing with spawn cannot promise zero effects;
         // every subsequent failure retains possible-spawn disposition. A forked
         // Arc<AtomicBool> would not observe later parent writes (copy-on-write).
-        live().map_err(failure)?;
+        check(&record, trusted, deadline, &cancelled).map_err(failure)?;
+        control("execution_user_spawn").map_err(|_| failure(Refusal::Control))?;
         let job_deadline = Instant::now()
             .checked_add(Duration::from_millis(record.value().limits.job_timeout_ms))
             .ok_or_else(|| failure(Refusal::JobIo))?;
@@ -1379,11 +1380,12 @@ const {{evaluatePreparedExecution}}=require(path.join(path.dirname(entry),'autho
         let writer = RefCell::new(None);
         let ordering = RefCell::new(Vec::<Value>::new());
         let control = |phase: &'static str| {
-            if !attempted.get() && phase_observation(&f, "final_validate").is_some() {
+            if !attempted.get() && phase == "execution_user_spawn" {
                 attempted.set(true);
-                let validated = phase_observation(&f, "final_validate").unwrap();
+                let validated = phase_observation(&f, "final_validate")
+                    .expect("native spawn checkpoint follows consumed final reply");
                 let state = ordering_state(&f);
-                ordering.borrow_mut().push(serde_json::json!({"event":"final-validate-completed-before-cli","nativeControlPhase":phase,"analyze":phase_observation(&f,"analyze"),"reply":validated,"state":state}));
+                ordering.borrow_mut().push(serde_json::json!({"event":"native-user-spawn-check-before-cli","nativeControlPhase":phase,"analyze":phase_observation(&f,"analyze"),"reply":validated,"state":state}));
                 let result = revoke_scope(&f, &node, &entry);
                 let after = ordering_state(&f);
                 ordering.borrow_mut().push(serde_json::json!({"event":"cli-refused-under-fence","nativeControlPhase":phase,"status":result["status"],"state":after}));
@@ -1528,11 +1530,42 @@ const {{evaluatePreparedExecution}}=require(path.join(path.dirname(entry),'autho
     }
     #[test]
     #[ignore = "requires explicit external real Source fixture, Node, and built authorizer entry"]
+    fn control_refusal_at_native_user_spawn_prevents_effect_and_releases_fence() {
+        let (node, entry, source) = config();
+        let f = Fixture::create("cancel", &node, &source);
+        let reached = Cell::new(false);
+        let control = |phase: &'static str| {
+            if phase == "execution_user_spawn" {
+                reached.set(true);
+                Err("injected carrier loss at native spawn".to_owned())
+            } else {
+                Ok(())
+            }
+        };
+        let outcome = run_with_control(&f, &node, &entry, false, &control);
+        ordering_observation(
+            "control-at-user-spawn",
+            &serde_json::json!({"checkpoint":"execution_user_spawn","reached":reached.get(),
+                "owner":owner_observation(&outcome),
+                "userMarkerPresent":f.path("lane").join("src/cancel.txt").exists(),
+                "fencePresent":f.path("caws").join("state.lock").exists()}),
+        );
+        let s = failed(outcome);
+        assert!(reached.get());
+        assert_eq!(s.reason, Refusal::Control);
+        assert!(!s.possible);
+        assert_no_custody(&s);
+        assert!(!f.path("lane").join("src/cancel.txt").exists());
+        assert!(!f.path("caws").join("state.lock").exists());
+        f.finish();
+    }
+    #[test]
+    #[ignore = "requires explicit external real Source fixture, Node, and built authorizer entry"]
     fn control_loss_while_servicing_job_stops_and_reports_possible_effects() {
         let (node, entry, source) = config();
         let f = Fixture::create("positive", &node, &source);
         let control = |phase: &'static str| match phase {
-            "execution_preparation" => Ok(()),
+            "execution_preparation" | "execution_user_spawn" => Ok(()),
             "execution_job" => Err("injected carrier loss".to_owned()),
             _ => panic!("unexpected control phase"),
         };
