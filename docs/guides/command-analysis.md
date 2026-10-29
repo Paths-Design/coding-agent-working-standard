@@ -96,6 +96,16 @@ verdict. Existing utility operand rules and the claim oracle determine whether a
 recognized write is authorized. A missing or malformed backend fails closed
 without falling back to the legacy lexer.
 
+The machine adapter's Bash preload is hook infrastructure. Its dispatcher
+retains whether `BASH_ENV` was present and its value before installing that
+preload; handler children restore this fact before downstream analysis. An unset
+value stays absent, an empty value stays present, and a genuine prior startup
+file remains an unresolved startup fact. This does not recover the environment
+before the dispatcher's own startup or qualify native execution. Installed
+consumer checks must inspect the returned decision: a hook can exit zero with
+`permissionDecision: ask`, which requests approval rather than admitting the
+command.
+
 Every recognized interpreter invocation has an independent coverage entry and an
 effect result: `readonly`, `finite-writes`, or `unresolved`. Issue-free
 responses require ordered coverage to match every interpreter row. The v2 bridge

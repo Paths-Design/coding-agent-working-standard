@@ -85,6 +85,13 @@ Explicit library entries apply at the `caws_source_lib` adapter seam; arbitrary
 directly sourced helper files require a reviewed handler override or an upstream
 fix.
 
+The machine dispatcher retains the presence and value of `BASH_ENV` before
+installing its handler preload. Each handler restores that retained startup fact
+for downstream inspection; the adapter's own preload path is not user startup
+evidence. A genuine prior value remains visible, including an empty value or a
+prior script that changes the variable. This snapshot follows the dispatcher's
+own Bash startup and does not establish a native final-launch environment.
+
 Codex maps exit 2 to a native refusal reason on stderr. Stop plain observations
 become a JSON `systemMessage`; structured decisions remain intact. The Codex
 `session-transcript.py` adapter translates visible rollout response items and

@@ -9,6 +9,7 @@ const {
   rollbackMachineRuntime,
 } = require('../../dist/init/machine-adapters');
 const { getMessageDeliveryState } = require('../../dist/store/messages-store');
+const linkedRepository = require('../fixtures/command-analysis/git-fixture.cjs');
 
 const templatesRoot = path.resolve(__dirname, '../../templates/hook-packs');
 let root;
@@ -67,6 +68,99 @@ function invoke(
     }),
   });
 }
+
+test.each(['unset', 'empty', 'file', 'self-unset', 'self-rebind'])(
+  'handler preload preserves the dispatch-entry BASH_ENV fact: %s',
+  (startup) => {
+    const sources = generationSources('startup-templates');
+    fs.appendFileSync(
+      path.join(sources, 'codex/hooks/lib/emit.sh'),
+      '\nexport CAWS_TEST_SELECTED_PRELOAD=selected\n'
+    );
+    const home = path.join(root, 'home');
+    installMachineRuntime({ home, templatesRoot: sources });
+    const observations = path.join(root, 'handler-environments');
+    const report =
+      'printf \'%s|%s|%s|%s|%s\\n\' "${BASH_ENV+x}" "${BASH_ENV-}" ' +
+      '"${CAWS_TEST_SELECTED_PRELOAD:-missing}" "${CAWS_TEST_PRIOR_STARTUP:-missing}" ' +
+      '"$(declare -F emit_additional_context >/dev/null && printf loaded)" >> "$STARTUP_OBSERVATIONS"\n';
+    const repo = repository('startup-facts', { 'first.sh': report, 'second.sh': report });
+    const prior = path.join(root, 'original startup.sh');
+    fs.writeFileSync(
+      prior,
+      'export CAWS_TEST_PRIOR_STARTUP=ran\n' +
+        'case "$0" in */first.sh|*/second.sh)\n' +
+        (startup === 'self-unset'
+          ? 'unset BASH_ENV\n'
+          : startup === 'self-rebind'
+            ? 'export BASH_ENV=/genuine/rebound-startup\n'
+            : ':\n') +
+        ';; esac\n'
+    );
+    const original = startup === 'unset' ? undefined : startup === 'empty' ? '' : prior;
+    const result = invoke(home, repo, 'startup-facts', 'pre_tool_use', {
+      BASH_ENV: original,
+      CAWS_PRIOR_BASH_ENV: undefined,
+      CAWS_PRIOR_BASH_ENV_SET: undefined,
+      CAWS_TEST_PRIOR_STARTUP: undefined,
+      CAWS_TEST_SELECTED_PRELOAD: undefined,
+      STARTUP_OBSERVATIONS: observations,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('');
+    expect(fs.readFileSync(observations, 'utf8').trim().split('\n')).toEqual([
+      `${startup === 'unset' ? '' : 'x'}|${original ?? ''}|selected|${startup === 'unset' || startup === 'empty' ? 'missing' : 'ran'}|loaded`,
+      `${startup === 'unset' ? '' : 'x'}|${original ?? ''}|selected|${startup === 'unset' || startup === 'empty' ? 'missing' : 'ran'}|loaded`,
+    ]);
+  }
+);
+
+test.each(['unset', 'empty', 'file', 'self-unset'])(
+  'actual analyzer distinguishes adapter preload from original BASH_ENV: %s',
+  (startup) => {
+    const home = path.join(root, 'home');
+    installMachineRuntime({ home, templatesRoot });
+    const analysis = path.join(root, 'analysis.json');
+    const repo = repository('analyzed-startup', {
+      'analyze.sh':
+        'printf \'%s\' \'{"command":"printf harmless"}\' | ' +
+        '"$STARTUP_TEST_NODE" "$STARTUP_TEST_CLI" hooks analyze --json ' +
+        '--worktree "$STARTUP_WORKTREE" --cwd "$STARTUP_WORKTREE" > "$STARTUP_ANALYSIS"\n',
+    });
+    const worktree = path.join(repo, '.caws/worktrees/own');
+    linkedRepository(repo, [worktree]);
+    const prior = path.join(root, 'analyzer startup.sh');
+    fs.writeFileSync(
+      prior,
+      startup === 'self-unset' ? 'case "$0" in */analyze.sh) unset BASH_ENV;; esac\n' : ':\n'
+    );
+    const result = invoke(home, repo, 'analyzed-startup', 'pre_tool_use', {
+      BASH_ENV: startup === 'unset' ? undefined : startup === 'empty' ? '' : prior,
+      ENV: undefined,
+      CAWS_PRIOR_BASH_ENV: undefined,
+      CAWS_PRIOR_BASH_ENV_SET: undefined,
+      STARTUP_TEST_NODE: process.execPath,
+      STARTUP_TEST_CLI: path.resolve(__dirname, '../../dist/index.js'),
+      STARTUP_ANALYSIS: analysis,
+      STARTUP_WORKTREE: worktree,
+    });
+    const output = JSON.parse(fs.readFileSync(analysis, 'utf8'));
+    expect(output).toEqual(
+      expect.objectContaining({ decision: startup === 'unset' ? 'allow' : 'unresolved' })
+    );
+    expect(output.reasons.filter(({ code }) => code === 'inherited-environment')).toEqual(
+      startup === 'unset'
+        ? []
+        : [
+            expect.objectContaining({
+              code: 'inherited-environment',
+              message: 'Unmodeled inherited environment BASH_ENV.',
+            }),
+          ]
+    );
+    expect(result.status).toBe(startup === 'unset' ? 0 : 2);
+  }
+);
 
 test('two same-priority advisory handlers survive as one bounded adapter result', () => {
   const home = path.join(root, 'home');
