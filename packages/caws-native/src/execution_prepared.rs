@@ -174,14 +174,17 @@ impl PreparedRecord {
         require(
             image(&e.executable)
                 && path(&e.cwd)
-                && e.argv.len() == 5
+                && (1..=256).contains(&e.argv.len())
                 && e.argv.iter().all(|s| text(s, 65536, true))
                 && e.argv.iter().map(|s| s.len() + 1).sum::<usize>() <= 65536
-                && p.kind == "bash-clean-v1"
                 && text(&p.source, 65536, true)
-                && e.argv
-                    == [&e.executable.path, "--noprofile", "--norc", "-c", &p.source]
-                        .map(str::to_owned),
+                && ((p.kind == "bash-clean-v1"
+                    && e.argv
+                        == [&e.executable.path, "--noprofile", "--norc", "-c", &p.source]
+                            .map(str::to_owned))
+                    || (p.kind == "caws-evidence-v1"
+                        && e.argv.len() >= 5
+                        && e.argv[0] == e.executable.path)),
         )?;
         require(e.environment.len() <= 1024)?;
         let mut previous: Option<&str> = None;
@@ -251,6 +254,36 @@ impl PreparedRecord {
 mod tests {
     use super::*;
     use serde_json::{Value, json};
+
+    #[test]
+    fn dedicated_writer_record_requires_direct_executable_argv_and_known_profile() {
+        let mut value = fixture();
+        value["profile"]["kind"] = json!("caws-evidence-v1");
+        value["execution"]["executable"]["path"] = json!("/generation/node");
+        value["execution"]["argv"] = json!([
+            "/generation/node",
+            "/generation/writer-main.js",
+            "specs",
+            "evidence",
+            "S"
+        ]);
+        assert_eq!(
+            PreparedRecord::decode(serde_json::to_vec(&value).unwrap())
+                .unwrap()
+                .value()
+                .profile
+                .kind,
+            "caws-evidence-v1"
+        );
+        let mut wrong = value.clone();
+        wrong["execution"]["argv"][0] = json!("/usr/bin/env");
+        assert!(PreparedRecord::decode(serde_json::to_vec(&wrong).unwrap()).is_err());
+        let mut wrong = value.clone();
+        wrong["execution"]["argv"] = json!(["/generation/node", "script.js"]);
+        assert!(PreparedRecord::decode(serde_json::to_vec(&wrong).unwrap()).is_err());
+        value["profile"]["kind"] = json!("unreviewed-writer");
+        assert!(PreparedRecord::decode(serde_json::to_vec(&value).unwrap()).is_err());
+    }
 
     pub(crate) fn fixture() -> Value {
         let state = b"{ \"future\": 1, \"future\": 2 }";

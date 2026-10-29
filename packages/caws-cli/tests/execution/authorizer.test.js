@@ -3,6 +3,8 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { spawnCoveredSync } = require('./child-coverage.cjs');
 const { authorityFixture, cleanupAll, source, hash } = require('./authority-fixture');
+const { parseExecutionEvidenceArguments } = require('../../dist/execution/authorizer');
+const { image } = require('./authority-fixture');
 afterAll(cleanupAll);
 // Native ESM import is unavailable in Jest's VM. Exercise the actual private
 // child entry with inert framed source, including the active mutant explicitly.
@@ -47,6 +49,263 @@ async function observe(f, command, utilities = []) {
   const record = source(f, command, utilities);
   return evaluatePreparedExecution(record, request(record));
 }
+
+const quoteWriterArg = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
+function evidenceRecord(f, extra = []) {
+  const argv = [
+    fs.realpathSync.native(process.execPath),
+    path.resolve(__dirname, '../../dist/execution/writer-main.js'),
+    'specs',
+    'evidence',
+    'EXEC-001',
+    '--ac',
+    'A1',
+    '--status',
+    'unchecked',
+    '--evidence-ref',
+    'node /tmp/input.js; sed -i /etc/profile $(touch foreign) ${HOME}\nquoted data',
+    ...extra,
+  ];
+  const command = argv.map(quoteWriterArg).join(' ');
+  const record = source(f, command, [argv[0], argv[1], '/usr/bin/git']);
+  record.profile.kind = 'caws-evidence-v1';
+  record.execution.executable = image(argv[0]);
+  record.execution.argv = argv;
+  record.execution.environment.push(
+    { name: 'CAWS_EXECUTION_PROJECT', value: record.projectRoot },
+    { name: 'CAWS_EXECUTION_CALLER', value: record.association.callerAnchor },
+    { name: 'CAWS_EXECUTION_SESSION', value: record.association.sessionId },
+    { name: 'CAWS_EXECUTION_THREAD', value: record.association.threadId },
+    { name: 'CAWS_EXECUTION_CALL', value: record.association.callId }
+  );
+  record.execution.environment.sort((a, b) =>
+    Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
+  );
+  return record;
+}
+
+describe('dedicated evidence consumer admission, before any writer execution', () => {
+  test('preserves the complete typed operation and inert metadata values', () => {
+    expect(
+      parseExecutionEvidenceArguments(
+        [
+          'specs',
+          'evidence',
+          'EXEC-001',
+          '--ac',
+          'A1',
+          '--status',
+          'pass',
+          '--evidence-ref',
+          'artifact\nproof',
+          '--command',
+          'node a.js; $(touch /foreign)',
+          '--exit-code',
+          '-12',
+          '--artifact-path',
+          'src/proof.txt',
+          '--commit-sha',
+          'ab'.repeat(20),
+          '--verify',
+        ],
+        'EXEC-001'
+      )
+    ).toEqual({
+      id: 'EXEC-001',
+      criterionId: 'A1',
+      status: 'pass',
+      evidenceRef: 'artifact\nproof',
+      command: 'node a.js; $(touch /foreign)',
+      exitCode: -12,
+      artifactPath: 'src/proof.txt',
+      commitSha: 'ab'.repeat(20),
+      verify: true,
+    });
+  });
+  test.each(['pass', 'fail', 'unchecked'])(
+    'records the explicit %s claim without inventing verification',
+    (status) => {
+      expect(
+        parseExecutionEvidenceArguments(
+          [
+            'specs',
+            'evidence',
+            'EXEC-001',
+            '--ac',
+            'A1',
+            '--status',
+            status,
+            '--evidence-ref',
+            'self-reported',
+          ],
+          'EXEC-001'
+        )
+      ).toEqual({
+        id: 'EXEC-001',
+        criterionId: 'A1',
+        status,
+        evidenceRef: 'self-reported',
+        verify: false,
+      });
+    }
+  );
+  test.each(
+    [
+      ['specs', 'close', 'EXEC-001'],
+      ['specs', 'evidence', 'FOREIGN-001'],
+      ['specs', 'evidence', 'EXEC-001', '--ac', 'A1', '--status', 'pass'],
+      [
+        'specs',
+        'evidence',
+        'EXEC-001',
+        '--ac',
+        'A1',
+        '--status',
+        'unknown',
+        '--evidence-ref',
+        'proof',
+      ],
+      [
+        'specs',
+        'evidence',
+        'EXEC-001',
+        '--ac',
+        'bad/criterion',
+        '--status',
+        'pass',
+        '--evidence-ref',
+        'proof',
+      ],
+      ['specs', 'evidence', 'EXEC-001', '--ac', 'A1', '--status', 'pass', '--evidence-ref', '  '],
+      ['specs', 'evidence', 'EXEC-001', '--ac', 'A1', '--status', 'pass', '--evidence-ref'],
+    ].map((args) => [args])
+  )('refuses incomplete or foreign operation %j', (args) => {
+    expect(() => parseExecutionEvidenceArguments(args, 'EXEC-001')).toThrow();
+  });
+  test('admits exact pinned literal argv while quoted program names remain inert metadata', () => {
+    const f = authorityFixture();
+    const record = evidenceRecord(f);
+    const reply = evaluatePreparedExecution(record, request(record));
+    expect(reply.decision).toBe('allow');
+    expect(reply.reasonCodes).toEqual([]);
+    expect(fs.readFileSync(f.specPath, 'utf8')).not.toContain('evidence_ref');
+    expect(fs.existsSync(path.join(f.caws, 'events.jsonl'))).toBe(false);
+  });
+  test.each([
+    [
+      'compound',
+      (r) => {
+        r.profile.source += '; printf bad > ../foreign-marker';
+      },
+    ],
+    [
+      'redirect',
+      (r) => {
+        r.profile.source += ' > ../foreign-marker';
+      },
+    ],
+    [
+      'background',
+      (r) => {
+        r.profile.source += ' &';
+      },
+    ],
+    [
+      'argv drift',
+      (r) => {
+        r.execution.argv[r.execution.argv.length - 1] = 'different metadata';
+      },
+    ],
+    [
+      'callee drift',
+      (r) => {
+        r.execution.argv[1] = '/tmp/foreign-writer.js';
+      },
+    ],
+    [
+      'image drift',
+      (r) => {
+        r.profile.utilities[1].sha256 = '0'.repeat(64);
+      },
+    ],
+    [
+      'actor drift',
+      (r) => {
+        r.execution.environment.find((e) => e.name === 'CAWS_EXECUTION_THREAD').value = 'foreign';
+      },
+    ],
+    [
+      'extra startup control',
+      (r) => {
+        r.execution.environment.push({ name: 'NODE_OPTIONS', value: '--require=/tmp/payload' });
+      },
+    ],
+  ])('holds %s without publishing authority state', (_label, change) => {
+    const f = authorityFixture();
+    const record = evidenceRecord(f);
+    const before = fs.readFileSync(f.specPath);
+    change(record);
+    record.execution.environment.sort((a, b) =>
+      Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
+    );
+    const reply = evaluatePreparedExecution(record, request(record));
+    expect(reply.decision).toBe('unresolved');
+    expect(reply.reasonCodes).toEqual(['unsupported_profile']);
+    expect(fs.readFileSync(f.specPath)).toEqual(before);
+    expect(fs.existsSync(path.join(f.root, 'foreign-marker'))).toBe(false);
+  });
+  test('the private writer is not admitted through the generic shell profile', () => {
+    const f = authorityFixture();
+    const record = evidenceRecord(f);
+    record.profile.kind = 'bash-clean-v1';
+    record.execution.executable = image('/bin/bash');
+    record.execution.argv = [
+      record.execution.executable.path,
+      '--noprofile',
+      '--norc',
+      '-c',
+      record.profile.source,
+    ];
+    const reply = evaluatePreparedExecution(record, request(record));
+    expect(reply.decision).toBe('unresolved');
+    expect(reply.reasonCodes).toEqual(['unsupported_profile']);
+  });
+  test.each([
+    ['--test-nodeid', 'tests/project.test.js::runs'],
+    ['--status', 'waived'],
+    ['--ac', 'A2'],
+    ['--verify', '--verify'],
+    ['--artifact-path', '../foreign'],
+    ['--artifact-path', './src/proof.txt'],
+    ['--artifact-path', '/foreign'],
+    ['--artifact-path', 'src/proof\n.txt'],
+    ['--commit-sha', '--help'],
+    ['--commit-sha', 'A'.repeat(40)],
+    ['--exit-code', '1.5'],
+    ['--exit-code', '9007199254740992'],
+    ['--evidence-ref', 'duplicate'],
+    ['--command', 'contains\0nul'],
+    ['--unknown', 'value'],
+  ])('closed grammar refuses %s additions', (...addition) => {
+    expect(() =>
+      parseExecutionEvidenceArguments(
+        [
+          'specs',
+          'evidence',
+          'EXEC-001',
+          '--ac',
+          'A1',
+          '--status',
+          'pass',
+          '--evidence-ref',
+          'proof',
+          ...addition,
+        ],
+        'EXEC-001'
+      )
+    ).toThrow();
+  });
+});
 describe('private authorizer component observations, without USER execution', () => {
   test('rejects reader aliases to writers or shells while accepting an alias to the actual reader', async () => {
     const f = authorityFixture();

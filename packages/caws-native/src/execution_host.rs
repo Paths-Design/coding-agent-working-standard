@@ -271,6 +271,12 @@ mod macos {
         Ok(pid as u32)
     }
     impl ProducerPeer {
+        pub(crate) fn pid(&self) -> u32 {
+            self.process.pid
+        }
+        pub(crate) fn birth(&self) -> (u64, u64) {
+            (self.process.seconds, self.process.microseconds)
+        }
         pub(crate) fn capture(
             fd: std::os::fd::BorrowedFd<'_>,
             pin: &ProgramImage,
@@ -547,6 +553,12 @@ pub(crate) struct ProducerPeer {
 }
 #[cfg(not(target_os = "macos"))]
 impl ProducerPeer {
+    pub(crate) fn pid(&self) -> u32 {
+        match self.never {}
+    }
+    pub(crate) fn birth(&self) -> (u64, u64) {
+        match self.never {}
+    }
     pub(crate) fn capture(
         _: std::os::fd::BorrowedFd<'_>,
         _: &ProgramImage,

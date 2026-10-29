@@ -29,7 +29,7 @@ export interface PreparedExecutionV1 {
     readonly stdinBase64: string;
   };
   readonly profile: {
-    readonly kind: 'bash-clean-v1';
+    readonly kind: 'bash-clean-v1' | 'caws-evidence-v1';
     readonly source: string;
     /** Captured utility images; a manifest entry does not admit arbitrary programs. */
     readonly utilities: readonly ProgramImage[];

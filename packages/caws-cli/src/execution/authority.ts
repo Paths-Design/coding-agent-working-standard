@@ -16,7 +16,14 @@ import {
 import { parseJsonSource } from '../runtime/json-custody';
 import { repoRootFromGitCommonDir } from '../store/repo-root';
 import { inside } from '../shell/analysis/policies';
-import type { ExecutionReasonCode, PreparedExecutionV1 } from './prepared';
+import type { ExecutionReasonCode } from './prepared';
+
+/** Authority inputs only; authenticated launch provenance belongs to the native owner. */
+export interface ExecutionAuthorityContext {
+  readonly association: { readonly callerAnchor: string; readonly threadId: string };
+  readonly projectRoot: string;
+  readonly execution: { readonly cwd: string };
+}
 
 export class ExecutionAuthorityUnavailable extends Error {
   constructor(readonly reason: ExecutionReasonCode = 'context_unresolved') {
@@ -160,7 +167,7 @@ function callerProject(caller: string): { canonical: string; checkout: string } 
  * dashboard loaders. The final call runs while the Rust parent owns state.lock.
  * The native private producer, not submitted JSON, establishes caller provenance.
  */
-export function readExecutionAuthority(record: PreparedExecutionV1): ExecutionAuthority {
+export function readExecutionAuthority(record: ExecutionAuthorityContext): ExecutionAuthority {
   try {
     const caller = fs.realpathSync.native(record.association.callerAnchor);
     requireValue(caller === record.association.callerAnchor);

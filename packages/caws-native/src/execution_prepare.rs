@@ -149,7 +149,7 @@ fn sandbox_anchor(uri: &str) -> Result<String, PrepareRefusal> {
     let text = std::str::from_utf8(&bytes).map_err(|_| PrepareRefusal::Context)?;
     physical_dir(text)
 }
-fn program(
+pub(crate) fn program(
     path: &str,
     check: &impl Fn() -> Result<(), PrepareRefusal>,
 ) -> Result<ProgramImage, PrepareRefusal> {
@@ -254,6 +254,7 @@ fn resolve(
     name: &str,
     dirs: &[String],
     node: &ProgramImage,
+    authorizer: &ProgramImage,
     check: &impl Fn() -> Result<(), PrepareRefusal>,
 ) -> Result<ProgramImage, PrepareRefusal> {
     check()?;
@@ -296,7 +297,14 @@ fn resolve(
         "sed", "rg", "grep", "cat", "head", "tail", "wc", "ls", "cut", "tr", "uniq", "printf",
         "echo", "pwd", "true", "false", "test", "[",
     ];
-    if requested == "node" {
+    let writer = Path::new(&authorizer.path)
+        .parent()
+        .ok_or(PrepareRefusal::Utility)?
+        .join("writer-main.js");
+    if Path::new(name) == writer && Path::new(&chosen) == writer {
+        // The supported writer's one file argument, not a general file callee.
+    } else if name == "/usr/bin/git" && chosen == "/usr/bin/git" && protected_system(&chosen) {
+    } else if requested == "node" {
         if chosen != node.path {
             return Err(PrepareRefusal::Utility);
         }
@@ -383,6 +391,9 @@ pub(crate) fn prepare(
     pin(host_image, &check).map_err(failure)?;
     pin(&pins.node, &check).map_err(failure)?;
     pin(&pins.entry, &check).map_err(failure)?;
+    if let Some(writer) = &pins.writer {
+        pin(writer, &check).map_err(failure)?;
+    }
     pin(discovery, &check).map_err(failure)?;
     let caller = physical_dir(&call.caller_anchor).map_err(failure)?;
     if caller != call.caller_anchor {
@@ -411,7 +422,13 @@ pub(crate) fn prepare(
             "callId":call.call_id,"callerAnchor":caller,"serverEnvironmentId":call.server_environment_id},
         "projectRoot":project,
         "execution":{"executable":image_json(&bash),"argv":[bash.path,"--noprofile","--norc","-c",call.source],
-            "cwd":cwd,"environment":[{"name":"LC_ALL","value":"C"},{"name":"PATH","value":path}],"stdinBase64":""},
+            "cwd":cwd,"environment":[
+                {"name":"CAWS_EXECUTION_CALL","value":call.call_id},
+                {"name":"CAWS_EXECUTION_CALLER","value":caller},
+                {"name":"CAWS_EXECUTION_PROJECT","value":project},
+                {"name":"CAWS_EXECUTION_SESSION","value":call.session_id},
+                {"name":"CAWS_EXECUTION_THREAD","value":call.thread_id},
+                {"name":"LC_ALL","value":"C"},{"name":"PATH","value":path}],"stdinBase64":""},
         "profile":{"kind":"bash-clean-v1","source":call.source,"utilities":[]},
         "sandbox":{"stateBase64":STANDARD.encode(state),"stateSha256":format!("{:x}",Sha256::digest(state)),
             "launcher":image_json(host_image),"environmentAnchor":environment_anchor},
@@ -443,6 +460,7 @@ pub(crate) fn prepare(
     check().map_err(failure)?;
     let grace = TerminationGrace::new(Duration::from_millis(1000))
         .map_err(|_| failure(PrepareRefusal::Deadline))?;
+    control("execution_discovery_spawn").map_err(|_| failure(PrepareRefusal::Control))?;
     let child = command
         .spawn()
         .map_err(|_| failure(PrepareRefusal::DiscoverySpawn))?;
@@ -484,7 +502,14 @@ pub(crate) fn prepare(
     let mut seen = BTreeSet::new();
     let mut utilities = Vec::new();
     for name in observed.commands() {
-        let utility = resolve(name, &dirs, &pins.node, &check).map_err(failure)?;
+        let writer = Path::new(&pins.entry.path)
+            .parent()
+            .ok_or_else(|| failure(PrepareRefusal::Utility))?
+            .join("writer-main.js");
+        if observed.execution().is_none() && (name == "/usr/bin/git" || Path::new(name) == writer) {
+            return Err(failure(PrepareRefusal::Utility));
+        }
+        let utility = resolve(name, &dirs, &pins.node, &pins.entry, &check).map_err(failure)?;
         if seen.insert(utility.path.clone()) {
             utilities.push(image_json(&utility));
         }
@@ -493,6 +518,49 @@ pub(crate) fn prepare(
         }
     }
     let mut final_value = draft;
+    if let Some(execution) = observed.execution() {
+        let writer = Path::new(&pins.entry.path)
+            .parent()
+            .ok_or_else(|| failure(PrepareRefusal::Utility))?
+            .join("writer-main.js");
+        let writer_pin = pins
+            .writer
+            .as_ref()
+            .ok_or_else(|| failure(PrepareRefusal::Image))?;
+        if execution.argv[0] != pins.node.path
+            || Path::new(&execution.argv[1]) != writer
+            || Path::new(&writer_pin.path) != writer
+            || execution.argv[2] != "specs"
+            || execution.argv[3] != "evidence"
+        {
+            return Err(failure(PrepareRefusal::Utility));
+        }
+        // Discovery is advisory. Both Source phases must prove the exact
+        // source-to-argv relation and writer authority before this can execute.
+        final_value["profile"]["kind"] = json!("caws-evidence-v1");
+        final_value["execution"]["executable"] = image_json(&pins.node);
+        final_value["execution"]["argv"] = json!(execution.argv);
+        for env in final_value["execution"]["environment"]
+            .as_array_mut()
+            .unwrap()
+        {
+            if env["name"] == "PATH" {
+                env["value"] = json!("/usr/bin:/bin");
+            }
+        }
+        for name in [
+            &pins.node.path,
+            writer
+                .to_str()
+                .ok_or_else(|| failure(PrepareRefusal::Utility))?,
+            "/usr/bin/git",
+        ] {
+            let utility = resolve(name, &dirs, &pins.node, &pins.entry, &check).map_err(failure)?;
+            if seen.insert(utility.path.clone()) {
+                utilities.push(image_json(&utility));
+            }
+        }
+    }
     final_value["profile"]["utilities"] = Value::Array(utilities);
     let final_bytes =
         serde_json::to_vec(&final_value).map_err(|_| failure(PrepareRefusal::Record))?;
@@ -547,8 +615,8 @@ mod tests {
             path: "/bin/node".into(),
             sha256: "0".repeat(64),
         };
-        assert!(resolve("foo/bar", &["/usr/bin".into()], &node, &|| Ok(())).is_err());
-        assert!(resolve("", &["/usr/bin".into()], &node, &|| Ok(())).is_err());
+        assert!(resolve("foo/bar", &["/usr/bin".into()], &node, &node, &|| Ok(())).is_err());
+        assert!(resolve("", &["/usr/bin".into()], &node, &node, &|| Ok(())).is_err());
     }
     #[test]
     fn cancellation_and_carrier_loss_refuse_before_io() {
@@ -765,6 +833,7 @@ process.stdin.resume();
             HostContext::capture(&host_image, &deadline).unwrap()
         };
         let pins = PinnedAuthorizer {
+            writer: None,
             node: image(&node),
             entry: image(&entry),
         };

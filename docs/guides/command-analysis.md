@@ -583,12 +583,13 @@ It accepts the existing authorizer `analyze` frame over a draft prepared record
 whose utility manifest is empty. Its distinct
 `caws.execution.program-discovery.v1` reply contains `invocationId`, the draft's
 `executionDigest`, `status` (`observed` or `unresolved`), unique lexical
-`commands` and closed `reasonCodes`. The bounded analyzer, initial bindings and
-`command` wrapper handling are shared with final authorization. Bare builtins
-are omitted; utility spellings are not resolved images or trusted hashes. At
-most 256 candidates of 4096 UTF-8 bytes each are observed; excessive count or
-encoded output produces an unresolved result with an empty list. Replies fit the
-same 64 KiB bound and contain no permission or authority revision.
+`commands`, a nullable typed `execution` plan and closed `reasonCodes`. The
+bounded analyzer, initial bindings and `command` wrapper handling are shared
+with final authorization. Bare builtins are omitted; utility spellings are not
+resolved images or trusted hashes. At most 256 candidates of 4096 UTF-8 bytes
+each are observed; excessive count or encoded output produces an unresolved
+result with an empty list. Replies fit the same 64 KiB bound and contain no
+permission or authority revision.
 
 The native producer must independently resolve and hash those candidates,
 deduplicate physical images and freeze the final record. Its execution digest
@@ -599,6 +600,60 @@ cannot replace either phase, establish native origin or execute submitted
 expansions. The owner's original monotonic preparation budget includes this
 child; discovery does not start a new budget. Candidate names are private
 metadata, not default diagnostic output.
+
+### Dedicated evidence consumer
+
+`caws-execution --config <absolute-config>` implements a restricted MCP adapter.
+It requires a host-created local socket duplicated to stdin and stdout, with
+kernel peer process identity matching the live pinned direct host. A pipe, an
+asserted caller object or a pinned parent without authenticated input is
+insufficient. The configuration pins the native, host, Node, authorizer,
+discovery and writer images, and an exhaustive package/dependency generation
+manifest. The manifest resides outside its physical generation root. Missing,
+added, replaced or aliased generation files refuse. Protecting that generation
+from concurrent untrusted writes and proving the actual sandbox route are
+deployment obligations.
+
+For one literal invocation of the pinned Node and `writer-main.js` entry,
+discovery returns `execution: {kind: 'caws-evidence-v1', argv: [...]}`. This
+plan is advisory. Native preparation freezes the direct executable and argv with
+the original source in the prepared digest, and both authorizer phases compare
+the literal source with that exact invocation. This elaboration explicitly
+selects the restricted consumer; it does not preserve the broader effects of the
+general CLI index. Compounds, redirects, substitutions, arbitrary file callees,
+unknown or repeated options, test citations and foreign specs remain held.
+Quoted evidence references and command descriptions remain inert data.
+
+The consumer accepts `specs evidence <owned-active-spec>` with `--ac`,
+`--status pass|fail|unchecked`, `--evidence-ref`, and optional `--command`,
+`--exit-code`, `--artifact-path`, `--commit-sha` and `--verify`. Verification
+requires a normalized relative artifact path and a full commit identity. It
+checks only that requested artifact/commit citation; it establishes neither test
+success nor semantic satisfaction of the criterion. The normal CLI verifier also
+limits a record-time check to its requested criterion, while retaining that
+criterion's declared test behavior.
+
+Only this trusted direct child borrows descriptor 3 and the lifecycle fence
+through completion. Its actor derives from the authenticated association. It
+revalidates ownership and exact spec bytes under the held fence, then calls the
+sole `recordSpecEvidence` transaction and reads back the evidence entry and
+matching `ac_recorded` event. It does not reacquire the fence, run project
+tests, discover an actor through legacy process/session helpers, or auto-commit
+through project Git configuration. Generic user execution receives no private
+descriptor and releases the launch fence after spawn.
+
+The result reports `auditCommit: 'pending'`, the exact spec digest and the
+supported continuation `caws specs commit <id>`. The agent must execute that
+normal governed command, including its project hooks, and verify a clean
+canonical tree before merge and closure. Recording alone is unfinished work. The
+inherited execution environment is closed; the consumer separately checks the
+numeric macOS startup field added by the operating system.
+
+This route is source implementation. Genuine host-channel authentication, worker
+descriptor survival through the actual sandbox launcher, useful writer
+admission, foreign-write refusal, cancellation, full workflow, native canary and
+rollback require their own observed qualification. The reduced hook producer
+remains held and native adoption remains unqualified until those checks pass.
 
 Authority derives from the verified native caller coordinate, actual thread
 owner, canonical policy, active spec and unique worktree or bridge binding.
@@ -815,7 +870,8 @@ producing admission, but does not qualify a rollout that blocks benign commands.
 Native adoption requires demonstrated execution-contract support and an isolated
 canary before replacing the deployed runtime.
 
-The declared analysis topology contains three suites:
+The declared analysis topology contains four suites:
+`tests/shell/caws-read-metadata.test.js`,
 `tests/shell/command-analysis.test.js`,
 `tests/shell/interpreter-effects.test.js` and
 `tests/shell/mutation-view.test.js`. Together they check bounded decisions,
@@ -829,6 +885,7 @@ cd packages/caws-cli
 npm run build
 node ../../node_modules/jest/bin/jest.js --config jest.config.js \
   --selectProjects caws-cli --runInBand --runTestsByPath \
+  tests/shell/caws-read-metadata.test.js \
   tests/shell/command-analysis.test.js \
   tests/shell/interpreter-effects.test.js \
   tests/shell/mutation-view.test.js \
@@ -842,7 +899,7 @@ node ../../node_modules/jest/bin/jest.js --config jest.config.js \
 npm run mutation:run:analysis
 ```
 
-The mutation command uses `mutation-policy.json` and the declared three-suite
+The mutation command uses `mutation-policy.json` and the declared four-suite
 topology through `stryker.analysis.conf.js`. It must cover all nine registered
 sources: `analyze.ts`, `caws-read-metadata.ts`, `git-context.ts`,
 `inspection-prefix.ts`, `inspection-profiles.ts`, `interpreter-effects.ts`,
@@ -855,6 +912,13 @@ verdicts and unallowed exclusions do not pass. A single-file diagnostic,
 aggregate score, narrowed test configuration or Stryker process exit zero does
 not establish this full contract. Retain raw commands, actual statuses, source
 and test identities, failed attempts and meaningful survivor analysis.
+
+The execution campaign retains the original six targets (`authority.ts`,
+`authorizer.ts`, `fence.ts`, `prepared-schema.ts`, `protocol.ts` and
+`store/lifecycle-lock.ts`) and adds the dedicated `execution/writer.ts` consumer
+as a seventh target at the same per-file floor. Its declared suites include the
+writer's inherited-fence, hostile-helper and exact publication checks. A passing
+consumer fixture or inventory validator does not establish mutation scores.
 
 Use repository-installed Bats for `tests/hooks/bats/worktree-pin-guard.bats` and
 the mandatory guard fixtures in isolated HOME/CAWS_HOME. Check benign admission,

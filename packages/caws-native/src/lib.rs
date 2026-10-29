@@ -16,6 +16,7 @@ mod execution_ingress;
 mod execution_owner;
 mod execution_prepare;
 mod execution_prepared;
+pub mod execution_server;
 pub mod invocation_project;
 pub mod monotonic_deadline;
 pub mod owned_group;

@@ -46,6 +46,48 @@ function observation(result) {
   return value;
 }
 describe('private nonexecuting draft program discovery', () => {
+  test('lowers only the literal dedicated consumer and retains quoted metadata as argv data', () => {
+    const f = authorityFixture();
+    const argv = [
+      require('node:fs').realpathSync.native(process.execPath),
+      path.resolve(__dirname, '../../dist/execution/writer-main.js'),
+      'specs',
+      'evidence',
+      'EXEC-001',
+      '--ac',
+      'A1',
+      '--status',
+      'unchecked',
+      '--evidence-ref',
+      'node /tmp/read.js; $(touch /foreign)\n{braces}',
+    ];
+    const quoted = argv.map((value) => "'" + value.replaceAll("'", "'\\''") + "'").join(' ');
+    source(f, quoted);
+    for (const [name, value] of Object.entries({
+      CAWS_EXECUTION_PROJECT: f.root,
+      CAWS_EXECUTION_CALLER: f.lane,
+      CAWS_EXECUTION_SESSION: f.record.association.sessionId,
+      CAWS_EXECUTION_THREAD: f.record.association.threadId,
+      CAWS_EXECUTION_CALL: f.record.association.callId,
+    }))
+      f.record.execution.environment.push({ name, value });
+    f.record.execution.environment.sort((a, b) =>
+      Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
+    );
+    const result = observation(run(f.record));
+    expect(result.status).toBe('observed');
+    expect(result.execution).toEqual({ kind: 'caws-evidence-v1', argv });
+    expect(result.commands).toEqual(
+      [argv[0], argv[1], '/usr/bin/git'].sort((a, b) =>
+        Buffer.compare(Buffer.from(a), Buffer.from(b))
+      )
+    );
+    expect(fs.readFileSync(f.specPath, 'utf8')).not.toContain('evidence_ref');
+    source(f, quoted + '; printf bad > ../foreign-marker');
+    const refused = observation(run(f.record));
+    expect(refused.execution).toBeNull();
+    expect(fs.existsSync(path.join(f.root, 'foreign-marker'))).toBe(false);
+  });
   test('observes finite lexical utilities through assignments and command wrappers exactly once', () => {
     const f = authorityFixture();
     source(
@@ -59,6 +101,7 @@ describe('private nonexecuting draft program discovery', () => {
       executionDigest: request(f.record).executionDigest,
       status: 'observed',
       commands: ['/bin/cat', 'sed'],
+      execution: null,
       reasonCodes: [],
     });
     expect(fs.readdirSync(path.join(f.lane, 'src'))).toEqual([]);
@@ -158,6 +201,7 @@ describe('private nonexecuting draft program discovery', () => {
       executionDigest: '0'.repeat(64),
       status: 'observed',
       commands: ['a'.repeat(65536)],
+      execution: null,
       reasonCodes: [],
     };
     const frame = encodeProgramDiscoveryReply(reply);

@@ -56,6 +56,7 @@ pub(crate) struct TrustedInvocation {
 pub(crate) struct PinnedAuthorizer {
     pub node: ProgramImage,
     pub entry: ProgramImage,
+    pub writer: Option<ProgramImage>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -201,6 +202,32 @@ fn images(
     pins: &PinnedAuthorizer,
     live: &impl Fn() -> Result<(), Refusal>,
 ) -> Result<(), Refusal> {
+    if record.value().profile.kind == "caws-evidence-v1" {
+        let e = &record.value().execution;
+        let writer = Path::new(&pins.entry.path)
+            .parent()
+            .ok_or(Refusal::Image)?
+            .join("writer-main.js");
+        let pinned_writer = pins.writer.as_ref().ok_or(Refusal::Image)?;
+        if e.executable.path != pins.node.path
+            || e.executable.sha256 != pins.node.sha256
+            || e.argv.len() < 5
+            || e.argv[0] != pins.node.path
+            || Path::new(&e.argv[1]) != writer
+            || e.argv[2] != "specs"
+            || e.argv[3] != "evidence"
+            || Path::new(&pinned_writer.path) != writer
+            || !record
+                .value()
+                .profile
+                .utilities
+                .iter()
+                .any(|u| u.path == pinned_writer.path && u.sha256 == pinned_writer.sha256)
+        {
+            return Err(Refusal::Image);
+        }
+        image_valid(pinned_writer, live)?;
+    }
     image_valid(&pins.node, live)?;
     image_valid(&pins.entry, live)?;
     image_valid(&record.value().execution.executable, live)?;
@@ -381,6 +408,7 @@ fn execute_inner(
         record.value().limits.termination_grace_ms,
     ))
     .map_err(|_| failure(Refusal::InvalidDeadline))?;
+    let writer = record.value().profile.kind == "caws-evidence-v1";
     let live = || {
         check(&record, trusted, deadline, &cancelled)?;
         control("execution_preparation").map_err(|_| Refusal::Control)
@@ -431,6 +459,12 @@ fn execute_inner(
         }
         configure_private_child(&mut command)
             .map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
+        if writer {
+            // This dedicated pinned consumer borrows the same fence through
+            // completion. Generic USER receives no private descriptors.
+            configure_child_fds(&mut command, &[(fence.file().as_fd(), 3)])
+                .map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
+        }
         private_exec_check(
             &mut command,
             deadline,
@@ -463,13 +497,17 @@ fn execute_inner(
             Err(problem)
         }
         Ok((child, job_deadline)) => {
-            let child = release_after_spawn(child, fence, grace)?;
+            let (child, mut held_fence) = if writer {
+                (child, Some(fence))
+            } else {
+                (release_after_spawn(child, fence, grace)?, None)
+            };
             // The preparation deadline does not constrain the job lifetime.
             // Liveness/cancellation of the private carrier still does.
             let job_control = |_: &'static str| {
                 control("execution_job").map_err(|_| "execution control unavailable".to_owned())
             };
-            execution_child::service_child(
+            let serviced = execution_child::service_child(
                 child,
                 record.stdin(),
                 job_deadline,
@@ -479,14 +517,36 @@ fn execute_inner(
                 record.value().limits.max_output_bytes,
                 grace,
                 &job_control,
-            )
-            .map_err(|e| OwnerFailure {
-                reason: Refusal::JobIo,
-                child: None,
-                fence: None,
-                job_failure: Some(e),
-                user_spawn_may_have_occurred: true,
-            })
+            );
+            let mut serviced = match serviced {
+                Ok(done) => Ok(done),
+                Err(e) => Err(OwnerFailure {
+                    reason: Refusal::JobIo,
+                    child: None,
+                    fence: None,
+                    job_failure: Some(e),
+                    user_spawn_may_have_occurred: true,
+                }),
+            };
+            if let Some(mut fence) = held_fence.take() {
+                let retained = serviced
+                    .as_ref()
+                    .err()
+                    .and_then(|f| f.job_failure.as_ref())
+                    .is_some_and(|j| j.retained_child.is_some());
+                if retained {
+                    serviced.as_mut().err().unwrap().fence = Some(fence);
+                } else if fence.try_release().is_err() {
+                    let mut problem = serviced
+                        .err()
+                        .unwrap_or_else(|| failure(Refusal::FenceRelease));
+                    problem.reason = Refusal::FenceRelease;
+                    problem.user_spawn_may_have_occurred = true;
+                    problem.fence = Some(fence);
+                    return Err(problem);
+                }
+            }
+            serviced
         }
     }
 }
@@ -805,6 +865,7 @@ process.stdin.resume();
             same_host_macos_verified: true,
         };
         let pins = PinnedAuthorizer {
+            writer: None,
             node: image(node.into()),
             entry: image(entry.into()),
         };

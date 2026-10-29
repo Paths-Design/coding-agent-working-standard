@@ -52,6 +52,8 @@ struct Trusted {
 struct Pins {
     node: ProgramImage,
     entry: ProgramImage,
+    #[serde(default)]
+    writer: Option<ProgramImage>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -134,6 +136,12 @@ fn decode(bytes: &[u8]) -> io::Result<(Frame, PreparedRecord, MonotonicDeadline)
         || !hex(&frame.prepared_sha256, 64)
         || !valid_image(&frame.authorizer.node)
         || !valid_image(&frame.authorizer.entry)
+        || frame.authorizer.writer.as_ref().is_some_and(|writer| {
+            !valid_image(writer)
+                || !shape
+                    .pointer("/authorizer/writer")
+                    .is_some_and(serde_json::Value::is_object)
+        })
         || frame.prepared_base64.len() > 4 * RECORD_LIMIT.div_ceil(3)
     {
         return Err(invalid());
@@ -172,6 +180,35 @@ fn decode(bytes: &[u8]) -> io::Result<(Frame, PreparedRecord, MonotonicDeadline)
     }
     let deadline = MonotonicDeadline::receive(frame.deadline).map_err(|_| invalid())?;
     Ok((frame, record, deadline))
+}
+/// Encode only a native preparer's retained record and association. The
+/// receiver independently authenticates the producer and all coordinates.
+pub(crate) fn encode_startup(
+    prepared: &crate::execution_prepare::PreparedExecution,
+    pins: &PinnedAuthorizer,
+    deadline: &MonotonicDeadline,
+) -> io::Result<Vec<u8>> {
+    use serde_json::json;
+    let mut random = [0u8; 16];
+    std::fs::File::open("/dev/urandom")?.read_exact(&mut random)?;
+    let nonce: String = random.iter().map(|b| format!("{b:02x}")).collect();
+    let a = &prepared.association;
+    let image = |p: &ProgramImage| json!({"path":p.path,"sha256":p.sha256});
+    let body = serde_json::to_vec(&json!({
+        "schema":"caws.execution.startup.v1", "nonce":nonce,
+        "preparedBase64":STANDARD.encode(prepared.record.original()),
+        "preparedSha256":format!("{:x}",Sha256::digest(prepared.record.original())),
+        "trusted":{"invocationId":a.invocation_id,"sessionId":a.session_id,
+            "threadId":a.thread_id,"callId":a.call_id,"callerAnchor":a.caller_anchor,
+            "serverEnvironmentId":a.server_environment_id,"projectRoot":a.project_root,
+            "environmentAnchor":a.environment_anchor},
+        "authorizer":{"node":image(&pins.node),"entry":image(&pins.entry),"writer":pins.writer.as_ref().map(image)},
+        "deadline":deadline.envelope()
+    })).map_err(|_| invalid())?;
+    decode(&body)?;
+    let mut bytes = (body.len() as u32).to_be_bytes().to_vec();
+    bytes.extend(body);
+    Ok(bytes)
 }
 fn read_exact_deadline(
     stream: &mut UnixStream,
@@ -262,6 +299,7 @@ pub(crate) fn receive_startup(
         pins: PinnedAuthorizer {
             node: frame.authorizer.node,
             entry: frame.authorizer.entry,
+            writer: frame.authorizer.writer,
         },
         deadline,
         control,
@@ -316,6 +354,40 @@ mod tests {
         let mut frame = (body.len() as u32).to_be_bytes().to_vec();
         frame.extend(body);
         frame
+    }
+    #[test]
+    fn producer_frame_preserves_original_bytes_and_refuses_association_disagreement() {
+        let (value, original) = fixture();
+        let (frame, record, deadline) = decode(&serde_json::to_vec(&value).unwrap()).unwrap();
+        let t = frame.trusted;
+        let mut prepared = crate::execution_prepare::PreparedExecution {
+            record,
+            association: crate::execution_prepare::PreparedAssociation {
+                invocation_id: t.invocation_id,
+                session_id: t.session_id,
+                thread_id: t.thread_id,
+                call_id: t.call_id,
+                caller_anchor: t.caller_anchor,
+                server_environment_id: t.server_environment_id,
+                project_root: t.project_root,
+                environment_anchor: t.environment_anchor,
+            },
+        };
+        let pins = PinnedAuthorizer {
+            node: frame.authorizer.node,
+            entry: frame.authorizer.entry,
+            writer: None,
+        };
+        let bytes = encode_startup(&prepared, &pins, &deadline).unwrap();
+        assert_eq!(
+            u32::from_be_bytes(bytes[..4].try_into().unwrap()) as usize,
+            bytes.len() - 4
+        );
+        let (_, decoded, observed) = decode(&bytes[4..]).unwrap();
+        assert_eq!(decoded.original(), original);
+        assert_eq!(observed.envelope(), deadline.envelope());
+        prepared.association.call_id = "changed".into();
+        assert!(encode_startup(&prepared, &pins, &deadline).is_err());
     }
     #[test]
     fn strict_startup_preserves_original_and_rejects_association_digest_and_schema_aliases() {

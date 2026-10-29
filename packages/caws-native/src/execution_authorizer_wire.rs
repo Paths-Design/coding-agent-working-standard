@@ -890,6 +890,21 @@ impl DiscoveryRequest {
         }
         let reply: DiscoveryReply =
             serde_json::from_slice(payload).map_err(|_| WireError::Schema)?;
+        if let Some(execution) = reply.execution.as_ref() {
+            if !object
+                .get("execution")
+                .is_some_and(serde_json::Value::is_object)
+                || execution.kind != "caws-evidence-v1"
+                || !(5..=128).contains(&execution.argv.len())
+                || execution
+                    .argv
+                    .iter()
+                    .any(|a| a.len() > 65536 || a.contains('\0'))
+                || execution.argv.iter().map(|a| a.len() + 1).sum::<usize>() > 65536
+            {
+                return Err(WireError::Schema);
+            }
+        }
         if reply.protocol != DISCOVERY_PROTOCOL
             || reply.invocation_id != self.request.envelope.invocation_id
             || reply.execution_digest != self.request.envelope.execution_digest
@@ -923,7 +938,9 @@ impl DiscoveryRequest {
                 return Err(WireError::Schema);
             }
             DiscoveryStatus::Unresolved
-                if !reply.commands.is_empty() || reply.reason_codes.is_empty() =>
+                if !reply.commands.is_empty()
+                    || reply.reason_codes.is_empty()
+                    || reply.execution.as_ref().is_some() =>
             {
                 return Err(WireError::Schema);
             }
@@ -947,7 +964,14 @@ struct DiscoveryReply {
     execution_digest: String,
     status: DiscoveryStatus,
     commands: Vec<String>,
+    execution: Nullable<DiscoveryExecution>,
     reason_codes: Vec<String>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DiscoveryExecution {
+    pub kind: String,
+    pub argv: Vec<String>,
 }
 /// Validated advisory lexical spellings, not images or authority.
 pub(crate) struct ProgramCandidates {
@@ -959,6 +983,9 @@ impl ProgramCandidates {
     }
     pub(crate) fn commands(&self) -> &[String] {
         &self.reply.commands
+    }
+    pub(crate) fn execution(&self) -> Option<&DiscoveryExecution> {
+        self.reply.execution.as_ref()
     }
     pub(crate) fn reason_codes(&self) -> &[String] {
         &self.reply.reason_codes
@@ -994,7 +1021,7 @@ mod discovery_tests {
     fn observed(req: &DiscoveryRequest) -> Value {
         json!({"protocol":DISCOVERY_PROTOCOL,"invocationId":req.request.envelope.invocation_id,
             "executionDigest":req.request.envelope.execution_digest,"status":"observed",
-            "commands":[],"reasonCodes":[]})
+            "commands":[],"execution":null,"reasonCodes":[]})
     }
     fn accepts(req: &DiscoveryRequest, value: &Value) -> bool {
         req.correlate_reply(&serde_json::to_vec(value).unwrap())
@@ -1167,5 +1194,32 @@ mod discovery_tests {
             decoder.finish().is_err(),
             "trailing byte must not yield a reply"
         );
+    }
+
+    #[test]
+    fn dedicated_execution_is_bounded_advisory_and_unresolved_cannot_supply_it() {
+        let req = request();
+        let mut value = observed(&req);
+        value["execution"] = json!({"kind":"caws-evidence-v1","argv":["/gen/node","/gen/writer-main.js","specs","evidence","S"]});
+        let parsed = req
+            .correlate_reply(&serde_json::to_vec(&value).unwrap())
+            .unwrap();
+        assert_eq!(
+            parsed.execution().unwrap().argv,
+            ["/gen/node", "/gen/writer-main.js", "specs", "evidence", "S"]
+        );
+        for bad in [
+            json!({"kind":"foreign","argv":["a","b","c","d","e"]}),
+            json!({"kind":"caws-evidence-v1","argv":["a","b","c","d","e"],"permit":true}),
+            json!({"kind":"caws-evidence-v1","argv":["a","b","c","d","\u{0}"]}),
+            json!(["caws-evidence-v1", ["a", "b", "c", "d", "e"]]),
+        ] {
+            let mut wrong = value.clone();
+            wrong["execution"] = bad;
+            assert!(!accepts(&req, &wrong));
+        }
+        value["status"] = json!("unresolved");
+        value["reasonCodes"] = json!(["source_unresolved"]);
+        assert!(!accepts(&req, &value));
     }
 }

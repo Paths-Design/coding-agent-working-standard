@@ -5,6 +5,8 @@ import {
   executionProfileArguments,
   executionProfileBindings,
   isExecutionProfileBuiltin,
+  discoverEvidenceExecution,
+  type EvidenceExecutionPlan,
 } from './authorizer';
 import { MAX_AUTHORIZER_REPLY_BYTES } from './protocol';
 import type { AuthorizerRequest, ExecutionReasonCode, PreparedExecutionV1 } from './prepared';
@@ -19,6 +21,7 @@ export interface ProgramDiscoveryReply {
   readonly executionDigest: string;
   readonly status: 'observed' | 'unresolved';
   readonly commands: readonly string[];
+  readonly execution: EvidenceExecutionPlan | null;
   readonly reasonCodes: readonly ExecutionReasonCode[];
 }
 
@@ -41,6 +44,19 @@ export async function discoverExecutionPrograms(
     if (Date.now() >= record.limits.preparationDeadlineUnixMs)
       throw new ExecutionAuthorityUnavailable('deadline_expired');
     const authority = readExecutionAuthority(record);
+    const evidence = await discoverEvidenceExecution(record, authority);
+    if (evidence)
+      return Object.freeze({
+        ...base,
+        status: 'observed',
+        commands: Object.freeze(
+          [evidence.argv[0]!, evidence.argv[1]!, '/usr/bin/git'].sort((a, b) =>
+            Buffer.compare(Buffer.from(a), Buffer.from(b))
+          )
+        ),
+        execution: Object.freeze({ ...evidence, argv: Object.freeze([...evidence.argv]) }),
+        reasonCodes: Object.freeze([]),
+      });
     const inheritedBindings = executionProfileBindings(record);
     const commands = new Set<string>();
     const nodeProfiles = new Set<string>();
@@ -98,6 +114,7 @@ export async function discoverExecutionPrograms(
         [...commands].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)))
       ),
       reasonCodes: Object.freeze([]),
+      execution: null,
     });
   } catch (error) {
     const code =
@@ -107,6 +124,7 @@ export async function discoverExecutionPrograms(
       status: 'unresolved',
       commands: Object.freeze([]),
       reasonCodes: Object.freeze([code]),
+      execution: null,
     });
   }
 }
@@ -119,6 +137,7 @@ export function encodeProgramDiscoveryReply(reply: ProgramDiscoveryReply): Buffe
         ...reply,
         status: 'unresolved',
         commands: [],
+        execution: null,
         reasonCodes: ['source_unresolved'],
       })
     );

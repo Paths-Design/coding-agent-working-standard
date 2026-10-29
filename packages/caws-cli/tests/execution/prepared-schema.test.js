@@ -61,6 +61,34 @@ function reject(value) {
 }
 
 describe('private prepared execution record', () => {
+  test('retains the dedicated consumer kind and direct argv without replacing original source', () => {
+    const input = fixture();
+    input.profile.kind = 'caws-evidence-v1';
+    input.profile.source =
+      "'/trusted/node' '/trusted/writer-main.js' specs evidence EXAMPLE-001 --ac A1 --status unchecked --evidence-ref 'quoted node input.js'";
+    input.execution.executable = image('/trusted/node');
+    input.execution.argv = [
+      '/trusted/node',
+      '/trusted/writer-main.js',
+      'specs',
+      'evidence',
+      'EXAMPLE-001',
+      '--ac',
+      'A1',
+      '--status',
+      'unchecked',
+      '--evidence-ref',
+      'quoted node input.js',
+    ];
+    const decoded = decode(input);
+    expect(decoded.profile).toEqual(input.profile);
+    expect(decoded.execution.argv).toEqual(input.execution.argv);
+    expect(Object.isFrozen(decoded.execution.argv)).toBe(true);
+    input.execution.argv[0] = '/foreign/node';
+    reject(input);
+    input.execution.argv = ['/trusted/node', 'too', 'short', 'argv'];
+    reject(input);
+  });
   test('retains exact native identities, LF paths, opaque bytes and immutable invocation data', () => {
     const input = fixture();
     const result = decode(input);

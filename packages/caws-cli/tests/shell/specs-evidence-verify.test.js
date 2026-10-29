@@ -14,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const yaml = require('js-yaml');
 
 const { runSpecsEvidenceCommand } = require('../../dist/shell/commands/specs');
 const { initProject } = require('../../dist/store/init-store');
@@ -141,6 +142,45 @@ function spawnCli(root, args) {
 }
 
 describe('caws specs evidence --verify (A4 record-time, A14)', () => {
+  test('executes the requested criterion test without executing another criterion evidence or declared test', () => {
+    const { root, cawsDir } = mkProject();
+    const target = path.join(root, 'selected-test-ran');
+    const unrelated = path.join(root, 'unrelated-test-must-not-run');
+    write(
+      root,
+      'js/tests/selected.test.js',
+      `test('selected', () => { require('fs').writeFileSync(${JSON.stringify(target)}, 'selected'); expect(true).toBe(true); });\n`
+    );
+    write(
+      root,
+      'js/tests/unrelated.test.js',
+      `test('unrelated', () => { require('fs').writeFileSync(${JSON.stringify(unrelated)}, 'unrelated'); expect(true).toBe(true); });\n`
+    );
+    const doc = yaml.load(readSpec(cawsDir));
+    doc.acceptance[1].test_nodeids = ['js/tests/unrelated.test.js::unrelated'];
+    doc.evidence = [
+      {
+        criterion_id: 'A2',
+        status: 'pass',
+        evidence_ref: 'other criterion',
+        test_nodeid: 'js/tests/unrelated.test.js::unrelated',
+        recorded_at: '2026-09-16T00:00:00.000Z',
+      },
+    ];
+    write(root, `.caws/specs/${SPEC_ID}.yaml`, yaml.dump(doc));
+    const result = runEvidence(root, {
+      testNodeid: 'js/tests/selected.test.js::selected',
+      verify: true,
+    });
+    expect(result.code).toBe(0);
+    expect(result.out).toContain('A1: verified (passed)');
+    expect(fs.readFileSync(target, 'utf8')).toBe('selected');
+    expect(fs.existsSync(unrelated)).toBe(false);
+    const recorded = yaml.load(readSpec(cawsDir));
+    expect(recorded.evidence.find((item) => item.criterion_id === 'A2')).toEqual(doc.evidence[0]);
+    expect(acRecordedEvents(cawsDir).map((event) => event.data.criterion_id)).toEqual(['A1']);
+  }, 60000);
+
   test('--help through dist lists --verify', () => {
     const { root } = mkProject();
     const r = spawnCli(root, ['specs', 'evidence', '--help']);

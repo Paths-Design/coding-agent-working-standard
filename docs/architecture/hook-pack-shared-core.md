@@ -383,6 +383,20 @@ typed executor and single-use permit sequence remain proposed. Complete
 final-launch mediation, native canary and rollback require separate proof before
 the deployed runtime is replaced.
 
+The separate native `caws-execution` adapter owns a restricted producer/worker
+route. Host-created local socket credentials authenticate the complete MCP input
+channel; parent image identity alone does not authenticate pipe contents.
+Preparation and final validation bind original source, typed argv, environment,
+images and opaque sandbox state into the execution digest. The dedicated
+`caws-evidence-v1` consumer retains the lifecycle fence through the canonical
+evidence transaction. It checks requested artifact/commit citations without test
+runners, legacy actor discovery or automatic Git commits. The public
+`caws specs commit <id>` command completes the audit step through normal Git
+hooks. Generic user execution retains its separate descriptor and fence-release
+rules. Protected transitive generation custody, actual sandbox placement,
+genuine-agent workflow, canary and rollback are native qualification
+obligations; source and component checks do not establish adoption.
+
 ## Dispatcher resolution
 
 Vendor wiring points harness commands at the shared

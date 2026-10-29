@@ -1,10 +1,10 @@
 import * as fs from 'node:fs';
 import { createHash } from 'node:crypto';
-import { basename, dirname, isAbsolute, relative } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import { analyzeCommand } from '../shell/analysis/analyze';
 import { classifyInterpreterEffects } from '../shell/analysis/interpreter-effects';
 import { loadParser } from '../shell/analysis/load-parser';
-import type { SyntaxNode } from '../shell/analysis/parser-types';
+import type { SyntaxNode, Word, WordPart } from '../shell/analysis/parser-types';
 import type { Argument } from '../shell/analysis/types';
 import { inside, sensitiveBinding } from '../shell/analysis/policies';
 import { evaluatePath } from '../kernel';
@@ -75,6 +75,172 @@ const UTILITIES = new Set([
 ]);
 function refuse(code: ExecutionReasonCode): never {
   throw new ExecutionAuthorityUnavailable(code);
+}
+
+export interface ExecutionEvidenceArguments {
+  readonly id: string;
+  readonly criterionId: string;
+  readonly status: 'pass' | 'fail' | 'unchecked';
+  readonly evidenceRef: string;
+  readonly command?: string;
+  readonly exitCode?: number;
+  readonly artifactPath?: string;
+  readonly commitSha?: string;
+  readonly verify: boolean;
+}
+
+/** A closed operation grammar. Narrative fields remain data, regardless of their contents. */
+export function parseExecutionEvidenceArguments(
+  argv: readonly string[],
+  specId: string
+): ExecutionEvidenceArguments {
+  if (argv[0] !== 'specs' || argv[1] !== 'evidence' || argv[2] !== specId) refuse('scope_refused');
+  const values = new Map<string, string>();
+  let verify = false;
+  const flags = new Set([
+    '--ac',
+    '--status',
+    '--evidence-ref',
+    '--command',
+    '--exit-code',
+    '--artifact-path',
+    '--commit-sha',
+  ]);
+  for (let i = 3; i < argv.length; i++) {
+    const flag = argv[i]!;
+    if (flag === '--verify') {
+      if (verify) refuse('unsupported_profile');
+      verify = true;
+      continue;
+    }
+    const value = argv[++i];
+    if (!flags.has(flag) || values.has(flag) || value === undefined || value.includes('\0'))
+      refuse('unsupported_profile');
+    values.set(flag, value);
+  }
+  const criterionId = values.get('--ac');
+  const status = values.get('--status');
+  const evidenceRef = values.get('--evidence-ref');
+  if (
+    !criterionId ||
+    !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(criterionId) ||
+    !['pass', 'fail', 'unchecked'].includes(status ?? '') ||
+    !evidenceRef?.trim()
+  )
+    refuse('unsupported_profile');
+  const artifactPath = values.get('--artifact-path');
+  if (artifactPath !== undefined) {
+    const normalized = normalizeRelativePosixPath(artifactPath);
+    if (
+      !normalized.ok ||
+      normalized.normalized !== artifactPath ||
+      /[\x00-\x1f\x7f]/.test(artifactPath)
+    )
+      refuse('unsupported_profile');
+  }
+  const commitSha = values.get('--commit-sha');
+  if (commitSha !== undefined && !/^[0-9a-f]{40}$/.test(commitSha)) refuse('unsupported_profile');
+  if (verify && (artifactPath === undefined || commitSha === undefined))
+    refuse('unsupported_profile');
+  const exit = values.get('--exit-code');
+  if (
+    exit !== undefined &&
+    (!/^-?(?:0|[1-9][0-9]*)$/.test(exit) || !Number.isSafeInteger(Number(exit)))
+  )
+    refuse('unsupported_profile');
+  return {
+    id: specId,
+    criterionId,
+    status: status as ExecutionEvidenceArguments['status'],
+    evidenceRef,
+    verify,
+    ...(values.has('--command') ? { command: values.get('--command')! } : {}),
+    ...(exit !== undefined ? { exitCode: Number(exit) } : {}),
+    ...(artifactPath !== undefined ? { artifactPath } : {}),
+    ...(commitSha !== undefined ? { commitSha } : {}),
+  };
+}
+
+function evidenceLiteral(word: Word): string {
+  let scheduled = 0;
+  const pieces = (parts: readonly WordPart[], depth: number): string => {
+    if (depth > 16) refuse('source_unresolved');
+    return parts
+      .map((part) => {
+        if (++scheduled > 8192) refuse('source_unresolved');
+        if (part.type === 'Literal' || part.type === 'SingleQuoted') return part.value;
+        if (part.type === 'DoubleQuoted') return pieces(part.parts, depth + 1);
+        return refuse('unsupported_profile');
+      })
+      .join('');
+  };
+  const parts = word.parts;
+  const value = parts === undefined ? word.value : pieces(parts, 0);
+  // Tilde is performed before word expansion. The dedicated consumer accepts
+  // literal argv only, and never obtains a home directory by evaluating source.
+  if (word.text.startsWith('~') || value.includes('\0')) refuse('unsupported_profile');
+  return value;
+}
+
+export interface EvidenceExecutionPlan {
+  readonly kind: 'caws-evidence-v1';
+  readonly argv: readonly string[];
+}
+
+/** Recognize one literal trusted consumer call without executing shell expansion.
+ * The native owner must independently pin this same package and retain the fence
+ * through this consumer; this observation cannot promote generic USER code.
+ */
+export async function discoverEvidenceExecution(
+  record: PreparedExecutionV1,
+  authority: ExecutionAuthority
+): Promise<EvidenceExecutionPlan | null> {
+  const { parse } = await loadParser();
+  const script = parse(record.profile.source);
+  if (script.errors?.length || script.shebang || script.commands.length !== 1) return null;
+  const statement = script.commands[0]!;
+  const command = statement.command;
+  if (
+    statement.background ||
+    command.type !== 'Command' ||
+    !command.name ||
+    command.prefix.length ||
+    command.redirects.length ||
+    command.args.some((arg) => arg.type !== 'Word')
+  )
+    return null;
+  const args = [command.name, ...command.args] as readonly Word[];
+  let argv: string[];
+  try {
+    argv = args.map(evidenceLiteral);
+  } catch {
+    return null;
+  }
+  const entry = join(__dirname, 'writer-main.js');
+  if (argv[1] !== entry) return null;
+  const node = fs.realpathSync.native(process.execPath);
+  if (argv[0] !== node) refuse('unsupported_profile');
+  parseExecutionEvidenceArguments(argv.slice(2), authority.binding.spec.id);
+  const environment = new Map(record.execution.environment.map(({ name, value }) => [name, value]));
+  const expected = new Map([
+    ['CAWS_EXECUTION_PROJECT', record.projectRoot],
+    ['CAWS_EXECUTION_CALLER', record.association.callerAnchor],
+    ['CAWS_EXECUTION_SESSION', record.association.sessionId],
+    ['CAWS_EXECUTION_THREAD', record.association.threadId],
+    ['CAWS_EXECUTION_CALL', record.association.callId],
+    ['LC_ALL', 'C'],
+  ]);
+  if (
+    environment.size !== expected.size + 1 ||
+    !environment.has('PATH') ||
+    [...expected].some(([name, value]) => environment.get(name) !== value)
+  )
+    refuse('unsupported_profile');
+  if (record.profile.kind === 'caws-evidence-v1' && environment.get('PATH') !== '/usr/bin:/bin')
+    refuse('unsupported_profile');
+  executionProfileBindings(record);
+  if (record.execution.stdinBase64 !== '') refuse('unsupported_profile');
+  return { kind: 'caws-evidence-v1', argv };
 }
 function protectedSystemImage(path: string): boolean {
   const stat = fs.statSync(path);
@@ -291,6 +457,29 @@ async function inspectSource(
   record: PreparedExecutionV1,
   authority: ExecutionAuthority
 ): Promise<void> {
+  if (record.profile.kind === 'caws-evidence-v1') {
+    const plan = await discoverEvidenceExecution(record, authority);
+    if (
+      !plan ||
+      plan.argv.length !== record.execution.argv.length ||
+      plan.argv.some((arg, index) => arg !== record.execution.argv[index]) ||
+      record.execution.executable.path !== plan.argv[0]
+    )
+      refuse('unsupported_profile');
+    const expected = [plan.argv[0]!, plan.argv[1]!, '/usr/bin/git'];
+    if (
+      record.profile.utilities.length !== expected.length ||
+      !protectedSystemImage('/usr/bin/git')
+    )
+      refuse('unsupported_profile');
+    for (const path of expected) {
+      const image = record.profile.utilities.find((candidate) => candidate.path === path);
+      if (!image) refuse('unsupported_profile');
+      verifyImage(image);
+    }
+    verifyImage(record.execution.executable);
+    return;
+  }
   const bindings = executionProfileBindings(record);
   // Bash's special variables have startup/read/assignment semantics outside
   // ordinary scalar tracking. A syntax scan only narrows admission; the bounded
