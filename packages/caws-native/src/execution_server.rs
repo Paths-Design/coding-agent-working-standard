@@ -134,32 +134,114 @@ fn preparation_reason(reason: PrepareRefusal) -> &'static str {
         PrepareRefusal::Utility => "Utility",
     }
 }
-/// Observations only: neither a stage nor a preparation reason establishes
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProjectRefusal {
+    CallerCanonicalize,
+    CallerAlias,
+    CallerMetadata,
+    CallerNotDirectory,
+    PrivateChildSetup,
+    Control,
+    Spawn,
+    ServiceCancelled,
+    ServiceDeadline,
+    ServiceEffectCheck,
+    ServiceIo,
+    ServiceEarlyStdinClose,
+    ServiceStdoutLimit,
+    ServiceStderrLimit,
+    ServiceTotalOutputLimit,
+    ServiceNonzero,
+    ServiceSettlement,
+    OutputUtf8,
+    OutputFraming,
+    CommonDirectoryName,
+    CommonDirectoryCanonicalize,
+    RootMissing,
+    GovernanceDirectory,
+    RootUtf8,
+}
+impl ProjectRefusal {
+    fn label(self) -> &'static str {
+        match self {
+            Self::CallerCanonicalize => "CallerCanonicalize",
+            Self::CallerAlias => "CallerAlias",
+            Self::CallerMetadata => "CallerMetadata",
+            Self::CallerNotDirectory => "CallerNotDirectory",
+            Self::PrivateChildSetup => "PrivateChildSetup",
+            Self::Control => "Control",
+            Self::Spawn => "Spawn",
+            Self::ServiceCancelled => "ServiceCancelled",
+            Self::ServiceDeadline => "ServiceDeadline",
+            Self::ServiceEffectCheck => "ServiceEffectCheck",
+            Self::ServiceIo => "ServiceIo",
+            Self::ServiceEarlyStdinClose => "ServiceEarlyStdinClose",
+            Self::ServiceStdoutLimit => "ServiceStdoutLimit",
+            Self::ServiceStderrLimit => "ServiceStderrLimit",
+            Self::ServiceTotalOutputLimit => "ServiceTotalOutputLimit",
+            Self::ServiceNonzero => "ServiceNonzero",
+            Self::ServiceSettlement => "ServiceSettlement",
+            Self::OutputUtf8 => "OutputUtf8",
+            Self::OutputFraming => "OutputFraming",
+            Self::CommonDirectoryName => "CommonDirectoryName",
+            Self::CommonDirectoryCanonicalize => "CommonDirectoryCanonicalize",
+            Self::RootMissing => "RootMissing",
+            Self::GovernanceDirectory => "GovernanceDirectory",
+            Self::RootUtf8 => "RootUtf8",
+        }
+    }
+}
+fn project_service_reason(kind: &execution_child::FailureKind) -> ProjectRefusal {
+    use execution_child::FailureKind;
+    match kind {
+        FailureKind::Cancelled => ProjectRefusal::ServiceCancelled,
+        FailureKind::Deadline => ProjectRefusal::ServiceDeadline,
+        FailureKind::EffectCheck(_) => ProjectRefusal::ServiceEffectCheck,
+        FailureKind::Io(_) => ProjectRefusal::ServiceIo,
+        FailureKind::EarlyStdinClose => ProjectRefusal::ServiceEarlyStdinClose,
+        FailureKind::StdoutLimit => ProjectRefusal::ServiceStdoutLimit,
+        FailureKind::StderrLimit => ProjectRefusal::ServiceStderrLimit,
+        FailureKind::TotalOutputLimit => ProjectRefusal::ServiceTotalOutputLimit,
+        FailureKind::Nonzero(_) => ProjectRefusal::ServiceNonzero,
+        FailureKind::Settlement(_) => ProjectRefusal::ServiceSettlement,
+    }
+}
+/// Observations only: neither a stage nor a refusal reason establishes
 /// that no USER launch occurred. Possible-launch custody remains independent.
 struct CallTrace {
     stage: Cell<CallStage>,
     preparation: Cell<Option<PrepareRefusal>>,
+    project: Cell<Option<ProjectRefusal>>,
 }
 impl CallTrace {
     fn new() -> Self {
         Self {
             stage: Cell::new(CallStage::Deadline),
             preparation: Cell::new(None),
+            project: Cell::new(None),
         }
     }
     fn at(&self, stage: CallStage) {
         self.stage.set(stage);
         self.preparation.set(None);
+        self.project.set(None);
     }
     fn preparation_failed(&self, reason: PrepareRefusal) {
         self.at(CallStage::Preparation);
         self.preparation.set(Some(reason));
+    }
+    fn project_failed(&self, reason: ProjectRefusal) {
+        self.at(CallStage::Project);
+        self.project.set(Some(reason));
     }
     fn refusal(&self, possible: bool) -> Value {
         let mut detail = json!({"ok":false,"reason":"NativeBoundaryRefused",
             "userSpawnMayHaveOccurred":possible,"stage":self.stage.get().label()});
         if let Some(reason) = self.preparation.get() {
             detail["preparationReason"] = json!(preparation_reason(reason));
+        }
+        if let Some(reason) = self.project.get() {
+            detail["projectReason"] = json!(reason.label());
         }
         detail
     }
@@ -765,9 +847,16 @@ fn project(
     deadline: &MonotonicDeadline,
     cancelled: &AtomicBool,
     control: &crate::monotonic_deadline::EffectCheck<'_>,
-) -> io::Result<String> {
-    if fs::canonicalize(caller)? != Path::new(caller) || !fs::metadata(caller)?.is_dir() {
-        return Err(refused());
+) -> Result<String, ProjectRefusal> {
+    let canonical = fs::canonicalize(caller).map_err(|_| ProjectRefusal::CallerCanonicalize)?;
+    if canonical != Path::new(caller) {
+        return Err(ProjectRefusal::CallerAlias);
+    }
+    if !fs::metadata(caller)
+        .map_err(|_| ProjectRefusal::CallerMetadata)?
+        .is_dir()
+    {
+        return Err(ProjectRefusal::CallerNotDirectory);
     }
     let mut cmd = Command::new("/usr/bin/git");
     cmd.args([
@@ -796,9 +885,9 @@ fn project(
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
-    configure_private_child(&mut cmd)?;
-    control("project_spawn").map_err(|_| refused())?;
-    let child = cmd.spawn()?;
+    configure_private_child(&mut cmd).map_err(|_| ProjectRefusal::PrivateChildSetup)?;
+    control("project_spawn").map_err(|_| ProjectRefusal::Control)?;
+    let child = cmd.spawn().map_err(|_| ProjectRefusal::Spawn)?;
     drop(cmd);
     let output = execution_child::service_child(
         child,
@@ -812,21 +901,27 @@ fn project(
         control,
     )
     .map_err(|f| {
+        let reason = project_service_reason(&f.kind);
         settle(f.retained_child);
-        refused()
+        reason
     })?;
-    let raw = String::from_utf8(output.stdout).map_err(|_| refused())?;
-    let common = raw.strip_suffix('\n').ok_or_else(refused)?;
+    let raw = String::from_utf8(output.stdout).map_err(|_| ProjectRefusal::OutputUtf8)?;
+    let common = raw
+        .strip_suffix('\n')
+        .ok_or(ProjectRefusal::OutputFraming)?;
     let common = Path::new(common);
     if common.file_name().and_then(|p| p.to_str()) != Some(".git") {
-        return Err(refused());
+        return Err(ProjectRefusal::CommonDirectoryName);
     }
-    let common = fs::canonicalize(common)?;
-    let root = common.parent().ok_or_else(refused)?;
+    let common =
+        fs::canonicalize(common).map_err(|_| ProjectRefusal::CommonDirectoryCanonicalize)?;
+    let root = common.parent().ok_or(ProjectRefusal::RootMissing)?;
     if !root.join(".caws").is_dir() {
-        return Err(refused());
+        return Err(ProjectRefusal::GovernanceDirectory);
     }
-    root.to_str().map(str::to_owned).ok_or_else(refused)
+    root.to_str()
+        .map(str::to_owned)
+        .ok_or(ProjectRefusal::RootUtf8)
 }
 
 fn execute_call(
@@ -889,7 +984,11 @@ fn execute_call(
     trace.at(CallStage::WriterImage);
     verify_image(&config.writer, &prep)?;
     trace.at(CallStage::Project);
-    let canonical = project(&call.caller_anchor, &prep, &cancelled, &control)?;
+    let canonical =
+        project(&call.caller_anchor, &prep, &cancelled, &control).map_err(|reason| {
+            trace.project_failed(reason);
+            refused()
+        })?;
     let pins = PinnedAuthorizer {
         node: ProgramImage {
             path: config.node.path.clone(),
@@ -1151,6 +1250,105 @@ mod tests {
     use sha2::{Digest, Sha256};
     use std::sync::atomic::AtomicU64;
     static NEXT: AtomicU64 = AtomicU64::new(0);
+    #[test]
+    fn call_trace_project_reasons_are_closed_and_clear_without_changing_possible_custody() {
+        let trace = CallTrace::new();
+        trace.preparation_failed(PrepareRefusal::Identity);
+        for (reason, expected) in [
+            (ProjectRefusal::CallerCanonicalize, "CallerCanonicalize"),
+            (ProjectRefusal::CallerAlias, "CallerAlias"),
+            (ProjectRefusal::CallerMetadata, "CallerMetadata"),
+            (ProjectRefusal::CallerNotDirectory, "CallerNotDirectory"),
+            (ProjectRefusal::PrivateChildSetup, "PrivateChildSetup"),
+            (ProjectRefusal::Control, "Control"),
+            (ProjectRefusal::Spawn, "Spawn"),
+            (ProjectRefusal::ServiceCancelled, "ServiceCancelled"),
+            (ProjectRefusal::ServiceDeadline, "ServiceDeadline"),
+            (ProjectRefusal::ServiceEffectCheck, "ServiceEffectCheck"),
+            (ProjectRefusal::ServiceIo, "ServiceIo"),
+            (
+                ProjectRefusal::ServiceEarlyStdinClose,
+                "ServiceEarlyStdinClose",
+            ),
+            (ProjectRefusal::ServiceStdoutLimit, "ServiceStdoutLimit"),
+            (ProjectRefusal::ServiceStderrLimit, "ServiceStderrLimit"),
+            (
+                ProjectRefusal::ServiceTotalOutputLimit,
+                "ServiceTotalOutputLimit",
+            ),
+            (ProjectRefusal::ServiceNonzero, "ServiceNonzero"),
+            (ProjectRefusal::ServiceSettlement, "ServiceSettlement"),
+            (ProjectRefusal::OutputUtf8, "OutputUtf8"),
+            (ProjectRefusal::OutputFraming, "OutputFraming"),
+            (ProjectRefusal::CommonDirectoryName, "CommonDirectoryName"),
+            (
+                ProjectRefusal::CommonDirectoryCanonicalize,
+                "CommonDirectoryCanonicalize",
+            ),
+            (ProjectRefusal::RootMissing, "RootMissing"),
+            (ProjectRefusal::GovernanceDirectory, "GovernanceDirectory"),
+            (ProjectRefusal::RootUtf8, "RootUtf8"),
+        ] {
+            trace.project_failed(reason);
+            assert_eq!(
+                trace.refusal(true),
+                json!({"ok":false,"reason":"NativeBoundaryRefused",
+                "userSpawnMayHaveOccurred":true,"stage":"project","projectReason":expected})
+            );
+        }
+        trace.preparation_failed(PrepareRefusal::Identity);
+        assert_eq!(
+            trace.refusal(false),
+            json!({"ok":false,"reason":"NativeBoundaryRefused",
+            "userSpawnMayHaveOccurred":false,"stage":"preparation","preparationReason":"Identity"})
+        );
+        trace.at(CallStage::WorkerReply);
+        assert_eq!(
+            trace.refusal(true),
+            json!({"ok":false,"reason":"NativeBoundaryRefused",
+            "userSpawnMayHaveOccurred":true,"stage":"worker-reply"})
+        );
+    }
+    #[test]
+    fn project_service_reasons_erase_error_payloads_and_preserve_each_failure_kind() {
+        use execution_child::FailureKind;
+        use std::os::unix::process::ExitStatusExt;
+        for (kind, expected) in [
+            (FailureKind::Cancelled, ProjectRefusal::ServiceCancelled),
+            (FailureKind::Deadline, ProjectRefusal::ServiceDeadline),
+            (
+                FailureKind::EffectCheck("PRIVATE_EFFECT_CHECK".into()),
+                ProjectRefusal::ServiceEffectCheck,
+            ),
+            (
+                FailureKind::Io("PRIVATE_IO_ERROR".into()),
+                ProjectRefusal::ServiceIo,
+            ),
+            (
+                FailureKind::EarlyStdinClose,
+                ProjectRefusal::ServiceEarlyStdinClose,
+            ),
+            (FailureKind::StdoutLimit, ProjectRefusal::ServiceStdoutLimit),
+            (FailureKind::StderrLimit, ProjectRefusal::ServiceStderrLimit),
+            (
+                FailureKind::TotalOutputLimit,
+                ProjectRefusal::ServiceTotalOutputLimit,
+            ),
+            (
+                FailureKind::Nonzero(std::process::ExitStatus::from_raw(256)),
+                ProjectRefusal::ServiceNonzero,
+            ),
+            (
+                FailureKind::Settlement("PRIVATE_SETTLEMENT_ERROR".into()),
+                ProjectRefusal::ServiceSettlement,
+            ),
+        ] {
+            assert_eq!(project_service_reason(&kind), expected);
+            let trace = CallTrace::new();
+            trace.project_failed(project_service_reason(&kind));
+            assert!(!trace.refusal(false).to_string().contains("PRIVATE_"));
+        }
+    }
     #[test]
     fn call_trace_preparation_reason_is_closed_and_does_not_replace_possible_launch_custody() {
         let trace = CallTrace::new();

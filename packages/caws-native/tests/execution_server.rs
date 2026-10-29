@@ -331,19 +331,45 @@ fn self_image_refusal_is_distinct_from_configuration_and_channel_refusal() {
 
 #[test]
 fn synthetic_generation_drift_has_closed_call_stage_before_project_node_or_user() {
-    exercise_synthetic_call_refusal(true);
+    exercise_synthetic_call_refusal(true, None);
 }
 
 #[test]
 fn synthetic_preparation_identity_failure_preserves_closed_reason_without_metadata() {
-    exercise_synthetic_call_refusal(false);
+    exercise_synthetic_call_refusal(false, None);
 }
 
-fn exercise_synthetic_call_refusal(generation_drift: bool) {
+#[derive(Clone, Copy)]
+enum ProjectCase {
+    NonRepository,
+    CallerAlias,
+    MissingGovernance,
+    CallerNotDirectory,
+    MissingCaller,
+}
+#[test]
+fn synthetic_project_failures_have_exact_closed_reasons_with_real_fixed_git() {
+    for case in [
+        ProjectCase::NonRepository,
+        ProjectCase::CallerAlias,
+        ProjectCase::MissingGovernance,
+        ProjectCase::CallerNotDirectory,
+        ProjectCase::MissingCaller,
+    ] {
+        exercise_synthetic_call_refusal(false, Some(case));
+    }
+}
+
+fn exercise_synthetic_call_refusal(generation_drift: bool, project_case: Option<ProjectCase>) {
     let fixture = Fixture::new();
     let config = fixture.config(false);
     let configured: Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
-    if !generation_drift {
+    let initialize_project = !generation_drift
+        && matches!(
+            project_case,
+            None | Some(ProjectCase::CallerAlias | ProjectCase::MissingGovernance)
+        );
+    if initialize_project {
         let initialized = Command::new("/usr/bin/git")
             .args(["init", "--quiet"])
             .arg(&fixture.0)
@@ -354,8 +380,24 @@ fn exercise_synthetic_call_refusal(generation_drift: bool) {
             .output()
             .unwrap();
         assert!(initialized.status.success());
-        fs::create_dir(fixture.0.join(".caws")).unwrap();
+        if !matches!(project_case, Some(ProjectCase::MissingGovernance)) {
+            fs::create_dir(fixture.0.join(".caws")).unwrap();
+        }
     }
+    let caller = match project_case {
+        Some(ProjectCase::CallerAlias) => {
+            let alias = fixture.0.join("PRIVATE_CALLER_ALIAS");
+            std::os::unix::fs::symlink(&fixture.0, &alias).unwrap();
+            alias
+        }
+        Some(ProjectCase::CallerNotDirectory) => {
+            let file = fixture.0.join("PRIVATE_CALLER_FILE");
+            fs::write(&file, "PRIVATE_CALLER_CONTENT").unwrap();
+            file
+        }
+        Some(ProjectCase::MissingCaller) => fixture.0.join("PRIVATE_MISSING_CALLER"),
+        _ => fixture.0.clone(),
+    };
     let (mut input, endpoint) = UnixStream::pair().unwrap();
     let stdin_fd: OwnedFd = endpoint.try_clone().unwrap().into();
     let stdout_fd: OwnedFd = endpoint.into();
@@ -399,7 +441,7 @@ fn exercise_synthetic_call_refusal(generation_drift: bool) {
     let packet = json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{
         "name":"caws_exec","arguments":{"source":format!("printf PRIVATE_SUBMITTED_SOURCE > {}", marker.display())},
         "_meta":{"sessionId":"PRIVATE_SESSION_ID","threadId":"PRIVATE_THREAD_ID","callId":"PRIVATE_CALL_ID",
-            "codex/caller-context":{"version":1,"callerAnchor":{"kind":"local","cwd":fixture.0},"serverEnvironmentId":"PRIVATE_SERVER_ENV"},
+            "codex/caller-context":{"version":1,"callerAnchor":{"kind":"local","cwd":caller},"serverEnvironmentId":"PRIVATE_SERVER_ENV"},
             "codex/sandbox-state":state,"codex/sandbox-state-meta":state,
             "codex/sandbox-launcher":{"codexExecutable":launcher}}}});
     line.clear();
@@ -411,6 +453,15 @@ fn exercise_synthetic_call_refusal(generation_drift: bool) {
         serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
     let expected = if generation_drift {
         json!({"ok":false,"reason":"NativeBoundaryRefused","userSpawnMayHaveOccurred":false,"stage":"generation"})
+    } else if let Some(case) = project_case {
+        let reason = match case {
+            ProjectCase::NonRepository => "ServiceNonzero",
+            ProjectCase::CallerAlias => "CallerAlias",
+            ProjectCase::MissingGovernance => "GovernanceDirectory",
+            ProjectCase::CallerNotDirectory => "CallerNotDirectory",
+            ProjectCase::MissingCaller => "CallerCanonicalize",
+        };
+        json!({"ok":false,"reason":"NativeBoundaryRefused","userSpawnMayHaveOccurred":false,"stage":"project","projectReason":reason})
     } else {
         json!({"ok":false,"reason":"NativeBoundaryRefused","userSpawnMayHaveOccurred":false,"stage":"preparation","preparationReason":"Identity"})
     };
