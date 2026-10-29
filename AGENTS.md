@@ -202,6 +202,9 @@ caws gates run --spec FEAT-1               # policy decides block/warn/skip
 # Bound lanes include committed changes against their recorded base branch.
 # Elsewhere, pass --base <ref> to include committed work; empty staged input
 # without a branch basis is unavailable, not a passing scope check.
+git commit -m "feat: render empty state"
+git status --short                      # resolve any remaining implementation changes
+# Verified evidence recording requires a clean linked worktree.
 
 # 4. Record typed evidence (test results, AC closures)
 caws evidence record --type test --spec FEAT-1 \
@@ -248,7 +251,7 @@ between agents**: one spec + one bound worktree per agent, scope enforced from
 ```bash
 # Create an isolated worktree bound to your spec (writes the binding atomically,
 # emits worktree_created + worktree_bound)
-caws worktree create wt-auth --spec FEAT-AUTH
+caws worktree create wt-auth --spec FEAT-AUTH-001
 cd .caws/worktrees/wt-auth
 
 # Surface the claim and see who else is live
@@ -261,9 +264,10 @@ caws agents list                           # active / stale / stopped sessions
 
 # After committing, checks, review and AC evidence, leave the target worktree.
 cd ../../..                                # repository root
-# Merge auto-closes the bound spec and removes the worktree and merged branch.
+# Merge auto-closes the bound spec and removes the worktree.
 caws worktree merge wt-auth
 # No separate destroy is needed after a successful merge.
+# Safe branch deletion is attempted; inspect any branch-deletion warning.
 ```
 
 ### Merge publication, checkout refresh and recovery
@@ -272,7 +276,7 @@ caws worktree merge wt-auth
 merge in the object database (`git merge-tree --write-tree` + `git commit-tree`)
 and advances the base with an atomic compare-and-swap
 (`git update-ref <ref> <new> <expected-old>`). After the ref advances, it
-refreshes the index and files of checkouts on that base with
+refreshes the canonical checkout's index and files when it is on that base with
 `git read-tree -u -m <old-base> <merge-commit>`. Git preserves unrelated edits
 and refuses a refresh that would overwrite overlapping edits. A refused refresh
 leaves that checkout stale while the merge remains landed; the output identifies

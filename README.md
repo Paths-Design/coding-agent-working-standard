@@ -228,19 +228,20 @@ caws agents list       # active / stale / stopped sessions
 
 # After committing, checks, review and AC evidence, leave the target worktree.
 cd ../../..                                # repository root
-# Merge closes the spec and removes the worktree and merged branch.
+# Merge closes the spec and removes the worktree.
 caws worktree merge wt-auth
 # No separate destroy is needed after a successful merge.
+# Safe branch deletion is attempted; inspect any branch-deletion warning.
 ```
 
 Merge computes in Git's object database and advances the base ref atomically
-without checking out the base branch. It then refreshes base checkouts' indexes
-and files with `git read-tree -u -m`. Unrelated edits are preserved; overlapping
-edits can refuse the refresh, leaving that checkout stale with the merge landed.
-Spec closure, audit writes and teardown follow publication, so a later failure
-can leave lifecycle steps unfinished. Inspect the reported merge commit and
-checkout/spec/event/registry state, preserve local edits, and follow the
-recovery diagnostic. See
+without checking out the base branch. When the canonical checkout is on the base
+branch, it refreshes its index and files with `git read-tree -u -m`. Unrelated
+edits are preserved; overlapping edits can refuse the refresh, leaving that
+checkout stale with the merge landed. Spec closure, audit writes and teardown
+follow publication, so a later failure can leave lifecycle steps unfinished.
+Inspect the reported merge commit and checkout/spec/event/registry state,
+preserve local edits, and follow the recovery diagnostic. See
 [merge recovery in AGENTS.md](AGENTS.md#merge-publication-checkout-refresh-and-recovery).
 
 `caws agents` leases (`.caws/leases/`) are **visibility only** — a stale lease
