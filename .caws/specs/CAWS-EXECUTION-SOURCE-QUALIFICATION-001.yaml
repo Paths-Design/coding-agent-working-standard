@@ -123,7 +123,7 @@ scope:
     - packages/caws-cli/tests/shell/specs-evidence-verify.test.js
     - packages/caws-cli/scripts/mutation-input-identity.mjs
 invariants:
-  - 'Candidate source and test repairs occur only before campaign freeze within admitted paths; tracked source, tests, dependencies and build outputs remain unchanged while either campaign runs, and no per-file mutation floor is lowered'
+  - 'Each campaign runs in its own immutable physical export: every captured source, test, script, documentation, dependency and build input remains unchanged throughout that run, no per-file floor is lowered, and results apply only to those captured inputs. Native-only repairs outside the captured Node inputs may proceed in the owned lane; any captured-input change requires fresh matching qualification before acceptance.'
 acceptance:
   - id: A1
     given: >-
