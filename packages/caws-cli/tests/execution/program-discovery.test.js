@@ -46,6 +46,26 @@ function observation(result) {
   return value;
 }
 describe('private nonexecuting draft program discovery', () => {
+  test('observes only the exact npm test source without resolving npm from caller PATH', () => {
+    const f = authorityFixture();
+    source(f, 'npm test');
+    const exact = observation(run(f.record));
+    expect(exact.status).toBe('observed');
+    expect(exact.commands).toEqual([]);
+    expect(exact.execution).toBeNull();
+    expect(exact.reasonCodes).toEqual([]);
+    for (const altered of [
+      'npm test -- --watch',
+      'npm run test',
+      'npm test; true',
+      'PATH=/tmp npm test',
+    ]) {
+      source(f, altered);
+      const result = observation(run(f.record));
+      expect(result.status).toBe('unresolved');
+      expect(result.commands).toEqual([]);
+    }
+  });
   test('lowers only the literal dedicated consumer and retains quoted metadata as argv data', () => {
     const f = authorityFixture();
     const argv = [

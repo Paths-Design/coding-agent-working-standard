@@ -44,6 +44,17 @@ export async function discoverExecutionPrograms(
     if (Date.now() >= record.limits.preparationDeadlineUnixMs)
       throw new ExecutionAuthorityUnavailable('deadline_expired');
     const authority = readExecutionAuthority(record);
+    // The producer recognizes this one literal form and independently pins
+    // npm before constructing its final record. No shell command is resolved
+    // from the submitted source, and this observation grants no launch.
+    if (record.profile.source === 'npm test')
+      return Object.freeze({
+        ...base,
+        status: 'observed',
+        commands: Object.freeze([]),
+        execution: null,
+        reasonCodes: Object.freeze([]),
+      });
     const evidence = await discoverEvidenceExecution(record, authority);
     if (evidence)
       return Object.freeze({
