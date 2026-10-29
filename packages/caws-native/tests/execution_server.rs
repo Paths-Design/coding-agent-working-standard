@@ -173,6 +173,14 @@ fn real_binary_advertises_context_and_exposes_only_source_and_cwd() {
     assert!(!line.contains("must-not-run"));
     input.shutdown(std::net::Shutdown::Write).unwrap();
     assert!(child.wait().unwrap().success());
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    assert_eq!(stderr, "");
 }
 
 #[test]
@@ -182,17 +190,35 @@ fn real_binary_refuses_configured_parent_mismatch_without_protocol_output() {
     let (mut input, endpoint) = UnixStream::pair().unwrap();
     let stdin_fd: OwnedFd = endpoint.try_clone().unwrap().into();
     let stdout_fd: OwnedFd = endpoint.into();
+    let sentinel = fixture.0.join("source-must-not-launch");
+    let source = format!("printf SUBMITTED_SOURCE_SECRET > {}", sentinel.display());
+    writeln!(input, "{}", json!({"jsonrpc":"2.0","id":1,"method":"tools/call", "params":{"name":"caws_exec","arguments":{"source":source}}})).unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_caws-execution"))
         .arg("--config")
         .arg(config)
         .stdin(Stdio::from(stdin_fd))
         .stdout(Stdio::from(stdout_fd))
+        .stderr(Stdio::piped())
         .spawn()
         .unwrap();
     let mut bytes = Vec::new();
     input.read_to_end(&mut bytes).unwrap();
     assert_eq!(child.wait().unwrap().code(), Some(2));
     assert!(bytes.is_empty());
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    assert_eq!(
+        stderr,
+        "caws-execution: startup-refused stage=host-channel\n"
+    );
+    assert!(!stderr.contains("SUBMITTED_SOURCE_SECRET"));
+    assert!(!stderr.contains(fixture.0.to_str().unwrap()));
+    assert!(!sentinel.exists());
 }
 
 #[test]
@@ -206,6 +232,10 @@ fn ordinary_stdio_pipes_are_not_an_authenticated_request_channel() {
         .unwrap();
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"caws-execution: startup-refused stage=host-channel\n"
+    );
 }
 
 #[test]
@@ -219,4 +249,81 @@ fn real_worker_refuses_when_private_startup_descriptor_is_missing() {
         .unwrap();
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"caws-execution: entry-failed stage=worker-failed\n"
+    );
+}
+
+#[test]
+fn invalid_configuration_has_closed_startup_diagnostic_without_its_path_or_bytes() {
+    let fixture = Fixture::new();
+    let config = fixture.0.join("PRIVATE_CONFIG_PATH_SECRET.json");
+    fs::write(&config, br#"{"schema":"PRIVATE_CONFIG_CONTENT_SECRET"}"#).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_caws-execution"))
+        .arg("--config")
+        .arg(&config)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        b"caws-execution: startup-refused stage=config\n"
+    );
+    for secret in [
+        "PRIVATE_CONFIG_PATH_SECRET",
+        "PRIVATE_CONFIG_CONTENT_SECRET",
+        fixture.0.to_str().unwrap(),
+    ] {
+        assert!(!String::from_utf8_lossy(&output.stderr).contains(secret));
+    }
+}
+
+#[test]
+fn rejected_arguments_have_one_closed_diagnostic_without_echoing_arguments() {
+    let fixture = Fixture::new();
+    let config = fixture.config(false);
+    let cases = [
+        vec!["PRIVATE_ARGUMENT_SECRET".into()],
+        vec!["--config".into()],
+        vec![
+            "--config".into(),
+            config.as_os_str().to_owned(),
+            "PRIVATE_ARGUMENT_SECRET".into(),
+        ],
+        vec!["--worker".into(), "PRIVATE_ARGUMENT_SECRET".into()],
+    ];
+    for args in cases {
+        let output = Command::new(env!("CARGO_BIN_EXE_caws-execution"))
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert_eq!(output.stdout, b"");
+        assert_eq!(
+            output.stderr,
+            b"caws-execution: startup-refused stage=arguments\n"
+        );
+    }
+}
+
+#[test]
+fn self_image_refusal_is_distinct_from_configuration_and_channel_refusal() {
+    let fixture = Fixture::new();
+    let config_path = fixture.config(false);
+    let mut config: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+    config["native"]["sha256"] = Value::String("0".repeat(64));
+    fs::write(&config_path, serde_json::to_vec(&config).unwrap()).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_caws-execution"))
+        .arg("--config")
+        .arg(config_path)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        b"caws-execution: startup-refused stage=self-image\n"
+    );
 }

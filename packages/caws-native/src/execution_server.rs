@@ -47,6 +47,33 @@ fn refused() -> io::Error {
     io::Error::other("execution boundary refused")
 }
 
+/// Closed process-entry diagnostics. Paths, configuration bytes, submitted
+/// source and underlying IO errors never enter stderr through this boundary.
+enum EntryFailureStage {
+    Arguments,
+    Config,
+    Deadline,
+    SelfImage,
+    HostChannel,
+    InputSetup,
+    WorkerFailed,
+}
+fn entry_failed(stage: EntryFailureStage) -> i32 {
+    let diagnostic = match stage {
+        EntryFailureStage::Arguments => "caws-execution: startup-refused stage=arguments\n",
+        EntryFailureStage::Config => "caws-execution: startup-refused stage=config\n",
+        EntryFailureStage::Deadline => "caws-execution: startup-refused stage=deadline\n",
+        EntryFailureStage::SelfImage => "caws-execution: startup-refused stage=self-image\n",
+        EntryFailureStage::HostChannel => "caws-execution: startup-refused stage=host-channel\n",
+        EntryFailureStage::InputSetup => "caws-execution: startup-refused stage=input-setup\n",
+        // Worker reply failure can follow USER execution. This line carries no
+        // assertion that the worker failed before a launch or publication.
+        EntryFailureStage::WorkerFailed => "caws-execution: entry-failed stage=worker-failed\n",
+    };
+    let _ = io::stderr().lock().write_all(diagnostic.as_bytes());
+    2
+}
+
 /// Startup-only trusted configuration. No model argument can replace a pin.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -923,35 +950,39 @@ pub fn main_entry() -> i32 {
     let worker_mode = first.as_deref() == Some(std::ffi::OsStr::new("--worker"));
     let config_flag = if worker_mode { args.next() } else { first };
     if config_flag.as_deref() != Some(std::ffi::OsStr::new("--config")) {
-        return 2;
+        return entry_failed(EntryFailureStage::Arguments);
     }
     let Some(path) = args.next().map(PathBuf::from) else {
-        return 2;
+        return entry_failed(EntryFailureStage::Arguments);
     };
     if args.next().is_some() {
-        return 2;
+        return entry_failed(EntryFailureStage::Arguments);
     }
     let config = match load_config(&path) {
         Ok(c) => c,
-        Err(_) => return 2,
+        Err(_) => return entry_failed(EntryFailureStage::Config),
     };
     if worker_mode {
-        return if worker(&config).is_ok() { 0 } else { 2 };
+        return if worker(&config).is_ok() {
+            0
+        } else {
+            entry_failed(EntryFailureStage::WorkerFailed)
+        };
     }
     let startup = match MonotonicDeadline::capture(Duration::from_secs(30)) {
         Ok(d) => d,
-        Err(_) => return 2,
+        Err(_) => return entry_failed(EntryFailureStage::Deadline),
     };
     if verify_self(&config, &startup).is_err() {
-        return 2;
+        return entry_failed(EntryFailureStage::SelfImage);
     }
     let peer = match host_channel(&config, &startup) {
         Ok(p) => p,
-        Err(_) => return 2,
+        Err(_) => return entry_failed(EntryFailureStage::HostChannel),
     };
     let input = match Input::new() {
         Ok(i) => RefCell::new(i),
-        Err(_) => return 2,
+        Err(_) => return entry_failed(EntryFailureStage::InputSetup),
     };
     loop {
         let line = match input.borrow_mut().next() {
