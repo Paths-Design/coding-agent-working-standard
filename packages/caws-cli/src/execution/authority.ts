@@ -138,6 +138,8 @@ function capture(cawsDir: string): CapturedAuthority {
 /** Fixed read-only Git query. Remove exactly its one framing LF, never path data.
  * Inherited Git routing, global config and model-selected executables do not enter it.
  */
+const CALLER_PROJECT_GIT_TIMEOUT_MS = 5_000;
+
 function callerProject(caller: string): { canonical: string; checkout: string } {
   const query = (argument: '--git-common-dir' | '--show-toplevel'): string => {
     const bytes = execFileSync('/usr/bin/git', ['rev-parse', '--path-format=absolute', argument], {
@@ -149,7 +151,9 @@ function callerProject(caller: string): { canonical: string; checkout: string } 
         GIT_CONFIG_GLOBAL: '/dev/null',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 500,
+      // This local child bound tolerates cold sandbox startup. It does not
+      // renew the native owner's original deadline or cancellation custody.
+      timeout: CALLER_PROJECT_GIT_TIMEOUT_MS,
       maxBuffer: 65536,
     });
     requireValue(bytes.length > 1 && bytes.at(-1) === 10);
