@@ -1,0 +1,32 @@
+id: CAWS-RUST-CUTOVER-ORIGIN-001
+title: 'Qualify pinned native MCP request origin'
+mode: chore
+lifecycle_state: active
+created_at: '2026-10-29T22:42:57.293Z'
+updated_at: '2026-10-29T22:42:57.293Z'
+created_by_session: '01a189ce-5a4e-7522-a2dc-b3fdc1d2f25b'
+blast_radius:
+  modules:
+    - 'native-request-origin'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'tmp/rust-cutover-origin/'
+  out: []
+invariants:
+  - 'Initialization-only probes never submit tools/call, USER commands or governance writes; only owned probe processes and ignored artifacts may change'
+  - 'Actual copied host and executor bytes remain pinned and foreign candidate fixtures and running campaigns remain untouched'
+acceptance:
+  - id: A1
+    given: 'pinned host and executor copies in a private ignored fixture'
+    when: 'genuine host-created and foreign transferred or prequeued same-PID-exec request channels are compared'
+    then: 'raw kernel witnesses streams statuses and cleanup distinguish authenticated admission from counterfeit admission without asserting USER authority'
+observability:
+  - 'Retain source and binary pins, exact request bytes, raw stdout stderr and terminal cleanup for every probe'
+rollback:
+  - 'Stop only an owned probe through its bounded normal control path; retain uncertain custody and do not start another case'
+non_functional: {}
+contracts:
+  - name: 'native-origin'
+    type: behavior
