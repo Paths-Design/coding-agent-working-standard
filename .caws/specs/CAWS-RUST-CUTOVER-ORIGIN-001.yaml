@@ -30,3 +30,8 @@ non_functional: {}
 contracts:
   - name: 'native-origin'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "Owned initialization-only probe tmp/rust-cutover-origin/probe.py SHA256 1e53d0aadd0b17b131383c442286431dee01cfe32f63ebee754ab6041acea9df is prepared but NEVER EXECUTED. Original first-refused script SHA256 c6861db63e2526994ca859ba6af1e125cbcff8925107e4a0f1c3f8b735e3ebda; explicit queue-before-exec handshake was added afterward to make prequeued origin decisive. Installed runtime43f2 refused python3 absolute script before dispatch: unavailable-native-context, relative target tools-call mentioned in its comment. No copied host or executor, private config, probe process or result receipt exists. Root explicitly holds probe pending supported validated native command context or owning consumer repair; no guard rephrasing, alternate carrier, reprieve or source hardening is authorized. Remaining owner is workflow_enforcement under parent integration; resumption requires the supported route plus same pinned b7bee6fa host and76eb53c0 executor, max3owned processes per case45s with no USER or governance effect. Genuine host-created comparator remains separately owed; historical matched-byte genuine A3 is not a fresh comparator. Secure-origin defect is not yet established."
+    recorded_at: "2026-10-29T22:57:38.626Z"
