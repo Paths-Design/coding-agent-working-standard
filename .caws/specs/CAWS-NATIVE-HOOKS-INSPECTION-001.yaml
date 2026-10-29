@@ -1,0 +1,44 @@
+id: CAWS-NATIVE-HOOKS-INSPECTION-001
+title: 'Describe effective native hooks without unconditional Python inspection'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-10-29T22:42:56.880Z'
+updated_at: '2026-10-29T22:42:56.880Z'
+created_by_session: '01a189cf-33ad-7133-b4a4-1d751e4b9d41'
+blast_radius:
+  modules:
+    - 'CLI hooks inspection and observed harness registration'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/hooks.ts'
+    - 'packages/caws-cli/tests/shell/hooks-readonly.test.js'
+  out: []
+invariants:
+  - 'Installed native images do not imply active native harness registration'
+  - 'Native description failures never replay the legacy Python entry'
+  - 'Hooks inspection dispatches no handlers and preserves original caller context'
+acceptance:
+  - id: A1
+    given: 'an observed native registration and selected native runtime'
+    when: 'hooks list runs without a usable Python executable'
+    then: 'actual native launcher description supplies the effective handler chain with original caller and project context'
+  - id: A2
+    given: 'a native image is installed but the effective registration selects legacy'
+    when: 'hooks list runs'
+    then: 'the supported legacy launcher describes the chain and the native launcher does not run'
+  - id: A3
+    given: 'missing corrupt contradictory or failing effective selection'
+    when: 'hooks list runs'
+    then: 'it reports unavailable without guessing a route or replaying Python after native failure'
+observability:
+  - 'CLI JSON events identify unavailable selection and actual selected handler values; raw launcher traces establish route'
+rollback:
+  - 'Revert the isolated source commit through normal governed history; no runtime or registration changes are performed'
+non_functional:
+  security:
+    - 'Read registration as inert data and never execute configured command text'
+contracts:
+  - name: 'hooks-effective-selection'
+    type: behavior
