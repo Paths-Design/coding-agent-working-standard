@@ -125,9 +125,17 @@ invariants:
   - 'Candidate source and test repairs occur only before campaign freeze within admitted paths; tracked source, tests, dependencies and build outputs remain unchanged while either campaign runs, and no per-file mutation floor is lowered'
 acceptance:
   - id: A1
-    given: 'committed Source candidate with matching runtime and test bytes'
-    when: 'the full six-file execution mutation campaign and baseline execute in an isolated owned checkout'
-    then: 'every target meets the unchanged 80 percent floor with nonzero selected tests and retained input-build-report identity'
+    given: >-
+      The isolated qualification lane contains the original six execution mutation
+      targets plus the dedicated evidence consumer target and selected fixture
+      suites.
+    when: >-
+      The frozen candidate completes the declared execution campaign without
+      exclusions, partial runs, or reduced floors.
+    then: >-
+      All seven execution targets individually meet the 80 percent floor, with exact
+      source, build, dependency and report identities and hostile writer controls
+      retained.
   - id: A2
     given: >-
       The committed joined Source candidate includes extracted pure inspection
@@ -162,9 +170,7 @@ contracts:
 evidence:
   - criterion_id: A1
     status: unchecked
-    evidence_ref: "Continuation14980: owned QA remains clean0b99d80da, three commits above Sourcec8. Production/test repairc2 unchanged; docs-only0b adds explicit check-to-mutation serialization/conditional-operation requirement to PROPOSED unimplemented retirement contract. docscheck0b0 retained at reports/dependency-isolation/owned-retirement-docs-0b99d80da.log. Existing c2 joined2232pass13suites/build0/docs0/5gates0 retained; these do not satisfy full mutation or native adoption. New negative source check: policies.ts491-496 refuses unknown read destinations; authorizer reasons cannot filter that refusal. Parent normal push02 terminal1 and canonical freeze released; full campaign remains HOLD pending Source caws-read-metadata implementation. That pure executable predicate will join whole-file analysis mutation at unchanged80; actual final target count/spec/CI update after source inspection, likely9; execution6 unchanged. Source native patch exact export5targets/65066bytepatch/67292byterequest timed out; invocation29964 known Started+dispatchStarted only per owners, terminal/effects unresolved; owners retain hook-only transport/deadline investigation, no retry/bypass by Root. Parent owns pending explicit child env repairs only in command-analysis, mutation-view and ci/git-fixture-isolation tests; preserve during normal integration, explicit hostile request.environment and mutant propagation must remain. No active QA process. Next join final dependency/source plus fixtures, validate, freeze once and launch sustained capped2 surfaces sequentially. Preserve raw reports before destructive QA merge; archivecopy refusal remains. Root retains source/fourdocs/landing/push; native custody/canary/rollback and adoption unqualified."
-    recorded_at: "2026-10-28T11:02:21.287Z"
-    commit_sha: "0b99d80da9cac236cf0647de0229b4376e494f7f"
+    recorded_at: "2026-10-29T01:57:15.061Z"
   - criterion_id: A3
     status: unchecked
     evidence_ref: "Continuation15120; previous raw native/literal/canonical-pin negative preserved. Added a distinct real foreign-repository literal negative using existing agent-config repo: ONLY projected write target /Users/darianrosebrook/Desktop/Projects/agent-config/__caws_writer_negative_01a151c0, payload33:119 exactly quoted target; marker absent before/after; no submitted source executed. writer-foreign-negative-{input,view}-e9788f3e0.json SHA3fb45fe0ff20fe44d96cf67b845aab84c72cf25b1141d0a38ccfa7206c4d35a9/7734c42ed98164f9739c2c6087c2ef39a5a77e1c7cf8ae31a7a1abc731689a68. Assertions of original native/literal command equality,2802bytes, native execution null/execution-contract, unknown actual Caws file callee, no invented writes, exact foreign target/span and absent marker all pass; generated writer-consumer-summary-e9788f3e0.json SHAce5c286813019ea7307bb91c5be4077a6db3f463b5a6f0bddf6e8c8a5e29e121 explicitly says both actualNativeWriterAdmissionProven and actualNativeForeignRefusalProven false. Runtime src tree4574 ande978 identical a0b8c0a08704651c261bc5c05e6d1dbaff352d20. Bounded CI109pass3suites55.092s, five local gates pass, accounting216/37/5 only. Independent read-only peer no consequential inspected merge/oracle defect; Root directly grounds additional private-profile env rejection(authorizer41-47/26-75) as well as file rejection401-408 and native Codex gatehooks249-253. Native84 contains only wire/framing module, not owner/host/carrier from separate private execution-owner branch. Existing owner releases fence immediately after spawn before job wait; no invented inherent writer deadlock. Evidence --verify with test-nodeid executes cited code(specs1850-1853); no blanket authenticated-Caws all-args profile is safe. Caller/host and narrow callee/effect contract remains needed; no fabricated fields or exception. Source-side adapters/tests retained, Native owner interface/acceptance pending; recipient became stale and ordinary message not sent, documented allow-dead queue used separately, never treated as accepted handoff. Actual installed useful writer+foreign refusal unperformed; heavy9+6 held and native/global adoption unqualified. Citation verification here checks committed identity only, not generated report execution."
