@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: execution-boundary
 created_at: '2026-10-19T02:30:42.300Z'
-updated_at: '2026-10-27T00:18:32.626Z'
+updated_at: '2026-10-29T01:26:22.039Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -73,6 +73,75 @@ scope:
     - packages/caws-cli/stryker.execution.conf.js
     - packages/caws-cli/scripts/stryker-config.cjs
     - packages/caws-cli/tsconfig.vnext.json
+    - docs/internal/caws-runtime-modernization.md
+    - packages/caws-cli/scripts/qualify-stop-profile.mjs
+    - packages/caws-cli/src/init/machine-runtime-state.ts
+    - packages/caws-cli/src/init/native-hook-identification.ts
+    - packages/caws-cli/src/init/native-runtime-entry.ts
+    - packages/caws-cli/src/init/system-runtime.ts
+    - packages/caws-cli/src/runtime/cli-identity-loader.ts
+    - packages/caws-cli/src/runtime/describe-entry.ts
+    - packages/caws-cli/src/tooling/native-qualification-prepare-entry.ts
+    - packages/caws-cli/src/tooling/native-qualification-prepare.ts
+    - packages/caws-cli/src/tooling/native-sqlite-build.ts
+    - packages/caws-cli/tests/adapter/native-entry-registration.test.js
+    - packages/caws-cli/tests/adapter/native-runtime-entry.test.js
+    - packages/caws-cli/tests/adapter/opencode-project-registration.test.js
+    - packages/caws-cli/tests/runtime/cli-identity-loader.test.js
+    - packages/caws-cli/tests/runtime/describe-entry.test.js
+    - packages/caws-cli/tests/tooling/native-qualification-prepare.test.js
+    - packages/caws-cli/tests/tooling/native-sqlite-build.test.js
+    - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
+    - packages/caws-native/src/bin/caws-prepare-source.rs
+    - packages/caws-native/src/cli.rs
+    - packages/caws-native/src/context_git.rs
+    - packages/caws-native/src/context_git/original_project.rs
+    - packages/caws-native/src/context_git/render.rs
+    - packages/caws-native/src/context_git/stop.rs
+    - packages/caws-native/src/engine_custody.rs
+    - packages/caws-native/src/engine_custody/tests.rs
+    - packages/caws-native/src/engine_custody/worker.rs
+    - packages/caws-native/src/engine_custody/worker/tests.rs
+    - packages/caws-native/src/execution_authorizer_wire.rs
+    - packages/caws-native/src/execution_carrier.rs
+    - packages/caws-native/src/execution_child.rs
+    - packages/caws-native/src/execution_control.rs
+    - packages/caws-native/src/execution_fd_transport.rs
+    - packages/caws-native/src/execution_fence.rs
+    - packages/caws-native/src/execution_host.rs
+    - packages/caws-native/src/execution_ingress.rs
+    - packages/caws-native/src/execution_owner.rs
+    - packages/caws-native/src/execution_prepare.rs
+    - packages/caws-native/src/execution_prepared.rs
+    - packages/caws-native/src/installed_compatibility.rs
+    - packages/caws-native/src/installed_entry.rs
+    - packages/caws-native/src/installed_generation.rs
+    - packages/caws-native/src/lib.rs
+    - packages/caws-native/src/main.rs
+    - packages/caws-native/src/monotonic_deadline.rs
+    - packages/caws-native/src/native_generation.rs
+    - packages/caws-native/src/preparation_parent.rs
+    - packages/caws-native/src/process_effect.rs
+    - packages/caws-native/src/render_context.rs
+    - packages/caws-native/src/render_observation.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/sqlite_build_identity.rs
+    - packages/caws-native/src/stop_budget.rs
+    - packages/caws-native/src/stop_git.rs
+    - packages/caws-native/tests/engine_custody.rs
+    - packages/caws-native/tests/installed_compatibility.rs
+    - packages/caws-native/tests/installed_deadline.rs
+    - packages/caws-native/tests/installed_entry.rs
+    - packages/caws-native/tests/invoke.rs
+    - packages/caws-native/tests/preparation_parent.rs
+    - packages/caws-native/tests/sqlite_identity.rs
+    - scripts/install-cli-snapshot.mjs
+    - scripts/install-cli-snapshot.test.mjs
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/evidence-rederive.ts
+    - packages/caws-cli/tests/shell/caws-read-metadata.test.js
+    - packages/caws-cli/tests/shell/specs-evidence.test.js
 invariants:
   - 'Analysis never executes submitted commands, expansions, scripts or redirections.'
   - 'Every possible shell-visible Git target and admitted execution-bearing argument satisfies the declared policy; unresolved syntax or values never become an allow proof.'
