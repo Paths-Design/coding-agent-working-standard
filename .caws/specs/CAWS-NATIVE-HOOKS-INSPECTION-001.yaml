@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: native-hooks-inspection
 created_at: '2026-10-29T22:42:56.880Z'
-updated_at: '2026-10-29T23:41:07.265Z'
+updated_at: '2026-10-29T23:57:54.529Z'
 created_by_session: '01a189cf-33ad-7133-b4a4-1d751e4b9d41'
 blast_radius:
   modules:
@@ -21,6 +21,7 @@ scope:
   support:
     - tmp/rust-cutover-package
     - package-lock.json
+    - packages/caws-cli/node_modules
 invariants:
   - 'Installed native images do not imply active native harness registration'
   - 'Native description failures never replay the legacy Python entry'
