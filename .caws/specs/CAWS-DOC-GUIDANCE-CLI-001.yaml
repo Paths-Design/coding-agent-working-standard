@@ -1,10 +1,11 @@
 id: CAWS-DOC-GUIDANCE-CLI-001
 title: 'Align agent and README guidance with the CLI'
 mode: doc
-lifecycle_state: active
-worktree: doc-guidance-cli
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Corrected AGENTS.md and README CLI authoring, evidence routes, clean verification order, merge cwd/cleanup and partial-recovery guarantees, and Markdown tables. Validated installed 12.2.0-rc.2 help/plan/refusal and source contracts; 28 focused repository lifecycle tests and all policy gates passed. All three AC records and matching events were read back. Native harness setup and a full installed-CLI fixture lifecycle were not executed. User explicitly approved merging into main, spec closure and worktree removal.'
 created_at: '2026-10-29T05:32:02.892Z'
-updated_at: '2026-10-29T05:40:04.480Z'
+updated_at: '2026-10-29T05:59:02.656Z'
 created_by_session: '01a1861e-58cc-7392-ac55-1ff3a6051998'
 blast_radius:
   modules:
