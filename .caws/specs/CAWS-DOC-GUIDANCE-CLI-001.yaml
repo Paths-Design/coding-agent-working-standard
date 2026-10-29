@@ -35,3 +35,10 @@ acceptance:
     then: 'tables render with consistent columns and the revised guidance passes focused validation'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected both docs at 0a49f64ae against installed CLI 12.2.0-rc.2 help for create/amend/amend-scope/evidence/verify-acs and evidence record; FEAT-1 create --plan returned valid=true with no missing fields; live event-only AC probe returned shell.command.evidence_ac_wrong_surface exit 1. Audited CLI-only authoring and later-refutation wording; CLI probes establish syntax/refusal, not native harness execution."
+    recorded_at: "2026-10-29T05:54:42.487Z"
+    artifact_path: AGENTS.md
+    commit_sha: "0a49f64ae32f5776da9f6e107430a933f8db8096"
