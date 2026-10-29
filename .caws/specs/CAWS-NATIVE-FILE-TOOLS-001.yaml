@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-FILE-TOOLS-001
 title: 'Carry authentic Codex file tools through typed stock pre-write enforcement'
 mode: refactor
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-file-tools
 created_at: '2026-10-29T23:24:56.819Z'
-updated_at: '2026-10-29T23:25:28.172Z'
+updated_at: '2026-10-29T23:25:30.856Z'
 created_by_session: '01a1861e-58cc-7392-ac55-1ff3a6051998'
 blast_radius:
   modules:
