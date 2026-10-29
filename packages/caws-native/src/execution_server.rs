@@ -74,6 +74,97 @@ fn entry_failed(stage: EntryFailureStage) -> i32 {
     2
 }
 
+#[derive(Clone, Copy)]
+enum CallStage {
+    Deadline,
+    Ingress,
+    HostIdentity,
+    HostChannel,
+    CallControl,
+    NativeImage,
+    Generation,
+    WriterImage,
+    Project,
+    Preparation,
+    StartupEncoding,
+    StartupSocket,
+    WorkerConfiguration,
+    PreSpawn,
+    WorkerSpawn,
+    StartupTransit,
+    WorkerReply,
+}
+impl CallStage {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Deadline => "deadline",
+            Self::Ingress => "ingress",
+            Self::HostIdentity => "host-identity",
+            Self::HostChannel => "host-channel",
+            Self::CallControl => "call-control",
+            Self::NativeImage => "native-image",
+            Self::Generation => "generation",
+            Self::WriterImage => "writer-image",
+            Self::Project => "project",
+            Self::Preparation => "preparation",
+            Self::StartupEncoding => "startup-encoding",
+            Self::StartupSocket => "startup-socket",
+            Self::WorkerConfiguration => "worker-configuration",
+            Self::PreSpawn => "pre-spawn",
+            Self::WorkerSpawn => "worker-spawn",
+            Self::StartupTransit => "startup-transit",
+            Self::WorkerReply => "worker-reply",
+        }
+    }
+}
+fn preparation_reason(reason: PrepareRefusal) -> &'static str {
+    match reason {
+        PrepareRefusal::Host => "Host",
+        PrepareRefusal::Identity => "Identity",
+        PrepareRefusal::Context => "Context",
+        PrepareRefusal::Image => "Image",
+        PrepareRefusal::Deadline => "Deadline",
+        PrepareRefusal::Cancelled => "Cancelled",
+        PrepareRefusal::Control => "Control",
+        PrepareRefusal::Record => "Record",
+        PrepareRefusal::DiscoverySpawn => "DiscoverySpawn",
+        PrepareRefusal::DiscoveryIo => "DiscoveryIo",
+        PrepareRefusal::DiscoveryReply => "DiscoveryReply",
+        PrepareRefusal::DiscoveryUnresolved => "DiscoveryUnresolved",
+        PrepareRefusal::Utility => "Utility",
+    }
+}
+/// Observations only: neither a stage nor a preparation reason establishes
+/// that no USER launch occurred. Possible-launch custody remains independent.
+struct CallTrace {
+    stage: Cell<CallStage>,
+    preparation: Cell<Option<PrepareRefusal>>,
+}
+impl CallTrace {
+    fn new() -> Self {
+        Self {
+            stage: Cell::new(CallStage::Deadline),
+            preparation: Cell::new(None),
+        }
+    }
+    fn at(&self, stage: CallStage) {
+        self.stage.set(stage);
+        self.preparation.set(None);
+    }
+    fn preparation_failed(&self, reason: PrepareRefusal) {
+        self.at(CallStage::Preparation);
+        self.preparation.set(Some(reason));
+    }
+    fn refusal(&self, possible: bool) -> Value {
+        let mut detail = json!({"ok":false,"reason":"NativeBoundaryRefused",
+            "userSpawnMayHaveOccurred":possible,"stage":self.stage.get().label()});
+        if let Some(reason) = self.preparation.get() {
+            detail["preparationReason"] = json!(preparation_reason(reason));
+        }
+        detail
+    }
+}
+
 /// Startup-only trusted configuration. No model argument can replace a pin.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -745,21 +836,28 @@ fn execute_call(
     peer: &HostChannel,
     bytes: &[u8],
     possible: &Cell<bool>,
+    trace: &CallTrace,
 ) -> io::Result<Value> {
+    trace.at(CallStage::Deadline);
     let prep = MonotonicDeadline::capture(Duration::from_secs(30)).map_err(|_| refused())?;
     // This earlier producer bound also clips a long worker job. It is never
     // renewed by host revalidation, startup, or reply transit.
     let overall = MonotonicDeadline::capture(Duration::from_secs(120)).map_err(|_| refused())?;
+    trace.at(CallStage::Ingress);
     let call = execution_ingress::parse_call(bytes).map_err(|_| refused())?;
     let id: Value = serde_json::from_str(&call.id_json).map_err(|_| refused())?;
     let cancelled = AtomicBool::new(false);
+    trace.at(CallStage::HostIdentity);
     let host = HostContext::capture(&config.host, &prep)?;
+    trace.at(CallStage::HostChannel);
     peer.revalidate(config, &prep)?;
     if peer.input.pid() != host.pid() || peer.input.birth() != host.birth() {
         return Err(refused());
     }
     let next_host_check = Cell::new(Instant::now());
     let control = |stage: &'static str| {
+        let previous = trace.stage.get();
+        trace.at(CallStage::CallControl);
         input
             .borrow_mut()
             .pump(Some(&id), &cancelled)
@@ -772,18 +870,25 @@ fn execute_call(
             "project_spawn" | "worker_spawn" | "execution_discovery_spawn"
         ) || Instant::now() >= next_host_check.get()
         {
+            trace.at(CallStage::HostIdentity);
             host.revalidate(&overall)
                 .map_err(|_| "host unavailable".to_owned())?;
+            trace.at(CallStage::HostChannel);
             peer.revalidate(config, &overall)
                 .map_err(|_| "channel unavailable".to_owned())?;
             next_host_check.set(Instant::now() + Duration::from_secs(1));
         }
+        trace.at(previous);
         Ok(())
     };
     control("project").map_err(|_| refused())?;
+    trace.at(CallStage::NativeImage);
     verify_self(config, &prep)?;
+    trace.at(CallStage::Generation);
     verify_generation(config, &prep)?;
+    trace.at(CallStage::WriterImage);
     verify_image(&config.writer, &prep)?;
+    trace.at(CallStage::Project);
     let canonical = project(&call.caller_anchor, &prep, &cancelled, &control)?;
     let pins = PinnedAuthorizer {
         node: ProgramImage {
@@ -799,6 +904,7 @@ fn execute_call(
             sha256: config.writer.sha256.clone(),
         }),
     };
+    trace.at(CallStage::Preparation);
     let prepared = execution_prepare::prepare(
         &call,
         &host,
@@ -811,10 +917,13 @@ fn execute_call(
         &control,
     )
     .map_err(|f| {
+        trace.preparation_failed(f.reason);
         settle(f.child);
         refused()
     })?;
+    trace.at(CallStage::StartupEncoding);
     let frame = execution_carrier::encode_startup(&prepared, &pins, &prep)?;
+    trace.at(CallStage::StartupSocket);
     let (mut producer, worker) = UnixStream::pair()?;
     producer.set_nonblocking(true)?;
     // Both endpoints are CLOEXEC in the producer; only child fd3 is exported.
@@ -832,6 +941,7 @@ fn execute_call(
             return Err(refused());
         }
     }
+    trace.at(CallStage::WorkerConfiguration);
     let mut command = Command::new(&config.host.path);
     command
         .arg("sandbox")
@@ -852,18 +962,21 @@ fn execute_call(
         .stderr(Stdio::piped());
     configure_private_child(&mut command)?;
     configure_child_fds(&mut command, &[(worker.as_fd(), STARTUP_FD)])?;
+    trace.at(CallStage::PreSpawn);
     host.revalidate(&prep)?;
     verify_self(config, &prep)?;
     verify_generation(config, &prep)?;
     verify_image(&config.writer, &prep)?;
     control("worker_spawn").map_err(|_| refused())?;
     // A lost/invalid worker reply cannot establish that no USER spawn happened.
+    trace.at(CallStage::WorkerSpawn);
     possible.set(true);
     let child = command.spawn()?;
     drop(command);
     drop(worker);
     // A failed frame write closes the liveness socket, but custody of the real
     // launcher/worker is still settled before returning.
+    trace.at(CallStage::StartupTransit);
     let mut remaining = frame.as_slice();
     while !remaining.is_empty() {
         if prep.check().is_err() || control("startup_write").is_err() {
@@ -900,6 +1013,7 @@ fn execute_call(
             }
         }
     }
+    trace.at(CallStage::WorkerReply);
     service_worker(child, producer, overall.expires(), &control)
 }
 
@@ -1014,13 +1128,10 @@ pub fn main_entry() -> i32 {
                     "properties":{"source":{"type":"string"},"cwd":{"type":"string"}}}}]}}),
             Some("tools/call") => {
                 let possible = Cell::new(false);
-                match execute_call(&config, &path, &input, &peer, &line, &possible) {
+                let trace = CallTrace::new();
+                match execute_call(&config, &path, &input, &peer, &line, &possible, &trace) {
                     Ok(v) => execution_result(id, v),
-                    Err(_) => result(
-                        id,
-                        json!({"ok":false,"reason":"NativeBoundaryRefused","userSpawnMayHaveOccurred":possible.get()}),
-                        true,
-                    ),
+                    Err(_) => result(id, trace.refusal(possible.get()), true),
                 }
             }
             _ if id.is_null() => continue,
@@ -1040,6 +1151,44 @@ mod tests {
     use sha2::{Digest, Sha256};
     use std::sync::atomic::AtomicU64;
     static NEXT: AtomicU64 = AtomicU64::new(0);
+    #[test]
+    fn call_trace_preparation_reason_is_closed_and_does_not_replace_possible_launch_custody() {
+        let trace = CallTrace::new();
+        for (reason, expected) in [
+            (PrepareRefusal::Host, "Host"),
+            (PrepareRefusal::Identity, "Identity"),
+            (PrepareRefusal::Context, "Context"),
+            (PrepareRefusal::Image, "Image"),
+            (PrepareRefusal::Deadline, "Deadline"),
+            (PrepareRefusal::Cancelled, "Cancelled"),
+            (PrepareRefusal::Control, "Control"),
+            (PrepareRefusal::Record, "Record"),
+            (PrepareRefusal::DiscoverySpawn, "DiscoverySpawn"),
+            (PrepareRefusal::DiscoveryIo, "DiscoveryIo"),
+            (PrepareRefusal::DiscoveryReply, "DiscoveryReply"),
+            (PrepareRefusal::DiscoveryUnresolved, "DiscoveryUnresolved"),
+            (PrepareRefusal::Utility, "Utility"),
+        ] {
+            trace.preparation_failed(reason);
+            assert_eq!(
+                trace.refusal(false),
+                json!({"ok":false,"reason":"NativeBoundaryRefused",
+                "userSpawnMayHaveOccurred":false,"stage":"preparation","preparationReason":expected})
+            );
+        }
+        trace.at(CallStage::WorkerReply);
+        assert_eq!(
+            trace.refusal(true),
+            json!({"ok":false,"reason":"NativeBoundaryRefused",
+            "userSpawnMayHaveOccurred":true,"stage":"worker-reply"})
+        );
+        trace.at(CallStage::Ingress);
+        assert_eq!(
+            trace.refusal(false),
+            json!({"ok":false,"reason":"NativeBoundaryRefused",
+            "userSpawnMayHaveOccurred":false,"stage":"ingress"})
+        );
+    }
     #[test]
     fn consumer_exit_status_controls_mcp_error_without_losing_structured_stdout() {
         for code in [0, 1] {

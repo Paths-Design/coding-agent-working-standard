@@ -168,8 +168,9 @@ fn real_binary_advertises_context_and_exposes_only_source_and_cwd() {
         serde_json::from_str(denied["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
     assert_eq!(
         detail,
-        json!({"ok":false,"reason":"NativeBoundaryRefused","userSpawnMayHaveOccurred":false})
+        json!({"ok":false,"reason":"NativeBoundaryRefused","userSpawnMayHaveOccurred":false,"stage":"ingress"})
     );
+    println!("observed invalid-meta refusal: {detail}");
     assert!(!line.contains("must-not-run"));
     input.shutdown(std::net::Shutdown::Write).unwrap();
     assert!(child.wait().unwrap().success());
@@ -326,4 +327,107 @@ fn self_image_refusal_is_distinct_from_configuration_and_channel_refusal() {
         output.stderr,
         b"caws-execution: startup-refused stage=self-image\n"
     );
+}
+
+#[test]
+fn synthetic_generation_drift_has_closed_call_stage_before_project_node_or_user() {
+    exercise_synthetic_call_refusal(true);
+}
+
+#[test]
+fn synthetic_preparation_identity_failure_preserves_closed_reason_without_metadata() {
+    exercise_synthetic_call_refusal(false);
+}
+
+fn exercise_synthetic_call_refusal(generation_drift: bool) {
+    let fixture = Fixture::new();
+    let config = fixture.config(false);
+    let configured: Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
+    if !generation_drift {
+        let initialized = Command::new("/usr/bin/git")
+            .args(["init", "--quiet"])
+            .arg(&fixture.0)
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .output()
+            .unwrap();
+        assert!(initialized.status.success());
+        fs::create_dir(fixture.0.join(".caws")).unwrap();
+    }
+    let (mut input, endpoint) = UnixStream::pair().unwrap();
+    let stdin_fd: OwnedFd = endpoint.try_clone().unwrap().into();
+    let stdout_fd: OwnedFd = endpoint.into();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_caws-execution"))
+        .arg("--config")
+        .arg(&config)
+        .stdin(Stdio::from(stdin_fd))
+        .stdout(Stdio::from(stdout_fd))
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut output = BufReader::new(input.try_clone().unwrap());
+    let mut line = String::new();
+    writeln!(
+        input,
+        "{}",
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})
+    )
+    .unwrap();
+    output.read_line(&mut line).unwrap();
+    let initialized: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(
+        initialized["result"]["serverInfo"]["name"],
+        "caws-execution"
+    );
+    if generation_drift {
+        fs::write(
+            configured["authorizer"]["path"].as_str().unwrap(),
+            "PRIVATE_GENERATION_DRIFT",
+        )
+        .unwrap();
+    }
+    let marker = fixture.0.join("USER-must-remain-absent");
+    let state = json!({"sandboxCwd":format!("file://{}", fixture.0.display()), "useMxc":false,
+        "privatePolicy":"PRIVATE_POLICY_CONTENT"});
+    let launcher = if generation_drift {
+        configured["host"]["path"].clone()
+    } else {
+        json!("/usr/bin/true")
+    };
+    let packet = json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{
+        "name":"caws_exec","arguments":{"source":format!("printf PRIVATE_SUBMITTED_SOURCE > {}", marker.display())},
+        "_meta":{"sessionId":"PRIVATE_SESSION_ID","threadId":"PRIVATE_THREAD_ID","callId":"PRIVATE_CALL_ID",
+            "codex/caller-context":{"version":1,"callerAnchor":{"kind":"local","cwd":fixture.0},"serverEnvironmentId":"PRIVATE_SERVER_ENV"},
+            "codex/sandbox-state":state,"codex/sandbox-state-meta":state,
+            "codex/sandbox-launcher":{"codexExecutable":launcher}}}});
+    line.clear();
+    writeln!(input, "{packet}").unwrap();
+    output.read_line(&mut line).unwrap();
+    let reply: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(reply["result"]["isError"], true);
+    let detail: Value =
+        serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    let expected = if generation_drift {
+        json!({"ok":false,"reason":"NativeBoundaryRefused","userSpawnMayHaveOccurred":false,"stage":"generation"})
+    } else {
+        json!({"ok":false,"reason":"NativeBoundaryRefused","userSpawnMayHaveOccurred":false,"stage":"preparation","preparationReason":"Identity"})
+    };
+    assert_eq!(detail, expected);
+    for secret in ["PRIVATE_", fixture.0.to_str().unwrap()] {
+        assert!(!line.contains(secret));
+    }
+    assert!(!marker.exists());
+    println!("observed synthetic call refusal: {detail}");
+    input.shutdown(std::net::Shutdown::Write).unwrap();
+    assert!(child.wait().unwrap().success());
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    assert_eq!(stderr, "");
 }
