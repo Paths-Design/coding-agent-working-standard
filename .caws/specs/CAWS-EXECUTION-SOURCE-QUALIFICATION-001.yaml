@@ -4,7 +4,7 @@ mode: chore
 lifecycle_state: active
 worktree: execution-qualification
 created_at: '2026-10-27T17:30:32.605Z'
-updated_at: '2026-10-29T01:41:55.937Z'
+updated_at: '2026-10-29T04:31:29.627Z'
 created_by_session: '01a151c0-4722-76a0-9814-eb680a4be9b2'
 blast_radius:
   modules:
@@ -121,6 +121,7 @@ scope:
     - packages/caws-native/src/bin/caws-execution.rs
     - packages/caws-native/tests/execution_server.rs
     - packages/caws-cli/tests/shell/specs-evidence-verify.test.js
+    - packages/caws-cli/scripts/mutation-input-identity.mjs
 invariants:
   - 'Candidate source and test repairs occur only before campaign freeze within admitted paths; tracked source, tests, dependencies and build outputs remain unchanged while either campaign runs, and no per-file mutation floor is lowered'
 acceptance:
