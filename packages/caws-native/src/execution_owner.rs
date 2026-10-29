@@ -12,7 +12,9 @@
 //! quiescent-table contract in execution_fd_transport. A threaded MCP server
 //! must use a separate worker rather than call this owner in its own process.
 use crate::{
-    execution_authorizer_wire::{Decision, Fence, FrameDecoder, Phase, RequestRecord},
+    execution_authorizer_wire::{
+        Decision, Fence, FrameDecoder, Phase, ReplyObservation, RequestRecord,
+    },
     execution_child::{self, Completed, Failure, TerminationGrace},
     execution_fd_transport::{configure_child_fds, configure_private_child},
     execution_fence::ExecutionFence,
@@ -77,6 +79,36 @@ pub(crate) enum Refusal {
     UserSpawnMayHaveOccurred,
     JobIo,
 }
+#[derive(serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+enum AuthorizerNonAllowDecision {
+    Deny,
+    Unresolved,
+}
+/// Only a fully correlated wire observation can construct this closed detail.
+/// Its reason strings already passed the wire whitelist and 32-code bound.
+/// No record, revision, authorizer output, or arbitrary error enters this value.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AuthorizerRefusalDetail {
+    phase: Phase,
+    decision: AuthorizerNonAllowDecision,
+    reason_codes: Vec<String>,
+}
+impl AuthorizerRefusalDetail {
+    fn from_observation(phase: Phase, observation: &ReplyObservation) -> Option<Self> {
+        let decision = match observation.decision() {
+            Decision::Allow => return None,
+            Decision::Deny => AuthorizerNonAllowDecision::Deny,
+            Decision::Unresolved => AuthorizerNonAllowDecision::Unresolved,
+        };
+        Some(Self {
+            phase,
+            decision,
+            reason_codes: observation.reason_codes().to_vec(),
+        })
+    }
+}
 /// When a child remains, the caller MUST retain it and retry settlement. When
 /// `fence` remains, settle the authorizer before attempting fence release.
 /// Never automatically retry a possible USER spawn. No payload Debug/logging.
@@ -85,6 +117,7 @@ pub(crate) struct OwnerFailure {
     pub child: Option<Child>,
     pub fence: Option<ExecutionFence>,
     pub job_failure: Option<Failure>,
+    pub authorizer_refusal: Option<AuthorizerRefusalDetail>,
     pub user_spawn_may_have_occurred: bool,
 }
 pub(crate) enum OwnerOutcome {
@@ -97,6 +130,7 @@ fn failure(reason: Refusal) -> OwnerFailure {
         child: None,
         fence: None,
         job_failure: None,
+        authorizer_refusal: None,
         user_spawn_may_have_occurred: reason == Refusal::UserSpawnMayHaveOccurred,
     }
 }
@@ -348,6 +382,7 @@ fn authorizer(
                 child: e.retained_child,
                 fence: None,
                 job_failure: None,
+                authorizer_refusal: None,
                 user_spawn_may_have_occurred: false,
             });
         }
@@ -363,7 +398,9 @@ fn authorizer(
         .correlate_reply(&payload)
         .map_err(|_| failure(Refusal::AuthorizerReply))?;
     if observation.decision() != Decision::Allow {
-        return Err(failure(Refusal::Denied));
+        let mut denied = failure(Refusal::Denied);
+        denied.authorizer_refusal = AuthorizerRefusalDetail::from_observation(phase, &observation);
+        return Err(denied);
     }
     let revision = observation
         .authority_revision()
@@ -492,6 +529,7 @@ fn execute_inner(
             }
             if fence.try_release().is_err() {
                 problem.reason = Refusal::FenceRelease;
+                problem.authorizer_refusal = None;
                 problem.fence = Some(fence);
             }
             Err(problem)
@@ -525,6 +563,7 @@ fn execute_inner(
                     child: None,
                     fence: None,
                     job_failure: Some(e),
+                    authorizer_refusal: None,
                     user_spawn_may_have_occurred: true,
                 }),
             };
@@ -541,6 +580,7 @@ fn execute_inner(
                         .err()
                         .unwrap_or_else(|| failure(Refusal::FenceRelease));
                     problem.reason = Refusal::FenceRelease;
+                    problem.authorizer_refusal = None;
                     problem.user_spawn_may_have_occurred = true;
                     problem.fence = Some(fence);
                     return Err(problem);
@@ -572,6 +612,7 @@ fn release_after_spawn(
                 retained_child: None,
                 cleanup_detail: Some(detail),
             }),
+            authorizer_refusal: None,
             user_spawn_may_have_occurred: true,
         });
     }

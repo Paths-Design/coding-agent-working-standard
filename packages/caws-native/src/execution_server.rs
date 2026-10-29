@@ -726,8 +726,14 @@ fn worker_reply(outcome: OwnerOutcome) -> Value {
                 stderr = job.stderr;
             }
             let fence_released = f.fence.as_mut().is_none_or(|f| f.try_release().is_ok());
-            json!({"ok":false,"reason":format!("{:?}",f.reason),"userSpawnMayHaveOccurred":f.user_spawn_may_have_occurred,
-                "fenceReleased":fence_released,"exitCode":exit_code,"stdoutBase64":STANDARD.encode(stdout),"stderrBase64":STANDARD.encode(stderr)})
+            let mut reply = json!({"ok":false,"reason":format!("{:?}",f.reason),"userSpawnMayHaveOccurred":f.user_spawn_may_have_occurred,
+                "fenceReleased":fence_released,"exitCode":exit_code,"stdoutBase64":STANDARD.encode(stdout),"stderrBase64":STANDARD.encode(stderr)});
+            if f.reason == execution_owner::Refusal::Denied {
+                if let Some(detail) = f.authorizer_refusal {
+                    reply["authorizerRefusal"] = json!(detail);
+                }
+            }
+            reply
         }
     }
 }
@@ -1250,6 +1256,236 @@ mod tests {
     use sha2::{Digest, Sha256};
     use std::sync::atomic::AtomicU64;
     static NEXT: AtomicU64 = AtomicU64::new(0);
+    #[derive(Clone, Copy)]
+    enum AuthorizerFixtureReply {
+        Allow,
+        Deny,
+        Unresolved,
+        UnknownReason,
+        UnknownDecision,
+        TooManyReasons,
+        MalformedFrame,
+    }
+    fn fixture_word(path: &Path) -> String {
+        format!("'{}'", path.to_str().unwrap().replace('\'', "'\\''"))
+    }
+    fn authorizer_fixture_frame(
+        phase: crate::execution_authorizer_wire::Phase,
+        kind: AuthorizerFixtureReply,
+        digest: &str,
+    ) -> Vec<u8> {
+        let (decision, reasons) = match kind {
+            AuthorizerFixtureReply::Allow => ("allow", json!([])),
+            AuthorizerFixtureReply::Deny => ("deny", json!(["source_denied", "scope_refused"])),
+            AuthorizerFixtureReply::Unresolved => (
+                "unresolved",
+                json!(["unsupported_profile", "context_unresolved"]),
+            ),
+            AuthorizerFixtureReply::UnknownReason => {
+                ("unresolved", json!(["PRIVATE_UNKNOWN_REASON"]))
+            }
+            AuthorizerFixtureReply::UnknownDecision => ("PRIVATE_UNKNOWN_DECISION", json!([])),
+            AuthorizerFixtureReply::TooManyReasons => ("deny", json!(vec!["source_denied"; 33])),
+            AuthorizerFixtureReply::MalformedFrame => ("deny", json!(["source_denied"])),
+        };
+        let revision = if matches!(kind, AuthorizerFixtureReply::Allow) {
+            json!("fixture-revision")
+        } else {
+            Value::Null
+        };
+        let payload = serde_json::to_vec(&json!({"protocol":"caws.execution.authorizer.v1",
+            "phase":phase,"invocationId":"owner-fixture","executionDigest":digest,
+            "decision":decision,"authorityRevision":revision,"reasonCodes":reasons}))
+        .unwrap();
+        let mut frame = (payload.len() as u32).to_be_bytes().to_vec();
+        frame.extend(payload);
+        if matches!(kind, AuthorizerFixtureReply::MalformedFrame) {
+            frame.push(0xff);
+        }
+        frame
+    }
+    fn fixture_frame_word(bytes: &[u8]) -> String {
+        bytes.iter().map(|byte| format!("\\0{byte:03o}")).collect()
+    }
+    /// Real framed child/owner controls with synthetic trusted identity. The
+    /// pinned Bash fixture is not a Source authorizer or native-carrier proof.
+    fn run_authorizer_fixture(
+        target_phase: crate::execution_authorizer_wire::Phase,
+        kind: AuthorizerFixtureReply,
+    ) -> (Fixture, OwnerOutcome) {
+        use crate::execution_authorizer_wire::Phase;
+        use crate::execution_prepared::PreparedRecord;
+        let fixture = Fixture::new();
+        let root = &fixture.0;
+        fs::create_dir(root.join(".caws")).unwrap();
+        let image = |path: &Path| {
+            let path = fs::canonicalize(path).unwrap();
+            ProgramImage {
+                sha256: format!("{:x}", Sha256::digest(fs::read(&path).unwrap())),
+                path: path.to_str().unwrap().into(),
+            }
+        };
+        let bash = image(Path::new("/bin/bash"));
+        let bash_value = json!({"path":bash.path,"sha256":bash.sha256});
+        let source = format!("printf launched > {}", fixture_word(&root.join("USER")));
+        let wall_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64
+            + 30_000;
+        let record = PreparedRecord::decode(serde_json::to_vec(&json!({
+            "schema":"caws.execution.prepared.v1","invocationId":"owner-fixture",
+            "association":{"kind":"codex-mcp-v1","sessionId":"fixture-lineage","threadId":"fixture-thread",
+                "callId":"fixture-call","callerAnchor":root,"serverEnvironmentId":"fixture-environment"},
+            "projectRoot":root,
+            "execution":{"executable":bash_value,"argv":[bash.path,"--noprofile","--norc","-c",source],
+                "cwd":root,"environment":[],"stdinBase64":""},
+            "profile":{"kind":"bash-clean-v1","source":source,"utilities":[]},
+            "sandbox":{"stateBase64":"e30=","stateSha256":format!("{:x}",Sha256::digest(b"{}")),
+                "launcher":bash_value,"environmentAnchor":root},
+            "limits":{"preparationDeadlineUnixMs":wall_ms,"jobTimeoutMs":5000,"terminationGraceMs":100,"maxOutputBytes":4096}
+        })).unwrap()).unwrap();
+        let digest = format!("{:x}", Sha256::digest(record.original()));
+        let analyze = authorizer_fixture_frame(
+            Phase::Analyze,
+            if target_phase == Phase::Analyze {
+                kind
+            } else {
+                AuthorizerFixtureReply::Allow
+            },
+            &digest,
+        );
+        let final_validate = authorizer_fixture_frame(
+            Phase::FinalValidate,
+            if target_phase == Phase::FinalValidate {
+                kind
+            } else {
+                AuthorizerFixtureReply::Allow
+            },
+            &digest,
+        );
+        let entry = root.join("authorizer-fixture.sh");
+        fs::write(&entry, format!(
+            "/bin/cat >/dev/null\nif [[ -f {analyzed} ]]; then\n : > {final_seen}\n if [[ -f {lock} && -e /dev/fd/3 ]]; then : > {fence_seen}; fi\n printf '%b' '{final_frame}'\nelse\n : > {analyzed}\n if [[ ! -e {lock} ]]; then : > {analyze_no_fence}; fi\n printf '%b' '{analyze_frame}'\nfi\n",
+            analyzed=fixture_word(&root.join("analyze-seen")), final_seen=fixture_word(&root.join("final-seen")),
+            lock=fixture_word(&root.join(".caws/state.lock")), fence_seen=fixture_word(&root.join("final-fence-seen")),
+            analyze_no_fence=fixture_word(&root.join("analyze-no-fence")),
+            final_frame=fixture_frame_word(&final_validate), analyze_frame=fixture_frame_word(&analyze),
+        )).unwrap();
+        let pins = PinnedAuthorizer {
+            node: bash,
+            entry: image(&entry),
+            writer: None,
+        };
+        let trusted = execution_owner::TrustedInvocation {
+            invocation_id: "owner-fixture".into(),
+            session_id: "fixture-lineage".into(),
+            thread_id: "fixture-thread".into(),
+            call_id: "fixture-call".into(),
+            caller_anchor: root.to_str().unwrap().into(),
+            server_environment_id: "fixture-environment".into(),
+            project_root: root.to_str().unwrap().into(),
+            environment_anchor: root.to_str().unwrap().into(),
+            same_host_macos_verified: true,
+        };
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(30)).unwrap();
+        let outcome = execution_owner::execute(
+            record,
+            &trusted,
+            &pins,
+            &deadline,
+            Arc::new(AtomicBool::new(false)),
+            &|_| Ok(()),
+        );
+        (fixture, outcome)
+    }
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn owner_authorizer_allow_control_launches_user_and_releases_fence() {
+        let (fixture, outcome) = run_authorizer_fixture(
+            crate::execution_authorizer_wire::Phase::Analyze,
+            AuthorizerFixtureReply::Allow,
+        );
+        let reply = worker_reply(outcome);
+        assert_eq!(
+            reply,
+            json!({"ok":true,"stdoutBase64":"","stderrBase64":"","exitCode":0,"userSpawnMayHaveOccurred":true})
+        );
+        assert_eq!(fs::read(fixture.0.join("USER")).unwrap(), b"launched");
+        assert!(fixture.0.join("analyze-no-fence").exists());
+        assert!(fixture.0.join("final-fence-seen").exists());
+        assert!(!fixture.0.join(".caws/state.lock").exists());
+    }
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn owner_authorizer_nonallow_preserves_phase_decision_and_validated_reasons_without_user() {
+        use crate::execution_authorizer_wire::Phase;
+        for phase in [Phase::Analyze, Phase::FinalValidate] {
+            for (kind, decision, reasons) in [
+                (
+                    AuthorizerFixtureReply::Deny,
+                    "deny",
+                    json!(["source_denied", "scope_refused"]),
+                ),
+                (
+                    AuthorizerFixtureReply::Unresolved,
+                    "unresolved",
+                    json!(["unsupported_profile", "context_unresolved"]),
+                ),
+            ] {
+                let (fixture, outcome) = run_authorizer_fixture(phase, kind);
+                let reply = worker_reply(outcome);
+                assert_eq!(
+                    reply,
+                    json!({"ok":false,"reason":"Denied","userSpawnMayHaveOccurred":false,
+                    "fenceReleased":true,"exitCode":null,"stdoutBase64":"","stderrBase64":"",
+                    "authorizerRefusal":{"phase":phase,"decision":decision,"reasonCodes":reasons}})
+                );
+                assert!(!fixture.0.join("USER").exists());
+                assert!(fixture.0.join("analyze-no-fence").exists());
+                assert_eq!(
+                    fixture.0.join("final-seen").exists(),
+                    phase == Phase::FinalValidate
+                );
+                assert_eq!(
+                    fixture.0.join("final-fence-seen").exists(),
+                    phase == Phase::FinalValidate
+                );
+                assert!(!fixture.0.join(".caws/state.lock").exists());
+                assert!(!reply.to_string().contains(fixture.0.to_str().unwrap()));
+                println!("observed synthetic authorizer refusal: {reply}");
+            }
+        }
+    }
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn malformed_authorizer_wire_never_becomes_exported_refusal_detail() {
+        use crate::execution_authorizer_wire::Phase;
+        for phase in [Phase::Analyze, Phase::FinalValidate] {
+            for kind in [
+                AuthorizerFixtureReply::UnknownReason,
+                AuthorizerFixtureReply::UnknownDecision,
+                AuthorizerFixtureReply::TooManyReasons,
+                AuthorizerFixtureReply::MalformedFrame,
+            ] {
+                let (fixture, outcome) = run_authorizer_fixture(phase, kind);
+                let reply = worker_reply(outcome);
+                assert_eq!(
+                    reply,
+                    json!({"ok":false,"reason":"AuthorizerReply","userSpawnMayHaveOccurred":false,
+                    "fenceReleased":true,"exitCode":null,"stdoutBase64":"","stderrBase64":""})
+                );
+                assert!(!fixture.0.join("USER").exists());
+                assert!(!fixture.0.join(".caws/state.lock").exists());
+                assert_eq!(
+                    fixture.0.join("final-fence-seen").exists(),
+                    phase == Phase::FinalValidate
+                );
+                assert!(!reply.to_string().contains("PRIVATE_"));
+                println!("observed synthetic malformed authorizer refusal: {reply}");
+            }
+        }
+    }
     #[test]
     fn call_trace_project_reasons_are_closed_and_clear_without_changing_possible_custody() {
         let trace = CallTrace::new();
@@ -1435,6 +1671,7 @@ mod tests {
                         retained_child: None,
                         cleanup_detail: None,
                     }),
+                    authorizer_refusal: None,
                     user_spawn_may_have_occurred: true,
                 }));
                 assert_eq!(reply["exitCode"], 1);
