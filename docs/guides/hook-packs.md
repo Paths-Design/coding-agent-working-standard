@@ -57,11 +57,15 @@ qualify native adoption. The known reduced Codex producer is held because its
 command projection cannot bind the complete final command, shell and startup
 context. A validated host execution directory establishes only that coordinate.
 The analyzer bridge's inherited `CAWS_BIN` or `PATH` selection also requires
-generation-bound Node and CLI identity through launch. The guide's owned
-execution boundary is proposed. Retain the deployed runtime until complete
-final-launch and rewrite custody, useful benign admission, an isolated native
-canary and rollback are demonstrated. A protective refusal is not evidence of a
-qualified rollout.
+generation-bound Node and CLI identity through launch. The private
+prepared-record authorizer checks source profiles, canonical authority and an
+inherited fence; it returns observations and does not launch user commands.
+Private draft utility discovery supplies candidates for producer preparation,
+with final analysis and validation required after the manifest is frozen. The
+guide's complete owned execution boundary remains proposed. Retain the deployed
+runtime until complete final-launch and rewrite custody, useful benign
+admission, an isolated native canary and rollback are demonstrated. A protective
+refusal is not evidence of a qualified rollout.
 
 These four hooks are _advisory_ edit-time signals. They implement the
 load-bearing edit-time quality checks (`god_object`, `todo_detection`,

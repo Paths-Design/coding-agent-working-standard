@@ -43,6 +43,7 @@
     "mutation:run:store": "node scripts/run-mutation.mjs --surface store",
     "mutation:run:shell": "node scripts/run-mutation.mjs --surface shell",
     "mutation:run:analysis": "node scripts/run-mutation.mjs --surface analysis",
+    "mutation:run:execution": "node scripts/run-mutation.mjs --surface execution",
     "test:mutation": "npm run mutation:run:store",
     "test:axe": "npm run test:prepare && jest --testPathPatterns=axe && npm run test:cleanup",
     "test:watch": "npm run test:prepare && jest --watch",

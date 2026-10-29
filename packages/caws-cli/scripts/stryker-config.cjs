@@ -75,7 +75,9 @@ function createStrykerConfig(surfaceId) {
   }
   const config = {
     mutate: surface.targets.map((target) => target.source),
-    testFiles: surface.tests,
+    // Jest's exact testMatch below owns file selection. Core turns testFiles
+    // into file-path testFilter values for static/off-coverage mutants, while
+    // the Jest runner treats testFilter as test names and then runs no tests.
     // Only instrumented targets require type-check suppression. The default
     // rewrites every JS/TS file, including the runtime asset generator and
     // its digest inputs, which makes its ordinary --check build fail. Keep

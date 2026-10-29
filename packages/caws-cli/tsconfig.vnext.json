@@ -51,6 +51,7 @@
     "src/kernel/**/*.ts",
     "src/init/**/*.ts",
     "src/runtime/**/*.ts",
+    "src/execution/**/*.ts",
     "src/transcripts/**/*.ts",
     "src/tooling/**/*.ts"
   ]

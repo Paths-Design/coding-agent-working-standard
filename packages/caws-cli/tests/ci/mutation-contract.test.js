@@ -533,24 +533,41 @@ describe('mutation policy topology contract', () => {
     expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
-    // The inventory includes inspection-prefix analysis, its entry point and shared CAWS reader metadata.
-    expect(result.stdout).toMatch(/^PASS: 207 source files accounted for exactly once$/m);
-    expect(result.stdout).toMatch(/^PASS: 28 mutation targets across 4 surfaces$/m);
+    // The inventory includes execution and all shared inspection decisions.
+    expect(result.stdout).toMatch(/^PASS: 216 source files accounted for exactly once$/m);
+    expect(result.stdout).toMatch(/^PASS: 37 mutation targets across 5 surfaces$/m);
   });
 
   test.each([
     'src/shell/analysis/caws-read-metadata.ts',
-    'src/shell/analysis/inspection-prefix-entry.ts',
     'src/shell/analysis/inspection-prefix.ts',
     'src/shell/analysis/inspection-profiles.ts',
-  ])('inspection source has one behavioral proof classification: %s', (source) => {
-    // hooks-inspection-prefix exercises parsing and entry-point refusals. This
-    // classification does not assert a mutation score or runtime activation.
+  ])('pure inspection decisions retain a whole-file mutation floor: %s', (source) => {
+    const policy = loadPolicy();
+    expect(
+      policy.proofGroups
+        .filter((group) => group.files.includes(source))
+        .map(({ id, strategy }) => ({ id, strategy }))
+    ).toEqual([{ id: 'mutation', strategy: 'mutation' }]);
+    expect(policy.surfaces.analysis.targets.filter((target) => target.source === source)).toEqual([
+      { source },
+    ]);
+    expect(policy.surfaces.analysis.threshold).toBe(80);
+    const config = createStrykerConfig('analysis');
+    expect(config.mutate).toContain(source);
+    expect(config.thresholds.low).toBe(80);
+    expect(config.jest.config.testMatch).toContain(
+      '<rootDir>/tests/shell/command-analysis.test.js'
+    );
+  });
+
+  test('inspection worker IO retains its behavioral consumer checks', () => {
+    const source = 'src/shell/analysis/inspection-prefix-entry.ts';
     expect(
       loadPolicy()
         .proofGroups.filter((group) => group.files.includes(source))
-        .map(({ id, strategy, command }) => ({ id, strategy, command }))
-    ).toEqual([{ id: 'behavioral', strategy: 'behavioral', command: 'npm test' }]);
+        .map(({ id, strategy }) => ({ id, strategy }))
+    ).toEqual([{ id: 'behavioral', strategy: 'behavioral' }]);
   });
 
   test('session seal preparation is classified as behavioral parsing and rendering', () => {
@@ -633,20 +650,22 @@ describe('mutation policy topology contract', () => {
 
   test('store mutation recomputes evidence using in-process store and timestamp contracts', () => {
     const config = createStrykerConfig('store');
+    const testFiles = config.jest.config.testMatch.map((file) => file.replace(/^<rootDir>\//, ''));
 
     expect(config.incremental).toBe(false);
-    expect(config.testFiles).not.toHaveLength(0);
+    expect(config).not.toHaveProperty('testFiles');
+    expect(testFiles).not.toHaveLength(0);
     expect(
-      config.testFiles.every(
+      testFiles.every(
         (file) =>
           file.startsWith('tests/store/') ||
           file === 'tests/transcripts/store-timestamp.test.js' ||
           file === 'tests/transcripts/renderer-calendar-mutation.test.js'
       )
     ).toBe(true);
-    expect(config.testFiles).toContain('tests/store/messages-behavior-store.test.js');
-    expect(config.testFiles).toContain('tests/store/messages-dead-recipient-prune.test.js');
-    expect(config.testFiles).toContain('tests/transcripts/store-timestamp.test.js');
+    expect(testFiles).toContain('tests/store/messages-behavior-store.test.js');
+    expect(testFiles).toContain('tests/store/messages-dead-recipient-prune.test.js');
+    expect(testFiles).toContain('tests/transcripts/store-timestamp.test.js');
     expect(config.mutate).toContain('src/transcripts/store-timestamp.ts');
     expect(config.jest.config.testMatch).toContain(
       '<rootDir>/tests/transcripts/store-timestamp.test.js'
@@ -663,7 +682,7 @@ describe('mutation policy topology contract', () => {
       'src/transcripts/renderer-calendar.ts',
       'src/transcripts/store-timestamp.ts',
     ]);
-    expect(config.testFiles).toEqual([
+    expect(testFiles).toEqual([
       'tests/store/apply-patch.test.js',
       'tests/store/atomic-write-sweep.test.js',
       'tests/store/atomic-write.test.js',
@@ -713,6 +732,8 @@ describe('mutation policy topology contract', () => {
     expect(config.mutate).toEqual([
       'src/shell/analysis/analyze.ts',
       'src/shell/analysis/git-context.ts',
+      'src/shell/analysis/inspection-prefix.ts',
+      'src/shell/analysis/inspection-profiles.ts',
       'src/shell/analysis/interpreter-effects.ts',
       'src/shell/analysis/mutation-view.ts',
       'src/shell/analysis/policies.ts',
@@ -729,6 +750,30 @@ describe('mutation policy topology contract', () => {
     const names = new RegExp(config.jest.config.testNamePattern);
     expect(names.test('bounded shell analysis contract profile-git-status')).toBe(true);
     expect(names.test('bounded shell analysis contract semantic mutation in policies')).toBe(false);
+  });
+
+  test('execution mutations use attributed child coverage and retain every integrated contract', () => {
+    const config = require(path.join(PACKAGE_ROOT, 'stryker.execution.conf.js'));
+    expect(config.coverageAnalysis).toBe('perTest');
+    expect(config.incremental).toBe(false);
+    expect(config).not.toHaveProperty('testFiles');
+    expect(config.jest.config.testMatch).toEqual([
+      '<rootDir>/tests/execution/authority-fence.test.js',
+      '<rootDir>/tests/execution/authority.test.js',
+      '<rootDir>/tests/execution/authorizer.test.js',
+      '<rootDir>/tests/execution/fence.test.js',
+      '<rootDir>/tests/execution/prepared-schema.test.js',
+      '<rootDir>/tests/execution/program-discovery.test.js',
+      '<rootDir>/tests/execution/protocol.test.js',
+    ]);
+    expect(config.mutate).toEqual([
+      'src/execution/authority.ts',
+      'src/execution/authorizer.ts',
+      'src/execution/fence.ts',
+      'src/execution/prepared-schema.ts',
+      'src/execution/protocol.ts',
+      'src/store/lifecycle-lock.ts',
+    ]);
   });
 
   test.each([
@@ -752,12 +797,16 @@ describe('mutation policy topology contract', () => {
     expect(new RegExp(config.jest.config.testNamePattern).test(name)).toBe(selected);
   });
 
-  test.each(['kernel', 'store', 'shell', 'analysis'])(
+  test.each(['kernel', 'store', 'shell', 'analysis', 'execution'])(
     '%s sandbox excludes sibling runs while retaining source and tests',
     (surface) => {
       expect(createStrykerConfig(surface).jest.config.setupFiles).toEqual([
         '<rootDir>/tests/helpers/isolate-session-env.js',
       ]);
+      expect(createStrykerConfig(surface)).not.toHaveProperty('testFiles');
+      expect(createStrykerConfig(surface).jest.config.testMatch).toEqual(
+        loadPolicy().surfaces[surface].tests.map((file) => `<rootDir>/${file}`)
+      );
       const dir = makeTempDir();
       const required = [
         'src/init/runtime.ts',
@@ -819,7 +868,7 @@ describe('mutation policy topology contract', () => {
         'scripts/build-cli.js',
         'tests/helpers/isolate-session-env.js',
       ];
-      const testFile = single ? 'tests/store/a.test.js' : config.testFiles[0];
+      const testFile = single ? 'tests/store/a.test.js' : loadPolicy().surfaces[surface].tests[0];
       protectedFiles.push(testFile);
       const originals = {};
       for (const file of [...targets, ...protectedFiles]) {
@@ -1830,7 +1879,7 @@ describe('active workflow topology contract', () => {
 
     expect(workflow).not.toContain('packages/caws-kernel');
     const parsed = yaml.load(workflow);
-    const surfaces = ['kernel', 'store', 'shell', 'analysis'];
+    const surfaces = ['kernel', 'store', 'shell', 'analysis', 'execution'];
     expect(parsed.jobs.harness_integrity.strategy.matrix.surface).toEqual(surfaces);
     expect(parsed.jobs.mutation.strategy.matrix.surface).toEqual(surfaces);
     const scripts = JSON.parse(

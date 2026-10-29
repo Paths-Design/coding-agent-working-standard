@@ -34,6 +34,81 @@ const corpus = [
 ];
 const linkedRepository = require('../fixtures/command-analysis/git-fixture.cjs');
 const wordCases = require('../fixtures/command-analysis/abstract-words.cjs');
+// The inspection predicate is a narrower syntax check than effect analysis.
+// Exercise its actual parser in the same batched child, including the active
+// mutation, without executing any of these submitted commands.
+const inspectionPrefixes = [
+  ['literal-reader', 'cat file', 0],
+  ['absolute-reader', '/usr/bin/cat file', 0],
+  ['bin-reader', '/bin/cat file', 0],
+  ['unicode-read-data', 'cat "caf\u00e9"', 0],
+  ['quoted-tilde-data', 'cat "~literal"', 0],
+  ['search-data', 'rg -F "alpha { beta }" file', 0],
+  ['sed-data-boundary', 'sed -n "1,2p" -- "-e data"', 0],
+  ['pwd', 'pwd', 0],
+  ['pwd-physical', 'pwd -P', 0],
+  ['pwd-logical', 'pwd -L', 0],
+  ['git-current-branch', 'git branch --show-current', 0],
+  ['git-global-reader-flag', 'git --no-pager status --short', 0],
+  ['git-oneline', 'git show --oneline HEAD', 0],
+  ['git-optional-count', 'git diff -U -- --output=literal', 0],
+  ['reader-lines', ' \t\ncat file\nhead -n 1 file\n ', 0],
+  ['file-data-boundary', 'cat -- --output=literal', 0],
+  ['empty', '', 1],
+  ['blank', ' \t\n', 1],
+  ['comment-prefix', '# comment\ncat file', 1],
+  ['comment-tail', 'cat file # comment', 1],
+  ['shebang', '#!/bin/bash\ncat file', 1],
+  ['carriage-return', 'cat file\r', 1],
+  ['continuation', 'cat \\\nfile', 1],
+  ['bom', '\ufeffcat file', 1],
+  ['relative-image', './cat file', 1],
+  ['untrusted-image', '/tmp/cat file', 1],
+  ['unknown-program', 'npm test', 1],
+  ['prototype-name', '__proto__ file', 1],
+  ['pwd-data', 'pwd file', 1],
+  ['pwd-extra-flag', 'pwd -P -L', 1],
+  ['pwd-unknown-flag', 'pwd -X', 1],
+  ['git-branch-mutation', 'git branch new-branch', 1],
+  ['git-execution', 'git diff --ext-diff', 1],
+  ['git-output-after-count', 'git diff -U --output=target', 1],
+  ['git-context-override', 'git -C /tmp status', 1],
+  ['git-unknown-command', 'git config --list', 1],
+  ['reader-execution', 'rg --pre=program word file', 1],
+  ['reader-output', 'uniq input output', 1],
+  ['reader-unknown-option', 'cat --unknown file', 1],
+  ['sed-execution', 'sed -n "1e touch marker" file', 1],
+  ['sed-output', 'sed -n "w marker" file', 1],
+  ['sed-script-file', 'sed -f script file', 1],
+  ['assignment', 'X=x cat file', 1],
+  ['redirection', 'cat file > marker', 1],
+  ['background', 'cat file &', 1],
+  ['semicolon', 'cat file; head file', 1],
+  ['trailing-semicolon', 'cat file;', 1],
+  ['conditional', 'cat file && head file', 1],
+  ['pipeline', 'cat file | head', 1],
+  ['loop', 'for x in file; do cat file; done', 1],
+  ['parameter', 'cat "$FILE"', 1],
+  ['substitution', 'cat $(touch {{MARKER}})', 1],
+  ['backtick', 'cat `touch {{MARKER}}`', 1],
+  ['tilde', 'cat ~/file', 1],
+  ['quoted-newline', "cat 'first\nsecond'", 1],
+  ['malformed', "cat 'unfinished", 2],
+  ['nul', 'cat file\0', 2],
+  ['byte-limit', 'cat f' + ' '.repeat(32768 - 5), 0],
+  ['over-byte-limit', 'cat f' + ' '.repeat(32769 - 5), 2],
+  ['utf8-byte-limit', 'cat "' + '\u00e9'.repeat(16382) + '"', 2],
+  ['command-limit', Array(64).fill('cat f').join('\n'), 0],
+  ['over-command-limit', Array(65).fill('cat f').join('\n'), 2],
+  ['node-limit', 'cat ' + 'x '.repeat(1500), 2],
+  [
+    'depth-limit',
+    Array(40)
+      .fill(0)
+      .reduce((s) => `cat $(${s})`, 'cat f'),
+    2,
+  ],
+].map(([id, source, status]) => ({ id: `inspection-${id}`, source, status }));
 require('../fixtures/command-analysis/git-context-cases.cjs')(
   path.resolve(__dirname, '../../dist/shell/analysis/git-context.js')
 );
@@ -79,6 +154,7 @@ const { analyzeCommand } = require(process.argv[1]);
 const { resolveGitContext } = require(require('node:path').join(require('node:path').dirname(process.argv[1]), 'git-context.js'));
 const { expandWord } = require(require('node:path').join(require('node:path').dirname(process.argv[1]), 'words.js'));
 const { loadParser } = require(require('node:path').join(require('node:path').dirname(process.argv[1]), 'load-parser.js'));
+const { classifyInspectionPrefix } = require(require('node:path').join(require('node:path').dirname(process.argv[1]), 'inspection-prefix.js'));
 // The fixture graph is immutable: submitted source never executes. Reuse only
 // real discovery results for that graph; the production CLI has no shared cache.
 const contexts = new Map();
@@ -93,6 +169,10 @@ const gitContext = input => {
     const previous = new Map(Object.keys(request.environment || {}).map(key => [key,process.env[key]]));
     try {
       Object.assign(process.env, request.environment || {});
+      if (request.inspectionPrefix !== undefined) {
+        out.push({id:request.id, activeMutant:process.env.__STRYKER_ACTIVE_MUTANT__ ?? '', status:await classifyInspectionPrefix(request.inspectionPrefix)});
+        continue;
+      }
       if (request.wordDomain) {
         const fixture = request.wordDomain;
         const tree = (await loadParser()).parse('cat -- ' + fixture.source);
@@ -260,6 +340,12 @@ describe('bounded shell analysis contract', () => {
         contextQuery: { cwd: locations.OWN, overrides: {} },
       }
     );
+    requests.push(
+      ...inspectionPrefixes.map((fixture) => ({
+        id: fixture.id,
+        inspectionPrefix: expand(fixture.source),
+      }))
+    );
     activeMutant = String(
       globalThis.__stryker__?.activeMutant ?? process.env.__STRYKER_ACTIVE_MUTANT__ ?? ''
     );
@@ -284,6 +370,11 @@ describe('bounded shell analysis contract', () => {
   });
   afterAll(() => {
     if (root) fs.rmSync(root, { recursive: true, force: true });
+  });
+  test.each(inspectionPrefixes)('inspection predicate $id', (fixture) => {
+    const actual = results.get(fixture.id);
+    expect(actual).toEqual({ id: fixture.id, activeMutant, status: fixture.status });
+    expect(fs.existsSync(locations.MARKER)).toBe(false);
   });
   test.each(corpus)('$id', (fixture) => {
     const actual = results.get(fixture.id);

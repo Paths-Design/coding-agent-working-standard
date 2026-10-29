@@ -565,12 +565,86 @@ between the model and the shell remains a host assumption. Widening the subset
 requires independent examples that distinguish a correct interpretation from a
 plausible incorrect one.
 
-## Execution boundary proposal
+## Execution boundary
 
-This design is proposed, not an implemented executor or an activated native
-contract. It places preparation, authorization and launch under one owner. A
-parser or an optional command wrapper cannot supply that ownership by itself.
-The matching Codex release's reduced hook payload is insufficient input.
+### Implemented private authorizer
+
+`packages/caws-cli/src/execution/authorizer-main.ts` implements a private Node
+child protocol for `caws.execution.prepared.v1` records. It accepts one bounded,
+length-prefixed request followed by EOF. Strict decoding rejects duplicate or
+unknown owned fields, invalid UTF-8, noncanonical encodings, excessive sizes and
+correlation mismatches. The execution digest covers the original record bytes;
+opaque sandbox-state bytes retain their identity. The child returns one framed
+observation after analysis. A reply is not a launch permit or a public CLI
+execution command.
+
+`program-discovery-main.ts` implements private, nonexecuting utility discovery.
+It accepts the existing authorizer `analyze` frame over a draft prepared record
+whose utility manifest is empty. Its distinct
+`caws.execution.program-discovery.v1` reply contains `invocationId`, the draft's
+`executionDigest`, `status` (`observed` or `unresolved`), unique lexical
+`commands` and closed `reasonCodes`. The bounded analyzer, initial bindings and
+`command` wrapper handling are shared with final authorization. Bare builtins
+are omitted; utility spellings are not resolved images or trusted hashes. At
+most 256 candidates of 4096 UTF-8 bytes each are observed; excessive count or
+encoded output produces an unresolved result with an empty list. Replies fit the
+same 64 KiB bound and contain no permission or authority revision.
+
+The native producer must independently resolve and hash those candidates,
+deduplicate physical images and freeze the final record. Its execution digest
+must cover those final bytes, including the completed manifest. Every result,
+including an empty candidate list, requires the existing `analyze` and
+`final_validate` phases before a private one-use permit can exist. Discovery
+cannot replace either phase, establish native origin or execute submitted
+expansions. The owner's original monotonic preparation budget includes this
+child; discovery does not start a new budget. Candidate names are private
+metadata, not default diagnostic output.
+
+Authority derives from the verified native caller coordinate, actual thread
+owner, canonical policy, active spec and unique worktree or bridge binding.
+Native association fields require the owning private transport; decoding a
+record does not authenticate its origin. The server's environment anchor and
+root session lineage cannot substitute for the caller checkout or current
+thread. Missing, malformed or changing authority remains unresolved. Final
+validation compares the prior authority revision and verifies inherited
+descriptor 3 against canonical `state.lock`, its device and inode, private
+nonce, and actual parent process. That check requires a shared local PID
+namespace; an unsupported sandbox topology cannot weaken it.
+
+The bounded execution profile accepts clean Bash, named protected system utility
+images and the existing literal Node effect grammar on the pinned actual Node
+runtime. Python programs have no native v1 profile, including programs whose
+effects the separate diagnostic analyzer can partially classify. Finite writes
+require owned physical targets admitted by scope. Existing leaf entries retain
+their canonical spelling and observed device/inode before scope evaluation.
+Excluded file and directory aliases cannot borrow a different spelling;
+unresolved prospective aliases remain held. Native v1 canonical write paths
+relative to the pin must be ASCII, including ordinary LF names. Unicode
+filesystem equivalence is not guessed; UTF-8 roots, source and read data are
+separate from this write-path restriction. Policy exemptions retain their kernel
+precedence; execution-control paths remain refused. Unmodeled programs, scripts,
+image aliases, implicit temporary writers, heredocs, here-strings and private
+descriptor redirects remain held. Ordinary inherited application data can
+provide finite values. `PWD` derives from the prepared physical cwd; other
+Bash-generated variables are opaque. Mutations of special variables remain held.
+Startup and lookup controls such as `EXECIGNORE`, `BASH_COMPAT` and
+`POSIX_PEDANTIC`, and history-file effects through `HISTFILESIZE`, are outside
+this profile. Parsing never runs submitted expansions or executes source to
+discover effects.
+
+The child neither acquires/releases the launch fence nor spawns a user program.
+Its input-completion timeout ends at EOF. The native owner must independently
+enforce the original monotonic preparation deadline across startup and analysis;
+the record's wall-clock deadline is an additional check, not a replacement.
+Private-entry tests exercise observations with zero submitted user effects. They
+do not establish complete mediation, executable custody at final spawn, sandbox
+enforcement, native useful-command execution or qualified adoption.
+
+### Proposed complete launch owner
+
+The complete design places preparation, authorization and launch under one
+owner. A parser or an optional command wrapper cannot supply that ownership by
+itself. The matching Codex release's reduced hook payload is insufficient input.
 
 Interpreter source profiles establish bounded effect knowledge and send proven
 write operands to ownership checks. Opaque interpreter programs have no such
@@ -634,6 +708,19 @@ does not provide this join. Hold such a fence only through spawn, not the entire
 child lifetime: a child lifecycle command may itself need the authority writer.
 Revocation after spawn can request cancellation but cannot undo effects already
 performed. These are separate promises and must have separate tests.
+
+The lifecycle lock protects live holders independently of lock-file age. Its
+recovery path requires an aged file with a demonstrably dead owner and
+serializes reclaimers through `.caws/state.lock.reclaim`. Unknown or malformed
+ownership remains held. A private acquisition handle releases only its own file
+and descriptor once. An abandoned reclaimer blocks recovery until quiescence has
+been established; it is not stolen by age. Older writers using age-only recovery
+cannot participate in this guarantee.
+
+This lock mechanism does not supply the execution join. Every authority writer
+that can affect admission must participate, and authoritative reads, validation
+and compensation must remain coherent with its critical section. The final
+launch owner and the joined writer contract require their own proof.
 
 The design also retains executable/path replacement and descendant-escape
 limits. Hashing a binary and then spawning its pathname is not atomic execution
@@ -717,10 +804,13 @@ npm run mutation:run:analysis
 ```
 
 The mutation command uses `mutation-policy.json` and the declared three-suite
-topology through `stryker.analysis.conf.js`. It must cover all six registered
-sources: `analyze.ts`, `git-context.ts`, `interpreter-effects.ts`,
-`mutation-view.ts`, `policies.ts` and `words.ts`. The runner applies the
-unchanged 80% floor separately to every file through
+topology through `stryker.analysis.conf.js`. It must cover all nine registered
+sources: `analyze.ts`, `caws-read-metadata.ts`, `git-context.ts`,
+`inspection-prefix.ts`, `inspection-profiles.ts`, `interpreter-effects.ts`,
+`mutation-view.ts`, `policies.ts` and `words.ts`. The pure inspection predicate
+and shared argument roles retain mutation coverage when extracted from the
+effect analyzer; the worker entry has separate behavioral IO and failure checks.
+The runner applies the unchanged 80% floor separately to every file through
 `scripts/assert-mutation-report.mjs`; zero valid mutants, invalid/pending
 verdicts and unallowed exclusions do not pass. A single-file diagnostic,
 aggregate score, narrowed test configuration or Stryker process exit zero does
