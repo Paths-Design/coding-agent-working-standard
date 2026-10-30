@@ -5,6 +5,7 @@ try {
   const result = runExecutionLifecycleConsumer(process.argv.slice(2));
   try {
     process.stdout.write(JSON.stringify(result) + '\n');
+    process.exitCode = result.exitCode;
   } catch {
     throw new ExecutionLifecyclePublicationFailure({ operation: result.action }, result.specId);
   }
@@ -16,10 +17,11 @@ try {
       /* publication remains uncertain */
     }
     process.stderr.write('caws lifecycle publication requires inspection\n');
+    process.exitCode = error.outcome.exitCode ?? 1;
   } else {
     process.stderr.write(
       `caws lifecycle refused: ${error instanceof ExecutionAuthorityUnavailable ? error.reason : 'infrastructure_unavailable'}\n`
     );
+    process.exitCode = 1;
   }
-  process.exitCode = 1;
 }

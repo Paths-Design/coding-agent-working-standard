@@ -13,12 +13,22 @@ import {
 import { MAX_AUTHORIZER_REPLY_BYTES } from './protocol';
 import type { AuthorizerRequest, ExecutionReasonCode, PreparedExecutionV1 } from './prepared';
 import { snapshotNpmProject, type NpmProjectSnapshot } from './npm-project';
+import {
+  cargoManifestArgument,
+  snapshotCargoProject,
+  type CargoProjectSnapshot,
+} from './cargo-project';
 import { parseExecutionLifecycleArguments, readExecutionLifecycleAuthority } from './lifecycle';
 
 export interface NpmExecutionPlan {
   readonly kind: 'npm-test-v1';
   readonly argv: readonly string[];
   readonly project: NpmProjectSnapshot;
+}
+export interface CargoExecutionPlan {
+  readonly kind: 'cargo-run-v1';
+  readonly argv: readonly string[];
+  readonly cargoProject: CargoProjectSnapshot;
 }
 
 /** Advisory lexical program candidates, never admission or an authority revision.
@@ -31,7 +41,12 @@ export interface ProgramDiscoveryReply {
   readonly executionDigest: string;
   readonly status: 'observed' | 'unresolved';
   readonly commands: readonly string[];
-  readonly execution: EvidenceExecutionPlan | LifecycleExecutionPlan | NpmExecutionPlan | null;
+  readonly execution:
+    | EvidenceExecutionPlan
+    | LifecycleExecutionPlan
+    | NpmExecutionPlan
+    | CargoExecutionPlan
+    | null;
   readonly reasonCodes: readonly ExecutionReasonCode[];
 }
 
@@ -74,6 +89,25 @@ export async function discoverExecutionPrograms(
       });
     }
     const authority = readExecutionAuthority(record);
+    const manifest = cargoManifestArgument(record.profile.source);
+    if (manifest) {
+      const cargoProject = snapshotCargoProject(
+        record.execution.cwd,
+        manifest,
+        record.limits.preparationDeadlineUnixMs
+      );
+      return Object.freeze({
+        ...base,
+        status: 'observed',
+        commands: Object.freeze([]),
+        execution: Object.freeze({
+          kind: 'cargo-run-v1' as const,
+          argv: Object.freeze(['cargo', 'run', '--manifest-path', manifest]),
+          cargoProject,
+        }),
+        reasonCodes: Object.freeze([]),
+      });
+    }
     // The producer recognizes this one literal form and independently pins
     // npm before constructing its final record. No shell command is resolved
     // from the submitted source, and this observation grants no launch.

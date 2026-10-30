@@ -11,7 +11,7 @@ use crate::{
     execution_ingress,
     execution_owner::{self, OwnerOutcome, PinnedAuthorizer},
     execution_prepare::{self, PrepareRefusal},
-    execution_prepared::ProgramImage,
+    execution_prepared::{CargoRuntime, ProgramImage},
     monotonic_deadline::MonotonicDeadline,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -89,6 +89,7 @@ enum CallStage {
     Project,
     Preparation,
     NpmExecution,
+    CargoExecution,
     StartupEncoding,
     StartupSocket,
     WorkerConfiguration,
@@ -111,6 +112,7 @@ impl CallStage {
             Self::Project => "project",
             Self::Preparation => "preparation",
             Self::NpmExecution => "npm-execution",
+            Self::CargoExecution => "cargo-execution",
             Self::StartupEncoding => "startup-encoding",
             Self::StartupSocket => "startup-socket",
             Self::WorkerConfiguration => "worker-configuration",
@@ -264,9 +266,13 @@ struct Config {
     writer: ProgramImage,
     #[serde(default)]
     lifecycle: Option<ProgramImage>,
+    #[serde(default)]
+    lifecycle_context: Option<execution_owner::RuntimeHomes>,
     generation: Generation,
     #[serde(default)]
     npm: Option<NpmRuntime>,
+    #[serde(default)]
+    cargo: Option<CargoRuntimeConfig>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -279,6 +285,12 @@ struct Generation {
 struct NpmRuntime {
     root: String,
     entry: ProgramImage,
+    scratch_root: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CargoRuntimeConfig {
+    runtime: CargoRuntime,
     scratch_root: String,
 }
 #[derive(Deserialize)]
@@ -323,6 +335,26 @@ fn load_config(path: &Path) -> io::Result<Config> {
     if config.schema != "caws.execution.server-config.v1" {
         return Err(refused());
     }
+    if let Some(cargo) = &config.cargo {
+        if ![
+            "/cargo",
+            "/cargo/runtime",
+            "/cargo/runtime/cargo",
+            "/cargo/runtime/rustc",
+            "/cargo/runtime/linker",
+        ]
+        .iter()
+        .all(|pointer| shape.pointer(pointer).is_some_and(Value::is_object))
+            || !cargo.runtime.valid()
+            || !Path::new(&cargo.scratch_root).is_absolute()
+            || cargo.scratch_root.contains('\0')
+            || cargo.runtime.generation_manifest_sha256 != config.generation.manifest.sha256
+        {
+            return Err(refused());
+        }
+    } else if shape.get("cargo").is_some() {
+        return Err(refused());
+    }
     for image in [
         &config.native,
         &config.host,
@@ -360,9 +392,28 @@ fn load_config(path: &Path) -> io::Result<Config> {
         if !shape.pointer("/lifecycle").is_some_and(Value::is_object)
             || !Path::new(&lifecycle.path).is_absolute()
             || lifecycle.sha256.len() != 64
-            || !lifecycle.sha256.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-            || Path::new(&config.authorizer.path).parent().ok_or_else(refused)?.join("lifecycle-main.js") != Path::new(&lifecycle.path)
-        { return Err(refused()); }
+            || !lifecycle
+                .sha256
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            || Path::new(&config.authorizer.path)
+                .parent()
+                .ok_or_else(refused)?
+                .join("lifecycle-main.js")
+                != Path::new(&lifecycle.path)
+        {
+            return Err(refused());
+        }
+    }
+    if let Some(context) = &config.lifecycle_context {
+        if config.lifecycle.is_none()
+            || !context.well_formed()
+            || !shape
+                .pointer("/lifecycle_context")
+                .is_some_and(Value::is_object)
+        {
+            return Err(refused());
+        }
     }
     if Path::new(&config.authorizer.path)
         .parent()
@@ -393,7 +444,9 @@ fn verify_generation(config: &Config, deadline: &MonotonicDeadline) -> io::Resul
         }
     }
     if let Some(lifecycle) = &config.lifecycle {
-        if !Path::new(&lifecycle.path).starts_with(root) { return Err(refused()); }
+        if !Path::new(&lifecycle.path).starts_with(root) {
+            return Err(refused());
+        }
         verify_generation_image(lifecycle, deadline)?;
     }
     if let Some(npm) = &config.npm {
@@ -406,6 +459,21 @@ fn verify_generation(config: &Config, deadline: &MonotonicDeadline) -> io::Resul
             return Err(refused());
         }
         verify_generation_image(&npm.entry, deadline)?;
+    }
+    if let Some(cargo) = &config.cargo {
+        let runtime = &cargo.runtime;
+        let cargo_root = Path::new(&runtime.root);
+        if cargo_root == root
+            || !cargo_root.starts_with(root)
+            || fs::canonicalize(cargo_root)? != cargo_root
+            || fs::canonicalize(&runtime.sdk_root)? != Path::new(&runtime.sdk_root)
+            || !fs::metadata(&runtime.sdk_root)?.is_dir()
+        {
+            return Err(refused());
+        }
+        verify_generation_image(&runtime.cargo, deadline)?;
+        verify_generation_image(&runtime.rustc, deadline)?;
+        verify_image(&runtime.linker, deadline)?;
     }
     verify_generation_image(&config.generation.manifest, deadline)?;
     let mut bytes = Vec::new();
@@ -484,7 +552,9 @@ fn verify_generation(config: &Config, deadline: &MonotonicDeadline) -> io::Resul
         return Err(refused());
     }
     if let Some(lifecycle) = &config.lifecycle {
-        if !expected.contains(Path::new(&lifecycle.path)) { return Err(refused()); }
+        if !expected.contains(Path::new(&lifecycle.path)) {
+            return Err(refused());
+        }
         verify_generation_image(lifecycle, deadline)?;
     }
     if let Some(npm) = &config.npm {
@@ -492,6 +562,15 @@ fn verify_generation(config: &Config, deadline: &MonotonicDeadline) -> io::Resul
             return Err(refused());
         }
         verify_generation_image(&npm.entry, deadline)?;
+    }
+    if let Some(cargo) = &config.cargo {
+        for image in [&cargo.runtime.cargo, &cargo.runtime.rustc] {
+            if !expected.contains(Path::new(&image.path)) {
+                return Err(refused());
+            }
+            verify_generation_image(image, deadline)?;
+        }
+        verify_image(&cargo.runtime.linker, deadline)?;
     }
     verify_generation_image(&config.generation.manifest, deadline)
 }
@@ -764,6 +843,12 @@ These paths are configured, not a live generation or authority verification. Eac
     );
     if let Some(lifecycle) = &config.lifecycle {
         description.push_str(&format!("\nConfigured lifecycle consumer prefix:\n{} {}\nAppend exactly one typed operation: git-status | git-head | git-branch | git-stage -- PATH... | git-commit --message 'MESSAGE' -- PATH... | spec-commit --spec SPEC_ID | worktree-merge --worktree NAME --spec SPEC_ID | bridge-claim --spec SPEC_ID --merge-commit MERGE_SHA | spec-close --spec SPEC_ID --merge-commit MERGE_SHA --reason 'REASON'. Use literal shell words and quote data. No extra flags, shell expansion, operators, general Git or general CLI passthrough are admitted. Stage and commit paths must fit the current owned spec. Normal executable hooks or unsupported Git configuration refuse; hooks are never disabled. Merge applies the normal CAWS merge with no close; run it from the canonical checkout after an actual host context transition. An explicit bridge claim after merge requires this same thread's exact recorded merge SHA; only then run downstream npm and close. Consumer output reports actual HEAD or a publication-failure requiring inspection before retry.\n", quote(&config.node.path), quote(&lifecycle.path)));
+    }
+    if config.lifecycle_context.is_some() {
+        description.push_str("\nThe same pinned lifecycle prefix also admits exactly doctor or gates-run --spec SPEC_ID. These use the configured private runtime homes and the actual normal CLI diagnostics/policy gates, returning their real exit code and output. Gates publish normal gate_evaluated events; a nonzero diagnostic is not a green result.\n");
+    }
+    if config.cargo.is_some() {
+        description.push_str("\nThe exact literal source cargo run --manifest-path RELATIVE/Cargo.toml admits a minimal standalone dependency-free package with matching lock and src/main.rs. Use only ASCII alphanumeric, underscore, hyphen, dot and slash in the normalized relative operand, without quoting, dot/dotdot components, protected metadata, extra flags or shell syntax. Workspace/config/build-script/dependency routes refuse. The pinned Cargo/rustc/linker run locked, offline, frozen and one-job under the host descendant write ceiling, with fresh private output/tmp/cache; project and governance are read-only. This is not general Cargo passthrough.\n");
     }
     if config.npm.is_some() {
         description.push_str("\nThe exact source npm test uses the configured pinned npm test profile, private operational roots and inherited restricted network policy. Project npmrc and pretest/posttest are unsupported. This availability does not establish test success or full workflow qualification.\n");
@@ -1084,16 +1169,29 @@ fn execute_call(
             sha256: config.writer.sha256.clone(),
         }),
         lifecycle: config.lifecycle.as_ref().map(|image| ProgramImage {
-            path: image.path.clone(), sha256: image.sha256.clone(),
+            path: image.path.clone(),
+            sha256: image.sha256.clone(),
         }),
+        lifecycle_context: config.lifecycle_context.clone(),
     };
     trace.at(CallStage::Preparation);
-    let npm_preparation = config.npm.as_ref().map(|npm| execution_prepare::NpmPreparation {
-        root: &npm.root,
-        entry: &npm.entry,
-        scratch_root: &npm.scratch_root,
-        generation_manifest_sha256: &config.generation.manifest.sha256,
-    });
+    let npm_preparation = config
+        .npm
+        .as_ref()
+        .map(|npm| execution_prepare::NpmPreparation {
+            root: &npm.root,
+            entry: &npm.entry,
+            scratch_root: &npm.scratch_root,
+            generation_manifest_sha256: &config.generation.manifest.sha256,
+        });
+    let cargo_preparation =
+        config
+            .cargo
+            .as_ref()
+            .map(|cargo| execution_prepare::CargoPreparation {
+                runtime: &cargo.runtime,
+                scratch_root: &cargo.scratch_root,
+            });
     let prepared = execution_prepare::prepare(
         &call,
         &host,
@@ -1102,6 +1200,7 @@ fn execute_call(
         &pins,
         &config.discovery,
         npm_preparation.as_ref(),
+        cargo_preparation.as_ref(),
         &prep,
         &cancelled,
         &control,
@@ -1111,23 +1210,47 @@ fn execute_call(
         settle(f.child);
         refused()
     })?;
-    if let Some(private) = prepared.npm_launch.as_ref() {
-        trace.at(CallStage::NpmExecution);
-        let npm = config.npm.as_ref().ok_or_else(refused)?;
+    if let Some(private) = prepared.sandboxed_launch.as_ref() {
+        let runtime = if prepared.record.value().profile.kind == "cargo-run-v1" {
+            trace.at(CallStage::CargoExecution);
+            execution_owner::SandboxedRuntime::Cargo(
+                &config.cargo.as_ref().ok_or_else(refused)?.runtime,
+            )
+        } else {
+            trace.at(CallStage::NpmExecution);
+            let npm = config.npm.as_ref().ok_or_else(refused)?;
+            execution_owner::SandboxedRuntime::Npm {
+                root: &npm.root,
+                entry: &npm.entry,
+            }
+        };
         let a = &prepared.association;
         let trusted = execution_owner::TrustedInvocation {
-            invocation_id: a.invocation_id.clone(), session_id: a.session_id.clone(),
-            thread_id: a.thread_id.clone(), call_id: a.call_id.clone(),
-            caller_anchor: a.caller_anchor.clone(), server_environment_id: a.server_environment_id.clone(),
-            project_root: a.project_root.clone(), environment_anchor: a.environment_anchor.clone(),
+            invocation_id: a.invocation_id.clone(),
+            session_id: a.session_id.clone(),
+            thread_id: a.thread_id.clone(),
+            call_id: a.call_id.clone(),
+            caller_anchor: a.caller_anchor.clone(),
+            server_environment_id: a.server_environment_id.clone(),
+            project_root: a.project_root.clone(),
+            environment_anchor: a.environment_anchor.clone(),
             same_host_macos_verified: cfg!(target_os = "macos"),
         };
-        let launch = execution_owner::NpmLaunch {
-            host: &config.host, root: &npm.root, entry: &npm.entry,
-            generation_manifest_sha256: &config.generation.manifest.sha256, private,
+        let launch = execution_owner::SandboxedLaunch {
+            host: &config.host,
+            runtime,
+            generation_manifest_sha256: &config.generation.manifest.sha256,
+            private,
         };
-        let outcome = execution_owner::execute_npm(prepared.record, &trusted, &pins, &prep,
-            cancelled.clone(), &control, &launch);
+        let outcome = execution_owner::execute_sandboxed(
+            prepared.record,
+            &trusted,
+            &pins,
+            &prep,
+            cancelled.clone(),
+            &control,
+            &launch,
+        );
         possible.set(match &outcome {
             OwnerOutcome::Completed(_) => true,
             OwnerOutcome::Failed(problem) => problem.user_spawn_may_have_occurred,
@@ -1255,6 +1378,7 @@ fn worker(config: &Config) -> io::Result<()> {
             (Some(pin), Some(config)) => pin.path != config.path || pin.sha256 != config.sha256,
             _ => true,
         }
+        || pins.lifecycle_context != config.lifecycle_context
     {
         return Err(refused());
     }
@@ -1490,6 +1614,7 @@ mod tests {
             entry: image(&entry),
             writer: None,
             lifecycle: None,
+            lifecycle_context: None,
         };
         let trusted = execution_owner::TrustedInvocation {
             invocation_id: "owner-fixture".into(),
@@ -1839,11 +1964,13 @@ mod tests {
                 discovery: image(&root.join("discovery.js")),
                 writer: image(&root.join("writer-main.js")),
                 lifecycle: None,
+                lifecycle_context: None,
                 generation: Generation {
                     root: root.to_str().unwrap().into(),
                     manifest: image(&manifest),
                 },
                 npm: None,
+                cargo: None,
             }
         }
     }
@@ -1859,19 +1986,37 @@ mod tests {
         let root = Path::new(&config.generation.root);
         let path = root.join("lifecycle-main.js");
         fs::write(&path, "lifecycle").unwrap();
-        let image = ProgramImage { path: path.to_str().unwrap().into(), sha256: format!("{:x}", Sha256::digest(b"lifecycle")) };
+        let image = ProgramImage {
+            path: path.to_str().unwrap().into(),
+            sha256: format!("{:x}", Sha256::digest(b"lifecycle")),
+        };
         config.lifecycle = Some(image);
         let deadline = MonotonicDeadline::capture(Duration::from_secs(30)).unwrap();
-        assert!(verify_generation(&config, &deadline).is_err(), "unmanifested consumer must refuse");
-        let mut manifest: Value = serde_json::from_slice(&fs::read(&config.generation.manifest.path).unwrap()).unwrap();
-        manifest["files"].as_array_mut().unwrap().push(json!({"path":"lifecycle-main.js","sha256":config.lifecycle.as_ref().unwrap().sha256}));
-        manifest["files"].as_array_mut().unwrap().sort_by(|a, b| a["path"].as_str().unwrap().as_bytes().cmp(b["path"].as_str().unwrap().as_bytes()));
+        assert!(
+            verify_generation(&config, &deadline).is_err(),
+            "unmanifested consumer must refuse"
+        );
+        let mut manifest: Value =
+            serde_json::from_slice(&fs::read(&config.generation.manifest.path).unwrap()).unwrap();
+        manifest["files"].as_array_mut().unwrap().push(
+            json!({"path":"lifecycle-main.js","sha256":config.lifecycle.as_ref().unwrap().sha256}),
+        );
+        manifest["files"].as_array_mut().unwrap().sort_by(|a, b| {
+            a["path"]
+                .as_str()
+                .unwrap()
+                .as_bytes()
+                .cmp(b["path"].as_str().unwrap().as_bytes())
+        });
         let bytes = serde_json::to_vec(&manifest).unwrap();
         fs::write(&config.generation.manifest.path, &bytes).unwrap();
         config.generation.manifest.sha256 = format!("{:x}", Sha256::digest(&bytes));
         assert!(verify_generation(&config, &deadline).is_ok());
         fs::write(&path, "replacement").unwrap();
-        assert!(verify_generation(&config, &deadline).is_err(), "replaced consumer must refuse");
+        assert!(
+            verify_generation(&config, &deadline).is_err(),
+            "replaced consumer must refuse"
+        );
     }
 
     #[test]

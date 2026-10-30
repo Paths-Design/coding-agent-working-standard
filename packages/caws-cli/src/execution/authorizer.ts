@@ -10,13 +10,18 @@ import { inside, sensitiveBinding } from '../shell/analysis/policies';
 import { evaluatePath } from '../kernel';
 import { normalizeRelativePosixPath } from '../kernel/scope/normalize';
 import { snapshotNpmProject } from './npm-project';
+import { cargoManifestArgument, snapshotCargoProject } from './cargo-project';
 import {
   ExecutionAuthorityUnavailable,
   readExecutionAuthority,
   type ExecutionAuthority,
 } from './authority';
 import { verifyInheritedFence } from './fence';
-import { parseExecutionLifecycleArguments, readExecutionLifecycleAuthority } from './lifecycle';
+import {
+  parseExecutionLifecycleArguments,
+  readExecutionLifecycleAuthority,
+  readExecutionLifecycleRuntimeHomes,
+} from './lifecycle';
 import type {
   AuthorizerReply,
   AuthorizerRequest,
@@ -222,8 +227,9 @@ export async function discoverLifecycleExecution(
   }
   if (argv[1] !== join(__dirname, 'lifecycle-main.js')) return null;
   if (argv[0] !== fs.realpathSync.native(process.execPath)) refuse('unsupported_profile');
-  parseExecutionLifecycleArguments(argv.slice(2));
+  const args = parseExecutionLifecycleArguments(argv.slice(2));
   const environment = new Map(record.execution.environment.map(({ name, value }) => [name, value]));
+  const homes = readExecutionLifecycleRuntimeHomes(record.execution.environment);
   const expected = new Map([
     ['CAWS_EXECUTION_PROJECT', record.projectRoot],
     ['CAWS_EXECUTION_CALLER', record.association.callerAnchor],
@@ -232,6 +238,18 @@ export async function discoverLifecycleExecution(
     ['CAWS_EXECUTION_CALL', record.association.callId],
     ['LC_ALL', 'C'],
   ]);
+  if (homes) {
+    if (record.profile.kind !== 'caws-lifecycle-v1') refuse('unsupported_profile');
+    expected.set('HOME', homes.home);
+    expected.set('CAWS_HOME', homes.cawsHome);
+    expected.set('CODEX_HOME', homes.codexHome);
+  }
+  if (
+    record.profile.kind === 'caws-lifecycle-v1' &&
+    (args.operation === 'doctor' || args.operation === 'gates-run') &&
+    !homes
+  )
+    refuse('unsupported_profile');
   if (
     environment.size !== expected.size + 1 ||
     !environment.has('PATH') ||
@@ -443,18 +461,105 @@ function inspectNpmTest(record: PreparedExecutionV1, authority: ExecutionAuthori
   for (const root of [ceiling.outputRoot, ceiling.tmpRoot, ceiling.cacheRoot])
     if (fs.readdirSync(root).length !== 0) refuse('unsupported_profile');
 }
+function inspectCargoRun(record: PreparedExecutionV1, authority: ExecutionAuthority): void {
+  const cargo = record.profile.cargo;
+  const ceiling = record.sandbox.writeCeiling;
+  const manifest = cargoManifestArgument(record.profile.source);
+  if (
+    !cargo ||
+    !ceiling ||
+    !manifest ||
+    record.profile.utilities.length ||
+    record.execution.stdinBase64 !== ''
+  )
+    refuse('unsupported_profile');
+  const { runtime, project } = cargo;
+  if (
+    project.manifest.path !== join(record.execution.cwd, manifest) ||
+    runtime.cargo.path !== `${runtime.root}/bin/cargo` ||
+    runtime.rustc.path !== `${runtime.root}/bin/rustc` ||
+    fs.realpathSync.native(runtime.root) !== runtime.root ||
+    !fs.statSync(runtime.root).isDirectory() ||
+    fs.realpathSync.native(runtime.sdkRoot) !== runtime.sdkRoot ||
+    !fs.statSync(runtime.sdkRoot).isDirectory() ||
+    inside(runtime.root, authority.canonical) ||
+    inside(ceiling.invocationRoot, authority.canonical)
+  )
+    refuse('unsupported_profile');
+  for (const image of [runtime.cargo, runtime.rustc, runtime.linker]) verifyImage(image);
+  const expected = new Map([
+    ['CAWS_EXECUTION_CALL', record.association.callId],
+    ['CAWS_EXECUTION_CALLER', record.association.callerAnchor],
+    ['CAWS_EXECUTION_PROJECT', record.projectRoot],
+    ['CAWS_EXECUTION_SESSION', record.association.sessionId],
+    ['CAWS_EXECUTION_THREAD', record.association.threadId],
+    ['CARGO_HOME', ceiling.cacheRoot],
+    [
+      'CARGO_ENCODED_RUSTFLAGS',
+      `--sysroot\x1f${runtime.root}\x1f-C\x1flinker=${runtime.linker.path}`,
+    ],
+    ['CODEX_SANDBOX', 'seatbelt'],
+    ['CODEX_SANDBOX_NETWORK_DISABLED', '1'],
+    ['HOME', ceiling.invocationRoot],
+    ['LC_ALL', 'C'],
+    ['PATH', `${runtime.root}/bin:/usr/bin:/bin`],
+    ['RUSTC', runtime.rustc.path],
+    ['SDKROOT', runtime.sdkRoot],
+    ['TMPDIR', ceiling.tmpRoot],
+  ]);
+  const actual = new Map(record.execution.environment.map(({ name, value }) => [name, value]));
+  if (
+    actual.size !== expected.size ||
+    [...expected].some(([name, value]) => actual.get(name) !== value)
+  )
+    refuse('unsupported_profile');
+  const observed = snapshotCargoProject(
+    record.execution.cwd,
+    manifest,
+    record.limits.preparationDeadlineUnixMs
+  );
+  for (const key of ['manifest', 'lock', 'entry'] as const)
+    if (observed[key].path !== project[key].path || observed[key].sha256 !== project[key].sha256)
+      refuse('unsupported_profile');
+  for (const key of ['packageName', 'version', 'edition', 'configurationSha256'] as const)
+    if (observed[key] !== project[key]) refuse('unsupported_profile');
+  for (const root of [
+    ceiling.invocationRoot,
+    ceiling.outputRoot,
+    ceiling.tmpRoot,
+    ceiling.cacheRoot,
+  ]) {
+    if (fs.realpathSync.native(root) !== root) refuse('unsupported_profile');
+    const stat = fs.lstatSync(root);
+    if (
+      !stat.isDirectory() ||
+      typeof process.getuid !== 'function' ||
+      stat.uid !== process.getuid() ||
+      (stat.mode & 0o7777) !== 0o700
+    )
+      refuse('unsupported_profile');
+  }
+  for (const root of [ceiling.outputRoot, ceiling.tmpRoot, ceiling.cacheRoot])
+    if (fs.readdirSync(root).length !== 0) refuse('unsupported_profile');
+}
+
 export function executionProfileBindings(
   record: PreparedExecutionV1
 ): Map<string, readonly string[]> {
   const values = new Map(
     record.execution.environment.map(({ name, value }) => [name, [value] as readonly string[]])
   );
+  const homes =
+    record.profile.kind === 'caws-lifecycle-v1'
+      ? readExecutionLifecycleRuntimeHomes(record.execution.environment)
+      : undefined;
+  const runtimeNames = homes ? ['HOME', 'CAWS_HOME', 'CODEX_HOME'] : [];
   for (const [name, [value]] of values) {
     if (['PWD', 'OLDPWD'].includes(name)) refuse('unsupported_profile');
     if (
       name.startsWith('BASH_FUNC_') ||
       PROFILE_CONTROL.test(name) ||
-      (sensitiveBinding(name) && !['PATH', 'LANG', 'LC_ALL'].includes(name))
+      (sensitiveBinding(name) && !['PATH', 'LANG', 'LC_ALL', ...runtimeNames].includes(name))
     )
       refuse('unsupported_profile');
     if (['LANG', 'LC_ALL'].includes(name) && value !== 'C') refuse('unsupported_profile');
@@ -614,6 +719,10 @@ async function inspectSource(
 ): Promise<void> {
   if (record.profile.kind === 'npm-test-v1') {
     inspectNpmTest(record, authority);
+    return;
+  }
+  if (record.profile.kind === 'cargo-run-v1') {
+    inspectCargoRun(record, authority);
     return;
   }
   if (record.profile.kind === 'caws-evidence-v1') {

@@ -51,6 +51,55 @@ function observation(result) {
   return value;
 }
 describe('private nonexecuting draft program discovery', () => {
+  test('Cargo captures the unchanged standalone project and exact advisory argv without executing it', () => {
+    const f = authorityFixture();
+    const { git } = require('../helpers/git-repo-factory');
+    const lane = path.join(f.root, 'cargo-owned');
+    git(f.root, ['worktree', 'move', f.lane, lane]);
+    f.lane = lane;
+    f.registry.owned.path = lane;
+    fs.writeFileSync(f.registryPath, JSON.stringify(f.registry));
+    f.record.association.callerAnchor = lane;
+    f.record.execution.cwd = lane;
+    const pkg = path.join(lane, 'rust-probe');
+    fs.mkdirSync(path.join(pkg, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pkg, 'Cargo.toml'),
+      '[package]\nname="actual-probe"\nversion="0.1.0"\nedition="2024"\n'
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'Cargo.lock'),
+      'version = 4\n[[package]]\nname="actual-probe"\nversion="0.1.0"\n'
+    );
+    fs.writeFileSync(path.join(pkg, 'src/main.rs'), 'fn main() { panic!("must not execute"); }\n');
+    const files = ['Cargo.toml', 'Cargo.lock', 'src/main.rs'].map((name) => path.join(pkg, name));
+    const before = files.map((name) => fs.readFileSync(name));
+    source(f, 'cargo run --manifest-path rust-probe/Cargo.toml');
+    const value = observation(run(f.record));
+    expect(value.status).toBe('observed');
+    expect(value.commands).toEqual([]);
+    expect(value.execution).toEqual({
+      kind: 'cargo-run-v1',
+      argv: ['cargo', 'run', '--manifest-path', 'rust-probe/Cargo.toml'],
+      cargoProject: require('../../dist/execution/cargo-project').snapshotCargoProject(
+        lane,
+        'rust-probe/Cargo.toml',
+        Date.now() + 30000
+      ),
+    });
+    expect(value.execution.cargoProject.packageName).toBe('actual-probe');
+    expect(files.map((name) => fs.readFileSync(name))).toEqual(before);
+    expect(fs.existsSync(path.join(pkg, 'target'))).toBe(false);
+    for (const invalid of [
+      'cargo run --manifest-path ../Cargo.toml',
+      'cargo run --manifest-path .caws/Cargo.toml',
+      'cargo run --manifest-path rust-probe/Cargo.toml --release',
+      'cargo run --manifest-path "rust-probe/Cargo.toml"',
+    ]) {
+      source(f, invalid);
+      expect(observation(run(f.record)).execution).toBeNull();
+    }
+  });
   test('lifecycle discovery resolves canonical merge before ordinary edit authority and keeps the complete pinned argv', () => {
     const f = authorityFixture();
     const { git } = require('../helpers/git-repo-factory');

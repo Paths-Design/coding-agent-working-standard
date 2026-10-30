@@ -50,6 +50,90 @@ pub(crate) struct Profile {
     pub utilities: Vec<ProgramImage>,
     #[serde(default)]
     pub npm: Option<NpmProfile>,
+    #[serde(default)]
+    pub cargo: Option<CargoProfile>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CargoProfile {
+    pub runtime: CargoRuntime,
+    pub project: CargoProject,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CargoRuntime {
+    pub cargo: ProgramImage,
+    pub rustc: ProgramImage,
+    pub linker: ProgramImage,
+    pub root: String,
+    pub sdk_root: String,
+    pub toolchain_version: String,
+    pub generation_manifest_sha256: String,
+}
+impl CargoRuntime {
+    pub(crate) fn valid(&self) -> bool {
+        image(&self.cargo)
+            && image(&self.rustc)
+            && image(&self.linker)
+            && path(&self.root)
+            && path(&self.sdk_root)
+            && numeric_version(&self.toolchain_version)
+            && digest(&self.generation_manifest_sha256)
+            && self.cargo.path == format!("{}/bin/cargo", self.root)
+            && self.rustc.path == format!("{}/bin/rustc", self.root)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CargoProject {
+    pub manifest: ProgramImage,
+    pub lock: ProgramImage,
+    pub entry: ProgramImage,
+    pub package_name: String,
+    pub version: String,
+    pub edition: String,
+    pub configuration_sha256: String,
+}
+
+impl CargoProject {
+    pub(crate) fn valid(&self) -> bool {
+        image(&self.manifest)
+            && image(&self.lock)
+            && image(&self.entry)
+            && cargo_package_name(&self.package_name)
+            && numeric_version(&self.version)
+            && matches!(self.edition.as_str(), "2015" | "2018" | "2021" | "2024")
+            && digest(&self.configuration_sha256)
+    }
+}
+
+pub(crate) fn cargo_project_shape(shape: &serde_json::Value, base: &str) -> bool {
+    ["", "/manifest", "/lock", "/entry"].iter().all(|suffix| {
+        shape
+            .pointer(&format!("{base}{suffix}"))
+            .is_some_and(serde_json::Value::is_object)
+    })
+}
+
+fn cargo_package_name(value: &str) -> bool {
+    (1..=64).contains(&value.len())
+        && value.as_bytes()[0].is_ascii_alphabetic()
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+}
+
+fn numeric_version(value: &str) -> bool {
+    let parts: Vec<_> = value.split('.').collect();
+    parts.len() == 3
+        && parts.iter().all(|part| {
+            (1..=9).contains(&part.len())
+                && part.bytes().all(|b| b.is_ascii_digit())
+                && (part.len() == 1 || !part.starts_with('0'))
+        })
 }
 
 #[derive(Deserialize)]
@@ -213,6 +297,7 @@ impl PreparedRecord {
         let e = &value.execution;
         let p = &value.profile;
         let npm = p.kind == "npm-test-v1";
+        let cargo = p.kind == "cargo-run-v1";
         require(
             image(&e.executable)
                 && path(&e.cwd)
@@ -230,22 +315,37 @@ impl PreparedRecord {
                     || (p.kind == "caws-lifecycle-v1"
                         && e.argv.len() >= 3
                         && e.argv[0] == e.executable.path)
-                    || npm),
+                    || npm
+                    || cargo),
         )?;
         if npm {
             let profile = p.npm.as_ref().ok_or(InvalidRecord)?;
             let runtime = &profile.runtime;
             let project = &profile.project;
             require(
-                shape.pointer("/profile/npm").is_some_and(serde_json::Value::is_object)
-                    && shape.pointer("/profile/npm/runtime").is_some_and(serde_json::Value::is_object)
-                    && shape.pointer("/profile/npm/project").is_some_and(serde_json::Value::is_object)
+                shape
+                    .pointer("/profile/npm")
+                    .is_some_and(serde_json::Value::is_object)
+                    && shape
+                        .pointer("/profile/npm/runtime")
+                        .is_some_and(serde_json::Value::is_object)
+                    && shape
+                        .pointer("/profile/npm/project")
+                        .is_some_and(serde_json::Value::is_object)
                     && [
                         "/profile/npm/runtime/node",
                         "/profile/npm/runtime/entry",
                         "/profile/npm/project/packageJson",
-                    ].into_iter().all(|pointer| shape.pointer(pointer).is_some_and(serde_json::Value::is_object))
-                    && shape.pointer("/profile/npm/project/npmrc").is_some_and(|value| value.is_null() || value.is_object())
+                    ]
+                    .into_iter()
+                    .all(|pointer| {
+                        shape
+                            .pointer(pointer)
+                            .is_some_and(serde_json::Value::is_object)
+                    })
+                    && shape
+                        .pointer("/profile/npm/project/npmrc")
+                        .is_some_and(|value| value.is_null() || value.is_object())
                     && p.source == "npm test"
                     && p.utilities.is_empty()
                     && e.stdin_base64.is_empty()
@@ -261,10 +361,74 @@ impl PreparedRecord {
                     && digest(&project.path_shadow_sha256)
                     && e.executable.path == runtime.node.path
                     && e.executable.sha256 == runtime.node.sha256
-                    && e.argv == [runtime.node.path.as_str(), runtime.entry.path.as_str(), "--prefix", e.cwd.as_str(), "--workspaces=false", "test"]
+                    && e.argv
+                        == [
+                            runtime.node.path.as_str(),
+                            runtime.entry.path.as_str(),
+                            "--prefix",
+                            e.cwd.as_str(),
+                            "--workspaces=false",
+                            "test",
+                        ],
             )?;
         } else {
             require(p.npm.is_none() && shape.pointer("/profile/npm").is_none())?;
+        }
+        if cargo {
+            let profile = p.cargo.as_ref().ok_or(InvalidRecord)?;
+            let runtime = &profile.runtime;
+            let project = &profile.project;
+            let ceiling = value.sandbox.write_ceiling.as_ref().ok_or(InvalidRecord)?;
+            let target = format!("{}/target", ceiling.output_root);
+            require(
+                [
+                    "/profile/cargo",
+                    "/profile/cargo/runtime",
+                    "/profile/cargo/runtime/cargo",
+                    "/profile/cargo/runtime/rustc",
+                    "/profile/cargo/runtime/linker",
+                ]
+                .iter()
+                .all(|pointer| {
+                    shape
+                        .pointer(pointer)
+                        .is_some_and(serde_json::Value::is_object)
+                }) && cargo_project_shape(&shape, "/profile/cargo/project")
+                    && p.utilities.is_empty()
+                    && e.stdin_base64.is_empty()
+                    && image(&runtime.cargo)
+                    && image(&runtime.rustc)
+                    && image(&runtime.linker)
+                    && path(&runtime.root)
+                    && path(&runtime.sdk_root)
+                    && numeric_version(&runtime.toolchain_version)
+                    && digest(&runtime.generation_manifest_sha256)
+                    && runtime.cargo.path == format!("{}/bin/cargo", runtime.root)
+                    && runtime.rustc.path == format!("{}/bin/rustc", runtime.root)
+                    && project.valid()
+                    && e.executable.path == runtime.cargo.path
+                    && e.executable.sha256 == runtime.cargo.sha256
+                    && e.argv
+                        == [
+                            runtime.cargo.path.as_str(),
+                            "run",
+                            "--locked",
+                            "--offline",
+                            "--frozen",
+                            "--jobs",
+                            "1",
+                            "--manifest-path",
+                            project.manifest.path.as_str(),
+                            "--target-dir",
+                            target.as_str(),
+                            "--bin",
+                            project.package_name.as_str(),
+                            "--message-format",
+                            "json-render-diagnostics",
+                        ],
+            )?;
+        } else {
+            require(p.cargo.is_none() && shape.pointer("/profile/cargo").is_none())?;
         }
         require(e.environment.len() <= 1024)?;
         let mut previous: Option<&str> = None;
@@ -290,10 +454,12 @@ impl PreparedRecord {
         )?;
         let s = &value.sandbox;
         require(digest(&s.state_sha256) && image(&s.launcher) && path(&s.environment_anchor))?;
-        if npm {
+        if npm || cargo {
             let ceiling = s.write_ceiling.as_ref().ok_or(InvalidRecord)?;
             require(
-                shape.pointer("/sandbox/writeCeiling").is_some_and(serde_json::Value::is_object)
+                shape
+                    .pointer("/sandbox/writeCeiling")
+                    .is_some_and(serde_json::Value::is_object)
                     && ceiling.schema == "caws.execution.write-ceiling.v1"
                     && digest(&ceiling.launch_id)
                     && digest(&ceiling.manifest_sha256)
@@ -361,7 +527,14 @@ mod tests {
         let node = json!({"path":"/generation/node", "sha256":"a".repeat(64)});
         let entry = json!({"path":"/generation/npm/bin/npm-cli.js", "sha256":"b".repeat(64)});
         value["execution"]["executable"] = node.clone();
-        value["execution"]["argv"] = json!(["/generation/node", "/generation/npm/bin/npm-cli.js", "--prefix", value["execution"]["cwd"], "--workspaces=false", "test"]);
+        value["execution"]["argv"] = json!([
+            "/generation/node",
+            "/generation/npm/bin/npm-cli.js",
+            "--prefix",
+            value["execution"]["cwd"],
+            "--workspaces=false",
+            "test"
+        ]);
         value["execution"]["stdinBase64"] = json!("");
         value["profile"] = json!({"kind":"npm-test-v1", "source":"npm test", "utilities":[],
             "npm":{"runtime":{"node":node,"entry":entry,"root":"/generation/npm",
@@ -375,6 +548,233 @@ mod tests {
         value
     }
 
+    pub(crate) fn cargo_fixture() -> Value {
+        let mut value = npm_fixture();
+        let pin = |path: &str, hash: &str| json!({"path":path,"sha256":hash.repeat(64)});
+        let cargo = pin("/generation/rust/bin/cargo", "a");
+        value["execution"]["executable"] = cargo.clone();
+        value["execution"]["argv"] = json!([
+            "/generation/rust/bin/cargo",
+            "run",
+            "--locked",
+            "--offline",
+            "--frozen",
+            "--jobs",
+            "1",
+            "--manifest-path",
+            "/project/demo/Cargo.toml",
+            "--target-dir",
+            "/private/run/output/target",
+            "--bin",
+            "demo",
+            "--message-format",
+            "json-render-diagnostics"
+        ]);
+        value["profile"] = json!({"kind":"cargo-run-v1",
+            "source":"cargo run --manifest-path demo/Cargo.toml", "utilities":[],
+            "cargo":{"runtime":{"cargo":cargo,"rustc":pin("/generation/rust/bin/rustc","b"),
+                "linker":pin("/generation/toolchain/bin/clang","c"),"root":"/generation/rust",
+                "sdkRoot":"/generation/sdk","toolchainVersion":"1.90.0",
+                "generationManifestSha256":"d".repeat(64)},
+            "project":{"manifest":pin("/project/demo/Cargo.toml","e"),
+                "lock":pin("/project/demo/Cargo.lock","f"),"entry":pin("/project/demo/src/main.rs","1"),
+                "packageName":"demo","version":"0.1.0","edition":"2024",
+                "configurationSha256":"2".repeat(64)}}});
+        value
+    }
+
+    #[test]
+    fn cargo_record_preserves_exact_tuple_and_original_opaque_bytes() {
+        let value = cargo_fixture();
+        let original = serde_json::to_vec_pretty(&value).unwrap();
+        let record = PreparedRecord::decode(original.clone()).unwrap();
+        assert_eq!(record.original(), original);
+        assert_eq!(record.sandbox_state(), b"{ \"future\": 1, \"future\": 2 }");
+        assert_eq!(
+            record.value().execution.argv,
+            [
+                "/generation/rust/bin/cargo",
+                "run",
+                "--locked",
+                "--offline",
+                "--frozen",
+                "--jobs",
+                "1",
+                "--manifest-path",
+                "/project/demo/Cargo.toml",
+                "--target-dir",
+                "/private/run/output/target",
+                "--bin",
+                "demo",
+                "--message-format",
+                "json-render-diagnostics"
+            ]
+        );
+        let profile = record.value().profile.cargo.as_ref().unwrap();
+        assert_eq!(profile.project.package_name, "demo");
+        assert_eq!(profile.project.version, "0.1.0");
+        assert_eq!(profile.runtime.toolchain_version, "1.90.0");
+        assert!(record.stdin().is_empty());
+        for edition in ["2015", "2018", "2021", "2024"] {
+            let mut good = value.clone();
+            good["profile"]["cargo"]["project"]["edition"] = json!(edition);
+            assert!(PreparedRecord::decode(serde_json::to_vec(&good).unwrap()).is_ok());
+        }
+    }
+
+    #[test]
+    fn cargo_record_refuses_runtime_argv_project_and_ceiling_disagreement() {
+        let value = cargo_fixture();
+        for (pointer, replacement) in [
+            ("/execution/executable/path", json!("/usr/bin/cargo")),
+            ("/execution/executable/sha256", json!("9".repeat(64))),
+            ("/execution/argv/1", json!("build")),
+            ("/execution/argv/2", json!("--release")),
+            ("/execution/argv/6", json!("2")),
+            ("/execution/argv/8", json!("/project/other/Cargo.toml")),
+            ("/execution/argv/10", json!("/project/target")),
+            ("/execution/argv/12", json!("other")),
+            ("/execution/argv/14", json!("json")),
+            ("/execution/stdinBase64", json!("YQ==")),
+            (
+                "/profile/utilities",
+                json!([{"path":"/bin/cat","sha256":"a".repeat(64)}]),
+            ),
+            ("/profile/cargo/runtime/root", json!("/generation/other")),
+            ("/profile/cargo/runtime/cargo/path", json!("/usr/bin/cargo")),
+            ("/profile/cargo/runtime/rustc/path", json!("/usr/bin/rustc")),
+            ("/profile/cargo/runtime/linker/path", json!("clang")),
+            ("/profile/cargo/runtime/sdkRoot", json!("sdk")),
+            (
+                "/profile/cargo/runtime/toolchainVersion",
+                json!("1.90.0-nightly"),
+            ),
+            ("/profile/cargo/runtime/toolchainVersion", json!("01.90.0")),
+            (
+                "/profile/cargo/runtime/generationManifestSha256",
+                json!("bad"),
+            ),
+            ("/profile/cargo/project/manifest/path", json!("Cargo.toml")),
+            ("/profile/cargo/project/lock/sha256", json!("F".repeat(64))),
+            ("/profile/cargo/project/entry/path", json!("src/main.rs")),
+            ("/profile/cargo/project/configurationSha256", json!("bad")),
+            ("/profile/cargo/project/packageName", json!("-demo")),
+            ("/profile/cargo/project/packageName", json!("a".repeat(65))),
+            ("/profile/cargo/project/version", json!("0.1.0+local")),
+            ("/profile/cargo/project/version", json!("0.01.0")),
+            ("/profile/cargo/project/edition", json!("2027")),
+            ("/sandbox/writeCeiling/tmpRoot", json!("/project/tmp")),
+            (
+                "/sandbox/writeCeiling/outputRoot",
+                json!("/private/run/output/"),
+            ),
+            ("/sandbox/writeCeiling/manifestSha256", json!("bad")),
+        ] {
+            let mut bad = value.clone();
+            *bad.pointer_mut(pointer).unwrap() = replacement;
+            assert!(
+                PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err(),
+                "{pointer}"
+            );
+        }
+        for pointer in ["/profile/cargo", "/sandbox/writeCeiling"] {
+            let mut bad = value.clone();
+            *bad.pointer_mut(pointer).unwrap() = Value::Null;
+            assert!(PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err());
+        }
+        let mut missing = value.clone();
+        missing["sandbox"]
+            .as_object_mut()
+            .unwrap()
+            .remove("writeCeiling");
+        assert!(PreparedRecord::decode(serde_json::to_vec(&missing).unwrap()).is_err());
+        let mut extra = value.clone();
+        extra["execution"]["argv"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!("--release"));
+        assert!(PreparedRecord::decode(serde_json::to_vec(&extra).unwrap()).is_err());
+    }
+
+    #[test]
+    fn cargo_record_refuses_positional_unknown_duplicate_and_cross_kind_objects() {
+        let value = cargo_fixture();
+        for (pointer, keys) in [
+            ("/profile/cargo", vec!["runtime", "project"]),
+            (
+                "/profile/cargo/runtime",
+                vec![
+                    "cargo",
+                    "rustc",
+                    "linker",
+                    "root",
+                    "sdkRoot",
+                    "toolchainVersion",
+                    "generationManifestSha256",
+                ],
+            ),
+            (
+                "/profile/cargo/project",
+                vec![
+                    "manifest",
+                    "lock",
+                    "entry",
+                    "packageName",
+                    "version",
+                    "edition",
+                    "configurationSha256",
+                ],
+            ),
+            ("/profile/cargo/runtime/cargo", vec!["path", "sha256"]),
+            ("/profile/cargo/runtime/rustc", vec!["path", "sha256"]),
+            ("/profile/cargo/runtime/linker", vec!["path", "sha256"]),
+            ("/profile/cargo/project/manifest", vec!["path", "sha256"]),
+            ("/profile/cargo/project/lock", vec!["path", "sha256"]),
+            ("/profile/cargo/project/entry", vec!["path", "sha256"]),
+            (
+                "/sandbox/writeCeiling",
+                vec![
+                    "schema",
+                    "launchId",
+                    "invocationRoot",
+                    "outputRoot",
+                    "tmpRoot",
+                    "cacheRoot",
+                    "manifestSha256",
+                ],
+            ),
+        ] {
+            let mut bad = value.clone();
+            let row = bad.pointer_mut(pointer).unwrap();
+            *row = Value::Array(keys.iter().map(|key| row[key].clone()).collect());
+            assert!(
+                PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err(),
+                "positional {pointer}"
+            );
+            let mut bad = value.clone();
+            bad.pointer_mut(pointer).unwrap()["unexpected"] = json!(true);
+            assert!(
+                PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err(),
+                "unknown {pointer}"
+            );
+        }
+        let original = serde_json::to_string(&value).unwrap();
+        let duplicate = original.replacen(
+            "\"edition\":\"2024\"",
+            "\"edition\":\"2024\",\"edition\":\"2024\"",
+            1,
+        );
+        assert_ne!(original, duplicate);
+        assert!(PreparedRecord::decode(duplicate.into_bytes()).is_err());
+        let mut bad = value;
+        bad["profile"]["npm"] = Value::Null;
+        assert!(PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err());
+        for mut other in [fixture(), npm_fixture()] {
+            other["profile"]["cargo"] = Value::Null;
+            assert!(PreparedRecord::decode(serde_json::to_vec(&other).unwrap()).is_err());
+        }
+    }
+
     #[test]
     fn npm_record_requires_exact_test_runtime_project_and_ceiling() {
         let value = npm_fixture();
@@ -384,17 +784,26 @@ mod tests {
         for (pointer, replacement) in [
             ("/profile/source", json!("npm test -- --watch")),
             ("/execution/argv/2", json!("install")),
-            ("/profile/npm/runtime/entry/path", json!("/generation/npm/other.js")),
+            (
+                "/profile/npm/runtime/entry/path",
+                json!("/generation/npm/other.js"),
+            ),
             ("/profile/npm/project/testScript", json!("")),
             ("/sandbox/writeCeiling/tmpRoot", json!("/project/tmp")),
             ("/sandbox/writeCeiling/manifestSha256", json!("0")),
         ] {
             let mut bad = value.clone();
             *bad.pointer_mut(pointer).unwrap() = replacement;
-            assert!(PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err(), "{pointer}");
+            assert!(
+                PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err(),
+                "{pointer}"
+            );
         }
         let mut bad = value.clone();
-        bad["profile"]["npm"]["project"].as_object_mut().unwrap().remove("npmrc");
+        bad["profile"]["npm"]["project"]
+            .as_object_mut()
+            .unwrap()
+            .remove("npmrc");
         assert!(PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err());
         for pointer in [
             "/profile/npm/runtime/node",
@@ -404,12 +813,16 @@ mod tests {
             let mut bad = value.clone();
             let image = bad.pointer(pointer).unwrap().clone();
             *bad.pointer_mut(pointer).unwrap() = json!([image["path"], image["sha256"]]);
-            assert!(PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err(), "{pointer}");
+            assert!(
+                PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err(),
+                "{pointer}"
+            );
         }
         let mut npmrc = value.clone();
-        npmrc["profile"]["npm"]["project"]["npmrc"] = json!({"path":"/project/.npmrc","sha256":"2".repeat(64)});
+        npmrc["profile"]["npm"]["project"]["npmrc"] =
+            json!({"path":"/project/.npmrc","sha256":"2".repeat(64)});
         assert!(PreparedRecord::decode(serde_json::to_vec(&npmrc).unwrap()).is_ok());
-        npmrc["profile"]["npm"]["project"]["npmrc"] = json!(["/project/.npmrc","2".repeat(64)]);
+        npmrc["profile"]["npm"]["project"]["npmrc"] = json!(["/project/.npmrc", "2".repeat(64)]);
         assert!(PreparedRecord::decode(serde_json::to_vec(&npmrc).unwrap()).is_err());
         let mut bad = fixture();
         bad["profile"]["npm"] = json!(null);
@@ -451,7 +864,11 @@ mod tests {
         let mut value = fixture();
         value["profile"]["kind"] = json!("caws-lifecycle-v1");
         value["execution"]["executable"]["path"] = json!("/generation/node");
-        value["execution"]["argv"] = json!(["/generation/node", "/generation/lifecycle-main.js", "git-head"]);
+        value["execution"]["argv"] = json!([
+            "/generation/node",
+            "/generation/lifecycle-main.js",
+            "git-head"
+        ]);
         let decoded = PreparedRecord::decode(serde_json::to_vec(&value).unwrap()).unwrap();
         assert_eq!(decoded.value().profile.kind, "caws-lifecycle-v1");
         assert_eq!(decoded.value().execution.argv[2], "git-head");

@@ -20,10 +20,11 @@ use crate::{
     execution_child::{self, Completed, Failure, TerminationGrace},
     execution_fd_transport::{configure_child_fds, configure_private_child},
     execution_fence::ExecutionFence,
-    execution_prepared::{PreparedRecord, ProgramImage},
-    execution_server::private_roots::{PrivateLaunch, MANIFEST_FD, ROLE_FDS},
+    execution_prepared::{CargoRuntime, PreparedRecord, ProgramImage},
+    execution_server::private_roots::{MANIFEST_FD, PrivateLaunch, ROLE_FDS},
     monotonic_deadline::{self, EffectCheck, MonotonicDeadline},
 };
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
     cell::RefCell,
@@ -64,46 +65,151 @@ pub(crate) struct PinnedAuthorizer {
     pub entry: ProgramImage,
     pub writer: Option<ProgramImage>,
     pub lifecycle: Option<ProgramImage>,
+    pub lifecycle_context: Option<RuntimeHomes>,
+}
+
+/// Operational context selected by trusted startup configuration. These paths
+/// are supplied only to the pinned lifecycle consumer, never ordinary USER.
+#[derive(Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RuntimeHomes {
+    pub home: String,
+    pub caws_home: String,
+    pub codex_home: String,
+}
+impl RuntimeHomes {
+    pub(crate) fn well_formed(&self) -> bool {
+        [&self.home, &self.caws_home, &self.codex_home]
+            .into_iter()
+            .all(|value| {
+                value.len() <= 4096 && !value.contains('\0') && Path::new(value).is_absolute()
+            })
+            && Path::new(&self.codex_home) == Path::new(&self.home).join(".codex")
+    }
+    pub(crate) fn environment(&self) -> [(&'static str, &str); 3] {
+        [
+            ("CAWS_HOME", self.caws_home.as_str()),
+            ("CODEX_HOME", self.codex_home.as_str()),
+            ("HOME", self.home.as_str()),
+        ]
+    }
+    fn validate(&self, live: &impl Fn() -> Result<(), Refusal>) -> Result<(), Refusal> {
+        if !self.well_formed() {
+            return Err(Refusal::Identity);
+        }
+        for (_, value) in self.environment() {
+            live()?;
+            let path = Path::new(value);
+            if fs::canonicalize(path).map_err(|_| Refusal::Image)? != path
+                || !fs::symlink_metadata(path)
+                    .map_err(|_| Refusal::Image)?
+                    .is_dir()
+            {
+                return Err(Refusal::Image);
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Supplied only by the authenticated producer from its pinned configuration.
 /// The generic worker entry cannot construct or receive this launch context.
-pub(crate) struct NpmLaunch<'a> {
+pub(crate) enum SandboxedRuntime<'a> {
+    Npm {
+        root: &'a str,
+        entry: &'a ProgramImage,
+    },
+    Cargo(&'a CargoRuntime),
+}
+pub(crate) struct SandboxedLaunch<'a> {
     pub host: &'a ProgramImage,
-    pub root: &'a str,
-    pub entry: &'a ProgramImage,
+    pub runtime: SandboxedRuntime<'a>,
     pub generation_manifest_sha256: &'a str,
     pub private: &'a PrivateLaunch,
 }
 
-impl NpmLaunch<'_> {
-    fn validate(&self, record: &PreparedRecord, pins: &PinnedAuthorizer,
-        deadline: &MonotonicDeadline, live: &impl Fn() -> Result<(), Refusal>) -> Result<(), Refusal> {
+impl SandboxedLaunch<'_> {
+    fn validate(
+        &self,
+        record: &PreparedRecord,
+        pins: &PinnedAuthorizer,
+        deadline: &MonotonicDeadline,
+        live: &impl Fn() -> Result<(), Refusal>,
+    ) -> Result<(), Refusal> {
         let value = record.value();
-        let npm = value.profile.npm.as_ref().ok_or(Refusal::Image)?;
         let ceiling = value.sandbox.write_ceiling.as_ref().ok_or(Refusal::Image)?;
-        if value.profile.kind != "npm-test-v1"
-            || npm.runtime.node.path != pins.node.path || npm.runtime.node.sha256 != pins.node.sha256
-            || npm.runtime.root != self.root || npm.runtime.entry.path != self.entry.path
-            || npm.runtime.entry.sha256 != self.entry.sha256
-            || npm.runtime.generation_manifest_sha256 != self.generation_manifest_sha256
-            || value.sandbox.launcher.path != self.host.path || value.sandbox.launcher.sha256 != self.host.sha256
-            || ceiling.launch_id != self.private.launch_id || ceiling.manifest_sha256 != self.private.manifest_sha256
+        if value.sandbox.launcher.path != self.host.path
+            || value.sandbox.launcher.sha256 != self.host.sha256
+            || ceiling.launch_id != self.private.launch_id
+            || ceiling.manifest_sha256 != self.private.manifest_sha256
             || Path::new(&ceiling.invocation_root) != self.private.invocation_root
             || Path::new(&ceiling.output_root) != self.private.output_root
             || Path::new(&ceiling.tmp_root) != self.private.tmp_root
             || Path::new(&ceiling.cache_root) != self.private.cache_root
-        { return Err(Refusal::Image); }
-        self.private.verify_execution(&value.execution, deadline).map_err(|_| Refusal::Image)?;
-        let manifest: serde_json::Value = serde_json::from_slice(&self.private.manifest).map_err(|_| Refusal::Image)?;
+        {
+            return Err(Refusal::Image);
+        }
+        self.private
+            .verify_execution(&value.execution, deadline)
+            .map_err(|_| Refusal::Image)?;
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&self.private.manifest).map_err(|_| Refusal::Image)?;
         if manifest["sandboxStateJson"].as_str() != std::str::from_utf8(record.sandbox_state()).ok()
             || manifest["sessionId"] != value.association.session_id
             || manifest["threadId"] != value.association.thread_id
             || manifest["callId"] != value.association.call_id
-        { return Err(Refusal::Identity); }
+        {
+            return Err(Refusal::Identity);
+        }
         image_valid(self.host, live)?;
-        image_valid(self.entry, live)?;
-        image_valid(&npm.project.package_json, live)
+        match &self.runtime {
+            SandboxedRuntime::Npm { root, entry } => {
+                let npm = value.profile.npm.as_ref().ok_or(Refusal::Image)?;
+                if value.profile.kind != "npm-test-v1"
+                    || npm.runtime.node.path != pins.node.path
+                    || npm.runtime.node.sha256 != pins.node.sha256
+                    || npm.runtime.root != *root
+                    || npm.runtime.entry.path != entry.path
+                    || npm.runtime.entry.sha256 != entry.sha256
+                    || npm.runtime.generation_manifest_sha256 != self.generation_manifest_sha256
+                {
+                    return Err(Refusal::Image);
+                }
+                image_valid(entry, live)?;
+                image_valid(&npm.project.package_json, live)
+            }
+            SandboxedRuntime::Cargo(expected) => {
+                let cargo = value.profile.cargo.as_ref().ok_or(Refusal::Image)?;
+                let runtime = &cargo.runtime;
+                if value.profile.kind != "cargo-run-v1"
+                    || runtime.root != expected.root
+                    || runtime.sdk_root != expected.sdk_root
+                    || runtime.toolchain_version != expected.toolchain_version
+                    || runtime.generation_manifest_sha256 != self.generation_manifest_sha256
+                    || expected.generation_manifest_sha256 != self.generation_manifest_sha256
+                {
+                    return Err(Refusal::Image);
+                }
+                for (actual, pinned) in [
+                    (&runtime.cargo, &expected.cargo),
+                    (&runtime.rustc, &expected.rustc),
+                    (&runtime.linker, &expected.linker),
+                ] {
+                    if actual.path != pinned.path || actual.sha256 != pinned.sha256 {
+                        return Err(Refusal::Image);
+                    }
+                    image_valid(pinned, live)?;
+                }
+                for image in [
+                    &cargo.project.manifest,
+                    &cargo.project.lock,
+                    &cargo.project.entry,
+                ] {
+                    image_valid(image, live)?;
+                }
+                Ok(())
+            }
+        }
     }
 }
 
@@ -114,34 +220,61 @@ struct ManifestPump {
 }
 impl ManifestPump {
     fn new(bytes: &[u8]) -> io::Result<(File, Self)> {
-        if bytes.is_empty() || bytes.len() > 512 * 1024 { return Err(io::Error::other("invalid launch manifest")); }
+        if bytes.is_empty() || bytes.len() > 512 * 1024 {
+            return Err(io::Error::other("invalid launch manifest"));
+        }
         let mut raw = [-1; 2];
-        if unsafe { libc::pipe(raw.as_mut_ptr()) } != 0 { return Err(io::Error::last_os_error()); }
+        if unsafe { libc::pipe(raw.as_mut_ptr()) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
         let reader = unsafe { File::from_raw_fd(raw[0]) };
         let writer = unsafe { File::from_raw_fd(raw[1]) };
         for file in [&reader, &writer] {
             let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) };
-            if flags < 0 || unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0 {
+            if flags < 0
+                || unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETFD, flags | libc::FD_CLOEXEC) }
+                    < 0
+            {
                 return Err(io::Error::last_os_error());
             }
         }
         let flags = unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) };
-        if flags < 0 || unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        if flags < 0
+            || unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) }
+                < 0
+        {
             return Err(io::Error::last_os_error());
         }
-        Ok((reader, Self { writer: Some(writer), bytes: bytes.to_vec(), offset: 0 }))
+        Ok((
+            reader,
+            Self {
+                writer: Some(writer),
+                bytes: bytes.to_vec(),
+                offset: 0,
+            },
+        ))
     }
     fn pump(&mut self) -> io::Result<()> {
         for _ in 0..16 {
-            let Some(writer) = self.writer.as_mut() else { return Ok(()); };
+            let Some(writer) = self.writer.as_mut() else {
+                return Ok(());
+            };
             match writer.write(&self.bytes[self.offset..]) {
-                Ok(0) => return Err(io::Error::new(io::ErrorKind::WriteZero, "launch manifest closed")),
+                Ok(0) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "launch manifest closed",
+                    ));
+                }
                 Ok(count) => self.offset += count,
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(()),
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
                 Err(error) => return Err(error),
             }
-            if self.offset == self.bytes.len() { self.writer.take(); return Ok(()); }
+            if self.offset == self.bytes.len() {
+                self.writer.take();
+                return Ok(());
+            }
         }
         Ok(())
     }
@@ -328,9 +461,18 @@ fn images(
         let consumer = Path::new(&pins.entry.path)
             .parent()
             .ok_or(Refusal::Image)?
-            .join(if kind == "caws-evidence-v1" { "writer-main.js" } else { "lifecycle-main.js" });
-        let pinned_consumer = if kind == "caws-evidence-v1" { &pins.writer } else { &pins.lifecycle }
-            .as_ref().ok_or(Refusal::Image)?;
+            .join(if kind == "caws-evidence-v1" {
+                "writer-main.js"
+            } else {
+                "lifecycle-main.js"
+            });
+        let pinned_consumer = if kind == "caws-evidence-v1" {
+            &pins.writer
+        } else {
+            &pins.lifecycle
+        }
+        .as_ref()
+        .ok_or(Refusal::Image)?;
         if e.executable.path != pins.node.path
             || e.executable.sha256 != pins.node.sha256
             || e.argv.len() < if kind == "caws-evidence-v1" { 5 } else { 3 }
@@ -348,6 +490,26 @@ fn images(
             return Err(Refusal::Image);
         }
         image_valid(pinned_consumer, live)?;
+        if kind == "caws-lifecycle-v1" {
+            if let Some(homes) = &pins.lifecycle_context {
+                homes.validate(live)?;
+                for (name, value) in homes.environment() {
+                    if !e
+                        .environment
+                        .iter()
+                        .any(|entry| entry.name == name && entry.value == value)
+                    {
+                        return Err(Refusal::Identity);
+                    }
+                }
+            } else if e
+                .environment
+                .iter()
+                .any(|entry| ["HOME", "CAWS_HOME", "CODEX_HOME"].contains(&entry.name.as_str()))
+            {
+                return Err(Refusal::Identity);
+            }
+        }
     }
     image_valid(&pins.node, live)?;
     image_valid(&pins.entry, live)?;
@@ -509,7 +671,10 @@ pub(crate) fn execute(
     cancelled: Arc<AtomicBool>,
     control: &EffectCheck<'_>,
 ) -> OwnerOutcome {
-    if record.value().profile.kind == "npm-test-v1" {
+    if matches!(
+        record.value().profile.kind.as_str(),
+        "npm-test-v1" | "cargo-run-v1"
+    ) {
         return OwnerOutcome::Failed(failure(Refusal::Unsupported));
     }
     match execute_inner(record, trusted, pins, deadline, cancelled, control, None) {
@@ -517,12 +682,24 @@ pub(crate) fn execute(
         Err(e) => OwnerOutcome::Failed(e),
     }
 }
-pub(crate) fn execute_npm(
-    record: PreparedRecord, trusted: &TrustedInvocation, pins: &PinnedAuthorizer,
-    deadline: &MonotonicDeadline, cancelled: Arc<AtomicBool>, control: &EffectCheck<'_>,
-    launch: &NpmLaunch<'_>,
+pub(crate) fn execute_sandboxed(
+    record: PreparedRecord,
+    trusted: &TrustedInvocation,
+    pins: &PinnedAuthorizer,
+    deadline: &MonotonicDeadline,
+    cancelled: Arc<AtomicBool>,
+    control: &EffectCheck<'_>,
+    launch: &SandboxedLaunch<'_>,
 ) -> OwnerOutcome {
-    match execute_inner(record, trusted, pins, deadline, cancelled, control, Some(launch)) {
+    match execute_inner(
+        record,
+        trusted,
+        pins,
+        deadline,
+        cancelled,
+        control,
+        Some(launch),
+    ) {
         Ok(done) => OwnerOutcome::Completed(done),
         Err(problem) => OwnerOutcome::Failed(problem),
     }
@@ -534,7 +711,7 @@ fn execute_inner(
     deadline: &MonotonicDeadline,
     cancelled: Arc<AtomicBool>,
     control: &EffectCheck<'_>,
-    npm_launch: Option<&NpmLaunch<'_>>,
+    sandboxed_launch: Option<&SandboxedLaunch<'_>>,
 ) -> Result<Completed, OwnerFailure> {
     if !cfg!(target_os = "macos") || !trusted.same_host_macos_verified {
         return Err(failure(Refusal::Unsupported));
@@ -546,16 +723,28 @@ fn execute_inner(
         record.value().limits.termination_grace_ms,
     ))
     .map_err(|_| failure(Refusal::InvalidDeadline))?;
-    let trusted_consumer = matches!(record.value().profile.kind.as_str(), "caws-evidence-v1" | "caws-lifecycle-v1");
-    let npm = record.value().profile.kind == "npm-test-v1";
-    if npm != npm_launch.is_some() { return Err(failure(Refusal::Unsupported)); }
+    let trusted_consumer = matches!(
+        record.value().profile.kind.as_str(),
+        "caws-evidence-v1" | "caws-lifecycle-v1"
+    );
+    let sandboxed = matches!(
+        record.value().profile.kind.as_str(),
+        "npm-test-v1" | "cargo-run-v1"
+    );
+    if sandboxed != sandboxed_launch.is_some() {
+        return Err(failure(Refusal::Unsupported));
+    }
     let live = || {
         check(&record, trusted, deadline, &cancelled)?;
         control("execution_preparation").map_err(|_| Refusal::Control)
     };
     live().map_err(failure)?;
     images(&record, pins, &live).map_err(failure)?;
-    if let Some(launch) = npm_launch { launch.validate(&record, pins, deadline, &live).map_err(failure)?; }
+    if let Some(launch) = sandboxed_launch {
+        launch
+            .validate(&record, pins, deadline, &live)
+            .map_err(failure)?;
+    }
     let revision = authorizer(
         &record,
         trusted,
@@ -586,28 +775,50 @@ fn execute_inner(
         )?;
         fence.validate().map_err(|_| failure(Refusal::Fence))?;
         images(&record, pins, &live).map_err(failure)?;
-        if let Some(launch) = npm_launch { launch.validate(&record, pins, deadline, &live).map_err(failure)?; }
+        if let Some(launch) = sandboxed_launch {
+            launch
+                .validate(&record, pins, deadline, &live)
+                .map_err(failure)?;
+        }
         fence.validate().map_err(|_| failure(Refusal::Fence))?;
         live().map_err(failure)?;
         let e = &record.value().execution;
         let mut manifest_reader = None;
         let mut manifest_pump = None;
-        let mut command = if let Some(launch) = npm_launch {
-            let (reader, pump) = ManifestPump::new(&launch.private.manifest).map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
+        let mut command = if let Some(launch) = sandboxed_launch {
+            let (reader, pump) = ManifestPump::new(&launch.private.manifest)
+                .map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
             manifest_reader = Some(reader);
             manifest_pump = Some(pump);
             let mut command = pipe_command(&launch.host.path);
-            command.arg("sandbox").arg("--sandbox-state-json")
-                .arg(std::str::from_utf8(record.sandbox_state()).map_err(|_| failure(Refusal::Image))?)
-                .arg("--sandbox-state-write-ceiling-json").arg(&launch.private.ceiling_json)
-                .arg("--sandbox-state-write-ceiling-manifest-fd").arg(MANIFEST_FD.to_string())
-                .arg("--").args(&e.argv).current_dir("/").env_clear()
-                .env("PATH", "/usr/bin:/bin").env("LC_ALL", "C");
+            command
+                .arg("sandbox")
+                .arg("--sandbox-state-json")
+                .arg(
+                    std::str::from_utf8(record.sandbox_state())
+                        .map_err(|_| failure(Refusal::Image))?,
+                )
+                .arg("--sandbox-state-write-ceiling-json")
+                .arg(&launch.private.ceiling_json)
+                .arg("--sandbox-state-write-ceiling-manifest-fd")
+                .arg(MANIFEST_FD.to_string())
+                .arg("--")
+                .args(&e.argv)
+                .current_dir("/")
+                .env_clear()
+                .env("PATH", "/usr/bin:/bin")
+                .env("LC_ALL", "C");
             command
         } else {
             let mut command = pipe_command(&e.executable.path);
-            command.arg0(&e.argv[0]).args(&e.argv[1..]).current_dir(&e.cwd).env_clear();
-            for entry in &e.environment { command.env(&entry.name, &entry.value); }
+            command
+                .arg0(&e.argv[0])
+                .args(&e.argv[1..])
+                .current_dir(&e.cwd)
+                .env_clear();
+            for entry in &e.environment {
+                command.env(&entry.name, &entry.value);
+            }
             command
         };
         configure_private_child(&mut command)
@@ -618,10 +829,13 @@ fn execute_inner(
             configure_child_fds(&mut command, &[(fence.file().as_fd(), 3)])
                 .map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
         }
-        if let Some(launch) = npm_launch {
+        if let Some(launch) = sandboxed_launch {
             let mut mapping = vec![(manifest_reader.as_ref().unwrap().as_fd(), MANIFEST_FD)];
-            for (file, target) in launch.private.handles().iter().zip(ROLE_FDS) { mapping.push((file.as_fd(), target)); }
-            configure_child_fds(&mut command, &mapping).map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
+            for (file, target) in launch.private.handles().iter().zip(ROLE_FDS) {
+                mapping.push((file.as_fd(), target));
+            }
+            configure_child_fds(&mut command, &mapping)
+                .map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
         }
         private_exec_check(
             &mut command,
@@ -657,7 +871,7 @@ fn execute_inner(
             Err(problem)
         }
         Ok((child, job_deadline, manifest_pump)) => {
-            let (child, mut held_fence) = if trusted_consumer || npm {
+            let (child, mut held_fence) = if trusted_consumer || sandboxed {
                 (child, Some(fence))
             } else {
                 (release_after_spawn(child, fence, grace)?, None)
@@ -668,7 +882,8 @@ fn execute_inner(
             let job_control = |_: &'static str| {
                 control("execution_job").map_err(|_| "execution control unavailable".to_owned())?;
                 if let Some(pump) = manifest_pump.borrow_mut().as_mut() {
-                    pump.pump().map_err(|_| "execution manifest unavailable".to_owned())?;
+                    pump.pump()
+                        .map_err(|_| "execution manifest unavailable".to_owned())?;
                 }
                 Ok(())
             };
@@ -752,13 +967,68 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn runtime_homes_revalidate_physical_directories_and_original_control() {
+        let root = fs::canonicalize(std::env::temp_dir())
+            .unwrap()
+            .join(format!(
+                "caws-owner-homes-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+        let home = root.join("home");
+        let caws = root.join("machine");
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        fs::create_dir(&caws).unwrap();
+        let homes = RuntimeHomes {
+            home: home.to_str().unwrap().into(),
+            caws_home: caws.to_str().unwrap().into(),
+            codex_home: home.join(".codex").to_str().unwrap().into(),
+        };
+        assert!(homes.well_formed());
+        assert_eq!(homes.validate(&|| Ok(())), Ok(()));
+        let calls = std::cell::Cell::new(0);
+        assert_eq!(
+            homes.validate(&|| {
+                calls.set(calls.get() + 1);
+                if calls.get() == 2 {
+                    Err(Refusal::Cancelled)
+                } else {
+                    Ok(())
+                }
+            }),
+            Err(Refusal::Cancelled)
+        );
+        assert_eq!(calls.get(), 2);
+        let alias = root.join("alias");
+        std::os::unix::fs::symlink(&home, &alias).unwrap();
+        let mut changed = homes.clone();
+        changed.home = alias.to_str().unwrap().into();
+        changed.codex_home = alias.join(".codex").to_str().unwrap().into();
+        assert!(changed.well_formed());
+        assert_eq!(changed.validate(&|| Ok(())), Err(Refusal::Image));
+        changed = homes.clone();
+        changed.codex_home = caws.to_str().unwrap().into();
+        assert!(!changed.well_formed());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn manifest_pipe_is_private_nonblocking_and_delivers_large_exact_bytes_with_eof() {
         let bytes: Vec<u8> = (0..512 * 1024).map(|n| (n % 251) as u8).collect();
         let (mut reader, mut pump) = ManifestPump::new(&bytes).unwrap();
         let writer = pump.writer.as_ref().unwrap();
-        assert_ne!(unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) } & libc::O_NONBLOCK, 0);
+        assert_ne!(
+            unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) } & libc::O_NONBLOCK,
+            0
+        );
         for file in [&reader, writer] {
-            assert_ne!(unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) } & libc::FD_CLOEXEC, 0);
+            assert_ne!(
+                unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) } & libc::FD_CLOEXEC,
+                0
+            );
         }
         pump.pump().unwrap();
         let observer = std::thread::spawn(move || {
@@ -1125,6 +1395,7 @@ process.stdin.resume();
         let pins = PinnedAuthorizer {
             writer: None,
             lifecycle: None,
+            lifecycle_context: None,
             node: image(node.into()),
             entry: image(entry.into()),
         };

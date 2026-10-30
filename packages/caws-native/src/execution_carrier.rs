@@ -56,6 +56,8 @@ struct Pins {
     writer: Option<ProgramImage>,
     #[serde(default)]
     lifecycle: Option<ProgramImage>,
+    #[serde(default)]
+    lifecycle_context: Option<crate::execution_owner::RuntimeHomes>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -146,8 +148,21 @@ fn decode(bytes: &[u8]) -> io::Result<(Frame, PreparedRecord, MonotonicDeadline)
         })
         || frame.authorizer.lifecycle.as_ref().is_some_and(|image| {
             !valid_image(image)
-                || !shape.pointer("/authorizer/lifecycle").is_some_and(serde_json::Value::is_object)
+                || !shape
+                    .pointer("/authorizer/lifecycle")
+                    .is_some_and(serde_json::Value::is_object)
         })
+        || frame
+            .authorizer
+            .lifecycle_context
+            .as_ref()
+            .is_some_and(|context| {
+                !context.well_formed()
+                    || frame.authorizer.lifecycle.is_none()
+                    || !shape
+                        .pointer("/authorizer/lifecycle_context")
+                        .is_some_and(serde_json::Value::is_object)
+            })
         || frame.prepared_base64.len() > 4 * RECORD_LIMIT.div_ceil(3)
     {
         return Err(invalid());
@@ -195,7 +210,12 @@ pub(crate) fn encode_startup(
     deadline: &MonotonicDeadline,
 ) -> io::Result<Vec<u8>> {
     use serde_json::json;
-    if prepared.npm_launch.is_some() || prepared.record.value().profile.kind == "npm-test-v1" {
+    if prepared.sandboxed_launch.is_some()
+        || matches!(
+            prepared.record.value().profile.kind.as_str(),
+            "npm-test-v1" | "cargo-run-v1"
+        )
+    {
         return Err(invalid());
     }
     let mut random = [0u8; 16];
@@ -211,7 +231,8 @@ pub(crate) fn encode_startup(
             "threadId":a.thread_id,"callId":a.call_id,"callerAnchor":a.caller_anchor,
             "serverEnvironmentId":a.server_environment_id,"projectRoot":a.project_root,
             "environmentAnchor":a.environment_anchor},
-        "authorizer":{"node":image(&pins.node),"entry":image(&pins.entry),"writer":pins.writer.as_ref().map(image),"lifecycle":pins.lifecycle.as_ref().map(image)},
+        "authorizer":{"node":image(&pins.node),"entry":image(&pins.entry),"writer":pins.writer.as_ref().map(image),"lifecycle":pins.lifecycle.as_ref().map(image),
+            "lifecycle_context":pins.lifecycle_context.as_ref().map(|homes| json!({"home":homes.home,"caws_home":homes.caws_home,"codex_home":homes.codex_home}))},
         "deadline":deadline.envelope()
     })).map_err(|_| invalid())?;
     decode(&body)?;
@@ -310,6 +331,7 @@ pub(crate) fn receive_startup(
             entry: frame.authorizer.entry,
             writer: frame.authorizer.writer,
             lifecycle: frame.authorizer.lifecycle,
+            lifecycle_context: frame.authorizer.lifecycle_context,
         },
         deadline,
         control,
@@ -359,6 +381,31 @@ mod tests {
     fn bound() -> MonotonicDeadline {
         MonotonicDeadline::capture(Duration::from_secs(30)).unwrap()
     }
+    #[test]
+    fn runtime_homes_require_object_shape_complete_tuple_and_pinned_lifecycle() {
+        let (mut value, _) = fixture();
+        value["authorizer"]["lifecycle"] =
+            json!({"path":"/trusted/lifecycle-main.js","sha256":"b".repeat(64)});
+        value["authorizer"]["lifecycle_context"] = json!({"home":"/private/runtime-home","caws_home":"/private/runtime-machine","codex_home":"/private/runtime-home/.codex"});
+        assert!(decode(&serde_json::to_vec(&value).unwrap()).is_ok());
+        for context in [
+            json!([
+                "/private/runtime-home",
+                "/private/runtime-machine",
+                "/private/runtime-home/.codex"
+            ]),
+            json!({"home":"relative","caws_home":"/machine","codex_home":"relative/.codex"}),
+            json!({"home":"/home","caws_home":"/machine","codex_home":"/other/.codex"}),
+            json!({"home":"/home","codex_home":"/home/.codex"}),
+            json!({"home":"/home","caws_home":"/machine","codex_home":"/home/.codex","extra":true}),
+        ] {
+            let mut bad = value.clone();
+            bad["authorizer"]["lifecycle_context"] = context;
+            assert!(decode(&serde_json::to_vec(&bad).unwrap()).is_err());
+        }
+        value["authorizer"]["lifecycle"] = Value::Null;
+        assert!(decode(&serde_json::to_vec(&value).unwrap()).is_err());
+    }
     fn framed(value: &Value) -> Vec<u8> {
         let body = serde_json::to_vec(value).unwrap();
         let mut frame = (body.len() as u32).to_be_bytes().to_vec();
@@ -371,7 +418,7 @@ mod tests {
         let (frame, record, deadline) = decode(&serde_json::to_vec(&value).unwrap()).unwrap();
         let t = frame.trusted;
         let mut prepared = crate::execution_prepare::PreparedExecution {
-            npm_launch: None,
+            sandboxed_launch: None,
             record,
             association: crate::execution_prepare::PreparedAssociation {
                 invocation_id: t.invocation_id,
@@ -389,6 +436,7 @@ mod tests {
             entry: frame.authorizer.entry,
             writer: None,
             lifecycle: None,
+            lifecycle_context: None,
         };
         let bytes = encode_startup(&prepared, &pins, &deadline).unwrap();
         assert_eq!(
@@ -449,7 +497,8 @@ mod tests {
     #[test]
     fn lifecycle_startup_pin_preserves_exact_image_and_rejects_positional_aliases() {
         let (mut value, _) = fixture();
-        value["authorizer"]["lifecycle"] = json!({"path":"/generation/lifecycle-main.js","sha256":"b".repeat(64)});
+        value["authorizer"]["lifecycle"] =
+            json!({"path":"/generation/lifecycle-main.js","sha256":"b".repeat(64)});
         let (decoded, _, _) = decode(&serde_json::to_vec(&value).unwrap()).unwrap();
         let pin = decoded.authorizer.lifecycle.unwrap();
         assert_eq!(pin.path, "/generation/lifecycle-main.js");

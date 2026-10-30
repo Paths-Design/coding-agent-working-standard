@@ -91,6 +91,54 @@ function npmFixture() {
   };
   return input;
 }
+function cargoFixture() {
+  const value = npmFixture();
+  const cargo = image('/generation/rust/bin/cargo');
+  value.profile = {
+    kind: 'cargo-run-v1',
+    source: 'cargo run --manifest-path demo/Cargo.toml',
+    utilities: [],
+    cargo: {
+      runtime: {
+        cargo,
+        rustc: image('/generation/rust/bin/rustc'),
+        linker: image('/system/clang'),
+        root: '/generation/rust',
+        sdkRoot: '/system/sdk',
+        toolchainVersion: '1.99.1',
+        generationManifestSha256: 'b'.repeat(64),
+      },
+      project: {
+        manifest: image('/project/demo/Cargo.toml'),
+        lock: image('/project/demo/Cargo.lock'),
+        entry: image('/project/demo/src/main.rs'),
+        packageName: 'demo',
+        version: '0.1.0',
+        edition: '2024',
+        configurationSha256: 'c'.repeat(64),
+      },
+    },
+  };
+  value.execution.executable = cargo;
+  value.execution.argv = [
+    cargo.path,
+    'run',
+    '--locked',
+    '--offline',
+    '--frozen',
+    '--jobs',
+    '1',
+    '--manifest-path',
+    '/project/demo/Cargo.toml',
+    '--target-dir',
+    '/private/run/output/target',
+    '--bin',
+    'demo',
+    '--message-format',
+    'json-render-diagnostics',
+  ];
+  return value;
+}
 const encode = (value) => Buffer.from(JSON.stringify(value));
 const decode = (value) => decodePreparedExecution(encode(value));
 function at(value, path) {
@@ -105,6 +153,75 @@ function reject(value) {
 }
 
 describe('private prepared execution record', () => {
+  test('Cargo preserves the exact standalone execution tuple and opaque state bytes', () => {
+    const input = cargoFixture();
+    const decoded = decode(input);
+    expect(decoded).toEqual(input);
+    expect(decoded.execution.argv).toEqual(input.execution.argv);
+    expect(Object.isFrozen(decoded.profile.cargo.project)).toBe(true);
+    expect(decoded.sandbox.stateBase64).toBe(input.sandbox.stateBase64);
+  });
+  test('Cargo refuses argument, runtime, project and ceiling substitution', () => {
+    const mutations = [
+      (r) => r.execution.argv.push('--release'),
+      (r) => (r.execution.argv[2] = '--unlocked'),
+      (r) => (r.execution.argv[6] = '2'),
+      (r) => (r.execution.argv[10] = '/project/target'),
+      (r) => (r.execution.argv[12] = 'other'),
+      (r) => (r.execution.executable = image('/system/cargo')),
+      (r) => (r.execution.stdinBase64 = 'YQ=='),
+      (r) => r.profile.utilities.push(image('/usr/bin/git')),
+      (r) => (r.profile.npm = null),
+      (r) => (r.profile.cargo.runtime.rustc.path = '/other/rustc'),
+      (r) => (r.profile.cargo.runtime.linker.path = 'clang'),
+      (r) => (r.profile.cargo.runtime.sdkRoot = 'sdk'),
+      (r) => (r.profile.cargo.runtime.toolchainVersion = '1.99.1-nightly'),
+      (r) => (r.profile.cargo.project.version = '0.01.0'),
+      (r) => (r.profile.cargo.project.packageName = '-demo'),
+      (r) => (r.profile.cargo.project.edition = '2027'),
+      (r) => (r.profile.cargo.project.lock.sha256 = 'F'.repeat(64)),
+      (r) => (r.profile.cargo.project.configurationSha256 = 'bad'),
+      (r) => delete r.sandbox.writeCeiling,
+      (r) => (r.sandbox.writeCeiling = null),
+    ];
+    for (const mutate of mutations) {
+      const input = cargoFixture();
+      mutate(input);
+      reject(input);
+    }
+    for (const make of [fixture, npmFixture]) {
+      const input = make();
+      input.profile.cargo = null;
+      reject(input);
+    }
+  });
+  test('Cargo rejects positional, unknown, missing and duplicate protocol fields', () => {
+    const paths = [
+      ['profile', 'cargo'],
+      ['profile', 'cargo', 'runtime'],
+      ['profile', 'cargo', 'project'],
+      ...['cargo', 'rustc', 'linker'].map((key) => ['profile', 'cargo', 'runtime', key]),
+      ...['manifest', 'lock', 'entry'].map((key) => ['profile', 'cargo', 'project', key]),
+    ];
+    for (const keys of paths) {
+      const array = cargoFixture();
+      replace(array, keys, Object.values(at(array, keys)));
+      reject(array);
+      const extra = cargoFixture();
+      at(extra, keys).extra = true;
+      reject(extra);
+      const missing = cargoFixture();
+      delete at(missing, keys)[Object.keys(at(missing, keys))[0]];
+      reject(missing);
+    }
+    const original = encode(cargoFixture()).toString();
+    const duplicate = original.replace(
+      '"toolchainVersion":"1.99.1"',
+      '"toolchainVersion":"1.99.1","toolchainVersion":"1.99.1"'
+    );
+    expect(duplicate).not.toBe(original);
+    expect(() => decodePreparedExecution(Buffer.from(duplicate))).toThrow(InvalidPreparedRecord);
+  });
   test('retains a lifecycle consumer full argv without inventing npm or ordinary shell metadata', () => {
     const input = fixture();
     input.profile = {

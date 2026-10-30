@@ -2,9 +2,34 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const { snapshotCargoProject } = require('../../dist/execution/cargo-project');
+const {
+  snapshotCargoProject,
+  cargoManifestArgument,
+} = require('../../dist/execution/cargo-project');
 
 const roots = [];
+test('Cargo source is a closed literal operand grammar with protected paths excluded', () => {
+  for (const relative of ['Cargo.toml', 'rust-probe/Cargo.toml', 'nested/demo_7/Cargo.toml'])
+    expect(cargoManifestArgument(`cargo run --manifest-path ${relative}`)).toBe(relative);
+  for (const source of [
+    'cargo test',
+    'cargo run --manifest-path /Cargo.toml',
+    'cargo run --manifest-path ../Cargo.toml',
+    'cargo run --manifest-path demo//Cargo.toml',
+    'cargo run --manifest-path demo/./Cargo.toml',
+    'cargo run --manifest-path .CAWS/Cargo.toml',
+    'cargo run --manifest-path .env.local/Cargo.toml',
+    'cargo run --manifest-path démo/Cargo.toml',
+    'cargo run --manifest-path C:/Cargo.toml',
+    'cargo run --manifest-path demo\\Cargo.toml',
+    'cargo run --manifest-path "demo/Cargo.toml"',
+    'cargo run --manifest-path demo/Cargo.toml --release',
+    'cargo run --manifest-path $(pwd)/Cargo.toml',
+    'cargo run --manifest-path demo/Cargo.toml; echo bad',
+    'cargo run --manifest-path demo/Cargo.toml\n',
+  ])
+    expect(cargoManifestArgument(source)).toBeNull();
+});
 afterEach(() => jest.restoreAllMocks());
 afterAll(() =>
   roots.splice(0).forEach((root) => fs.rmSync(root, { recursive: true, force: true }))

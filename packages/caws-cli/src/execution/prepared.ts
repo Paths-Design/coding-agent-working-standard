@@ -29,10 +29,28 @@ export interface PreparedExecutionV1 {
     readonly stdinBase64: string;
   };
   readonly profile: {
-    readonly kind: 'bash-clean-v1' | 'caws-evidence-v1' | 'caws-lifecycle-v1' | 'npm-test-v1';
+    readonly kind:
+      | 'bash-clean-v1'
+      | 'caws-evidence-v1'
+      | 'caws-lifecycle-v1'
+      | 'npm-test-v1'
+      | 'cargo-run-v1';
     readonly source: string;
     /** Captured utility images; a manifest entry does not admit arbitrary programs. */
     readonly utilities: readonly ProgramImage[];
+    /** Exact standalone Cargo route; present only for cargo-run-v1. */
+    readonly cargo?: {
+      readonly runtime: {
+        readonly cargo: ProgramImage;
+        readonly rustc: ProgramImage;
+        readonly linker: ProgramImage;
+        readonly root: string;
+        readonly sdkRoot: string;
+        readonly toolchainVersion: string;
+        readonly generationManifestSha256: string;
+      };
+      readonly project: import('./cargo-project').CargoProjectSnapshot;
+    };
     /** Exact npm route; present only for npm-test-v1. */
     readonly npm?: {
       readonly runtime: {
@@ -56,7 +74,7 @@ export interface PreparedExecutionV1 {
     readonly launcher: ProgramImage;
     /** Actual sandbox/server anchor, independent of callerAnchor and execution.cwd. */
     readonly environmentAnchor: string;
-    /** Producer-created private roots bound to the host manifest; npm only. */
+    /** Producer-created private roots bound to the host manifest. */
     readonly writeCeiling?: {
       readonly schema: 'caws.execution.write-ceiling.v1';
       readonly launchId: string;

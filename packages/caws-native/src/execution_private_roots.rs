@@ -2,10 +2,10 @@
 //!
 //! Directory handles bind the paths passed to the host. This module does not
 //! authenticate the host or prove that a descendant was actually sandboxed.
-use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use crate::execution_prepared::Execution;
 use crate::monotonic_deadline::MonotonicDeadline;
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     fs::{self, DirBuilder, File, OpenOptions},
@@ -173,7 +173,9 @@ impl PrivateLaunch {
         }
         let mut environment = BTreeMap::new();
         for entry in &execution.environment {
-            if entry.name.is_empty() || entry.name.contains('=') || entry.name.contains('\0')
+            if entry.name.is_empty()
+                || entry.name.contains('=')
+                || entry.name.contains('\0')
                 || entry.value.contains('\0')
                 || environment.insert(&entry.name, &entry.value).is_some()
             {
@@ -188,13 +190,23 @@ impl PrivateLaunch {
     fn deadline_value(deadline: &MonotonicDeadline) -> io::Result<Value> {
         deadline.check().map_err(|_| denied())?;
         let envelope = deadline.envelope();
-        if envelope.expires_ns.checked_sub(envelope.started_ns).is_none_or(|n| n == 0 || n > 30_000_000_000) {
+        if envelope
+            .expires_ns
+            .checked_sub(envelope.started_ns)
+            .is_none_or(|n| n == 0 || n > 30_000_000_000)
+        {
             return Err(denied());
         }
-        Ok(json!({"clock":"CLOCK_MONOTONIC","startedNs":envelope.started_ns,"expiresNs":envelope.expires_ns}))
+        Ok(
+            json!({"clock":"CLOCK_MONOTONIC","startedNs":envelope.started_ns,"expiresNs":envelope.expires_ns}),
+        )
     }
 
-    pub fn bind_execution(&mut self, execution: &Execution, deadline: &MonotonicDeadline) -> io::Result<()> {
+    pub fn bind_execution(
+        &mut self,
+        execution: &Execution,
+        deadline: &MonotonicDeadline,
+    ) -> io::Result<()> {
         self.verify_empty()?;
         let mut manifest: Value = serde_json::from_slice(&self.manifest)?;
         if manifest["schema"] != "codex.write-ceiling-launch.v1"
@@ -214,7 +226,11 @@ impl PrivateLaunch {
         Ok(())
     }
 
-    pub fn verify_execution(&self, execution: &Execution, deadline: &MonotonicDeadline) -> io::Result<()> {
+    pub fn verify_execution(
+        &self,
+        execution: &Execution,
+        deadline: &MonotonicDeadline,
+    ) -> io::Result<()> {
         self.verify_empty()?;
         let manifest: Value = serde_json::from_slice(&self.manifest)?;
         if manifest["schema"] != "codex.write-ceiling-launch.v2"
@@ -331,11 +347,20 @@ mod tests {
     #[test]
     fn v2_manifest_binds_full_execution_once_without_changing_policy_bytes() {
         let f = Fixture::new();
-        let mut launch = PrivateLaunch::create(&f.scratch(), &f.project(), "s", "t", "c", "{ \"opaque\": 1 }").unwrap();
+        let mut launch = PrivateLaunch::create(
+            &f.scratch(),
+            &f.project(),
+            "s",
+            "t",
+            "c",
+            "{ \"opaque\": 1 }",
+        )
+        .unwrap();
         let mut execution: Execution = serde_json::from_value(json!({
             "executable":{"path":"/pinned/node","sha256":"a".repeat(64)},
             "argv":["/pinned/node","/pinned/npm-cli.js","test"],
-            "cwd":f.project(),"environment":[{"name":"LC_ALL","value":"C"}],"stdinBase64":""})).unwrap();
+            "cwd":f.project(),"environment":[{"name":"LC_ALL","value":"C"}],"stdinBase64":""}))
+        .unwrap();
         let deadline = MonotonicDeadline::capture(std::time::Duration::from_secs(30)).unwrap();
         launch.bind_execution(&execution, &deadline).unwrap();
         launch.verify_execution(&execution, &deadline).unwrap();
@@ -343,7 +368,10 @@ mod tests {
         assert_eq!(manifest["sandboxStateJson"], "{ \"opaque\": 1 }");
         assert_eq!(manifest["execution"]["argv"][0], "/pinned/node");
         assert_eq!(manifest["execution"]["environment"], json!({"LC_ALL":"C"}));
-        assert_eq!(manifest["preparationDeadline"]["expiresNs"], deadline.envelope().expires_ns);
+        assert_eq!(
+            manifest["preparationDeadline"]["expiresNs"],
+            deadline.envelope().expires_ns
+        );
         assert!(launch.bind_execution(&execution, &deadline).is_err());
         execution.argv.push("substitution".into());
         assert!(launch.verify_execution(&execution, &deadline).is_err());

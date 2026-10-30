@@ -125,6 +125,130 @@ function npmRecord(f) {
   return record;
 }
 
+function cargoRecord(f) {
+  const { git } = require('../helpers/git-repo-factory');
+  const lane = path.join(f.root, 'cargo-owned');
+  git(f.root, ['worktree', 'move', f.lane, lane]);
+  f.lane = lane;
+  f.registry.owned.path = lane;
+  fs.writeFileSync(f.registryPath, JSON.stringify(f.registry));
+  f.record.association.callerAnchor = lane;
+  f.record.execution.cwd = lane;
+  const record = npmRecord(f);
+  const runtimeRoot = path.dirname(record.profile.npm.runtime.root);
+  const root = path.join(runtimeRoot, 'rust'),
+    sdkRoot = path.join(runtimeRoot, 'sdk');
+  fs.mkdirSync(path.join(root, 'bin'), { recursive: true });
+  fs.mkdirSync(sdkRoot);
+  // Images model only Source observation; no compiler or USER is executed.
+  for (const name of ['cargo', 'rustc', 'clang'])
+    fs.copyFileSync('/bin/echo', path.join(root, 'bin', name));
+  const pkg = path.join(lane, 'rust-probe');
+  fs.mkdirSync(path.join(pkg, 'src'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pkg, 'Cargo.toml'),
+    '[package]\nname="source-probe"\nversion="0.1.0"\nedition="2024"\n'
+  );
+  fs.writeFileSync(
+    path.join(pkg, 'Cargo.lock'),
+    'version=4\n[[package]]\nname="source-probe"\nversion="0.1.0"\n'
+  );
+  fs.writeFileSync(path.join(pkg, 'src/main.rs'), 'fn main() { panic!("not executed"); }\n');
+  const runtime = {
+    cargo: image(path.join(root, 'bin/cargo')),
+    rustc: image(path.join(root, 'bin/rustc')),
+    linker: image(path.join(root, 'bin/clang')),
+    root,
+    sdkRoot,
+    toolchainVersion: '1.99.1',
+    generationManifestSha256: 'a'.repeat(64),
+  };
+  const project = require('../../dist/execution/cargo-project').snapshotCargoProject(
+    lane,
+    'rust-probe/Cargo.toml',
+    Date.now() + 30000
+  );
+  record.profile = {
+    kind: 'cargo-run-v1',
+    source: 'cargo run --manifest-path rust-probe/Cargo.toml',
+    utilities: [],
+    cargo: { runtime, project },
+  };
+  const ceiling = record.sandbox.writeCeiling;
+  record.execution.executable = runtime.cargo;
+  record.execution.argv = [
+    runtime.cargo.path,
+    'run',
+    '--locked',
+    '--offline',
+    '--frozen',
+    '--jobs',
+    '1',
+    '--manifest-path',
+    project.manifest.path,
+    '--target-dir',
+    `${ceiling.outputRoot}/target`,
+    '--bin',
+    project.packageName,
+    '--message-format',
+    'json-render-diagnostics',
+  ];
+  const bindings = new Map(record.execution.environment.map(({ name, value }) => [name, value]));
+  for (const name of [...bindings.keys()]) if (name.startsWith('NPM_')) bindings.delete(name);
+  bindings.set('CARGO_HOME', ceiling.cacheRoot);
+  bindings.set(
+    'CARGO_ENCODED_RUSTFLAGS',
+    `--sysroot\x1f${root}\x1f-C\x1flinker=${runtime.linker.path}`
+  );
+  bindings.set('PATH', `${root}/bin:/usr/bin:/bin`);
+  bindings.set('RUSTC', runtime.rustc.path);
+  bindings.set('SDKROOT', sdkRoot);
+  record.execution.environment = [...bindings]
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => Buffer.compare(Buffer.from(a.name), Buffer.from(b.name)));
+  return record;
+}
+describe('bounded Cargo Source observation without compiler or USER execution', () => {
+  test('admits the exact pinned profile while leaving project and private outputs unchanged', () => {
+    const f = authorityFixture(),
+      record = cargoRecord(f);
+    const before = fs.readFileSync(record.profile.cargo.project.entry.path);
+    expect(evaluatePreparedExecution(record, request(record)).decision).toBe('allow');
+    expect(fs.readFileSync(record.profile.cargo.project.entry.path)).toEqual(before);
+    expect(fs.readdirSync(record.sandbox.writeCeiling.outputRoot)).toEqual([]);
+  });
+  test.each(['environment', 'private-cache', 'manifest', 'entry', 'configuration', 'source'])(
+    'refuses changed Cargo %s inputs before any USER execution',
+    (which) => {
+      const f = authorityFixture(),
+        record = cargoRecord(f);
+      if (which === 'environment') {
+        record.execution.environment.push({ name: 'RUSTC_WRAPPER', value: '/bin/echo' });
+        record.execution.environment.sort((a, b) =>
+          Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
+        );
+      }
+      if (which === 'private-cache')
+        fs.writeFileSync(
+          path.join(record.sandbox.writeCeiling.cacheRoot, 'config.toml'),
+          '[build]\n'
+        );
+      if (which === 'manifest')
+        fs.appendFileSync(record.profile.cargo.project.manifest.path, 'build="arbitrary.rs"\n');
+      if (which === 'entry')
+        fs.appendFileSync(record.profile.cargo.project.entry.path, '// changed\n');
+      if (which === 'configuration') {
+        fs.mkdirSync(path.join(f.lane, '.cargo'));
+        fs.writeFileSync(path.join(f.lane, '.cargo/config.toml'), '[build]\n');
+      }
+      if (which === 'source') record.profile.source = 'cargo run --manifest-path ../Cargo.toml';
+      const result = evaluatePreparedExecution(record, request(record));
+      expect(result.decision).not.toBe('allow');
+      expect(fs.readdirSync(record.sandbox.writeCeiling.outputRoot)).toEqual([]);
+    }
+  );
+});
+
 describe('bounded npm test profile observation', () => {
   test('rechecks lifecycle tool bytes during final validation under the inherited fence', () => {
     const f = authorityFixture();
@@ -310,6 +434,33 @@ function lifecycleRecord(f, args = ['git-head'], canonical = false) {
 }
 
 describe('dedicated lifecycle consumer Source admission', () => {
+  test('doctor requires the complete physical runtime tuple and observes its chosen Git home', () => {
+    const f = lifecycleFixture();
+    const record = lifecycleRecord(f, ['doctor']);
+    expect(evaluatePreparedExecution(record, request(record), undefined, 30000).decision).not.toBe(
+      'allow'
+    );
+    const home = path.join(f.root, 'private-home'),
+      cawsHome = path.join(home, 'machine'),
+      codexHome = path.join(home, '.codex');
+    fs.mkdirSync(cawsHome, { recursive: true });
+    fs.mkdirSync(codexHome);
+    record.execution.environment.push(
+      { name: 'HOME', value: home },
+      { name: 'CAWS_HOME', value: cawsHome },
+      { name: 'CODEX_HOME', value: codexHome }
+    );
+    record.execution.environment.sort((a, b) =>
+      Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
+    );
+    expect(evaluatePreparedExecution(record, request(record), undefined, 30000).decision).toBe(
+      'allow'
+    );
+    fs.writeFileSync(path.join(home, '.gitconfig'), '[include]\npath = /must-not-load\n');
+    expect(evaluatePreparedExecution(record, request(record), undefined, 30000).decision).not.toBe(
+      'allow'
+    );
+  });
   test.each(['worktree-merge', 'bridge-claim'])(
     'lifecycle %s uses operation authority in analyze and final validation without inventing an edit binding',
     (operation) => {

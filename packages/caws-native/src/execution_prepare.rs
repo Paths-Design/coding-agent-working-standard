@@ -17,7 +17,9 @@ use crate::{
     execution_host::HostContext,
     execution_ingress::UnverifiedCall,
     execution_owner::PinnedAuthorizer,
-    execution_prepared::{Execution, NpmProject, PreparedRecord, ProgramImage},
+    execution_prepared::{
+        CargoProject, CargoRuntime, Execution, NpmProject, PreparedRecord, ProgramImage,
+    },
     execution_server::private_roots::PrivateLaunch,
     monotonic_deadline::{self, EffectCheck, MonotonicDeadline},
 };
@@ -82,13 +84,17 @@ pub(crate) struct PreparedAssociation {
 pub(crate) struct PreparedExecution {
     pub record: PreparedRecord,
     pub association: PreparedAssociation,
-    pub npm_launch: Option<PrivateLaunch>,
+    pub sandboxed_launch: Option<PrivateLaunch>,
 }
 pub(crate) struct NpmPreparation<'a> {
     pub root: &'a str,
     pub entry: &'a ProgramImage,
     pub scratch_root: &'a str,
     pub generation_manifest_sha256: &'a str,
+}
+pub(crate) struct CargoPreparation<'a> {
+    pub runtime: &'a CargoRuntime,
+    pub scratch_root: &'a str,
 }
 
 fn live(
@@ -309,9 +315,13 @@ fn resolve(
         .parent()
         .ok_or(PrepareRefusal::Utility)?
         .join("writer-main.js");
-    let lifecycle = writer.parent().ok_or(PrepareRefusal::Utility)?.join("lifecycle-main.js");
+    let lifecycle = writer
+        .parent()
+        .ok_or(PrepareRefusal::Utility)?
+        .join("lifecycle-main.js");
     if (Path::new(name) == writer && Path::new(&chosen) == writer)
-        || (Path::new(name) == lifecycle && Path::new(&chosen) == lifecycle) {
+        || (Path::new(name) == lifecycle && Path::new(&chosen) == lifecycle)
+    {
         // A dedicated pinned consumer file argument, not a general file callee.
     } else if name == "/usr/bin/git" && chosen == "/usr/bin/git" && protected_system(&chosen) {
     } else if requested == "node" {
@@ -368,9 +378,16 @@ fn lower_npm(
     check: &impl Fn() -> Result<(), PrepareRefusal>,
 ) -> Result<PrivateLaunch, PrepareRefusal> {
     check()?;
-    let cwd = value["execution"]["cwd"].as_str().ok_or(PrepareRefusal::Record)?.to_owned();
-    let root = value["projectRoot"].as_str().ok_or(PrepareRefusal::Record)?.to_owned();
-    if call.source != "npm test" || project.npmrc.is_some()
+    let cwd = value["execution"]["cwd"]
+        .as_str()
+        .ok_or(PrepareRefusal::Record)?
+        .to_owned();
+    let root = value["projectRoot"]
+        .as_str()
+        .ok_or(PrepareRefusal::Record)?
+        .to_owned();
+    if call.source != "npm test"
+        || project.npmrc.is_some()
         || Path::new(&project.package_json.path) != Path::new(&cwd).join("package.json")
         || Path::new(&npm.entry.path) != Path::new(npm.root).join("bin/npm-cli.js")
         || program(&project.package_json.path, check)?.sha256 != project.package_json.sha256
@@ -378,9 +395,15 @@ fn lower_npm(
         return Err(PrepareRefusal::Image);
     }
     pin(npm.entry, check)?;
-    let mut launch = PrivateLaunch::create(Path::new(npm.scratch_root), Path::new(&root),
-        &call.session_id, &call.thread_id, &call.call_id, &call.sandbox_state_json)
-        .map_err(|_| PrepareRefusal::Context)?;
+    let mut launch = PrivateLaunch::create(
+        Path::new(npm.scratch_root),
+        Path::new(&root),
+        &call.session_id,
+        &call.thread_id,
+        &call.call_id,
+        &call.sandbox_state_json,
+    )
+    .map_err(|_| PrepareRefusal::Context)?;
     let text = |p: &Path| p.to_str().map(str::to_owned).ok_or(PrepareRefusal::Context);
     let mut environment = BTreeMap::new();
     for (name, value) in [
@@ -399,18 +422,166 @@ fn lower_npm(
         ("NPM_CONFIG_USERCONFIG", "/dev/null".into()),
         ("PATH", path.into()),
         ("TMPDIR", text(&launch.tmp_root)?),
-    ] { environment.insert(name, value); }
+    ] {
+        environment.insert(name, value);
+    }
     value["execution"]["executable"] = image_json(&pins.node);
-    value["execution"]["argv"] = json!([pins.node.path, npm.entry.path, "--prefix", cwd, "--workspaces=false", "test"]);
-    value["execution"]["environment"] = json!(environment.into_iter().map(|(name,value)| json!({"name":name,"value":value})).collect::<Vec<_>>());
+    value["execution"]["argv"] = json!([
+        pins.node.path,
+        npm.entry.path,
+        "--prefix",
+        cwd,
+        "--workspaces=false",
+        "test"
+    ]);
+    value["execution"]["environment"] = json!(
+        environment
+            .into_iter()
+            .map(|(name, value)| json!({"name":name,"value":value}))
+            .collect::<Vec<_>>()
+    );
     value["profile"]["kind"] = json!("npm-test-v1");
     value["profile"]["npm"] = json!({"runtime":{
         "node":image_json(&pins.node),"entry":image_json(npm.entry),"root":npm.root,
         "generationManifestSha256":npm.generation_manifest_sha256},"project":{
         "packageJson":image_json(&project.package_json),"npmrc":null,
         "testScript":project.test_script,"pathShadowSha256":project.path_shadow_sha256}});
-    let execution: Execution = serde_json::from_value(value["execution"].clone()).map_err(|_| PrepareRefusal::Record)?;
-    launch.bind_execution(&execution, deadline).map_err(|_| PrepareRefusal::Record)?;
+    let execution: Execution =
+        serde_json::from_value(value["execution"].clone()).map_err(|_| PrepareRefusal::Record)?;
+    launch
+        .bind_execution(&execution, deadline)
+        .map_err(|_| PrepareRefusal::Record)?;
+    value["sandbox"]["writeCeiling"] = json!({"schema":"caws.execution.write-ceiling.v1",
+        "launchId":launch.launch_id,"invocationRoot":launch.invocation_root,
+        "outputRoot":launch.output_root,"tmpRoot":launch.tmp_root,"cacheRoot":launch.cache_root,
+        "manifestSha256":launch.manifest_sha256});
+    check()?;
+    Ok(launch)
+}
+fn lower_cargo(
+    value: &mut Value,
+    call: &UnverifiedCall,
+    cargo: &CargoPreparation<'_>,
+    project: &CargoProject,
+    relative: &str,
+    deadline: &MonotonicDeadline,
+    check: &impl Fn() -> Result<(), PrepareRefusal>,
+) -> Result<PrivateLaunch, PrepareRefusal> {
+    check()?;
+    let cwd = value["execution"]["cwd"]
+        .as_str()
+        .ok_or(PrepareRefusal::Record)?
+        .to_owned();
+    let root = value["projectRoot"]
+        .as_str()
+        .ok_or(PrepareRefusal::Record)?
+        .to_owned();
+    let runtime = cargo.runtime;
+    let manifest = Path::new(&cwd).join(relative);
+    let package = manifest.parent().ok_or(PrepareRefusal::Record)?;
+    if call.source != format!("cargo run --manifest-path {relative}")
+        || relative.is_empty()
+        || !relative.is_ascii()
+        || relative.len() > 4096
+        || relative
+            .bytes()
+            .any(|b| b.is_ascii_control() || matches!(b, b'\\' | b':'))
+        || Path::new(relative).is_absolute()
+        || relative
+            .split('/')
+            .any(|part| matches!(part, "" | "." | ".."))
+        || Path::new(&project.manifest.path) != manifest
+        || Path::new(&project.lock.path) != package.join("Cargo.lock")
+        || Path::new(&project.entry.path) != package.join("src/main.rs")
+        || !project.valid()
+        || !runtime.valid()
+        || physical_dir(&runtime.root)? != runtime.root
+        || physical_dir(&runtime.sdk_root)? != runtime.sdk_root
+    {
+        return Err(PrepareRefusal::Record);
+    }
+    for image in [
+        &runtime.cargo,
+        &runtime.rustc,
+        &runtime.linker,
+        &project.manifest,
+        &project.lock,
+        &project.entry,
+    ] {
+        pin(image, check)?;
+    }
+    let mut launch = PrivateLaunch::create(
+        Path::new(cargo.scratch_root),
+        Path::new(&root),
+        &call.session_id,
+        &call.thread_id,
+        &call.call_id,
+        &call.sandbox_state_json,
+    )
+    .map_err(|_| PrepareRefusal::Context)?;
+    let text = |p: &Path| p.to_str().map(str::to_owned).ok_or(PrepareRefusal::Context);
+    let mut environment = BTreeMap::new();
+    for (name, entry) in [
+        ("CAWS_EXECUTION_CALL", call.call_id.clone()),
+        ("CAWS_EXECUTION_CALLER", call.caller_anchor.clone()),
+        ("CAWS_EXECUTION_PROJECT", root),
+        ("CAWS_EXECUTION_SESSION", call.session_id.clone()),
+        ("CAWS_EXECUTION_THREAD", call.thread_id.clone()),
+        ("CARGO_HOME", text(&launch.cache_root)?),
+        (
+            "CARGO_ENCODED_RUSTFLAGS",
+            format!(
+                "--sysroot\u{1f}{}\u{1f}-C\u{1f}linker={}",
+                runtime.root, runtime.linker.path
+            ),
+        ),
+        ("CODEX_SANDBOX", "seatbelt".into()),
+        ("CODEX_SANDBOX_NETWORK_DISABLED", "1".into()),
+        ("HOME", text(&launch.invocation_root)?),
+        ("LC_ALL", "C".into()),
+        ("PATH", format!("{}/bin:/usr/bin:/bin", runtime.root)),
+        ("RUSTC", runtime.rustc.path.clone()),
+        ("SDKROOT", runtime.sdk_root.clone()),
+        ("TMPDIR", text(&launch.tmp_root)?),
+    ] {
+        environment.insert(name, entry);
+    }
+    value["execution"]["executable"] = image_json(&runtime.cargo);
+    value["execution"]["argv"] = json!([
+        runtime.cargo.path,
+        "run",
+        "--locked",
+        "--offline",
+        "--frozen",
+        "--jobs",
+        "1",
+        "--manifest-path",
+        project.manifest.path,
+        "--target-dir",
+        format!("{}/target", text(&launch.output_root)?),
+        "--bin",
+        project.package_name,
+        "--message-format",
+        "json-render-diagnostics"
+    ]);
+    value["execution"]["environment"] = json!(
+        environment
+            .into_iter()
+            .map(|(name, value)| json!({"name":name,"value":value}))
+            .collect::<Vec<_>>()
+    );
+    value["profile"]["kind"] = json!("cargo-run-v1");
+    value["profile"]["cargo"] = json!({"runtime":{
+        "cargo":image_json(&runtime.cargo),"rustc":image_json(&runtime.rustc),"linker":image_json(&runtime.linker),
+        "root":runtime.root,"sdkRoot":runtime.sdk_root,"toolchainVersion":runtime.toolchain_version,
+        "generationManifestSha256":runtime.generation_manifest_sha256},"project":{
+        "manifest":image_json(&project.manifest),"lock":image_json(&project.lock),"entry":image_json(&project.entry),
+        "packageName":project.package_name,"version":project.version,"edition":project.edition,"configurationSha256":project.configuration_sha256}});
+    let execution: Execution =
+        serde_json::from_value(value["execution"].clone()).map_err(|_| PrepareRefusal::Record)?;
+    launch
+        .bind_execution(&execution, deadline)
+        .map_err(|_| PrepareRefusal::Record)?;
     value["sandbox"]["writeCeiling"] = json!({"schema":"caws.execution.write-ceiling.v1",
         "launchId":launch.launch_id,"invocationRoot":launch.invocation_root,
         "outputRoot":launch.output_root,"tmpRoot":launch.tmp_root,"cacheRoot":launch.cache_root,
@@ -439,6 +610,7 @@ pub(crate) fn prepare(
     pins: &PinnedAuthorizer,
     discovery: &ProgramImage,
     npm: Option<&NpmPreparation<'_>>,
+    cargo: Option<&CargoPreparation<'_>>,
     deadline: &MonotonicDeadline,
     cancelled: &AtomicBool,
     control: &EffectCheck<'_>,
@@ -581,8 +753,13 @@ pub(crate) fn prepare(
             .parent()
             .ok_or_else(|| failure(PrepareRefusal::Utility))?
             .join("writer-main.js");
-        let lifecycle = writer.parent().ok_or_else(|| failure(PrepareRefusal::Utility))?.join("lifecycle-main.js");
-        if observed.execution().is_none() && (name == "/usr/bin/git" || Path::new(name) == writer || Path::new(name) == lifecycle) {
+        let lifecycle = writer
+            .parent()
+            .ok_or_else(|| failure(PrepareRefusal::Utility))?
+            .join("lifecycle-main.js");
+        if observed.execution().is_none()
+            && (name == "/usr/bin/git" || Path::new(name) == writer || Path::new(name) == lifecycle)
+        {
             return Err(failure(PrepareRefusal::Utility));
         }
         let utility = resolve(name, &dirs, &pins.node, &pins.entry, &check).map_err(failure)?;
@@ -594,57 +771,124 @@ pub(crate) fn prepare(
         }
     }
     let mut final_value = draft;
-    let mut npm_launch = None;
+    let mut sandboxed_launch = None;
     if let Some(execution) = observed.execution() {
         if execution.kind == "npm-test-v1" {
             if call.source != "npm test" || !observed.commands().is_empty() {
                 return Err(failure(PrepareRefusal::Utility));
             }
-            npm_launch = Some(lower_npm(&mut final_value, call, pins,
-                npm.ok_or_else(|| failure(PrepareRefusal::Utility))?,
-                execution.project.as_ref().ok_or_else(|| failure(PrepareRefusal::Record))?,
-                &path, deadline, &check).map_err(failure)?);
+            sandboxed_launch = Some(
+                lower_npm(
+                    &mut final_value,
+                    call,
+                    pins,
+                    npm.ok_or_else(|| failure(PrepareRefusal::Utility))?,
+                    execution
+                        .project
+                        .as_ref()
+                        .ok_or_else(|| failure(PrepareRefusal::Record))?,
+                    &path,
+                    deadline,
+                    &check,
+                )
+                .map_err(failure)?,
+            );
+        } else if execution.kind == "cargo-run-v1" {
+            if !observed.commands().is_empty() {
+                return Err(failure(PrepareRefusal::Utility));
+            }
+            sandboxed_launch = Some(
+                lower_cargo(
+                    &mut final_value,
+                    call,
+                    cargo.ok_or_else(|| failure(PrepareRefusal::Utility))?,
+                    execution
+                        .cargo_project
+                        .as_ref()
+                        .ok_or_else(|| failure(PrepareRefusal::Record))?,
+                    &execution.argv[3],
+                    deadline,
+                    &check,
+                )
+                .map_err(failure)?,
+            );
         } else {
-        let lifecycle = execution.kind == "caws-lifecycle-v1";
-        let consumer = Path::new(&pins.entry.path)
-            .parent()
-            .ok_or_else(|| failure(PrepareRefusal::Utility))?
-            .join(if lifecycle { "lifecycle-main.js" } else { "writer-main.js" });
-        let consumer_pin = if lifecycle { &pins.lifecycle } else { &pins.writer }
+            let lifecycle = execution.kind == "caws-lifecycle-v1";
+            let consumer = Path::new(&pins.entry.path)
+                .parent()
+                .ok_or_else(|| failure(PrepareRefusal::Utility))?
+                .join(if lifecycle {
+                    "lifecycle-main.js"
+                } else {
+                    "writer-main.js"
+                });
+            let consumer_pin = if lifecycle {
+                &pins.lifecycle
+            } else {
+                &pins.writer
+            }
             .as_ref()
             .ok_or_else(|| failure(PrepareRefusal::Image))?;
-        if execution.argv[0] != pins.node.path
-            || Path::new(&execution.argv[1]) != consumer
-            || Path::new(&consumer_pin.path) != consumer
-            || (!lifecycle && (execution.argv[2] != "specs" || execution.argv[3] != "evidence"))
-        {
-            return Err(failure(PrepareRefusal::Utility));
-        }
-        // Discovery is advisory. Both Source phases must prove the exact
-        // source-to-argv relation and writer authority before this can execute.
-        final_value["profile"]["kind"] = json!(execution.kind);
-        final_value["execution"]["executable"] = image_json(&pins.node);
-        final_value["execution"]["argv"] = json!(execution.argv);
-        for env in final_value["execution"]["environment"]
-            .as_array_mut()
-            .unwrap()
-        {
-            if env["name"] == "PATH" {
-                env["value"] = json!("/usr/bin:/bin");
+            if execution.argv[0] != pins.node.path
+                || Path::new(&execution.argv[1]) != consumer
+                || Path::new(&consumer_pin.path) != consumer
+                || (!lifecycle && (execution.argv[2] != "specs" || execution.argv[3] != "evidence"))
+            {
+                return Err(failure(PrepareRefusal::Utility));
             }
-        }
-        for name in [
-            &pins.node.path,
-            consumer
-                .to_str()
-                .ok_or_else(|| failure(PrepareRefusal::Utility))?,
-            "/usr/bin/git",
-        ] {
-            let utility = resolve(name, &dirs, &pins.node, &pins.entry, &check).map_err(failure)?;
-            if seen.insert(utility.path.clone()) {
-                utilities.push(image_json(&utility));
+            if lifecycle
+                && matches!(execution.argv[2].as_str(), "doctor" | "gates-run")
+                && pins.lifecycle_context.is_none()
+            {
+                return Err(failure(PrepareRefusal::Utility));
             }
-        }
+            // Discovery is advisory. Both Source phases must prove the exact
+            // source-to-argv relation and writer authority before this can execute.
+            final_value["profile"]["kind"] = json!(execution.kind);
+            final_value["execution"]["executable"] = image_json(&pins.node);
+            final_value["execution"]["argv"] = json!(execution.argv);
+            for env in final_value["execution"]["environment"]
+                .as_array_mut()
+                .unwrap()
+            {
+                if env["name"] == "PATH" {
+                    env["value"] = json!("/usr/bin:/bin");
+                }
+            }
+            if lifecycle {
+                if let Some(context) = &pins.lifecycle_context {
+                    if !context.well_formed() {
+                        return Err(failure(PrepareRefusal::Identity));
+                    }
+                    let environment = final_value["execution"]["environment"]
+                        .as_array_mut()
+                        .unwrap();
+                    for (name, value) in context.environment() {
+                        physical_dir(value).map_err(failure)?;
+                        environment.push(json!({"name":name,"value":value}));
+                    }
+                    environment.sort_by(|a, b| {
+                        a["name"]
+                            .as_str()
+                            .unwrap()
+                            .as_bytes()
+                            .cmp(b["name"].as_str().unwrap().as_bytes())
+                    });
+                }
+            }
+            for name in [
+                &pins.node.path,
+                consumer
+                    .to_str()
+                    .ok_or_else(|| failure(PrepareRefusal::Utility))?,
+                "/usr/bin/git",
+            ] {
+                let utility =
+                    resolve(name, &dirs, &pins.node, &pins.entry, &check).map_err(failure)?;
+                if seen.insert(utility.path.clone()) {
+                    utilities.push(image_json(&utility));
+                }
+            }
         }
     }
     final_value["profile"]["utilities"] = Value::Array(utilities);
@@ -668,7 +912,7 @@ pub(crate) fn prepare(
     Ok(PreparedExecution {
         record,
         association,
-        npm_launch,
+        sandboxed_launch,
     })
 }
 
@@ -922,6 +1166,7 @@ process.stdin.resume();
         let pins = PinnedAuthorizer {
             writer: None,
             lifecycle: None,
+            lifecycle_context: None,
             node: image(&node),
             entry: image(&entry),
         };
@@ -958,6 +1203,7 @@ process.stdin.resume();
             &host_image,
             &pins,
             &selected,
+            None,
             None,
             &deadline,
             &cancelled,

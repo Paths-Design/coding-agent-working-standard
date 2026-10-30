@@ -22,6 +22,29 @@ const MAX_TOTAL_BYTES = 3 * 1048576;
 const NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 const VERSION = /^(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})$/;
 
+/** Closed source grammar; this is an operand, never shell evaluation. */
+export function cargoManifestArgument(source: string): string | null {
+  const match = /^cargo run --manifest-path ([A-Za-z0-9_.\/-]+)$/.exec(source);
+  if (!match) return null;
+  const operand = match[1]!;
+  const parts = operand.split('/');
+  if (
+    Buffer.byteLength(operand) > 4096 ||
+    isAbsolute(operand) ||
+    parts.at(-1) !== 'Cargo.toml' ||
+    parts.some(
+      (part) =>
+        !part ||
+        part === '.' ||
+        part === '..' ||
+        ['.caws', '.git', '.codex', '.claude', '.env'].includes(part.toLowerCase()) ||
+        part.toLowerCase().startsWith('.env.')
+    )
+  )
+    return null;
+  return operand;
+}
+
 function refuse(): never {
   throw new ExecutionAuthorityUnavailable('unsupported_profile');
 }

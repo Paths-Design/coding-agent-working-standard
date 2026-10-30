@@ -7,6 +7,7 @@ const { git } = require('../helpers/git-repo-factory');
 const {
   parseExecutionLifecycleArguments,
   inspectExecutionLifecycleGit,
+  readExecutionLifecycleRuntimeHomes,
 } = require('../../dist/execution/lifecycle');
 const { loadEvents } = require('../../dist/store/events-store');
 afterAll(cleanupAll);
@@ -86,6 +87,104 @@ function success(result) {
 function spec(f) {
   return yaml.load(fs.readFileSync(f.specPath, 'utf8'));
 }
+function runtimeHomes(f) {
+  const home = path.join(f.root, 'runtime-home');
+  const cawsHome = path.join(home, 'machine');
+  const codexHome = path.join(home, '.codex');
+  fs.mkdirSync(cawsHome, { recursive: true });
+  fs.mkdirSync(codexHome);
+  Object.assign(f.env, { HOME: home, CAWS_HOME: cawsHome, CODEX_HOME: codexHome });
+  return { home, cawsHome, codexHome };
+}
+test('lifecycle runtime homes are all-or-none physical directories with no alias fallback', () => {
+  const f = fixture();
+  const homes = runtimeHomes(f);
+  const environment = Object.entries(f.env).map(([name, value]) => ({ name, value }));
+  expect(readExecutionLifecycleRuntimeHomes(environment)).toEqual(homes);
+  expect(readExecutionLifecycleRuntimeHomes([])).toBeUndefined();
+  for (const missing of ['HOME', 'CAWS_HOME', 'CODEX_HOME'])
+    expect(() =>
+      readExecutionLifecycleRuntimeHomes(environment.filter(({ name }) => name !== missing))
+    ).toThrow();
+  const alias = path.join(f.root, 'home-alias');
+  fs.symlinkSync(homes.home, alias);
+  expect(() =>
+    readExecutionLifecycleRuntimeHomes(
+      environment.map((row) => (row.name === 'HOME' ? { name: 'HOME', value: alias } : row))
+    )
+  ).toThrow();
+  expect(() =>
+    readExecutionLifecycleRuntimeHomes([...environment, { name: 'HOME', value: homes.home }])
+  ).toThrow();
+});
+test('doctor uses the pinned runtime context and returns the actual diagnostic result', () => {
+  const f = fixture();
+  runtimeHomes(f);
+  const lane = path.join(f.root, 'doctor-owned');
+  git(f.root, ['worktree', 'move', f.lane, lane]);
+  f.lane = lane;
+  f.registry.owned.path = lane;
+  fs.writeFileSync(f.registryPath, JSON.stringify(f.registry));
+  f.env.CAWS_EXECUTION_CALLER = lane;
+  expect(fs.existsSync(path.join(f.caws, 'events.jsonl'))).toBe(false);
+  const result = execute(f, ['doctor']);
+  const value = success(result);
+  expect(value).toMatchObject({
+    action: 'doctor',
+    specId: 'EXEC-001',
+    outcome: 'settled',
+    exitCode: 0,
+  });
+  expect(value.stdout).toContain('0E');
+  expect(fs.existsSync(path.join(f.caws, 'events.jsonl'))).toBe(false);
+});
+test('doctor preserves a real nonzero diagnostic instead of converting it to success', () => {
+  const f = fixture();
+  const homes = runtimeHomes(f);
+  // This fixture's newline worktree is reported as a ghost by the ordinary
+  // doctor reader. The consumer must faithfully carry that error and context.
+  const result = execute(f, ['doctor']);
+  expect(result.error).toBeUndefined();
+  expect(result.stderr).toBe('');
+  expect(result.status).toBe(1);
+  const value = JSON.parse(result.stdout);
+  expect(value).toMatchObject({ action: 'doctor', outcome: 'settled', exitCode: 1 });
+  expect(value.stdout).toContain('doctor.worktree.ghost_registry_entry');
+  expect(value.stdout).toContain(homes.cawsHome);
+});
+test('gates runs the real policy command and publishes only its actual same-thread events', () => {
+  const f = fixture();
+  runtimeHomes(f);
+  fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'owned changed\n');
+  const before = loadEvents(f.caws);
+  expect(before.ok).toBe(true);
+  const result = execute(f, ['gates-run', '--spec', 'EXEC-001']);
+  const value = success(result);
+  expect(value).toMatchObject({
+    action: 'gates-run',
+    specId: 'EXEC-001',
+    outcome: 'settled',
+    exitCode: 0,
+  });
+  const after = loadEvents(f.caws);
+  expect(after.ok).toBe(true);
+  const added = after.value.events.slice(before.value.events.length);
+  expect(added.length).toBeGreaterThan(0);
+  expect(value.data.gateEventSequences).toEqual(added.map((event) => event.seq));
+  for (const event of added) {
+    expect(event.event).toBe('gate_evaluated');
+    expect(event.spec_id).toBe('EXEC-001');
+    expect(event.actor).toMatchObject({ session_id: 'thread-owned', platform: 'codex' });
+  }
+});
+test('diagnostic operations cannot fall back to ambient homes or a foreign spec', () => {
+  const f = fixture();
+  expect(fs.existsSync(path.join(f.caws, 'events.jsonl'))).toBe(false);
+  expect(execute(f, ['doctor']).status).not.toBe(0);
+  runtimeHomes(f);
+  expect(execute(f, ['gates-run', '--spec', 'OTHER-001']).status).not.toBe(0);
+  expect(fs.existsSync(path.join(f.caws, 'events.jsonl'))).toBe(false);
+});
 
 function configureInactiveLocalMetadata(f, { sparse = true } = {}) {
   const marker = path.join(f.root, 'filter-must-not-run');

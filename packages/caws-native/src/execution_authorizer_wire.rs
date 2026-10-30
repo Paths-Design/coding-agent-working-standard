@@ -904,23 +904,59 @@ impl DiscoveryRequest {
                 return Err(WireError::Schema);
             }
             match execution.kind.as_str() {
-                "caws-evidence-v1" if execution.argv.len() >= 5
-                    && shape.pointer("/execution/project").is_none() => {}
-                "caws-lifecycle-v1" if execution.argv.len() >= 3
-                    && shape.pointer("/execution/project").is_none() => {}
-                "npm-test-v1" if execution.argv == ["npm", "test"] => {
+                "caws-evidence-v1"
+                    if execution.argv.len() >= 5
+                        && shape.pointer("/execution/project").is_none()
+                        && shape.pointer("/execution/cargoProject").is_none() => {}
+                "caws-lifecycle-v1"
+                    if execution.argv.len() >= 3
+                        && shape.pointer("/execution/project").is_none()
+                        && shape.pointer("/execution/cargoProject").is_none() => {}
+                "npm-test-v1"
+                    if execution.argv == ["npm", "test"]
+                        && shape.pointer("/execution/cargoProject").is_none() =>
+                {
                     let project = execution.project.as_ref().ok_or(WireError::Schema)?;
                     let image = &project.package_json;
-                    let hex = |value: &str| value.len() == 64
-                        && value.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
-                    if !shape.pointer("/execution/project").is_some_and(serde_json::Value::is_object)
-                        || !shape.pointer("/execution/project/packageJson").is_some_and(serde_json::Value::is_object)
-                        || !shape.pointer("/execution/project/npmrc").is_some_and(serde_json::Value::is_null)
+                    let hex = |value: &str| {
+                        value.len() == 64
+                            && value
+                                .bytes()
+                                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                    };
+                    if !shape
+                        .pointer("/execution/project")
+                        .is_some_and(serde_json::Value::is_object)
+                        || !shape
+                            .pointer("/execution/project/packageJson")
+                            .is_some_and(serde_json::Value::is_object)
+                        || !shape
+                            .pointer("/execution/project/npmrc")
+                            .is_some_and(serde_json::Value::is_null)
                         || !std::path::Path::new(&image.path).is_absolute()
-                        || image.path.len() > 4096 || image.path.contains('\0')
-                        || !hex(&image.sha256) || !hex(&project.path_shadow_sha256)
-                        || project.test_script.is_empty() || project.test_script.len() > 65536
-                        || project.test_script.contains('\0') || project.npmrc.is_some()
+                        || image.path.len() > 4096
+                        || image.path.contains('\0')
+                        || !hex(&image.sha256)
+                        || !hex(&project.path_shadow_sha256)
+                        || project.test_script.is_empty()
+                        || project.test_script.len() > 65536
+                        || project.test_script.contains('\0')
+                        || project.npmrc.is_some()
+                    {
+                        return Err(WireError::Schema);
+                    }
+                }
+                "cargo-run-v1"
+                    if execution.argv.len() == 4
+                        && execution.argv[..3] == ["cargo", "run", "--manifest-path"]
+                        && cargo_manifest_relative(&execution.argv[3])
+                        && shape.pointer("/execution/project").is_none() =>
+                {
+                    let project = execution.cargo_project.as_ref().ok_or(WireError::Schema)?;
+                    if !crate::execution_prepared::cargo_project_shape(
+                        &shape,
+                        "/execution/cargoProject",
+                    ) || !project.valid()
                     {
                         return Err(WireError::Schema);
                     }
@@ -991,12 +1027,28 @@ struct DiscoveryReply {
     reason_codes: Vec<String>,
 }
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct DiscoveryExecution {
     pub kind: String,
     pub argv: Vec<String>,
     #[serde(default)]
     pub project: Option<crate::execution_prepared::NpmProject>,
+    #[serde(default)]
+    pub cargo_project: Option<crate::execution_prepared::CargoProject>,
+}
+
+fn cargo_manifest_relative(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 4096
+        && value.is_ascii()
+        && !value
+            .bytes()
+            .any(|b| b.is_ascii_control() || matches!(b, b'\\' | b':'))
+        && !std::path::Path::new(value).is_absolute()
+        && value
+            .split('/')
+            .all(|part| !matches!(part, "" | "." | ".."))
+        && value.rsplit('/').next() == Some("Cargo.toml")
 }
 /// Validated advisory lexical spellings, not images or authority.
 pub(crate) struct ProgramCandidates {
@@ -1253,16 +1305,19 @@ mod discovery_tests {
         let req = request();
         let mut value = observed(&req);
         value["execution"] = json!({"kind":"caws-lifecycle-v1","argv":["/gen/node","/gen/lifecycle-main.js","git-head"]});
-        let parsed = req.correlate_reply(&serde_json::to_vec(&value).unwrap()).unwrap();
+        let parsed = req
+            .correlate_reply(&serde_json::to_vec(&value).unwrap())
+            .unwrap();
         assert_eq!(parsed.execution().unwrap().kind, "caws-lifecycle-v1");
         assert_eq!(parsed.execution().unwrap().argv[2], "git-head");
         for execution in [
             json!({"kind":"caws-lifecycle-v1","argv":["/gen/node","/gen/lifecycle-main.js"]}),
             json!({"kind":"caws-lifecycle-v1","argv":["a","b","c"],"project":null}),
             json!({"kind":"caws-lifecycle-v1","argv":["a","b","\u{0}"]}),
-            json!(["caws-lifecycle-v1",["a","b","c"]]),
+            json!(["caws-lifecycle-v1", ["a", "b", "c"]]),
         ] {
-            let mut bad = value.clone(); bad["execution"] = execution;
+            let mut bad = value.clone();
+            bad["execution"] = execution;
             assert!(!accepts(&req, &bad));
         }
         value["status"] = json!("unresolved");
@@ -1280,13 +1335,180 @@ mod discovery_tests {
         assert!(accepts(&req, &value));
         for (pointer, replacement) in [
             ("/execution/argv/1", json!("install")),
-            ("/execution/project/packageJson", json!(["/project/package.json","a".repeat(64)])),
+            (
+                "/execution/project/packageJson",
+                json!(["/project/package.json", "a".repeat(64)]),
+            ),
             ("/execution/project/pathShadowSha256", json!("bad")),
-            ("/execution/project/npmrc", json!({"path":"/project/.npmrc","sha256":"c".repeat(64)})),
+            (
+                "/execution/project/npmrc",
+                json!({"path":"/project/.npmrc","sha256":"c".repeat(64)}),
+            ),
         ] {
             let mut bad = value.clone();
             *bad.pointer_mut(pointer).unwrap() = replacement;
             assert!(!accepts(&req, &bad), "{pointer}");
+        }
+    }
+
+    fn cargo_observed(req: &DiscoveryRequest) -> Value {
+        let mut value = observed(req);
+        value["execution"] = json!({"kind":"cargo-run-v1",
+            "argv":["cargo","run","--manifest-path","demo/Cargo.toml"],
+            "cargoProject":{"manifest":{"path":"/project/demo/Cargo.toml","sha256":"a".repeat(64)},
+                "lock":{"path":"/project/demo/Cargo.lock","sha256":"b".repeat(64)},
+                "entry":{"path":"/project/demo/src/main.rs","sha256":"c".repeat(64)},
+                "packageName":"demo","version":"0.1.0","edition":"2024",
+                "configurationSha256":"d".repeat(64)}});
+        value
+    }
+
+    #[test]
+    fn cargo_discovery_is_exact_relative_advisory_and_unresolved_cannot_supply_it() {
+        let req = request();
+        let value = cargo_observed(&req);
+        let parsed = req
+            .correlate_reply(&serde_json::to_vec(&value).unwrap())
+            .unwrap();
+        let execution = parsed.execution().unwrap();
+        assert_eq!(execution.kind, "cargo-run-v1");
+        assert_eq!(
+            execution.argv,
+            ["cargo", "run", "--manifest-path", "demo/Cargo.toml"]
+        );
+        assert_eq!(
+            execution.cargo_project.as_ref().unwrap().manifest.path,
+            "/project/demo/Cargo.toml"
+        );
+        assert_eq!(
+            execution.cargo_project.as_ref().unwrap().package_name,
+            "demo"
+        );
+        for relative in ["Cargo.toml", "nested/demo/Cargo.toml"] {
+            let mut good = value.clone();
+            good["execution"]["argv"][3] = json!(relative);
+            assert!(accepts(&req, &good));
+        }
+        for relative in [
+            "",
+            "/project/Cargo.toml",
+            "../Cargo.toml",
+            "./Cargo.toml",
+            "demo//Cargo.toml",
+            "demo/../Cargo.toml",
+            "demo/./Cargo.toml",
+            "demo/Cargo.toml/",
+            "demo/Cargo.lock",
+            "C:/Cargo.toml",
+            "demo\\Cargo.toml",
+            "démo/Cargo.toml",
+            "demo\n/Cargo.toml",
+        ] {
+            let mut bad = value.clone();
+            bad["execution"]["argv"][3] = json!(relative);
+            assert!(!accepts(&req, &bad), "relative {relative:?}");
+        }
+        for argv in [
+            json!(["cargo", "build", "--manifest-path", "demo/Cargo.toml"]),
+            json!(["cargo", "run", "--manifest-path"]),
+            json!([
+                "cargo",
+                "run",
+                "--manifest-path",
+                "demo/Cargo.toml",
+                "--release"
+            ]),
+            json!([
+                "/usr/bin/cargo",
+                "run",
+                "--manifest-path",
+                "demo/Cargo.toml"
+            ]),
+        ] {
+            let mut bad = value.clone();
+            bad["execution"]["argv"] = argv;
+            assert!(!accepts(&req, &bad));
+        }
+        let mut unresolved = value;
+        unresolved["status"] = json!("unresolved");
+        unresolved["reasonCodes"] = json!(["source_unresolved"]);
+        assert!(!accepts(&req, &unresolved));
+    }
+
+    #[test]
+    fn cargo_discovery_refuses_invalid_project_shapes_fields_and_cross_kind_aliases() {
+        let req = request();
+        let value = cargo_observed(&req);
+        for (pointer, replacement) in [
+            ("/execution/cargoProject", Value::Null),
+            ("/execution/cargoProject/manifest/path", json!("Cargo.toml")),
+            ("/execution/cargoProject/lock/sha256", json!("bad")),
+            ("/execution/cargoProject/entry/path", json!("src/main.rs")),
+            ("/execution/cargoProject/packageName", json!("1demo")),
+            ("/execution/cargoProject/version", json!("0.1.0-beta")),
+            ("/execution/cargoProject/edition", json!("2027")),
+            ("/execution/cargoProject/configurationSha256", json!("bad")),
+        ] {
+            let mut bad = value.clone();
+            *bad.pointer_mut(pointer).unwrap() = replacement;
+            assert!(!accepts(&req, &bad), "{pointer}");
+        }
+        for (pointer, keys) in [
+            (
+                "/execution",
+                vec!["kind", "argv", "project", "cargoProject"],
+            ),
+            (
+                "/execution/cargoProject",
+                vec![
+                    "manifest",
+                    "lock",
+                    "entry",
+                    "packageName",
+                    "version",
+                    "edition",
+                    "configurationSha256",
+                ],
+            ),
+            ("/execution/cargoProject/manifest", vec!["path", "sha256"]),
+            ("/execution/cargoProject/lock", vec!["path", "sha256"]),
+            ("/execution/cargoProject/entry", vec!["path", "sha256"]),
+        ] {
+            let mut bad = value.clone();
+            let row = bad.pointer_mut(pointer).unwrap();
+            *row = Value::Array(keys.iter().map(|key| row[key].clone()).collect());
+            assert!(!accepts(&req, &bad), "positional {pointer}");
+            let mut bad = value.clone();
+            bad.pointer_mut(pointer).unwrap()["unexpected"] = json!(true);
+            assert!(!accepts(&req, &bad), "unknown {pointer}");
+        }
+        let mut missing = value.clone();
+        missing["execution"]
+            .as_object_mut()
+            .unwrap()
+            .remove("cargoProject");
+        assert!(!accepts(&req, &missing));
+        let mut npm_alias = value.clone();
+        npm_alias["execution"]["project"] = Value::Null;
+        assert!(!accepts(&req, &npm_alias));
+        let original = serde_json::to_string(&value).unwrap();
+        let duplicate = original.replacen(
+            "\"edition\":\"2024\"",
+            "\"edition\":\"2024\",\"edition\":\"2024\"",
+            1,
+        );
+        assert_ne!(duplicate, original);
+        assert!(req.correlate_reply(duplicate.as_bytes()).is_err());
+        for execution in [
+            json!({"kind":"caws-evidence-v1","argv":["a","b","c","d","e"],"cargoProject":null}),
+            json!({"kind":"caws-lifecycle-v1","argv":["a","b","c"],"cargoProject":null}),
+            json!({"kind":"npm-test-v1","argv":["npm","test"],"project":{
+                "packageJson":{"path":"/project/package.json","sha256":"a".repeat(64)},
+                "npmrc":null,"testScript":"node tests/run.js","pathShadowSha256":"b".repeat(64)},"cargoProject":null}),
+        ] {
+            let mut bad = value.clone();
+            bad["execution"] = execution;
+            assert!(!accepts(&req, &bad));
         }
     }
 }

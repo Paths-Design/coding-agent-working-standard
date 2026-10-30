@@ -151,13 +151,19 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
       (root.profile as Record<string, unknown>).kind === 'npm-test-v1';
     const profile = object(
       root.profile,
-      npmProfile ? ['kind', 'source', 'utilities', 'npm'] : ['kind', 'source', 'utilities']
+      npmProfile
+        ? ['kind', 'source', 'utilities', 'npm']
+        : (root.profile as Record<string, unknown>)?.kind === 'cargo-run-v1'
+          ? ['kind', 'source', 'utilities', 'cargo']
+          : ['kind', 'source', 'utilities']
     );
+    const cargoProfile = profile.kind === 'cargo-run-v1';
     insist(
       profile.kind === 'bash-clean-v1' ||
         profile.kind === 'caws-evidence-v1' ||
         profile.kind === 'caws-lifecycle-v1' ||
-        profile.kind === 'npm-test-v1'
+        profile.kind === 'npm-test-v1' ||
+        cargoProfile
     );
     nativeText(profile.source, 65536, true);
     if (profile.kind === 'bash-clean-v1')
@@ -173,7 +179,7 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
       insist(execution.argv.length >= 5 && execution.argv[0] === executable.path);
     else if (profile.kind === 'caws-lifecycle-v1')
       insist(execution.argv.length >= 3 && execution.argv[0] === executable.path);
-    else {
+    else if (npmProfile) {
       insist(profile.source === 'npm test' && execution.stdinBase64 === '');
       const npm = object(profile.npm, ['runtime', 'project']);
       const runtime = object(npm.runtime, ['node', 'entry', 'root', 'generationManifestSha256']);
@@ -204,6 +210,94 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
           executable.path === node.path &&
           executable.sha256 === node.sha256
       );
+    } else {
+      insist(execution.stdinBase64 === '');
+      const cargo = object(profile.cargo, ['runtime', 'project']);
+      const runtime = object(cargo.runtime, [
+        'cargo',
+        'rustc',
+        'linker',
+        'root',
+        'sdkRoot',
+        'toolchainVersion',
+        'generationManifestSha256',
+      ]);
+      const cargoImage = image(runtime.cargo),
+        rustc = image(runtime.rustc);
+      image(runtime.linker);
+      nativePath(runtime.root);
+      nativePath(runtime.sdkRoot);
+      const version = /^(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})$/;
+      insist(
+        typeof runtime.toolchainVersion === 'string' && version.test(runtime.toolchainVersion)
+      );
+      digest(runtime.generationManifestSha256);
+      insist(
+        cargoImage.path === `${runtime.root}/bin/cargo` &&
+          rustc.path === `${runtime.root}/bin/rustc`
+      );
+      const project = object(cargo.project, [
+        'manifest',
+        'lock',
+        'entry',
+        'packageName',
+        'version',
+        'edition',
+        'configurationSha256',
+      ]);
+      const manifest = image(project.manifest);
+      image(project.lock);
+      image(project.entry);
+      insist(
+        typeof project.packageName === 'string' &&
+          /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(project.packageName)
+      );
+      insist(typeof project.version === 'string' && version.test(project.version));
+      insist(
+        typeof project.edition === 'string' &&
+          ['2015', '2018', '2021', '2024'].includes(project.edition)
+      );
+      digest(project.configurationSha256);
+      const sandboxRow = object(root.sandbox, [
+        'stateBase64',
+        'stateSha256',
+        'launcher',
+        'environmentAnchor',
+        'writeCeiling',
+      ]);
+      const ceiling = object(sandboxRow.writeCeiling, [
+        'schema',
+        'launchId',
+        'invocationRoot',
+        'outputRoot',
+        'tmpRoot',
+        'cacheRoot',
+        'manifestSha256',
+      ]);
+      nativePath(ceiling.outputRoot);
+      const expected = [
+        cargoImage.path,
+        'run',
+        '--locked',
+        '--offline',
+        '--frozen',
+        '--jobs',
+        '1',
+        '--manifest-path',
+        manifest.path,
+        '--target-dir',
+        `${ceiling.outputRoot}/target`,
+        '--bin',
+        project.packageName,
+        '--message-format',
+        'json-render-diagnostics',
+      ];
+      insist(
+        executable.path === cargoImage.path &&
+          executable.sha256 === cargoImage.sha256 &&
+          execution.argv.length === expected.length &&
+          execution.argv.every((value, i) => value === expected[i])
+      );
     }
     insist(Array.isArray(profile.utilities) && profile.utilities.length <= 32);
     const paths = new Set<string>();
@@ -212,10 +306,10 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
       insist(!paths.has(row.path as string));
       paths.add(row.path as string);
     }
-    if (npmProfile) insist(profile.utilities.length === 0);
+    if (npmProfile || cargoProfile) insist(profile.utilities.length === 0);
     const sandbox = object(
       root.sandbox,
-      npmProfile
+      npmProfile || cargoProfile
         ? ['stateBase64', 'stateSha256', 'launcher', 'environmentAnchor', 'writeCeiling']
         : ['stateBase64', 'stateSha256', 'launcher', 'environmentAnchor']
     );
@@ -227,7 +321,7 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
     JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(state));
     image(sandbox.launcher);
     nativePath(sandbox.environmentAnchor);
-    if (npmProfile) {
+    if (npmProfile || cargoProfile) {
       const ceiling = object(sandbox.writeCeiling, [
         'schema',
         'launchId',
