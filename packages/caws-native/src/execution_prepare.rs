@@ -309,8 +309,10 @@ fn resolve(
         .parent()
         .ok_or(PrepareRefusal::Utility)?
         .join("writer-main.js");
-    if Path::new(name) == writer && Path::new(&chosen) == writer {
-        // The supported writer's one file argument, not a general file callee.
+    let lifecycle = writer.parent().ok_or(PrepareRefusal::Utility)?.join("lifecycle-main.js");
+    if (Path::new(name) == writer && Path::new(&chosen) == writer)
+        || (Path::new(name) == lifecycle && Path::new(&chosen) == lifecycle) {
+        // A dedicated pinned consumer file argument, not a general file callee.
     } else if name == "/usr/bin/git" && chosen == "/usr/bin/git" && protected_system(&chosen) {
     } else if requested == "node" {
         if chosen != node.path {
@@ -464,6 +466,9 @@ pub(crate) fn prepare(
     if let Some(writer) = &pins.writer {
         pin(writer, &check).map_err(failure)?;
     }
+    if let Some(lifecycle) = &pins.lifecycle {
+        pin(lifecycle, &check).map_err(failure)?;
+    }
     pin(discovery, &check).map_err(failure)?;
     let caller = physical_dir(&call.caller_anchor).map_err(failure)?;
     if caller != call.caller_anchor {
@@ -576,7 +581,8 @@ pub(crate) fn prepare(
             .parent()
             .ok_or_else(|| failure(PrepareRefusal::Utility))?
             .join("writer-main.js");
-        if observed.execution().is_none() && (name == "/usr/bin/git" || Path::new(name) == writer) {
+        let lifecycle = writer.parent().ok_or_else(|| failure(PrepareRefusal::Utility))?.join("lifecycle-main.js");
+        if observed.execution().is_none() && (name == "/usr/bin/git" || Path::new(name) == writer || Path::new(name) == lifecycle) {
             return Err(failure(PrepareRefusal::Utility));
         }
         let utility = resolve(name, &dirs, &pins.node, &pins.entry, &check).map_err(failure)?;
@@ -599,25 +605,24 @@ pub(crate) fn prepare(
                 execution.project.as_ref().ok_or_else(|| failure(PrepareRefusal::Record))?,
                 &path, deadline, &check).map_err(failure)?);
         } else {
-        let writer = Path::new(&pins.entry.path)
+        let lifecycle = execution.kind == "caws-lifecycle-v1";
+        let consumer = Path::new(&pins.entry.path)
             .parent()
             .ok_or_else(|| failure(PrepareRefusal::Utility))?
-            .join("writer-main.js");
-        let writer_pin = pins
-            .writer
+            .join(if lifecycle { "lifecycle-main.js" } else { "writer-main.js" });
+        let consumer_pin = if lifecycle { &pins.lifecycle } else { &pins.writer }
             .as_ref()
             .ok_or_else(|| failure(PrepareRefusal::Image))?;
         if execution.argv[0] != pins.node.path
-            || Path::new(&execution.argv[1]) != writer
-            || Path::new(&writer_pin.path) != writer
-            || execution.argv[2] != "specs"
-            || execution.argv[3] != "evidence"
+            || Path::new(&execution.argv[1]) != consumer
+            || Path::new(&consumer_pin.path) != consumer
+            || (!lifecycle && (execution.argv[2] != "specs" || execution.argv[3] != "evidence"))
         {
             return Err(failure(PrepareRefusal::Utility));
         }
         // Discovery is advisory. Both Source phases must prove the exact
         // source-to-argv relation and writer authority before this can execute.
-        final_value["profile"]["kind"] = json!("caws-evidence-v1");
+        final_value["profile"]["kind"] = json!(execution.kind);
         final_value["execution"]["executable"] = image_json(&pins.node);
         final_value["execution"]["argv"] = json!(execution.argv);
         for env in final_value["execution"]["environment"]
@@ -630,7 +635,7 @@ pub(crate) fn prepare(
         }
         for name in [
             &pins.node.path,
-            writer
+            consumer
                 .to_str()
                 .ok_or_else(|| failure(PrepareRefusal::Utility))?,
             "/usr/bin/git",
@@ -916,6 +921,7 @@ process.stdin.resume();
         };
         let pins = PinnedAuthorizer {
             writer: None,
+            lifecycle: None,
             node: image(&node),
             entry: image(&entry),
         };

@@ -54,6 +54,8 @@ struct Pins {
     entry: ProgramImage,
     #[serde(default)]
     writer: Option<ProgramImage>,
+    #[serde(default)]
+    lifecycle: Option<ProgramImage>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -142,6 +144,10 @@ fn decode(bytes: &[u8]) -> io::Result<(Frame, PreparedRecord, MonotonicDeadline)
                     .pointer("/authorizer/writer")
                     .is_some_and(serde_json::Value::is_object)
         })
+        || frame.authorizer.lifecycle.as_ref().is_some_and(|image| {
+            !valid_image(image)
+                || !shape.pointer("/authorizer/lifecycle").is_some_and(serde_json::Value::is_object)
+        })
         || frame.prepared_base64.len() > 4 * RECORD_LIMIT.div_ceil(3)
     {
         return Err(invalid());
@@ -205,7 +211,7 @@ pub(crate) fn encode_startup(
             "threadId":a.thread_id,"callId":a.call_id,"callerAnchor":a.caller_anchor,
             "serverEnvironmentId":a.server_environment_id,"projectRoot":a.project_root,
             "environmentAnchor":a.environment_anchor},
-        "authorizer":{"node":image(&pins.node),"entry":image(&pins.entry),"writer":pins.writer.as_ref().map(image)},
+        "authorizer":{"node":image(&pins.node),"entry":image(&pins.entry),"writer":pins.writer.as_ref().map(image),"lifecycle":pins.lifecycle.as_ref().map(image)},
         "deadline":deadline.envelope()
     })).map_err(|_| invalid())?;
     decode(&body)?;
@@ -303,6 +309,7 @@ pub(crate) fn receive_startup(
             node: frame.authorizer.node,
             entry: frame.authorizer.entry,
             writer: frame.authorizer.writer,
+            lifecycle: frame.authorizer.lifecycle,
         },
         deadline,
         control,
@@ -381,6 +388,7 @@ mod tests {
             node: frame.authorizer.node,
             entry: frame.authorizer.entry,
             writer: None,
+            lifecycle: None,
         };
         let bytes = encode_startup(&prepared, &pins, &deadline).unwrap();
         assert_eq!(
@@ -436,6 +444,26 @@ mod tests {
         let mut unknown = value;
         unknown["sameHostMacosVerified"] = json!(true);
         assert!(decode(&serde_json::to_vec(&unknown).unwrap()).is_err());
+    }
+
+    #[test]
+    fn lifecycle_startup_pin_preserves_exact_image_and_rejects_positional_aliases() {
+        let (mut value, _) = fixture();
+        value["authorizer"]["lifecycle"] = json!({"path":"/generation/lifecycle-main.js","sha256":"b".repeat(64)});
+        let (decoded, _, _) = decode(&serde_json::to_vec(&value).unwrap()).unwrap();
+        let pin = decoded.authorizer.lifecycle.unwrap();
+        assert_eq!(pin.path, "/generation/lifecycle-main.js");
+        assert_eq!(pin.sha256, "b".repeat(64));
+        for replacement in [
+            json!(["/generation/lifecycle-main.js", "b".repeat(64)]),
+            json!({"path":"relative.js","sha256":"b".repeat(64)}),
+            json!({"path":"/generation/lifecycle-main.js","sha256":"invalid"}),
+            json!({"path":"/generation/lifecycle-main.js","sha256":"b".repeat(64),"permit":true}),
+        ] {
+            let mut wrong = value.clone();
+            wrong["authorizer"]["lifecycle"] = replacement;
+            assert!(decode(&serde_json::to_vec(&wrong).unwrap()).is_err());
+        }
     }
     #[test]
     fn authenticated_socket_preserves_frame_deadline_and_observes_later_cancel() {

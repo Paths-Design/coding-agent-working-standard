@@ -227,6 +227,9 @@ impl PreparedRecord {
                     || (p.kind == "caws-evidence-v1"
                         && e.argv.len() >= 5
                         && e.argv[0] == e.executable.path)
+                    || (p.kind == "caws-lifecycle-v1"
+                        && e.argv.len() >= 3
+                        && e.argv[0] == e.executable.path)
                     || npm),
         )?;
         if npm {
@@ -440,6 +443,25 @@ mod tests {
         wrong["execution"]["argv"] = json!(["/generation/node", "script.js"]);
         assert!(PreparedRecord::decode(serde_json::to_vec(&wrong).unwrap()).is_err());
         value["profile"]["kind"] = json!("unreviewed-writer");
+        assert!(PreparedRecord::decode(serde_json::to_vec(&value).unwrap()).is_err());
+    }
+
+    #[test]
+    fn lifecycle_record_requires_direct_executable_and_consumer_argument() {
+        let mut value = fixture();
+        value["profile"]["kind"] = json!("caws-lifecycle-v1");
+        value["execution"]["executable"]["path"] = json!("/generation/node");
+        value["execution"]["argv"] = json!(["/generation/node", "/generation/lifecycle-main.js", "git-head"]);
+        let decoded = PreparedRecord::decode(serde_json::to_vec(&value).unwrap()).unwrap();
+        assert_eq!(decoded.value().profile.kind, "caws-lifecycle-v1");
+        assert_eq!(decoded.value().execution.argv[2], "git-head");
+        let mut wrong = value.clone();
+        wrong["execution"]["argv"][0] = json!("/usr/bin/env");
+        assert!(PreparedRecord::decode(serde_json::to_vec(&wrong).unwrap()).is_err());
+        wrong = value.clone();
+        wrong["execution"]["argv"] = json!(["/generation/node", "/generation/lifecycle-main.js"]);
+        assert!(PreparedRecord::decode(serde_json::to_vec(&wrong).unwrap()).is_err());
+        value["profile"]["npm"] = json!(null);
         assert!(PreparedRecord::decode(serde_json::to_vec(&value).unwrap()).is_err());
     }
 

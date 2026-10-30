@@ -63,6 +63,7 @@ pub(crate) struct PinnedAuthorizer {
     pub node: ProgramImage,
     pub entry: ProgramImage,
     pub writer: Option<ProgramImage>,
+    pub lifecycle: Option<ProgramImage>,
 }
 
 /// Supplied only by the authenticated producer from its pinned configuration.
@@ -321,31 +322,32 @@ fn images(
     pins: &PinnedAuthorizer,
     live: &impl Fn() -> Result<(), Refusal>,
 ) -> Result<(), Refusal> {
-    if record.value().profile.kind == "caws-evidence-v1" {
+    let kind = record.value().profile.kind.as_str();
+    if kind == "caws-evidence-v1" || kind == "caws-lifecycle-v1" {
         let e = &record.value().execution;
-        let writer = Path::new(&pins.entry.path)
+        let consumer = Path::new(&pins.entry.path)
             .parent()
             .ok_or(Refusal::Image)?
-            .join("writer-main.js");
-        let pinned_writer = pins.writer.as_ref().ok_or(Refusal::Image)?;
+            .join(if kind == "caws-evidence-v1" { "writer-main.js" } else { "lifecycle-main.js" });
+        let pinned_consumer = if kind == "caws-evidence-v1" { &pins.writer } else { &pins.lifecycle }
+            .as_ref().ok_or(Refusal::Image)?;
         if e.executable.path != pins.node.path
             || e.executable.sha256 != pins.node.sha256
-            || e.argv.len() < 5
+            || e.argv.len() < if kind == "caws-evidence-v1" { 5 } else { 3 }
             || e.argv[0] != pins.node.path
-            || Path::new(&e.argv[1]) != writer
-            || e.argv[2] != "specs"
-            || e.argv[3] != "evidence"
-            || Path::new(&pinned_writer.path) != writer
+            || Path::new(&e.argv[1]) != consumer
+            || (kind == "caws-evidence-v1" && (e.argv[2] != "specs" || e.argv[3] != "evidence"))
+            || Path::new(&pinned_consumer.path) != consumer
             || !record
                 .value()
                 .profile
                 .utilities
                 .iter()
-                .any(|u| u.path == pinned_writer.path && u.sha256 == pinned_writer.sha256)
+                .any(|u| u.path == pinned_consumer.path && u.sha256 == pinned_consumer.sha256)
         {
             return Err(Refusal::Image);
         }
-        image_valid(pinned_writer, live)?;
+        image_valid(pinned_consumer, live)?;
     }
     image_valid(&pins.node, live)?;
     image_valid(&pins.entry, live)?;
@@ -544,7 +546,7 @@ fn execute_inner(
         record.value().limits.termination_grace_ms,
     ))
     .map_err(|_| failure(Refusal::InvalidDeadline))?;
-    let writer = record.value().profile.kind == "caws-evidence-v1";
+    let trusted_consumer = matches!(record.value().profile.kind.as_str(), "caws-evidence-v1" | "caws-lifecycle-v1");
     let npm = record.value().profile.kind == "npm-test-v1";
     if npm != npm_launch.is_some() { return Err(failure(Refusal::Unsupported)); }
     let live = || {
@@ -610,7 +612,7 @@ fn execute_inner(
         };
         configure_private_child(&mut command)
             .map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
-        if writer {
+        if trusted_consumer {
             // This dedicated pinned consumer borrows the same fence through
             // completion. Generic USER receives no private descriptors.
             configure_child_fds(&mut command, &[(fence.file().as_fd(), 3)])
@@ -655,7 +657,7 @@ fn execute_inner(
             Err(problem)
         }
         Ok((child, job_deadline, manifest_pump)) => {
-            let (child, mut held_fence) = if writer || npm {
+            let (child, mut held_fence) = if trusted_consumer || npm {
                 (child, Some(fence))
             } else {
                 (release_after_spawn(child, fence, grace)?, None)
@@ -1122,6 +1124,7 @@ process.stdin.resume();
         };
         let pins = PinnedAuthorizer {
             writer: None,
+            lifecycle: None,
             node: image(node.into()),
             entry: image(entry.into()),
         };

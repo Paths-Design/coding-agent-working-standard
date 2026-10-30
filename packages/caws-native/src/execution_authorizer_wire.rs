@@ -906,6 +906,8 @@ impl DiscoveryRequest {
             match execution.kind.as_str() {
                 "caws-evidence-v1" if execution.argv.len() >= 5
                     && shape.pointer("/execution/project").is_none() => {}
+                "caws-lifecycle-v1" if execution.argv.len() >= 3
+                    && shape.pointer("/execution/project").is_none() => {}
                 "npm-test-v1" if execution.argv == ["npm", "test"] => {
                     let project = execution.project.as_ref().ok_or(WireError::Schema)?;
                     let image = &project.package_json;
@@ -1240,6 +1242,28 @@ mod discovery_tests {
             let mut wrong = value.clone();
             wrong["execution"] = bad;
             assert!(!accepts(&req, &wrong));
+        }
+        value["status"] = json!("unresolved");
+        value["reasonCodes"] = json!(["source_unresolved"]);
+        assert!(!accepts(&req, &value));
+    }
+
+    #[test]
+    fn lifecycle_discovery_is_bounded_advisory_without_npm_project() {
+        let req = request();
+        let mut value = observed(&req);
+        value["execution"] = json!({"kind":"caws-lifecycle-v1","argv":["/gen/node","/gen/lifecycle-main.js","git-head"]});
+        let parsed = req.correlate_reply(&serde_json::to_vec(&value).unwrap()).unwrap();
+        assert_eq!(parsed.execution().unwrap().kind, "caws-lifecycle-v1");
+        assert_eq!(parsed.execution().unwrap().argv[2], "git-head");
+        for execution in [
+            json!({"kind":"caws-lifecycle-v1","argv":["/gen/node","/gen/lifecycle-main.js"]}),
+            json!({"kind":"caws-lifecycle-v1","argv":["a","b","c"],"project":null}),
+            json!({"kind":"caws-lifecycle-v1","argv":["a","b","\u{0}"]}),
+            json!(["caws-lifecycle-v1",["a","b","c"]]),
+        ] {
+            let mut bad = value.clone(); bad["execution"] = execution;
+            assert!(!accepts(&req, &bad));
         }
         value["status"] = json!("unresolved");
         value["reasonCodes"] = json!(["source_unresolved"]);

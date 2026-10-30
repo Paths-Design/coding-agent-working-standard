@@ -262,6 +262,8 @@ struct Config {
     authorizer: ProgramImage,
     discovery: ProgramImage,
     writer: ProgramImage,
+    #[serde(default)]
+    lifecycle: Option<ProgramImage>,
     generation: Generation,
     #[serde(default)]
     npm: Option<NpmRuntime>,
@@ -354,6 +356,14 @@ fn load_config(path: &Path) -> io::Result<Config> {
             return Err(refused());
         }
     }
+    if let Some(lifecycle) = &config.lifecycle {
+        if !shape.pointer("/lifecycle").is_some_and(Value::is_object)
+            || !Path::new(&lifecycle.path).is_absolute()
+            || lifecycle.sha256.len() != 64
+            || !lifecycle.sha256.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            || Path::new(&config.authorizer.path).parent().ok_or_else(refused)?.join("lifecycle-main.js") != Path::new(&lifecycle.path)
+        { return Err(refused()); }
+    }
     if Path::new(&config.authorizer.path)
         .parent()
         .ok_or_else(refused)?
@@ -381,6 +391,10 @@ fn verify_generation(config: &Config, deadline: &MonotonicDeadline) -> io::Resul
         if !Path::new(&image.path).starts_with(root) {
             return Err(refused());
         }
+    }
+    if let Some(lifecycle) = &config.lifecycle {
+        if !Path::new(&lifecycle.path).starts_with(root) { return Err(refused()); }
+        verify_generation_image(lifecycle, deadline)?;
     }
     if let Some(npm) = &config.npm {
         let npm_root = Path::new(&npm.root);
@@ -468,6 +482,10 @@ fn verify_generation(config: &Config, deadline: &MonotonicDeadline) -> io::Resul
     }
     if actual != expected {
         return Err(refused());
+    }
+    if let Some(lifecycle) = &config.lifecycle {
+        if !expected.contains(Path::new(&lifecycle.path)) { return Err(refused()); }
+        verify_generation_image(lifecycle, deadline)?;
     }
     if let Some(npm) = &config.npm {
         if !expected.contains(Path::new(&npm.entry.path)) {
@@ -731,7 +749,7 @@ fn result(id: Value, value: Value, error: bool) -> Value {
 }
 fn tool_description(config: &Config) -> String {
     let quote = |path: &str| format!("'{}'", path.replace('\'', "'\\''"));
-    format!(
+    let mut description = format!(
         "Execute source admitted by closed CAWS Bash profiles.\n\
 Configured evidence writer prefix:\n{} {}\n\
 Append this grammar to that configured prefix as one literal command:\n\
@@ -743,7 +761,14 @@ For a pending audit, use the ordinary authorized CLI workflow: caws specs commit
 These paths are configured, not a live generation or authority verification. Each execution still validates its native context, pins, source profile, authority, and fence. Other closed Bash profiles remain available under their existing authorization rules.",
         quote(&config.node.path),
         quote(&config.writer.path),
-    )
+    );
+    if let Some(lifecycle) = &config.lifecycle {
+        description.push_str(&format!("\nConfigured lifecycle consumer prefix:\n{} {}\nAppend exactly one typed operation: git-status | git-head | git-branch | git-stage -- PATH... | git-commit --message 'MESSAGE' -- PATH... | spec-commit --spec SPEC_ID | worktree-merge --worktree NAME --spec SPEC_ID | bridge-claim --spec SPEC_ID --merge-commit MERGE_SHA | spec-close --spec SPEC_ID --merge-commit MERGE_SHA --reason 'REASON'. Use literal shell words and quote data. No extra flags, shell expansion, operators, general Git or general CLI passthrough are admitted. Stage and commit paths must fit the current owned spec. Normal executable hooks or unsupported Git configuration refuse; hooks are never disabled. Merge applies the normal CAWS merge with no close; run it from the canonical checkout after an actual host context transition. An explicit bridge claim after merge requires this same thread's exact recorded merge SHA; only then run downstream npm and close. Consumer output reports actual HEAD or a publication-failure requiring inspection before retry.\n", quote(&config.node.path), quote(&lifecycle.path)));
+    }
+    if config.npm.is_some() {
+        description.push_str("\nThe exact source npm test uses the configured pinned npm test profile, private operational roots and inherited restricted network policy. Project npmrc and pretest/posttest are unsupported. This availability does not establish test success or full workflow qualification.\n");
+    }
+    description
 }
 fn execution_result(id: Value, value: Value) -> Value {
     let error = value.get("ok") != Some(&Value::Bool(true));
@@ -1058,6 +1083,9 @@ fn execute_call(
             path: config.writer.path.clone(),
             sha256: config.writer.sha256.clone(),
         }),
+        lifecycle: config.lifecycle.as_ref().map(|image| ProgramImage {
+            path: image.path.clone(), sha256: image.sha256.clone(),
+        }),
     };
     trace.at(CallStage::Preparation);
     let npm_preparation = config.npm.as_ref().map(|npm| execution_prepare::NpmPreparation {
@@ -1222,6 +1250,11 @@ fn worker(config: &Config) -> io::Result<()> {
             .writer
             .as_ref()
             .is_none_or(|w| w.path != config.writer.path || w.sha256 != config.writer.sha256)
+        || match (&pins.lifecycle, &config.lifecycle) {
+            (None, None) => false,
+            (Some(pin), Some(config)) => pin.path != config.path || pin.sha256 != config.sha256,
+            _ => true,
+        }
     {
         return Err(refused());
     }
@@ -1456,6 +1489,7 @@ mod tests {
             node: bash,
             entry: image(&entry),
             writer: None,
+            lifecycle: None,
         };
         let trusted = execution_owner::TrustedInvocation {
             invocation_id: "owner-fixture".into(),
@@ -1804,6 +1838,7 @@ mod tests {
                 authorizer: image(&root.join("authorizer.js")),
                 discovery: image(&root.join("discovery.js")),
                 writer: image(&root.join("writer-main.js")),
+                lifecycle: None,
                 generation: Generation {
                     root: root.to_str().unwrap().into(),
                     manifest: image(&manifest),
@@ -1817,6 +1852,28 @@ mod tests {
             fs::remove_dir_all(&self.0).unwrap();
         }
     }
+    #[test]
+    fn optional_lifecycle_pin_must_belong_to_exact_generation_inventory() {
+        let fixture = Fixture::new();
+        let mut config = fixture.config();
+        let root = Path::new(&config.generation.root);
+        let path = root.join("lifecycle-main.js");
+        fs::write(&path, "lifecycle").unwrap();
+        let image = ProgramImage { path: path.to_str().unwrap().into(), sha256: format!("{:x}", Sha256::digest(b"lifecycle")) };
+        config.lifecycle = Some(image);
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(30)).unwrap();
+        assert!(verify_generation(&config, &deadline).is_err(), "unmanifested consumer must refuse");
+        let mut manifest: Value = serde_json::from_slice(&fs::read(&config.generation.manifest.path).unwrap()).unwrap();
+        manifest["files"].as_array_mut().unwrap().push(json!({"path":"lifecycle-main.js","sha256":config.lifecycle.as_ref().unwrap().sha256}));
+        manifest["files"].as_array_mut().unwrap().sort_by(|a, b| a["path"].as_str().unwrap().as_bytes().cmp(b["path"].as_str().unwrap().as_bytes()));
+        let bytes = serde_json::to_vec(&manifest).unwrap();
+        fs::write(&config.generation.manifest.path, &bytes).unwrap();
+        config.generation.manifest.sha256 = format!("{:x}", Sha256::digest(&bytes));
+        assert!(verify_generation(&config, &deadline).is_ok());
+        fs::write(&path, "replacement").unwrap();
+        assert!(verify_generation(&config, &deadline).is_err(), "replaced consumer must refuse");
+    }
+
     #[test]
     fn generation_checks_content_additions_removals_and_symlinks() {
         let fixture = Fixture::new();
