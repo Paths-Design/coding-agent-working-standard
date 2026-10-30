@@ -56,3 +56,9 @@ evidence:
     recorded_at: "2026-10-30T09:39:09.544Z"
     exit_code: 0
     commit_sha: d7833c8684184094ffef3f16092925a6ff91cbfb
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Current d7833c868 fresh hooks-readonly119 exit0 verifies installed Native does not override observed legacy registration. Retained333 actual legacy-positive raw stdout and Python marker under /Users/darianrosebrook/Desktop/Projects/caws/tmp/rust-cutover-package/hooks-inspection-01 establish actual legacy bootstrap; d783 leaves launcher invocation unchanged. Independent feedback and root source/raw inspection support bounded applicability. Ignored raw receipts manually verified; verify checks commit existence only. No global selection or final package qualification."
+    recorded_at: "2026-10-30T09:42:48.015Z"
+    exit_code: 0
+    commit_sha: d7833c8684184094ffef3f16092925a6ff91cbfb
