@@ -49,3 +49,10 @@ non_functional:
 contracts:
   - name: 'hooks-effective-selection'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Root inspected actual retained ART07 Native description at /Users/darianrosebrook/Desktop/Projects/caws/tmp/rust-cutover-package/hooks-inspection-01/result.json:333316c84 native-positive describes ten expected handlers without Python, original nested cwd/project preserved. Current d7833c868 fresh hooks-readonly119 exit0 raw committed-hooks-checks.log; source comparison confirms unchanged launcher execution and fixture applicability through added registration checks. Raw ignored receipts were manually inspected, not claimed as tracked artifacts; verify checks commit existence only. No fresh real-Native run for d783, harness trust/callback, package or adoption claim."
+    recorded_at: "2026-10-30T09:39:09.544Z"
+    exit_code: 0
+    commit_sha: d7833c8684184094ffef3f16092925a6ff91cbfb
