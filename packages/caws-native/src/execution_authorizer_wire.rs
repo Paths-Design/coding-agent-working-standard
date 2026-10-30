@@ -932,7 +932,7 @@ impl DiscoveryRequest {
                             .is_some_and(serde_json::Value::is_object)
                         || !shape
                             .pointer("/execution/project/npmrc")
-                            .is_some_and(serde_json::Value::is_null)
+                            .is_some_and(|value| value.is_null() || value.is_object())
                         || !std::path::Path::new(&image.path).is_absolute()
                         || image.path.len() > 4096
                         || image.path.contains('\0')
@@ -941,7 +941,12 @@ impl DiscoveryRequest {
                         || project.test_script.is_empty()
                         || project.test_script.len() > 65536
                         || project.test_script.contains('\0')
-                        || project.npmrc.is_some()
+                        || project.npmrc.as_ref().is_some_and(|config| {
+                            !std::path::Path::new(&config.path).is_absolute()
+                                || config.path.len() > 4096
+                                || config.path.contains('\0')
+                                || !hex(&config.sha256)
+                        })
                     {
                         return Err(WireError::Schema);
                     }
@@ -1333,6 +1338,10 @@ mod discovery_tests {
             "packageJson":{"path":"/project/package.json","sha256":"a".repeat(64)},
             "npmrc":null,"testScript":"node tests/run.js","pathShadowSha256":"b".repeat(64)}});
         assert!(accepts(&req, &value));
+        let mut configured = value.clone();
+        configured["execution"]["project"]["npmrc"] =
+            json!({"path":"/project/.npmrc","sha256":"c".repeat(64)});
+        assert!(accepts(&req, &configured));
         for (pointer, replacement) in [
             ("/execution/argv/1", json!("install")),
             (
@@ -1342,7 +1351,7 @@ mod discovery_tests {
             ("/execution/project/pathShadowSha256", json!("bad")),
             (
                 "/execution/project/npmrc",
-                json!({"path":"/project/.npmrc","sha256":"c".repeat(64)}),
+                json!(["/project/.npmrc", "c".repeat(64)]),
             ),
         ] {
             let mut bad = value.clone();

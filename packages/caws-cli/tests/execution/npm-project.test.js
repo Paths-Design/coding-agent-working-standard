@@ -95,7 +95,7 @@ test('observes entry, mode, target bytes, symlink and directory replacements', (
   }
 });
 
-test('accepts verified absence and refuses dangling paths, project config and lifecycle hooks', () => {
+test('accepts verified absence and refuses dangling paths and lifecycle hooks', () => {
   const f = fixture();
   expect(f.snapshot().npmrc).toBeNull();
   fs.symlinkSync('missing', path.join(f.cwd, 'node_modules'));
@@ -110,6 +110,72 @@ test('accepts verified absence and refuses dangling paths, project config and li
   );
   expect(f.snapshot).toThrow();
 });
+
+test('pins inert project reporting settings and the overridden literal cache operand', () => {
+  const f = fixture(),
+    file = path.join(f.cwd, '.npmrc');
+  const content =
+    '# bounded project settings\ncache=../outside-cache\naudit=false\nfund=false\nupdate-notifier=false\n';
+  fs.writeFileSync(file, content);
+  const before = fs.readFileSync(file);
+  const first = f.snapshot();
+  expect(first.npmrc).toEqual({
+    path: file,
+    sha256: require('node:crypto').createHash('sha256').update(before).digest('hex'),
+  });
+  expect(f.snapshot()).toEqual(first);
+  expect(fs.readFileSync(file)).toEqual(before);
+  expect(fs.existsSync(path.join(f.root, 'outside-cache'))).toBe(false);
+  fs.writeFileSync(file, 'cache=../another-cache\n');
+  expect(f.snapshot().npmrc.sha256).not.toBe(first.npmrc.sha256);
+});
+test.each([
+  'registry=https://example.invalid\n',
+  '_authToken=not-a-real-token\n',
+  'script-shell=/bin/sh\n',
+  'audit=true\n',
+  'fund=false\nfund=false\n',
+  'cache=${HOME}/cache\n',
+  'cache=https://example.invalid\n',
+  'cache=one=two\n',
+  '[section]\n',
+  'cache=some\\path\n',
+  'cache=\n',
+  'audit=false\0\n',
+])('refuses unsupported project configuration %j', (content) => {
+  const f = fixture();
+  fs.writeFileSync(path.join(f.cwd, '.npmrc'), content);
+  expect(f.snapshot).toThrow('Execution authority is unavailable');
+});
+test('refuses config hard links and changes admitted config identity without mutating it', () => {
+  const f = fixture(),
+    file = path.join(f.cwd, '.npmrc');
+  fs.writeFileSync(file, 'audit=false\n');
+  const original = f.snapshot().npmrc;
+  fs.linkSync(file, path.join(f.root, 'config-alias'));
+  expect(f.snapshot).toThrow();
+  fs.unlinkSync(path.join(f.root, 'config-alias'));
+  fs.writeFileSync(file, 'fund=false\n');
+  expect(f.snapshot().npmrc.sha256).not.toBe(original.sha256);
+});
+const protectedFixture = process.env.CAWS_NPM_PROJECT_FIXTURE_ROOT;
+(protectedFixture ? test : test.skip)(
+  'observes the frozen real workflow npm configuration without editing inputs',
+  () => {
+    const root = fs.realpathSync.native(protectedFixture);
+    const safePath = [
+      path.dirname(fs.realpathSync.native(process.execPath)),
+      '/usr/bin',
+      '/bin',
+    ].join(':');
+    const first = snapshotNpmProject(root, safePath, Date.now() + 30000);
+    expect(first.npmrc.path).toBe(path.join(root, '.npmrc'));
+    expect(first.npmrc.sha256).toBe(
+      '067b1efd5f43ac5e70b38bb4cfcce066bed73033d585c155dd4c5a5a779ffee2'
+    );
+    expect(snapshotNpmProject(root, safePath, Date.now() + 30000)).toEqual(first);
+  }
+);
 
 test('refuses entry overflow and expires without reading package effects', () => {
   const f = fixture();

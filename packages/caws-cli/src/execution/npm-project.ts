@@ -28,6 +28,28 @@ function same(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+/** Closed project-config grammar. The cache operand is inert because the
+ * Native environment always supplies its fresh NPM_CONFIG_CACHE. Other keys
+ * only disable optional reporting; no registry, credential or script controls. */
+function inspectProjectConfig(bytes: Buffer): void {
+  const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  if (/[^\x09\x0a\x0d\x20-\x7e]/.test(text)) refuse();
+  const seen = new Set<string>();
+  for (const source of text.split(/\r\n|\n|\r/)) {
+    const line = source.trim();
+    if (!line || line.startsWith('#') || line.startsWith(';')) continue;
+    const separator = line.indexOf('=');
+    if (separator < 1) refuse();
+    const key = line.slice(0, separator).trim(),
+      value = line.slice(separator + 1).trim();
+    if (seen.has(key)) refuse();
+    seen.add(key);
+    if (key === 'cache') {
+      if (!value || value.length > 4096 || !/^[A-Za-z0-9_.\/-]+$/.test(value)) refuse();
+    } else if (!['audit', 'fund', 'update-notifier'].includes(key) || value !== 'false') refuse();
+  }
+}
+
 /** Observe path components without hashing unrelated ancestor-directory times. */
 function trace(path: string): unknown[] {
   if (!isAbsolute(path)) refuse();
@@ -68,7 +90,8 @@ function readImage(
   maximum: number,
   budget: { bytes: number },
   deadline: number,
-  capture = false
+  capture = false,
+  inspect?: (bytes: Buffer) => void
 ) {
   live(deadline);
   const fd = fs.openSync(
@@ -90,8 +113,8 @@ function readImage(
       budget.bytes += count;
       if (offset > maximum || budget.bytes > MAX_TOTAL_BYTES) refuse();
       const bytes = Buffer.from(buffer.subarray(0, count));
-      if (capture) chunks.push(bytes);
-      hash.update(bytes);
+      if (capture || inspect) chunks.push(bytes);
+      if (!inspect) hash.update(bytes);
     }
     if (
       BigInt(offset) !== before.size ||
@@ -99,10 +122,15 @@ function readImage(
       !same(identity(before), identity(fs.lstatSync(path, { bigint: true })))
     )
       refuse();
+    const bytes = Buffer.concat(chunks);
+    if (inspect) {
+      inspect(bytes);
+      hash.update(bytes);
+    }
     return {
       image: { path, sha256: hash.digest('hex') },
       identity: identity(before),
-      bytes: Buffer.concat(chunks),
+      bytes,
     };
   } finally {
     fs.closeSync(fd);
@@ -187,14 +215,22 @@ export function snapshotNpmProject(
       safeDirectories.some((path) => !isAbsolute(path) || fs.realpathSync.native(path) !== path)
     )
       refuse();
+    const budget = { bytes: 0, entries: 0 };
+    let npmrc: NpmProjectSnapshot['npmrc'] = null;
     try {
-      fs.lstatSync(join(cwd, '.npmrc'));
-      refuse();
+      const config = readImage(
+        join(cwd, '.npmrc'),
+        65536,
+        budget,
+        deadline,
+        true,
+        inspectProjectConfig
+      );
+      npmrc = config.image;
     } catch (error) {
       if (error instanceof ExecutionAuthorityUnavailable) throw error;
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
-    const budget = { bytes: 0, entries: 0 };
     const packageJson = readImage(join(cwd, 'package.json'), 1048576, budget, deadline, true);
     const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
       packageJson.bytes
@@ -224,7 +260,7 @@ export function snapshotNpmProject(
     live(deadline);
     return {
       packageJson: packageJson.image,
-      npmrc: null,
+      npmrc,
       testScript: script.test,
       pathShadowSha256: createHash('sha256')
         .update(JSON.stringify(['caws.npm-lifecycle-path.v1', cwd, safePath, transcript]))

@@ -176,7 +176,11 @@ impl SandboxedLaunch<'_> {
                     return Err(Refusal::Image);
                 }
                 image_valid(entry, live)?;
-                image_valid(&npm.project.package_json, live)
+                image_valid(&npm.project.package_json, live)?;
+                if let Some(config) = &npm.project.npmrc {
+                    image_valid(config, live)?;
+                }
+                Ok(())
             }
             SandboxedRuntime::Cargo(expected) => {
                 let cargo = value.profile.cargo.as_ref().ok_or(Refusal::Image)?;

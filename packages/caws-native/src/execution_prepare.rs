@@ -387,7 +387,10 @@ fn lower_npm(
         .ok_or(PrepareRefusal::Record)?
         .to_owned();
     if call.source != "npm test"
-        || project.npmrc.is_some()
+        || project
+            .npmrc
+            .as_ref()
+            .is_some_and(|config| Path::new(&config.path) != Path::new(&cwd).join(".npmrc"))
         || Path::new(&project.package_json.path) != Path::new(&cwd).join("package.json")
         || Path::new(&npm.entry.path) != Path::new(npm.root).join("bin/npm-cli.js")
         || program(&project.package_json.path, check)?.sha256 != project.package_json.sha256
@@ -395,6 +398,9 @@ fn lower_npm(
         return Err(PrepareRefusal::Image);
     }
     pin(npm.entry, check)?;
+    if let Some(config) = &project.npmrc {
+        pin(config, check)?;
+    }
     let mut launch = PrivateLaunch::create(
         Path::new(npm.scratch_root),
         Path::new(&root),
@@ -444,7 +450,7 @@ fn lower_npm(
     value["profile"]["npm"] = json!({"runtime":{
         "node":image_json(&pins.node),"entry":image_json(npm.entry),"root":npm.root,
         "generationManifestSha256":npm.generation_manifest_sha256},"project":{
-        "packageJson":image_json(&project.package_json),"npmrc":null,
+        "packageJson":image_json(&project.package_json),"npmrc":project.npmrc.as_ref().map(image_json),
         "testScript":project.test_script,"pathShadowSha256":project.path_shadow_sha256}});
     let execution: Execution =
         serde_json::from_value(value["execution"].clone()).map_err(|_| PrepareRefusal::Record)?;

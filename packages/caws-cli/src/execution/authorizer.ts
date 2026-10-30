@@ -392,7 +392,7 @@ function inspectNpmTest(record: PreparedExecutionV1, authority: ExecutionAuthori
   const { runtime, project } = npm;
   if (
     project.packageJson.path !== join(record.execution.cwd, 'package.json') ||
-    project.npmrc !== null ||
+    (project.npmrc !== null && project.npmrc.path !== join(record.execution.cwd, '.npmrc')) ||
     runtime.node.path !== fs.realpathSync.native(process.execPath) ||
     runtime.entry.path !== join(runtime.root, 'bin', 'npm-cli.js') ||
     fs.realpathSync.native(runtime.root) !== runtime.root ||
@@ -438,6 +438,8 @@ function inspectNpmTest(record: PreparedExecutionV1, authority: ExecutionAuthori
   if (
     observed.packageJson.path !== project.packageJson.path ||
     observed.packageJson.sha256 !== project.packageJson.sha256 ||
+    observed.npmrc?.path !== project.npmrc?.path ||
+    observed.npmrc?.sha256 !== project.npmrc?.sha256 ||
     observed.testScript !== project.testScript ||
     observed.pathShadowSha256 !== project.pathShadowSha256
   )

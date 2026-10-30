@@ -250,6 +250,28 @@ describe('bounded Cargo Source observation without compiler or USER execution', 
 });
 
 describe('bounded npm test profile observation', () => {
+  test('admits pinned inert project config while refusing stale config bytes or presence', () => {
+    for (const change of ['bytes', 'presence']) {
+      const f = authorityFixture(),
+        record = npmRecord(f),
+        file = path.join(f.lane, '.npmrc');
+      fs.writeFileSync(file, 'cache=../unused\naudit=false\nfund=false\nupdate-notifier=false\n');
+      const safePath = record.execution.environment.find(({ name }) => name === 'PATH').value;
+      record.profile.npm.project = snapshotNpmProject(
+        f.lane,
+        safePath,
+        record.limits.preparationDeadlineUnixMs
+      );
+      const admitted = evaluatePreparedExecution(record, request(record));
+      expect(admitted.decision).toBe('allow');
+      expect(record.profile.npm.project.npmrc.path).toBe(file);
+      expect(fs.readdirSync(record.sandbox.writeCeiling.cacheRoot)).toEqual([]);
+      if (change === 'bytes') fs.writeFileSync(file, 'cache=../different\naudit=false\n');
+      else fs.unlinkSync(file);
+      expect(evaluatePreparedExecution(record, request(record)).decision).not.toBe('allow');
+      expect(fs.readdirSync(record.sandbox.writeCeiling.outputRoot)).toEqual([]);
+    }
+  });
   test('rechecks lifecycle tool bytes during final validation under the inherited fence', () => {
     const f = authorityFixture();
     const record = npmRecord(f);
