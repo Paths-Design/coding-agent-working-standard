@@ -4,7 +4,7 @@ authority: working
 status: active
 title: CAWS native runtime migration tracker
 owner: CAWS runtime maintainers
-updated: 2026-10-29
+updated: 2026-10-30
 audience: maintainer
 ---
 
@@ -29,11 +29,21 @@ passing unit tests, or the existence of this document.
 
 ## Source location and progress
 
-Integration checkpoint `9f87d3e1baeb8328b5a51047f641a98abc5137ee` joins the
-parent's `28ef8482` source with main, including the stock scanner and Stop
-preflight repairs. Source integration does not establish package qualification
-or selected execution. The
-[canonical parent evidence](../../.caws/specs/CAWS-NATIVE-RUNTIME-001.yaml)
+Parent checkpoint `9f87d3e1baeb8328b5a51047f641a98abc5137ee` joins the parent's
+`28ef8482` source with main, including the stock scanner and Stop preflight
+repairs. Owned file-tool candidate `88170c904f2ea14eebaad017ba0249af94537505`
+joins file-tool source `67410254c` and execution source `ada60d4e6` through
+normal merge `caa49db02`. Its only conflict resolution retains both Rust module
+sets. The worktree writer retains the execution lifecycle fences and optional
+dependency-link setting. The production CLI build, package-config lint and
+107-path gates pass. After a stale prerequisite receipt refuses before test
+execution, normal preparation compiles the combined Native binary and libtest
+with Rust 1.90.0, locked, offline, feature-off and one job. The fresh receipt
+admits the focused lifecycle and artifact suites: 65 checks pass in 251.103
+seconds. The fixed module loader preserves the two literal diagnostic imports
+after environment and fence validation. These are component checks; the private
+matched-image consumer, source landing and package qualification remain open.
+The [canonical parent evidence](../../.caws/specs/CAWS-NATIVE-RUNTIME-001.yaml)
 retains failed A2 and unchecked cutover criteria.
 
 The retained ART07 descriptor `ae99243f…adfdb` binds source `289605cc`, CLI
@@ -191,7 +201,27 @@ selected-machine adoption are separate states.
   The three source-only admission checks pass with child-launch APIs forbidden;
   they exclude the other 105 stock-handler cases. The prior pathological run's
   handle is missing and its descendants are unproved. The human reset the
-  resulting session danger latch; no signal retry is authorized or planned.
+  resulting session danger latch; no signal retry is authorized or planned. The
+  genuine same-SID two-target probe in execution fixture
+  `native-agent-workflow-09` changes both `src/label.js` and `protected.txt`.
+  Its preserved raw callback is 1,243 bytes, SHA
+  `52d74d52c0a9a7fd0dd4feaf287ccfbfe8c4fb42b29c30cdfb5fe893f857af9c`;
+  `tool_input.command` contains the source target first and protected target
+  second. Effective hooks select private runtime `523b2306`, which contains
+  neither new file-tool parser nor handler modules. This is not execution of
+  `67410254c`. The retained fixture also has empty `scope.out`: prose naming
+  `protected.txt` does not turn the first progressive scope miss into a hard
+  exclusion. Its A3 remains failed, with original policy, dirty effects and raw
+  evidence preserved. The execution owner creates a distinct same-SID hard
+  exclusion fixture with persisted `scope.out`, and owns one matched private
+  package, registration and consumer qualification from the integrated source.
+  No retry or scope alteration of the failed fixture supplies acceptance. Stock
+  shell participation remains unfinished. A descriptor inherited by the complete
+  compatibility dispatcher reaches unrelated helper processes and cannot attest
+  the selected counter writer. Per-child PostToolUse execution also needs the
+  Codex original-tool/path normalization and durable session envelope prefix
+  before replacing the dispatcher. Counter client/control drafts in agent
+  context are uncompiled data, not an installed implementation.
 - Hook-inspection candidate `d7833c868` lands on `main` through merge
   `4104a1d0c`; component closure is `8e14dd057`. All three inspection criteria
   are recorded through `caws specs evidence` and read back with events
@@ -242,12 +272,18 @@ selected-machine adoption are separate states.
   exact prior CLI's `status` exits zero despite load failures. The follow-up
   requires its supported read-only `doctor --repair-plan --json` report, zero
   error/load-error counts and retained warnings; the corrected driver suite
-  passes 84 checks. A complete private restorer snapshot and actual
-  retained-source fixture are pending. The next consumer step builds the
-  committed recovery CLI into an isolated snapshot, captures its whole physical
-  install prefix, then runs one explicit baseline request with exact retained
-  prior `43f2…`. These unit fixtures run no Native Stop scenario. Native
-  Stop/recovery/rollback acceptance remains unearned.
+  passes 84 checks. Candidate `81508e3be` checks the prior reader before
+  restart; `57d07165d` applies the same oracle after rollback. A complete
+  private restorer snapshot and actual retained-source fixture are pending. The
+  maintained installer refuses probe projects beneath `.caws/worktrees`; the
+  canonical ignored cache location passes CLI scope admission, but the agent
+  Bash guard refuses its materialization as a claimed lane path while the native
+  caller remains canonical. The reviewed human-terminal installer command for
+  `tmp/rust-cutover-recovery/art07/restorer-tool-home-01` is pending; no
+  alternate carrier bypasses that refusal. After its actual receipt exists,
+  capture the whole physical install prefix and run one explicit baseline
+  request with exact retained prior `43f2…`. These unit fixtures run no Native
+  Stop scenario. Native Stop/recovery/rollback acceptance remains unearned.
 - Native signing source supplies all-architectures, strict and the installed
   SDK's `kSecCSNoNetworkAccess` bit 29 to `SecStaticCodeCheckValidity`. Two
   tests observe those outbound flags and preserve refusal errors. The rebuilt
