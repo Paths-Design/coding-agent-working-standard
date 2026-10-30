@@ -1,0 +1,36 @@
+id: CAWS-EXCLUSIVE-CARGO-PROJECT-001
+title: 'Snapshot bounded standalone dependency-free Cargo projects'
+mode: feature
+lifecycle_state: active
+created_at: '2026-10-30T06:06:28.017Z'
+updated_at: '2026-10-30T06:06:28.017Z'
+created_by_session: '01a18a3c-0251-7c73-91a9-8ba658bcf0d9'
+blast_radius:
+  modules:
+    - 'exclusive Cargo project input snapshot'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/execution/cargo-project.ts'
+    - 'packages/caws-cli/tests/execution/cargo-project.test.js'
+  out: []
+invariants:
+  - 'Snapshot admission executes no project code and changes no files; only a closed standalone dependency-free package grammar and stable physical single-link inputs are admitted.'
+acceptance:
+  - id: A1
+    given: 'a minimal standalone package and matching dependency-free lock'
+    when: 'snapshot captures its three inputs twice'
+    then: 'exact package metadata and stable content/configuration identities are returned without side effects'
+  - id: A2
+    given: 'dependency workspace build-script target config path alias hard-link deadline or input-drift counterexamples'
+    when: 'snapshot evaluates them'
+    then: 'unsupported or unstable inputs refuse before Cargo launch'
+observability:
+  - 'Typed refusal distinguishes unsupported inputs from deadline expiry; snapshot emits no project bytes.'
+rollback:
+  - 'Remove the additive Cargo snapshot consumer through a normal governed revert if its launch integration is withdrawn.'
+non_functional: {}
+contracts:
+  - name: 'bounded-cargo-project'
+    type: behavior
