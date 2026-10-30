@@ -1,0 +1,48 @@
+id: CAWS-EXCLUSIVE-OPERATION-CONSUMER-001
+title: 'Bounded exclusive Git and CAWS lifecycle consumer'
+mode: feature
+lifecycle_state: active
+created_at: '2026-10-30T01:58:52.358Z'
+updated_at: '2026-10-30T01:58:52.358Z'
+created_by_session: '01a18a45-661c-7ab2-b0aa-0f8ae3d8dd04'
+blast_radius:
+  modules:
+    - 'exclusive trusted lifecycle consumer'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/execution/lifecycle.ts'
+    - 'packages/caws-cli/src/execution/lifecycle-main.ts'
+    - 'packages/caws-cli/src/execution/writer.ts'
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/store/bridge-store.ts'
+    - 'packages/caws-cli/src/store/lifecycle-lock.ts'
+    - 'packages/caws-cli/tests/execution/lifecycle.test.js'
+  out: []
+invariants:
+  - 'Ordinary USER and npm execution never receive Git or CAWS publication authority; operational consumers borrow only the verified native fence and retain normal hook refusals.'
+acceptance:
+  - id: A1
+    given: 'authenticated native execution and an owned scope'
+    when: 'bounded stage and path-scoped commit run'
+    then: 'only literal admitted paths commit and unrelated staged content survives'
+  - id: A2
+    given: 'owned live lane and verified borrowed fence'
+    when: 'merge without close then explicit bridge and close run'
+    then: 'existing governance checks and partial-publication outcomes remain observable without relocking or implicit event authority'
+  - id: A3
+    given: 'unsupported hooks/configuration or replaced fence owner/ref'
+    when: 'an operational mutation is requested'
+    then: 'refuse before unauthorized effects and never bypass hooks'
+observability:
+  - 'Closed operation result identifies settlement and inspection-required publication failures.'
+rollback:
+  - 'Revert owned source commits through normal governed Git workflow; inspect partial Git and CAWS publication before retry.'
+non_functional:
+  security:
+    - 'Only authenticated direct native-parent consumers may borrow execution fences; no arbitrary CLI or Git command dispatch.'
+contracts:
+  - name: 'exclusive-lifecycle'
+    type: behavior
