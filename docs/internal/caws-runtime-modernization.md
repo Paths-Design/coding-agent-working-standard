@@ -154,11 +154,20 @@ selected-machine adoption are separate states.
   callback execution. The pre-repair deterministic two-isolate scope-strike
   check fails: both callers warn and publish count one, rather than one warning,
   one denial and count two. The Native transaction core and client integration
-  are applied. A test-only Rust subprocess bridge preserves the real count-two
-  oracle without adding a public counter command. Actual `npm run test:prepare`
-  succeeds with Node 22 and pinned Rust 1.90, feature-off locked/offline jobs
-  one, in a physical lane-local target. The owned target symlink was removed;
-  the canonical shared target remains intact. The compiler-reported artifact and
+  are committed as `935703bd3`, with direct package-config lint coverage. Root
+  pre-commit's ignored TypeScript warnings are not lint evidence. Review
+  identifies a physical-path gap: the typed scope check admits final and
+  ancestor dangling symlinks. Two negative controls reproduce it; the repair
+  refuses existing unresolved entries while preserving a resolvable in-scope
+  symlink. The corrected two-worker file-tool/client run passes all 152 checks.
+  Actual host symlink behavior remains unobserved. Focused Native review finds
+  no additional concrete defect in original identity, one-shot transaction,
+  publication retention or bounded cleanup; joined Native IPC is unqualified. A
+  test-only Rust subprocess bridge preserves the real count-two oracle without
+  adding a public counter command. Actual `npm run test:prepare` succeeds with
+  Node 22 and pinned Rust 1.90, feature-off locked/offline jobs one, in a
+  physical lane-local target. The owned target symlink was removed; the
+  canonical shared target remains intact. The compiler-reported artifact and
   source/toolchain receipt feed a two-worker Jest run without a manual override:
   all 149 file-tool and client checks pass. The prepared feature-off artifact
   also passes the 16 core parent tests. Forty-eight preparation/receipt/CI
@@ -226,9 +235,18 @@ selected-machine adoption are separate states.
   before using the helper; bootstrap `408c…` is distinct from restored prior
   `43f2…`. The 113-member retained source remains untouched. The four-path
   restore change is applied in the recovery lane; its source helper compiles and
-  17 real private installer transaction controls pass. Driver identity-loader
-  checks, a complete private restorer snapshot and the actual retained-source
-  fixture are pending. These unit fixtures run no Native Stop scenario. Native
+  17 real private installer transaction controls pass. Restore/loader support is
+  committed as `0821501f5`; the complete adapter suite passes 72 checks and the
+  driver suite passes 76 after an earlier per-file refusal is accepted by the
+  tree-drift oracle with phase/no-output assertions. Review establishes that the
+  exact prior CLI's `status` exits zero despite load failures. The follow-up
+  requires its supported read-only `doctor --repair-plan --json` report, zero
+  error/load-error counts and retained warnings; the corrected driver suite
+  passes 84 checks. A complete private restorer snapshot and actual
+  retained-source fixture are pending. The next consumer step builds the
+  committed recovery CLI into an isolated snapshot, captures its whole physical
+  install prefix, then runs one explicit baseline request with exact retained
+  prior `43f2…`. These unit fixtures run no Native Stop scenario. Native
   Stop/recovery/rollback acceptance remains unearned.
 - Native signing source supplies all-architectures, strict and the installed
   SDK's `kSecCSNoNetworkAccess` bit 29 to `SecStaticCodeCheckValidity`. Two

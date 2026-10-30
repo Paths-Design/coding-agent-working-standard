@@ -89,6 +89,9 @@ function physicalEntry(spelling: string): string {
     return fs.realpathSync.native(spelling);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    // A dangling symlink is an existing entry, not an absent creation target.
+    // Refuse it (including ancestors) instead of checking the link spelling.
+    if (present(spelling)) throw new Error('Existing file-tool path cannot be resolved physically');
     const parent = dirname(spelling);
     if (parent === spelling) throw error;
     return join(physicalEntry(parent), basename(spelling));

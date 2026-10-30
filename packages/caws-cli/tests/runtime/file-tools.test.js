@@ -937,6 +937,39 @@ describe('complete stock file-tool prewrite handlers', () => {
     });
     expect(count()).toBe(0);
   });
+  test.each(['final', 'ancestor'])(
+    'scope refuses an unresolved existing symlink at the %s target component without a strike',
+    async (position) => {
+      const link = path.join(lane, 'src/allowed/dangling');
+      const outside = path.join(root, 'outside-not-created');
+      fs.mkdirSync(path.dirname(link), { recursive: true });
+      fs.symlinkSync(outside, link);
+      const target = position === 'final' ? link : path.join(link, 'child.js');
+      payload('Write', { file_path: target, content: 'never applied' });
+      const result = await execute('scope-guard.sh');
+      expect(result.exitCode).toBe(2);
+      expect(decoded(result).reason).toContain('authority unavailable');
+      expect(count()).toBe(0);
+      expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+      expect(fs.readlinkSync(link)).toBe(outside);
+      expect(fs.existsSync(outside)).toBe(false);
+    }
+  );
+  test('scope admits an existing symlink whose resolved target is in scope', async () => {
+    const target = path.join(lane, 'src/allowed/existing.js');
+    const link = path.join(lane, 'src/allowed/alias.js');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, 'original');
+    fs.symlinkSync(target, link);
+    payload('Write', { file_path: link, content: 'never applied' });
+    const result = await execute('scope-guard.sh');
+    expect({ exitCode: result.exitCode, stdout: Buffer.from(result.stdout).toString() }).toEqual({
+      exitCode: 0,
+      stdout: '',
+    });
+    expect(count()).toBe(0);
+    expect(fs.readFileSync(target, 'utf8')).toBe('original');
+  });
   test('one complete multi-target mutation records only one warning then Codex deny then hard block', async () => {
     patch('src/outside/a', 'src/outside/b');
     const first = await execute('scope-guard.sh');
