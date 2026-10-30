@@ -423,9 +423,15 @@ fn lower_npm(
         ("HOME", text(&launch.invocation_root)?),
         ("LC_ALL", "C".into()),
         ("NPM_CONFIG_CACHE", text(&launch.cache_root)?),
-        ("NPM_CONFIG_GLOBALCONFIG", "/dev/null".into()),
+        (
+            "NPM_CONFIG_GLOBALCONFIG",
+            text(&launch.invocation_root.join("npm-global.npmrc"))?,
+        ),
         ("NPM_CONFIG_SCRIPT_SHELL", "/bin/sh".into()),
-        ("NPM_CONFIG_USERCONFIG", "/dev/null".into()),
+        (
+            "NPM_CONFIG_USERCONFIG",
+            text(&launch.invocation_root.join("npm-user.npmrc"))?,
+        ),
         ("PATH", path.into()),
         ("TMPDIR", text(&launch.tmp_root)?),
     ] {

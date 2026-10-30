@@ -243,6 +243,15 @@ impl PrivateLaunch {
     }
 
     pub fn verify_empty(&self) -> io::Result<()> {
+        // npm rejects one config path reused as both user and global config.
+        // Distinct, absent paths in the producer-owned invocation directory
+        // disable both sources without importing ambient configuration.
+        for name in ["npm-user.npmrc", "npm-global.npmrc"] {
+            match fs::symlink_metadata(self.invocation_root.join(name)) {
+                Err(error) if error.kind() == io::ErrorKind::NotFound => (),
+                _ => return Err(denied()),
+            }
+        }
         for (path, handle) in [
             &self.invocation_root,
             &self.output_root,
@@ -375,6 +384,24 @@ mod tests {
         assert!(launch.bind_execution(&execution, &deadline).is_err());
         execution.argv.push("substitution".into());
         assert!(launch.verify_execution(&execution, &deadline).is_err());
+    }
+
+    #[test]
+    fn invocation_npm_configs_must_remain_absent_including_dangling_links() {
+        let f = Fixture::new();
+        let launch =
+            PrivateLaunch::create(&f.scratch(), &f.project(), "s", "t", "c", "{}").unwrap();
+        launch.verify_empty().unwrap();
+        for name in ["npm-user.npmrc", "npm-global.npmrc"] {
+            let path = launch.invocation_root.join(name);
+            fs::write(&path, b"registry=https://untrusted.invalid/\n").unwrap();
+            assert!(launch.verify_empty().is_err());
+            fs::remove_file(&path).unwrap();
+            std::os::unix::fs::symlink(launch.invocation_root.join("missing"), &path).unwrap();
+            assert!(launch.verify_empty().is_err());
+            fs::remove_file(&path).unwrap();
+            launch.verify_empty().unwrap();
+        }
     }
 
     #[test]

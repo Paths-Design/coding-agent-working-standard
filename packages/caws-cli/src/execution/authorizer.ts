@@ -418,9 +418,9 @@ function inspectNpmTest(record: PreparedExecutionV1, authority: ExecutionAuthori
     ['HOME', ceiling.invocationRoot],
     ['LC_ALL', 'C'],
     ['NPM_CONFIG_CACHE', ceiling.cacheRoot],
-    ['NPM_CONFIG_GLOBALCONFIG', '/dev/null'],
+    ['NPM_CONFIG_GLOBALCONFIG', join(ceiling.invocationRoot, 'npm-global.npmrc')],
     ['NPM_CONFIG_SCRIPT_SHELL', '/bin/sh'],
-    ['NPM_CONFIG_USERCONFIG', '/dev/null'],
+    ['NPM_CONFIG_USERCONFIG', join(ceiling.invocationRoot, 'npm-user.npmrc')],
     ['PATH', safePath],
     ['TMPDIR', ceiling.tmpRoot],
   ]);
@@ -430,6 +430,15 @@ function inspectNpmTest(record: PreparedExecutionV1, authority: ExecutionAuthori
     [...expected].some(([name, value]) => actual.get(name) !== value)
   )
     refuse('unsupported_profile');
+  for (const name of ['npm-user.npmrc', 'npm-global.npmrc']) {
+    try {
+      fs.lstatSync(join(ceiling.invocationRoot, name));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw error;
+    }
+    refuse('unsupported_profile');
+  }
   const observed = snapshotNpmProject(
     record.execution.cwd,
     safePath,

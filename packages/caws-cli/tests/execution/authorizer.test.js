@@ -107,9 +107,9 @@ function npmRecord(f) {
     ['HOME', invocation],
     ['LC_ALL', 'C'],
     ['NPM_CONFIG_CACHE', path.join(invocation, 'cache')],
-    ['NPM_CONFIG_GLOBALCONFIG', '/dev/null'],
+    ['NPM_CONFIG_GLOBALCONFIG', path.join(invocation, 'npm-global.npmrc')],
     ['NPM_CONFIG_SCRIPT_SHELL', '/bin/sh'],
-    ['NPM_CONFIG_USERCONFIG', '/dev/null'],
+    ['NPM_CONFIG_USERCONFIG', path.join(invocation, 'npm-user.npmrc')],
     ['PATH', safePath],
     ['TMPDIR', path.join(invocation, 'tmp')],
   ].map(([name, value]) => ({ name, value }));
@@ -352,6 +352,87 @@ describe('bounded npm test profile observation', () => {
     expect(result.reasonCodes).toEqual([]);
     expect(fs.readdirSync(record.sandbox.writeCeiling.outputRoot)).toEqual([]);
   });
+
+  test('refuses duplicate config paths and newly populated private npm config sources', () => {
+    const f = authorityFixture();
+    const record = npmRecord(f);
+    for (const key of ['NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG']) {
+      const binding = record.execution.environment.find((entry) => entry.name === key);
+      const expected = binding.value;
+      binding.value = '/dev/null';
+      expect(evaluatePreparedExecution(record, request(record)).reasonCodes).toEqual([
+        'unsupported_profile',
+      ]);
+      binding.value = expected;
+      fs.writeFileSync(expected, 'registry=https://untrusted.invalid/\n');
+      expect(evaluatePreparedExecution(record, request(record)).reasonCodes).toEqual([
+        'unsupported_profile',
+      ]);
+      fs.unlinkSync(expected);
+      fs.symlinkSync(path.join(f.root, 'missing-config'), expected);
+      expect(evaluatePreparedExecution(record, request(record)).reasonCodes).toEqual([
+        'unsupported_profile',
+      ]);
+      fs.unlinkSync(expected);
+    }
+    expect(evaluatePreparedExecution(record, request(record)).decision).toBe('allow');
+  });
+
+  (process.env.CAWS_NPM_RUNTIME_ENTRY ? test : test.skip)(
+    'runs pinned npm with distinct absent config sources and the private cache overriding project config',
+    () => {
+      const f = authorityFixture();
+      const record = npmRecord(f);
+      const entry = fs.realpathSync.native(process.env.CAWS_NPM_RUNTIME_ENTRY);
+      record.profile.npm.runtime.entry = image(entry);
+      record.profile.npm.runtime.root = path.dirname(path.dirname(entry));
+      record.execution.argv[1] = entry;
+      fs.mkdirSync(path.join(f.lane, 'tests'));
+      fs.writeFileSync(
+        path.join(f.lane, 'tests', 'run.js'),
+        'console.log("CACHE_PROBE=" + JSON.stringify({cache:process.env.npm_config_cache || process.env.NPM_CONFIG_CACHE,cwd:process.cwd()}));\n'
+      );
+      const foreignCache = path.join(f.root, 'foreign-cache');
+      fs.writeFileSync(
+        path.join(f.lane, '.npmrc'),
+        `cache=${foreignCache}\naudit=false\nfund=false\nupdate-notifier=false\n`
+      );
+      const safePath = record.execution.environment.find((entry) => entry.name === 'PATH').value;
+      record.profile.npm.project = snapshotNpmProject(
+        f.lane,
+        safePath,
+        record.limits.preparationDeadlineUnixMs
+      );
+      expect(evaluatePreparedExecution(record, request(record)).decision).toBe('allow');
+      const result = require('node:child_process').spawnSync(
+        record.execution.executable.path,
+        record.execution.argv.slice(1),
+        {
+          cwd: f.lane,
+          env: Object.fromEntries(
+            record.execution.environment.map(({ name, value }) => [name, value])
+          ),
+          encoding: 'utf8',
+          timeout: 30000,
+        }
+      );
+      expect({ status: result.status, stderr: result.stderr, error: result.error }).toEqual({
+        status: 0,
+        stderr: '',
+        error: undefined,
+      });
+      const marker = result.stdout.split('\n').find((line) => line.startsWith('CACHE_PROBE='));
+      expect(JSON.parse(marker.slice('CACHE_PROBE='.length))).toEqual({
+        cache: record.sandbox.writeCeiling.cacheRoot,
+        cwd: f.lane,
+      });
+      expect(fs.existsSync(foreignCache)).toBe(false);
+      for (const name of ['npm-user.npmrc', 'npm-global.npmrc'])
+        expect(fs.existsSync(path.join(record.sandbox.writeCeiling.invocationRoot, name))).toBe(
+          false
+        );
+    }
+  );
 
   test('rejects script replacement, lifecycle hooks, project config and PATH shadowing', () => {
     const f = authorityFixture();
