@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, relative } from 'node:path';
+import { createRequire } from 'node:module';
 import { TextDecoder } from 'node:util';
 import { evaluatePath, parseAndValidateSpec, type EventBody } from '../kernel';
 import { parseJsonSource } from '../runtime/json-custody';
@@ -19,6 +20,9 @@ import {
 } from './authority';
 import { verifyInheritedFence } from './fence';
 import type { FenceObservation } from './prepared';
+
+// Keep fixed command loading after original environment and fence validation.
+const loadFixedApplication = createRequire(__filename);
 
 export type ExecutionLifecycleArguments =
   | { readonly operation: 'doctor' }
@@ -967,14 +971,16 @@ export function runExecutionLifecycleConsumer(argv: readonly string[]): Executio
       // Fixed application APIs; no injected report, base override, runner or
       // process environment rewrite. Native installed the homes before import.
       if (args.operation === 'doctor') {
-        const { runDoctorCommand } =
-          require('../shell/commands/doctor') as typeof import('../shell/commands/doctor');
+        const { runDoctorCommand } = loadFixedApplication(
+          '../shell/commands/doctor'
+        ) as typeof import('../shell/commands/doctor');
         exitCode = runDoctorCommand({ cwd: authority.pin, out, err });
         requireValue([0, 1, 2].includes(exitCode));
         validate();
       } else {
-        const { runGatesRunCommand } =
-          require('../shell/commands/gates') as typeof import('../shell/commands/gates');
+        const { runGatesRunCommand } = loadFixedApplication(
+          '../shell/commands/gates'
+        ) as typeof import('../shell/commands/gates');
         exitCode = runGatesRunCommand(
           { specId: authority.specId },
           {
