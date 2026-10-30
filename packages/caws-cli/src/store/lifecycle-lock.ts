@@ -26,6 +26,8 @@ import { err, ok, type Result } from '../kernel';
 
 import { sleepSyncMs, storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
+import { verifyInheritedFence } from '../execution/fence';
+import type { FenceObservation } from '../execution/prepared';
 
 const LOCK_FILE_NAME = 'state.lock';
 const LOCK_MAX_ATTEMPTS = 3;
@@ -221,4 +223,47 @@ export function withLifecycleLock<T>(
   } finally {
     releaseLifecycleLock(acquired.value);
   }
+}
+
+/** Private direct-native-child capability. It is neither a reentrant lock nor
+ * permission to release the parent's lock. Only explicit lifecycle consumers
+ * thread this capability through their composed store calls. */
+export interface BorrowedExecutionLifecycleFence {
+  readonly cawsDir: string;
+  readonly fence: FenceObservation;
+}
+const borrowedExecutionFences = new WeakSet<BorrowedExecutionLifecycleFence>();
+
+export function borrowExecutionLifecycleFence(
+  cawsDir: string,
+  fence: FenceObservation
+): BorrowedExecutionLifecycleFence {
+  if (!verifyInheritedFence(cawsDir, fence)) throw new Error('Execution fence unavailable');
+  const capability = Object.freeze({ cawsDir, fence: Object.freeze({ ...fence }) });
+  borrowedExecutionFences.add(capability);
+  return capability;
+}
+
+export function withLifecycleMutationFence<T>(
+  cawsDir: string,
+  body: () => Result<T>,
+  borrowed?: BorrowedExecutionLifecycleFence
+): Result<T> {
+  if (borrowed === undefined) return withLifecycleLock(cawsDir, body);
+  if (!verifyBorrowedExecutionLifecycleFence(cawsDir, borrowed))
+    return err(
+      storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, 'Execution fence unavailable.')
+    );
+  return body();
+}
+
+export function verifyBorrowedExecutionLifecycleFence(
+  cawsDir: string,
+  borrowed: BorrowedExecutionLifecycleFence
+): boolean {
+  return (
+    borrowedExecutionFences.has(borrowed) &&
+    borrowed.cawsDir === cawsDir &&
+    verifyInheritedFence(cawsDir, borrowed.fence)
+  );
 }

@@ -16,6 +16,7 @@ import {
   type ExecutionAuthority,
 } from './authority';
 import { verifyInheritedFence } from './fence';
+import { parseExecutionLifecycleArguments, readExecutionLifecycleAuthority } from './lifecycle';
 import type {
   AuthorizerReply,
   AuthorizerRequest,
@@ -186,6 +187,82 @@ function evidenceLiteral(word: Word): string {
 export interface EvidenceExecutionPlan {
   readonly kind: 'caws-evidence-v1';
   readonly argv: readonly string[];
+}
+
+export interface LifecycleExecutionPlan {
+  readonly kind: 'caws-lifecycle-v1';
+  readonly argv: readonly string[];
+}
+
+/** Recognize only the pinned direct consumer's literal typed protocol. This
+ * runs before ordinary authority: canonical merge and explicit post-merge
+ * bridge acquisition deliberately do not have an ordinary USER binding. */
+export async function discoverLifecycleExecution(
+  record: PreparedExecutionV1
+): Promise<LifecycleExecutionPlan | null> {
+  const { parse } = await loadParser();
+  const script = parse(record.profile.source);
+  if (script.errors?.length || script.shebang || script.commands.length !== 1) return null;
+  const statement = script.commands[0]!;
+  const command = statement.command;
+  if (
+    statement.background ||
+    command.type !== 'Command' ||
+    !command.name ||
+    command.prefix.length ||
+    command.redirects.length ||
+    command.args.some((arg) => arg.type !== 'Word')
+  )
+    return null;
+  let argv: string[];
+  try {
+    argv = ([command.name, ...command.args] as readonly Word[]).map(evidenceLiteral);
+  } catch {
+    return null;
+  }
+  if (argv[1] !== join(__dirname, 'lifecycle-main.js')) return null;
+  if (argv[0] !== fs.realpathSync.native(process.execPath)) refuse('unsupported_profile');
+  parseExecutionLifecycleArguments(argv.slice(2));
+  const environment = new Map(record.execution.environment.map(({ name, value }) => [name, value]));
+  const expected = new Map([
+    ['CAWS_EXECUTION_PROJECT', record.projectRoot],
+    ['CAWS_EXECUTION_CALLER', record.association.callerAnchor],
+    ['CAWS_EXECUTION_SESSION', record.association.sessionId],
+    ['CAWS_EXECUTION_THREAD', record.association.threadId],
+    ['CAWS_EXECUTION_CALL', record.association.callId],
+    ['LC_ALL', 'C'],
+  ]);
+  if (
+    environment.size !== expected.size + 1 ||
+    !environment.has('PATH') ||
+    [...expected].some(([name, value]) => environment.get(name) !== value)
+  )
+    refuse('unsupported_profile');
+  if (record.profile.kind === 'caws-lifecycle-v1' && environment.get('PATH') !== '/usr/bin:/bin')
+    refuse('unsupported_profile');
+  executionProfileBindings(record);
+  if (record.execution.stdinBase64 !== '') refuse('unsupported_profile');
+  return { kind: 'caws-lifecycle-v1', argv };
+}
+
+function inspectLifecycleImages(record: PreparedExecutionV1, plan: LifecycleExecutionPlan): void {
+  if (
+    plan.argv.length !== record.execution.argv.length ||
+    plan.argv.some((arg, index) => arg !== record.execution.argv[index]) ||
+    record.execution.executable.path !== plan.argv[0]
+  )
+    refuse('unsupported_profile');
+  const expected = [plan.argv[0]!, plan.argv[1]!, '/usr/bin/git'];
+  if (record.profile.utilities.length !== expected.length || !protectedSystemImage('/usr/bin/git'))
+    refuse('unsupported_profile');
+  const seen = new Set<string>();
+  for (const path of expected) {
+    const image = record.profile.utilities.find((candidate) => candidate.path === path);
+    if (!image || seen.has(path)) refuse('unsupported_profile');
+    seen.add(path);
+    verifyImage(image);
+  }
+  verifyImage(record.execution.executable);
 }
 
 /** Recognize one literal trusted consumer call without executing shell expansion.
@@ -757,6 +834,27 @@ export async function evaluatePreparedExecution(
       (!request.fence || !verifyInheritedFence(`${record.projectRoot}/.caws`, request.fence))
     )
       refuse('fence_unverified');
+    if (record.profile.kind === 'caws-lifecycle-v1') {
+      const plan = await discoverLifecycleExecution(record);
+      if (!plan) refuse('unsupported_profile');
+      const args = parseExecutionLifecycleArguments(plan.argv.slice(2));
+      const authority = readExecutionLifecycleAuthority(record, args);
+      if (
+        request.phase === 'final_validate' &&
+        request.expectedAuthorityRevision !== authority.revision
+      )
+        refuse('authority_changed');
+      inspectLifecycleImages(record, plan);
+      if (readExecutionLifecycleAuthority(record, args).revision !== authority.revision)
+        refuse('authority_changed');
+      if (Date.now() >= record.limits.preparationDeadlineUnixMs) refuse('deadline_expired');
+      if (
+        request.phase === 'final_validate' &&
+        (!request.fence || !verifyInheritedFence(authority.cawsDir, request.fence))
+      )
+        refuse('fence_unverified');
+      return { ...base, decision: 'allow', authorityRevision: authority.revision, reasonCodes: [] };
+    }
     const authority = readExecutionAuthority(record);
     if (
       request.phase === 'final_validate' &&

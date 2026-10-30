@@ -14,7 +14,13 @@ afterAll(() =>
 );
 // Native ESM import is unavailable in Jest's VM. Exercise the actual private
 // child entry with inert framed source, including the active mutant explicitly.
-function evaluatePreparedExecution(record, envelope, fenceFd) {
+function evaluatePreparedExecution(
+  record,
+  envelope,
+  fenceFd,
+  timeout = 5000,
+  entry = 'authorizer-main.js'
+) {
   const body = Buffer.from(JSON.stringify(envelope));
   const header = Buffer.alloc(4);
   header.writeUInt32BE(body.length);
@@ -23,11 +29,11 @@ function evaluatePreparedExecution(record, envelope, fenceFd) {
   );
   const child = spawnCoveredSync(
     process.execPath,
-    [path.resolve(__dirname, '../../dist/execution/authorizer-main.js')],
+    [path.resolve(__dirname, '../../dist/execution', entry)],
     {
       input: Buffer.concat([header, body]),
       env: { PATH: '/usr/bin:/bin', LC_ALL: 'C', __STRYKER_ACTIVE_MUTANT__: active },
-      timeout: 5000,
+      timeout,
       maxBuffer: 1048576,
       ...(fenceFd === undefined ? {} : { stdio: ['pipe', 'pipe', 'pipe', fenceFd] }),
     }
@@ -233,6 +239,217 @@ describe('bounded npm test profile observation', () => {
 });
 
 const quoteWriterArg = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
+function lifecycleFixture(landed = false) {
+  const f = authorityFixture();
+  const { git } = require('../helpers/git-repo-factory');
+  f.record.limits.preparationDeadlineUnixMs = Date.now() + 120000;
+  f.registry.owned.branch = 'owned';
+  f.registry.owned.baseBranch = git(f.root, ['branch', '--show-current']);
+  f.registry.owned.baseSha = git(f.root, ['rev-parse', 'HEAD']);
+  fs.writeFileSync(f.registryPath, JSON.stringify(f.registry));
+  if (landed) {
+    fs.writeFileSync(f.specPath, require('js-yaml').dump(f.spec));
+    fs.writeFileSync(
+      path.join(f.root, '.gitignore'),
+      '/owned*/\n.caws/claims/\n.caws/state.lock\n.caws/events.jsonl.lock\n'
+    );
+    git(f.root, ['add', '--', '.caws', '.gitignore']);
+    git(f.root, ['commit', '-m', 'fixture governance']);
+    fs.writeFileSync(path.join(f.lane, 'src/proof.txt'), 'landed source\n');
+    git(f.lane, ['add', '--', 'src/proof.txt']);
+    git(f.lane, ['commit', '-m', 'fixture source']);
+    const session = { session_id: f.record.association.threadId, platform: 'codex' };
+    const result = require('../../dist/store/worktrees-writer').mergeWorktree(f.caws, {
+      name: 'owned',
+      session,
+      sessionCandidates: {
+        candidates: [{ identity: session, source: 'codex_thread_env' }],
+        trace: [],
+      },
+      actor: {
+        kind: 'agent',
+        id: session.session_id,
+        session_id: session.session_id,
+        platform: 'codex',
+      },
+      callerCwd: f.root,
+      noClose: true,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('success');
+    f.mergeCommit = result.value.data.merge_commit;
+  }
+  return f;
+}
+function lifecycleRecord(f, args = ['git-head'], canonical = false) {
+  if (canonical) {
+    f.record.association.callerAnchor = f.root;
+    f.record.execution.cwd = f.root;
+  }
+  const argv = [
+    fs.realpathSync.native(process.execPath),
+    path.resolve(__dirname, '../../dist/execution/lifecycle-main.js'),
+    ...args,
+  ];
+  const record = source(f, argv.map(quoteWriterArg).join(' '), [argv[0], argv[1], '/usr/bin/git']);
+  record.profile.kind = 'caws-lifecycle-v1';
+  record.execution.executable = image(argv[0]);
+  record.execution.argv = argv;
+  record.execution.environment = Object.entries({
+    CAWS_EXECUTION_PROJECT: record.projectRoot,
+    CAWS_EXECUTION_CALLER: record.association.callerAnchor,
+    CAWS_EXECUTION_SESSION: record.association.sessionId,
+    CAWS_EXECUTION_THREAD: record.association.threadId,
+    CAWS_EXECUTION_CALL: record.association.callId,
+    LC_ALL: 'C',
+    PATH: '/usr/bin:/bin',
+  })
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => Buffer.compare(Buffer.from(a.name), Buffer.from(b.name)));
+  return record;
+}
+
+describe('dedicated lifecycle consumer Source admission', () => {
+  test.each(['worktree-merge', 'bridge-claim'])(
+    'lifecycle %s uses operation authority in analyze and final validation without inventing an edit binding',
+    (operation) => {
+      const f = lifecycleFixture(operation === 'bridge-claim');
+      const args =
+        operation === 'worktree-merge'
+          ? ['worktree-merge', '--worktree', 'owned', '--spec', 'EXEC-001']
+          : ['bridge-claim', '--spec', 'EXEC-001', '--merge-commit', f.mergeCommit];
+      const record = lifecycleRecord(f, args, true);
+      let ordinaryRefusal;
+      try {
+        require('../../dist/execution/authority').readExecutionAuthority(record);
+      } catch (error) {
+        ordinaryRefusal = error.reason;
+      }
+      expect(ordinaryRefusal).toBe('binding_unavailable');
+      if (operation === 'bridge-claim') {
+        const draft = JSON.parse(JSON.stringify(record));
+        draft.profile.kind = 'bash-clean-v1';
+        draft.profile.utilities = [];
+        draft.execution.executable = image('/bin/bash');
+        draft.execution.argv = [
+          draft.execution.executable.path,
+          '--noprofile',
+          '--norc',
+          '-c',
+          draft.profile.source,
+        ];
+        const discovery = evaluatePreparedExecution(
+          draft,
+          request(draft),
+          undefined,
+          30000,
+          'program-discovery-main.js'
+        );
+        expect(discovery.status).toBe('observed');
+        expect(discovery.execution).toEqual({
+          kind: 'caws-lifecycle-v1',
+          argv: record.execution.argv,
+        });
+        expect(fs.existsSync(path.join(f.caws, 'claims/bridge.json'))).toBe(false);
+      }
+      const before = fs.readFileSync(f.specPath);
+      const analyzed = evaluatePreparedExecution(record, request(record), undefined, 30000);
+      expect(analyzed.decision).toBe('allow');
+      expect(analyzed.reasonCodes).toEqual([]);
+      expect(analyzed.authorityRevision).toMatch(/^[0-9a-f]{64}$/);
+      const lock = path.join(f.caws, 'state.lock');
+      const fd = fs.openSync(lock, 'wx+', 0o600);
+      const nonce = 'lifecycle-source-final';
+      fs.writeFileSync(
+        fd,
+        JSON.stringify({
+          pid: process.pid,
+          at: new Date().toISOString(),
+          purpose: 'execution-launch',
+          nonce,
+          protocol: 'caws.execution.fence.v1',
+        })
+      );
+      const stat = fs.fstatSync(fd, { bigint: true });
+      const fence = { dev: stat.dev.toString(), ino: stat.ino.toString(), nonce };
+      try {
+        const final = request(record, analyzed.authorityRevision, fence);
+        expect(evaluatePreparedExecution(record, final, fd, 30000).decision).toBe('allow');
+        expect(
+          evaluatePreparedExecution(
+            record,
+            { ...final, fence: { ...fence, nonce: 'wrong' } },
+            fd,
+            30000
+          ).reasonCodes
+        ).toEqual(['fence_unverified']);
+        fs.appendFileSync(
+          path.join(f.caws, 'policy.yaml'),
+          '\n# authority changed after analysis\n'
+        );
+        expect(evaluatePreparedExecution(record, final, fd, 30000).reasonCodes).toEqual([
+          'authority_changed',
+        ]);
+        expect(fs.fstatSync(fd, { bigint: true }).ino).toBe(stat.ino);
+        expect(fs.existsSync(lock)).toBe(true);
+      } finally {
+        fs.closeSync(fd);
+        fs.unlinkSync(lock);
+      }
+      expect(fs.readFileSync(f.specPath)).toEqual(before);
+      expect(fs.existsSync(path.join(f.caws, 'claims/bridge.json'))).toBe(false);
+    }
+  );
+
+  test('lifecycle Git stage observation never stages or launches its typed operation', () => {
+    const f = lifecycleFixture();
+    fs.writeFileSync(path.join(f.lane, 'src/proof.txt'), 'must remain untracked\n');
+    const { git } = require('../helpers/git-repo-factory');
+    const index = git(f.lane, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
+    const before = fs.readFileSync(index);
+    const record = lifecycleRecord(f, ['git-stage', '--', 'src/proof.txt']);
+    expect(evaluatePreparedExecution(record, request(record), undefined, 30000).decision).toBe(
+      'allow'
+    );
+    expect(fs.readFileSync(index)).toEqual(before);
+    expect(git(f.lane, ['diff', '--cached', '--name-only'])).toBe('');
+  });
+
+  test.each([
+    'source',
+    'argv',
+    'stdin',
+    'environment',
+    'path',
+    'image',
+    'missing-image',
+    'generic-git',
+    'generic-node',
+  ])('lifecycle refuses %s substitution before its operation can run', (target) => {
+    const f = lifecycleFixture();
+    const record = lifecycleRecord(f);
+    if (target === 'source') record.profile.source += '; true';
+    if (target === 'argv') record.execution.argv.push('--unknown');
+    if (target === 'stdin') record.execution.stdinBase64 = Buffer.from('input').toString('base64');
+    if (target === 'environment')
+      record.execution.environment.find((entry) => entry.name === 'CAWS_EXECUTION_THREAD').value =
+        'spoofed';
+    if (target === 'path')
+      record.execution.environment.find((entry) => entry.name === 'PATH').value =
+        '/usr/bin:/bin:/usr/sbin';
+    if (target === 'image') record.profile.utilities[1].sha256 = 'f'.repeat(64);
+    if (target === 'missing-image') record.profile.utilities.pop();
+    if (target === 'generic-git') record.profile.source = 'git status --short';
+    if (target === 'generic-node')
+      record.profile.source = `${quoteWriterArg(record.execution.argv[0])} /tmp/user.js git-head`;
+    const result = evaluatePreparedExecution(record, request(record), undefined, 30000);
+    expect(result.decision).toBe('unresolved');
+    expect(result.reasonCodes).toEqual(['unsupported_profile']);
+    expect(fs.existsSync(f.lane)).toBe(true);
+    expect(fs.existsSync(path.join(f.caws, 'claims/bridge.json'))).toBe(false);
+  });
+});
+
 function evidenceRecord(f, extra = []) {
   const argv = [
     fs.realpathSync.native(process.execPath),

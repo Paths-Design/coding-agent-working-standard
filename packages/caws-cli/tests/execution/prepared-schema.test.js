@@ -105,6 +105,33 @@ function reject(value) {
 }
 
 describe('private prepared execution record', () => {
+  test('retains a lifecycle consumer full argv without inventing npm or ordinary shell metadata', () => {
+    const input = fixture();
+    input.profile = {
+      kind: 'caws-lifecycle-v1',
+      source: "'/trusted/node' '/trusted/lifecycle-main.js' 'git-head'",
+      utilities: [],
+    };
+    input.execution.executable = image('/trusted/node');
+    input.execution.argv = ['/trusted/node', '/trusted/lifecycle-main.js', 'git-head'];
+    input.execution.stdinBase64 = '';
+    expect(decode(input)).toEqual(input);
+    for (const mutate of [
+      (record) => {
+        record.execution.argv.pop();
+      },
+      (record) => {
+        record.execution.argv[0] = '/foreign/node';
+      },
+      (record) => {
+        record.profile.npm = {};
+      },
+    ]) {
+      const changed = JSON.parse(JSON.stringify(input));
+      mutate(changed);
+      reject(changed);
+    }
+  });
   test('retains one exact npm test route with pinned runtime, project and host ceiling', () => {
     const input = npmFixture();
     const result = decode(input);

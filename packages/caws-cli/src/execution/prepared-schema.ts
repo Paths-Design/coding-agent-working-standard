@@ -156,6 +156,7 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
     insist(
       profile.kind === 'bash-clean-v1' ||
         profile.kind === 'caws-evidence-v1' ||
+        profile.kind === 'caws-lifecycle-v1' ||
         profile.kind === 'npm-test-v1'
     );
     nativeText(profile.source, 65536, true);
@@ -170,6 +171,8 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
       );
     else if (profile.kind === 'caws-evidence-v1')
       insist(execution.argv.length >= 5 && execution.argv[0] === executable.path);
+    else if (profile.kind === 'caws-lifecycle-v1')
+      insist(execution.argv.length >= 3 && execution.argv[0] === executable.path);
     else {
       insist(profile.source === 'npm test' && execution.stdinBase64 === '');
       const npm = object(profile.npm, ['runtime', 'project']);

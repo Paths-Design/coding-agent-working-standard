@@ -19,7 +19,12 @@ function request(record) {
 }
 function run(
   record,
-  { entry = 'program-discovery-main.js', envelope = request(record), suffix = Buffer.alloc(0) } = {}
+  {
+    entry = 'program-discovery-main.js',
+    envelope = request(record),
+    suffix = Buffer.alloc(0),
+    timeout = 5000,
+  } = {}
 ) {
   const body = Buffer.from(JSON.stringify(envelope));
   const header = Buffer.alloc(4);
@@ -30,7 +35,7 @@ function run(
     {
       input: Buffer.concat([header, body, suffix]),
       env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' },
-      timeout: 5000,
+      timeout,
       maxBuffer: 1048576,
     }
   );
@@ -46,6 +51,62 @@ function observation(result) {
   return value;
 }
 describe('private nonexecuting draft program discovery', () => {
+  test('lifecycle discovery resolves canonical merge before ordinary edit authority and keeps the complete pinned argv', () => {
+    const f = authorityFixture();
+    const { git } = require('../helpers/git-repo-factory');
+    f.registry.owned.branch = 'owned';
+    f.registry.owned.baseBranch = git(f.root, ['branch', '--show-current']);
+    fs.writeFileSync(f.registryPath, JSON.stringify(f.registry));
+    f.record.association.callerAnchor = f.root;
+    f.record.execution.cwd = f.root;
+    const argv = [
+      fs.realpathSync.native(process.execPath),
+      path.resolve(__dirname, '../../dist/execution/lifecycle-main.js'),
+      'worktree-merge',
+      '--worktree',
+      'owned',
+      '--spec',
+      'EXEC-001',
+    ];
+    const quoted = argv.map((value) => "'" + value.replaceAll("'", "'\\''") + "'").join(' ');
+    source(f, quoted);
+    for (const [name, value] of Object.entries({
+      CAWS_EXECUTION_PROJECT: f.root,
+      CAWS_EXECUTION_CALLER: f.root,
+      CAWS_EXECUTION_SESSION: f.record.association.sessionId,
+      CAWS_EXECUTION_THREAD: f.record.association.threadId,
+      CAWS_EXECUTION_CALL: f.record.association.callId,
+    }))
+      f.record.execution.environment.push({ name, value });
+    f.record.execution.environment.sort((a, b) =>
+      Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
+    );
+    f.record.execution.environment.find((entry) => entry.name === 'PATH').value = [
+      ...new Set([fs.realpathSync.native(path.dirname(process.execPath)), '/usr/bin', '/bin']),
+    ].join(':');
+    const before = fs.readFileSync(f.registryPath);
+    const result = observation(run(f.record, { timeout: 30000 }));
+    expect(result.status).toBe('observed');
+    expect(result.execution).toEqual({ kind: 'caws-lifecycle-v1', argv });
+    expect(result.commands).toEqual(
+      [argv[0], argv[1], '/usr/bin/git'].sort((a, b) =>
+        Buffer.compare(Buffer.from(a), Buffer.from(b))
+      )
+    );
+    expect(fs.readFileSync(f.registryPath)).toEqual(before);
+    expect(fs.existsSync(f.lane)).toBe(true);
+    for (const changed of [
+      quoted + '; true',
+      quoted + ' > redirected',
+      'CAWS_FAKE=1 ' + quoted,
+      quoted + ' &',
+      quoted.replace("'worktree-merge'", '"$OPERATION"'),
+    ]) {
+      source(f, changed);
+      expect(observation(run(f.record, { timeout: 30000 })).execution).toBeNull();
+    }
+    expect(fs.existsSync(path.join(f.root, 'redirected'))).toBe(false);
+  });
   test('observes only the exact npm test source without resolving npm from caller PATH', () => {
     const f = authorityFixture();
     fs.writeFileSync(

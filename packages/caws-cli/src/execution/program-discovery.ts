@@ -6,11 +6,14 @@ import {
   executionProfileBindings,
   isExecutionProfileBuiltin,
   discoverEvidenceExecution,
+  discoverLifecycleExecution,
   type EvidenceExecutionPlan,
+  type LifecycleExecutionPlan,
 } from './authorizer';
 import { MAX_AUTHORIZER_REPLY_BYTES } from './protocol';
 import type { AuthorizerRequest, ExecutionReasonCode, PreparedExecutionV1 } from './prepared';
 import { snapshotNpmProject, type NpmProjectSnapshot } from './npm-project';
+import { parseExecutionLifecycleArguments, readExecutionLifecycleAuthority } from './lifecycle';
 
 export interface NpmExecutionPlan {
   readonly kind: 'npm-test-v1';
@@ -28,7 +31,7 @@ export interface ProgramDiscoveryReply {
   readonly executionDigest: string;
   readonly status: 'observed' | 'unresolved';
   readonly commands: readonly string[];
-  readonly execution: EvidenceExecutionPlan | NpmExecutionPlan | null;
+  readonly execution: EvidenceExecutionPlan | LifecycleExecutionPlan | NpmExecutionPlan | null;
   readonly reasonCodes: readonly ExecutionReasonCode[];
 }
 
@@ -50,6 +53,26 @@ export async function discoverExecutionPrograms(
       throw new ExecutionAuthorityUnavailable('invalid_record');
     if (Date.now() >= record.limits.preparationDeadlineUnixMs)
       throw new ExecutionAuthorityUnavailable('deadline_expired');
+    const lifecycle = await discoverLifecycleExecution(record);
+    if (lifecycle) {
+      readExecutionLifecycleAuthority(
+        record,
+        parseExecutionLifecycleArguments(lifecycle.argv.slice(2))
+      );
+      if (Date.now() >= record.limits.preparationDeadlineUnixMs)
+        throw new ExecutionAuthorityUnavailable('deadline_expired');
+      return Object.freeze({
+        ...base,
+        status: 'observed',
+        commands: Object.freeze(
+          [lifecycle.argv[0]!, lifecycle.argv[1]!, '/usr/bin/git'].sort((a, b) =>
+            Buffer.compare(Buffer.from(a), Buffer.from(b))
+          )
+        ),
+        execution: Object.freeze({ ...lifecycle, argv: Object.freeze([...lifecycle.argv]) }),
+        reasonCodes: Object.freeze([]),
+      });
+    }
     const authority = readExecutionAuthority(record);
     // The producer recognizes this one literal form and independently pins
     // npm before constructing its final record. No shell command is resolved

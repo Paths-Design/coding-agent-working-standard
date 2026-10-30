@@ -53,7 +53,12 @@ import { loadSpecs } from './specs-store';
 import { loadWorktrees } from './worktrees-store';
 import { autoCommit, isPathDirty, type AutoCommitOutcome } from './git-autocommit';
 import { runLifecycleTransaction, type LifecycleTransactionResult } from './lifecycle-transaction';
-import { withLifecycleLock } from './lifecycle-lock';
+import {
+  withLifecycleLock,
+  withLifecycleMutationFence,
+  verifyBorrowedExecutionLifecycleFence,
+  type BorrowedExecutionLifecycleFence,
+} from './lifecycle-lock';
 import { repoRootFromCawsDir, storeDiagnostic, validateSpecId } from './repo-root';
 import { AGENT_CITED_LEGEND, describeVerdict, rederiveSpecEvidence } from './evidence-rederive';
 import { STORE_RULES } from './rules';
@@ -1355,7 +1360,11 @@ export function unsatisfiedAcceptanceCriteria(spec: Spec): UnsatisfiedCriterion[
 
 // ─── closeSpec ───────────────────────────────────────────────────────────
 
-export function closeSpec(cawsDir: string, input: CloseSpecInput): Result<SpecWriterOutcome> {
+export function closeSpec(
+  cawsDir: string,
+  input: CloseSpecInput,
+  execution?: BorrowedExecutionLifecycleFence
+): Result<SpecWriterOutcome> {
   const idValidation = validateSpecId(input.id);
   if (!idValidation.ok) return idValidation;
 
@@ -1760,17 +1769,27 @@ export function closeSpec(cawsDir: string, input: CloseSpecInput): Result<SpecWr
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const wasDirtyBeforeWrite = isPathDirty(repoRoot, specRelPath(cawsDir, input.id, repoRoot));
 
-  const txnResult = withLifecycleLock(cawsDir, () =>
-    runLifecycleTransaction({
-      cawsDir,
-      plannedWrites: [{ path: targetPath, contents: patched }],
-      events: [event],
-    })
+  const txnResult = withLifecycleMutationFence(
+    cawsDir,
+    () =>
+      runLifecycleTransaction({
+        cawsDir,
+        plannedWrites: [{ path: targetPath, contents: patched }],
+        events: [event],
+      }),
+    execution
   );
   if (!txnResult.ok) {
     return err(txnResult.errors);
   }
   const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
+  if (execution !== undefined && !verifyBorrowedExecutionLifecycleFence(cawsDir, execution))
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+        'Close publication requires inspection: execution fence unavailable before audit commit.'
+      )
+    );
   const committed = attachAutoCommit(outcome, cawsDir, input.id, 'close', wasDirtyBeforeWrite);
   // CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01 (warn-mode): fold the evidence advisory
   // into the success outcome (additive, non-blocking) so agents see which ACs
