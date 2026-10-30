@@ -183,12 +183,39 @@ export function observeHookInspectionRoute(options: {
   if (!vendor) throw new Error('No qualified registration observer for ' + surface);
   const user = options.caller.environment.HOME || os.homedir();
   if (!path.isAbsolute(user)) throw new Error('Registration requires an absolute caller HOME');
+  const roots = new Map([
+    [user, user],
+    [options.canonical, options.canonical],
+    [options.checkout, options.checkout],
+  ]);
+  if (surface === 'codex') {
+    const configuredHome = options.caller.environment.CODEX_HOME;
+    if (
+      configuredHome &&
+      (!path.isAbsolute(configuredHome) || path.resolve(configuredHome) !== path.join(user, vendor))
+    )
+      throw new Error('Alternate CODEX_HOME requires registration qualification');
+    const caller = options.caller.cwd;
+    if (!path.isAbsolute(caller))
+      throw new Error('Registration requires an absolute caller directory');
+    const nested = path.relative(options.checkout, caller);
+    if (nested === '..' || nested.startsWith('..' + path.sep) || path.isAbsolute(nested))
+      throw new Error('Caller configuration outside the checkout requires qualification');
+    let checkout = options.checkout;
+    let canonical = options.canonical;
+    for (const part of nested.split(path.sep).filter(Boolean)) {
+      checkout = path.join(checkout, part);
+      canonical = path.join(canonical, part);
+      roots.set(checkout, options.checkout);
+      roots.set(canonical, options.canonical);
+    }
+  }
   const primary = surface === 'codex' ? 'hooks.json' : 'settings.json';
   const selected: HookInspectionRoute[] = [];
-  for (const root of new Set([user, options.canonical, options.checkout])) {
+  for (const [root, boundary] of roots) {
     const userLayer = root === user;
     const toml = path.join(root, vendor, 'config.toml');
-    assertMachinePath(root, toml);
+    assertMachinePath(boundary, toml);
     if (surface === 'codex') inspectCodexToml(toml);
     else if (fs.existsSync(toml) && isCawsNativeCommand(fs.readFileSync(toml, 'utf8')))
       throw new Error('Inline CAWS registration requires native-harness reconciliation');
@@ -198,7 +225,7 @@ export function observeHookInspectionRoute(options: {
           ? nativeConfigPath(user, vendor, name, settings?.native_config_target)
           : path.join(root, vendor, name);
       if (!(userLayer && name === primary && settings?.native_config_target))
-        assertMachinePath(root, file);
+        assertMachinePath(boundary, file);
       if (!fs.existsSync(file)) continue;
       const config: unknown =
         surface === 'codex' ? readCodexJson(file) : JSON.parse(fs.readFileSync(file, 'utf8'));

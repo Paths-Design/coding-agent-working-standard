@@ -117,10 +117,12 @@ function runCli(args, { cwd, env = {} } = {}) {
   const result = spawnSync(process.execPath, [CLI, ...args], {
     cwd,
     encoding: 'utf8',
+    timeout: 30000,
+    maxBuffer: 4 * 1024 * 1024,
     env: {
       ...process.env,
       ...(env.CAWS_HOME && fs.existsSync(path.join(env.CAWS_HOME, 'user'))
-        ? { HOME: path.join(env.CAWS_HOME, 'user') }
+        ? { HOME: path.join(env.CAWS_HOME, 'user'), CODEX_HOME: '' }
         : {}),
       ...env,
     },
@@ -269,6 +271,108 @@ describe('effective native and legacy inspection routes', () => {
   test('installed native launcher does not override observed legacy registration', () => {
     const f = registered('legacy');
     expect(f.result().handlers[0].entry).toBe('legacy-selected.sh');
+    expect(fs.existsSync(f.trace)).toBe(false);
+  });
+
+  test.each(['empty', 'legacy', 'relative'])(
+    'alternate %s CODEX_HOME cannot select stale HOME registration',
+    (kind) => {
+      const f = registered();
+      const alternate = path.join(f.home, 'alternate-codex');
+      fs.mkdirSync(alternate);
+      if (kind === 'legacy')
+        fs.writeFileSync(
+          path.join(alternate, 'hooks.json'),
+          JSON.stringify({
+            hooks: {
+              PreToolUse: [
+                {
+                  hooks: [
+                    {
+                      type: 'command',
+                      command: systemCommand(f.home, 'codex', 'pre_tool_use', 'legacy'),
+                    },
+                  ],
+                },
+              ],
+            },
+          })
+        );
+      const row = f.result({ CODEX_HOME: kind === 'relative' ? 'alternate-codex' : alternate });
+      expect(row.unavailable).toContain('Alternate CODEX_HOME');
+      expect(row.handlers).toBeUndefined();
+      expect(fs.existsSync(f.trace)).toBe(false);
+      expect(fs.existsSync(path.join(f.home, 'legacy-called'))).toBe(false);
+    }
+  );
+
+  test('explicit default CODEX_HOME preserves supported registration', () => {
+    const f = registered();
+    const row = f.result({ CODEX_HOME: path.join(f.home, 'user/.codex'), PATH: f.tools });
+    expect(row.handlers[0].entry).toBe('native-selected.sh');
+    expect(fs.readFileSync(f.trace, 'utf8')).toBe('codex pre_tool_use --system --describe\n');
+  });
+
+  test.each(['disabled TOML', 'additive JSON', 'benign TOML'])(
+    'nested caller %s is observed before launcher selection',
+    (kind) => {
+      const f = registered();
+      const nested = path.join(f.repo, 'nested/deeper');
+      const config = path.join(f.repo, 'nested/.codex');
+      fs.mkdirSync(nested, { recursive: true });
+      fs.mkdirSync(config);
+      if (kind === 'additive JSON') {
+        const doc = JSON.parse(JSON.stringify(f.registration));
+        doc.hooks.PreToolUse[0].hooks[0].command = machineCommand(
+          f.home,
+          'codex',
+          'pre_tool_use',
+          'native'
+        );
+        fs.writeFileSync(path.join(config, 'hooks.json'), JSON.stringify(doc));
+      } else {
+        fs.writeFileSync(
+          path.join(config, 'config.toml'),
+          kind === 'disabled TOML' ? '[features]\nhooks=false\n' : 'model="fixture"\n'
+        );
+      }
+      const result = runCli(
+        ['hooks', 'list', '--event', 'pre_tool_use', '--surface', 'codex', '--json'],
+        { cwd: nested, env: { CAWS_HOME: f.home, CAWS_GIT_BINARY: '/usr/bin/git', PATH: f.tools } }
+      );
+      expect(result.status).toBe(0);
+      const row = JSON.parse(result.out).events[0];
+      if (kind === 'benign TOML') {
+        expect(row.handlers[0].entry).toBe('native-selected.sh');
+        expect(fs.readFileSync(path.join(f.home, 'native-cwd'), 'utf8')).toBe(nested + '\n');
+      } else {
+        expect(typeof row.unavailable).toBe('string');
+        expect(row.handlers).toBeUndefined();
+        expect(fs.existsSync(f.trace)).toBe(false);
+        expect(fs.existsSync(path.join(f.home, 'legacy-called'))).toBe(false);
+      }
+    }
+  );
+
+  test('nested linked-checkout configuration maps to the root-checkout counterpart', () => {
+    const f = registered();
+    const checkout = path.join(f.home, 'linked-checkout');
+    const nested = path.join(checkout, 'nested');
+    fs.mkdirSync(nested, { recursive: true });
+    const mapped = path.join(f.repo, 'nested/.codex');
+    fs.mkdirSync(mapped, { recursive: true });
+    fs.writeFileSync(path.join(mapped, 'config.toml'), '[features]\nhooks=false\n');
+    const { observeHookInspectionRoute } = require('../../dist/init/hook-inspection-route');
+    expect(() =>
+      observeHookInspectionRoute({
+        home: f.home,
+        surface: 'codex',
+        event: 'pre_tool_use',
+        canonical: f.repo,
+        checkout,
+        caller: { cwd: nested, environment: { HOME: path.join(f.home, 'user') } },
+      })
+    ).toThrow('TOML hooks/features/state require native-harness qualification');
     expect(fs.existsSync(f.trace)).toBe(false);
   });
 
