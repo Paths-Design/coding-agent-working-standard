@@ -3,7 +3,7 @@ title: 'Bounded exclusive Git and CAWS lifecycle consumer'
 mode: feature
 lifecycle_state: active
 created_at: '2026-10-30T01:58:52.358Z'
-updated_at: '2026-10-30T01:58:52.358Z'
+updated_at: '2026-10-30T03:34:40.059Z'
 created_by_session: '01a18a45-661c-7ab2-b0aa-0f8ae3d8dd04'
 blast_radius:
   modules:
@@ -20,6 +20,13 @@ scope:
     - 'packages/caws-cli/src/store/bridge-store.ts'
     - 'packages/caws-cli/src/store/lifecycle-lock.ts'
     - 'packages/caws-cli/tests/execution/lifecycle.test.js'
+    - packages/caws-cli/src/execution/prepared.ts
+    - packages/caws-cli/src/execution/prepared-schema.ts
+    - packages/caws-cli/src/execution/program-discovery.ts
+    - packages/caws-cli/src/execution/authorizer.ts
+    - packages/caws-cli/tests/execution/prepared-schema.test.js
+    - packages/caws-cli/tests/execution/program-discovery.test.js
+    - packages/caws-cli/tests/execution/authorizer.test.js
   out: []
 invariants:
   - 'Ordinary USER and npm execution never receive Git or CAWS publication authority; operational consumers borrow only the verified native fence and retain normal hook refusals.'
