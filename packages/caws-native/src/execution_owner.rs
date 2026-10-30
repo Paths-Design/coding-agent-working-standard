@@ -177,9 +177,7 @@ impl SandboxedLaunch<'_> {
                 }
                 image_valid(entry, live)?;
                 image_valid(&npm.project.package_json, live)?;
-                if let Some(config) = &npm.project.npmrc {
-                    image_valid(config, live)?;
-                }
+                npm_config_valid(&value.execution.cwd, npm.project.npmrc.as_ref(), live)?;
                 Ok(())
             }
             SandboxedRuntime::Cargo(expected) => {
@@ -402,6 +400,25 @@ fn interval_valid(deadline: &MonotonicDeadline) -> bool {
         .checked_sub(e.started_ns)
         .is_some_and(|n| n > 0 && n <= 30_000_000_000)
 }
+fn npm_config_valid(
+    cwd: &str,
+    config: Option<&ProgramImage>,
+    live: &impl Fn() -> Result<(), Refusal>,
+) -> Result<(), Refusal> {
+    let path = Path::new(cwd).join(".npmrc");
+    if let Some(config) = config {
+        if Path::new(&config.path) != path {
+            return Err(Refusal::Image);
+        }
+        return image_valid(config, live);
+    }
+    live()?;
+    match fs::symlink_metadata(path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        _ => Err(Refusal::Image),
+    }
+}
+
 fn image_valid(
     image: &ProgramImage,
     check_live: &impl Fn() -> Result<(), Refusal>,
@@ -969,6 +986,53 @@ fn release_after_spawn(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn npm_config_final_check_rejects_absent_to_present_and_changed_images() {
+        let root = fs::canonicalize(std::env::temp_dir())
+            .unwrap()
+            .join(format!(
+                "caws-owner-npm-config-{}-{}",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+        fs::create_dir(&root).unwrap();
+        let cwd = root.to_str().unwrap();
+        let path = root.join(".npmrc");
+        assert_eq!(npm_config_valid(cwd, None, &|| Ok(())), Ok(()));
+        // This models a new config after the authorizer observed absence.
+        fs::write(&path, b"script-shell=/untrusted/program\n").unwrap();
+        assert_eq!(npm_config_valid(cwd, None, &|| Ok(())), Err(Refusal::Image));
+        fs::remove_file(&path).unwrap();
+        std::os::unix::fs::symlink(root.join("missing"), &path).unwrap();
+        assert_eq!(npm_config_valid(cwd, None, &|| Ok(())), Err(Refusal::Image));
+        fs::remove_file(&path).unwrap();
+        fs::write(&path, b"audit=false\n").unwrap();
+        let pinned = ProgramImage {
+            path: path.to_str().unwrap().into(),
+            sha256: format!("{:x}", Sha256::digest(b"audit=false\n")),
+        };
+        assert_eq!(npm_config_valid(cwd, Some(&pinned), &|| Ok(())), Ok(()));
+        fs::write(&path, b"fund=false\n").unwrap();
+        assert_eq!(
+            npm_config_valid(cwd, Some(&pinned), &|| Ok(())),
+            Err(Refusal::Image)
+        );
+        fs::remove_file(&path).unwrap();
+        assert_eq!(
+            npm_config_valid(cwd, Some(&pinned), &|| Ok(())),
+            Err(Refusal::Image)
+        );
+        assert_eq!(
+            npm_config_valid(cwd, None, &|| Err(Refusal::Cancelled)),
+            Err(Refusal::Cancelled)
+        );
+        assert_eq!(npm_config_valid(cwd, None, &|| Ok(())), Ok(()));
+        fs::remove_dir(root).unwrap();
+    }
 
     #[test]
     fn runtime_homes_revalidate_physical_directories_and_original_control() {
