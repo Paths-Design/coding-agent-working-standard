@@ -46,6 +46,7 @@ import { isOk } from '../../kernel';
 import { resolveRepoRoot } from '../../store';
 import { resolveGitBinary } from '../../store/git-binary';
 import { machineHome } from '../../init/machine-adapters';
+import { observeHookInspectionRoute } from '../../init/hook-inspection-route';
 import { planHookReconciliation, type ReconciliationPlan } from '../../init/hook-reconciliation';
 import {
   applyHookReconciliation,
@@ -645,20 +646,67 @@ const UNKNOWN_TIER = 'unknown';
 function describeSelection(
   repoRoot: string,
   surface: string,
-  event: string
+  event: string,
+  callerCwd: string
 ): { entries: DescribedEntry[] } | { unavailable: string } {
   const home = machineHome();
-  const launcher = nodePath.join(home, 'bin/caws-hook');
-  if (!existsSync(launcher)) return { unavailable: `no machine runtime at ${launcher}` };
   try {
-    const out = execFileSync('python3', [launcher, surface, event, '--describe'], {
-      cwd: repoRoot,
+    const checkout = execFileSync(resolveGitBinary(), ['rev-parse', '--show-toplevel'], {
+      cwd: callerCwd,
       encoding: 'utf8',
-      env: { ...process.env, CAWS_HOME: home, CAWS_PROJECT_DIR: repoRoot },
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+    const environment = Object.fromEntries(
+      Object.entries(process.env).filter((row): row is [string, string] => row[1] !== undefined)
+    );
+    const route = observeHookInspectionRoute({
+      home,
+      surface,
+      event,
+      canonical: repoRoot,
+      checkout,
+      caller: { cwd: callerCwd, environment },
     });
-    const parsed = JSON.parse(out) as { handlers?: DescribedEntry[] };
-    return { entries: parsed.handlers ?? [] };
+    const launcher = nodePath.join(
+      home,
+      route.entry === 'native' ? 'bin/caws-hook-native' : 'bin/caws-hook'
+    );
+    if (!existsSync(launcher)) return { unavailable: `no selected machine entry at ${launcher}` };
+    const args = [surface, event, ...(route.system ? ['--system'] : []), '--describe'];
+    const out = execFileSync(
+      route.entry === 'native' ? launcher : 'python3',
+      route.entry === 'native' ? args : [launcher, ...args],
+      {
+        cwd: callerCwd,
+        encoding: 'utf8',
+        env: { ...process.env, CAWS_HOME: home },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }
+    );
+    const parsed: unknown = JSON.parse(out);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      throw new Error('Malformed launcher description');
+    const document = parsed as Record<string, unknown>;
+    if (document.status === 'inactive')
+      throw new Error(
+        'Inactive launcher selection: ' + String(document.reason ?? 'unknown reason')
+      );
+    if (
+      document.schema !== 'caws.hook_selection.v1' ||
+      !Array.isArray(document.handlers) ||
+      document.handlers.some((row: unknown) => {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) return true;
+        const entry = row as Record<string, unknown>;
+        return (
+          typeof entry.entry !== 'string' ||
+          typeof entry.path !== 'string' ||
+          typeof entry.kind !== 'string' ||
+          (entry.tier !== undefined && typeof entry.tier !== 'string')
+        );
+      })
+    )
+      throw new Error('Malformed launcher description');
+    return { entries: document.handlers as DescribedEntry[] };
   } catch (e) {
     const err = e as { stderr?: Buffer | string; message?: string };
     const detail =
@@ -722,7 +770,12 @@ export function runHooksListCommand(options: HooksListOptions = {}): number {
     : null;
 
   const results = events.map((event) => {
-    const described = describeSelection(ctx.repoRoot, surface, event);
+    const described = describeSelection(
+      ctx.repoRoot,
+      surface,
+      event,
+      nodePath.resolve(options.cwd ?? process.cwd())
+    );
     return 'unavailable' in described
       ? { event, unavailable: described.unavailable }
       : { event, handlers: described.entries };

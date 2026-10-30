@@ -25,12 +25,21 @@ const path = require('node:path');
 
 const CLI = path.resolve(__dirname, '..', '..', 'dist', 'index.js');
 const TEMPLATES = path.resolve(__dirname, '..', '..', 'templates/hook-packs/shared');
+const {
+  systemCommand,
+  machineCommand,
+  MACHINE_EVENTS,
+} = require('../../dist/init/native-hook-identification');
 
 /** A throwaway git repo with a real dispatch tree copied from the templates. */
 function makeRepo({ policy, chains = {}, events = ['pre_tool_use', 'stop'] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-hooks-'));
   const real = fs.realpathSync(dir);
-  execFileSync('git', ['init', '-q'], { cwd: real });
+  execFileSync('git', ['init', '-q'], {
+    cwd: real,
+    timeout: 5000,
+    maxBuffer: 1024 * 1024,
+  });
   const dispatch = path.join(real, '.caws', 'hooks', 'dispatch');
   fs.mkdirSync(dispatch, { recursive: true });
   for (const event of events) {
@@ -69,8 +78,38 @@ function makeMachineHome(handlers) {
   };
   fs.writeFileSync(
     path.join(home, 'bin', 'caws-hook'),
-    `import json,sys\nprint(json.dumps(${JSON.stringify(document)}))\n`
+    `import json,sys\nfrom pathlib import Path\nPath(${JSON.stringify(path.join(home, 'legacy-called'))}).write_text('called\\n')\nprint(json.dumps(${JSON.stringify(document)}))\n`
   );
+  const user = path.join(home, 'user');
+  for (const [surface, vendor, file] of [
+    ['claude-code', '.claude', 'settings.json'],
+    ['codex', '.codex', 'hooks.json'],
+  ]) {
+    fs.mkdirSync(path.join(home, 'surfaces', surface), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, 'surfaces', surface, 'settings.json'),
+      JSON.stringify({ version: 1, enabled: true })
+    );
+    fs.mkdirSync(path.join(user, vendor), { recursive: true });
+    fs.writeFileSync(
+      path.join(user, vendor, file),
+      JSON.stringify({
+        hooks: Object.fromEntries(
+          Object.entries(MACHINE_EVENTS).map(([event, name]) => [
+            name,
+            [
+              {
+                matcher: '.*',
+                hooks: [
+                  { type: 'command', command: systemCommand(home, surface, event), timeout: 45 },
+                ],
+              },
+            ],
+          ])
+        ),
+      })
+    );
+  }
   return home;
 }
 
@@ -78,7 +117,13 @@ function runCli(args, { cwd, env = {} } = {}) {
   const result = spawnSync(process.execPath, [CLI, ...args], {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, ...env },
+    env: {
+      ...process.env,
+      ...(env.CAWS_HOME && fs.existsSync(path.join(env.CAWS_HOME, 'user'))
+        ? { HOME: path.join(env.CAWS_HOME, 'user') }
+        : {}),
+      ...env,
+    },
   });
   return { status: result.status, out: `${result.stdout}${result.stderr}` };
 }
@@ -132,6 +177,534 @@ describe('A5: the group is reachable through Commander on the built CLI', () => 
     const { status, out } = runCli(['hooks', 'compile', '--check', '--surface', 'opencode']);
     expect(status).not.toBe(0);
     expect(out).toMatch(/unknown option/i);
+  });
+});
+
+describe('effective native and legacy inspection routes', () => {
+  function registered(entry = 'native') {
+    const repo = makeRepo();
+    const home = makeMachineHome([['legacy-selected.sh', 'stock']]);
+    const user = path.join(home, 'user');
+    const config = path.join(user, '.codex/hooks.json');
+    const trace = path.join(home, 'native-called');
+    const quote = (s) => "'" + s.replace(/'/g, "'\\''") + "'";
+    const native = path.join(home, 'bin/caws-hook-native');
+    const document = {
+      schema: 'caws.hook_selection.v1',
+      handlers: [
+        { entry: 'native-selected.sh', path: '/native/selected.sh', kind: 'stock', tier: 'stock' },
+      ],
+    };
+    fs.writeFileSync(
+      native,
+      '#!/bin/sh\nprintf "%s\\n" "$*" > ' +
+        quote(trace) +
+        '\nprintf "%s\\n" "$PWD" > ' +
+        quote(path.join(home, 'native-cwd')) +
+        '\nprintf "%s\\n" "$CAWS_PROJECT_DIR" > ' +
+        quote(path.join(home, 'native-project')) +
+        '\nprintf "%s\\n" ' +
+        quote(JSON.stringify(document)) +
+        '\n',
+      { mode: 0o755 }
+    );
+    const registration = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: '.*',
+            hooks: [
+              { type: 'command', command: systemCommand(home, 'codex', 'pre_tool_use', entry) },
+            ],
+          },
+        ],
+      },
+    };
+    fs.writeFileSync(config, JSON.stringify(registration));
+    const tools = path.join(home, 'empty-path');
+    fs.mkdirSync(tools);
+    const list = (extra = {}) =>
+      runCli(['hooks', 'list', '--event', 'pre_tool_use', '--surface', 'codex', '--json'], {
+        cwd: repo,
+        env: { CAWS_HOME: home, CAWS_GIT_BINARY: '/usr/bin/git', ...extra },
+      });
+    const result = (extra = {}) => {
+      const child = list(extra);
+      expect(child.status).toBe(0);
+      return JSON.parse(child.out).events[0];
+    };
+    return { repo, home, user, config, trace, native, registration, tools, list, result };
+  }
+
+  test('observed native registration runs its launcher with Python absent and retains caller context', () => {
+    const f = registered();
+    const nested = path.join(f.repo, 'nested');
+    fs.mkdirSync(nested);
+    const beforeRepo = treeHash(f.repo),
+      beforeUser = treeHash(f.user);
+    const child = runCli(
+      ['hooks', 'list', '--event', 'pre_tool_use', '--surface', 'codex', '--json'],
+      {
+        cwd: nested,
+        env: {
+          HOME: f.user,
+          CAWS_HOME: f.home,
+          CAWS_PROJECT_DIR: nested,
+          CAWS_GIT_BINARY: '/usr/bin/git',
+          PATH: f.tools,
+        },
+      }
+    );
+    expect(child.status).toBe(0);
+    expect(JSON.parse(child.out).events[0].handlers).toEqual([
+      { entry: 'native-selected.sh', path: '/native/selected.sh', kind: 'stock', tier: 'stock' },
+    ]);
+    expect(fs.readFileSync(f.trace, 'utf8')).toBe('codex pre_tool_use --system --describe\n');
+    expect(fs.readFileSync(path.join(f.home, 'native-cwd'), 'utf8')).toBe(nested + '\n');
+    expect(fs.readFileSync(path.join(f.home, 'native-project'), 'utf8')).toBe(nested + '\n');
+    expect(treeHash(f.repo)).toBe(beforeRepo);
+    expect(treeHash(f.user)).toBe(beforeUser);
+  });
+
+  test('installed native launcher does not override observed legacy registration', () => {
+    const f = registered('legacy');
+    expect(f.result().handlers[0].entry).toBe('legacy-selected.sh');
+    expect(fs.existsSync(f.trace)).toBe(false);
+  });
+
+  test('default Codex configuration produced by configure preserves route admission', () => {
+    const { installMachineRuntime } = require('../../dist/init/machine-adapters');
+    const { configureSystemRuntime } = require('../../dist/init/system-runtime');
+    const { observeHookInspectionRoute } = require('../../dist/init/hook-inspection-route');
+    const repo = makeRepo();
+    const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-generated-')));
+    const user = path.join(home, 'user');
+    fs.mkdirSync(user);
+    installMachineRuntime({ home, templatesRoot: path.dirname(TEMPLATES) });
+    const config = path.join(user, '.codex/hooks.json');
+    const plan = configureSystemRuntime({
+      home,
+      userHome: user,
+      surface: 'codex',
+      entry: 'legacy',
+      plan: true,
+    });
+    expect(plan.changes.map((change) => change.path)).toContain(config);
+    const registration = plan.changes.find((change) => change.path === config);
+    expect(JSON.parse(registration.after).hooks.PreToolUse[0].hooks).toEqual([
+      { type: 'command', command: systemCommand(home, 'codex', 'pre_tool_use'), timeout: 45 },
+    ]);
+    for (const change of plan.changes) {
+      fs.mkdirSync(path.dirname(change.path), { recursive: true });
+      fs.writeFileSync(change.path, change.after);
+    }
+    const before = treeHash(home);
+    expect(
+      observeHookInspectionRoute({
+        home,
+        surface: 'codex',
+        event: 'pre_tool_use',
+        canonical: repo,
+        checkout: repo,
+        caller: { cwd: repo, environment: { HOME: user } },
+      })
+    ).toEqual({ entry: 'legacy', system: true });
+    expect(treeHash(home)).toBe(before);
+  });
+
+  test('all retained Codex event names and supported string metadata remain inspectable', () => {
+    const f = registered();
+    for (const event of [
+      'PreModelRequest',
+      'PostModelRequest',
+      'PermissionRequest',
+      'PostToolUse',
+      'PreCompact',
+      'PostCompact',
+      'SessionStart',
+      'SessionEnd',
+      'UserPromptSubmit',
+      'SubagentStart',
+      'SubagentStop',
+      'Stop',
+      'Interrupt',
+    ])
+      f.registration.hooks[event] = [];
+    f.registration.description = 'Observed registration fixture';
+    f.registration.hooks.PreToolUse[0].hooks[0].statusMessage = 'Checking CAWS guardrails';
+    f.registration.hooks.PreToolUse[0].hooks[0].timeout = 45;
+    fs.writeFileSync(f.config, JSON.stringify(f.registration));
+    expect(f.result({ PATH: f.tools }).handlers[0].entry).toBe('native-selected.sh');
+    expect(fs.readFileSync(f.trace, 'utf8')).toBe('codex pre_tool_use --system --describe\n');
+  });
+
+  test.each([1, Number.MAX_SAFE_INTEGER])(
+    'exact supported Codex timeout %s preserves native route admission',
+    (timeout) => {
+      const f = registered();
+      f.registration.hooks.PreToolUse[0].hooks[0].timeout = timeout;
+      fs.writeFileSync(f.config, JSON.stringify(f.registration));
+      expect(f.result({ PATH: f.tools }).handlers[0].entry).toBe('native-selected.sh');
+      expect(fs.readFileSync(f.trace, 'utf8')).toBe('codex pre_tool_use --system --describe\n');
+    }
+  );
+
+  test.each([
+    [
+      'unknown top-level flag',
+      (doc) => {
+        doc.disableAllHooks = false;
+      },
+    ],
+    [
+      'nonstring description',
+      (doc) => {
+        doc.description = 7;
+      },
+    ],
+    [
+      'null hooks',
+      (doc) => {
+        doc.hooks = null;
+      },
+    ],
+    [
+      'array hooks',
+      (doc) => {
+        doc.hooks = [];
+      },
+    ],
+    [
+      'unknown event',
+      (doc) => {
+        doc.hooks.UnknownEvent = [];
+      },
+    ],
+    [
+      'malformed other event',
+      (doc) => {
+        doc.hooks.Stop = {};
+      },
+    ],
+    [
+      'null other-event group',
+      (doc) => {
+        doc.hooks.Stop = [null];
+      },
+    ],
+    [
+      'nonstring other-event matcher',
+      (doc) => {
+        doc.hooks.Stop = [{ matcher: 7, hooks: [] }];
+      },
+    ],
+    [
+      'malformed other-event hooks',
+      (doc) => {
+        doc.hooks.Stop = [{ hooks: {} }];
+      },
+    ],
+    [
+      'null other-event handler',
+      (doc) => {
+        doc.hooks.Stop = [{ hooks: [null] }];
+      },
+    ],
+    [
+      'unsupported other-event handler',
+      (doc) => {
+        doc.hooks.Stop = [{ hooks: [{ type: 'prompt' }] }];
+      },
+    ],
+    [
+      'hidden additive group',
+      (doc) => {
+        doc.hooks.PreToolUse.push({ ...doc.hooks.PreToolUse[0], enabled: false });
+      },
+    ],
+    [
+      'hidden additive hook',
+      (doc) => {
+        const hooks = doc.hooks.PreToolUse[0].hooks;
+        hooks.push({ ...hooks[0], enabled: false });
+      },
+    ],
+    [
+      'nonstring command',
+      (doc) => {
+        doc.hooks.PreToolUse[0].hooks[0].command = 7;
+      },
+    ],
+    [
+      'empty command',
+      (doc) => {
+        doc.hooks.PreToolUse[0].hooks[0].command = ' ';
+      },
+    ],
+    [
+      'fractional timeout',
+      (doc) => {
+        doc.hooks.PreToolUse[0].hooks[0].timeout = 1.5;
+      },
+    ],
+    [
+      'negative timeout',
+      (doc) => {
+        doc.hooks.PreToolUse[0].hooks[0].timeout = -1;
+      },
+    ],
+    [
+      'zero timeout',
+      (doc) => {
+        doc.hooks.PreToolUse[0].hooks[0].timeout = 0;
+      },
+    ],
+    [
+      'string timeout',
+      (doc) => {
+        doc.hooks.PreToolUse[0].hooks[0].timeout = '45';
+      },
+    ],
+    [
+      'precision-losing timeout',
+      (doc) => {
+        doc.hooks.PreToolUse[0].hooks[0].timeout = Number.MAX_SAFE_INTEGER + 1;
+      },
+    ],
+    [
+      'u64-overflowing timeout',
+      (doc) => {
+        doc.hooks.PreToolUse[0].hooks[0].timeout = 1e20;
+      },
+    ],
+    [
+      'nonstring statusMessage',
+      (doc) => {
+        doc.hooks.PreToolUse[0].hooks[0].statusMessage = 7;
+      },
+    ],
+    [
+      'unsupported async field',
+      (doc) => {
+        doc.hooks.PreToolUse[0].hooks[0].async = false;
+      },
+    ],
+    [
+      'malformed foreign command in another event',
+      (doc, fixture) => {
+        doc.hooks.Stop = [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command: 'touch ' + JSON.stringify(path.join(fixture.home, 'must-not-execute')),
+                timeout: '45',
+              },
+            ],
+          },
+        ];
+      },
+    ],
+  ])('whole-file Codex JSON %s is unavailable before either launcher runs', (_name, mutate) => {
+    const f = registered();
+    mutate(f.registration, f);
+    fs.writeFileSync(f.config, JSON.stringify(f.registration));
+    const row = f.result();
+    expect(row.unavailable).toContain('Unsupported Codex JSON registration');
+    expect(row.handlers).toBeUndefined();
+    expect(fs.existsSync(f.trace)).toBe(false);
+    expect(fs.existsSync(path.join(f.home, 'legacy-called'))).toBe(false);
+    expect(fs.existsSync(path.join(f.home, 'must-not-execute'))).toBe(false);
+  });
+
+  test.each(['literal', 'escaped'])(
+    'duplicate %s Codex JSON hooks key is unavailable before launcher selection',
+    (mode) => {
+      const f = registered();
+      const hooks = JSON.stringify(f.registration.hooks);
+      const secondKey = mode === 'literal' ? '"hooks"' : '"ho\\u006fks"';
+      fs.writeFileSync(f.config, '{"hooks":' + hooks + ',' + secondKey + ':' + hooks + '}');
+      const row = f.result();
+      expect(row.unavailable).toContain('invalid Codex JSON registration');
+      expect(row.handlers).toBeUndefined();
+      expect(fs.existsSync(f.trace)).toBe(false);
+      expect(fs.existsSync(path.join(f.home, 'legacy-called'))).toBe(false);
+    }
+  );
+
+  test.each([
+    [
+      'UTF-8',
+      (hooks) =>
+        Buffer.concat([
+          Buffer.from('{"description":"'),
+          Buffer.from([0xff]),
+          Buffer.from('","hooks":' + hooks + '}'),
+        ]),
+    ],
+    ['depth', () => '{"extra":' + '['.repeat(17) + '0' + ']'.repeat(17) + '}'],
+    ['nodes', () => '{"extra":[' + Array(100_001).fill('0').join(',') + ']}'],
+    ['bytes', () => ' '.repeat(1024 * 1024 + 1)],
+  ])('bounded Codex JSON rejects invalid %s without a launcher', (name, bytes) => {
+    const f = registered();
+    fs.writeFileSync(f.config, bytes(JSON.stringify(f.registration.hooks)));
+    const row = f.result();
+    expect(row.unavailable).toContain(
+      name === 'bytes' ? 'Unsupported Codex JSON registration' : 'invalid Codex JSON registration'
+    );
+    expect(row.handlers).toBeUndefined();
+    expect(fs.existsSync(f.trace)).toBe(false);
+    expect(fs.existsSync(path.join(f.home, 'legacy-called'))).toBe(false);
+  });
+
+  test.each([
+    'missing',
+    'corrupt',
+    'duplicate',
+    'restricted',
+    'wrong-home',
+    'disabled',
+    'exec-form',
+    'opaque-command',
+    'disabled-settings',
+    'missing-settings',
+  ])('unavailable %s registration never invokes either launcher', (mode) => {
+    const f = registered();
+    if (mode === 'missing') fs.unlinkSync(f.config);
+    else if (mode === 'corrupt') fs.writeFileSync(f.config, '{');
+    else {
+      const group = f.registration.hooks.PreToolUse[0];
+      if (mode === 'duplicate') f.registration.hooks.PreToolUse.push(group);
+      if (mode === 'restricted') group.matcher = 'Bash';
+      if (mode === 'wrong-home')
+        group.hooks[0].command = systemCommand(
+          path.join(f.home, 'other'),
+          'codex',
+          'pre_tool_use',
+          'native'
+        );
+      if (mode === 'disabled') f.registration.disableAllHooks = true;
+      if (mode === 'exec-form')
+        group.hooks[0] = {
+          type: 'command',
+          command: f.native,
+          args: ['codex', 'pre_tool_use', '--system'],
+        };
+      if (mode === 'opaque-command')
+        group.hooks[0].command =
+          f.native +
+          ' $(touch ' +
+          path.join(f.home, 'must-not-execute') +
+          ') codex pre_tool_use --system';
+      if (mode === 'disabled-settings')
+        fs.writeFileSync(
+          path.join(f.home, 'surfaces/codex/settings.json'),
+          JSON.stringify({ version: 1, enabled: false })
+        );
+      if (mode === 'missing-settings')
+        fs.unlinkSync(path.join(f.home, 'surfaces/codex/settings.json'));
+      fs.writeFileSync(f.config, JSON.stringify(f.registration));
+    }
+    const row = f.result();
+    expect(row.unavailable).toBeTruthy();
+    expect(row.handlers).toBeUndefined();
+    expect(fs.existsSync(f.trace)).toBe(false);
+    expect(fs.existsSync(path.join(f.home, 'legacy-called'))).toBe(false);
+    expect(fs.existsSync(path.join(f.home, 'must-not-execute'))).toBe(false);
+  });
+
+  test.each(['missing-entry', 'failed-entry', 'malformed-output', 'inactive-output'])(
+    'native %s never falls back to an available legacy launcher',
+    (mode) => {
+      const f = registered();
+      if (mode === 'missing-entry') fs.unlinkSync(f.native);
+      if (mode === 'failed-entry')
+        fs.writeFileSync(f.native, '#!/bin/sh\nprintf "native integrity failure\\n" >&2\nexit 2\n');
+      if (mode === 'malformed-output') fs.writeFileSync(f.native, '#!/bin/sh\nprintf "{}\\n"\n');
+      if (mode === 'inactive-output')
+        fs.writeFileSync(
+          f.native,
+          '#!/bin/sh\nprintf \'{"schema":"caws.hook_selection.v1","status":"inactive","reason":"project governance absent","handlers":[]}\\n\'\n'
+        );
+      const row = f.result();
+      expect(row.unavailable).toBeTruthy();
+      expect(row.handlers).toBeUndefined();
+      expect(JSON.stringify(row)).not.toContain('legacy-selected.sh');
+      expect(fs.existsSync(path.join(f.home, 'legacy-called'))).toBe(false);
+    }
+  );
+
+  test('canonical project registration selects project mode without a user producer', () => {
+    const f = registered();
+    fs.unlinkSync(f.config);
+    fs.mkdirSync(path.join(f.repo, '.codex'));
+    f.registration.hooks.PreToolUse[0].hooks[0].command = machineCommand(
+      f.home,
+      'codex',
+      'pre_tool_use',
+      'native'
+    );
+    fs.writeFileSync(path.join(f.repo, '.codex/hooks.json'), JSON.stringify(f.registration));
+    expect(f.result({ PATH: f.tools }).handlers[0].entry).toBe('native-selected.sh');
+    expect(fs.readFileSync(f.trace, 'utf8')).toBe('codex pre_tool_use --describe\n');
+  });
+
+  test.each([
+    ['feature disabled', '[features]\nhooks=false\n'],
+    ['feature enabled without qualification', 'features.hooks=true\n'],
+    ['quoted feature', '["features"]\n"hooks"=false\n'],
+    ['escaped feature', '["feat\\u0075res"]\n"ho\\u006fks"=false\n'],
+    ['inline feature', 'features={hooks=false}\n'],
+    ['hook state', '[hooks.state."file:hooks.json:pre_tool_use:0:0"]\nenabled=false\n'],
+    [
+      'hook trust',
+      '[hooks.state."file:hooks.json:pre_tool_use:0:0"]\ntrusted_hash="sha256:other"\n',
+    ],
+    ['quoted hook table', '["hooks"."state"."opaque"]\nenabled=true\n'],
+    ['opaque hook scalar', 'hooks=false\n'],
+    ['profile hook state', '[profiles.fast.hooks.state.key]\nenabled=false\n'],
+    ['profile features', '[profiles.fast.features]\nhooks=false\n'],
+    ['malformed document', 'model="unterminated\n'],
+    ['duplicate key', 'model="a"\nmodel="b"\n'],
+    ['opaque profile map', 'profiles=2026-01-01\n'],
+    ['oversized document', '#' + 'x'.repeat(1024 * 1024)],
+    ['invalid UTF8', Buffer.from([0x23, 0xff, 0x0a])],
+  ])('command-free TOML %s is unavailable without invoking a launcher', (name, bytes) => {
+    const f = registered();
+    fs.writeFileSync(path.join(f.user, '.codex/config.toml'), bytes);
+    const row = f.result();
+    expect(row.unavailable).toMatch(/TOML|UTF-8/i);
+    expect(row.handlers).toBeUndefined();
+    expect(fs.existsSync(f.trace)).toBe(false);
+    expect(fs.existsSync(path.join(f.home, 'legacy-called'))).toBe(false);
+  });
+
+  test.each([
+    ['empty', ''],
+    ['comment-only', '# [hooks] and features.hooks=false are inert comments\n'],
+    [
+      'model and project',
+      'model="test-model"\nmodel_reasoning_effort="high"\n[projects."/project/with.dots"]\ntrust_level="trusted"\n',
+    ],
+    ['exact bigint', 'model="test"\n[history]\nmax_bytes=9223372036854775807\n'],
+    ['model profile', '[profiles.fast]\nmodel="test-model"\n'],
+    [
+      'hook words in strings',
+      'model="hooks features"\n[projects."features.hooks"]\ntrust_level="trusted"\n',
+    ],
+  ])('benign %s TOML preserves the observed JSON route', (name, bytes) => {
+    const f = registered();
+    fs.writeFileSync(path.join(f.user, '.codex/config.toml'), bytes);
+    expect(f.result({ PATH: f.tools }).handlers[0].entry).toBe('native-selected.sh');
+    expect(fs.readFileSync(f.trace, 'utf8')).toBe('codex pre_tool_use --system --describe\n');
+  });
+
+  test('command-free canonical project TOML also cannot silently disable inspected hooks', () => {
+    const f = registered();
+    fs.mkdirSync(path.join(f.repo, '.codex'));
+    fs.writeFileSync(path.join(f.repo, '.codex/config.toml'), '"features"={"hooks"=false}\n');
+    expect(f.result().unavailable).toMatch(/TOML/);
+    expect(fs.existsSync(f.trace)).toBe(false);
   });
 });
 
