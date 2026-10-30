@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-file-tools
 created_at: '2026-10-29T23:24:56.819Z'
-updated_at: '2026-10-30T08:53:11.775Z'
+updated_at: '2026-10-30T09:14:01.613Z'
 created_by_session: '01a1861e-58cc-7392-ac55-1ff3a6051998'
 blast_radius:
   modules:
@@ -54,6 +54,7 @@ scope:
   support:
     - docs/internal/caws-runtime-modernization.md
     - .github/workflows/release-qualification.yml
+    - turbo.json
 invariants:
   - 'Preserve exact original input and every ordered Add Update Delete Move target; malformed inventories refuse before target effects'
   - 'Preserve selected guard order and owner scope latch progressive-strike reprieve and secret-scan semantics; legacy and custom routes retain their complete compatibility path before effects'
