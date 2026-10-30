@@ -382,6 +382,47 @@ export function assertNativeStopAgentSelection(
   }
 }
 
+/** No effects: file tools share the exact heartbeat source/CLI boundary with Bash. */
+export function qualifiesForFileToolHeartbeat(
+  handler: SelectedHandler,
+  context: StockHandlerContext
+): boolean {
+  return (
+    ['apply_patch', 'Write', 'Edit'].includes(String(context.request.payload.tool_name)) &&
+    heartbeatCompatible(handler, context)
+  );
+}
+
+function heartbeatCompatible(handler: SelectedHandler, context: StockHandlerContext): boolean {
+  const { request, selection, environment } = context;
+  return (
+    handler.name === 'agent-heartbeat.sh' &&
+    compatible(handler, context) &&
+    selection.surface === 'codex' &&
+    selection.event === 'pre_tool_use' &&
+    request.surface === selection.surface &&
+    request.event === selection.event &&
+    request.runtimeDigest === selection.runtimeDigest &&
+    (!environment.CAWS_BIN || environment.CAWS_BIN === 'caws') &&
+    heartbeatCliCompatible(environment) &&
+    !Object.entries(environment).some(
+      ([name, value]) =>
+        Boolean(value) &&
+        (name === 'NODE_OPTIONS' ||
+          name === 'NODE_PATH' ||
+          name.startsWith('LD_') ||
+          name.startsWith('DYLD_') ||
+          name.startsWith('BASH_FUNC_'))
+    ) &&
+    !selection.handlers.some((entry) => entry.kind !== 'stock') &&
+    !Object.values(selection.libraries).some(
+      (entry) => entry.kind === 'project' || entry.kind === 'user'
+    ) &&
+    !Object.keys(selection.overrides).length &&
+    !Object.keys(selection.libraryOverrides).length
+  );
+}
+
 /** Null means execute the selected shell source; it never means skip the handler. */
 export function tryExecuteStockHandler(
   handler: SelectedHandler,
@@ -418,30 +459,9 @@ export function tryExecuteStockHandler(
   const toolInput = object(payload.tool_input) ? payload.tool_input : {};
   if (handler.name === 'agent-heartbeat.sh') {
     if (
-      selection.surface !== 'codex' ||
-      selection.event !== 'pre_tool_use' ||
-      request.surface !== selection.surface ||
-      request.event !== selection.event ||
-      request.runtimeDigest !== selection.runtimeDigest ||
       payload.tool_name !== 'Bash' ||
       typeof toolInput.command !== 'string' ||
-      (environment.CAWS_BIN && environment.CAWS_BIN !== 'caws') ||
-      !heartbeatCliCompatible(environment) ||
-      Object.entries(environment).some(
-        ([name, value]) =>
-          Boolean(value) &&
-          (name === 'NODE_OPTIONS' ||
-            name === 'NODE_PATH' ||
-            name.startsWith('LD_') ||
-            name.startsWith('DYLD_') ||
-            name.startsWith('BASH_FUNC_'))
-      ) ||
-      selection.handlers.some((entry) => entry.kind !== 'stock') ||
-      Object.values(selection.libraries).some(
-        (entry) => entry.kind === 'project' || entry.kind === 'user'
-      ) ||
-      Object.keys(selection.overrides).length ||
-      Object.keys(selection.libraryOverrides).length
+      !heartbeatCompatible(handler, context)
     )
       return null;
     return executeAgentHeartbeat(context);

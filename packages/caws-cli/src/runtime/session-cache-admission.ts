@@ -317,9 +317,10 @@ export function qualifiesForNativeSessionCache(context: {
       !/^[a-f0-9]{64}$/.test(request.runtimeDigest) ||
       selection.runtimeDigest !== request.runtimeDigest ||
       selection.hooksDirectory !== selection.runtimeDirectory ||
-      request.payload.tool_name !== 'Bash' ||
+      !['Bash', 'apply_patch', 'Write', 'Edit'].includes(String(request.payload.tool_name)) ||
       !object(request.payload.tool_input) ||
-      typeof request.payload.tool_input.command !== 'string' ||
+      (request.payload.tool_name === 'Bash' &&
+        typeof request.payload.tool_input.command !== 'string') ||
       Object.keys(selection.overrides).length > 0 ||
       Object.keys(selection.libraryOverrides).length > 0 ||
       selection.handlers.some((handler) => handler.kind !== 'stock') ||

@@ -64,6 +64,8 @@
     "packages/caws-native/build.rs",
     "packages/caws-native/src/**",
     "packages/caws-native/tests/**",
+    "packages/caws-native/examples/**",
+    "packages/caws-cli/templates/**",
     "packages/caws-cli/scripts/**",
     "packages/caws-cli/tsconfig*.json"
   ]

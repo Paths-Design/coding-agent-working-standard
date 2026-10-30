@@ -4,6 +4,7 @@ mod cancellation;
 mod cli;
 #[cfg(any(target_os = "macos", test))]
 mod engine_custody;
+mod guard_strikes_wire;
 mod installed_generation;
 mod native_generation;
 mod process_effect;
@@ -50,6 +51,9 @@ fn retain_store_result(
 
 struct Failure<'deadline> {
     original_stop: Option<runner::OriginalStopPreparation<'deadline>>,
+    file_tool_context: Option<caws_native::context_git::file_tools::Preparation>,
+    guard_strikes: Option<guard_strikes_wire::Owner>,
+    engine_cleanup: Option<runner::Session>,
     terminal_code: Option<u8>,
     stop_git_custody: stop_git::FailureCustody,
     dispatched: bool,
@@ -65,6 +69,9 @@ impl<'deadline> Failure<'deadline> {
     fn configuration(message: String) -> Self {
         Self {
             original_stop: None,
+            file_tool_context: None,
+            guard_strikes: None,
+            engine_cleanup: None,
             terminal_code: None,
             stop_git_custody: stop_git::FailureCustody::default(),
             dispatched: false,
@@ -270,6 +277,20 @@ fn execute_observed<'deadline>(
     progress.original_render_captured = original_stop.render.available();
     // Root custody outlives closing brackets, String-only callbacks and the
     // outcome closure. A callback never owns the last retained Git failure.
+    let mut file_tool_context = request.file_tool_context_input().map(|input| {
+        caws_native::context_git::file_tools::Preparation::retain_original(
+            input,
+            original_deadline,
+            deadline,
+            &|| {
+                cancellation::check().is_err()
+                    || runner::check_until(original_deadline, deadline).is_err()
+            },
+        )
+    });
+    let mut guard_strikes = request
+        .guard_strikes_input()
+        .map(|input| guard_strikes_wire::Owner::retain(input, original_deadline));
     let mut stop_git_custody = stop_git::FailureCustody::default();
     let outcome = (|| -> Result<u8, Failure<'deadline>> {
         progress.mark("selection-owner");
@@ -387,6 +408,26 @@ fn execute_observed<'deadline>(
                         session.run_selection_observation(owner, &request, &frame, deadline)?;
                         progress.completed_selection = observed.sequence;
                     }
+                    protocol::EngineFrame::GuardStrikesRequest(frame) => {
+                        session.run_guard_strikes(
+                            guard_strikes
+                                .as_mut()
+                                .ok_or("scope strikes were not advertised")?,
+                            file_tool_context.as_ref(),
+                            &frame,
+                            deadline,
+                        )?;
+                    }
+                    protocol::EngineFrame::FileToolContextRequest(frame) => {
+                        session.run_file_tool_context(
+                            file_tool_context
+                                .as_mut()
+                                .ok_or("file-tool context was not captured")?,
+                            &frame,
+                            false,
+                            deadline,
+                        )?;
+                    }
                     protocol::EngineFrame::ContextGitRequest(frame) => {
                         if let Some(replay) = captured_context.as_mut() {
                             session.replay_context_git(replay, &frame, deadline)?;
@@ -413,6 +454,9 @@ fn execute_observed<'deadline>(
                             .map(|owner| owner.seal(cancellation::check))
                             .transpose()?;
                         progress.selection_sealed = selection_receipt.is_some();
+                        if let Some(owner) = file_tool_context.as_mut() {
+                            owner.mark_ready()?;
+                        }
                         context_git.mark_ready()?;
                         if let Some(replay) = captured_context.as_mut() {
                             replay.mark_ready();
@@ -556,6 +600,9 @@ fn execute_observed<'deadline>(
             };
             session.send(&dispatch, deadline)?;
             progress.dispatch_written = true;
+            if let Some(owner) = guard_strikes.as_mut() {
+                owner.grant_written(dispatched)?;
+            }
             let mut cache_attempted = false;
             let mut prefix_complete = false;
             let mut publication_attempted = false;
@@ -566,6 +613,26 @@ fn execute_observed<'deadline>(
                 match protocol::validate_frame(&session.frame(deadline)?, &request)? {
                     protocol::EngineFrame::SelectionObservationRequest(_) => {
                         return Err("selection observation request after Ready".into());
+                    }
+                    protocol::EngineFrame::GuardStrikesRequest(frame) => {
+                        session.run_guard_strikes(
+                            guard_strikes
+                                .as_mut()
+                                .ok_or("scope strikes were not advertised")?,
+                            file_tool_context.as_ref(),
+                            &frame,
+                            deadline,
+                        )?;
+                    }
+                    protocol::EngineFrame::FileToolContextRequest(frame) => {
+                        session.run_file_tool_context(
+                            file_tool_context
+                                .as_mut()
+                                .ok_or("file-tool context was not captured")?,
+                            &frame,
+                            true,
+                            deadline,
+                        )?;
                     }
                     protocol::EngineFrame::ContextGitRequest(_) => {
                         return Err("context Git request after Ready".into());
@@ -893,11 +960,14 @@ fn execute_observed<'deadline>(
         let (token, result, containment) = match stop_git_custody.preserve(proposal) {
             Ok(value) => value,
             Err(mut message) => {
-                if let Err(error) = session.cleanup_until(original_deadline, bounds.cleanup) {
+                if let Err(error) = session.cleanup_until(original_deadline, bounds.processing) {
                     message.push_str(&format!("; cleanup: {error}"));
                 }
                 return Err(Failure {
                     original_stop: None,
+                    file_tool_context: None,
+                    guard_strikes: None,
+                    engine_cleanup: Some(session),
                     terminal_code: None,
                     stop_git_custody: stop_git::FailureCustody::default(),
                     dispatched,
@@ -1063,6 +1133,12 @@ fn execute_observed<'deadline>(
             post_errors.push(format!("output delivery failed: {error}. Output may be partial; consumer receipt is unconfirmed.{note}"));
         }
         if !post_errors.is_empty() {
+            if let Some(note) = guard_strikes
+                .as_ref()
+                .and_then(guard_strikes_wire::Owner::terminal_note)
+            {
+                post_errors.push(note);
+            }
             runner::write_diagnostic(
                 format!(
                     "CAWS native post-proposal diagnostic: {}\n",
@@ -1079,6 +1155,9 @@ fn execute_observed<'deadline>(
             &mut stop_git_custody,
             Failure {
                 original_stop: None,
+                file_tool_context: None,
+                guard_strikes: None,
+                engine_cleanup: None,
                 terminal_code: Some(code),
                 stop_git_custody: stop_git::FailureCustody::default(),
                 dispatched,
@@ -1105,11 +1184,32 @@ fn execute_observed<'deadline>(
                 .preserve::<()>(Err(error.message))
                 .expect_err("preserved execution failure");
             error.original_stop = Some(original_stop);
+            error.file_tool_context = file_tool_context;
+            error.guard_strikes = guard_strikes;
             error.stop_git_custody = stop_git_custody;
             Err(error)
         }
     }
 }
+// Scheduling only: actual capture/pending handles remain in the caller-owned
+// Preparation through both cleanup attempts and the intervening terminal write.
+fn file_tool_terminal<T>(
+    original: Option<&MonotonicDeadline>,
+    mut settle: impl FnMut(&MonotonicDeadline, Instant) -> Result<(), String>,
+    deliver: impl FnOnce(Option<String>) -> T,
+) -> T {
+    let bounds = original.map(runner::CallbackBounds::original);
+    let before =
+        original.and_then(|clock| settle(clock, bounds.as_ref().unwrap().processing).err());
+    let value = deliver(before);
+    if let Some(clock) = original
+        && let Err(error) = settle(clock, bounds.as_ref().unwrap().cleanup)
+    {
+        runner::write_diagnostic(format!("CAWS original file-tool context retains native cleanup custody after terminal delivery: {error}; no replay.\n").as_bytes(), clock, clock.expires());
+    }
+    value
+}
+
 fn fallback(
     mut error: Failure<'_>,
     pre: bool,
@@ -1131,121 +1231,166 @@ fn fallback(
                 .err()
         })
     });
-    let _session_settlement = error.session_settlement.as_ref();
-    // Frontend failure retains finite metadata; the resident owns SQL cleanup.
-    #[cfg(feature = "sqlite-store")]
-    let _store_settlement = error.store_settlement.as_ref();
-    let mut reason = format!(
-        "CAWS native infrastructure failure ({}): {}. Checks did not complete; request was not retried.{}",
-        if error.dispatched {
-            "execution"
-        } else {
-            "configuration"
+    let mut file_tool_context = error.file_tool_context.take();
+    let mut engine_cleanup = error.engine_cleanup.take();
+    file_tool_terminal(
+        original,
+        |clock, until| {
+            let mut retained = Vec::new();
+            if let Some(owner) = file_tool_context.as_mut()
+                && let Err(error) = owner.retry_cleanup_until(clock, until)
+            {
+                retained.push(format!("file-tool custody: {error}"));
+            }
+            if let Some(session) = engine_cleanup.as_mut()
+                && let Err(error) = session.cleanup_until(clock, until)
+            {
+                retained.push(format!("engine custody: {error}"));
+            }
+            if retained.is_empty() {
+                Ok(())
+            } else {
+                Err(retained.join("; "))
+            }
         },
-        error.message,
-        if error.dispatched {
-            " Execution outcome may be uncertain."
-        } else {
-            ""
-        }
-    );
-    if let Some(cleanup) = stop_git_cleanup {
-        reason.push_str(&format!(" {cleanup}."));
-    }
-    if let Some(cleanup) = original_cleanup {
-        reason.push_str(&format!(" Original project native custodian retains cleanup: {cleanup}; native candidate was not retried."));
-    }
-    // A known refusal never charges infrastructure, including after partial
-    // output. Other retained failures keep the event-specific failure policy;
-    // prior native output forbids another stdout result.
-    if error.terminal_code == Some(2) {
-        if let Some(clock) = original {
-            runner::write_diagnostic(format!("{reason}\n").as_bytes(), clock, clock.expires());
-        }
-        return 2;
-    }
-    let mut block = pre || error.dispatched;
-    #[cfg(feature = "sqlite-store")]
-    if let Some(outcome) = error
-        .store_settlement
-        .as_ref()
-        .filter(|record| record.error.is_none())
-        .and_then(|record| record.acquisition.as_ref())
-    {
-        // Report only finite settlement metadata, never SQL cell/error payloads.
-        reason.push_str(&format!(
+        |file_tool_cleanup| {
+            let _session_settlement = error.session_settlement.as_ref();
+            // Frontend failure retains finite metadata; the resident owns SQL cleanup.
+            #[cfg(feature = "sqlite-store")]
+            let _store_settlement = error.store_settlement.as_ref();
+            let mut reason = format!(
+                "CAWS native infrastructure failure ({}): {}. Checks did not complete; request was not retried.{}",
+                if error.dispatched {
+                    "execution"
+                } else {
+                    "configuration"
+                },
+                error.message,
+                if error.dispatched {
+                    " Execution outcome may be uncertain."
+                } else {
+                    ""
+                }
+            );
+            if let Some(note) = error
+                .guard_strikes
+                .as_ref()
+                .and_then(guard_strikes_wire::Owner::terminal_note)
+            {
+                reason.push(' ');
+                reason.push_str(&note);
+            }
+            if let Some(cleanup) = stop_git_cleanup {
+                reason.push_str(&format!(" {cleanup}."));
+            }
+            if let Some(cleanup) = file_tool_cleanup {
+                reason.push_str(&format!(
+                    " Native execution retains cleanup custody: {cleanup}; no replay."
+                ));
+            }
+            if let Some(cleanup) = original_cleanup {
+                reason.push_str(&format!(" Original project native custodian retains cleanup: {cleanup}; native candidate was not retried."));
+            }
+            // A known refusal never charges infrastructure, including after partial
+            // output. Other retained failures keep the event-specific failure policy;
+            // prior native output forbids another stdout result.
+            if error.terminal_code == Some(2) {
+                if let Some(clock) = original {
+                    runner::write_diagnostic(
+                        format!("{reason}\n").as_bytes(),
+                        clock,
+                        clock.expires(),
+                    );
+                }
+                return 2;
+            }
+            let mut block = pre || error.dispatched;
+            #[cfg(feature = "sqlite-store")]
+            if let Some(outcome) = error
+                .store_settlement
+                .as_ref()
+                .filter(|record| record.error.is_none())
+                .and_then(|record| record.acquisition.as_ref())
+            {
+                // Report only finite settlement metadata, never SQL cell/error payloads.
+                reason.push_str(&format!(
             " Completed store exchange retained: end={}; acquisitionFailed={}; rowsDelivered={}.",
             outcome.end,
             outcome.first_failure.is_some(),
             outcome.rows_delivered,
         ));
-    }
-    if error.dispatched && stop {
-        let budget_ready = error.ready.as_deref();
-        #[cfg(feature = "sqlite-store")]
-        let budget_ready = budget_ready
-            .filter(|_| !matches!(error.store_project_binding, StoreProjectBinding::Unbound));
-        let charged = original
-            .ok_or_else(|| "Stop budget unavailable: original clock unavailable".to_owned())
-            .and_then(|clock| {
-                charge(
-                    budget_ready,
+            }
+            if error.dispatched && stop {
+                let budget_ready = error.ready.as_deref();
+                #[cfg(feature = "sqlite-store")]
+                let budget_ready = budget_ready.filter(|_| {
+                    !matches!(error.store_project_binding, StoreProjectBinding::Unbound)
+                });
+                let charged = original
+                    .ok_or_else(|| "Stop budget unavailable: original clock unavailable".to_owned())
+                    .and_then(|clock| {
+                        charge(
+                            budget_ready,
+                            clock,
+                            runner::cap_until(
+                                clock,
+                                bounds.as_ref().unwrap().terminal,
+                                Duration::from_millis(100),
+                            ),
+                        )
+                    });
+                match charged {
+                    Ok(Charge::Refuse) => {}
+                    Ok(Charge::Release) => {
+                        block = false;
+                        reason.push_str(
+                            " Stop infrastructure budget exhausted; releasing this Stop.",
+                        );
+                    }
+                    Err(unavailable) => {
+                        block = false;
+                        reason.push_str(&format!(
+                    " {unavailable}; releasing this infrastructure Stop; transaction not retried."
+                ));
+                    }
+                }
+            }
+            let stdout = if error.terminal_code.is_some() {
+                Vec::new()
+            } else if block {
+                format!(
+                    "{}\n",
+                    serde_json::json!({"decision":"block","reason":reason})
+                )
+                .into_bytes()
+            } else if error.dispatched && stop {
+                format!("{}\n", serde_json::json!({"systemMessage":reason})).into_bytes()
+            } else {
+                Vec::new()
+            };
+            let stderr = format!("{reason}\n");
+            let delivered = match original {
+                Some(clock) => runner::write_native(
+                    &stdout,
+                    stderr.as_bytes(),
                     clock,
                     runner::cap_until(
                         clock,
                         bounds.as_ref().unwrap().terminal,
-                        Duration::from_millis(100),
+                        runner::DELIVERY_BUDGET,
                     ),
-                )
-            });
-        match charged {
-            Ok(Charge::Refuse) => {}
-            Ok(Charge::Release) => {
-                block = false;
-                reason.push_str(" Stop infrastructure budget exhausted; releasing this Stop.");
+                ),
+                None => runner::write_unclocked_configuration(&stdout, stderr.as_bytes()),
+            };
+            if let Err(write) = delivered {
+                if let Some(clock) = original {
+                    runner::write_diagnostic(format!("{reason}\nCAWS native output delivery failed: {write}. Output may be partial; consumer receipt is unconfirmed.\n").as_bytes(), clock, clock.expires());
+                }
+                return if !block { 0 } else { 2 };
             }
-            Err(unavailable) => {
-                block = false;
-                reason.push_str(&format!(
-                    " {unavailable}; releasing this infrastructure Stop; transaction not retried."
-                ));
-            }
-        }
-    }
-    let stdout = if error.terminal_code.is_some() {
-        Vec::new()
-    } else if block {
-        format!(
-            "{}\n",
-            serde_json::json!({"decision":"block","reason":reason})
-        )
-        .into_bytes()
-    } else if error.dispatched && stop {
-        format!("{}\n", serde_json::json!({"systemMessage":reason})).into_bytes()
-    } else {
-        Vec::new()
-    };
-    let stderr = format!("{reason}\n");
-    let delivered = match original {
-        Some(clock) => runner::write_native(
-            &stdout,
-            stderr.as_bytes(),
-            clock,
-            runner::cap_until(
-                clock,
-                bounds.as_ref().unwrap().terminal,
-                runner::DELIVERY_BUDGET,
-            ),
-        ),
-        None => runner::write_unclocked_configuration(&stdout, stderr.as_bytes()),
-    };
-    if let Err(write) = delivered {
-        if let Some(clock) = original {
-            runner::write_diagnostic(format!("{reason}\nCAWS native output delivery failed: {write}. Output may be partial; consumer receipt is unconfirmed.\n").as_bytes(), clock, clock.expires());
-        }
-        return if !block { 0 } else { 2 };
-    }
-    if block { 2 } else { 0 }
+            if block { 2 } else { 0 }
+        },
+    )
 }
 #[cfg(feature = "sqlite-store")]
 mod sqlite_build_identity;
@@ -1563,6 +1708,9 @@ mod stop_terminal_context_tests {
             };
             let observed = Failure {
                 original_stop: None,
+                file_tool_context: None,
+                guard_strikes: None,
+                engine_cleanup: None,
                 terminal_code: None,
                 stop_git_custody: stop_git::FailureCustody::default(),
                 dispatched,
@@ -1606,5 +1754,83 @@ mod stop_terminal_context_tests {
                 assert!(store.original_project_bound);
             }
         }
+    }
+    #[test]
+    fn retained_strike_owner_survives_observed_terminal_failure_without_replay() {
+        let original = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+        let payload = serde_json::value::RawValue::from_string("{}".into()).unwrap();
+        let mut owner = guard_strikes_wire::Owner::retain(
+            guard_strikes_wire::OriginalInput {
+                id: "original",
+                runtime_digest: &"a".repeat(64),
+                home: Some("/original"),
+                payload: &payload,
+            },
+            &original,
+        );
+        assert!(owner.begin(b"malformed").is_err());
+        let note = owner.terminal_note().unwrap();
+        let mut failure = Failure::configuration("late terminal failure".into());
+        failure.guard_strikes = Some(owner);
+        let mut custody = stop_git::FailureCustody::default();
+        custody
+            .retain::<()>(Err(stop_git::Failure::Invalidated(
+                "retained refusal".into(),
+            )))
+            .unwrap_err();
+        let mut failure = retain_observed_stop_terminal(0, &mut custody, failure)
+            .err()
+            .unwrap();
+        let retained = failure.guard_strikes.as_mut().unwrap();
+        assert_eq!(retained.terminal_note().as_deref(), Some(note.as_str()));
+        assert!(retained.begin(b"{}").is_err());
+    }
+    #[test]
+    fn file_tool_cleanup_preserves_terminal_reserve_and_the_original_clock() {
+        // Tests the actual fallback scheduler, not a process-settlement oracle.
+        let original = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+        let bounds = runner::CallbackBounds::original(&original);
+        assert!(bounds.processing < bounds.terminal && bounds.terminal < bounds.cleanup);
+        let events = std::cell::RefCell::new(Vec::new());
+        let calls = std::cell::Cell::new(0);
+        let result = file_tool_terminal(
+            Some(&original),
+            |clock, until| {
+                assert_eq!(clock.envelope(), original.envelope());
+                calls.set(calls.get() + 1);
+                events.borrow_mut().push(("cleanup", until));
+                if calls.get() == 1 {
+                    Err("processing window ended with custody retained".into())
+                } else {
+                    Ok(())
+                }
+            },
+            |before| {
+                assert_eq!(
+                    before.as_deref(),
+                    Some("processing window ended with custody retained")
+                );
+                events.borrow_mut().push(("terminal", bounds.terminal));
+                7
+            },
+        );
+        assert_eq!(result, 7);
+        assert_eq!(
+            *events.borrow(),
+            vec![
+                ("cleanup", bounds.processing),
+                ("terminal", bounds.terminal),
+                ("cleanup", bounds.cleanup)
+            ]
+        );
+        let unclocked = file_tool_terminal(
+            None,
+            |_, _| panic!("no original clock cannot grant cleanup"),
+            |before| {
+                assert_eq!(before, None);
+                9
+            },
+        );
+        assert_eq!(unclocked, 9);
     }
 }

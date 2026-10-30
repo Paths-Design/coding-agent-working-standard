@@ -131,6 +131,10 @@ pub struct Request {
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_lease_context: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    file_tool_context: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guard_strikes: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     selection_observation: Option<SelectionObservationCapability>,
     #[cfg(target_os = "macos")]
     session_end_prefix: &'static str,
@@ -147,6 +151,29 @@ pub struct Request {
 }
 
 impl Request {
+    pub(crate) fn guard_strikes_input(
+        &self,
+    ) -> Option<crate::guard_strikes_wire::OriginalInput<'_>> {
+        self.guard_strikes
+            .map(|_| crate::guard_strikes_wire::OriginalInput {
+                id: &self.id,
+                runtime_digest: &self.runtime_digest,
+                home: self.caller.environment.get("HOME").map(String::as_str),
+                payload: &self.payload,
+            })
+    }
+    pub fn file_tool_context_input(
+        &self,
+    ) -> Option<caws_native::context_git::original_project::Input<'_>> {
+        self.file_tool_context
+            .map(|_| caws_native::context_git::original_project::Input {
+                id: &self.id,
+                runtime_digest: &self.runtime_digest,
+                caller_cwd: &self.caller.cwd,
+                environment: &self.caller.environment,
+                payload: &self.payload,
+            })
+    }
     /// Transport correlation only. The actual completed prefix and consumed
     /// EligibleStop remain mandatory at the parent consumer boundary.
     pub(crate) fn stop_lease_context_request(
@@ -476,6 +503,16 @@ impl Request {
         if Instant::now() >= expires {
             return Err("request deadline expired during execution context validation".into());
         }
+        let file_tool_context = if cfg!(target_os = "macos")
+            && config.configuration == "system"
+            && config.surface == "codex"
+            && config.event == "pre_tool_use"
+            && caws_native::context_git::file_tools::eligible_payload(&payload)?
+        {
+            Some(caws_native::context_git::file_tools::CAPABILITY)
+        } else {
+            None
+        };
         Ok(Self {
             schema: "caws.runtime.request.v1",
             id: format!("{}-{}", std::process::id(), since_epoch.as_nanos()),
@@ -498,6 +535,8 @@ impl Request {
                 && config.event == "stop")
                 .then_some(STOP_LEASE_CONTEXT_CAPABILITY),
             selection_observation: None,
+            file_tool_context,
+            guard_strikes: file_tool_context.map(|_| crate::guard_strikes_wire::CAPABILITY),
             #[cfg(target_os = "macos")]
             session_end_prefix: caws_native::session_cache_wire::PREFIX_CAPABILITY,
             #[cfg(target_os = "macos")]
@@ -572,6 +611,8 @@ pub struct Ready {
 pub enum EngineFrame {
     Ready(Ready),
     ContextGitRequest(Vec<u8>),
+    FileToolContextRequest(Vec<u8>),
+    GuardStrikesRequest(Vec<u8>),
     StopLeaseContextRequest(Vec<u8>),
     SelectionObservationRequest(Vec<u8>),
     SessionCacheRequest(Vec<u8>),
@@ -682,6 +723,19 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
     }
     let header: Discriminator =
         serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
+    if header.schema == crate::guard_strikes_wire::REQUEST_SCHEMA {
+        // Classification grants no effects or credit. Even malformed/oversized
+        // recognized requests must reach the one-shot owner's consumption check.
+        return Ok(EngineFrame::GuardStrikesRequest(bytes.to_vec()));
+    }
+    if header.schema == caws_native::context_git::file_tools::REQUEST_SCHEMA {
+        if request.file_tool_context.is_none()
+            || bytes.len() > caws_native::context_git::file_tools::MAX_REQUEST
+        {
+            return Err("file-tool context was not advertised or exceeds its frame bound".into());
+        }
+        return Ok(EngineFrame::FileToolContextRequest(bytes.to_vec()));
+    }
     if header.schema == STOP_LEASE_CONTEXT_REQUEST {
         if bytes.len() > MAX_STOP_LEASE_CONTEXT_REQUEST {
             return Err("Stop lease context request exceeds frame budget".into());
@@ -910,6 +964,8 @@ mod tests {
             session_cache: caws_native::session_cache_wire::CAPABILITY,
             stop_prefix: None,
             stop_lease_context: None,
+            file_tool_context: None,
+            guard_strikes: None,
             selection_observation: None,
             #[cfg(target_os = "macos")]
             session_end_prefix: caws_native::session_cache_wire::PREFIX_CAPABILITY,
@@ -929,6 +985,70 @@ mod tests {
             input_json: "{}".into(),
         }
     }
+
+    #[test]
+    fn guard_strike_classification_does_not_admit_or_decode_unowned_fields() {
+        let mut request = fixture_request();
+        let bytes = serde_json::to_vec(
+            &serde_json::json!({"schema":crate::guard_strikes_wire::REQUEST_SCHEMA,
+            "id":"forged","runtimeDigest":"wrong","token":false,"home":"/forged"}),
+        )
+        .unwrap();
+        assert!(
+            matches!(validate_frame(&bytes,&request).unwrap(),EngineFrame::GuardStrikesRequest(actual) if actual==bytes)
+        );
+        assert!(request.guard_strikes_input().is_none());
+        request.guard_strikes = Some(crate::guard_strikes_wire::CAPABILITY);
+        request
+            .caller
+            .environment
+            .insert("HOME".into(), "/original-home".into());
+        request
+            .caller
+            .environment
+            .insert("CAWS_HOME".into(), "/unrelated".into());
+        let input = request.guard_strikes_input().unwrap();
+        assert_eq!(input.id, "request");
+        assert_eq!(input.home, Some("/original-home"));
+        assert_eq!(input.payload.get(), "{}");
+        let mut oversized = bytes.clone();
+        oversized.extend(std::iter::repeat_n(
+            b' ',
+            crate::guard_strikes_wire::MAX_REQUEST,
+        ));
+        assert!(
+            matches!(validate_frame(&oversized,&request).unwrap(),EngineFrame::GuardStrikesRequest(actual) if actual==oversized)
+        );
+    }
+
+    #[test]
+    fn file_tool_frames_require_advertisement_and_keep_their_own_bound() {
+        let mut request = fixture_request();
+        let bytes=serde_json::to_vec(&serde_json::json!({
+            "schema":caws_native::context_git::file_tools::REQUEST_SCHEMA,"id":request.id,
+            "runtimeDigest":request.runtime_digest,"token":"b".repeat(64),"ordinal":1,"snapshotToken":null})).unwrap();
+        assert!(validate_frame(&bytes, &request).is_err());
+        request.file_tool_context = Some(caws_native::context_git::file_tools::CAPABILITY);
+        assert!(
+            matches!(validate_frame(&bytes,&request).unwrap(),EngineFrame::FileToolContextRequest(actual) if actual==bytes)
+        );
+        let mut oversized = bytes.clone();
+        oversized.extend(std::iter::repeat_n(
+            b' ',
+            caws_native::context_git::file_tools::MAX_REQUEST,
+        ));
+        assert!(
+            matches!(validate_frame(&oversized,&request),Err(error) if error.contains("frame bound"))
+        );
+        request.file_tool_context = None;
+        assert!(request.file_tool_context_input().is_none());
+        request.file_tool_context = Some(caws_native::context_git::file_tools::CAPABILITY);
+        let input = request.file_tool_context_input().unwrap();
+        assert_eq!(input.id, "request");
+        assert_eq!(input.caller_cwd, "/fixture");
+        assert_eq!(input.payload.get(), "{}");
+    }
+
     #[test]
     fn stop_lease_frame_refuses_unadvertised_wrong_consumer_duplicate_and_forged_arguments() {
         let mut request = fixture_request();

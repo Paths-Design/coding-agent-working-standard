@@ -124,7 +124,11 @@ selected-machine adoption are separate states.
   frozen Source05 mutation qualification work. Its retry4 logs retain the
   restarted campaigns; no final report or per-file floor verdict is established.
   Final-image applicability requires matching captured inputs or
-  requalification.
+  requalification. The user's clarified ownership decision assigns the
+  execution-owner continuation to that chat; this coordinator performs no
+  takeover or owner restoration there. That owner also retains the reported
+  Source app-bridge authority mismatch and the genuine same-session
+  execution/lifecycle consumer.
 - The origin probe under `CAWS-RUST-CUTOVER-ORIGIN-001` remains unexecuted after
   the installed guard refusal. A validated execution route and actual genuine
   host positive plus hostile transferred/prequeued-channel controls remain owed.
@@ -132,11 +136,116 @@ selected-machine adoption are separate states.
   file-tool changes moved byte-for-byte to `native-file-tools` under the user's
   repo-scoped worktree-guard exception; only those parent changes were restored.
   Parent state is clean, and the exception is revoked with no active handlers.
-  File-tool compilation and consumer qualification remain in progress.
-- Recovery qualifier candidate `935bf9de` has 53 passing evidence/filesystem/SQL
-  checks and independent source feedback. Its installed CLI entry preflight and
-  output-preservation bracket across owner restart require repairs before native
-  execution. Real native scenarios and recovery acceptance remain unearned.
+  File-tool source includes the native-owned context port, with capture before
+  Ready and fresh observation before ownership, plus truthful bare-primary
+  inventory. Independent source counterexamples corrected unused-capability
+  compatibility and terminal-reserve handling. The joined TypeScript production
+  build and 311 port, handler and cache checks pass for the context-only slice.
+  That slice also passes a private default-feature Rust check and selected
+  protocol/context tests. The joined strike core, Native wire and client have a
+  passing TypeScript build, 44 strict client checks and lint. The
+  default-feature Rust check and both test executables compile with pinned Rust
+  1.90. Sixteen core tests cover real filesystem locking, hostile paths,
+  migration, reset preimages and crash release; two ignored subprocess endpoints
+  are invoked by parent tests. Five wire tests and four pending/terminal tests
+  pass. The actual two-Rust-process TypeScript oracle passes one warning, one
+  denial, persisted count two, preservation of an unrelated guard key and no
+  target writes. This proves the fixture's core behavior, not final-image
+  callback execution. The pre-repair deterministic two-isolate scope-strike
+  check fails: both callers warn and publish count one, rather than one warning,
+  one denial and count two. The Native transaction core and client integration
+  are applied. A test-only Rust subprocess bridge preserves the real count-two
+  oracle without adding a public counter command. Actual `npm run test:prepare`
+  succeeds with Node 22 and pinned Rust 1.90, feature-off locked/offline jobs
+  one, in a physical lane-local target. The owned target symlink was removed;
+  the canonical shared target remains intact. The compiler-reported artifact and
+  source/toolchain receipt feed a two-worker Jest run without a manual override:
+  all 149 file-tool and client checks pass. The prepared feature-off artifact
+  also passes the 16 core parent tests. Forty-eight preparation/receipt/CI
+  checks cover stale inputs, failed compilation, shared-target refusal,
+  collision preservation and cleanup failures. Raw normal preparation and
+  consumer output are siblings `normal-test-preparation.log` and
+  `prepared-runtime-consumer.log` of the retained concurrency logs.
+  Participating shell/reset writers remain owed: live stock keys are file-tool
+  `scope_guard` and PostToolUse `shortcut_language`, not Bash `worktree_guard`.
+  The shared-runtime reset script also derives its project audit root from the
+  machine-library location. Those repairs and explicit prior-generation
+  drain/rollback handling remain open. Raw failure is retained in
+  `/private/tmp/caws-native-file-tools-01a1861e.b84kXw/strike-concurrency-red.log`.
+  The corresponding successful oracle is retained in
+  `/private/tmp/caws-native-file-tools-01a1861e.b84kXw/strike-concurrency-green.log`.
+  A broader sandboxed JavaScript attempt was interrupted with exit 130 after
+  repeated macOS developer-tool failures in Git fixture setup; it supplies no
+  suite verdict. The retry with verified host Git access passes all 475 checks
+  across the five affected JavaScript suites in 108.719 seconds; its raw output
+  is `strike-concurrency-green.log`'s sibling `joined-runtime-host-tests.log`.
+  The three source-only admission checks pass with child-launch APIs forbidden;
+  they exclude the other 105 stock-handler cases. The prior pathological run's
+  handle is missing and its descendants are unproved. The human reset the
+  resulting session danger latch; no signal retry is authorized or planned.
+- Hook-inspection candidate `d7833c868` lands on `main` through merge
+  `4104a1d0c`; component closure is `8e14dd057`. All three inspection criteria
+  are recorded through `caws specs evidence` and read back with events
+  15343–15345; event15346 records closure. Its production build and fresh 119
+  built-CLI checks pass; raw `committed-hooks-checks.log` is retained beside the
+  actual consumer result. The human-executed private ART07 probe against
+  `333316c84` at `tmp/rust-cutover-package/hooks-inspection-01/result.json`
+  binds native description with Python absent from PATH, native
+  member-corruption refusal without legacy replay, and explicit legacy
+  description. It preserves fixture inventories and describes ten handlers; it
+  executes no handlers and proves no genuine harness trust or callback.
+  Independent feedback identified alternate `CODEX_HOME` and nested caller-layer
+  selection gaps; the committed repairs refuse unsupported homes and inspect
+  bounded caller/canonical layers. Direct Native and legacy description also
+  pass against the corrected build. The actual harness trust/configuration stack
+  and callback remain unqualified.
+- Recovery qualifier repairs are committed as `6e7b5206c`, with 60 passing
+  evidence/filesystem/SQL checks. The installed CLI link resolves the immutable
+  package's actual bin entry, and retained outputs are bracketed before owner
+  restart rather than after it. ART07 Git inspection is retained under the
+  recovery lane's `tmp/rust-cutover-recovery/art07`: the command-sandbox attempt
+  refuses with `CSSMERR_TP_NOT_TRUSTED`, while the host-access attempt succeeds
+  with observation SHA
+  `4c5091249644e9256c939e69be8a56874b130bdc3e3d8899f7d694f4d780dbc7`. The failed
+  first profile root `/private/tmp/caws-art07-stop-component-output` is
+  preserved. Candidate `23225278b` validates the complete diagnostic envelope
+  before projecting semantic SQLite v1; 14 hostile checks pass. The real ART07
+  run matches all 30 component comparisons with 31 clean executions and emits
+  profile SHA
+  `1e178cf516d1550b24bd51e57a240564c4ed29e0053fa87f25aeae5e67f0e1bb`.
+  Independent feedback checks the committed source and raw comparison receipts.
+  The owned `tmp/rust-cutover-recovery/art07` inputs include the exact
+  397-importer, 1,472-request domain, a fresh Node22 replay of all 38 ESM edges
+  and 17 target pins, and descriptor SHA
+  `93e1bcd73169237ca01b1391ad24d02d5889118c79dbacc24060f5e0eaf29d4c`. ART07's
+  installed reader admits that descriptor. No Native Stop scenario has run:
+  neither CLI template set reproduces selected prior `43f2…` (actual CLI
+  recreates `408c…`, ART07 recreates `a596…`). A bounded, verified fixture
+  restore through the maintained installer transaction is assigned. Its driver
+  must pin the complete private CLI snapshot and loaded dependency closure
+  before using the helper; bootstrap `408c…` is distinct from restored prior
+  `43f2…`. The 113-member retained source remains untouched. The four-path
+  restore change is applied in the recovery lane; its source helper compiles and
+  17 real private installer transaction controls pass. Driver identity-loader
+  checks, a complete private restorer snapshot and the actual retained-source
+  fixture are pending. These unit fixtures run no Native Stop scenario. Native
+  Stop/recovery/rollback acceptance remains unearned.
+- Native signing source supplies all-architectures, strict and the installed
+  SDK's `kSecCSNoNetworkAccess` bit 29 to `SecStaticCodeCheckValidity`. Two
+  tests observe those outbound flags and preserve refusal errors. The rebuilt
+  debug inspector fails at the original five-second Git deadline; the attempt is
+  retained in `/private/tmp/caws-native-file-tools-01a1861e.b84kXw` and grants
+  no final-image, successful Git or packet-observed no-network claim. The older
+  ART07 observation predates this repair. The host's optimized build has a raw
+  exit-zero terminal record and no Cargo/rustc process remains; its signing,
+  size and smoke qualification are unproved. The coordinator's one-job locked,
+  offline check and test compilation complete in its existing private target.
+  The execution owner resumes its source and genuine consumer work. Its reported
+  native execution test/build terminals release one compiler slot for the
+  coordinator's normal preparation; that preparation exits zero and releases the
+  slot back. Host package qualification and the execution owner's remaining
+  workflow/mutation evidence need direct verification. Their work stays with the
+  existing owners; no source takeover is inferred.
 - The source inventory contains 46 tracked Python files: 14 installed hook
   copies, 16 package templates, 13 pytest files and three developer tools.
   Embedded Python and selected custom consumers remain additional retirement

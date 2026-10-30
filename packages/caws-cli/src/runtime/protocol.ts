@@ -21,6 +21,8 @@ export const SESSION_CACHE_CAPABILITY = 'caws.runtime.session-cache.v1';
 export const SESSION_END_PREFIX_CAPABILITY = 'caws.runtime.session-end-prefix.v1';
 export const STOP_PREFIX_CAPABILITY = 'caws.runtime.stop-prefix.v1';
 export const STOP_LEASE_CONTEXT_CAPABILITY = 'caws.runtime.stop-lease-context.v1';
+export const FILE_TOOL_CONTEXT_CAPABILITY = 'caws.runtime.file-tool-context.v1';
+export const GUARD_STRIKES_CAPABILITY = 'caws.runtime.guard-strikes.v1';
 export const TRANSCRIPT_STORE_CAPABILITY = 'caws.runtime.transcript-store.v1';
 export const SESSION_PUBLICATION_CAPABILITY = 'caws.runtime.session-publication.v1';
 export const SELECTION_OBSERVATION_CAPABILITY = 'caws.runtime.selection-observation.v1';
@@ -109,6 +111,10 @@ export interface RuntimeRequest {
   readonly stopPrefix?: typeof STOP_PREFIX_CAPABILITY;
   /** Dedicated late fixed consumer transport; never general post-Ready Git. */
   readonly stopLeaseContext?: typeof STOP_LEASE_CONTEXT_CAPABILITY;
+  /** Two native-original observations, including late ownership freshness. */
+  readonly fileToolContext?: typeof FILE_TOOL_CONTEXT_CAPABILITY;
+  /** Native-owned one-shot scope strike transaction; no selectors are accepted. */
+  readonly guardStrikes?: typeof GUARD_STRIKES_CAPABILITY;
   /** Optional finite native query profile; this does not select a stock consumer. */
   readonly sessionStore?: typeof TRANSCRIPT_STORE_CAPABILITY;
   /** Native-owned publication exchange; prepared bytes confer no path authority. */
@@ -226,6 +232,8 @@ export function decodeRuntimeRequest(
       ...(Object.hasOwn(value, 'sessionEndPrefix') ? ['sessionEndPrefix'] : []),
       ...(Object.hasOwn(value, 'stopPrefix') ? ['stopPrefix'] : []),
       ...(Object.hasOwn(value, 'stopLeaseContext') ? ['stopLeaseContext'] : []),
+      ...(Object.hasOwn(value, 'fileToolContext') ? ['fileToolContext'] : []),
+      ...(Object.hasOwn(value, 'guardStrikes') ? ['guardStrikes'] : []),
       ...(Object.hasOwn(value, 'sessionStore') ? ['sessionStore'] : []),
       ...(Object.hasOwn(value, 'sessionPublication') ? ['sessionPublication'] : []),
       ...(Object.hasOwn(value, 'selectionObservation') ? ['selectionObservation'] : []),
@@ -257,6 +265,13 @@ export function decodeRuntimeRequest(
     value.stopLeaseContext !== STOP_LEASE_CONTEXT_CAPABILITY
   )
     throw new RuntimeProtocolError('Unsupported Stop lease context capability');
+  if (
+    Object.hasOwn(value, 'fileToolContext') &&
+    value.fileToolContext !== FILE_TOOL_CONTEXT_CAPABILITY
+  )
+    throw new RuntimeProtocolError('Unsupported file-tool context capability');
+  if (Object.hasOwn(value, 'guardStrikes') && value.guardStrikes !== GUARD_STRIKES_CAPABILITY)
+    throw new RuntimeProtocolError('Unsupported guard-strikes capability');
   if (Object.hasOwn(value, 'sessionStore') && value.sessionStore !== TRANSCRIPT_STORE_CAPABILITY)
     throw new RuntimeProtocolError('Unsupported transcript store capability');
   if (
@@ -356,6 +371,12 @@ export function decodeRuntimeRequest(
     ...(value.stopPrefix === STOP_PREFIX_CAPABILITY ? { stopPrefix: STOP_PREFIX_CAPABILITY } : {}),
     ...(value.stopLeaseContext === STOP_LEASE_CONTEXT_CAPABILITY
       ? { stopLeaseContext: STOP_LEASE_CONTEXT_CAPABILITY }
+      : {}),
+    ...(value.fileToolContext === FILE_TOOL_CONTEXT_CAPABILITY
+      ? { fileToolContext: FILE_TOOL_CONTEXT_CAPABILITY }
+      : {}),
+    ...(value.guardStrikes === GUARD_STRIKES_CAPABILITY
+      ? { guardStrikes: GUARD_STRIKES_CAPABILITY }
       : {}),
     ...(value.sessionStore === TRANSCRIPT_STORE_CAPABILITY
       ? { sessionStore: TRANSCRIPT_STORE_CAPABILITY }

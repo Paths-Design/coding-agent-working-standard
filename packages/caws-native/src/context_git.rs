@@ -37,6 +37,9 @@ pub mod render;
 #[path = "context_git/stop.rs"]
 pub mod stop;
 
+#[path = "context_git/file_tools.rs"]
+pub mod file_tools;
+
 pub const MAX_REQUEST: usize = 32 * 1024;
 pub const MAX_RESULT: usize = 2 * 1024 * 1024;
 pub const MAX_OUTPUT: usize = 1024 * 1024;
@@ -87,12 +90,25 @@ pub enum Operation {
     Checkout,
     #[serde(rename = "commonDir")]
     CommonDir,
+    #[serde(rename = "fileBranch")]
+    FileBranch,
+    #[serde(rename = "fileGitDir")]
+    FileGitDir,
+    #[serde(rename = "fileCommonDir")]
+    FileCommonDir,
+    #[serde(rename = "fileWorktrees")]
+    FileWorktrees,
 }
 impl Operation {
     fn argv(self) -> &'static [&'static str] {
         match self {
             Self::Checkout => &["rev-parse", "--show-toplevel"],
-            Self::CommonDir => &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+            Self::CommonDir | Self::FileCommonDir => {
+                &["rev-parse", "--path-format=absolute", "--git-common-dir"]
+            }
+            Self::FileBranch => &["rev-parse", "--abbrev-ref", "HEAD"],
+            Self::FileGitDir => &["rev-parse", "--path-format=absolute", "--git-dir"],
+            Self::FileWorktrees => &["worktree", "list", "--porcelain", "-z"],
         }
     }
 }
@@ -251,6 +267,15 @@ impl ContextGitOwner {
         self.binding
             .get_or_insert_with(|| (request.token.clone(), request.executable.clone()));
         self.next += 1;
+        self.start_query(request)
+    }
+
+    // Native child modules may select a closed internal query. The generic
+    // engine-facing begin above retains its original operation/phase grammar.
+    fn start_query(&mut self, request: Request) -> Result<PendingGit, String> {
+        if self.active.load(Ordering::Acquire) {
+            return Err("native context Git query overlaps retained custody".into());
+        }
         let invocation_expires_ns = monotonic_ns().saturating_add(
             self.invocation
                 .deadline
@@ -1369,3 +1394,38 @@ mod frontend_cleanup_tests {
 #[cfg(test)]
 #[path = "context_git/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod file_tool_query_admission_tests {
+    use super::*;
+    #[test]
+    fn generic_engine_requests_cannot_select_native_file_tool_operations() {
+        for operation in [
+            Operation::FileBranch,
+            Operation::FileGitDir,
+            Operation::FileCommonDir,
+            Operation::FileWorktrees,
+        ] {
+            let mut owner = ContextGitOwner::new(Invocation {
+                id: "original".into(),
+                runtime_digest: "a".repeat(64),
+                deadline: Instant::now() + Duration::from_secs(1),
+                environment: Vec::new(),
+            })
+            .unwrap();
+            let request = Request {
+                schema: REQUEST_SCHEMA.into(),
+                id: "original".into(),
+                runtime_digest: "a".repeat(64),
+                token: "b".repeat(64),
+                ordinal: 1,
+                operation,
+                executable: "/usr/bin/git".into(),
+                cwd: "/".into(),
+            };
+            assert!(owner.begin(&serde_json::to_vec(&request).unwrap()).is_err());
+            assert_eq!(owner.next, 1);
+            assert!(!owner.active.load(Ordering::Acquire));
+        }
+    }
+}

@@ -475,6 +475,8 @@ pub struct Session {
     context_git_control_credit: usize,
     stop_lease_context_used: bool,
     stop_lease_context_control_credit: usize,
+    file_tool_context_control_credit: usize,
+    guard_strikes_control_credit: usize,
     selection_control_credit: usize,
     #[cfg(feature = "sqlite-store")]
     store_control_credit: usize,
@@ -665,6 +667,8 @@ impl Session {
             context_git_control_credit: 0,
             stop_lease_context_used: false,
             stop_lease_context_control_credit: 0,
+            file_tool_context_control_credit: 0,
+            guard_strikes_control_credit: 0,
             selection_control_credit: 0,
             #[cfg(feature = "sqlite-store")]
             store_control_credit: 0,
@@ -1127,6 +1131,136 @@ impl Session {
         Ok(())
     }
 
+    pub(crate) fn run_guard_strikes(
+        &mut self,
+        owner: &mut crate::guard_strikes_wire::Owner,
+        context: Option<&caws_native::context_git::file_tools::Preparation>,
+        frame: &[u8],
+        until: Instant,
+    ) -> Result<(), String> {
+        // Consumption precedes decode, phase checks, roots, and any filesystem effect.
+        let control = owner.begin(frame)?;
+        let credit = frame
+            .len()
+            .checked_add(1)
+            .ok_or("scope strike control credit overflow")?;
+        if self.guard_strikes_control_credit != 0
+            || credit > crate::guard_strikes_wire::MAX_CONTROL_CREDIT
+        {
+            return Err("scope strike control credit exceeds one request".into());
+        }
+        self.guard_strikes_control_credit = credit;
+        let original = self.original_deadline.clone();
+        let until = until.min(original.expires());
+        let transport_error = std::cell::RefCell::new(None::<String>);
+        let reply = {
+            let reader = std::cell::RefCell::new(&mut *self);
+            let cancelled = || {
+                let check = if crate::cancellation::check().is_err() {
+                    Err("original scope strike cancelled".into())
+                } else {
+                    check_until(&original, until)
+                        .and_then(|_| reader.borrow_mut().guard_strikes_checkpoint(until))
+                };
+                match check {
+                    Ok(()) => false,
+                    Err(error) => {
+                        if transport_error.borrow().is_none() {
+                            *transport_error.borrow_mut() = Some(error);
+                        }
+                        true
+                    }
+                }
+            };
+            owner.execute(control, context, until, &cancelled)
+        };
+        // execute retained any core error/known publication before this branch.
+        // A concurrently observed transport failure cannot upgrade that result.
+        if let Some(error) = transport_error.into_inner() {
+            return Err(error);
+        }
+        let reply = reply?;
+        self.guard_strikes_checkpoint(until)?;
+        let mut offset = 0;
+        while offset < reply.len() {
+            offset += self.pump(Some(&reply[offset..]), until)?;
+            if self.guard_strikes_partial_overlap(offset, reply.len()) {
+                return Err("engine output overlapped partial scope strike result".into());
+            }
+        }
+        // Do not probe the reader after the final write: a legitimate following
+        // capture2/proposal may already be queued for the ordinary phase loop.
+        Ok(())
+    }
+    fn guard_strikes_partial_overlap(&self, offset: usize, length: usize) -> bool {
+        offset < length && (!self.buffered.is_empty() || self.out_done)
+    }
+    fn guard_strikes_checkpoint(&mut self, until: Instant) -> Result<(), String> {
+        check_until(&self.original_deadline, until)?;
+        crate::cancellation::check()?;
+        if !self.buffered.is_empty() || self.out_done {
+            return Err("engine output overlapped pending scope strike".into());
+        }
+        self.pump_with_interests(None, until, &[], 0)?;
+        if !self.buffered.is_empty() || self.out_done {
+            return Err("engine output overlapped pending scope strike".into());
+        }
+        Ok(())
+    }
+
+    /// Dedicated two-phase original file-tool observation. The native owner
+    /// retains all Git custody if this sole-reader transport fails or overlaps.
+    pub(crate) fn run_file_tool_context(
+        &mut self,
+        owner: &mut caws_native::context_git::file_tools::Preparation,
+        frame: &[u8],
+        after_dispatch: bool,
+        until: Instant,
+    ) -> Result<(), String> {
+        let original = self.original_deadline.clone();
+        let until = until.min(original.expires());
+        let reply = owner.observe(
+            frame,
+            after_dispatch,
+            until,
+            &|| crate::cancellation::check().is_err() || check_until(&original, until).is_err(),
+            |interests, wait| {
+                self.file_tool_context_checkpoint(until)?;
+                self.pump_with_interests(None, until, interests, wait)?;
+                self.file_tool_context_checkpoint(until)
+            },
+        )?;
+        let credit = self
+            .file_tool_context_control_credit
+            .checked_add(frame.len() + 1)
+            .ok_or("file-tool context control credit overflow")?;
+        if credit > caws_native::context_git::file_tools::MAX_CONTROL_CREDIT {
+            return Err("file-tool context exceeds two requests".into());
+        }
+        self.file_tool_context_control_credit = credit;
+        self.file_tool_context_checkpoint(until)?;
+        let mut offset = 0;
+        while offset < reply.len() {
+            offset += self.pump(Some(&reply[offset..]), until)?;
+            if offset < reply.len() && (!self.buffered.is_empty() || self.out_done) {
+                return Err("engine output overlapped partial file-tool context result".into());
+            }
+        }
+        Ok(())
+    }
+    fn file_tool_context_checkpoint(&mut self, until: Instant) -> Result<(), String> {
+        check_until(&self.original_deadline, until)?;
+        crate::cancellation::check()?;
+        if !self.buffered.is_empty() || self.out_done {
+            return Err("engine output overlapped pending file-tool context".into());
+        }
+        self.pump_with_interests(None, until, &[], 0)?;
+        if !self.buffered.is_empty() || self.out_done {
+            return Err("engine output overlapped pending file-tool context".into());
+        }
+        Ok(())
+    }
+
     /// One dedicated late consumer request only. Generic context Git credit
     /// and pre-Ready discovery admission remain unchanged.
     pub(crate) fn begin_stop_lease_context(
@@ -1201,6 +1335,8 @@ impl Session {
             self.cache_control_credit
                 + self.context_git_control_credit
                 + self.stop_lease_context_control_credit
+                + self.file_tool_context_control_credit
+                + self.guard_strikes_control_credit
                 + self.selection_control_credit
                 + self.publication_control_credit
                 + self.store_control_credit
@@ -1210,6 +1346,8 @@ impl Session {
             self.cache_control_credit
                 + self.context_git_control_credit
                 + self.stop_lease_context_control_credit
+                + self.file_tool_context_control_credit
+                + self.guard_strikes_control_credit
                 + self.selection_control_credit
                 + self.publication_control_credit
         }
@@ -2029,6 +2167,61 @@ mod tests {
         );
         assert_eq!(oversized.stop_lease_context_control_credit, 0);
         assert!(oversized.begin_stop_lease_context(1).is_err());
+    }
+
+    #[test]
+    fn scope_strike_pending_overlap_eof_and_expiry_are_terminal_without_generic_credit() {
+        let mut current = session("/dev/stdin");
+        current.buffered.extend_from_slice(b"next\n");
+        assert!(
+            current
+                .guard_strikes_checkpoint(deadline())
+                .unwrap_err()
+                .contains("overlapped")
+        );
+        assert_eq!(current.guard_strikes_control_credit, 0);
+        assert_eq!(current.context_git_control_credit, 0);
+        assert!(current.guard_strikes_partial_overlap(3, 4));
+        assert!(!current.guard_strikes_partial_overlap(4, 4));
+        assert_eq!(current.buffered, b"next\n");
+        let mut closed = session("/dev/null");
+        closed.out_done = true;
+        assert!(
+            closed
+                .guard_strikes_checkpoint(deadline())
+                .unwrap_err()
+                .contains("overlapped")
+        );
+        let mut expired = session("/dev/stdin");
+        expired.buffered.extend_from_slice(b"preserved\n");
+        assert!(
+            expired
+                .guard_strikes_checkpoint(Instant::now() - Duration::from_millis(1))
+                .is_err()
+        );
+        assert_eq!(expired.buffered, b"preserved\n");
+    }
+
+    #[test]
+    fn file_tool_pending_overlap_and_eof_are_terminal_without_generic_credit() {
+        let mut current = session("/dev/stdin");
+        current
+            .buffered
+            .extend_from_slice(b"queued forged second request");
+        assert_eq!(
+            current
+                .file_tool_context_checkpoint(deadline())
+                .unwrap_err(),
+            "engine output overlapped pending file-tool context"
+        );
+        assert_eq!(current.file_tool_context_control_credit, 0);
+        assert_eq!(current.context_git_control_credit, 0);
+        let mut closed = session("/dev/null");
+        closed.out_done = true;
+        assert_eq!(
+            closed.file_tool_context_checkpoint(deadline()).unwrap_err(),
+            "engine output overlapped pending file-tool context"
+        );
     }
 
     #[test]

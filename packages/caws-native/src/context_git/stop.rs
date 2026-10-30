@@ -994,6 +994,9 @@ mod signing {
     use super::*;
     use std::ffi::c_void;
     type Ref = *const c_void;
+    // SecStaticCode.h and CSCommon.h: check every architecture, validate
+    // strictly, and prohibit network access by the signature verifier.
+    const VALIDATION_FLAGS: u32 = (1 << 0) | (1 << 4) | (1 << 29);
     #[link(name = "CoreFoundation", kind = "framework")]
     unsafe extern "C" {
         fn CFURLCreateFromFileSystemRepresentation(
@@ -1044,11 +1047,60 @@ mod signing {
                 "Apple signature object/requirement refused: {a}/{b}"
             ));
         }
-        let status = unsafe { SecStaticCodeCheckValidity(code.0, (1 << 0) | (1 << 4), req.0) };
+        validate_signature_with(code.0, req.0, SecStaticCodeCheckValidity)
+    }
+
+    fn validate_signature_with(
+        code: Ref,
+        requirement: Ref,
+        check: unsafe extern "C" fn(Ref, u32, Ref) -> i32,
+    ) -> Result<(), String> {
+        let status = unsafe { check(code, VALIDATION_FLAGS, requirement) };
         if status != 0 {
             return Err(format!("Apple signature requirement refused: {status}"));
         }
         Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        static OBSERVED_FLAGS: AtomicU32 = AtomicU32::new(0);
+
+        unsafe extern "C" fn observe_flags(_: Ref, flags: u32, _: Ref) -> i32 {
+            OBSERVED_FLAGS.store(flags, Ordering::SeqCst);
+            0
+        }
+
+        #[test]
+        fn signing_port_requires_no_network_strict_and_all_architectures() {
+            validate_signature_with(std::ptr::null(), std::ptr::null(), observe_flags).unwrap();
+            let observed = OBSERVED_FLAGS.load(Ordering::SeqCst);
+            assert_ne!(
+                observed & (1 << 29),
+                0,
+                "signature verification must prohibit network access"
+            );
+            assert_ne!(
+                observed & (1 << 4),
+                0,
+                "signature verification must remain strict"
+            );
+            assert_ne!(observed & (1 << 0), 0, "every architecture must be checked");
+        }
+
+        #[test]
+        fn signing_port_preserves_security_framework_refusal() {
+            unsafe extern "C" fn refuse(_: Ref, _: u32, _: Ref) -> i32 {
+                -2147409622
+            }
+            assert_eq!(
+                validate_signature_with(std::ptr::null(), std::ptr::null(), refuse).unwrap_err(),
+                "Apple signature requirement refused: -2147409622"
+            );
+        }
     }
 }
 #[cfg(not(target_os = "macos"))]

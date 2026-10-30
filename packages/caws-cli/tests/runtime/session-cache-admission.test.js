@@ -171,6 +171,20 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test.each(['Write', 'Edit', 'apply_patch'])(
+  'original %s file-tool input qualifies the stock prefix without rewriting payload',
+  (tool) => {
+    const tool_input =
+      tool === 'apply_patch'
+        ? { command: '*** Begin Patch\n*** Delete File: src/a\n*** End Patch\n' }
+        : { file_path: 'src/a', content: 'ordinary' };
+    payload({ tool_name: tool, tool_input, cwd: checkout, session_id: 'original' });
+    const before = request.inputJson;
+    expect(qualify()).toBe(true);
+    expect(request.inputJson).toBe(before);
+  }
+);
+
 function sessionEnd(surface = 'codex') {
   selection.surface = request.surface = surface;
   selection.event = request.event = 'session_end';

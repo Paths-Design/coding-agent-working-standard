@@ -3,7 +3,9 @@ const { AbortController } = globalThis;
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { execFileSync } = require('node:child_process');
+const childProcess = require('node:child_process');
+const { execFileSync } = childProcess;
+const { resolveGitBinaryForEnvironment } = require('../../dist/store/git-binary');
 const {
   tryExecuteStockHandler,
   qualifiesForNativeContainment,
@@ -146,8 +148,17 @@ function command(value) {
   };
   request.inputJson = JSON.stringify(request.payload);
 }
-const git = (...args) =>
-  execFileSync('git', args, { cwd: project, env: environment, encoding: 'utf8' });
+const git = (...args) => {
+  const binary = resolveGitBinaryForEnvironment(environment, project);
+  if (!binary) throw new Error('Fixture Git is unavailable on its explicit PATH');
+  return execFileSync(binary, args, {
+    cwd: project,
+    env: environment,
+    encoding: 'utf8',
+    timeout: 5000,
+    maxBuffer: 1024 * 1024,
+  });
+};
 beforeEach(() => {
   directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-stock-handlers-')));
   runtime = path.join(directory, 'runtime');
@@ -214,7 +225,6 @@ beforeEach(() => {
     payload: {},
   };
   controller = new AbortController();
-  git('init', '-q');
 });
 afterEach(() => {
   jest.restoreAllMocks();
@@ -262,86 +272,104 @@ afterEach(() => {
   fs.rmSync(directory, { recursive: true, force: true });
 });
 
-test.each(agentSurfaceProfiles)(
-  'actual selected stock guard refuses a bare staged deletion natively without arming a latch ($name)',
-  async (profile) => {
-    useAgentSurfaceProfile(profile);
-    fs.writeFileSync(path.join(project, 'owned.txt'), 'owned\n');
-    git('add', 'owned.txt');
-    git(
-      '-c',
-      'user.name=Fixture',
-      '-c',
-      'user.email=fixture@example.invalid',
-      'commit',
-      '-qm',
-      'fixture'
-    );
-    fs.unlinkSync(path.join(project, 'owned.txt'));
-    git('add', '-u');
-    const indexBefore = fs.readFileSync(path.join(project, '.git/index'));
-    fs.writeFileSync(path.join(directory, 'index-before.bin'), indexBefore);
-    command('git commit -m unrelated');
+describe('selected stock execution', () => {
+  beforeEach(() => git('init', '-q'));
+
+  test.each(agentSurfaceProfiles)(
+    'actual selected stock guard refuses a bare staged deletion natively without arming a latch ($name)',
+    async (profile) => {
+      useAgentSurfaceProfile(profile);
+      fs.writeFileSync(path.join(project, 'owned.txt'), 'owned\n');
+      git('add', 'owned.txt');
+      git(
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '-qm',
+        'fixture'
+      );
+      fs.unlinkSync(path.join(project, 'owned.txt'));
+      git('add', '-u');
+      const indexBefore = fs.readFileSync(path.join(project, '.git/index'));
+      fs.writeFileSync(path.join(directory, 'index-before.bin'), indexBefore);
+      command('git commit -m unrelated');
+      const handler = select();
+      const spawn = jest.spyOn(require('node:child_process'), 'spawn');
+      const result = await createHandlerExecutor(context())(handler, 0);
+      captureResult('staged-deletion', result);
+      expect(result.exitCode).toBe(0);
+      const body = JSON.parse(Buffer.from(result.stdout).toString('utf8'));
+      expect(body.decision).toBe('block');
+      expect(body.reason).toContain('owned.txt');
+      expect(body.reason).toContain('danger latch was NOT armed');
+      expect(body.reason).toContain('git commit -m "<msg>" -- <paths>');
+      expect(spawn.mock.calls.length).toBe(0);
+      expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(indexBefore);
+      expect(fs.existsSync(path.join(project, '.codex/hooks/state'))).toBe(false);
+    }
+  );
+
+  test('a rehashed unreviewed library keeps the selected shell route instead of inheriting stock trust', async () => {
+    useAgentSurfaceProfile(agentSurfaceProfiles[1]);
+    command('echo safe');
+    environment.CAWS_SESSION_ID = 'fixture';
     const handler = select();
     const spawn = jest.spyOn(require('node:child_process'), 'spawn');
-    const result = await createHandlerExecutor(context())(handler, 0);
-    captureResult('staged-deletion', result);
-    expect(result.exitCode).toBe(0);
-    const body = JSON.parse(Buffer.from(result.stdout).toString('utf8'));
-    expect(body.decision).toBe('block');
-    expect(body.reason).toContain('owned.txt');
-    expect(body.reason).toContain('danger latch was NOT armed');
-    expect(body.reason).toContain('git commit -m "<msg>" -- <paths>');
+    const native = await createHandlerExecutor(context())(handler, 0);
+    const reviewedExecutorChildren = spawn.mock.calls.length;
+    captureResult('reviewed-quiet-allow', native);
+    expect(native.exitCode).toBe(0);
+    expect(Buffer.from(native.stdout).length).toBe(0);
+    expect(Buffer.from(native.stderr).length).toBe(0);
     expect(spawn.mock.calls.length).toBe(0);
-    expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(indexBefore);
-    expect(fs.existsSync(path.join(project, '.codex/hooks/state'))).toBe(false);
-  }
-);
+    expect(qualifiesForNativeContainment(handler, context())).toBe(true);
 
-test('a rehashed unreviewed library keeps the selected shell route instead of inheriting stock trust', async () => {
-  useAgentSurfaceProfile(agentSurfaceProfiles[1]);
-  command('echo safe');
-  environment.CAWS_SESSION_ID = 'fixture';
-  const handler = select();
-  const spawn = jest.spyOn(require('node:child_process'), 'spawn');
-  const native = await createHandlerExecutor(context())(handler, 0);
-  const reviewedExecutorChildren = spawn.mock.calls.length;
-  captureResult('reviewed-quiet-allow', native);
-  expect(native.exitCode).toBe(0);
-  expect(Buffer.from(native.stdout).length).toBe(0);
-  expect(Buffer.from(native.stderr).length).toBe(0);
-  expect(spawn.mock.calls.length).toBe(0);
-  expect(qualifiesForNativeContainment(handler, context())).toBe(true);
-
-  const library = selection.libraries['agent-surface.sh'];
-  fs.appendFileSync(library.path, '\n# valid but unreviewed fixture source\n');
-  library.sha256 = digest(library.path); // Fresh metadata must not grant a new reviewed identity.
-  expect(agentSurfaceProfiles.map((profile) => profile.sha256)).not.toContain(library.sha256);
-  expect(tryExecuteStockHandler(handler, context())).toBeNull();
-  expect(qualifiesForNativeContainment(handler, context())).toBe(false);
-  const fallback = await createHandlerExecutor(context())(handler, 0);
-  captureResult('unreviewed-shell-allow', fallback);
-  fs.writeFileSync(
-    path.join(directory, 'route-observation.json'),
-    JSON.stringify(
-      {
-        reviewedExecutorChildren,
-        finalExecutorChildren: spawn.mock.calls.length,
-        rehashedLibrary: library,
-      },
-      null,
-      2
-    )
-  );
-  expect(fallback.exitCode).toBe(0);
-  expect(Buffer.from(fallback.stdout).length).toBe(0);
-  expect(spawn.mock.calls.length).toBe(1);
+    const library = selection.libraries['agent-surface.sh'];
+    fs.appendFileSync(library.path, '\n# valid but unreviewed fixture source\n');
+    library.sha256 = digest(library.path); // Fresh metadata must not grant a new reviewed identity.
+    expect(agentSurfaceProfiles.map((profile) => profile.sha256)).not.toContain(library.sha256);
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+    expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+    const fallback = await createHandlerExecutor(context())(handler, 0);
+    captureResult('unreviewed-shell-allow', fallback);
+    fs.writeFileSync(
+      path.join(directory, 'route-observation.json'),
+      JSON.stringify(
+        {
+          reviewedExecutorChildren,
+          finalExecutorChildren: spawn.mock.calls.length,
+          rehashedLibrary: library,
+        },
+        null,
+        2
+      )
+    );
+    expect(fallback.exitCode).toBe(0);
+    expect(Buffer.from(fallback.stdout).length).toBe(0);
+    expect(spawn.mock.calls.length).toBe(1);
+  });
 });
 
 test.each(agentSurfaceProfiles)(
   'reviewed source permits only the original containment eligibility contract ($name)',
   (profile) => {
     useAgentSurfaceProfile(profile);
+    expect(fs.existsSync(path.join(project, '.git'))).toBe(false);
+    const childLaunches = [
+      'exec',
+      'execSync',
+      'execFile',
+      'execFileSync',
+      'spawn',
+      'spawnSync',
+      'fork',
+    ].map((method) =>
+      jest.spyOn(childProcess, method).mockImplementation(() => {
+        throw new Error('Source admission must not launch a child: ' + method);
+      })
+    );
     command('echo safe');
     environment.CAWS_SESSION_ID = 'fixture';
     const handler = select();
@@ -403,915 +431,929 @@ test.each(agentSurfaceProfiles)(
     for (const observation of observations)
       expect(observation).toEqual({ name: observation.name, eligible: false });
     expect(changedStartupEligible).toBe(false);
+    for (const launch of childLaunches) expect(launch).not.toHaveBeenCalled();
   }
 );
 
-test('a canonical latch prevents native admission from a different checkout', () => {
-  command('echo safe');
-  const handler = select();
-  const canonical = path.join(directory, 'canonical');
-  const state = path.join(canonical, '.codex/hooks/state');
-  fs.mkdirSync(state, { recursive: true });
-  selection.canonical = canonical;
-  // Positive control proves this command/source pair is otherwise admitted.
-  expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
-  fs.writeFileSync(path.join(state, 'danger-latch-neighbor.json'), '{}');
-  expect(tryExecuteStockHandler(handler, context())).toBeNull();
-  expect(fs.existsSync(path.join(project, '.codex/hooks/state'))).toBe(false);
-});
+describe('selected stock handler behavior', () => {
+  beforeEach(() => git('init', '-q'));
 
-test.each([
-  'handler-env.sh',
-  'runtime-paths.sh',
-  'lib/agent-surface.sh',
-  'lib/parse-input.sh',
-  'lib/session-cache.sh',
-  'lib/session-id.sh',
-  'lib/agent-pid.sh',
-])('selected Codex parser does not conceal changed direct source %s', async (name) => {
-  useCodexLibraries();
-  useHeartbeatCli();
-  command('echo safe');
-  const heartbeat = jest
-    .spyOn(require('../../dist/runtime/agent-heartbeat'), 'executeAgentHeartbeat')
-    .mockResolvedValue({ exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) });
-  for (const consumer of ['block-dangerous.sh', 'agent-heartbeat.sh', 'hook-utilities.sh']) {
-    const handler = select(consumer);
-    expect(await tryExecuteStockHandler(handler, context())).not.toBeNull();
-  }
-  const file = path.join(runtime, name);
-  fs.appendFileSync(file, '\n# unreviewed direct source\n');
-  for (const library of Object.values(selection.libraries))
-    if (library.path === file) library.sha256 = digest(file);
-  heartbeat.mockClear();
-  for (const consumer of ['block-dangerous.sh', 'agent-heartbeat.sh', 'hook-utilities.sh']) {
-    const handler = select(consumer);
-    expect(tryExecuteStockHandler(handler, context())).toBeNull();
-    if (consumer === 'block-dangerous.sh')
-      expect(qualifiesForNativeContainment(handler, context())).toBe(false);
-  }
-  expect(heartbeat).not.toHaveBeenCalled();
-});
-
-test.each(['parse-input.sh', 'emit.sh'])(
-  'reviewed %s bytes cannot move between shared and surface source roles',
-  (name) => {
-    useCodexLibraries();
+  test('a canonical latch prevents native admission from a different checkout', () => {
     command('echo safe');
     const handler = select();
+    const canonical = path.join(directory, 'canonical');
+    const state = path.join(canonical, '.codex/hooks/state');
+    fs.mkdirSync(state, { recursive: true });
+    selection.canonical = canonical;
+    // Positive control proves this command/source pair is otherwise admitted.
     expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
-    const shared = path.join(runtime, 'lib', name);
-    const surface = selection.libraries[name].path;
-    const sharedBytes = fs.readFileSync(shared);
-    const surfaceBytes = fs.readFileSync(surface);
-    fs.writeFileSync(surface, sharedBytes);
-    selection.libraries[name].sha256 = digest(surface);
-    expect(tryExecuteStockHandler(handler, context())).toBeNull();
-    expect(qualifiesForNativeContainment(handler, context())).toBe(false);
-    fs.writeFileSync(surface, surfaceBytes);
-    fs.writeFileSync(shared, surfaceBytes);
-    selection.libraries[name] = { path: shared, sha256: digest(shared), kind: 'shared' };
-    expect(tryExecuteStockHandler(handler, context())).toBeNull();
-  }
-);
-
-test.each(['file', 'dangling-link', 'non-directory'])(
-  'checkout runtime bootstrap %s cannot inherit machine source qualification',
-  (kind) => {
-    useCodexLibraries();
-    command('echo safe');
-    const handler = select();
-    expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
-    const hooks = path.join(project, '.caws/hooks');
-    fs.mkdirSync(path.dirname(hooks), { recursive: true });
-    if (kind === 'non-directory') fs.writeFileSync(hooks, 'not a directory');
-    else {
-      fs.mkdirSync(hooks);
-      const file = path.join(hooks, 'runtime-paths.sh');
-      if (kind === 'file') fs.copyFileSync(path.join(runtime, 'runtime-paths.sh'), file);
-      else fs.symlinkSync('missing-runtime', file);
-    }
-    expect(tryExecuteStockHandler(handler, context())).toBeNull();
-    expect(qualifiesForNativeContainment(handler, context())).toBe(false);
-  }
-);
-
-test.each([
-  ['CAWS_PROJECT_DIR', '/different/checkout'],
-  ['CAWS_SHARED_LIB_DIR', '/different/lib'],
-  ['CAWS_MACHINE_ADAPTER_LIB_DIR', '/different/surface'],
-  ['CAWS_MACHINE_LIBRARIES', '{"emit.sh":"custom"}'],
-  ['CAWS_BASH_ANALYSIS_REQUIRED', '1'],
-])('unqualified %s routing keeps the selected source', (name, value) => {
-  command('echo safe');
-  const handler = select();
-  expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
-  environment[name] = value;
-  expect(tryExecuteStockHandler(handler, context())).toBeNull();
-  expect(qualifiesForNativeContainment(handler, context())).toBe(false);
-});
-
-test.each(['quiet', 'staged deletion'])(
-  'current guard selected shell and native agree for %s without changing the index',
-  async (kind) => {
-    fs.writeFileSync(path.join(project, 'owned.txt'), 'owned\n');
-    git('add', 'owned.txt');
-    git(
-      '-c',
-      'user.name=Fixture',
-      '-c',
-      'user.email=fixture@example.invalid',
-      'commit',
-      '-qm',
-      'seed'
-    );
-    if (kind === 'staged deletion') {
-      fs.unlinkSync(path.join(project, 'owned.txt'));
-      git('add', '-u');
-    }
-    const before = fs.readFileSync(path.join(project, '.git/index'));
-    command(kind === 'quiet' ? 'echo safe' : 'git commit -m unrelated');
-    const handler = select();
-    const native = await tryExecuteStockHandler(handler, context());
-    expect(native).not.toBeNull();
-    const shell = await selectedShell(handler);
-    captureResult('native-pair', native);
-    captureResult('shell-pair', shell);
-    expect(shell.exitCode).toBe(native.exitCode);
-    const decode = (bytes) => (bytes.length ? JSON.parse(Buffer.from(bytes).toString()) : null);
-    expect(decode(shell.stdout)).toEqual(decode(native.stdout));
-    expect(Buffer.from(shell.stderr)).toEqual(Buffer.from(native.stderr));
-    expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(before);
-  }
-);
-
-test.each([
-  [
-    'quoted Node',
-    "node <<'NODE'\n/*\ngit add -f private.generated\n*/\nconst fs = require('fs'); fs.readFileSync('tracked.txt','utf8');\nNODE",
-  ],
-  [
-    'read prefix',
-    "git status --short\nnode <<'NODE'\n/*\ngit add -f private.generated\n*/\nconst fs = require('fs'); fs.readFileSync('tracked.txt','utf8');\nNODE",
-  ],
-])('current utility %s preserves shell heredoc projection and unchanged files', async (_, body) => {
-  useBoundPrefixGeneration();
-  const policy = path.join(project, 'utility-policy.json');
-  fs.writeFileSync(policy, JSON.stringify({ version: 1, ignored_staging: true }));
-  environment.CAWS_OPTIONAL_HOOK_POLICY = policy;
-  fs.writeFileSync(path.join(project, '.gitignore'), '*.generated\n');
-  fs.writeFileSync(path.join(project, 'private.generated'), 'sentinel\n');
-  fs.writeFileSync(path.join(project, 'tracked.txt'), 'tracked\n');
-  git('add', 'tracked.txt');
-  const before = fs.readFileSync(path.join(project, '.git/index'));
-  command(body);
-  const handler = select('hook-utilities.sh');
-  expect(tryExecuteStockHandler(handler, context())).toBeNull();
-  const spawn = jest.spyOn(require('node:child_process'), 'spawn');
-  const result = await createHandlerExecutor(context())(handler, 0);
-  captureResult('utility-heredoc', result);
-  expect(spawn).toHaveBeenCalledTimes(1);
-  expect(result.exitCode).toBe(0);
-  expect(Buffer.from(result.stdout).toString()).toBe('');
-  expect(Buffer.from(result.stderr).toString()).toBe('');
-  expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(before);
-  expect(fs.readFileSync(path.join(project, 'private.generated'), 'utf8')).toBe('sentinel\n');
-});
-
-test.each([
-  ['heartbeat', 'canonical'],
-  ['heartbeat', 'linked'],
-  ['Stop', 'canonical'],
-  ['Stop', 'linked'],
-])(
-  'current %s shell and native update the same %s lease and preserve its peer',
-  async (consumer, kind) => {
-    const canonical = project;
-    fs.mkdirSync(path.join(canonical, '.caws/specs'), { recursive: true });
-    fs.writeFileSync(path.join(canonical, '.caws/policy.yaml'), 'version: 1\n');
-    fs.writeFileSync(path.join(canonical, 'owned.txt'), 'owned\n');
-    git('add', 'owned.txt');
-    git(
-      '-c',
-      'user.name=Fixture',
-      '-c',
-      'user.email=fixture@example.invalid',
-      'commit',
-      '-qm',
-      'seed'
-    );
-    if (kind === 'linked') {
-      const linked = path.join(directory, 'linked');
-      git('worktree', 'add', '-q', '-b', 'paired', linked);
-      project = linked;
-      selection.checkout = linked;
-    }
-    useHeartbeatCli();
-    request.caller.cwd = project;
-    request.caller.processId = process.pid;
-    command('echo safe');
-    const platform = consumer === 'Stop' ? 'opencode' : 'codex';
-    if (consumer === 'Stop') {
-      selection.surface = request.surface = platform;
-      selection.event = request.event = 'stop';
-    }
-    const { heartbeatAgentActivity } = require('../../dist/application/agent-heartbeat');
-    const gitDir = git('rev-parse', '--path-format=absolute', '--git-dir').trim();
-    const common = git('rev-parse', '--path-format=absolute', '--git-common-dir').trim();
-    const seed = (session) =>
-      heartbeatAgentActivity({
-        cawsDir: path.join(canonical, '.caws'),
-        identity: { session_id: session, platform },
-        now: () => new Date('2000-01-01T00:00:00Z'),
-        reason: 'manual_register',
-        context: {
-          repo_root: canonical,
-          cwd: project,
-          git_common_dir: common,
-          git_dir: gitDir,
-          hook_pid: process.pid,
-        },
-      });
-    expect(seed('fixture').ok).toBe(true);
-    expect(seed('untouched-peer').ok).toBe(true);
-    const file = path.join(canonical, '.caws/leases/fixture.json');
-    const peerFile = path.join(canonical, '.caws/leases/untouched-peer.json');
-    const before = fs.readFileSync(file);
-    const peer = fs.readFileSync(peerFile);
-    let handler, native;
-    if (consumer === 'Stop') {
-      selection.handlers = [
-        'goal-ac-gate.sh',
-        'plan-transcript-finalize.sh',
-        'session-log.sh',
-        'agent-stop.sh',
-      ].map((name) => select(name));
-      handler = selection.handlers[3];
-      const { assertNativeStopAgentSelection } = require('../../dist/runtime/stock-handlers');
-      const { executeAgentStop } = require('../../dist/runtime/agent-stop');
-      assertNativeStopAgentSelection(handler, context(), 'preflight');
-      // Component parity with real Git and store effects. Native owner/permit
-      // custody is exercised separately by the Stop dispatch connection suite.
-      native = await executeAgentStop(
-        context(),
-        {
-          observe: async () => ({
-            status: 'resolved',
-            commonDir: git('rev-parse', '--path-format=absolute', '--git-common-dir').trim(),
-          }),
-        },
-        () => assertNativeStopAgentSelection(handler, context())
-      );
-    } else {
-      handler = select('agent-heartbeat.sh');
-      native = await tryExecuteStockHandler(handler, context());
-    }
-    expect(native).not.toBeNull();
-    const nativeLease = JSON.parse(fs.readFileSync(file));
-    const changedField = consumer === 'Stop' ? 'stopped_at' : 'last_active';
-    expect(nativeLease[changedField]).not.toBe(JSON.parse(before)[changedField]);
-    expect(Number.isFinite(Date.parse(nativeLease[changedField]))).toBe(true);
-    expect(nativeLease).toMatchObject({
-      session_id: 'fixture',
-      platform,
-      status: consumer === 'Stop' ? 'stopped' : 'active',
-      repo_root: canonical,
-      cwd: project,
-      git_common_dir: common,
-      git_dir: gitDir,
-    });
-    expect(fs.readFileSync(peerFile)).toEqual(peer);
-    fs.writeFileSync(file, before);
-    const shell = await selectedShell(handler);
-    const shellLease = JSON.parse(fs.readFileSync(file));
-    expect(shellLease[changedField]).not.toBe(JSON.parse(before)[changedField]);
-    expect(Number.isFinite(Date.parse(shellLease[changedField]))).toBe(true);
-    for (const key of [
-      'session_id',
-      'platform',
-      'status',
-      'repo_root',
-      'cwd',
-      'git_common_dir',
-      'git_dir',
-      'branch',
-    ])
-      expect(shellLease[key]).toEqual(nativeLease[key]);
-    expect(shell.exitCode).toBe(native.exitCode);
-    expect(Buffer.from(shell.stdout)).toEqual(Buffer.from(native.stdout));
-    expect(Buffer.from(shell.stderr)).toEqual(Buffer.from(native.stderr));
-    expect(fs.readFileSync(peerFile)).toEqual(peer);
-    captureResult('lease-native', native);
-    captureResult('lease-shell', shell);
-    fs.writeFileSync(
-      path.join(directory, 'paired-leases.json'),
-      JSON.stringify({ before: JSON.parse(before), nativeLease, shellLease }, null, 2)
-    );
-  }
-);
-
-test('native quiet allow and advisory use the actual classifier envelope contract', () => {
-  command('echo safe');
-  const handler = select();
-  expect(tryExecuteStockHandler(handler, context())).toEqual({
-    exitCode: 0,
-    stdout: new Uint8Array(),
-    stderr: new Uint8Array(),
-  });
-  jest.spyOn(classifier, 'classifyCommand').mockReturnValue({
-    decision: 'ask',
-    reason: 'review this operation',
-    source: 'regex',
-    enforcement: 'advisory',
-  });
-  const result = tryExecuteStockHandler(handler, context());
-  expect(result.exitCode).toBe(0);
-  expect(result.stdout).toEqual(new Uint8Array());
-  expect(Buffer.from(result.stderr).toString()).toBe(
-    'caws advisory (non-blocking): review this operation\n'
-  );
-});
-
-test.each([
-  'git init; echo "$(kubectl delete pod demo)"',
-  'git init; echo `kubectl delete pod demo`',
-  'echo "$(kubectl delete pod demo)"; git init',
-])(
-  'selected guard retains capability warning and repeat latch: %s',
-  async (input) => {
-    environment.CAWS_TRAP_KILL = '0';
-    environment.PATH = '/usr/bin:/bin';
-    command(input);
-    const handler = select();
-    const execute = createHandlerExecutor(context());
-    const state = path.join(project, '.codex/hooks/state');
-    const warningFile = path.join(state, 'danger-warn-fixture.json');
-    const latchFile = path.join(state, 'danger-latch-fixture.json');
-    const first = await execute(handler, 0);
-    expect(first.exitCode).toBe(0);
-    expect(Buffer.from(first.stdout).toString()).toBe('');
-    expect(Buffer.from(first.stderr).toString()).toContain('WARN, first capability ask');
-    const warningBytes = fs.readFileSync(warningFile);
-    expect(JSON.parse(warningBytes)).toMatchObject({
-      hook: 'block-dangerous.sh',
-      kind: 'capability-warn',
-      command: input,
-      reason: 'command substitution: destructive operation (K8S_DELETE)',
-    });
-    expect(fs.existsSync(latchFile)).toBe(false);
-
-    const second = await execute(handler, 0);
-    // The selected shell emits a protective decision; the composer owns exit promotion.
-    expect(second.exitCode).toBe(0);
-    const refusal = JSON.parse(Buffer.from(second.stdout).toString());
-    expect(refusal.decision).toBe('block');
-    expect(refusal.reason).toContain('SECOND capability-risk command');
-    expect(refusal.reason).toContain('ARMS the session danger latch');
-    const latch = JSON.parse(fs.readFileSync(latchFile));
-    expect(latch).toMatchObject({
-      hook: 'block-dangerous.sh',
-      decision: 'ask',
-      command: input,
-      reason: 'command substitution: destructive operation (K8S_DELETE)',
-    });
-    expect(latch.latch_generation).toMatch(/^[a-f0-9]{32}$/);
-    expect(fs.readFileSync(warningFile)).toEqual(warningBytes);
-
-    command('echo safe');
-    request.payload.session_id = 'ordinary-sibling';
-    request.inputJson = JSON.stringify(request.payload);
-    const ordinary = await execute(handler, 0);
-    expect(ordinary.exitCode).toBe(0);
-    expect(Buffer.from(ordinary.stdout).toString()).toBe('');
-    expect(fs.existsSync(path.join(state, 'danger-warn-ordinary-sibling.json'))).toBe(false);
-    expect(fs.existsSync(path.join(state, 'danger-latch-ordinary-sibling.json'))).toBe(false);
-  },
-  20000
-);
-
-test('merge-in-progress commit refusal preserves the classifier remedy without impossible pathspec advice', () => {
-  command('git commit -m merge');
-  const handler = select();
-  jest.spyOn(classifier, 'classifyCommand').mockReturnValue({
-    decision: 'ask',
-    reason: 'a merge is in progress; inspect the merge',
-    source: 'commit_deletions',
-    enforcement: 'confirm',
-  });
-  const result = tryExecuteStockHandler(handler, context());
-  const body = JSON.parse(Buffer.from(result.stdout).toString());
-  expect(body.decision).toBe('block');
-  expect(body.reason).toContain('a merge is in progress; inspect the merge');
-  expect(body.reason).not.toContain('-- <paths>');
-});
-
-test.each(['deny', 'capability-confirm', 'classifier-error'])(
-  'stateful enforcement stays on selected shell path: %s',
-  (kind) => {
-    command('fixture command');
-    const handler = select();
-    const classification =
-      kind === 'deny'
-        ? {
-            decision: 'deny',
-            reason: 'catastrophic target',
-            source: 'rm_classifier',
-            enforcement: 'block',
-          }
-        : {
-            decision: 'ask',
-            reason: 'unproved operation',
-            source: kind === 'classifier-error' ? 'classifier_error' : 'capability',
-            enforcement: 'confirm',
-          };
-    jest.spyOn(classifier, 'classifyCommand').mockReturnValue(classification);
+    fs.writeFileSync(path.join(state, 'danger-latch-neighbor.json'), '{}');
     expect(tryExecuteStockHandler(handler, context())).toBeNull();
     expect(fs.existsSync(path.join(project, '.codex/hooks/state'))).toBe(false);
-  }
-);
+  });
 
-test.each([
-  'kind',
-  'configuration',
-  'source',
-  'arguments',
-  'library-kind',
-  'library-bytes',
-  'library-override',
-  'prior-startup',
-])('cannot substitute native code for unproved provenance: %s', (variant) => {
-  command('echo safe');
-  const handler = select();
-  if (variant === 'kind') handler.kind = 'project-override';
-  if (variant === 'configuration') selection.configuration = 'project-policy';
-  if (variant === 'source') fs.appendFileSync(handler.path, '\n# custom\n');
-  if (variant === 'arguments') handler.args = ['custom'];
-  if (variant === 'library-kind') selection.libraries['emit.sh'].kind = 'project';
-  if (variant === 'library-bytes')
-    fs.appendFileSync(selection.libraries['emit.sh'].path, '\n# custom\n');
-  if (variant === 'library-override')
-    selection.libraryOverrides['emit.sh'] = selection.libraries['emit.sh'].path;
-  if (variant === 'prior-startup') environment.BASH_ENV = path.join(project, 'startup.sh');
-  expect(tryExecuteStockHandler(handler, context())).toBeNull();
-});
+  test.each([
+    'handler-env.sh',
+    'runtime-paths.sh',
+    'lib/agent-surface.sh',
+    'lib/parse-input.sh',
+    'lib/session-cache.sh',
+    'lib/session-id.sh',
+    'lib/agent-pid.sh',
+  ])('selected Codex parser does not conceal changed direct source %s', async (name) => {
+    useCodexLibraries();
+    useHeartbeatCli();
+    command('echo safe');
+    const heartbeat = jest
+      .spyOn(require('../../dist/runtime/agent-heartbeat'), 'executeAgentHeartbeat')
+      .mockResolvedValue({ exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) });
+    for (const consumer of ['block-dangerous.sh', 'agent-heartbeat.sh', 'hook-utilities.sh']) {
+      const handler = select(consumer);
+      expect(await tryExecuteStockHandler(handler, context())).not.toBeNull();
+    }
+    const file = path.join(runtime, name);
+    fs.appendFileSync(file, '\n# unreviewed direct source\n');
+    for (const library of Object.values(selection.libraries))
+      if (library.path === file) library.sha256 = digest(file);
+    heartbeat.mockClear();
+    for (const consumer of ['block-dangerous.sh', 'agent-heartbeat.sh', 'hook-utilities.sh']) {
+      const handler = select(consumer);
+      expect(tryExecuteStockHandler(handler, context())).toBeNull();
+      if (consumer === 'block-dangerous.sh')
+        expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+    }
+    expect(heartbeat).not.toHaveBeenCalled();
+  });
 
-test.each([
-  'latch',
-  'foreign-session-latch',
-  'redirected-state',
-  'protected-reference',
-  'file-tool',
-])('earlier guard semantics cannot be bypassed: %s', (variant) => {
-  command('echo safe');
-  const handler = select();
-  const state = path.join(project, '.codex/hooks/state');
-  fs.mkdirSync(path.dirname(state), { recursive: true });
-  if (variant === 'redirected-state') fs.symlinkSync(directory, state);
-  else if (variant === 'latch' || variant === 'foreign-session-latch') {
-    fs.mkdirSync(state);
-    fs.writeFileSync(
-      path.join(state, `danger-latch-${variant === 'latch' ? 'fixture' : 'another-session'}.json`),
-      '{}'
+  test.each(['parse-input.sh', 'emit.sh'])(
+    'reviewed %s bytes cannot move between shared and surface source roles',
+    (name) => {
+      useCodexLibraries();
+      command('echo safe');
+      const handler = select();
+      expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
+      const shared = path.join(runtime, 'lib', name);
+      const surface = selection.libraries[name].path;
+      const sharedBytes = fs.readFileSync(shared);
+      const surfaceBytes = fs.readFileSync(surface);
+      fs.writeFileSync(surface, sharedBytes);
+      selection.libraries[name].sha256 = digest(surface);
+      expect(tryExecuteStockHandler(handler, context())).toBeNull();
+      expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+      fs.writeFileSync(surface, surfaceBytes);
+      fs.writeFileSync(shared, surfaceBytes);
+      selection.libraries[name] = { path: shared, sha256: digest(shared), kind: 'shared' };
+      expect(tryExecuteStockHandler(handler, context())).toBeNull();
+    }
+  );
+
+  test.each(['file', 'dangling-link', 'non-directory'])(
+    'checkout runtime bootstrap %s cannot inherit machine source qualification',
+    (kind) => {
+      useCodexLibraries();
+      command('echo safe');
+      const handler = select();
+      expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
+      const hooks = path.join(project, '.caws/hooks');
+      fs.mkdirSync(path.dirname(hooks), { recursive: true });
+      if (kind === 'non-directory') fs.writeFileSync(hooks, 'not a directory');
+      else {
+        fs.mkdirSync(hooks);
+        const file = path.join(hooks, 'runtime-paths.sh');
+        if (kind === 'file') fs.copyFileSync(path.join(runtime, 'runtime-paths.sh'), file);
+        else fs.symlinkSync('missing-runtime', file);
+      }
+      expect(tryExecuteStockHandler(handler, context())).toBeNull();
+      expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+    }
+  );
+
+  test.each([
+    ['CAWS_PROJECT_DIR', '/different/checkout'],
+    ['CAWS_SHARED_LIB_DIR', '/different/lib'],
+    ['CAWS_MACHINE_ADAPTER_LIB_DIR', '/different/surface'],
+    ['CAWS_MACHINE_LIBRARIES', '{"emit.sh":"custom"}'],
+    ['CAWS_BASH_ANALYSIS_REQUIRED', '1'],
+  ])('unqualified %s routing keeps the selected source', (name, value) => {
+    command('echo safe');
+    const handler = select();
+    expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
+    environment[name] = value;
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+    expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+  });
+
+  test.each(['quiet', 'staged deletion'])(
+    'current guard selected shell and native agree for %s without changing the index',
+    async (kind) => {
+      fs.writeFileSync(path.join(project, 'owned.txt'), 'owned\n');
+      git('add', 'owned.txt');
+      git(
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '-qm',
+        'seed'
+      );
+      if (kind === 'staged deletion') {
+        fs.unlinkSync(path.join(project, 'owned.txt'));
+        git('add', '-u');
+      }
+      const before = fs.readFileSync(path.join(project, '.git/index'));
+      command(kind === 'quiet' ? 'echo safe' : 'git commit -m unrelated');
+      const handler = select();
+      const native = await tryExecuteStockHandler(handler, context());
+      expect(native).not.toBeNull();
+      const shell = await selectedShell(handler);
+      captureResult('native-pair', native);
+      captureResult('shell-pair', shell);
+      expect(shell.exitCode).toBe(native.exitCode);
+      const decode = (bytes) => (bytes.length ? JSON.parse(Buffer.from(bytes).toString()) : null);
+      expect(decode(shell.stdout)).toEqual(decode(native.stdout));
+      expect(Buffer.from(shell.stderr)).toEqual(Buffer.from(native.stderr));
+      expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(before);
+    }
+  );
+
+  test.each([
+    [
+      'quoted Node',
+      "node <<'NODE'\n/*\ngit add -f private.generated\n*/\nconst fs = require('fs'); fs.readFileSync('tracked.txt','utf8');\nNODE",
+    ],
+    [
+      'read prefix',
+      "git status --short\nnode <<'NODE'\n/*\ngit add -f private.generated\n*/\nconst fs = require('fs'); fs.readFileSync('tracked.txt','utf8');\nNODE",
+    ],
+  ])(
+    'current utility %s preserves shell heredoc projection and unchanged files',
+    async (_, body) => {
+      useBoundPrefixGeneration();
+      const policy = path.join(project, 'utility-policy.json');
+      fs.writeFileSync(policy, JSON.stringify({ version: 1, ignored_staging: true }));
+      environment.CAWS_OPTIONAL_HOOK_POLICY = policy;
+      fs.writeFileSync(path.join(project, '.gitignore'), '*.generated\n');
+      fs.writeFileSync(path.join(project, 'private.generated'), 'sentinel\n');
+      fs.writeFileSync(path.join(project, 'tracked.txt'), 'tracked\n');
+      git('add', 'tracked.txt');
+      const before = fs.readFileSync(path.join(project, '.git/index'));
+      command(body);
+      const handler = select('hook-utilities.sh');
+      expect(tryExecuteStockHandler(handler, context())).toBeNull();
+      const spawn = jest.spyOn(require('node:child_process'), 'spawn');
+      const result = await createHandlerExecutor(context())(handler, 0);
+      captureResult('utility-heredoc', result);
+      expect(spawn).toHaveBeenCalledTimes(1);
+      expect(result.exitCode).toBe(0);
+      expect(Buffer.from(result.stdout).toString()).toBe('');
+      expect(Buffer.from(result.stderr).toString()).toBe('');
+      expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(before);
+      expect(fs.readFileSync(path.join(project, 'private.generated'), 'utf8')).toBe('sentinel\n');
+    }
+  );
+
+  test.each([
+    ['heartbeat', 'canonical'],
+    ['heartbeat', 'linked'],
+    ['Stop', 'canonical'],
+    ['Stop', 'linked'],
+  ])(
+    'current %s shell and native update the same %s lease and preserve its peer',
+    async (consumer, kind) => {
+      const canonical = project;
+      fs.mkdirSync(path.join(canonical, '.caws/specs'), { recursive: true });
+      fs.writeFileSync(path.join(canonical, '.caws/policy.yaml'), 'version: 1\n');
+      fs.writeFileSync(path.join(canonical, 'owned.txt'), 'owned\n');
+      git('add', 'owned.txt');
+      git(
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '-qm',
+        'seed'
+      );
+      if (kind === 'linked') {
+        const linked = path.join(directory, 'linked');
+        git('worktree', 'add', '-q', '-b', 'paired', linked);
+        project = linked;
+        selection.checkout = linked;
+      }
+      useHeartbeatCli();
+      request.caller.cwd = project;
+      request.caller.processId = process.pid;
+      command('echo safe');
+      const platform = consumer === 'Stop' ? 'opencode' : 'codex';
+      if (consumer === 'Stop') {
+        selection.surface = request.surface = platform;
+        selection.event = request.event = 'stop';
+      }
+      const { heartbeatAgentActivity } = require('../../dist/application/agent-heartbeat');
+      const gitDir = git('rev-parse', '--path-format=absolute', '--git-dir').trim();
+      const common = git('rev-parse', '--path-format=absolute', '--git-common-dir').trim();
+      const seed = (session) =>
+        heartbeatAgentActivity({
+          cawsDir: path.join(canonical, '.caws'),
+          identity: { session_id: session, platform },
+          now: () => new Date('2000-01-01T00:00:00Z'),
+          reason: 'manual_register',
+          context: {
+            repo_root: canonical,
+            cwd: project,
+            git_common_dir: common,
+            git_dir: gitDir,
+            hook_pid: process.pid,
+          },
+        });
+      expect(seed('fixture').ok).toBe(true);
+      expect(seed('untouched-peer').ok).toBe(true);
+      const file = path.join(canonical, '.caws/leases/fixture.json');
+      const peerFile = path.join(canonical, '.caws/leases/untouched-peer.json');
+      const before = fs.readFileSync(file);
+      const peer = fs.readFileSync(peerFile);
+      let handler, native;
+      if (consumer === 'Stop') {
+        selection.handlers = [
+          'goal-ac-gate.sh',
+          'plan-transcript-finalize.sh',
+          'session-log.sh',
+          'agent-stop.sh',
+        ].map((name) => select(name));
+        handler = selection.handlers[3];
+        const { assertNativeStopAgentSelection } = require('../../dist/runtime/stock-handlers');
+        const { executeAgentStop } = require('../../dist/runtime/agent-stop');
+        assertNativeStopAgentSelection(handler, context(), 'preflight');
+        // Component parity with real Git and store effects. Native owner/permit
+        // custody is exercised separately by the Stop dispatch connection suite.
+        native = await executeAgentStop(
+          context(),
+          {
+            observe: async () => ({
+              status: 'resolved',
+              commonDir: git('rev-parse', '--path-format=absolute', '--git-common-dir').trim(),
+            }),
+          },
+          () => assertNativeStopAgentSelection(handler, context())
+        );
+      } else {
+        handler = select('agent-heartbeat.sh');
+        native = await tryExecuteStockHandler(handler, context());
+      }
+      expect(native).not.toBeNull();
+      const nativeLease = JSON.parse(fs.readFileSync(file));
+      const changedField = consumer === 'Stop' ? 'stopped_at' : 'last_active';
+      expect(nativeLease[changedField]).not.toBe(JSON.parse(before)[changedField]);
+      expect(Number.isFinite(Date.parse(nativeLease[changedField]))).toBe(true);
+      expect(nativeLease).toMatchObject({
+        session_id: 'fixture',
+        platform,
+        status: consumer === 'Stop' ? 'stopped' : 'active',
+        repo_root: canonical,
+        cwd: project,
+        git_common_dir: common,
+        git_dir: gitDir,
+      });
+      expect(fs.readFileSync(peerFile)).toEqual(peer);
+      fs.writeFileSync(file, before);
+      const shell = await selectedShell(handler);
+      const shellLease = JSON.parse(fs.readFileSync(file));
+      expect(shellLease[changedField]).not.toBe(JSON.parse(before)[changedField]);
+      expect(Number.isFinite(Date.parse(shellLease[changedField]))).toBe(true);
+      for (const key of [
+        'session_id',
+        'platform',
+        'status',
+        'repo_root',
+        'cwd',
+        'git_common_dir',
+        'git_dir',
+        'branch',
+      ])
+        expect(shellLease[key]).toEqual(nativeLease[key]);
+      expect(shell.exitCode).toBe(native.exitCode);
+      expect(Buffer.from(shell.stdout)).toEqual(Buffer.from(native.stdout));
+      expect(Buffer.from(shell.stderr)).toEqual(Buffer.from(native.stderr));
+      expect(fs.readFileSync(peerFile)).toEqual(peer);
+      captureResult('lease-native', native);
+      captureResult('lease-shell', shell);
+      fs.writeFileSync(
+        path.join(directory, 'paired-leases.json'),
+        JSON.stringify({ before: JSON.parse(before), nativeLease, shellLease }, null, 2)
+      );
+    }
+  );
+
+  test('native quiet allow and advisory use the actual classifier envelope contract', () => {
+    command('echo safe');
+    const handler = select();
+    expect(tryExecuteStockHandler(handler, context())).toEqual({
+      exitCode: 0,
+      stdout: new Uint8Array(),
+      stderr: new Uint8Array(),
+    });
+    jest.spyOn(classifier, 'classifyCommand').mockReturnValue({
+      decision: 'ask',
+      reason: 'review this operation',
+      source: 'regex',
+      enforcement: 'advisory',
+    });
+    const result = tryExecuteStockHandler(handler, context());
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toEqual(new Uint8Array());
+    expect(Buffer.from(result.stderr).toString()).toBe(
+      'caws advisory (non-blocking): review this operation\n'
     );
-  } else if (variant === 'protected-reference')
-    command('git commit -m .codex/hooks/worktree-write-guard.sh');
-  else
+  });
+
+  test.each([
+    'git init; echo "$(kubectl delete pod demo)"',
+    'git init; echo `kubectl delete pod demo`',
+    'echo "$(kubectl delete pod demo)"; git init',
+  ])(
+    'selected guard retains capability warning and repeat latch: %s',
+    async (input) => {
+      environment.CAWS_TRAP_KILL = '0';
+      environment.PATH = '/usr/bin:/bin';
+      command(input);
+      const handler = select();
+      const execute = createHandlerExecutor(context());
+      const state = path.join(project, '.codex/hooks/state');
+      const warningFile = path.join(state, 'danger-warn-fixture.json');
+      const latchFile = path.join(state, 'danger-latch-fixture.json');
+      const first = await execute(handler, 0);
+      expect(first.exitCode).toBe(0);
+      expect(Buffer.from(first.stdout).toString()).toBe('');
+      expect(Buffer.from(first.stderr).toString()).toContain('WARN, first capability ask');
+      const warningBytes = fs.readFileSync(warningFile);
+      expect(JSON.parse(warningBytes)).toMatchObject({
+        hook: 'block-dangerous.sh',
+        kind: 'capability-warn',
+        command: input,
+        reason: 'command substitution: destructive operation (K8S_DELETE)',
+      });
+      expect(fs.existsSync(latchFile)).toBe(false);
+
+      const second = await execute(handler, 0);
+      // The selected shell emits a protective decision; the composer owns exit promotion.
+      expect(second.exitCode).toBe(0);
+      const refusal = JSON.parse(Buffer.from(second.stdout).toString());
+      expect(refusal.decision).toBe('block');
+      expect(refusal.reason).toContain('SECOND capability-risk command');
+      expect(refusal.reason).toContain('ARMS the session danger latch');
+      const latch = JSON.parse(fs.readFileSync(latchFile));
+      expect(latch).toMatchObject({
+        hook: 'block-dangerous.sh',
+        decision: 'ask',
+        command: input,
+        reason: 'command substitution: destructive operation (K8S_DELETE)',
+      });
+      expect(latch.latch_generation).toMatch(/^[a-f0-9]{32}$/);
+      expect(fs.readFileSync(warningFile)).toEqual(warningBytes);
+
+      command('echo safe');
+      request.payload.session_id = 'ordinary-sibling';
+      request.inputJson = JSON.stringify(request.payload);
+      const ordinary = await execute(handler, 0);
+      expect(ordinary.exitCode).toBe(0);
+      expect(Buffer.from(ordinary.stdout).toString()).toBe('');
+      expect(fs.existsSync(path.join(state, 'danger-warn-ordinary-sibling.json'))).toBe(false);
+      expect(fs.existsSync(path.join(state, 'danger-latch-ordinary-sibling.json'))).toBe(false);
+    },
+    20000
+  );
+
+  test('merge-in-progress commit refusal preserves the classifier remedy without impossible pathspec advice', () => {
+    command('git commit -m merge');
+    const handler = select();
+    jest.spyOn(classifier, 'classifyCommand').mockReturnValue({
+      decision: 'ask',
+      reason: 'a merge is in progress; inspect the merge',
+      source: 'commit_deletions',
+      enforcement: 'confirm',
+    });
+    const result = tryExecuteStockHandler(handler, context());
+    const body = JSON.parse(Buffer.from(result.stdout).toString());
+    expect(body.decision).toBe('block');
+    expect(body.reason).toContain('a merge is in progress; inspect the merge');
+    expect(body.reason).not.toContain('-- <paths>');
+  });
+
+  test.each(['deny', 'capability-confirm', 'classifier-error'])(
+    'stateful enforcement stays on selected shell path: %s',
+    (kind) => {
+      command('fixture command');
+      const handler = select();
+      const classification =
+        kind === 'deny'
+          ? {
+              decision: 'deny',
+              reason: 'catastrophic target',
+              source: 'rm_classifier',
+              enforcement: 'block',
+            }
+          : {
+              decision: 'ask',
+              reason: 'unproved operation',
+              source: kind === 'classifier-error' ? 'classifier_error' : 'capability',
+              enforcement: 'confirm',
+            };
+      jest.spyOn(classifier, 'classifyCommand').mockReturnValue(classification);
+      expect(tryExecuteStockHandler(handler, context())).toBeNull();
+      expect(fs.existsSync(path.join(project, '.codex/hooks/state'))).toBe(false);
+    }
+  );
+
+  test.each([
+    'kind',
+    'configuration',
+    'source',
+    'arguments',
+    'library-kind',
+    'library-bytes',
+    'library-override',
+    'prior-startup',
+  ])('cannot substitute native code for unproved provenance: %s', (variant) => {
+    command('echo safe');
+    const handler = select();
+    if (variant === 'kind') handler.kind = 'project-override';
+    if (variant === 'configuration') selection.configuration = 'project-policy';
+    if (variant === 'source') fs.appendFileSync(handler.path, '\n# custom\n');
+    if (variant === 'arguments') handler.args = ['custom'];
+    if (variant === 'library-kind') selection.libraries['emit.sh'].kind = 'project';
+    if (variant === 'library-bytes')
+      fs.appendFileSync(selection.libraries['emit.sh'].path, '\n# custom\n');
+    if (variant === 'library-override')
+      selection.libraryOverrides['emit.sh'] = selection.libraries['emit.sh'].path;
+    if (variant === 'prior-startup') environment.BASH_ENV = path.join(project, 'startup.sh');
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+  });
+
+  test.each([
+    'latch',
+    'foreign-session-latch',
+    'redirected-state',
+    'protected-reference',
+    'file-tool',
+  ])('earlier guard semantics cannot be bypassed: %s', (variant) => {
+    command('echo safe');
+    const handler = select();
+    const state = path.join(project, '.codex/hooks/state');
+    fs.mkdirSync(path.dirname(state), { recursive: true });
+    if (variant === 'redirected-state') fs.symlinkSync(directory, state);
+    else if (variant === 'latch' || variant === 'foreign-session-latch') {
+      fs.mkdirSync(state);
+      fs.writeFileSync(
+        path.join(
+          state,
+          `danger-latch-${variant === 'latch' ? 'fixture' : 'another-session'}.json`
+        ),
+        '{}'
+      );
+    } else if (variant === 'protected-reference')
+      command('git commit -m .codex/hooks/worktree-write-guard.sh');
+    else
+      request.payload = {
+        tool_name: 'Write',
+        tool_input: { file_path: 'owned.txt', content: 'new' },
+      };
+    const classify = jest.spyOn(classifier, 'classifyCommand');
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+    expect(classify.mock.calls.length).toBe(0);
+  });
+
+  test('opt-in exact stock utility evaluates document metadata without Python or a shell handler', async () => {
+    const policy = path.join(project, 'utility-policy.json');
+    fs.writeFileSync(
+      policy,
+      JSON.stringify({
+        version: 1,
+        documents: { roots: ['docs/'], required_frontmatter: ['title'] },
+      })
+    );
+    environment.CAWS_OPTIONAL_HOOK_POLICY = policy;
     request.payload = {
       tool_name: 'Write',
-      tool_input: { file_path: 'owned.txt', content: 'new' },
+      tool_input: { file_path: 'docs/a.md', content: '# no metadata' },
     };
-  const classify = jest.spyOn(classifier, 'classifyCommand');
-  expect(tryExecuteStockHandler(handler, context())).toBeNull();
-  expect(classify.mock.calls.length).toBe(0);
-});
+    const handler = select('hook-utilities.sh');
+    const spawn = jest.spyOn(require('node:child_process'), 'spawn');
+    const result = await createHandlerExecutor(context())(handler, 0);
+    expect(result.exitCode).toBe(0);
+    expect(
+      JSON.parse(Buffer.from(result.stdout).toString()).hookSpecificOutput.additionalContext
+    ).toBe('Consumer document metadata missing: title.');
+    expect(spawn.mock.calls.length).toBe(0);
+  });
 
-test('opt-in exact stock utility evaluates document metadata without Python or a shell handler', async () => {
-  const policy = path.join(project, 'utility-policy.json');
-  fs.writeFileSync(
-    policy,
-    JSON.stringify({ version: 1, documents: { roots: ['docs/'], required_frontmatter: ['title'] } })
-  );
-  environment.CAWS_OPTIONAL_HOOK_POLICY = policy;
-  request.payload = {
-    tool_name: 'Write',
-    tool_input: { file_path: 'docs/a.md', content: '# no metadata' },
-  };
-  const handler = select('hook-utilities.sh');
-  const spawn = jest.spyOn(require('node:child_process'), 'spawn');
-  const result = await createHandlerExecutor(context())(handler, 0);
-  expect(result.exitCode).toBe(0);
-  expect(
-    JSON.parse(Buffer.from(result.stdout).toString()).hookSpecificOutput.additionalContext
-  ).toBe('Consumer document metadata missing: title.');
-  expect(spawn.mock.calls.length).toBe(0);
-});
-
-test.each([
-  ['absolute', 'nested', 2],
-  ['relative', 'nested', 2],
-  ['symlink-parent', 'nested', 2],
-  ['absent', 'root', 2],
-  ['empty', 'root', 2],
-  ['absolute', 'root', 0],
-  ['relative', 'root', 0],
-  ['symlink-parent', 'root', 0],
-])(
-  'utility staging uses %s payload cwd with ignored files at %s',
-  async (cwd, ignored, exitCode) => {
-    const subdirectory = path.join(project, cwd === 'symlink-parent' ? 'parent' : 'sub');
-    fs.mkdirSync(subdirectory);
-    if (cwd === 'symlink-parent') {
-      fs.mkdirSync(path.join(subdirectory, 'child'));
-      fs.symlinkSync(path.join(subdirectory, 'child'), path.join(project, 'link'));
+  test.each([
+    ['absolute', 'nested', 2],
+    ['relative', 'nested', 2],
+    ['symlink-parent', 'nested', 2],
+    ['absent', 'root', 2],
+    ['empty', 'root', 2],
+    ['absolute', 'root', 0],
+    ['relative', 'root', 0],
+    ['symlink-parent', 'root', 0],
+  ])(
+    'utility staging uses %s payload cwd with ignored files at %s',
+    async (cwd, ignored, exitCode) => {
+      const subdirectory = path.join(project, cwd === 'symlink-parent' ? 'parent' : 'sub');
+      fs.mkdirSync(subdirectory);
+      if (cwd === 'symlink-parent') {
+        fs.mkdirSync(path.join(subdirectory, 'child'));
+        fs.symlinkSync(path.join(subdirectory, 'child'), path.join(project, 'link'));
+      }
+      fs.writeFileSync(
+        path.join(project, '.gitignore'),
+        ignored === 'root' ? '/private.generated\n' : ''
+      );
+      fs.writeFileSync(
+        path.join(subdirectory, '.gitignore'),
+        ignored === 'nested' ? '*.generated\n' : ''
+      );
+      fs.writeFileSync(path.join(project, 'private.generated'), 'root sentinel\n');
+      fs.writeFileSync(path.join(subdirectory, 'private.generated'), 'nested sentinel\n');
+      fs.writeFileSync(path.join(project, 'tracked.txt'), 'tracked\n');
+      git('add', 'tracked.txt');
+      const indexBefore = fs.readFileSync(path.join(project, '.git/index'));
+      const policy = path.join(project, 'utility-policy.json');
+      fs.writeFileSync(policy, JSON.stringify({ version: 1, ignored_staging: true }));
+      environment.CAWS_OPTIONAL_HOOK_POLICY = policy;
+      command('git add -f private.generated');
+      if (cwd === 'absent') delete request.payload.cwd;
+      else
+        request.payload.cwd =
+          cwd === 'absolute'
+            ? subdirectory
+            : cwd === 'relative'
+              ? 'sub'
+              : cwd === 'symlink-parent'
+                ? 'link/..'
+                : '';
+      request.inputJson = JSON.stringify(request.payload);
+      const handler = select('hook-utilities.sh');
+      const spawn = jest.spyOn(require('node:child_process'), 'spawn');
+      const result = await createHandlerExecutor(context())(handler, 0);
+      expect({
+        exitCode: result.exitCode,
+        stdout: Buffer.from(result.stdout).toString('utf8'),
+      }).toEqual({
+        exitCode,
+        stdout:
+          exitCode === 2
+            ? JSON.stringify({
+                decision: 'block',
+                reason: 'Consumer ignored-staging policy: private.generated',
+              }) + '\n'
+            : '',
+      });
+      expect(spawn.mock.calls.length).toBe(0);
+      expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(indexBefore);
+      expect(fs.readFileSync(path.join(subdirectory, 'private.generated'), 'utf8')).toBe(
+        'nested sentinel\n'
+      );
     }
-    fs.writeFileSync(
-      path.join(project, '.gitignore'),
-      ignored === 'root' ? '/private.generated\n' : ''
-    );
-    fs.writeFileSync(
-      path.join(subdirectory, '.gitignore'),
-      ignored === 'nested' ? '*.generated\n' : ''
-    );
-    fs.writeFileSync(path.join(project, 'private.generated'), 'root sentinel\n');
-    fs.writeFileSync(path.join(subdirectory, 'private.generated'), 'nested sentinel\n');
-    fs.writeFileSync(path.join(project, 'tracked.txt'), 'tracked\n');
-    git('add', 'tracked.txt');
-    const indexBefore = fs.readFileSync(path.join(project, '.git/index'));
+  );
+
+  test('an unresolvable utility cwd retains the selected shell fallback', () => {
     const policy = path.join(project, 'utility-policy.json');
     fs.writeFileSync(policy, JSON.stringify({ version: 1, ignored_staging: true }));
     environment.CAWS_OPTIONAL_HOOK_POLICY = policy;
     command('git add -f private.generated');
-    if (cwd === 'absent') delete request.payload.cwd;
-    else
-      request.payload.cwd =
-        cwd === 'absolute'
-          ? subdirectory
-          : cwd === 'relative'
-            ? 'sub'
-            : cwd === 'symlink-parent'
-              ? 'link/..'
-              : '';
-    request.inputJson = JSON.stringify(request.payload);
     const handler = select('hook-utilities.sh');
-    const spawn = jest.spyOn(require('node:child_process'), 'spawn');
-    const result = await createHandlerExecutor(context())(handler, 0);
-    expect({
-      exitCode: result.exitCode,
-      stdout: Buffer.from(result.stdout).toString('utf8'),
-    }).toEqual({
-      exitCode,
-      stdout:
-        exitCode === 2
-          ? JSON.stringify({
-              decision: 'block',
-              reason: 'Consumer ignored-staging policy: private.generated',
-            }) + '\n'
-          : '',
-    });
-    expect(spawn.mock.calls.length).toBe(0);
-    expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(indexBefore);
-    expect(fs.readFileSync(path.join(subdirectory, 'private.generated'), 'utf8')).toBe(
-      'nested sentinel\n'
-    );
+    expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
+    fs.symlinkSync('loop', path.join(project, 'loop'));
+    request.payload.cwd = 'loop';
+    request.inputJson = JSON.stringify(request.payload);
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+  });
+
+  test('utility absence is silent, malformed policy informational, and custom helper forces shell fallback', () => {
+    const handler = select('hook-utilities.sh');
+    expect(tryExecuteStockHandler(handler, context()).stdout).toEqual(new Uint8Array());
+    const policy = path.join(project, 'policy.json');
+    fs.writeFileSync(policy, '{');
+    environment.CAWS_OPTIONAL_HOOK_POLICY = policy;
+    const result = tryExecuteStockHandler(handler, context());
+    expect(result.exitCode).toBe(0);
+    expect(
+      JSON.parse(Buffer.from(result.stdout).toString()).hookSpecificOutput.additionalContext
+    ).toMatch(/^Optional utility analysis incomplete:/);
+    fs.appendFileSync(path.join(runtime, 'lib/hook-utilities.py'), '\n# custom\n');
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+  });
+
+  test('native entry honors cancellation and an already expired request', () => {
+    command('echo safe');
+    const handler = select();
+    controller.abort();
+    expect(() => tryExecuteStockHandler(handler, context())).toThrow('cancelled');
+    controller = new AbortController();
+    request.deadlineEpochMs = Date.now() - 1;
+    expect(() => tryExecuteStockHandler(handler, context())).toThrow('deadline expired');
+  });
+
+  function useHeartbeatCli() {
+    // setup-python exports LD_LIBRARY_PATH in CI. Ordinary admission fixtures
+    // control loader inputs; hostile cases add them explicitly after this setup.
+    for (const key of Object.keys(environment))
+      if (key.startsWith('LD_') || key.startsWith('DYLD_')) delete environment[key];
+    const bin = path.join(directory, 'heartbeat-bin');
+    fs.mkdirSync(bin);
+    fs.symlinkSync(path.resolve(__dirname, '../../dist/index.js'), path.join(bin, 'caws'));
+    fs.symlinkSync(process.execPath, path.join(bin, 'node'));
+    environment.PATH = bin + path.delimiter + '/usr/bin:/bin';
+    return bin;
   }
-);
 
-test('an unresolvable utility cwd retains the selected shell fallback', () => {
-  const policy = path.join(project, 'utility-policy.json');
-  fs.writeFileSync(policy, JSON.stringify({ version: 1, ignored_staging: true }));
-  environment.CAWS_OPTIONAL_HOOK_POLICY = policy;
-  command('git add -f private.generated');
-  const handler = select('hook-utilities.sh');
-  expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
-  fs.symlinkSync('loop', path.join(project, 'loop'));
-  request.payload.cwd = 'loop';
-  request.inputJson = JSON.stringify(request.payload);
-  expect(tryExecuteStockHandler(handler, context())).toBeNull();
-});
-
-test('utility absence is silent, malformed policy informational, and custom helper forces shell fallback', () => {
-  const handler = select('hook-utilities.sh');
-  expect(tryExecuteStockHandler(handler, context()).stdout).toEqual(new Uint8Array());
-  const policy = path.join(project, 'policy.json');
-  fs.writeFileSync(policy, '{');
-  environment.CAWS_OPTIONAL_HOOK_POLICY = policy;
-  const result = tryExecuteStockHandler(handler, context());
-  expect(result.exitCode).toBe(0);
-  expect(
-    JSON.parse(Buffer.from(result.stdout).toString()).hookSpecificOutput.additionalContext
-  ).toMatch(/^Optional utility analysis incomplete:/);
-  fs.appendFileSync(path.join(runtime, 'lib/hook-utilities.py'), '\n# custom\n');
-  expect(tryExecuteStockHandler(handler, context())).toBeNull();
-});
-
-test('native entry honors cancellation and an already expired request', () => {
-  command('echo safe');
-  const handler = select();
-  controller.abort();
-  expect(() => tryExecuteStockHandler(handler, context())).toThrow('cancelled');
-  controller = new AbortController();
-  request.deadlineEpochMs = Date.now() - 1;
-  expect(() => tryExecuteStockHandler(handler, context())).toThrow('deadline expired');
-});
-
-function useHeartbeatCli() {
-  // setup-python exports LD_LIBRARY_PATH in CI. Ordinary admission fixtures
-  // control loader inputs; hostile cases add them explicitly after this setup.
-  for (const key of Object.keys(environment))
-    if (key.startsWith('LD_') || key.startsWith('DYLD_')) delete environment[key];
-  const bin = path.join(directory, 'heartbeat-bin');
-  fs.mkdirSync(bin);
-  fs.symlinkSync(path.resolve(__dirname, '../../dist/index.js'), path.join(bin, 'caws'));
-  fs.symlinkSync(process.execPath, path.join(bin, 'node'));
-  environment.PATH = bin + path.delimiter + '/usr/bin:/bin';
-  return bin;
-}
-
-test.each([undefined, '', 'caws'])(
-  'exact stock Codex Bash heartbeat selects typed application consumer with CAWS_BIN=%s',
-  async (cli) => {
-    environment.LD_LIBRARY_PATH = '/fixture/ambient-python/lib';
-    environment.DYLD_LIBRARY_PATH = '/fixture/ambient-loader/lib';
+  test.each([undefined, '', 'caws'])(
+    'exact stock Codex Bash heartbeat selects typed application consumer with CAWS_BIN=%s',
+    async (cli) => {
+      environment.LD_LIBRARY_PATH = '/fixture/ambient-python/lib';
+      environment.DYLD_LIBRARY_PATH = '/fixture/ambient-loader/lib';
+      useHeartbeatCli();
+      expect(environment.LD_LIBRARY_PATH).toBeUndefined();
+      expect(environment.DYLD_LIBRARY_PATH).toBeUndefined();
+      if (cli !== undefined) environment.CAWS_BIN = cli;
+      const heartbeat = require('../../dist/runtime/agent-heartbeat');
+      const result = { exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
+      const execute = jest.spyOn(heartbeat, 'executeAgentHeartbeat').mockResolvedValue(result);
+      command('true');
+      const handler = select('agent-heartbeat.sh');
+      expect(await tryExecuteStockHandler(handler, context())).toBe(result);
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(execute.mock.calls[0][0].request.payload.session_id).toBe('fixture');
+    }
+  );
+  test.each([
+    [
+      'Node preload',
+      () => {
+        environment.NODE_OPTIONS = '--require /custom/preload.js';
+      },
+    ],
+    [
+      'Node module path',
+      () => {
+        environment.NODE_PATH = '/custom/modules';
+      },
+    ],
+    [
+      'loader preload',
+      () => {
+        environment.LD_PRELOAD = '/custom/preload.so';
+      },
+    ],
+    [
+      'Darwin loader preload',
+      () => {
+        environment.DYLD_INSERT_LIBRARIES = '/custom/preload.dylib';
+      },
+    ],
+    [
+      'loader library path',
+      () => {
+        environment.LD_LIBRARY_PATH = '/custom/loader/lib';
+      },
+    ],
+    [
+      'Darwin loader library path',
+      () => {
+        environment.DYLD_LIBRARY_PATH = '/custom/loader/lib';
+      },
+    ],
+    [
+      'imported Bash function',
+      () => {
+        environment['BASH_FUNC_caws%%'] = '() { :; }';
+      },
+    ],
+    [
+      'custom CLI',
+      () => {
+        environment.CAWS_BIN = '/custom/caws';
+      },
+    ],
+    [
+      'PATH-selected custom CLI',
+      () => {
+        const custom = path.join(directory, 'custom-bin');
+        fs.mkdirSync(custom);
+        fs.writeFileSync(path.join(custom, 'caws'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+        environment.PATH = custom + path.delimiter + environment.PATH;
+      },
+    ],
+    [
+      'missing CLI',
+      () => {
+        fs.unlinkSync(path.join(directory, 'heartbeat-bin/caws'));
+      },
+    ],
+    [
+      'nonexecutable CLI',
+      () => {
+        const file = path.join(directory, 'heartbeat-bin/caws');
+        fs.unlinkSync(file);
+        fs.writeFileSync(file, '#!/bin/sh\nexit 1\n', { mode: 0o600 });
+      },
+    ],
+    [
+      'CLI directory',
+      () => {
+        const file = path.join(directory, 'heartbeat-bin/caws');
+        fs.unlinkSync(file);
+        fs.mkdirSync(file, { mode: 0o700 });
+      },
+    ],
+    [
+      'broken CLI symlink',
+      () => {
+        const file = path.join(directory, 'heartbeat-bin/caws');
+        fs.unlinkSync(file);
+        fs.symlinkSync('missing', file);
+      },
+    ],
+    [
+      'foreign CLI with identical entry bytes',
+      () => {
+        const file = path.join(directory, 'heartbeat-bin/caws');
+        fs.unlinkSync(file);
+        fs.copyFileSync(path.resolve(__dirname, '../../dist/index.js'), file);
+        fs.chmodSync(file, 0o700);
+      },
+    ],
+    [
+      'missing Node',
+      () => {
+        const bin = path.join(directory, 'heartbeat-bin');
+        fs.unlinkSync(path.join(bin, 'node'));
+        environment.PATH = bin;
+      },
+    ],
+    [
+      'missing PATH',
+      () => {
+        delete environment.PATH;
+      },
+    ],
+    [
+      'PATH-selected custom Node',
+      () => {
+        const file = path.join(directory, 'heartbeat-bin/node');
+        fs.unlinkSync(file);
+        fs.writeFileSync(file, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+      },
+    ],
+    [
+      'empty PATH entry',
+      () => {
+        environment.PATH = ':' + environment.PATH;
+      },
+    ],
+    [
+      'relative PATH entry',
+      () => {
+        environment.PATH = '.' + path.delimiter + environment.PATH;
+      },
+    ],
+    [
+      'modified CLI startup bytes',
+      () => {
+        const entry = fs.realpathSync(path.resolve(__dirname, '../../dist/index.js'));
+        const read = fs.readFileSync;
+        jest
+          .spyOn(fs, 'readFileSync')
+          .mockImplementation((file, ...args) =>
+            file === entry
+              ? Buffer.from('#!/usr/bin/env node\n// custom startup\n')
+              : read(file, ...args)
+          );
+      },
+    ],
+    [
+      'startup Bash',
+      () => {
+        environment.BASH_ENV = '/custom/startup';
+      },
+    ],
+    [
+      'prior startup Bash',
+      () => {
+        environment.CAWS_PRIOR_BASH_ENV = '/custom/startup';
+      },
+    ],
+    [
+      'preloaded library',
+      () => {
+        environment._CAWS_EMIT_SH_LOADED = '1';
+      },
+    ],
+    [
+      'project configuration',
+      () => {
+        selection.configuration = 'project-policy';
+      },
+    ],
+    [
+      'other event',
+      () => {
+        selection.event = 'post_tool_use';
+      },
+    ],
+    [
+      'other surface',
+      () => {
+        selection.surface = 'claude-code';
+      },
+    ],
+    [
+      'non-Bash',
+      () => {
+        request.payload.tool_name = 'Write';
+      },
+    ],
+    [
+      'noncanonical Bash',
+      () => {
+        request.payload.tool_input = { command: 27 };
+      },
+    ],
+    [
+      'arguments',
+      (handler) => {
+        handler.args = ['extra'];
+      },
+    ],
+    [
+      'user library',
+      () => {
+        selection.libraries['emit.sh'].kind = 'user';
+      },
+    ],
+    [
+      'project library',
+      () => {
+        selection.libraries['emit.sh'].kind = 'project';
+      },
+    ],
+    [
+      'library override',
+      () => {
+        selection.libraryOverrides['emit.sh'] = '/override';
+      },
+    ],
+    [
+      'handler override',
+      () => {
+        selection.overrides['other.sh'] = '/override';
+      },
+    ],
+    [
+      'project handler',
+      () => {
+        selection.handlers.push({ ...selection.handlers[0], kind: 'project-policy' });
+      },
+    ],
+    [
+      'handler source changed',
+      (handler) => {
+        fs.appendFileSync(handler.path, '\n# changed\n');
+      },
+    ],
+    [
+      'library source changed',
+      () => {
+        fs.appendFileSync(selection.libraries['emit.sh'].path, '\n# changed\n');
+      },
+    ],
+    [
+      'parse dependency changed',
+      () => {
+        fs.appendFileSync(path.join(runtime, 'lib/session-cache.sh'), '\n# changed\n');
+      },
+    ],
+    [
+      'runtime bootstrap changed',
+      () => {
+        fs.appendFileSync(path.join(runtime, 'runtime-paths.sh'), '\n# changed\n');
+      },
+    ],
+    [
+      'handler startup changed',
+      () => {
+        fs.appendFileSync(path.join(runtime, 'handler-env.sh'), '\n# changed\n');
+      },
+    ],
+  ])('heartbeat %s retains compatibility fallback', (_, mutate) => {
     useHeartbeatCli();
-    expect(environment.LD_LIBRARY_PATH).toBeUndefined();
-    expect(environment.DYLD_LIBRARY_PATH).toBeUndefined();
-    if (cli !== undefined) environment.CAWS_BIN = cli;
     const heartbeat = require('../../dist/runtime/agent-heartbeat');
-    const result = { exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
-    const execute = jest.spyOn(heartbeat, 'executeAgentHeartbeat').mockResolvedValue(result);
+    const execute = jest.spyOn(heartbeat, 'executeAgentHeartbeat');
     command('true');
     const handler = select('agent-heartbeat.sh');
-    expect(await tryExecuteStockHandler(handler, context())).toBe(result);
-    expect(execute).toHaveBeenCalledTimes(1);
-    expect(execute.mock.calls[0][0].request.payload.session_id).toBe('fixture');
-  }
-);
-test.each([
-  [
-    'Node preload',
-    () => {
-      environment.NODE_OPTIONS = '--require /custom/preload.js';
-    },
-  ],
-  [
-    'Node module path',
-    () => {
-      environment.NODE_PATH = '/custom/modules';
-    },
-  ],
-  [
-    'loader preload',
-    () => {
-      environment.LD_PRELOAD = '/custom/preload.so';
-    },
-  ],
-  [
-    'Darwin loader preload',
-    () => {
-      environment.DYLD_INSERT_LIBRARIES = '/custom/preload.dylib';
-    },
-  ],
-  [
-    'loader library path',
-    () => {
-      environment.LD_LIBRARY_PATH = '/custom/loader/lib';
-    },
-  ],
-  [
-    'Darwin loader library path',
-    () => {
-      environment.DYLD_LIBRARY_PATH = '/custom/loader/lib';
-    },
-  ],
-  [
-    'imported Bash function',
-    () => {
-      environment['BASH_FUNC_caws%%'] = '() { :; }';
-    },
-  ],
-  [
-    'custom CLI',
-    () => {
-      environment.CAWS_BIN = '/custom/caws';
-    },
-  ],
-  [
-    'PATH-selected custom CLI',
-    () => {
-      const custom = path.join(directory, 'custom-bin');
-      fs.mkdirSync(custom);
-      fs.writeFileSync(path.join(custom, 'caws'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-      environment.PATH = custom + path.delimiter + environment.PATH;
-    },
-  ],
-  [
-    'missing CLI',
-    () => {
-      fs.unlinkSync(path.join(directory, 'heartbeat-bin/caws'));
-    },
-  ],
-  [
-    'nonexecutable CLI',
-    () => {
-      const file = path.join(directory, 'heartbeat-bin/caws');
-      fs.unlinkSync(file);
-      fs.writeFileSync(file, '#!/bin/sh\nexit 1\n', { mode: 0o600 });
-    },
-  ],
-  [
-    'CLI directory',
-    () => {
-      const file = path.join(directory, 'heartbeat-bin/caws');
-      fs.unlinkSync(file);
-      fs.mkdirSync(file, { mode: 0o700 });
-    },
-  ],
-  [
-    'broken CLI symlink',
-    () => {
-      const file = path.join(directory, 'heartbeat-bin/caws');
-      fs.unlinkSync(file);
-      fs.symlinkSync('missing', file);
-    },
-  ],
-  [
-    'foreign CLI with identical entry bytes',
-    () => {
-      const file = path.join(directory, 'heartbeat-bin/caws');
-      fs.unlinkSync(file);
-      fs.copyFileSync(path.resolve(__dirname, '../../dist/index.js'), file);
-      fs.chmodSync(file, 0o700);
-    },
-  ],
-  [
-    'missing Node',
-    () => {
-      const bin = path.join(directory, 'heartbeat-bin');
-      fs.unlinkSync(path.join(bin, 'node'));
-      environment.PATH = bin;
-    },
-  ],
-  [
-    'missing PATH',
-    () => {
-      delete environment.PATH;
-    },
-  ],
-  [
-    'PATH-selected custom Node',
-    () => {
-      const file = path.join(directory, 'heartbeat-bin/node');
-      fs.unlinkSync(file);
-      fs.writeFileSync(file, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-    },
-  ],
-  [
-    'empty PATH entry',
-    () => {
-      environment.PATH = ':' + environment.PATH;
-    },
-  ],
-  [
-    'relative PATH entry',
-    () => {
-      environment.PATH = '.' + path.delimiter + environment.PATH;
-    },
-  ],
-  [
-    'modified CLI startup bytes',
-    () => {
-      const entry = fs.realpathSync(path.resolve(__dirname, '../../dist/index.js'));
-      const read = fs.readFileSync;
-      jest
-        .spyOn(fs, 'readFileSync')
-        .mockImplementation((file, ...args) =>
-          file === entry
-            ? Buffer.from('#!/usr/bin/env node\n// custom startup\n')
-            : read(file, ...args)
-        );
-    },
-  ],
-  [
-    'startup Bash',
-    () => {
-      environment.BASH_ENV = '/custom/startup';
-    },
-  ],
-  [
-    'prior startup Bash',
-    () => {
-      environment.CAWS_PRIOR_BASH_ENV = '/custom/startup';
-    },
-  ],
-  [
-    'preloaded library',
-    () => {
-      environment._CAWS_EMIT_SH_LOADED = '1';
-    },
-  ],
-  [
-    'project configuration',
-    () => {
-      selection.configuration = 'project-policy';
-    },
-  ],
-  [
-    'other event',
-    () => {
-      selection.event = 'post_tool_use';
-    },
-  ],
-  [
-    'other surface',
-    () => {
-      selection.surface = 'claude-code';
-    },
-  ],
-  [
-    'non-Bash',
-    () => {
-      request.payload.tool_name = 'Write';
-    },
-  ],
-  [
-    'noncanonical Bash',
-    () => {
-      request.payload.tool_input = { command: 27 };
-    },
-  ],
-  [
-    'arguments',
-    (handler) => {
-      handler.args = ['extra'];
-    },
-  ],
-  [
-    'user library',
-    () => {
-      selection.libraries['emit.sh'].kind = 'user';
-    },
-  ],
-  [
-    'project library',
-    () => {
-      selection.libraries['emit.sh'].kind = 'project';
-    },
-  ],
-  [
-    'library override',
-    () => {
-      selection.libraryOverrides['emit.sh'] = '/override';
-    },
-  ],
-  [
-    'handler override',
-    () => {
-      selection.overrides['other.sh'] = '/override';
-    },
-  ],
-  [
-    'project handler',
-    () => {
-      selection.handlers.push({ ...selection.handlers[0], kind: 'project-policy' });
-    },
-  ],
-  [
-    'handler source changed',
-    (handler) => {
-      fs.appendFileSync(handler.path, '\n# changed\n');
-    },
-  ],
-  [
-    'library source changed',
-    () => {
-      fs.appendFileSync(selection.libraries['emit.sh'].path, '\n# changed\n');
-    },
-  ],
-  [
-    'parse dependency changed',
-    () => {
-      fs.appendFileSync(path.join(runtime, 'lib/session-cache.sh'), '\n# changed\n');
-    },
-  ],
-  [
-    'runtime bootstrap changed',
-    () => {
-      fs.appendFileSync(path.join(runtime, 'runtime-paths.sh'), '\n# changed\n');
-    },
-  ],
-  [
-    'handler startup changed',
-    () => {
-      fs.appendFileSync(path.join(runtime, 'handler-env.sh'), '\n# changed\n');
-    },
-  ],
-])('heartbeat %s retains compatibility fallback', (_, mutate) => {
-  useHeartbeatCli();
-  const heartbeat = require('../../dist/runtime/agent-heartbeat');
-  const execute = jest.spyOn(heartbeat, 'executeAgentHeartbeat');
-  command('true');
-  const handler = select('agent-heartbeat.sh');
-  mutate(handler);
-  expect(tryExecuteStockHandler(handler, context())).toBeNull();
-  expect(execute).not.toHaveBeenCalled();
+    mutate(handler);
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+  });
 });

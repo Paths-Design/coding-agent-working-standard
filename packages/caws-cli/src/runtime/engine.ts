@@ -48,6 +48,8 @@ import {
   SESSION_END_PREFIX_CAPABILITY,
   SESSION_PUBLICATION_CAPABILITY,
   STOP_PREFIX_CAPABILITY,
+  FILE_TOOL_CONTEXT_CAPABILITY,
+  GUARD_STRIKES_CAPABILITY,
   TRANSCRIPT_STORE_CAPABILITY,
   MAX_JSON_DEPTH,
   type RuntimeRequest,
@@ -67,6 +69,13 @@ import type { NativeStopLeaseContextPort } from './stop-lease-context';
 import type { NativeSessionSealPort } from './session-publication-client';
 import { executeNativeSessionSeal } from './session-seal-runtime';
 import { assertNativeStopAgentSelection, type NativeSessionSealExecution } from './stock-handlers';
+import { prepareFileToolHandlers, qualifiesForFileToolHandlers } from './file-tool-handlers';
+import type { NativeGuardStrikesPort } from './guard-strikes';
+import {
+  assertFileToolContextRoots,
+  type FileToolContextSnapshot,
+  type NativeFileToolContextPort,
+} from './file-tool-context';
 import type { NativeResult } from './types';
 import type { NativeStopAdmission } from './live-protocol';
 import {
@@ -304,12 +313,18 @@ export async function prepareRuntimeInvocation(
   nativeStopPrefix?: NativeStopPrefixPort,
   nativeStopStore?: NativeTranscriptStorePublicationPort,
   nativeStopLeaseContext?: NativeStopLeaseContextPort,
-  nativeStopCliIdentity?: MatchedCliIdentityReceipt
+  nativeStopCliIdentity?: MatchedCliIdentityReceipt,
+  nativeFileToolContext?: NativeFileToolContextPort,
+  nativeGuardStrikes?: NativeGuardStrikesPort
 ): Promise<PreparedRuntimeInvocation> {
   if (nativeStopCliIdentity)
     assertMatchedCliIdentityReceipt(nativeStopCliIdentity, request, signal);
   if (request.contextGit !== undefined && !contextGit)
     throw new Error('Native context Git capability requires its request-owned port');
+  if ((request.fileToolContext === FILE_TOOL_CONTEXT_CAPABILITY) !== Boolean(nativeFileToolContext))
+    throw new Error('Native file-tool context capability requires its request-owned port');
+  if ((request.guardStrikes === GUARD_STRIKES_CAPABILITY) !== Boolean(nativeGuardStrikes))
+    throw new Error('Native guard-strikes capability requires its request-owned port');
   const environment = invocationEnvironment(request.caller);
   clearGuardConfigurationTransport(environment);
   for (const name of [
@@ -470,6 +485,21 @@ export async function prepareRuntimeInvocation(
     identity.sessionId,
     home
   );
+  let capturedFileToolContext: FileToolContextSnapshot | undefined;
+  if (
+    nativeFileToolContext &&
+    nativeGuardStrikes &&
+    qualifiesForFileToolHandlers({
+      request,
+      selection,
+      environment: invocationGuardConfiguration(selection, environment),
+      signal,
+    })
+  ) {
+    capturedFileToolContext = await nativeFileToolContext.capture();
+    if (signal.aborted) throw signal.reason;
+    assertFileToolContextRoots(capturedFileToolContext, selection.checkout, selection.canonical);
+  }
   let dispatched = false,
     acknowledged = false,
     result: NativeResult | null = null;
@@ -511,8 +541,27 @@ export async function prepareRuntimeInvocation(
           selection,
           environment: invocationGuardConfiguration(selection, environment),
           signal,
+          ...(capturedFileToolContext && nativeFileToolContext && nativeGuardStrikes
+            ? {
+                nativeFileToolContext: {
+                  captured: capturedFileToolContext,
+                  revalidate: () => nativeFileToolContext.revalidate(),
+                  incrementScopeGuard: async () => {
+                    const committed = await nativeGuardStrikes.incrementScopeGuard();
+                    journal.append('scope_strike_result', {
+                      observation_boundary: 'native_guard_strikes_result',
+                      count: committed.count,
+                      state_sha256: committed.stateSha256,
+                    });
+                    return committed;
+                  },
+                },
+              }
+            : {}),
         };
-        let compatibility = compatibilityRequired(request, selection, environment);
+        const fileTools = prepareFileToolHandlers(options);
+        let compatibility =
+          fileTools === null && compatibilityRequired(request, selection, environment);
         let sessionSeal: NativeSessionSealExecution | undefined;
         let stopLeaseContext: NativeStopLeaseContextPort | undefined;
         let stopPublication:
@@ -731,17 +780,19 @@ export async function prepareRuntimeInvocation(
                 : 32768,
             },
             {
-              execute: createHandlerExecutor({
-                ...options,
-                ...(sessionSeal ? { nativeSessionSeal: sessionSeal } : {}),
-                ...(stopPublication ? { nativeStopPublication: stopPublication } : {}),
-                ...(stopLeaseContext && nativeStopCliIdentity
-                  ? {
-                      nativeStopLeaseContext: stopLeaseContext,
-                      nativeStopCliIdentity,
-                    }
-                  : {}),
-              }),
+              execute: fileTools
+                ? (handler) => fileTools.execute(handler)
+                : createHandlerExecutor({
+                    ...options,
+                    ...(sessionSeal ? { nativeSessionSeal: sessionSeal } : {}),
+                    ...(stopPublication ? { nativeStopPublication: stopPublication } : {}),
+                    ...(stopLeaseContext && nativeStopCliIdentity
+                      ? {
+                          nativeStopLeaseContext: stopLeaseContext,
+                          nativeStopCliIdentity,
+                        }
+                      : {}),
+                  }),
               record: (observation) => journal.record(observation),
               eligibility: (handler) =>
                 handlerEligibility(handler, {
