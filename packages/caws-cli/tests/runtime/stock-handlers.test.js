@@ -165,10 +165,8 @@ beforeEach(() => {
   project = path.join(directory, 'project');
   fs.mkdirSync(project);
   fs.cpSync(path.join(templates, 'shared'), runtime, { recursive: true });
-  fs.copyFileSync(
-    path.join(templates, 'runtime/handler-env.sh'),
-    path.join(runtime, 'handler-env.sh')
-  );
+  for (const name of ['dispatch.sh', 'handler-env.sh'])
+    fs.copyFileSync(path.join(templates, 'runtime', name), path.join(runtime, name));
   const libraries = {};
   for (const name of [
     'agent-surface.sh',
@@ -453,6 +451,7 @@ describe('selected stock handler behavior', () => {
   });
 
   test.each([
+    'dispatch.sh',
     'handler-env.sh',
     'runtime-paths.sh',
     'lib/agent-surface.sh',
@@ -1085,6 +1084,30 @@ describe('selected stock handler behavior', () => {
       expect(await tryExecuteStockHandler(handler, context())).toBe(result);
       expect(execute).toHaveBeenCalledTimes(1);
       expect(execute.mock.calls[0][0].request.payload.session_id).toBe('fixture');
+    }
+  );
+  test.each(['original', 'effective'])(
+    'current startup pair refuses own startup presence before heartbeat effects in %s environment',
+    async (side) => {
+      useHeartbeatCli();
+      request.caller.environment = { ...environment };
+      command('true');
+      const execute = jest
+        .spyOn(require('../../dist/runtime/agent-heartbeat'), 'executeAgentHeartbeat')
+        .mockResolvedValue({ exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) });
+      const handler = select('agent-heartbeat.sh');
+      expect(await tryExecuteStockHandler(handler, context())).not.toBeNull();
+      expect(execute).toHaveBeenCalledTimes(1);
+      execute.mockClear();
+      const target = side === 'original' ? request.caller.environment : environment;
+      for (const name of ['BASH_ENV', 'CAWS_PRIOR_BASH_ENV', 'CAWS_PRIOR_BASH_ENV_SET']) {
+        for (const value of ['', 'x', 'unknown', path.join(runtime, 'handler-env.sh')]) {
+          target[name] = value;
+          expect(tryExecuteStockHandler(handler, context())).toBeNull();
+          expect(execute).not.toHaveBeenCalled();
+          delete target[name];
+        }
+      }
     }
   );
   test.each([

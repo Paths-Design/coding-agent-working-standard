@@ -261,6 +261,41 @@ export function qualifiesForNativeSessionEndPrefix(context: {
   }
 }
 
+const CURRENT_STARTUP: Readonly<Record<string, string>> = {
+  'dispatch.sh': 'ae1b3b5bae0028da2f5a87a41f55fe1a5a8b60eb63169361c50de2a44cf5cdd5',
+  'handler-env.sh': '04c7cb5485bfb1b5f3f64ab6ef0a17981db795dc5454134cdc257e7752b0ebdb',
+};
+const STARTUP_KEYS = ['BASH_ENV', 'CAWS_PRIOR_BASH_ENV', 'CAWS_PRIOR_BASH_ENV_SET'] as const;
+
+/** Admit the reviewed presence-restoring pair only with retained original absence. */
+export function qualifiesForNativeStartupProfile(context: {
+  readonly request: RuntimeRequest;
+  readonly selection: ActiveInvocationSelection;
+  readonly environment: Readonly<Record<string, string>>;
+}): boolean {
+  const { request, selection, environment } = context;
+  const root = selection.runtimeDirectory;
+  try {
+    if (
+      pinned(root, 'dispatch.sh', [PREFIX['dispatch.sh']!]) &&
+      pinned(root, 'handler-env.sh', [PREFIX['handler-env.sh']!])
+    )
+      return true;
+    return (
+      request.configuration === 'system' &&
+      request.surface === 'codex' &&
+      request.event === 'pre_tool_use' &&
+      [request.caller.environment, environment].every((snapshot) =>
+        STARTUP_KEYS.every((name) => !Object.hasOwn(snapshot, name))
+      ) &&
+      pinned(root, 'dispatch.sh', [CURRENT_STARTUP['dispatch.sh']!]) &&
+      pinned(root, 'handler-env.sh', [CURRENT_STARTUP['handler-env.sh']!])
+    );
+  } catch {
+    return false;
+  }
+}
+
 function environmentSupported(
   environment: Readonly<Record<string, string>>,
   startup: string | null
@@ -337,6 +372,7 @@ export function qualifiesForNativeSessionCache(context: {
       !directory(selection.canonical) ||
       selection.runtimeDirectory !== path.join(home, 'lib/runtimes', request.runtimeDigest) ||
       !directory(selection.runtimeDirectory) ||
+      !qualifiesForNativeStartupProfile(context) ||
       !environmentSupported(request.caller.environment, null) ||
       !environmentSupported(environment, path.join(selection.runtimeDirectory, 'handler-env.sh'))
     )
@@ -395,8 +431,10 @@ export function qualifiesForNativeSessionCache(context: {
       )
         return false;
     }
-    for (const relative of Object.keys(PREFIX))
+    for (const relative of Object.keys(PREFIX)) {
+      if (relative === 'dispatch.sh' || relative === 'handler-env.sh') continue;
       if (!pinned(selection.runtimeDirectory, relative)) return false;
+    }
     return true;
   } catch {
     return false;

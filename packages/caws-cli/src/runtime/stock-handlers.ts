@@ -21,7 +21,10 @@ import { createGuardUtilityPorts, runGuardUtilities } from './guard-utilities';
 import type { HandlerResult } from './composer';
 import type { RuntimeRequest } from './protocol';
 import type { ActiveInvocationSelection, SelectedHandler } from './selection';
-import { qualifiesForNativeSessionEndPrefix } from './session-cache-admission';
+import {
+  qualifiesForNativeSessionEndPrefix,
+  qualifiesForNativeStartupProfile,
+} from './session-cache-admission';
 
 /** Compatibility identities, not trust inferred from a filename or the current template bytes. */
 const HANDLERS: Readonly<Record<string, string>> = {
@@ -68,7 +71,6 @@ const LIBRARIES: Readonly<Record<string, readonly string[]>> = {
   ],
 };
 const STARTUP_SOURCES: Readonly<Record<string, readonly string[]>> = {
-  'handler-env.sh': ['901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7'],
   'runtime-paths.sh': ['c2cc098b08c110723c2d1805170ba2d73a855f0864e5792bb7a88a2c3def7f08'],
   'lib/session-cache.sh': ['eea9bb74ec74d07931eb13ac45e6822a348ce7fb49e4a7baa9d590e321e093cb'],
   'lib/agent-surface.sh': LIBRARIES['agent-surface.sh']!,
@@ -236,6 +238,7 @@ function compatible(handler: SelectedHandler, context: StockHandlerContext): boo
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return false;
     }
+    if (!qualifiesForNativeStartupProfile(context)) return false;
     const direct: Record<string, readonly string[]> = { ...STARTUP_SOURCES };
     for (const name of extra) direct['lib/' + name] = LIBRARIES[name]!;
     for (const [name, expected] of Object.entries(direct)) {

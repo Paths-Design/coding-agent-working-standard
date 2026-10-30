@@ -544,6 +544,17 @@ describe('complete stock file-tool prewrite handlers', () => {
     });
     for (const name of ['dispatch.sh', 'handler-env.sh'])
       fs.copyFileSync(path.join(templates, 'runtime', name), path.join(runtime, name));
+    // Model maintained machine installation, which marks every installed .sh
+    // member executable; source template checkout modes are not installation modes.
+    const installedDirectories = [runtime];
+    while (installedDirectories.length) {
+      const directory = installedDirectories.pop();
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const file = path.join(directory, entry.name);
+        if (entry.isDirectory()) installedDirectories.push(file);
+        else if (entry.isFile() && entry.name.endsWith('.sh')) fs.chmodSync(file, 0o755);
+      }
+    }
     put(path.join(repo, '.caws/policy.yaml'), {
       version: 1,
       risk_tiers: {
@@ -874,6 +885,21 @@ describe('complete stock file-tool prewrite handlers', () => {
     const defaults = actualDefaultPatchProfile();
     expect(selection.handlers.map((handler) => handler.entry)).toEqual(defaults);
     expect(prepare()).not.toBeNull();
+    expect(count()).toBe(0);
+    expect(fs.existsSync(path.join(repo, '.caws/leases'))).toBe(false);
+  });
+
+  test('default eleven pins the directly sourced shared parser separately from the surface parser', () => {
+    actualDefaultPatchProfile();
+    expect(prepare()).not.toBeNull();
+    const surface = selection.libraries['parse-input.sh'];
+    const surfaceBefore = fs.readFileSync(surface.path);
+    const shared = path.join(runtime, 'lib/parse-input.sh');
+    expect(shared).not.toBe(surface.path);
+    fs.appendFileSync(shared, "\nprintf 'shared-parser-drift\\n' >&2\n");
+    expect(fs.readFileSync(surface.path)).toEqual(surfaceBefore);
+    expect(surface.sha256).toBe(sha(surface.path));
+    expect(prepare()).toBeNull();
     expect(count()).toBe(0);
     expect(fs.existsSync(path.join(repo, '.caws/leases'))).toBe(false);
   });
