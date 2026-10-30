@@ -3,7 +3,7 @@ title: 'Join the exclusive Native lifecycle consumer to the agent workflow'
 mode: feature
 lifecycle_state: active
 created_at: '2026-10-30T03:31:05.440Z'
-updated_at: '2026-10-30T11:49:48.183Z'
+updated_at: '2026-10-30T12:16:41.889Z'
 created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
 blast_radius:
   modules:
@@ -34,6 +34,7 @@ scope:
     - packages/caws-cli/tests/execution/npm-project.test.js
     - packages/caws-cli/src/execution/authority.ts
     - packages/caws-cli/tests/execution/authority.test.js
+    - packages/caws-native/src/lib.rs
   out: []
 invariants:
   - 'Lifecycle authority is operation specific and never admits generic Git or general CAWS CLI commands'
