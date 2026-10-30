@@ -4,7 +4,7 @@ mode: refactor
 lifecycle_state: active
 worktree: native-file-tools
 created_at: '2026-10-29T23:24:56.819Z'
-updated_at: '2026-10-29T23:25:30.856Z'
+updated_at: '2026-10-30T00:59:26.502Z'
 created_by_session: '01a1861e-58cc-7392-ac55-1ff3a6051998'
 blast_radius:
   modules:
@@ -24,6 +24,15 @@ scope:
     - 'packages/caws-cli/tests/runtime/stock-handlers.test.js'
     - 'packages/caws-cli/tests/runtime/session-cache-admission.test.js'
     - 'packages/caws-cli/mutation-policy.json'
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/src/runtime/engine-entry.ts
+    - packages/caws-cli/src/runtime/file-tool-context.ts
+    - packages/caws-cli/tests/runtime/file-tool-context.test.js
+    - packages/caws-native/src/main.rs
+    - packages/caws-native/src/protocol.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/src/context_git.rs
+    - packages/caws-native/src/context_git/file_tools.rs
   out: []
   support:
     - docs/internal/caws-runtime-modernization.md
