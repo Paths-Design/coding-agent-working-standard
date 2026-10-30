@@ -4,7 +4,10 @@ const yaml = require('js-yaml');
 const { spawnCoveredSync } = require('./child-coverage.cjs');
 const { authorityFixture, cleanupAll } = require('./authority-fixture');
 const { git } = require('../helpers/git-repo-factory');
-const { parseExecutionLifecycleArguments } = require('../../dist/execution/lifecycle');
+const {
+  parseExecutionLifecycleArguments,
+  inspectExecutionLifecycleGit,
+} = require('../../dist/execution/lifecycle');
 const { loadEvents } = require('../../dist/store/events-store');
 afterAll(cleanupAll);
 const entry = path.resolve(__dirname, '../../dist/execution/lifecycle-main.js');
@@ -83,6 +86,78 @@ function success(result) {
 function spec(f) {
   return yaml.load(fs.readFileSync(f.specPath, 'utf8'));
 }
+
+function configureInactiveLocalMetadata(f, { sparse = true } = {}) {
+  const marker = path.join(f.root, 'filter-must-not-run');
+  const command = `sh -c 'echo executed > "${marker}"; exit 1'`;
+  for (const [key, value] of [
+    ['credential.helper', 'unused-local-helper'],
+    ['init.defaultbranch', 'main'],
+    ['inti.defaultbranch', 'main'],
+    ['color.ui', 'auto'],
+    ['filter.lfs.clean', command],
+    ['filter.lfs.smudge', command],
+    ['filter.lfs.process', command],
+    ['filter.lfs.required', 'true'],
+    ['push.autosetupremote', 'true'],
+    ['http.postbuffer', '524288000'],
+    ['pack.window', '1'],
+    ['pull.ff', 'only'],
+    ['pull.rebase', 'false'],
+    ['remote.origin.url', 'file:///unused-fixture-remote'],
+    ['remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*'],
+    ['branch.caws/fixture-base.remote', 'origin'],
+    ['branch.caws/fixture-base.merge', 'refs/heads/caws/fixture-base'],
+    ['extensions.worktreeconfig', 'true'],
+  ])
+    git(f.root, ['config', key, value]);
+  if (sparse) {
+    const configured =
+      require('../../dist/store/git-sparse-checkout').configureWorktreeSparseCheckout(f.lane);
+    expect(configured.ok).toBe(true);
+  }
+  return marker;
+}
+
+test('configured inactive LFS and local metadata permit normal sparse stage commit merge bridge and close', () => {
+  const f = fixture();
+  const marker = configureInactiveLocalMetadata(f);
+  fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'inert configuration consumer\n');
+  success(execute(f, ['git-stage', '--', 'src/owned.txt']));
+  success(
+    execute(f, ['git-commit', '--message', 'fix: actual local consumer', '--', 'src/owned.txt'])
+  );
+  expect(success(execute(f, ['git-status'])).stdout).toBe('');
+  f.spec.title = 'Pending local governance audit';
+  fs.writeFileSync(f.specPath, yaml.dump(f.spec));
+  success(execute(f, ['spec-commit', '--spec', 'EXEC-001']));
+  const merged = success(
+    execute(f, ['worktree-merge', '--worktree', 'owned', '--spec', 'EXEC-001'], { cwd: f.root })
+  ).data.merge_commit;
+  expect(fs.readFileSync(path.join(f.root, 'src/owned.txt'), 'utf8')).toBe(
+    'inert configuration consumer\n'
+  );
+  success(
+    execute(f, ['bridge-claim', '--spec', 'EXEC-001', '--merge-commit', merged], { cwd: f.root })
+  );
+  success(
+    execute(
+      f,
+      [
+        'spec-close',
+        '--spec',
+        'EXEC-001',
+        '--merge-commit',
+        merged,
+        '--reason',
+        'local downstream inspected',
+      ],
+      { cwd: f.root }
+    )
+  );
+  expect(spec(f).lifecycle_state).toBe('closed');
+  expect(fs.existsSync(marker)).toBe(false);
+});
 
 test.each([
   ['git-stage', '--', ':(top,glob)**'],
@@ -166,6 +241,69 @@ test.each(['pre-commit', 'pre-auto-gc', 'reference-transaction', 'post-index-cha
   }
 );
 
+function equivalentFilesystemPaths(stored, requested) {
+  const actual = fs.lstatSync(stored, { bigint: true });
+  try {
+    const lookup = fs.lstatSync(requested, { bigint: true });
+    return actual.dev === lookup.dev && actual.ino === lookup.ino;
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+test('exact Git hook pathname probes refuse filesystem-equivalent uppercase callback without executing it', () => {
+  const f = fixture();
+  const marker = path.join(f.root, 'uppercase-hook-ran');
+  const stored = path.join(f.root, '.git/hooks/PRE-COMMIT');
+  const requested = path.join(f.root, '.git/hooks/pre-commit');
+  fs.writeFileSync(stored, `#!/bin/sh\necho executed > '${marker}'\nexit 1\n`, { mode: 0o755 });
+  const equivalent = equivalentFilesystemPaths(stored, requested);
+  process.stdout.write(`Git hook pathname filesystem equivalence: ${equivalent}\n`);
+  fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'alias callback candidate\n');
+  const index = git(f.lane, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
+  const before = fs.readFileSync(index);
+  const result = execute(f, ['git-stage', '--', 'src/owned.txt']);
+  expect(fs.existsSync(marker)).toBe(false);
+  if (equivalent) {
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('unsupported_profile');
+    expect(fs.readFileSync(index)).toEqual(before);
+  } else {
+    // A genuinely different pathname is not Git's pre-commit callback.
+    expect(success(result).outcome).toBe('settled');
+    expect(fs.readFileSync(index)).not.toEqual(before);
+  }
+});
+
+test.each(['alternates', 'http-alternates'])(
+  'exact forbidden metadata pathname probe refuses filesystem-equivalent uppercase %s',
+  (name) => {
+    const f = fixture();
+    const stored = path.join(f.root, '.git/objects/info', name.toUpperCase());
+    const requested = path.join(f.root, '.git/objects/info', name);
+    fs.writeFileSync(stored, '');
+    const equivalent = equivalentFilesystemPaths(stored, requested);
+    process.stdout.write(`Git ${name} pathname filesystem equivalence: ${equivalent}\n`);
+    const index = git(f.lane, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
+    const before = {
+      index: fs.readFileSync(index),
+      spec: fs.readFileSync(f.specPath),
+      refs: git(f.root, ['show-ref', '--head']),
+    };
+    const result = execute(f, ['git-stage', '--', 'src/owned.txt']);
+    if (equivalent) {
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain('unsupported_profile');
+      expect(fs.readFileSync(index)).toEqual(before.index);
+    } else expect(success(result).outcome).toBe('settled');
+    expect(fs.readFileSync(f.specPath)).toEqual(before.spec);
+    expect(git(f.root, ['show-ref', '--head'])).toBe(before.refs);
+  }
+);
+
 test.each([
   'filter.hostile.clean',
   'core.fsmonitor',
@@ -176,9 +314,111 @@ test.each([
   const f = fixture();
   const marker = path.join(f.root, 'config-ran');
   git(f.root, ['config', key, `sh -c 'echo ran > "${marker}"'`]);
+  if (key.startsWith('filter.'))
+    fs.writeFileSync(path.join(f.lane, '.gitattributes'), 'src/** filter=hostile\n');
   const result = execute(f, ['git-stage', '--', 'src/owned.txt']);
   expect(result.status).toBe(1);
   expect(result.stderr).toContain('unsupported_profile');
+  expect(fs.existsSync(marker)).toBe(false);
+});
+
+test.each(['working', 'cached', 'untracked', 'governance', 'ignored-explicit'])(
+  'configured LFS refuses active %s attributes without invoking its helper or changing Git state',
+  (view) => {
+    const f = fixture();
+    const attributes = path.join(f.lane, '.gitattributes');
+    // Construct the hostile cached view before configuring its executable
+    // driver: update-index itself can refresh other paths using new attributes.
+    if (view === 'cached') {
+      const input = path.join(f.root, 'attribute-input');
+      fs.writeFileSync(input, 'src/** filter=lfs\n');
+      const blob = git(f.root, ['hash-object', '-w', input]);
+      git(f.lane, ['update-index', '--add', '--cacheinfo', `100644,${blob},.gitattributes`]);
+      fs.writeFileSync(attributes, '* -filter\n');
+    }
+    const marker = configureInactiveLocalMetadata(f, { sparse: view !== 'cached' });
+    let argv = ['git-stage', '--', 'src/owned.txt'];
+    if (view === 'working') fs.writeFileSync(attributes, 'src/** filter=lfs\n');
+    if (view === 'untracked') {
+      fs.writeFileSync(attributes, 'src/future.txt filter=lfs\n');
+      fs.writeFileSync(path.join(f.lane, 'src/future.txt'), 'untracked candidate\n');
+    }
+    if (view === 'ignored-explicit') {
+      fs.writeFileSync(attributes, 'src/ignored.txt filter=lfs\n');
+      fs.writeFileSync(path.join(f.lane, '.gitignore'), 'src/ignored.txt\n');
+      fs.writeFileSync(path.join(f.lane, 'src/ignored.txt'), 'explicit ignored candidate\n');
+      argv = ['git-stage', '--', 'src/ignored.txt'];
+    }
+    if (view === 'governance') {
+      fs.writeFileSync(path.join(f.root, '.gitattributes'), '.caws/specs/*.yaml filter=lfs\n');
+      argv = ['spec-commit', '--spec', 'EXEC-001'];
+    }
+    const index = git(f.lane, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
+    const before = {
+      index: fs.readFileSync(index),
+      refs: git(f.root, ['show-ref', '--head']),
+      source: fs.readFileSync(f.specPath),
+    };
+    const result = execute(f, argv);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('unsupported_profile');
+    expect(fs.readFileSync(index)).toEqual(before.index);
+    expect(git(f.root, ['show-ref', '--head'])).toBe(before.refs);
+    expect(fs.readFileSync(f.specPath)).toEqual(before.source);
+    expect(fs.existsSync(marker)).toBe(false);
+  }
+);
+
+test('configured LFS rejects active immutable HEAD attributes even when worktree and index disable them', () => {
+  const f = fixture();
+  const attributes = path.join(f.lane, '.gitattributes');
+  fs.writeFileSync(attributes, 'src/** filter=lfs\n');
+  git(f.lane, ['add', '--', '.gitattributes']);
+  git(f.lane, ['commit', '-m', 'fixture active HEAD attributes without configured driver']);
+  fs.writeFileSync(attributes, '* -filter\n');
+  git(f.lane, ['add', '--', '.gitattributes']);
+  const marker = configureInactiveLocalMetadata(f, { sparse: false });
+  expect(() => inspectExecutionLifecycleGit(f.lane)).toThrow('Execution authority is unavailable');
+  expect(fs.existsSync(marker)).toBe(false);
+});
+
+test.each([
+  'remote.origin.promisor',
+  'extensions.partialclone',
+  'include.path',
+  'alias.status',
+  'filter.unset.clean',
+  'filter.unspecified.process',
+])(
+  'configured LFS still refuses unsafe configuration %s with state and helper sentinel unchanged',
+  (key) => {
+    const f = fixture();
+    const marker = configureInactiveLocalMetadata(f);
+    git(f.root, ['config', key, key.endsWith('.promisor') ? 'true' : 'unsupported']);
+    const index = git(f.lane, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
+    const before = fs.readFileSync(index);
+    const result = execute(f, ['git-stage', '--', 'src/owned.txt']);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('unsupported_profile');
+    expect(fs.readFileSync(index)).toEqual(before);
+    expect(fs.existsSync(marker)).toBe(false);
+  }
+);
+
+test('configured LFS revalidation rejects a filter activated between observation and stage', () => {
+  const f = fixture();
+  const marker = configureInactiveLocalMetadata(f);
+  const index = git(f.lane, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
+  const before = fs.readFileSync(index);
+  const setup = `const fs=require('node:fs');const open=fs.openSync;let changed=false;
+    fs.openSync=function(p,...a){const fd=open.call(this,p,...a);if(!changed&&p===${JSON.stringify(path.join(f.lane, 'src/owned.txt'))}){changed=true;fs.writeFileSync(${JSON.stringify(path.join(f.lane, '.gitattributes'))},'src/** filter=lfs\\n');}return fd;};`;
+  const result = execute(f, ['git-stage', '--', 'src/owned.txt'], { setup });
+  expect(result.status).toBe(1);
+  expect(result.stdout).toBe('');
+  expect(result.stderr).toContain('unsupported_profile');
+  expect(fs.readFileSync(index)).toEqual(before);
   expect(fs.existsSync(marker)).toBe(false);
 });
 

@@ -119,12 +119,13 @@ export function parseExecutionLifecycleArguments(
 }
 
 const gitEnv = (): NodeJS.ProcessEnv => ({ PATH: '/usr/bin:/bin', LC_ALL: 'C' });
-function git(cwd: string, args: readonly string[]): string {
+function git(cwd: string, args: readonly string[], input?: Buffer): string {
   return execFileSync('/usr/bin/git', [...args], {
     cwd,
     env: gitEnv(),
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+    ...(input === undefined ? {} : { input }),
     timeout: 10000,
     maxBuffer: 1048576,
   });
@@ -195,7 +196,23 @@ function canonicalContext(context: ExecutionAuthorityContext): void {
   }
 }
 
+/** Git opens these exact pathnames. Probe them through the filesystem rather
+ * than comparing enumerated spelling, so case/normalization aliases refuse. */
+function refuseObjectRedirectionFiles(root: string): void {
+  for (const name of ['alternates', 'http-alternates']) {
+    let present = false;
+    try {
+      fs.lstatSync(join(root, 'objects', 'info', name));
+      present = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    requireValue(!present, 'unsupported_profile');
+  }
+}
+
 function gitMetadataTree(root: string): void {
+  refuseObjectRedirectionFiles(root);
   const pending = [root];
   let count = 0;
   while (pending.length > 0) {
@@ -210,18 +227,15 @@ function gitMetadataTree(root: string): void {
       for (const name of fs.readdirSync(current)) pending.push(join(current, name));
     } else requireValue(stat.isFile() && stat.nlink === 1, 'scope_refused');
     requireValue(
-      current !== join(root, 'objects', 'info', 'alternates') &&
-        current !== join(root, 'objects', 'info', 'http-alternates'),
+      !(dirname(current) === join(root, 'objects', 'pack') && current.endsWith('.promisor')),
       'unsupported_profile'
     );
   }
 }
 
-/** Inspect the effective normal Git configuration without evaluating includes.
- * Unknown executable/configuration closures refuse. No hooksPath or signing
- * override is installed by this consumer. */
-export function inspectExecutionLifecycleGit(cwd: string): void {
-  const entries = git(cwd, ['config', '--null', '--list', '--no-includes']).split('\0');
+function lifecycleGitConfiguration(cwd: string): { source: string; hooksPath?: string } {
+  const source = git(cwd, ['config', '--null', '--list', '--no-includes']);
+  const entries = source.split('\0');
   requireValue(entries.pop() === '');
   let hooksPath: string | undefined;
   for (const entry of entries) {
@@ -234,11 +248,38 @@ export function inspectExecutionLifecycleGit(cwd: string): void {
       hooksPath = value;
       continue;
     }
-    // The fixed operations perform no network transport. A system credential
-    // helper cannot be reached by this command family; promisor/remote config
-    // that could introduce a lazy fetch remains unsupported.
+    const boolean = /^(?:true|false|yes|no|on|off|0|1)$/i.test(value);
+    if (
+      /^(?:extensions\.worktreeconfig|core\.sparsecheckout|core\.sparsecheckoutcone|index\.sparse)$/.test(
+        key
+      )
+    ) {
+      requireValue(boolean, 'unsupported_profile');
+      continue;
+    }
+    // Driver command strings remain opaque configuration data. Attribute
+    // observation below must prove no candidate can select any filter driver.
+    if (/^filter\.[a-z0-9_-]+\.(?:clean|smudge|process|required)$/.test(key)) {
+      // check-attr renders these sentinel words identically to string values.
+      // Never admit a configured driver that could exploit that ambiguity.
+      requireValue(!/^filter\.(?:unset|unspecified|set)\./.test(key), 'unsupported_profile');
+      requireValue(!key.endsWith('.required') || boolean, 'unsupported_profile');
+      continue;
+    }
+    // pack.window affects built-in local repacking, not a callback. Bound its
+    // numeric work factor rather than treating it as inert network metadata.
+    if (key === 'pack.window') {
+      requireValue(
+        /^(?:0|[1-9][0-9]{0,3})$/.test(value) && Number(value) <= 1024,
+        'unsupported_profile'
+      );
+      continue;
+    }
+    // Fixed operations never fetch/push/pull or start an HTTP transport.
+    // Remote URL/fetch and credential/UI/default-branch settings cannot select
+    // a program here. Promisor/partialClone, includes and aliases stay refused.
     const harmless =
-      /^(?:credential\.helper|user\.(?:name|email)|core\.(?:repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode)|init\.defaultbranch|branch\.[^.]+\.(?:remote|merge))$/.test(
+      /^(?:credential\.helper|user\.(?:name|email)|color\.ui|push\.autosetupremote|http\.postbuffer|pull\.(?:ff|rebase)|core\.(?:repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode)|(?:init|inti)\.defaultbranch|remote\..+\.(?:url|fetch)|branch\..+\.(?:remote|merge))$/.test(
         key
       );
     requireValue(
@@ -246,6 +287,115 @@ export function inspectExecutionLifecycleGit(cwd: string): void {
       'unsupported_profile'
     );
   }
+  const common = framed(git(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
+  refuseObjectRedirectionFiles(common);
+  requireValue(
+    !fs.readdirSync(join(common, 'objects', 'pack')).some((name) => name.endsWith('.promisor')),
+    'unsupported_profile'
+  );
+  return { source, ...(hooksPath === undefined ? {} : { hooksPath }) };
+}
+
+function nullFields(source: string): string[] {
+  requireValue(!source.includes('\ufffd'), 'source_unresolved');
+  if (source === '') return [];
+  const fields = source.split('\0');
+  requireValue(
+    fields.pop() === '' && fields.every((field) => field.length > 0),
+    'source_unresolved'
+  );
+  return fields;
+}
+
+/** Git itself resolves system/info attributes, macros and the index fallback.
+ * Both current views and immutable parent trees are checked without invoking a
+ * filter or producing a merge tree. Different parent attribute maps refuse:
+ * combining macro definitions could select a driver absent in either parent. */
+function inactiveFilterClosure(
+  cwd: string,
+  trees: readonly string[],
+  additionalPaths: readonly string[]
+): string {
+  const candidates = new Set(
+    nullFields(
+      git(cwd, [
+        '--no-optional-locks',
+        'ls-files',
+        '--cached',
+        '--others',
+        '--exclude-standard',
+        '--full-name',
+        '-z',
+      ])
+    )
+  );
+  for (const path of additionalPaths) candidates.add(path);
+  const sources = [...new Set([framed(git(cwd, ['rev-parse', 'HEAD'])), ...trees])].sort();
+  const hash = createHash('sha256');
+  let attributes: string | undefined;
+  for (const tree of sources) {
+    requireValue(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(tree), 'context_unresolved');
+    const entries = nullFields(git(cwd, ['ls-tree', '-r', '-z', tree]));
+    const currentAttributes: string[] = [];
+    for (const entry of entries) {
+      const separator = entry.indexOf('\t');
+      const metadata = entry.slice(0, separator);
+      const path = entry.slice(separator + 1);
+      requireValue(
+        separator > 0 &&
+          /^(?:100644|100755|120000) blob (?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(metadata) &&
+          path.length > 0,
+        'unsupported_profile'
+      );
+      candidates.add(path);
+      if (path === '.gitattributes' || path.endsWith('/.gitattributes')) {
+        requireValue(metadata.startsWith('100'), 'unsupported_profile');
+        currentAttributes.push(entry);
+      }
+    }
+    const identity = JSON.stringify(currentAttributes);
+    requireValue(attributes === undefined || attributes === identity, 'unsupported_profile');
+    attributes = identity;
+    hash.update(tree).update(identity);
+  }
+  const paths = [...candidates].sort();
+  requireValue(
+    paths.length <= 4096 &&
+      paths.every((path) => path.length > 0 && !path.includes('\0') && !path.includes('\ufffd')),
+    'source_unresolved'
+  );
+  const input = Buffer.from(paths.join('\0') + (paths.length ? '\0' : ''));
+  requireValue(input.length <= 524288, 'source_unresolved');
+  for (const view of [[], ['--cached'], ...sources.map((tree) => [`--source=${tree}`])]) {
+    const output = git(cwd, ['check-attr', ...view, '-z', '--stdin', 'filter'], input);
+    const fields = nullFields(output);
+    requireValue(fields.length === paths.length * 3, 'source_unresolved');
+    for (let index = 0; index < paths.length; index++) {
+      requireValue(
+        fields[index * 3] === paths[index] && fields[index * 3 + 1] === 'filter',
+        'source_unresolved'
+      );
+      requireValue(
+        fields[index * 3 + 2] === 'unspecified' || fields[index * 3 + 2] === 'unset',
+        'unsupported_profile'
+      );
+    }
+    hash.update(JSON.stringify(view)).update(output);
+  }
+  return hash.digest('hex');
+}
+
+/** Inspect effective normal configuration and attribute reachability. No
+ * hooksPath, filter or signing override is installed. The returned digest is
+ * private authority observation, never configuration values or a permit. */
+export function inspectExecutionLifecycleGit(
+  cwd: string,
+  trees: readonly string[] = [],
+  additionalPaths: readonly string[] = []
+): string {
+  const { source, hooksPath } = lifecycleGitConfiguration(cwd);
+  const closure = inactiveFilterClosure(cwd, trees, additionalPaths);
+  const revision = createHash('sha256').update(source).update(closure).digest('hex');
   // Status can recursively launch Git in a tracked submodule, whose executable
   // configuration is outside this inspected closure. This profile has no
   // submodule capability; refuse gitlinks rather than spawning that reader.
@@ -263,7 +413,7 @@ export function inspectExecutionLifecycleGit(cwd: string): void {
         : join(cwd, hooksPath);
   // A project may already explicitly configure /dev/null. We never set it;
   // ordinary Git has no hook to run in that existing configuration.
-  if (hookDirectory === '/dev/null') return;
+  if (hookDirectory === '/dev/null') return revision;
   try {
     directory(hookDirectory);
     const active = new Set([
@@ -290,9 +440,14 @@ export function inspectExecutionLifecycleGit(cwd: string): void {
       'post-receive',
       'post-update',
     ]);
-    for (const name of fs.readdirSync(hookDirectory)) {
-      if (!active.has(name)) continue;
-      const stat = fs.lstatSync(join(hookDirectory, name));
+    for (const name of active) {
+      let stat: fs.Stats;
+      try {
+        stat = fs.lstatSync(join(hookDirectory, name));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        throw error;
+      }
       requireValue(
         stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o111) === 0,
         'unsupported_profile'
@@ -301,6 +456,7 @@ export function inspectExecutionLifecycleGit(cwd: string): void {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
+  return revision;
 }
 
 export interface ExecutionLifecycleAuthority {
@@ -389,6 +545,8 @@ export function readExecutionLifecycleAuthority(
 ): ExecutionLifecycleAuthority {
   canonicalContext(context);
   gitMetadataTree(join(context.projectRoot, '.git'));
+  // Reject includes/promisor configuration before any ancestry/object query.
+  lifecycleGitConfiguration(context.projectRoot);
   const cawsDir = join(context.projectRoot, '.caws');
   directory(join(cawsDir, 'specs'));
   try {
@@ -463,7 +621,6 @@ export function readExecutionLifecycleAuthority(
       framed(git(context.projectRoot, ['symbolic-ref', '--quiet', 'HEAD'])) ===
         `refs/heads/${(merged.data as Record<string, unknown>).base_branch}`
     );
-    git(context.projectRoot, ['merge-base', '--is-ancestor', args.mergeCommit, 'HEAD']);
     if (args.operation === 'spec-close')
       requireValue(
         readExecutionAuthority(context).binding.spec.id === args.specId,
@@ -473,10 +630,29 @@ export function readExecutionLifecycleAuthority(
     specId = args.specId;
   }
   const checkoutInventory = boundedCheckoutInventory(context.projectRoot, pin);
-  inspectExecutionLifecycleGit(pin);
-  if (pin !== context.projectRoot) inspectExecutionLifecycleGit(context.projectRoot);
+  if (pin !== context.projectRoot) lifecycleGitConfiguration(pin);
+  const trees = [...new Set([context.projectRoot, pin])].map((cwd) =>
+    framed(git(cwd, ['rev-parse', 'HEAD']))
+  );
+  // Native creates its fence between analyze and final_validate. Observe that
+  // known path in both phases even if the project does not ignore it, so the
+  // fence itself cannot change the inactive-attribute authority observation.
+  const candidates = [
+    `.caws/specs/${specId}.yaml`,
+    '.caws/worktrees.json',
+    '.caws/events.jsonl',
+    '.caws/state.lock',
+    ...(args.operation === 'git-stage' || args.operation === 'git-commit' ? args.paths : []),
+  ];
+  const pinClosure = inspectExecutionLifecycleGit(pin, trees, candidates);
+  const canonicalClosure =
+    pin === context.projectRoot
+      ? pinClosure
+      : inspectExecutionLifecycleGit(context.projectRoot, trees, candidates);
+  if (args.operation === 'bridge-claim' || args.operation === 'spec-close')
+    git(context.projectRoot, ['merge-base', '--is-ancestor', args.mergeCommit, 'HEAD']);
   const hash = createHash('sha256');
-  hash.update(checkoutInventory);
+  hash.update(checkoutInventory).update(pinClosure).update(canonicalClosure);
   for (const name of [
     'policy.yaml',
     'worktrees.json',
