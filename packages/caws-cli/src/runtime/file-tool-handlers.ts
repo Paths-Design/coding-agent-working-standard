@@ -45,6 +45,26 @@ const HANDLERS: Readonly<Record<string, string>> = {
   'scan-secrets.sh': 'f80c4758222163071dcb0e021c0a6f4b42b076e2ec17e38d8a036d760c36d533',
   'quiet-merge.sh': '94581e2f7c87b7bf61c56c2b475c58c057b12abc10a7dbbd978d24d9fe3515a8',
 };
+const SHORTCUT_HANDLER = 'shortcut-language-check.sh';
+const SHORTCUT_SOURCE_SHA = 'ee7fe03218f72f66e16479a8f96d3e2eb9f42d2cad8a22f8bc892b6d21c929df';
+const PATCH_HANDLERS: Readonly<Record<string, string>> = Object.freeze(
+  Object.fromEntries([
+    ...Object.entries(HANDLERS).slice(0, 8),
+    [SHORTCUT_HANDLER, SHORTCUT_SOURCE_SHA],
+    ...Object.entries(HANDLERS).slice(8),
+  ])
+);
+function selectedHandlerProfile(
+  context: StockHandlerContext
+): Readonly<Record<string, string>> | undefined {
+  if (context.selection.handlers.length === Object.keys(HANDLERS).length) return HANDLERS;
+  if (
+    context.request.payload.tool_name === 'apply_patch' &&
+    context.selection.handlers.length === Object.keys(PATCH_HANDLERS).length
+  )
+    return PATCH_HANDLERS;
+  return undefined;
+}
 const SOURCES: Readonly<Record<string, string>> = {
   ...HANDLERS,
   'guard-strikes.sh': '8253de9371aadd20c1e441155b4a19487e5ae7887c6da4358d8f7b31b9719e0a',
@@ -108,8 +128,12 @@ function present(file: string): boolean {
 }
 function sourceValid(context: StockHandlerContext): boolean {
   const { selection } = context;
+  const profile = selectedHandlerProfile(context);
+  if (!profile) return false;
+  const sources =
+    profile === PATCH_HANDLERS ? { ...SOURCES, [SHORTCUT_HANDLER]: SHORTCUT_SOURCE_SHA } : SOURCES;
   try {
-    for (const [name, expected] of Object.entries(SOURCES)) {
+    for (const [name, expected] of Object.entries(sources)) {
       const file = join(selection.runtimeDirectory, name);
       assertMachinePath(selection.runtimeDirectory, file);
       const bytes = readOperationalFile(selection.runtimeDirectory, file, 1024 * 1024);
@@ -466,7 +490,9 @@ export interface FileToolHandlerPlan {
 /** Read-only complete-source admission, independent of native context transport. */
 export function qualifiesForFileToolHandlers(context: StockHandlerContext): boolean {
   const { request, selection, environment } = context;
+  const handlers = selectedHandlerProfile(context);
   if (
+    !handlers ||
     request.surface !== 'codex' ||
     request.event !== 'pre_tool_use' ||
     !['apply_patch', 'Write', 'Edit'].includes(String(request.payload.tool_name)) ||
@@ -481,16 +507,16 @@ export function qualifiesForFileToolHandlers(context: StockHandlerContext): bool
     Object.values(selection.libraries).some(
       (entry) => !['shared', 'surface'].includes(entry.kind)
     ) ||
-    selection.handlers.length !== Object.keys(HANDLERS).length ||
+    selection.handlers.length !== Object.keys(handlers).length ||
     selection.handlers.some(
       (handler, index) =>
-        handler.name !== Object.keys(HANDLERS)[index] ||
+        handler.name !== Object.keys(handlers)[index] ||
         handler.entry !== handler.name ||
         handler.tier !== 'stock' ||
         handler.kind !== 'stock' ||
         handler.args.length ||
         handler.path !== join(selection.runtimeDirectory, handler.name) ||
-        handler.sha256 !== HANDLERS[handler.name]
+        handler.sha256 !== handlers[handler.name]
     ) ||
     environment.CAWS_PRIOR_BASH_ENV ||
     environment.ENV ||
@@ -593,6 +619,12 @@ export function prepareFileToolHandlers(
           }
           case 'protected-paths.sh':
             return protectedPaths(context, inventory);
+          case SHORTCUT_HANDLER:
+            // The stock pre-tool arm returns before content reads for original
+            // apply_patch, including Add patches normalized to Write.
+            if (request.payload.tool_name !== 'apply_patch')
+              throw new Error('Shortcut handler outside supported original apply_patch profile');
+            return empty();
           case 'scan-secrets.sh':
             return secrets(context, inventory);
           // Their selected stock file-tool arms are inactive; the armed latch was

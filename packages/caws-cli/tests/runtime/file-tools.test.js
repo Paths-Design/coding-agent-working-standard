@@ -851,6 +851,115 @@ describe('complete stock file-tool prewrite handlers', () => {
     expect(selection.handlers.map((handler) => handler.name)).toEqual(names);
   });
 
+  const actualDefaultPatchProfile = () => {
+    const { extractMachineHandlers } = require('../../dist/init/machine-handler-policy');
+    const text = fs.readFileSync(path.join(templates, 'shared/dispatch/pre_tool_use.sh'), 'utf8');
+    const defaults = extractMachineHandlers(text, text);
+    expect(defaults).toHaveLength(11);
+    expect(defaults[8]).toBe('shortcut-language-check.sh');
+    selection.handlers = defaults.map((name) => ({
+      name,
+      entry: name,
+      args: [],
+      path: path.join(runtime, name),
+      sha256: sha(path.join(runtime, name)),
+      kind: 'stock',
+      tier: 'stock',
+    }));
+    patch('src/a.js');
+    return defaults;
+  };
+
+  test('the actual default eleven-handler apply_patch profile admits without effects', () => {
+    const defaults = actualDefaultPatchProfile();
+    expect(selection.handlers.map((handler) => handler.entry)).toEqual(defaults);
+    expect(prepare()).not.toBeNull();
+    expect(count()).toBe(0);
+    expect(fs.existsSync(path.join(repo, '.caws/leases'))).toBe(false);
+  });
+
+  test.each(['Write', 'Edit'])(
+    'default eleven %s retains whole compatibility before effects',
+    (tool) => {
+      actualDefaultPatchProfile();
+      payload(
+        tool,
+        tool === 'Write'
+          ? { file_path: 'src/a.js', content: 'ordinary' }
+          : { file_path: 'src/a.js', old_string: 'old', new_string: 'new' }
+      );
+      request.payload.original_tool_name = 'apply_patch';
+      expect(prepare()).toBeNull();
+      expect(count()).toBe(0);
+      expect(fs.existsSync(path.join(repo, '.caws/leases'))).toBe(false);
+    }
+  );
+
+  test('default shortcut preserves the original Add-patch pre-tool no-op before file reads or strikes', async () => {
+    actualDefaultPatchProfile();
+    payload('apply_patch', {
+      command:
+        '*** Begin Patch\n*** Add File: src/a.js\n+// TODO: retained authored data\n*** End Patch\n',
+    });
+    const revalidate = jest.fn(async () => observation());
+    const port = {
+      incrementScopeGuard: jest.fn(async () => {
+        throw new Error('must not strike');
+      }),
+    };
+    const plan = prepare(revalidate, port);
+    expect(plan).not.toBeNull();
+    const target = path.join(lane, 'src/a.js');
+    const open = fs.openSync;
+    let targetReads = 0;
+    jest.spyOn(fs, 'openSync').mockImplementation((file, ...args) => {
+      if (file === target) {
+        targetReads++;
+        throw new Error('must not read a patch preimage');
+      }
+      return open(file, ...args);
+    });
+    try {
+      const result = await plan.execute(selection.handlers[8]);
+      expect({
+        exitCode: result.exitCode,
+        stdout: Buffer.from(result.stdout).toString(),
+        stderr: Buffer.from(result.stderr).toString(),
+      }).toEqual({ exitCode: 0, stdout: '', stderr: '' });
+      expect(targetReads).toBe(0);
+      expect(revalidate).not.toHaveBeenCalled();
+      expect(port.incrementScopeGuard).not.toHaveBeenCalled();
+      expect(count()).toBe(0);
+    } finally {
+      fs.openSync.mockRestore();
+    }
+  });
+
+  test.each([
+    'missing source',
+    'changed source',
+    'changed digest',
+    'extra handler',
+    'reordered handler',
+    'handler arguments',
+  ])('default eleven %s refuses typed admission before effects', (kind) => {
+    actualDefaultPatchProfile();
+    const shortcut = selection.handlers[8];
+    if (kind === 'missing source') fs.unlinkSync(shortcut.path);
+    if (kind === 'changed source') fs.appendFileSync(shortcut.path, '\n# changed\n');
+    if (kind === 'changed digest') shortcut.sha256 = '0'.repeat(64);
+    if (kind === 'extra handler') selection.handlers.push({ ...shortcut });
+    if (kind === 'reordered handler')
+      [selection.handlers[8], selection.handlers[9]] = [
+        selection.handlers[9],
+        selection.handlers[8],
+      ];
+    if (kind === 'handler arguments') shortcut.args.push('--custom');
+    expect(prepare()).toBeNull();
+    expect(count()).toBe(0);
+    expect(fs.existsSync(path.join(repo, '.caws/leases'))).toBe(false);
+  });
+
   test.each(names)('a custom selected %s retains complete compatibility before effects', (name) => {
     const handler = selection.handlers.find((entry) => entry.name === name);
     handler.sha256 = '0'.repeat(64);
