@@ -533,24 +533,41 @@ describe('mutation policy topology contract', () => {
     expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
-    // The inventory includes inspection-prefix analysis, its entry point and shared CAWS reader metadata.
-    expect(result.stdout).toMatch(/^PASS: 207 source files accounted for exactly once$/m);
-    expect(result.stdout).toMatch(/^PASS: 28 mutation targets across 4 surfaces$/m);
+    // The inventory includes execution and all shared inspection decisions.
+    expect(result.stdout).toMatch(/^PASS: 218 source files accounted for exactly once$/m);
+    expect(result.stdout).toMatch(/^PASS: 38 mutation targets across 5 surfaces$/m);
   });
 
   test.each([
     'src/shell/analysis/caws-read-metadata.ts',
-    'src/shell/analysis/inspection-prefix-entry.ts',
     'src/shell/analysis/inspection-prefix.ts',
     'src/shell/analysis/inspection-profiles.ts',
-  ])('inspection source has one behavioral proof classification: %s', (source) => {
-    // hooks-inspection-prefix exercises parsing and entry-point refusals. This
-    // classification does not assert a mutation score or runtime activation.
+  ])('pure inspection decisions retain a whole-file mutation floor: %s', (source) => {
+    const policy = loadPolicy();
+    expect(
+      policy.proofGroups
+        .filter((group) => group.files.includes(source))
+        .map(({ id, strategy }) => ({ id, strategy }))
+    ).toEqual([{ id: 'mutation', strategy: 'mutation' }]);
+    expect(policy.surfaces.analysis.targets.filter((target) => target.source === source)).toEqual([
+      { source },
+    ]);
+    expect(policy.surfaces.analysis.threshold).toBe(80);
+    const config = createStrykerConfig('analysis');
+    expect(config.mutate).toContain(source);
+    expect(config.thresholds.low).toBe(80);
+    expect(config.jest.config.testMatch).toContain(
+      '<rootDir>/tests/shell/command-analysis.test.js'
+    );
+  });
+
+  test('inspection worker IO retains its behavioral consumer checks', () => {
+    const source = 'src/shell/analysis/inspection-prefix-entry.ts';
     expect(
       loadPolicy()
         .proofGroups.filter((group) => group.files.includes(source))
-        .map(({ id, strategy, command }) => ({ id, strategy, command }))
-    ).toEqual([{ id: 'behavioral', strategy: 'behavioral', command: 'npm test' }]);
+        .map(({ id, strategy }) => ({ id, strategy }))
+    ).toEqual([{ id: 'behavioral', strategy: 'behavioral' }]);
   });
 
   test('session seal preparation is classified as behavioral parsing and rendering', () => {
@@ -633,20 +650,22 @@ describe('mutation policy topology contract', () => {
 
   test('store mutation recomputes evidence using in-process store and timestamp contracts', () => {
     const config = createStrykerConfig('store');
+    const testFiles = config.jest.config.testMatch.map((file) => file.replace(/^<rootDir>\//, ''));
 
     expect(config.incremental).toBe(false);
-    expect(config.testFiles).not.toHaveLength(0);
+    expect(config).not.toHaveProperty('testFiles');
+    expect(testFiles).not.toHaveLength(0);
     expect(
-      config.testFiles.every(
+      testFiles.every(
         (file) =>
           file.startsWith('tests/store/') ||
           file === 'tests/transcripts/store-timestamp.test.js' ||
           file === 'tests/transcripts/renderer-calendar-mutation.test.js'
       )
     ).toBe(true);
-    expect(config.testFiles).toContain('tests/store/messages-behavior-store.test.js');
-    expect(config.testFiles).toContain('tests/store/messages-dead-recipient-prune.test.js');
-    expect(config.testFiles).toContain('tests/transcripts/store-timestamp.test.js');
+    expect(testFiles).toContain('tests/store/messages-behavior-store.test.js');
+    expect(testFiles).toContain('tests/store/messages-dead-recipient-prune.test.js');
+    expect(testFiles).toContain('tests/transcripts/store-timestamp.test.js');
     expect(config.mutate).toContain('src/transcripts/store-timestamp.ts');
     expect(config.jest.config.testMatch).toContain(
       '<rootDir>/tests/transcripts/store-timestamp.test.js'
@@ -663,7 +682,7 @@ describe('mutation policy topology contract', () => {
       'src/transcripts/renderer-calendar.ts',
       'src/transcripts/store-timestamp.ts',
     ]);
-    expect(config.testFiles).toEqual([
+    expect(testFiles).toEqual([
       'tests/store/apply-patch.test.js',
       'tests/store/atomic-write-sweep.test.js',
       'tests/store/atomic-write.test.js',
@@ -712,7 +731,10 @@ describe('mutation policy topology contract', () => {
     const config = require(path.join(PACKAGE_ROOT, 'stryker.analysis.conf.js'));
     expect(config.mutate).toEqual([
       'src/shell/analysis/analyze.ts',
+      'src/shell/analysis/caws-read-metadata.ts',
       'src/shell/analysis/git-context.ts',
+      'src/shell/analysis/inspection-prefix.ts',
+      'src/shell/analysis/inspection-profiles.ts',
       'src/shell/analysis/interpreter-effects.ts',
       'src/shell/analysis/mutation-view.ts',
       'src/shell/analysis/policies.ts',
@@ -722,13 +744,46 @@ describe('mutation policy topology contract', () => {
     expect(config.coverageAnalysis).toBe('off');
     expect(config).not.toHaveProperty('testFiles');
     expect(config.jest.config.testMatch).toEqual([
+      '<rootDir>/tests/shell/caws-read-metadata.test.js',
       '<rootDir>/tests/shell/command-analysis.test.js',
       '<rootDir>/tests/shell/interpreter-effects.test.js',
       '<rootDir>/tests/shell/mutation-view.test.js',
     ]);
     const names = new RegExp(config.jest.config.testNamePattern);
+    expect(names.test('closed CAWS read metadata admits reviewed consumer ["status"]')).toBe(true);
+    expect(
+      names.test(
+        'compiled parser consumer preserves CAWS metadata admission without executing submitted source'
+      )
+    ).toBe(true);
     expect(names.test('bounded shell analysis contract profile-git-status')).toBe(true);
     expect(names.test('bounded shell analysis contract semantic mutation in policies')).toBe(false);
+  });
+
+  test('execution mutations use attributed child coverage and retain every integrated contract', () => {
+    const config = require(path.join(PACKAGE_ROOT, 'stryker.execution.conf.js'));
+    expect(config.coverageAnalysis).toBe('perTest');
+    expect(config.incremental).toBe(false);
+    expect(config).not.toHaveProperty('testFiles');
+    expect(config.jest.config.testMatch).toEqual([
+      '<rootDir>/tests/execution/authority-fence.test.js',
+      '<rootDir>/tests/execution/authority.test.js',
+      '<rootDir>/tests/execution/authorizer.test.js',
+      '<rootDir>/tests/execution/fence.test.js',
+      '<rootDir>/tests/execution/prepared-schema.test.js',
+      '<rootDir>/tests/execution/program-discovery.test.js',
+      '<rootDir>/tests/execution/protocol.test.js',
+      '<rootDir>/tests/execution/writer.test.js',
+    ]);
+    expect(config.mutate).toEqual([
+      'src/execution/authority.ts',
+      'src/execution/authorizer.ts',
+      'src/execution/fence.ts',
+      'src/execution/prepared-schema.ts',
+      'src/execution/protocol.ts',
+      'src/execution/writer.ts',
+      'src/store/lifecycle-lock.ts',
+    ]);
   });
 
   test.each([
@@ -752,12 +807,16 @@ describe('mutation policy topology contract', () => {
     expect(new RegExp(config.jest.config.testNamePattern).test(name)).toBe(selected);
   });
 
-  test.each(['kernel', 'store', 'shell', 'analysis'])(
+  test.each(['kernel', 'store', 'shell', 'analysis', 'execution'])(
     '%s sandbox excludes sibling runs while retaining source and tests',
     (surface) => {
       expect(createStrykerConfig(surface).jest.config.setupFiles).toEqual([
         '<rootDir>/tests/helpers/isolate-session-env.js',
       ]);
+      expect(createStrykerConfig(surface)).not.toHaveProperty('testFiles');
+      expect(createStrykerConfig(surface).jest.config.testMatch).toEqual(
+        loadPolicy().surfaces[surface].tests.map((file) => `<rootDir>/${file}`)
+      );
       const dir = makeTempDir();
       const required = [
         'src/init/runtime.ts',
@@ -805,13 +864,18 @@ describe('mutation policy topology contract', () => {
     }
   );
 
-  test.each(['kernel', 'store', 'shell', 'single'])(
+  test.each(['kernel', 'store', 'shell', 'analysis', 'execution', 'single'])(
     '%s installed preprocessing changes selected targets while preserving generator and test inputs',
     (surface) => {
       const single = surface === 'single' ? qualificationFixture() : null;
       const dir = single ? single.packageRoot : fs.realpathSync(makeTempDir('caws-preprocessor-'));
       const config = single ? null : createStrykerConfig(surface);
       const targets = single ? ['src/store/a.ts'] : config.mutate;
+      const typeConsumers =
+        surface === 'analysis'
+          ? ['src/shell/command-metadata.ts', 'src/shell/analysis/inspection-prefix-entry.ts']
+          : [];
+      const suppressed = [...targets, ...typeConsumers];
       const protectedFiles = [
         'scripts/generate-runtime-assets.mjs',
         'src/runtime/advisory-truncate-entry.ts',
@@ -819,11 +883,11 @@ describe('mutation policy topology contract', () => {
         'scripts/build-cli.js',
         'tests/helpers/isolate-session-env.js',
       ];
-      const testFile = single ? 'tests/store/a.test.js' : config.testFiles[0];
+      const testFile = single ? 'tests/store/a.test.js' : loadPolicy().surfaces[surface].tests[0];
       protectedFiles.push(testFile);
       const originals = {};
-      for (const file of [...targets, ...protectedFiles]) {
-        const content = targets.includes(file)
+      for (const file of [...suppressed, ...protectedFiles]) {
+        const content = suppressed.includes(file)
           ? 'export const fixture: number = 1;\n'
           : single && file === testFile
             ? single.testSource
@@ -851,7 +915,7 @@ describe('mutation policy topology contract', () => {
             : JSON.stringify(config)
         };
         const targets = ${JSON.stringify(targets)};
-        const files = ${JSON.stringify([...targets, ...protectedFiles])};
+        const files = ${JSON.stringify([...suppressed, ...protectedFiles])};
         const project = new Project(fs, Object.fromEntries(files.map(file => [path.resolve(file), { mutate: targets.includes(file) }])), undefined);
         const warnings = [];
         const processor = new DisableTypeChecksPreprocessor({ warn: (...args) => warnings.push(String(args[0])) },
@@ -876,7 +940,7 @@ describe('mutation policy topology contract', () => {
       expect(result.status).toBe(0);
       const observed = JSON.parse(result.stdout);
       expect(observed.warnings).toEqual([]);
-      for (const file of targets) {
+      for (const file of suppressed) {
         expect(observed.observations[file]).toEqual({
           matched: true,
           content: '// @ts-nocheck\n' + originals[file],
@@ -983,6 +1047,234 @@ describe('per-file mutation report contract', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('PASS dist/a.js 80.00% (4/5 detected)');
   });
+});
+
+describe('analysis type-consumer preprocessing identity', () => {
+  const authored = {
+    'src/shell/command-metadata.ts': "export const metadata = 'λ';\n",
+    'src/shell/analysis/inspection-prefix-entry.ts': "export const inspection = 'café';\n",
+  };
+  const prefix = '// @ts-nocheck\n';
+  const generator = 'scripts/fixture-generator.mjs';
+
+  function fixtureFor(mode = 'exact-prefix') {
+    const fixture = qualificationFixture({
+      coreBody: fixtureCoreBody({
+        beforeSandboxBuild: `
+          const consumers = ${JSON.stringify(Object.keys(authored))};
+          const mode = ${JSON.stringify(mode)};
+          const prefix = ${JSON.stringify(prefix)};
+          for (const file of consumers) {
+            const target = path.join(sandbox, file);
+            fs.writeFileSync(target, prefix + fs.readFileSync(target, 'utf8'));
+          }
+          const first = consumers[0];
+          if (mode === 'append-authored') fs.appendFileSync(path.join(sandbox, first), '// substituted suffix\\n');
+          if (mode === 'replace-authored') {
+            const target = path.join(sandbox, first);
+            fs.writeFileSync(target, fs.readFileSync(target, 'utf8').replace('metadata', 'metadatz'));
+          }
+          if (mode === 'prefix-generator' || mode === 'prefix-test') {
+            const file = mode === 'prefix-generator' ? ${JSON.stringify(generator)} : 'tests/store/a.test.js';
+            const target = path.join(sandbox, file);
+            fs.writeFileSync(target, prefix + fs.readFileSync(target, 'utf8'));
+          }
+          if (mode === 'captured-source-substitution' || mode === 'captured-identity-substitution') {
+            const forged = JSON.parse(fs.readFileSync(process.env.CAWS_MUTATION_RUN_CONTEXT, 'utf8'));
+            const source = forged.inputIdentity.typeConsumerSources[first].replace('metadata', 'metadatz');
+            forged.inputIdentity.typeConsumerSources[first] = source;
+            fs.writeFileSync(path.join(sandbox, first), prefix + source);
+            if (mode === 'captured-identity-substitution') {
+              const record = forged.inputIdentity.files.find(record => record.path === first);
+              record.sha256 = require('node:crypto').createHash('sha256').update(source).digest('hex');
+              record.size = Buffer.byteLength(source);
+              forged.inputIdentity.digest = require('node:crypto').createHash('sha256')
+                .update(JSON.stringify(forged.inputIdentity.files)).digest('hex');
+            }
+            fs.writeFileSync(process.env.CAWS_MUTATION_RUN_CONTEXT, JSON.stringify(forged));
+          }
+          fs.writeFileSync(path.join(context.repoRoot, 'type-consumer-observation.json'), JSON.stringify({
+            mode,
+            original: context.inputIdentity.typeConsumerSources,
+            sandbox: Object.fromEntries(consumers.map(file => [file, fs.readFileSync(path.join(sandbox, file), 'utf8')])),
+            context: JSON.parse(fs.readFileSync(process.env.CAWS_MUTATION_RUN_CONTEXT, 'utf8')).inputIdentity,
+          }));
+        `,
+        afterSandbox: `
+          const emitted = path.join(sandbox, 'dist/store/a.js');
+          const emittedBytes = fs.existsSync(emitted) ? fs.readFileSync(emitted) : null;
+          fs.writeFileSync(path.join(context.repoRoot, 'type-consumer-after-build.json'), JSON.stringify({
+            emittedSource: emittedBytes === null ? null : emittedBytes.toString('utf8'),
+            emittedSha256: emittedBytes === null ? null : require('node:crypto').createHash('sha256').update(emittedBytes).digest('hex'),
+            records: fs.readdirSync(context.sandboxBuildDir).map(file => JSON.parse(fs.readFileSync(path.join(context.sandboxBuildDir, file), 'utf8'))),
+          }));
+        `,
+      }),
+    });
+    fixture.policy.surfaces.analysis = fixture.policy.surfaces.store;
+    delete fixture.policy.surfaces.store;
+    fixture.put('mutation-policy.json', JSON.stringify(fixture.policy));
+    fixture.put(
+      'stryker.conf.cjs',
+      "module.exports = require('./scripts/stryker-config.cjs').createStrykerConfig('analysis');\n"
+    );
+    fixture.put(generator, '// authored generator input\n');
+    for (const [file, source] of Object.entries(authored)) {
+      fs.chmodSync(fixture.put(file, source), 0o640);
+    }
+    return fixture;
+  }
+
+  function observation(fixture) {
+    return JSON.parse(
+      fs.readFileSync(path.join(fixture.repoRoot, 'type-consumer-observation.json'), 'utf8')
+    );
+  }
+
+  test('the real runner/helper accepts exactly the two prefixed consumers bound to captured UTF8 bytes and original mode', () => {
+    const fixture = fixtureFor();
+    const result = runQualificationFixture(fixture, ['--surface', 'analysis']);
+    expect(result.error).toBeUndefined();
+    expect(result.signal).toBeNull();
+    expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+    expect(result.receipt.status).toBe('input-build-report-bound');
+    expect(result.receipt.surfaceId).toBe('analysis');
+    expect(result.receipt.sandboxBuilds).toHaveLength(1);
+    expect(result.receipt.sandboxBuilds[0].status).toBe(0);
+    const original = result.receipt.inputIdentity;
+    const sandbox = result.receipt.sandboxBuilds[0].inputIdentity;
+    expect(original.typeConsumerSources).toEqual(authored);
+    expect(Object.keys(sandbox.typeConsumerSources).sort()).toEqual(Object.keys(authored).sort());
+    for (const [file, source] of Object.entries(authored)) {
+      expect(Buffer.byteLength(source)).toBeGreaterThan(source.length);
+      expect(original.files.find((record) => record.path === file)).toEqual({
+        path: file,
+        sha256: createHash('sha256').update(source).digest('hex'),
+        size: Buffer.byteLength(source),
+        mode: 0o640,
+      });
+      expect(sandbox.typeConsumerSources[file]).toBe(prefix + source);
+      expect(sandbox.files.find((record) => record.path === file)).toEqual({
+        path: file,
+        sha256: createHash('sha256')
+          .update(prefix + source)
+          .digest('hex'),
+        size: Buffer.byteLength(prefix + source),
+        mode: 0o640,
+      });
+    }
+    expect(observation(fixture).sandbox).toEqual(
+      Object.fromEntries(Object.entries(authored).map(([file, source]) => [file, prefix + source]))
+    );
+    expect(result.receipt.discovery).toEqual({
+      sourceCount: 1,
+      declaredSourceCount: 1,
+      mutantCount: 5,
+      reportMutantCount: 5,
+    });
+  });
+
+  test.each([
+    ['append-authored', 'src/shell/command-metadata.ts'],
+    ['replace-authored', 'src/shell/command-metadata.ts'],
+    ['prefix-generator', generator],
+    ['prefix-test', 'tests/store/a.test.js'],
+  ])(
+    '%s is refused by the same runner/helper identity boundary despite a valid consumer prefix',
+    (mode, file) => {
+      const fixture = fixtureFor(mode);
+      const result = runQualificationFixture(fixture, ['--surface', 'analysis']);
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(`sandbox input detached from captured input: ${file}`);
+      expect(result.receipt.status).not.toBe('input-build-report-bound');
+      expect(result.receipt.error).toBe('missing executed sandbox build record');
+      expect(result.receipt.build.status).toBe(0);
+      const built = JSON.parse(
+        fs.readFileSync(path.join(fixture.repoRoot, 'fixture-build-observation.json'), 'utf8')
+      );
+      expect(built.status).toBe(1);
+      expect(fs.existsSync(path.join(built.sandbox, 'dist'))).toBe(false);
+      const observed = observation(fixture);
+      expect(observed.original).toEqual(authored);
+      expect(observed.sandbox['src/shell/command-metadata.ts'].startsWith(prefix)).toBe(true);
+      if (mode === 'append-authored' || mode === 'replace-authored') {
+        expect(observed.sandbox[file]).not.toBe(prefix + authored[file]);
+        if (mode === 'replace-authored')
+          expect(Buffer.byteLength(observed.sandbox[file])).toBe(
+            Buffer.byteLength(prefix + authored[file])
+          );
+      } else {
+        expect(fs.readFileSync(path.join(built.sandbox, file), 'utf8')).toBe(
+          prefix + fs.readFileSync(path.join(fixture.packageRoot, file), 'utf8')
+        );
+      }
+    }
+  );
+
+  test.each(['captured-source-substitution', 'captured-identity-substitution'])(
+    '%s cannot replace the captured authored source at helper or final record validation',
+    (mode) => {
+      const fixture = fixtureFor(mode);
+      const result = runQualificationFixture(fixture, ['--surface', 'analysis']);
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      const observed = observation(fixture);
+      const file = 'src/shell/command-metadata.ts';
+      const replacement = authored[file].replace('metadata', 'metadatz');
+      expect(observed.original).toEqual(authored);
+      expect(observed.context.typeConsumerSources[file]).toBe(replacement);
+      expect(observed.sandbox[file]).toBe(prefix + replacement);
+      const sourceHash = createHash('sha256').update(authored[file]).digest('hex');
+      const replacementHash = createHash('sha256').update(replacement).digest('hex');
+      expect(replacementHash).not.toBe(sourceHash);
+      const changedRecord = observed.context.files.find((record) => record.path === file);
+      expect(changedRecord.sha256).toBe(
+        mode === 'captured-source-substitution' ? sourceHash : replacementHash
+      );
+      expect(changedRecord.size).toBe(Buffer.byteLength(authored[file]));
+      expect(changedRecord.mode).toBe(0o640);
+      expect(result.receipt.status).not.toBe('input-build-report-bound');
+      const built = JSON.parse(
+        fs.readFileSync(path.join(fixture.repoRoot, 'fixture-build-observation.json'), 'utf8')
+      );
+      if (mode === 'captured-source-substitution') {
+        expect(result.stderr).toContain(`unbound type consumer source: ${file}`);
+        expect(result.receipt.error).toBe('missing executed sandbox build record');
+        expect(built.status).toBe(1);
+        expect(fs.existsSync(path.join(built.sandbox, 'dist'))).toBe(false);
+      } else {
+        expect(built.status).toBe(0);
+        expect(result.receipt.error).toContain(
+          `sandbox input detached from captured input: ${file}`
+        );
+        const emitted = JSON.parse(
+          fs.readFileSync(path.join(fixture.repoRoot, 'type-consumer-after-build.json'), 'utf8')
+        );
+        const expectedOutput = 'module.exports = 2;\n';
+        const expectedHash = createHash('sha256').update(expectedOutput).digest('hex');
+        expect(emitted.emittedSource).toBe(expectedOutput);
+        expect(emitted.emittedSha256).toBe(expectedHash);
+        expect(emitted.records).toHaveLength(1);
+        expect(emitted.records[0].status).toBe(0);
+        expect(
+          emitted.records[0].outputs.files.find((record) => record.path === 'dist/store/a.js')
+        ).toEqual({
+          path: 'dist/store/a.js',
+          sha256: expectedHash,
+          size: Buffer.byteLength(expectedOutput),
+          mode: 0o644,
+        });
+        expect(
+          emitted.records[0].inputIdentity.files.find((record) => record.path === file).sha256
+        ).toBe(
+          createHash('sha256')
+            .update(prefix + replacement)
+            .digest('hex')
+        );
+      }
+    }
+  );
 });
 
 describe('captured-input mutation report qualification', () => {
@@ -1830,7 +2122,7 @@ describe('active workflow topology contract', () => {
 
     expect(workflow).not.toContain('packages/caws-kernel');
     const parsed = yaml.load(workflow);
-    const surfaces = ['kernel', 'store', 'shell', 'analysis'];
+    const surfaces = ['kernel', 'store', 'shell', 'analysis', 'execution'];
     expect(parsed.jobs.harness_integrity.strategy.matrix.surface).toEqual(surfaces);
     expect(parsed.jobs.mutation.strategy.matrix.surface).toEqual(surfaces);
     const scripts = JSON.parse(

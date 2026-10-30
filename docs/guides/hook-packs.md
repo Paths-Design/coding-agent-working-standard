@@ -57,11 +57,25 @@ qualify native adoption. The known reduced Codex producer is held because its
 command projection cannot bind the complete final command, shell and startup
 context. A validated host execution directory establishes only that coordinate.
 The analyzer bridge's inherited `CAWS_BIN` or `PATH` selection also requires
-generation-bound Node and CLI identity through launch. The guide's owned
-execution boundary is proposed. Retain the deployed runtime until complete
-final-launch and rewrite custody, useful benign admission, an isolated native
-canary and rollback are demonstrated. A protective refusal is not evidence of a
-qualified rollout.
+generation-bound Node and CLI identity through launch. The private
+prepared-record authorizer checks source profiles, canonical authority and an
+inherited fence; it returns observations and does not launch user commands.
+Private draft utility discovery supplies candidates for producer preparation,
+with final analysis and validation required after the manifest is frozen. The
+guide's complete owned execution boundary remains proposed. Retain the deployed
+runtime until complete final-launch and rewrite custody, useful benign
+admission, an isolated native canary and rollback are demonstrated. A protective
+refusal is not evidence of a qualified rollout.
+
+The separate `caws-execution` adapter checks a local socket against the pinned
+host. Complete input authentication, including prequeued bytes across same-PID
+exec, requires its own qualification. The route requires a protected package
+generation and an in-sandbox dedicated worker. Its trusted evidence consumer
+borrows the lifecycle fence through its bounded transaction; ordinary user
+programs receive no private descriptor. Evidence recording reports a pending
+audit commit, completed with the normal `caws specs commit <id>` command before
+merge or closure. This restricted source route does not qualify adoption of the
+native hooks or complete tool mediation.
 
 These four hooks are _advisory_ edit-time signals. They implement the
 load-bearing edit-time quality checks (`god_object`, `todo_detection`,

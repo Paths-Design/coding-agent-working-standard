@@ -1843,10 +1843,14 @@ function verifyPendingEvidence(
       ],
     };
   }
-  // Project the entry being recorded over the spec as it will be after the
-  // write, so re-derivation targets exactly this claim.
-  const others = (spec.evidence ?? []).filter((e) => e.criterion_id !== pending.criterion_id);
-  const projected: Spec = { ...spec, evidence: [...others, pending] };
+  // Record-time verification belongs to this one claim. Other criteria can
+  // carry executable tests; inspecting one entry must not run those tests.
+  // Keep the target criterion's declared tests as part of its own contract.
+  const projected: Spec = {
+    ...spec,
+    acceptance: spec.acceptance.filter((ac) => ac.id === pending.criterion_id),
+    evidence: [pending],
+  };
   const result = rederiveSpecEvidence(tree.root, projected, {
     classes: ['citation', 'artifact', 'test'],
     runTests: true,

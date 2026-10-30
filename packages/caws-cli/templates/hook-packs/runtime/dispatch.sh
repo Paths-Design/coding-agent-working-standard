@@ -23,7 +23,8 @@ parse_hook_input || missing input
 caws_source_lib session-id.sh || missing session-id.sh
 caws_normalize_session_env "$(resolve_caws_session_id_with_payload "${HOOK_SESSION_ID:-}")" >/dev/null || missing session-id
 caws_source_lib run-handlers.sh || missing run-handlers.sh
-export CAWS_PRIOR_BASH_ENV="${BASH_ENV:-}"
+export CAWS_PRIOR_BASH_ENV_SET="${BASH_ENV+x}"
+export CAWS_PRIOR_BASH_ENV="${BASH_ENV-}"
 export BASH_ENV="$RUNTIME_DIR/handler-env.sh"
 [[ "$#" -gt 0 ]] || exit 0
 if [[ "$EVENT" == pre_tool_use ]]; then

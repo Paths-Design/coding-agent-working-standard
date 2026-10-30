@@ -72,18 +72,32 @@ two diagnostic commands have different exit contracts:
 
 A mutation projection has no permission verdict. Consumers inspect its schema,
 issues and effect coverage; parser or backend failures can appear as issues in
-an exit-zero projection. The guide's owned execution boundary is proposed. The
-implemented copy guards consume complete operand roles for a closed regular-file
-`cp`/`mv` profile, so external artifact copies are distinguished from canonical
-writes. Unknown roles, hard-link aliases and unmodeled filesystem cases refuse.
-A copy's effective final symlink destination refuses even when approval is
-available; a destination-directory alias with a regular final child is
-supported. Removal effects keep final-link entry ownership separate from
-referent writes; unsupported removal options remain unresolved. The shared
-ownership oracle follows registered physical worktree roots, including migrated
-locations, before path allowlists can permit a write. Unavailable or ambiguous
-payload ownership cannot grant admission. Existing registry read or format
-errors retain ownership uncertainty.
+an exit-zero projection. The private execution authorizer implements strict
+prepared-record decoding, canonical authority observations and inherited-fence
+validation. A separate private helper discovers utility candidates without
+submitted execution. These replies are observations, never launch permits; the
+complete owned execution boundary remains proposed. The implemented copy guards
+consume complete operand roles for a closed regular-file `cp`/`mv` profile, so
+external artifact copies are distinguished from canonical writes. Unknown roles,
+hard-link aliases and unmodeled filesystem cases refuse. A copy's effective
+final symlink destination refuses even when approval is available; a
+destination-directory alias with a regular final child is supported. Removal
+effects keep final-link entry ownership separate from referent writes;
+unsupported removal options remain unresolved. The shared ownership oracle
+follows registered physical worktree roots, including migrated locations, before
+path allowlists can permit a write. Unavailable or ambiguous payload ownership
+cannot grant admission. Existing registry read or format errors retain ownership
+uncertainty.
+
+The native `caws-execution` adapter implements a separate, restricted execution
+route with local socket peer and host image checks and a dedicated worker. Those
+checks alone do not authenticate bytes queued before a same-PID exec. Its
+`caws-evidence-v1` consumer records one owned criterion through the canonical
+evidence transaction, verifies only requested artifact/commit citations, and
+returns an explicit pending audit commit. The normal continuation is
+`caws specs commit <id>`. This source implementation does not qualify native
+adoption or replace the reduced Codex hook producer; see the guide's
+[writer contract](docs/guides/command-analysis.md#dedicated-evidence-consumer).
 
 Native adoption requires complete final-launch context, custody through later
 rewrites, generation-bound Node and analyzer CLI identities, an isolated canary

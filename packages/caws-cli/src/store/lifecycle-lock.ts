@@ -14,11 +14,10 @@
 // exactly the cross-file split-brain hazard the substrate exists to
 // prevent.
 //
-// Implementation parity with events-store.ts:
-//   - existence-based lockfile (`openSync(path, 'wx')`)
-//   - bounded retry with stale-lock recovery
-//   - same constants: 30s stale threshold, 3 attempts, 50ms retry
-//   - release in `finally` of caller's wrapper (transaction layer)
+// Recovery requires an aged file and a demonstrably dead process. A separate
+// exclusive reclaimer serializes inspection and the one unlink; it is never
+// stolen. A crashed reclaimer fails closed pending recovery after quiescence.
+// Release belongs to a private handle, never merely to a pathname or fd number.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -27,6 +26,8 @@ import { err, ok, type Result } from '../kernel';
 
 import { sleepSyncMs, storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
+import { verifyInheritedFence } from '../execution/fence';
+import type { FenceObservation } from '../execution/prepared';
 
 const LOCK_FILE_NAME = 'state.lock';
 const LOCK_MAX_ATTEMPTS = 3;
@@ -38,12 +39,39 @@ export interface LifecycleLockHandle {
   readonly lockPath: string;
 }
 
+interface LockIdentity {
+  readonly dev: bigint;
+  readonly ino: bigint;
+}
+
+const heldLocks = new WeakMap<LifecycleLockHandle, LockIdentity>();
+
+function sameFile(left: LockIdentity, right: LockIdentity): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+function closeQuietly(fd: number): void {
+  try {
+    fs.closeSync(fd);
+  } catch {
+    /* best effort */
+  }
+}
+
+function unlinkOwnedPath(lockPath: string, identity: LockIdentity): void {
+  try {
+    if (sameFile(identity, fs.lstatSync(lockPath, { bigint: true }))) fs.unlinkSync(lockPath);
+  } catch {
+    // Missing, replaced, or inaccessible is not permission to remove a lock.
+  }
+}
+
 export interface AcquireLifecycleLockOptions {
   /** Override the global lock path. Used by tests; production callers
    *  pass cawsDir and get the canonical `<cawsDir>/state.lock`. */
   readonly lockPath?: string;
-  /** Override stale-lock threshold. Defaults to 30s. Tests can lower it
-   *  to validate recovery without sleeping. */
+  /** Minimum age before dead-owner recovery, default 30s. Live, unknown and
+   *  inaccessible owners remain protected beyond this threshold. */
   readonly staleThresholdMs?: number;
   /** Override max attempts. Defaults to 3. */
   readonly maxAttempts?: number;
@@ -52,19 +80,46 @@ export interface AcquireLifecycleLockOptions {
 }
 
 function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolean {
+  const reclaimPath = `${lockPath}.reclaim`;
+  let reclaimFd: number;
   try {
-    const stat = fs.statSync(lockPath);
-    const ageMs = Date.now() - stat.mtimeMs;
-    if (ageMs > staleThresholdMs) {
-      fs.unlinkSync(lockPath);
-      return true;
-    }
+    reclaimFd = fs.openSync(reclaimPath, 'wx', 0o600);
   } catch {
-    // Race: lock was released between EEXIST and statSync. Treat as
-    // recoverable so the next attempt can take it.
-    return true;
+    return false;
   }
-  return false;
+  let reclaimIdentity: LockIdentity | undefined;
+  let lockFd: number | undefined;
+  try {
+    reclaimIdentity = fs.fstatSync(reclaimFd, { bigint: true });
+    // Re-read after becoming the sole reclaimer. A predecessor may have
+    // recovered the old holder and an ordinary caller acquired its successor.
+    lockFd = fs.openSync(
+      lockPath,
+      fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | fs.constants.O_NOFOLLOW
+    );
+    const stat = fs.fstatSync(lockFd, { bigint: true });
+    if (!stat.isFile() || stat.size > 4096n) return false;
+    if (Date.now() - Number(stat.mtimeMs) <= staleThresholdMs) return false;
+    const metadata = JSON.parse(fs.readFileSync(lockFd, 'utf8')) as { pid?: unknown };
+    if (!Number.isSafeInteger(metadata.pid) || (metadata.pid as number) <= 0) return false;
+    try {
+      process.kill(metadata.pid as number, 0);
+      return false;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') return false;
+    }
+    if (!sameFile(stat, fs.lstatSync(lockPath, { bigint: true }))) return false;
+    // Exactly one unlink. New acquisition may happen immediately afterward;
+    // this reclaimer never unlinks the main path again.
+    fs.unlinkSync(lockPath);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT';
+  } finally {
+    if (lockFd !== undefined) closeQuietly(lockFd);
+    if (reclaimIdentity !== undefined) unlinkOwnedPath(reclaimPath, reclaimIdentity);
+    closeQuietly(reclaimFd);
+  }
 }
 
 /**
@@ -73,7 +128,9 @@ function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolea
  *
  * The lock is held by the existence of `<cawsDir>/state.lock`. Concurrent
  * callers retry up to `maxAttempts` with `retryDelayMs` between attempts.
- * Stale locks (older than `staleThresholdMs`) are reclaimed.
+ * Aged locks are reclaimed only when their recorded PID is demonstrably dead.
+ * Unknown ownership and abandoned reclaimer files fail closed. This protocol
+ * assumes no external replacement of the held lock or reclaimer pathname.
  */
 export function acquireLifecycleLock(
   cawsDir: string,
@@ -86,10 +143,10 @@ export function acquireLifecycleLock(
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const fd = fs.openSync(lockPath, 'wx');
-      // Best-effort metadata so a future doctor or operator can see who
-      // is holding the lock.
+      const fd = fs.openSync(lockPath, 'wx', 0o600);
+      let identity: LockIdentity | undefined;
       try {
+        identity = fs.fstatSync(fd, { bigint: true });
         fs.writeFileSync(
           fd,
           JSON.stringify({
@@ -99,11 +156,14 @@ export function acquireLifecycleLock(
           })
         );
         fs.fsyncSync(fd);
-      } catch {
-        // Lock content is best-effort; the lock itself is the file's
-        // existence.
+      } catch (error) {
+        if (identity !== undefined) unlinkOwnedPath(lockPath, identity);
+        closeQuietly(fd);
+        throw error;
       }
-      return ok({ fd, lockPath });
+      const handle = Object.freeze({ fd, lockPath });
+      heldLocks.set(handle, identity);
+      return ok(handle);
     } catch (e) {
       const cause = e as { code?: string; message?: string };
       if (cause.code !== 'EEXIST') {
@@ -116,7 +176,7 @@ export function acquireLifecycleLock(
         );
       }
       const recovered = tryRecoverStaleLock(lockPath, staleThresholdMs);
-      if (!recovered) {
+      if (!recovered && attempt + 1 < maxAttempts) {
         sleepSyncMs(retryDelayMs);
       }
     }
@@ -131,20 +191,20 @@ export function acquireLifecycleLock(
   );
 }
 
-/** Release the lifecycle lock. Always safe to call; errors are swallowed
- *  because lock-release is best-effort (the lockfile is the contract, not
- *  the fd state). */
+/** Release only this acquisition, once. A reused descriptor or successor
+ *  pathname never belongs to a previously released handle. */
 export function releaseLifecycleLock(handle: LifecycleLockHandle): void {
+  const identity = heldLocks.get(handle);
+  if (identity === undefined) return;
+  heldLocks.delete(handle);
   try {
-    fs.closeSync(handle.fd);
+    if (!sameFile(identity, fs.fstatSync(handle.fd, { bigint: true }))) return;
   } catch {
-    /* ignore */
+    return;
   }
-  try {
-    fs.unlinkSync(handle.lockPath);
-  } catch {
-    /* ignore */
-  }
+  // Keep the descriptor open through unlink to prevent inode recycling.
+  unlinkOwnedPath(handle.lockPath, identity);
+  closeQuietly(handle.fd);
 }
 
 /** Convenience wrapper: acquire, run the body, release in a `finally`.
@@ -163,4 +223,47 @@ export function withLifecycleLock<T>(
   } finally {
     releaseLifecycleLock(acquired.value);
   }
+}
+
+/** Private direct-native-child capability. It is neither a reentrant lock nor
+ * permission to release the parent's lock. Only explicit lifecycle consumers
+ * thread this capability through their composed store calls. */
+export interface BorrowedExecutionLifecycleFence {
+  readonly cawsDir: string;
+  readonly fence: FenceObservation;
+}
+const borrowedExecutionFences = new WeakSet<BorrowedExecutionLifecycleFence>();
+
+export function borrowExecutionLifecycleFence(
+  cawsDir: string,
+  fence: FenceObservation
+): BorrowedExecutionLifecycleFence {
+  if (!verifyInheritedFence(cawsDir, fence)) throw new Error('Execution fence unavailable');
+  const capability = Object.freeze({ cawsDir, fence: Object.freeze({ ...fence }) });
+  borrowedExecutionFences.add(capability);
+  return capability;
+}
+
+export function withLifecycleMutationFence<T>(
+  cawsDir: string,
+  body: () => Result<T>,
+  borrowed?: BorrowedExecutionLifecycleFence
+): Result<T> {
+  if (borrowed === undefined) return withLifecycleLock(cawsDir, body);
+  if (!verifyBorrowedExecutionLifecycleFence(cawsDir, borrowed))
+    return err(
+      storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, 'Execution fence unavailable.')
+    );
+  return body();
+}
+
+export function verifyBorrowedExecutionLifecycleFence(
+  cawsDir: string,
+  borrowed: BorrowedExecutionLifecycleFence
+): boolean {
+  return (
+    borrowedExecutionFences.has(borrowed) &&
+    borrowed.cawsDir === cawsDir &&
+    verifyInheritedFence(cawsDir, borrowed.fence)
+  );
 }

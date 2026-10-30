@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "sourceRoots": [
+    "src/execution",
     "src/kernel",
     "src/store",
     "src/shell",
@@ -10,9 +11,15 @@
     {
       "id": "mutation",
       "strategy": "mutation",
-      "command": "npm run mutation:run:kernel && npm run mutation:run:store && npm run mutation:run:shell && npm run mutation:run:analysis",
+      "command": "npm run mutation:run:kernel && npm run mutation:run:store && npm run mutation:run:shell && npm run mutation:run:analysis && npm run mutation:run:execution",
       "rationale": "Pure safety, authority, timestamp parsing, and arithmetic decisions are held to an explicit per-file mutation floor.",
       "files": [
+        "src/execution/authority.ts",
+        "src/execution/authorizer.ts",
+        "src/execution/fence.ts",
+        "src/execution/prepared-schema.ts",
+        "src/execution/protocol.ts",
+        "src/execution/writer.ts",
         "src/kernel/evidence/canonical-json.ts",
         "src/kernel/evidence/rederive.ts",
         "src/kernel/evidence/verify.ts",
@@ -24,7 +31,10 @@
         "src/kernel/worktree/freshness.ts",
         "src/kernel/worktree/transitions.ts",
         "src/shell/analysis/analyze.ts",
+        "src/shell/analysis/caws-read-metadata.ts",
         "src/shell/analysis/git-context.ts",
+        "src/shell/analysis/inspection-prefix.ts",
+        "src/shell/analysis/inspection-profiles.ts",
         "src/shell/analysis/interpreter-effects.ts",
         "src/shell/analysis/mutation-view.ts",
         "src/shell/analysis/policies.ts",
@@ -37,6 +47,7 @@
         "src/store/apply-patch.ts",
         "src/store/atomic-write.ts",
         "src/store/events-store.ts",
+        "src/store/lifecycle-lock.ts",
         "src/store/messages-store.ts",
         "src/store/yaml-patch.ts",
         "src/transcripts/renderer-calendar.ts",
@@ -49,6 +60,7 @@
       "command": "npm run typecheck && npm test",
       "rationale": "Type, export, rule, and command metadata surfaces are checked as compile-time and executable contracts.",
       "files": [
+        "src/execution/prepared.ts",
         "src/kernel/diagnostics/index.ts",
         "src/kernel/diagnostics/types.ts",
         "src/kernel/doctor/index.ts",
@@ -99,6 +111,10 @@
       "command": "npm test",
       "rationale": "Stateful, I/O, parsing, rendering, and orchestration code is exercised through fixture-driven behavior and replay tests.",
       "files": [
+        "src/execution/authorizer-main.ts",
+        "src/execution/program-discovery-main.ts",
+        "src/execution/program-discovery.ts",
+        "src/execution/writer-main.ts",
         "src/kernel/diagnostics/construct.ts",
         "src/kernel/doctor/history.ts",
         "src/kernel/doctor/inspect.ts",
@@ -121,10 +137,7 @@
         "src/kernel/worktree/identity.ts",
         "src/kernel/worktree/leases.ts",
         "src/kernel/worktree/ownership.ts",
-        "src/shell/analysis/caws-read-metadata.ts",
         "src/shell/analysis/inspection-prefix-entry.ts",
-        "src/shell/analysis/inspection-prefix.ts",
-        "src/shell/analysis/inspection-profiles.ts",
         "src/shell/analysis/load-parser.js",
         "src/shell/build-freshness.ts",
         "src/shell/commands/agents.ts",
@@ -187,7 +200,6 @@
         "src/store/json-store.ts",
         "src/store/leases-store.ts",
         "src/store/legacy-adoption.ts",
-        "src/store/lifecycle-lock.ts",
         "src/store/lifecycle-transaction.ts",
         "src/store/policy-store.ts",
         "src/store/repo-root.ts",
@@ -248,6 +260,32 @@
     }
   ],
   "surfaces": {
+    "execution": {
+      "config": "stryker.execution.conf.js",
+      "reportDir": "reports/mutation-execution",
+      "threshold": 80,
+      "coverageAnalysis": "perTest",
+      "buildCommand": "node scripts/build-cli.js",
+      "targets": [
+        { "source": "src/execution/authority.ts" },
+        { "source": "src/execution/authorizer.ts" },
+        { "source": "src/execution/fence.ts" },
+        { "source": "src/execution/prepared-schema.ts" },
+        { "source": "src/execution/protocol.ts" },
+        { "source": "src/execution/writer.ts" },
+        { "source": "src/store/lifecycle-lock.ts" }
+      ],
+      "tests": [
+        "tests/execution/authority-fence.test.js",
+        "tests/execution/authority.test.js",
+        "tests/execution/authorizer.test.js",
+        "tests/execution/fence.test.js",
+        "tests/execution/prepared-schema.test.js",
+        "tests/execution/program-discovery.test.js",
+        "tests/execution/protocol.test.js",
+        "tests/execution/writer.test.js"
+      ]
+    },
     "analysis": {
       "config": "stryker.analysis.conf.js",
       "reportDir": "reports/mutation-analysis",
@@ -256,13 +294,17 @@
       "buildCommand": "node scripts/build-cli.js",
       "targets": [
         { "source": "src/shell/analysis/analyze.ts" },
+        { "source": "src/shell/analysis/caws-read-metadata.ts" },
         { "source": "src/shell/analysis/git-context.ts" },
+        { "source": "src/shell/analysis/inspection-prefix.ts" },
+        { "source": "src/shell/analysis/inspection-profiles.ts" },
         { "source": "src/shell/analysis/interpreter-effects.ts" },
         { "source": "src/shell/analysis/mutation-view.ts" },
         { "source": "src/shell/analysis/policies.ts" },
         { "source": "src/shell/analysis/words.ts" }
       ],
       "tests": [
+        "tests/shell/caws-read-metadata.test.js",
         "tests/shell/command-analysis.test.js",
         "tests/shell/interpreter-effects.test.js",
         "tests/shell/mutation-view.test.js"
