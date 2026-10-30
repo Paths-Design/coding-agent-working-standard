@@ -258,11 +258,13 @@ export function readExecutionAuthority(record: ExecutionAuthorityContext): Execu
       for (const [id, entry] of Object.entries(bridges)) {
         requireValue(row(entry) && typeof entry.session_id === 'string');
         if (entry.session_id !== record.association.threadId) continue;
-        requireValue(entry.platform === undefined || entry.platform === 'codex', 'foreign_owner');
         const spec = specs.find((candidate) => candidate.id === id);
+        // Match canonical bridge resolution: retired or missing specs confer
+        // no authority and cannot mask the session's active bridge.
+        if (spec === undefined || spec.lifecycle_state !== 'active') continue;
+        requireValue(entry.platform === undefined || entry.platform === 'codex', 'foreign_owner');
         requireValue(
-          spec?.lifecycle_state === 'active' &&
-            !spec.worktree &&
+          !spec.worktree &&
             !Object.values(registry).some((entry) => row(entry) && entry.specId === id),
           'binding_unavailable'
         );

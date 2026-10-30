@@ -302,4 +302,39 @@ describe('current execution authority snapshot', () => {
     fs.writeFileSync(bridge, '{"EXEC-001":null}');
     refuse(f);
   });
+  test('retired and missing bridge specs confer no authority and do not hide one active bridge', () => {
+    const f = authorityFixture();
+    f.record.association.callerAnchor = f.root;
+    f.record.execution.cwd = f.root;
+    delete f.spec.worktree;
+    fs.writeFileSync(f.specPath, JSON.stringify(f.spec));
+    fs.writeFileSync(f.registryPath, '{}');
+    fs.mkdirSync(path.join(f.caws, 'claims'));
+    const bridge = path.join(f.caws, 'claims/bridge.json');
+    const retiredPath = path.join(f.caws, 'specs/RETIRED-001.yaml');
+    const retired = {
+      ...f.spec,
+      id: 'RETIRED-001',
+      lifecycle_state: 'closed',
+      resolution: 'completed',
+      closure_notes: 'Retired test work',
+    };
+    fs.writeFileSync(retiredPath, JSON.stringify(retired));
+    const claims = {
+      'EXEC-001': { session_id: 'thread-owned' },
+      'RETIRED-001': { session_id: 'thread-owned' },
+      'MISSING-001': { session_id: 'thread-owned' },
+    };
+    fs.writeFileSync(bridge, JSON.stringify(claims));
+    expect(readExecutionAuthority(f.record).binding.spec.id).toBe('EXEC-001');
+    // Retiring the remaining active work must never make a closed/missing
+    // bridge usable as replacement authority.
+    delete claims['EXEC-001'];
+    fs.writeFileSync(bridge, JSON.stringify(claims));
+    refuse(f, 'binding_unavailable');
+    claims['EXEC-001'] = { session_id: 'thread-owned' };
+    fs.writeFileSync(bridge, JSON.stringify(claims));
+    fs.writeFileSync(retiredPath, JSON.stringify(f.spec).replace('EXEC-001', 'RETIRED-001'));
+    refuse(f, 'binding_unavailable');
+  });
 });
