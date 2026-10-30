@@ -108,8 +108,8 @@ const SESSION_END_SOURCES: Readonly<Record<string, string>> = {
   'lib/guard-config.cjs': 'b7947a24da1670613bb43a548be9951d7fe3be6d4be2f9418607a35dac945a85',
 };
 
-// SessionEnd accepts only its original profile and the reviewed exact-path
-// root fallback; do not inherit other session-cache profile alternatives.
+// SessionEnd keeps its independent body/library identities and exact-path root
+// fallback. The two startup sources are checked together by the paired profile.
 function sessionEndIdentities(relative: string): readonly string[] {
   const expected = SESSION_END_SOURCES[relative];
   if (!expected) return [];
@@ -175,6 +175,7 @@ export function qualifiesForNativeSessionEndPrefix(context: {
       !directory(selection.canonical) ||
       selection.runtimeDirectory !== path.join(home, 'lib/runtimes', request.runtimeDigest) ||
       !directory(selection.runtimeDirectory) ||
+      !qualifiesForNativeStartupProfile(context) ||
       !environmentSupported(request.caller.environment, null) ||
       !environmentSupported(environment, path.join(selection.runtimeDirectory, 'handler-env.sh'))
     )
@@ -222,8 +223,6 @@ export function qualifiesForNativeSessionEndPrefix(context: {
       'emit.sh': request.surface === 'codex' ? 'surface' : 'shared',
     };
     const required = new Set([
-      'dispatch.sh',
-      'handler-env.sh',
       'runtime-paths.sh',
       'session-log.sh',
       'lib/parse-input.sh',
@@ -283,8 +282,9 @@ export function qualifiesForNativeStartupProfile(context: {
       return true;
     return (
       request.configuration === 'system' &&
-      request.surface === 'codex' &&
-      request.event === 'pre_tool_use' &&
+      ((request.surface === 'codex' && request.event === 'pre_tool_use') ||
+        (['codex', 'claude-code'].includes(request.surface) && request.event === 'session_end') ||
+        (request.surface === 'opencode' && request.event === 'stop')) &&
       [request.caller.environment, environment].every((snapshot) =>
         STARTUP_KEYS.every((name) => !Object.hasOwn(snapshot, name))
       ) &&

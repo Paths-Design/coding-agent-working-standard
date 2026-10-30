@@ -14,6 +14,48 @@ const { createHandlerExecutor } = require('../../dist/runtime/handler-executor')
 const classifier = require('../../dist/runtime/classifier');
 const templates = path.resolve(__dirname, '../../templates/hook-packs');
 const digest = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const legacyStartup = {
+  'dispatch.sh': {
+    sha256: '5f8a185f8b63e601aa29af3431d0ddafedb9a44f45d6a2d9279d32410fc2150f',
+    text: '#!/bin/bash\n# CAWS machine adapter runtime. Project policy supplies ordered handler entries;\n# executable adapter libraries come from one immutable machine snapshot.\nset -uo pipefail\nRUNTIME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\nexport CAWS_SHARED_LIB_DIR="$RUNTIME_DIR/lib"\nexport CAWS_MACHINE_ADAPTER_LIB_DIR="$RUNTIME_DIR/surfaces/$1/lib"\nexport CAWS_MACHINE_RUNTIME=1\nexport CAWS_AGENT_SURFACE="$1"\nEVENT="$2"\nHOOKS_DIR="$3"\nshift 3\nexport HOOKS_DIR\n\nmissing() {\n  echo "[caws machine adapter] Required runtime library failed: $1" >&2\n  exit 2\n}\nsource "$RUNTIME_DIR/runtime-paths.sh" || missing runtime-paths.sh\nsource "$RUNTIME_DIR/lib/agent-surface.sh" || missing agent-surface.sh\ncaws_source_lib parse-input.sh || missing parse-input.sh\nparse_hook_input || missing input\ncaws_source_lib session-id.sh || missing session-id.sh\ncaws_normalize_session_env "$(resolve_caws_session_id_with_payload "${HOOK_SESSION_ID:-}")" >/dev/null || missing session-id\ncaws_source_lib run-handlers.sh || missing run-handlers.sh\nexport CAWS_PRIOR_BASH_ENV="${BASH_ENV:-}"\nexport BASH_ENV="$RUNTIME_DIR/handler-env.sh"\n[[ "$#" -gt 0 ]] || exit 0\nif [[ "$EVENT" == pre_tool_use ]]; then\n  run_handlers --short-circuit-on-block "$@"\nelse\n  # Preserve the legacy PostToolUse dispatcher\'s runtime-only disable list.\n  # Policy retains the declared list, so removing an environment override can\n  # re-enable a handler without another adoption or a policy rewrite.\n  if [[ "$EVENT" == post_tool_use ]]; then\n    HANDLERS=()\n    for handler in "$@"; do\n      case ":${CAWS_DISABLED_HANDLERS:-}:" in\n        *":${handler%% *}:"*) ;;\n        *) HANDLERS+=("$handler") ;;\n      esac\n    done\n    [[ "${#HANDLERS[@]}" -gt 0 ]] || exit 0\n    run_handlers "${HANDLERS[@]}"\n  else\n    run_handlers "$@"\n  fi\nfi\n',
+  },
+  'handler-env.sh': {
+    sha256: '901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7',
+    text: '#!/bin/bash\n# Preload the selected adapter in Bash handler children. Existing guard scripts\n# can keep sourcing their local libraries: the shared idempotence flags preserve\n# the selected parser, identity resolver and native emitters. Guard code and\n# ownership oracles remain project-owned. Preserve an existing Bash startup file.\nif [[ -n "${CAWS_PRIOR_BASH_ENV:-}" && "${CAWS_PRIOR_BASH_ENV}" != "${BASH_ENV:-}" ]]; then\n  source "$CAWS_PRIOR_BASH_ENV" || exit 2\nfi\nsource "${CAWS_SHARED_LIB_DIR}/agent-surface.sh" || exit 2\ncaws_source_lib parse-input.sh || exit 2\ncaws_source_lib session-id.sh || exit 2\ncaws_source_lib emit.sh || exit 2\n',
+  },
+};
+// Exercise the exact two source cohorts and both captured environment snapshots.
+function assertReviewedStartupPairs(check) {
+  request.caller.environment = { ...environment };
+  const current = Object.fromEntries(
+    Object.keys(legacyStartup).map((name) => [name, fs.readFileSync(path.join(runtime, name))])
+  );
+  check(true);
+  for (const [name, row] of Object.entries(legacyStartup)) {
+    expect(crypto.createHash('sha256').update(row.text).digest('hex')).toBe(row.sha256);
+    fs.writeFileSync(path.join(runtime, name), row.text);
+    check(false);
+    fs.writeFileSync(path.join(runtime, name), current[name]);
+    check(true);
+  }
+  for (const target of [request.caller.environment, environment]) {
+    for (const name of ['BASH_ENV', 'CAWS_PRIOR_BASH_ENV', 'CAWS_PRIOR_BASH_ENV_SET']) {
+      expect(Object.hasOwn(target, name)).toBe(false);
+      for (const value of ['', 'x', 'unknown', path.join(runtime, 'handler-env.sh')]) {
+        target[name] = value;
+        check(false);
+        delete target[name];
+        check(true);
+      }
+    }
+  }
+  for (const [name, row] of Object.entries(legacyStartup))
+    fs.writeFileSync(path.join(runtime, name), row.text);
+  check(true);
+  for (const [name, bytes] of Object.entries(current))
+    fs.writeFileSync(path.join(runtime, name), bytes);
+  check(true);
+}
 let directory, runtime, project, selection, request, environment, controller;
 const artifactRoot = process.env.CAWS_TEST_ARTIFACT_DIR;
 if (artifactRoot && !path.isAbsolute(artifactRoot))
@@ -436,6 +478,17 @@ test.each(agentSurfaceProfiles)(
 describe('selected stock handler behavior', () => {
   beforeEach(() => git('init', '-q'));
 
+  test('containment eligibility binds paired startup sources and original/effective absence', () => {
+    command('echo safe');
+    environment.CAWS_SESSION_ID = 'fixture';
+    const handler = select();
+    assertReviewedStartupPairs((expected) => {
+      expect(qualifiesForNativeContainment(handler, context())).toBe(expected);
+    });
+    fs.appendFileSync(path.join(runtime, 'handler-env.sh'), '\n# changed after admission\n');
+    expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+  });
+
   test('a canonical latch prevents native admission from a different checkout', () => {
     command('echo safe');
     const handler = select();
@@ -684,6 +737,20 @@ describe('selected stock handler behavior', () => {
         const { assertNativeStopAgentSelection } = require('../../dist/runtime/stock-handlers');
         const { executeAgentStop } = require('../../dist/runtime/agent-stop');
         assertNativeStopAgentSelection(handler, context(), 'preflight');
+        assertReviewedStartupPairs((expected) => {
+          for (const phase of ['preflight', 'lease']) {
+            const check = () => assertNativeStopAgentSelection(handler, context(), phase);
+            if (expected) expect(check).not.toThrow();
+            else
+              expect(check).toThrow(
+                phase === 'preflight'
+                  ? 'Native Stop agent consumer is ineligible before prefix'
+                  : 'Native Stop agent consumer changed after prefix; shell replay refused'
+              );
+          }
+          expect(fs.readFileSync(file)).toEqual(before);
+          expect(fs.readFileSync(peerFile)).toEqual(peer);
+        });
         // Component parity with real Git and store effects. Native owner/permit
         // custody is exercised separately by the Stop dispatch connection suite.
         native = await executeAgentStop(

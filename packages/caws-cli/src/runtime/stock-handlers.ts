@@ -298,16 +298,7 @@ export function qualifiesForNativeContainment(
     ].some((value) => Boolean(value && value !== '0'))
   )
     return false;
-  const startup = join(selection.runtimeDirectory, 'handler-env.sh');
-  try {
-    assertMachinePath(selection.runtimeDirectory, startup);
-    return (
-      lstatSync(startup).isFile() &&
-      sha(startup) === '901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7'
-    );
-  } catch {
-    return false;
-  }
+  return qualifiesForNativeStartupProfile(context);
 }
 
 /** Prove absence without guessing the session resolver's live PID/cached identity. */

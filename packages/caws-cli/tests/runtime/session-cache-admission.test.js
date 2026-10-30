@@ -306,6 +306,43 @@ test.each(['codex', 'claude-code'])(
   }
 );
 
+test.each(['codex', 'claude-code'])(
+  'SessionEnd retains the exact legacy startup pair for %s',
+  (surface) => {
+    sessionEnd(surface);
+    expect(qualifyEnd()).toBe(true);
+    installLegacyStartup();
+    expect(qualifyEnd()).toBe(true);
+  }
+);
+
+test.each(['codex', 'claude-code'])(
+  'SessionEnd current startup pair refuses mixed sources and original/effective key presence for %s',
+  (surface) => {
+    sessionEnd(surface);
+    expect(qualifyEnd()).toBe(true);
+    for (const name of ['dispatch.sh', 'handler-env.sh']) {
+      const file = path.join(runtime, name);
+      const original = fs.readFileSync(file);
+      fs.writeFileSync(file, legacyStartup[name].text);
+      expect(qualifyEnd()).toBe(false);
+      fs.writeFileSync(file, original);
+      expect(qualifyEnd()).toBe(true);
+    }
+    for (const target of [request.caller.environment, environment]) {
+      for (const name of ['BASH_ENV', 'CAWS_PRIOR_BASH_ENV', 'CAWS_PRIOR_BASH_ENV_SET']) {
+        for (const value of ['', 'x', 'unknown', path.join(runtime, 'handler-env.sh')]) {
+          target[name] = value;
+          expect(qualifyEnd()).toBe(false);
+          delete target[name];
+          expect(qualifyEnd()).toBe(true);
+        }
+      }
+    }
+    expect(fs.existsSync(path.join(checkout, '.caws/sessions'))).toBe(false);
+  }
+);
+
 test.each([
   'session-log.sh',
   'dispatch.sh',
