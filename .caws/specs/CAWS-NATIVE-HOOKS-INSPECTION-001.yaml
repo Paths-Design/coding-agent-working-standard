@@ -62,3 +62,9 @@ evidence:
     recorded_at: "2026-10-30T09:42:48.015Z"
     exit_code: 0
     commit_sha: d7833c8684184094ffef3f16092925a6ff91cbfb
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Current d7833c868 fresh hooks-readonly119 exit0 covers missing/corrupt/contradictory/additive registration, alternate CODEX_HOME and nested configuration layers. Retained333 actual Native member-corruption output reports unavailable and available Python was not replayed. Root inspected strict observer and one-launch catch path with no replay. Raw ignored receipts at /Users/darianrosebrook/Desktop/Projects/caws/tmp/rust-cutover-package/hooks-inspection-01 were manually inspected; verify checks commit existence only. Full harness configuration/trust and callback remain unqualified."
+    recorded_at: "2026-10-30T09:43:01.236Z"
+    exit_code: 0
+    commit_sha: d7833c8684184094ffef3f16092925a6ff91cbfb
