@@ -186,9 +186,14 @@ acceptance:
     when: 'typed normalization runs'
     then: 'exact ordered complete source and destination inventory and identities are preserved while malformed ambiguous and authored fake metadata controls refuse correctly'
   - id: A2
-    given: 'the exact complete stock Codex pre-write profile and actual policy ownership scope latch and secret state'
+    given: >-
+      the exact complete stock eleven-handler Codex pre-write profile and actual
+      policy ownership scope latch secret and shortcut state
     when: 'the real typed engine and authenticated cache prefix admit or refuse file edits'
-    then: 'the complete selected ten-handler behavior and effect order are preserved with semantic hostile controls and no skipped guard'
+    then: >-
+      the complete selected eleven-handler behavior and effect order are preserved
+      including original direct-Write shortcut classification progressive counters
+      and hostile controls with no skipped guard
   - id: A3
     given: 'unsupported custom selected libraries or handler profiles'
     when: 'the request enters the runtime'
