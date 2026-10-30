@@ -48,6 +48,45 @@ pub(crate) struct Profile {
     pub kind: String,
     pub source: String,
     pub utilities: Vec<ProgramImage>,
+    #[serde(default)]
+    pub npm: Option<NpmProfile>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct NpmProfile {
+    pub runtime: NpmRuntime,
+    pub project: NpmProject,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct NpmRuntime {
+    pub node: ProgramImage,
+    pub entry: ProgramImage,
+    pub root: String,
+    pub generation_manifest_sha256: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct NpmProject {
+    pub package_json: ProgramImage,
+    pub npmrc: Option<ProgramImage>,
+    pub test_script: String,
+    pub path_shadow_sha256: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct WriteCeiling {
+    pub schema: String,
+    pub launch_id: String,
+    pub invocation_root: String,
+    pub output_root: String,
+    pub tmp_root: String,
+    pub cache_root: String,
+    pub manifest_sha256: String,
 }
 
 #[derive(Deserialize)]
@@ -57,6 +96,8 @@ pub(crate) struct Sandbox {
     pub state_sha256: String,
     pub launcher: ProgramImage,
     pub environment_anchor: String,
+    #[serde(default)]
+    pub write_ceiling: Option<WriteCeiling>,
 }
 
 #[derive(Deserialize)]
@@ -171,6 +212,7 @@ impl PreparedRecord {
         )?;
         let e = &value.execution;
         let p = &value.profile;
+        let npm = p.kind == "npm-test-v1";
         require(
             image(&e.executable)
                 && path(&e.cwd)
@@ -184,8 +226,38 @@ impl PreparedRecord {
                             .map(str::to_owned))
                     || (p.kind == "caws-evidence-v1"
                         && e.argv.len() >= 5
-                        && e.argv[0] == e.executable.path)),
+                        && e.argv[0] == e.executable.path)
+                    || npm),
         )?;
+        if npm {
+            let profile = p.npm.as_ref().ok_or(InvalidRecord)?;
+            let runtime = &profile.runtime;
+            let project = &profile.project;
+            require(
+                shape.pointer("/profile/npm").is_some_and(serde_json::Value::is_object)
+                    && shape.pointer("/profile/npm/runtime").is_some_and(serde_json::Value::is_object)
+                    && shape.pointer("/profile/npm/project").is_some_and(serde_json::Value::is_object)
+                    && shape.pointer("/profile/npm/project/npmrc").is_some()
+                    && p.source == "npm test"
+                    && p.utilities.is_empty()
+                    && e.stdin_base64.is_empty()
+                    && image(&runtime.node)
+                    && image(&runtime.entry)
+                    && path(&runtime.root)
+                    && digest(&runtime.generation_manifest_sha256)
+                    && Path::new(&runtime.entry.path)
+                        == Path::new(&runtime.root).join("bin/npm-cli.js")
+                    && image(&project.package_json)
+                    && project.npmrc.as_ref().is_none_or(image)
+                    && text(&project.test_script, 65536, false)
+                    && digest(&project.path_shadow_sha256)
+                    && e.executable.path == runtime.node.path
+                    && e.executable.sha256 == runtime.node.sha256
+                    && e.argv == [runtime.node.path.as_str(), runtime.entry.path.as_str(), "test"]
+            )?;
+        } else {
+            require(p.npm.is_none() && shape.pointer("/profile/npm").is_none())?;
+        }
         require(e.environment.len() <= 1024)?;
         let mut previous: Option<&str> = None;
         let mut environment_bytes = 0;
@@ -210,6 +282,27 @@ impl PreparedRecord {
         )?;
         let s = &value.sandbox;
         require(digest(&s.state_sha256) && image(&s.launcher) && path(&s.environment_anchor))?;
+        if npm {
+            let ceiling = s.write_ceiling.as_ref().ok_or(InvalidRecord)?;
+            require(
+                shape.pointer("/sandbox/writeCeiling").is_some_and(serde_json::Value::is_object)
+                    && ceiling.schema == "caws.execution.write-ceiling.v1"
+                    && digest(&ceiling.launch_id)
+                    && digest(&ceiling.manifest_sha256)
+                    && path(&ceiling.invocation_root)
+                    && path(&ceiling.output_root)
+                    && path(&ceiling.tmp_root)
+                    && path(&ceiling.cache_root)
+                    && Path::new(&ceiling.output_root)
+                        == Path::new(&ceiling.invocation_root).join("output")
+                    && Path::new(&ceiling.tmp_root)
+                        == Path::new(&ceiling.invocation_root).join("tmp")
+                    && Path::new(&ceiling.cache_root)
+                        == Path::new(&ceiling.invocation_root).join("cache"),
+            )?;
+        } else {
+            require(s.write_ceiling.is_none() && shape.pointer("/sandbox/writeCeiling").is_none())?;
+        }
         let sandbox_state = bytes(&s.state_base64, 262144)?;
         require(format!("{:x}", Sha256::digest(&sandbox_state)) == s.state_sha256)?;
         // Grammar only: duplicate keys and policy extensions stay opaque, and
@@ -254,6 +347,51 @@ impl PreparedRecord {
 mod tests {
     use super::*;
     use serde_json::{Value, json};
+
+    fn npm_fixture() -> Value {
+        let mut value = fixture();
+        let node = json!({"path":"/generation/node", "sha256":"a".repeat(64)});
+        let entry = json!({"path":"/generation/npm/bin/npm-cli.js", "sha256":"b".repeat(64)});
+        value["execution"]["executable"] = node.clone();
+        value["execution"]["argv"] = json!(["/generation/node", "/generation/npm/bin/npm-cli.js", "test"]);
+        value["execution"]["stdinBase64"] = json!("");
+        value["profile"] = json!({"kind":"npm-test-v1", "source":"npm test", "utilities":[],
+            "npm":{"runtime":{"node":node,"entry":entry,"root":"/generation/npm",
+                "generationManifestSha256":"c".repeat(64)},
+            "project":{"packageJson":{"path":"/project/package.json","sha256":"d".repeat(64)},
+                "npmrc":null,"testScript":"node tests/run.js","pathShadowSha256":"e".repeat(64)}}});
+        value["sandbox"]["writeCeiling"] = json!({"schema":"caws.execution.write-ceiling.v1",
+            "launchId":"f".repeat(64),"invocationRoot":"/private/run",
+            "outputRoot":"/private/run/output","tmpRoot":"/private/run/tmp",
+            "cacheRoot":"/private/run/cache","manifestSha256":"1".repeat(64)});
+        value
+    }
+
+    #[test]
+    fn npm_record_requires_exact_test_runtime_project_and_ceiling() {
+        let value = npm_fixture();
+        let record = PreparedRecord::decode(serde_json::to_vec(&value).unwrap()).unwrap();
+        assert_eq!(record.value().profile.kind, "npm-test-v1");
+        assert_eq!(record.value().execution.argv[2], "test");
+        for (pointer, replacement) in [
+            ("/profile/source", json!("npm test -- --watch")),
+            ("/execution/argv/2", json!("install")),
+            ("/profile/npm/runtime/entry/path", json!("/generation/npm/other.js")),
+            ("/profile/npm/project/testScript", json!("")),
+            ("/sandbox/writeCeiling/tmpRoot", json!("/project/tmp")),
+            ("/sandbox/writeCeiling/manifestSha256", json!("0")),
+        ] {
+            let mut bad = value.clone();
+            *bad.pointer_mut(pointer).unwrap() = replacement;
+            assert!(PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err(), "{pointer}");
+        }
+        let mut bad = value.clone();
+        bad["profile"]["npm"]["project"].as_object_mut().unwrap().remove("npmrc");
+        assert!(PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err());
+        let mut bad = fixture();
+        bad["profile"]["npm"] = json!(null);
+        assert!(PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err());
+    }
 
     #[test]
     fn dedicated_writer_record_requires_direct_executable_argv_and_known_profile() {
