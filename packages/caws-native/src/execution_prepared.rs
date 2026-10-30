@@ -237,7 +237,12 @@ impl PreparedRecord {
                 shape.pointer("/profile/npm").is_some_and(serde_json::Value::is_object)
                     && shape.pointer("/profile/npm/runtime").is_some_and(serde_json::Value::is_object)
                     && shape.pointer("/profile/npm/project").is_some_and(serde_json::Value::is_object)
-                    && shape.pointer("/profile/npm/project/npmrc").is_some()
+                    && [
+                        "/profile/npm/runtime/node",
+                        "/profile/npm/runtime/entry",
+                        "/profile/npm/project/packageJson",
+                    ].into_iter().all(|pointer| shape.pointer(pointer).is_some_and(serde_json::Value::is_object))
+                    && shape.pointer("/profile/npm/project/npmrc").is_some_and(|value| value.is_null() || value.is_object())
                     && p.source == "npm test"
                     && p.utilities.is_empty()
                     && e.stdin_base64.is_empty()
@@ -388,6 +393,21 @@ mod tests {
         let mut bad = value.clone();
         bad["profile"]["npm"]["project"].as_object_mut().unwrap().remove("npmrc");
         assert!(PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err());
+        for pointer in [
+            "/profile/npm/runtime/node",
+            "/profile/npm/runtime/entry",
+            "/profile/npm/project/packageJson",
+        ] {
+            let mut bad = value.clone();
+            let image = bad.pointer(pointer).unwrap().clone();
+            *bad.pointer_mut(pointer).unwrap() = json!([image["path"], image["sha256"]]);
+            assert!(PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err(), "{pointer}");
+        }
+        let mut npmrc = value.clone();
+        npmrc["profile"]["npm"]["project"]["npmrc"] = json!({"path":"/project/.npmrc","sha256":"2".repeat(64)});
+        assert!(PreparedRecord::decode(serde_json::to_vec(&npmrc).unwrap()).is_ok());
+        npmrc["profile"]["npm"]["project"]["npmrc"] = json!(["/project/.npmrc","2".repeat(64)]);
+        assert!(PreparedRecord::decode(serde_json::to_vec(&npmrc).unwrap()).is_err());
         let mut bad = fixture();
         bad["profile"]["npm"] = json!(null);
         assert!(PreparedRecord::decode(serde_json::to_vec(&bad).unwrap()).is_err());
