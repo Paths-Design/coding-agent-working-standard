@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
+import { TextDecoder } from 'node:util';
 import { analyzeCommand } from '../shell/analysis/analyze';
 import { classifyInterpreterEffects } from '../shell/analysis/interpreter-effects';
 import { loadParser } from '../shell/analysis/load-parser';
@@ -9,6 +10,7 @@ import type { Argument } from '../shell/analysis/types';
 import { inside, sensitiveBinding } from '../shell/analysis/policies';
 import { evaluatePath } from '../kernel';
 import { normalizeRelativePosixPath } from '../kernel/scope/normalize';
+import { parseJsonSource } from '../runtime/json-custody';
 import {
   ExecutionAuthorityUnavailable,
   readExecutionAuthority,
@@ -288,6 +290,138 @@ function verifyImage(image: ProgramImage): void {
     fs.closeSync(fd);
   }
 }
+function pinnedPackageScript(image: ProgramImage): string {
+  const fd = fs.openSync(
+    image.path,
+    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK
+  );
+  try {
+    const before = fs.fstatSync(fd, { bigint: true });
+    if (!before.isFile() || before.nlink !== 1n || before.size === 0n || before.size > 1048576n)
+      refuse('unsupported_profile');
+    const bytes = Buffer.alloc(Number(before.size));
+    let length = 0;
+    while (length < bytes.length) {
+      const count = fs.readSync(fd, bytes, length, bytes.length - length, length);
+      if (count === 0) break;
+      length += count;
+    }
+    const after = fs.fstatSync(fd, { bigint: true });
+    const named = fs.lstatSync(image.path, { bigint: true });
+    if (
+      length !== bytes.length ||
+      createHash('sha256').update(bytes).digest('hex') !== image.sha256 ||
+      [after, named].some(
+        (stat) =>
+          stat.dev !== before.dev ||
+          stat.ino !== before.ino ||
+          stat.size !== before.size ||
+          stat.mtimeNs !== before.mtimeNs ||
+          stat.ctimeNs !== before.ctimeNs
+      )
+    )
+      refuse('unsupported_profile');
+    let value: unknown;
+    try {
+      const source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+      parseJsonSource(source, 32, 50_000, true);
+      value = JSON.parse(source);
+    } catch {
+      refuse('unsupported_profile');
+    }
+    if (value === null || typeof value !== 'object' || Array.isArray(value))
+      refuse('unsupported_profile');
+    const scripts = (value as Record<string, unknown>).scripts;
+    if (scripts === null || typeof scripts !== 'object' || Array.isArray(scripts))
+      refuse('unsupported_profile');
+    const entries = scripts as Record<string, unknown>;
+    if (
+      typeof entries.test !== 'string' ||
+      entries.test.length === 0 ||
+      Object.hasOwn(entries, 'pretest') ||
+      Object.hasOwn(entries, 'posttest')
+    )
+      refuse('unsupported_profile');
+    return entries.test;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function inspectNpmTest(record: PreparedExecutionV1, authority: ExecutionAuthority): void {
+  const npm = record.profile.npm;
+  const ceiling = record.sandbox.writeCeiling;
+  if (!npm || !ceiling || record.profile.source !== 'npm test' || record.profile.utilities.length)
+    refuse('unsupported_profile');
+  const { runtime, project } = npm;
+  let npmrcAbsent = false;
+  try {
+    fs.lstatSync(join(authority.pin, '.npmrc'));
+  } catch (error) {
+    npmrcAbsent = (error as NodeJS.ErrnoException).code === 'ENOENT';
+  }
+  if (
+    record.execution.cwd !== authority.pin ||
+    project.packageJson.path !== join(authority.pin, 'package.json') ||
+    project.npmrc !== null ||
+    !npmrcAbsent ||
+    runtime.node.path !== fs.realpathSync.native(process.execPath) ||
+    runtime.entry.path !== join(runtime.root, 'bin', 'npm-cli.js') ||
+    fs.realpathSync.native(runtime.root) !== runtime.root ||
+    inside(runtime.root, authority.canonical) ||
+    inside(ceiling.invocationRoot, authority.canonical)
+  )
+    refuse('unsupported_profile');
+  verifyImage(runtime.node);
+  verifyImage(runtime.entry);
+  if (pinnedPackageScript(project.packageJson) !== project.testScript)
+    refuse('unsupported_profile');
+  const safePath = [
+    ...new Set(
+      [dirname(runtime.node.path), '/usr/bin', '/bin'].map((name) => fs.realpathSync.native(name))
+    ),
+  ].join(':');
+  const expected = new Map([
+    ['CAWS_EXECUTION_CALL', record.association.callId],
+    ['CAWS_EXECUTION_CALLER', record.association.callerAnchor],
+    ['CAWS_EXECUTION_PROJECT', record.projectRoot],
+    ['CAWS_EXECUTION_SESSION', record.association.sessionId],
+    ['CAWS_EXECUTION_THREAD', record.association.threadId],
+    ['HOME', ceiling.invocationRoot],
+    ['LC_ALL', 'C'],
+    ['NPM_CONFIG_CACHE', ceiling.cacheRoot],
+    ['NPM_CONFIG_GLOBALCONFIG', '/dev/null'],
+    ['NPM_CONFIG_USERCONFIG', '/dev/null'],
+    ['PATH', safePath],
+    ['TMPDIR', ceiling.tmpRoot],
+  ]);
+  const actual = new Map(record.execution.environment.map(({ name, value }) => [name, value]));
+  if (
+    actual.size !== expected.size ||
+    [...expected].some(([name, value]) => actual.get(name) !== value)
+  )
+    refuse('unsupported_profile');
+  if (project.pathShadowSha256 !== createHash('sha256').update(safePath).digest('hex'))
+    refuse('unsupported_profile');
+  for (const root of [
+    ceiling.invocationRoot,
+    ceiling.outputRoot,
+    ceiling.tmpRoot,
+    ceiling.cacheRoot,
+  ]) {
+    if (fs.realpathSync.native(root) !== root) refuse('unsupported_profile');
+    const stat = fs.lstatSync(root);
+    if (
+      !stat.isDirectory() ||
+      typeof process.getuid !== 'function' ||
+      stat.uid !== process.getuid() ||
+      (stat.mode & 0o7777) !== 0o700
+    )
+      refuse('unsupported_profile');
+  }
+  for (const root of [ceiling.outputRoot, ceiling.tmpRoot, ceiling.cacheRoot])
+    if (fs.readdirSync(root).length !== 0) refuse('unsupported_profile');
+}
 export function executionProfileBindings(
   record: PreparedExecutionV1
 ): Map<string, readonly string[]> {
@@ -457,6 +591,10 @@ async function inspectSource(
   record: PreparedExecutionV1,
   authority: ExecutionAuthority
 ): Promise<void> {
+  if (record.profile.kind === 'npm-test-v1') {
+    inspectNpmTest(record, authority);
+    return;
+  }
   if (record.profile.kind === 'caws-evidence-v1') {
     const plan = await discoverEvidenceExecution(record, authority);
     if (

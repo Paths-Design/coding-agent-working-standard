@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { spawnCoveredSync } = require('./child-coverage.cjs');
@@ -6,6 +7,10 @@ const { authorityFixture, cleanupAll, source, hash } = require('./authority-fixt
 const { parseExecutionEvidenceArguments } = require('../../dist/execution/authorizer');
 const { image } = require('./authority-fixture');
 afterAll(cleanupAll);
+const npmRoots = [];
+afterAll(() =>
+  npmRoots.splice(0).forEach((root) => fs.rmSync(root, { recursive: true, force: true }))
+);
 // Native ESM import is unavailable in Jest's VM. Exercise the actual private
 // child entry with inert framed source, including the active mutant explicitly.
 function evaluatePreparedExecution(record, envelope) {
@@ -25,8 +30,10 @@ function evaluatePreparedExecution(record, envelope) {
       maxBuffer: 1048576,
     }
   );
-  expect(child.status).toBe(0);
-  expect(child.stderr.toString()).toBe('');
+  expect({ status: child.status, stderr: child.stderr.toString() }).toEqual({
+    status: 0,
+    stderr: '',
+  });
   expect(child.stdout.readUInt32BE()).toBe(child.stdout.length - 4);
   const observation = JSON.parse(child.stdout.subarray(4).toString());
   expect(observation.invocationId).toBe(record.invocationId);
@@ -49,6 +56,109 @@ async function observe(f, command, utilities = []) {
   const record = source(f, command, utilities);
   return evaluatePreparedExecution(record, request(record));
 }
+function npmRecord(f) {
+  const runtimeRoot = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'caws-npm-runtime-'))
+  );
+  npmRoots.push(runtimeRoot);
+  const npmRoot = path.join(runtimeRoot, 'npm');
+  fs.mkdirSync(path.join(npmRoot, 'bin'), { recursive: true });
+  const entry = path.join(npmRoot, 'bin', 'npm-cli.js');
+  fs.writeFileSync(entry, 'process.stdout.write("npm fixture should not execute")\n');
+  const node = image(process.execPath);
+  const packagePath = path.join(f.lane, 'package.json');
+  fs.writeFileSync(packagePath, JSON.stringify({ scripts: { test: 'node tests/run.js' } }));
+  const invocation = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'caws-npm-launch-'))
+  );
+  npmRoots.push(invocation);
+  for (const name of ['output', 'tmp', 'cache'])
+    fs.mkdirSync(path.join(invocation, name), { mode: 0o700 });
+  source(f, 'npm test');
+  const record = f.record;
+  const safePath = [
+    ...new Set(
+      [path.dirname(node.path), '/usr/bin', '/bin'].map((name) => fs.realpathSync.native(name))
+    ),
+  ].join(':');
+  record.profile.kind = 'npm-test-v1';
+  record.profile.npm = {
+    runtime: { node, entry: image(entry), root: npmRoot, generationManifestSha256: 'a'.repeat(64) },
+    project: {
+      packageJson: image(packagePath),
+      npmrc: null,
+      testScript: 'node tests/run.js',
+      pathShadowSha256: hash(Buffer.from(safePath)),
+    },
+  };
+  record.execution.executable = node;
+  record.execution.argv = [node.path, entry, 'test'];
+  record.execution.environment = [
+    ['CAWS_EXECUTION_CALL', record.association.callId],
+    ['CAWS_EXECUTION_CALLER', record.association.callerAnchor],
+    ['CAWS_EXECUTION_PROJECT', record.projectRoot],
+    ['CAWS_EXECUTION_SESSION', record.association.sessionId],
+    ['CAWS_EXECUTION_THREAD', record.association.threadId],
+    ['HOME', invocation],
+    ['LC_ALL', 'C'],
+    ['NPM_CONFIG_CACHE', path.join(invocation, 'cache')],
+    ['NPM_CONFIG_GLOBALCONFIG', '/dev/null'],
+    ['NPM_CONFIG_USERCONFIG', '/dev/null'],
+    ['PATH', safePath],
+    ['TMPDIR', path.join(invocation, 'tmp')],
+  ].map(([name, value]) => ({ name, value }));
+  record.sandbox.writeCeiling = {
+    schema: 'caws.execution.write-ceiling.v1',
+    launchId: 'b'.repeat(64),
+    invocationRoot: invocation,
+    outputRoot: path.join(invocation, 'output'),
+    tmpRoot: path.join(invocation, 'tmp'),
+    cacheRoot: path.join(invocation, 'cache'),
+    manifestSha256: 'c'.repeat(64),
+  };
+  return record;
+}
+
+describe('bounded npm test profile observation', () => {
+  test('admits a pinned package script without running the npm entry', () => {
+    const f = authorityFixture();
+    const record = npmRecord(f);
+    const result = evaluatePreparedExecution(record, request(record));
+    expect(result.decision).toBe('allow');
+    expect(result.reasonCodes).toEqual([]);
+    expect(fs.readdirSync(record.sandbox.writeCeiling.outputRoot)).toEqual([]);
+  });
+
+  test('rejects script replacement, lifecycle hooks, project config and PATH shadowing', () => {
+    const f = authorityFixture();
+    const record = npmRecord(f);
+    const pkg = record.profile.npm.project.packageJson.path;
+    fs.writeFileSync(pkg, JSON.stringify({ scripts: { test: 'node other.js' } }));
+    expect(evaluatePreparedExecution(record, request(record)).reasonCodes).toEqual([
+      'unsupported_profile',
+    ]);
+    fs.writeFileSync(
+      pkg,
+      JSON.stringify({ scripts: { test: 'node tests/run.js', pretest: 'node prepare.js' } })
+    );
+    record.profile.npm.project.packageJson = image(pkg);
+    expect(evaluatePreparedExecution(record, request(record)).reasonCodes).toEqual([
+      'unsupported_profile',
+    ]);
+    fs.writeFileSync(pkg, JSON.stringify({ scripts: { test: 'node tests/run.js' } }));
+    record.profile.npm.project.packageJson = image(pkg);
+    fs.writeFileSync(path.join(f.lane, '.npmrc'), 'script-shell=/bin/zsh\n');
+    expect(evaluatePreparedExecution(record, request(record)).reasonCodes).toEqual([
+      'unsupported_profile',
+    ]);
+    fs.unlinkSync(path.join(f.lane, '.npmrc'));
+    record.execution.environment.find((entry) => entry.name === 'PATH').value =
+      '/tmp:/usr/bin:/bin';
+    expect(evaluatePreparedExecution(record, request(record)).reasonCodes).toEqual([
+      'unsupported_profile',
+    ]);
+  });
+});
 
 const quoteWriterArg = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
 function evidenceRecord(f, extra = []) {
