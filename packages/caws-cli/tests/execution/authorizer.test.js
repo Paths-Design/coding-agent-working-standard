@@ -6,6 +6,7 @@ const { spawnCoveredSync } = require('./child-coverage.cjs');
 const { authorityFixture, cleanupAll, source, hash } = require('./authority-fixture');
 const { parseExecutionEvidenceArguments } = require('../../dist/execution/authorizer');
 const { image } = require('./authority-fixture');
+const { snapshotNpmProject } = require('../../dist/execution/npm-project');
 afterAll(cleanupAll);
 const npmRoots = [];
 afterAll(() =>
@@ -13,7 +14,7 @@ afterAll(() =>
 );
 // Native ESM import is unavailable in Jest's VM. Exercise the actual private
 // child entry with inert framed source, including the active mutant explicitly.
-function evaluatePreparedExecution(record, envelope) {
+function evaluatePreparedExecution(record, envelope, fenceFd) {
   const body = Buffer.from(JSON.stringify(envelope));
   const header = Buffer.alloc(4);
   header.writeUInt32BE(body.length);
@@ -28,6 +29,7 @@ function evaluatePreparedExecution(record, envelope) {
       env: { PATH: '/usr/bin:/bin', LC_ALL: 'C', __STRYKER_ACTIVE_MUTANT__: active },
       timeout: 5000,
       maxBuffer: 1048576,
+      ...(fenceFd === undefined ? {} : { stdio: ['pipe', 'pipe', 'pipe', fenceFd] }),
     }
   );
   expect({ status: child.status, stderr: child.stderr.toString() }).toEqual({
@@ -84,25 +86,23 @@ function npmRecord(f) {
   record.profile.kind = 'npm-test-v1';
   record.profile.npm = {
     runtime: { node, entry: image(entry), root: npmRoot, generationManifestSha256: 'a'.repeat(64) },
-    project: {
-      packageJson: image(packagePath),
-      npmrc: null,
-      testScript: 'node tests/run.js',
-      pathShadowSha256: hash(Buffer.from(safePath)),
-    },
+    project: snapshotNpmProject(f.lane, safePath, record.limits.preparationDeadlineUnixMs),
   };
   record.execution.executable = node;
-  record.execution.argv = [node.path, entry, 'test'];
+  record.execution.argv = [node.path, entry, '--prefix', f.lane, '--workspaces=false', 'test'];
   record.execution.environment = [
     ['CAWS_EXECUTION_CALL', record.association.callId],
     ['CAWS_EXECUTION_CALLER', record.association.callerAnchor],
     ['CAWS_EXECUTION_PROJECT', record.projectRoot],
     ['CAWS_EXECUTION_SESSION', record.association.sessionId],
     ['CAWS_EXECUTION_THREAD', record.association.threadId],
+    ['CODEX_SANDBOX', 'seatbelt'],
+    ['CODEX_SANDBOX_NETWORK_DISABLED', '1'],
     ['HOME', invocation],
     ['LC_ALL', 'C'],
     ['NPM_CONFIG_CACHE', path.join(invocation, 'cache')],
     ['NPM_CONFIG_GLOBALCONFIG', '/dev/null'],
+    ['NPM_CONFIG_SCRIPT_SHELL', '/bin/sh'],
     ['NPM_CONFIG_USERCONFIG', '/dev/null'],
     ['PATH', safePath],
     ['TMPDIR', path.join(invocation, 'tmp')],
@@ -120,6 +120,78 @@ function npmRecord(f) {
 }
 
 describe('bounded npm test profile observation', () => {
+  test('rechecks lifecycle tool bytes during final validation under the inherited fence', () => {
+    const f = authorityFixture();
+    const record = npmRecord(f);
+    const directory = path.join(f.lane, 'node_modules', '.bin');
+    fs.mkdirSync(directory, { recursive: true });
+    const tool = path.join(f.lane, 'src', 'jest.js');
+    fs.writeFileSync(tool, 'console.log("real tests")\n');
+    fs.symlinkSync(tool, path.join(directory, 'jest'));
+    fs.writeFileSync(
+      path.join(f.lane, 'package.json'),
+      JSON.stringify({ scripts: { test: 'jest' } })
+    );
+    record.profile.npm.project = snapshotNpmProject(
+      f.lane,
+      record.execution.environment.find((e) => e.name === 'PATH').value,
+      record.limits.preparationDeadlineUnixMs
+    );
+    const analyzed = evaluatePreparedExecution(record, request(record));
+    expect(analyzed.decision).toBe('allow');
+    const lock = path.join(f.caws, 'state.lock');
+    const fd = fs.openSync(lock, 'wx+', 0o600);
+    try {
+      const nonce = 'npm-final-fence';
+      fs.writeFileSync(
+        fd,
+        JSON.stringify({
+          pid: process.pid,
+          at: new Date().toISOString(),
+          purpose: 'execution-launch',
+          nonce,
+          protocol: 'caws.execution.fence.v1',
+        })
+      );
+      fs.fsyncSync(fd);
+      const stat = fs.fstatSync(fd, { bigint: true });
+      const envelope = request(record, analyzed.authorityRevision, {
+        dev: stat.dev.toString(),
+        ino: stat.ino.toString(),
+        nonce,
+      });
+      expect(evaluatePreparedExecution(record, envelope, fd).decision).toBe('allow');
+      fs.writeFileSync(tool, 'console.log("fake green")\n');
+      expect(evaluatePreparedExecution(record, envelope, fd).reasonCodes).toEqual([
+        'unsupported_profile',
+      ]);
+    } finally {
+      fs.closeSync(fd);
+      fs.unlinkSync(lock);
+    }
+  });
+
+  test('refuses lifecycle interpreter shadows in project and ancestor bin directories', () => {
+    const f = authorityFixture();
+    const record = npmRecord(f);
+    for (const root of [f.lane, f.root]) {
+      const bin = path.join(root, 'node_modules', '.bin');
+      fs.mkdirSync(bin, { recursive: true });
+      for (const name of ['node', 'sh']) {
+        const shadow = path.join(bin, name);
+        fs.writeFileSync(shadow, '#!/bin/sh\nprintf fake-green\\n\n', { mode: 0o755 });
+        const reply = evaluatePreparedExecution(record, request(record));
+        expect({ root, name, decision: reply.decision, reasons: reply.reasonCodes }).toEqual({
+          root,
+          name,
+          decision: 'unresolved',
+          reasons: ['unsupported_profile'],
+        });
+        fs.unlinkSync(shadow);
+      }
+    }
+  });
+
   test('admits a pinned package script without running the npm entry', () => {
     const f = authorityFixture();
     const record = npmRecord(f);

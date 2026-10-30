@@ -10,6 +10,13 @@ import {
 } from './authorizer';
 import { MAX_AUTHORIZER_REPLY_BYTES } from './protocol';
 import type { AuthorizerRequest, ExecutionReasonCode, PreparedExecutionV1 } from './prepared';
+import { snapshotNpmProject, type NpmProjectSnapshot } from './npm-project';
+
+export interface NpmExecutionPlan {
+  readonly kind: 'npm-test-v1';
+  readonly argv: readonly string[];
+  readonly project: NpmProjectSnapshot;
+}
 
 /** Advisory lexical program candidates, never admission or an authority revision.
  * Rust must resolve/hash the candidates, freeze a new final record, and run both
@@ -21,7 +28,7 @@ export interface ProgramDiscoveryReply {
   readonly executionDigest: string;
   readonly status: 'observed' | 'unresolved';
   readonly commands: readonly string[];
-  readonly execution: EvidenceExecutionPlan | null;
+  readonly execution: EvidenceExecutionPlan | NpmExecutionPlan | null;
   readonly reasonCodes: readonly ExecutionReasonCode[];
 }
 
@@ -47,14 +54,25 @@ export async function discoverExecutionPrograms(
     // The producer recognizes this one literal form and independently pins
     // npm before constructing its final record. No shell command is resolved
     // from the submitted source, and this observation grants no launch.
-    if (record.profile.source === 'npm test')
+    if (record.profile.source === 'npm test') {
+      const path = executionProfileBindings(record).get('PATH')![0]!;
+      const project = snapshotNpmProject(
+        record.execution.cwd,
+        path,
+        record.limits.preparationDeadlineUnixMs
+      );
       return Object.freeze({
         ...base,
         status: 'observed',
         commands: Object.freeze([]),
-        execution: null,
+        execution: Object.freeze({
+          kind: 'npm-test-v1' as const,
+          argv: Object.freeze(['npm', 'test']),
+          project,
+        }),
         reasonCodes: Object.freeze([]),
       });
+    }
     const evidence = await discoverEvidenceExecution(record, authority);
     if (evidence)
       return Object.freeze({

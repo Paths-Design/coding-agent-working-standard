@@ -191,10 +191,13 @@ export function decodePreparedExecution(input: Uint8Array): PreparedExecutionV1 
       digest(project.pathShadowSha256);
       insist(
         Array.isArray(execution.argv) &&
-          execution.argv.length === 3 &&
+          execution.argv.length === 6 &&
           execution.argv[0] === node.path &&
           execution.argv[1] === entry.path &&
-          execution.argv[2] === 'test' &&
+          execution.argv[2] === '--prefix' &&
+          execution.argv[3] === execution.cwd &&
+          execution.argv[4] === '--workspaces=false' &&
+          execution.argv[5] === 'test' &&
           executable.path === node.path &&
           executable.sha256 === node.sha256
       );

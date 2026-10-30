@@ -9,7 +9,7 @@
 //! executes the fixed Node entry outside the sandbox; it never executes source.
 //! The fixed child process must be spawned by a single-threaded producer with a
 //! quiescent descriptor table, no fd-mutating signal handlers, and no concurrent
-//! child reaper. The worker must still perform both final authorization phases.
+//! child reaper. The native execution owner must perform both authorization phases.
 use crate::{
     execution_authorizer_wire::{DiscoveryRequest, DiscoveryStatus, FrameDecoder},
     execution_child::{self, TerminationGrace},
@@ -17,14 +17,15 @@ use crate::{
     execution_host::HostContext,
     execution_ingress::UnverifiedCall,
     execution_owner::PinnedAuthorizer,
-    execution_prepared::{PreparedRecord, ProgramImage},
+    execution_prepared::{Execution, NpmProject, PreparedRecord, ProgramImage},
+    execution_server::private_roots::PrivateLaunch,
     monotonic_deadline::{self, EffectCheck, MonotonicDeadline},
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
     io::{self, Read},
     os::unix::{
@@ -81,6 +82,13 @@ pub(crate) struct PreparedAssociation {
 pub(crate) struct PreparedExecution {
     pub record: PreparedRecord,
     pub association: PreparedAssociation,
+    pub npm_launch: Option<PrivateLaunch>,
+}
+pub(crate) struct NpmPreparation<'a> {
+    pub root: &'a str,
+    pub entry: &'a ProgramImage,
+    pub scratch_root: &'a str,
+    pub generation_manifest_sha256: &'a str,
 }
 
 fn live(
@@ -347,6 +355,67 @@ fn wall_deadline(deadline: &MonotonicDeadline) -> Result<u64, PrepareRefusal> {
 fn image_json(p: &ProgramImage) -> Value {
     json!({"path":p.path,"sha256":p.sha256})
 }
+fn lower_npm(
+    value: &mut Value,
+    call: &UnverifiedCall,
+    pins: &PinnedAuthorizer,
+    npm: &NpmPreparation<'_>,
+    project: &NpmProject,
+    path: &str,
+    deadline: &MonotonicDeadline,
+    check: &impl Fn() -> Result<(), PrepareRefusal>,
+) -> Result<PrivateLaunch, PrepareRefusal> {
+    check()?;
+    let cwd = value["execution"]["cwd"].as_str().ok_or(PrepareRefusal::Record)?.to_owned();
+    let root = value["projectRoot"].as_str().ok_or(PrepareRefusal::Record)?.to_owned();
+    if call.source != "npm test" || project.npmrc.is_some()
+        || Path::new(&project.package_json.path) != Path::new(&cwd).join("package.json")
+        || Path::new(&npm.entry.path) != Path::new(npm.root).join("bin/npm-cli.js")
+        || program(&project.package_json.path, check)?.sha256 != project.package_json.sha256
+    {
+        return Err(PrepareRefusal::Image);
+    }
+    pin(npm.entry, check)?;
+    let mut launch = PrivateLaunch::create(Path::new(npm.scratch_root), Path::new(&root),
+        &call.session_id, &call.thread_id, &call.call_id, &call.sandbox_state_json)
+        .map_err(|_| PrepareRefusal::Context)?;
+    let text = |p: &Path| p.to_str().map(str::to_owned).ok_or(PrepareRefusal::Context);
+    let mut environment = BTreeMap::new();
+    for (name, value) in [
+        ("CAWS_EXECUTION_CALL", call.call_id.clone()),
+        ("CAWS_EXECUTION_CALLER", call.caller_anchor.clone()),
+        ("CAWS_EXECUTION_PROJECT", root),
+        ("CAWS_EXECUTION_SESSION", call.session_id.clone()),
+        ("CAWS_EXECUTION_THREAD", call.thread_id.clone()),
+        ("CODEX_SANDBOX", "seatbelt".into()),
+        ("CODEX_SANDBOX_NETWORK_DISABLED", "1".into()),
+        ("HOME", text(&launch.invocation_root)?),
+        ("LC_ALL", "C".into()),
+        ("NPM_CONFIG_CACHE", text(&launch.cache_root)?),
+        ("NPM_CONFIG_GLOBALCONFIG", "/dev/null".into()),
+        ("NPM_CONFIG_SCRIPT_SHELL", "/bin/sh".into()),
+        ("NPM_CONFIG_USERCONFIG", "/dev/null".into()),
+        ("PATH", path.into()),
+        ("TMPDIR", text(&launch.tmp_root)?),
+    ] { environment.insert(name, value); }
+    value["execution"]["executable"] = image_json(&pins.node);
+    value["execution"]["argv"] = json!([pins.node.path, npm.entry.path, "--prefix", cwd, "--workspaces=false", "test"]);
+    value["execution"]["environment"] = json!(environment.into_iter().map(|(name,value)| json!({"name":name,"value":value})).collect::<Vec<_>>());
+    value["profile"]["kind"] = json!("npm-test-v1");
+    value["profile"]["npm"] = json!({"runtime":{
+        "node":image_json(&pins.node),"entry":image_json(npm.entry),"root":npm.root,
+        "generationManifestSha256":npm.generation_manifest_sha256},"project":{
+        "packageJson":image_json(&project.package_json),"npmrc":null,
+        "testScript":project.test_script,"pathShadowSha256":project.path_shadow_sha256}});
+    let execution: Execution = serde_json::from_value(value["execution"].clone()).map_err(|_| PrepareRefusal::Record)?;
+    launch.bind_execution(&execution, deadline).map_err(|_| PrepareRefusal::Record)?;
+    value["sandbox"]["writeCeiling"] = json!({"schema":"caws.execution.write-ceiling.v1",
+        "launchId":launch.launch_id,"invocationRoot":launch.invocation_root,
+        "outputRoot":launch.output_root,"tmpRoot":launch.tmp_root,"cacheRoot":launch.cache_root,
+        "manifestSha256":launch.manifest_sha256});
+    check()?;
+    Ok(launch)
+}
 fn private_deadline(command: &mut Command, deadline: &MonotonicDeadline) {
     let envelope = deadline.envelope();
     // SAFETY: check_before_exec uses only async-signal-safe clock operations.
@@ -367,6 +436,7 @@ pub(crate) fn prepare(
     host_image: &ProgramImage,
     pins: &PinnedAuthorizer,
     discovery: &ProgramImage,
+    npm: Option<&NpmPreparation<'_>>,
     deadline: &MonotonicDeadline,
     cancelled: &AtomicBool,
     control: &EffectCheck<'_>,
@@ -518,7 +588,17 @@ pub(crate) fn prepare(
         }
     }
     let mut final_value = draft;
+    let mut npm_launch = None;
     if let Some(execution) = observed.execution() {
+        if execution.kind == "npm-test-v1" {
+            if call.source != "npm test" || !observed.commands().is_empty() {
+                return Err(failure(PrepareRefusal::Utility));
+            }
+            npm_launch = Some(lower_npm(&mut final_value, call, pins,
+                npm.ok_or_else(|| failure(PrepareRefusal::Utility))?,
+                execution.project.as_ref().ok_or_else(|| failure(PrepareRefusal::Record))?,
+                &path, deadline, &check).map_err(failure)?);
+        } else {
         let writer = Path::new(&pins.entry.path)
             .parent()
             .ok_or_else(|| failure(PrepareRefusal::Utility))?
@@ -560,6 +640,7 @@ pub(crate) fn prepare(
                 utilities.push(image_json(&utility));
             }
         }
+        }
     }
     final_value["profile"]["utilities"] = Value::Array(utilities);
     let final_bytes =
@@ -582,6 +663,7 @@ pub(crate) fn prepare(
     Ok(PreparedExecution {
         record,
         association,
+        npm_launch,
     })
 }
 
@@ -870,6 +952,7 @@ process.stdin.resume();
             &host_image,
             &pins,
             &selected,
+            None,
             &deadline,
             &cancelled,
             &check,

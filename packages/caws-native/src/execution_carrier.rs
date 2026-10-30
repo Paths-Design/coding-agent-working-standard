@@ -189,6 +189,9 @@ pub(crate) fn encode_startup(
     deadline: &MonotonicDeadline,
 ) -> io::Result<Vec<u8>> {
     use serde_json::json;
+    if prepared.npm_launch.is_some() || prepared.record.value().profile.kind == "npm-test-v1" {
+        return Err(invalid());
+    }
     let mut random = [0u8; 16];
     std::fs::File::open("/dev/urandom")?.read_exact(&mut random)?;
     let nonce: String = random.iter().map(|b| format!("{b:02x}")).collect();
@@ -361,6 +364,7 @@ mod tests {
         let (frame, record, deadline) = decode(&serde_json::to_vec(&value).unwrap()).unwrap();
         let t = frame.trusted;
         let mut prepared = crate::execution_prepare::PreparedExecution {
+            npm_launch: None,
             record,
             association: crate::execution_prepare::PreparedAssociation {
                 invocation_id: t.invocation_id,

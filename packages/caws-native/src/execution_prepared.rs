@@ -258,7 +258,7 @@ impl PreparedRecord {
                     && digest(&project.path_shadow_sha256)
                     && e.executable.path == runtime.node.path
                     && e.executable.sha256 == runtime.node.sha256
-                    && e.argv == [runtime.node.path.as_str(), runtime.entry.path.as_str(), "test"]
+                    && e.argv == [runtime.node.path.as_str(), runtime.entry.path.as_str(), "--prefix", e.cwd.as_str(), "--workspaces=false", "test"]
             )?;
         } else {
             require(p.npm.is_none() && shape.pointer("/profile/npm").is_none())?;
@@ -358,7 +358,7 @@ mod tests {
         let node = json!({"path":"/generation/node", "sha256":"a".repeat(64)});
         let entry = json!({"path":"/generation/npm/bin/npm-cli.js", "sha256":"b".repeat(64)});
         value["execution"]["executable"] = node.clone();
-        value["execution"]["argv"] = json!(["/generation/node", "/generation/npm/bin/npm-cli.js", "test"]);
+        value["execution"]["argv"] = json!(["/generation/node", "/generation/npm/bin/npm-cli.js", "--prefix", value["execution"]["cwd"], "--workspaces=false", "test"]);
         value["execution"]["stdinBase64"] = json!("");
         value["profile"] = json!({"kind":"npm-test-v1", "source":"npm test", "utilities":[],
             "npm":{"runtime":{"node":node,"entry":entry,"root":"/generation/npm",
@@ -377,7 +377,7 @@ mod tests {
         let value = npm_fixture();
         let record = PreparedRecord::decode(serde_json::to_vec(&value).unwrap()).unwrap();
         assert_eq!(record.value().profile.kind, "npm-test-v1");
-        assert_eq!(record.value().execution.argv[2], "test");
+        assert_eq!(record.value().execution.argv[5], "test");
         for (pointer, replacement) in [
             ("/profile/source", json!("npm test -- --watch")),
             ("/execution/argv/2", json!("install")),

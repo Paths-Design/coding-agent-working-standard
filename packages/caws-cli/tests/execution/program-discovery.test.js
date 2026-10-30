@@ -48,11 +48,19 @@ function observation(result) {
 describe('private nonexecuting draft program discovery', () => {
   test('observes only the exact npm test source without resolving npm from caller PATH', () => {
     const f = authorityFixture();
+    fs.writeFileSync(
+      path.join(f.lane, 'package.json'),
+      JSON.stringify({ scripts: { test: 'node tests/run.js' } })
+    );
     source(f, 'npm test');
     const exact = observation(run(f.record));
     expect(exact.status).toBe('observed');
     expect(exact.commands).toEqual([]);
-    expect(exact.execution).toBeNull();
+    expect(exact.execution).toEqual({
+      kind: 'npm-test-v1',
+      argv: ['npm', 'test'],
+      project: expect.objectContaining({ testScript: 'node tests/run.js', npmrc: null }),
+    });
     expect(exact.reasonCodes).toEqual([]);
     for (const altered of [
       'npm test -- --watch',

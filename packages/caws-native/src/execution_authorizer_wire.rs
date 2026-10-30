@@ -894,8 +894,7 @@ impl DiscoveryRequest {
             if !object
                 .get("execution")
                 .is_some_and(serde_json::Value::is_object)
-                || execution.kind != "caws-evidence-v1"
-                || !(5..=128).contains(&execution.argv.len())
+                || !(1..=128).contains(&execution.argv.len())
                 || execution
                     .argv
                     .iter()
@@ -903,6 +902,28 @@ impl DiscoveryRequest {
                 || execution.argv.iter().map(|a| a.len() + 1).sum::<usize>() > 65536
             {
                 return Err(WireError::Schema);
+            }
+            match execution.kind.as_str() {
+                "caws-evidence-v1" if execution.argv.len() >= 5
+                    && shape.pointer("/execution/project").is_none() => {}
+                "npm-test-v1" if execution.argv == ["npm", "test"] => {
+                    let project = execution.project.as_ref().ok_or(WireError::Schema)?;
+                    let image = &project.package_json;
+                    let hex = |value: &str| value.len() == 64
+                        && value.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+                    if !shape.pointer("/execution/project").is_some_and(serde_json::Value::is_object)
+                        || !shape.pointer("/execution/project/packageJson").is_some_and(serde_json::Value::is_object)
+                        || !shape.pointer("/execution/project/npmrc").is_some_and(serde_json::Value::is_null)
+                        || !std::path::Path::new(&image.path).is_absolute()
+                        || image.path.len() > 4096 || image.path.contains('\0')
+                        || !hex(&image.sha256) || !hex(&project.path_shadow_sha256)
+                        || project.test_script.is_empty() || project.test_script.len() > 65536
+                        || project.test_script.contains('\0') || project.npmrc.is_some()
+                    {
+                        return Err(WireError::Schema);
+                    }
+                }
+                _ => return Err(WireError::Schema),
             }
         }
         if reply.protocol != DISCOVERY_PROTOCOL
@@ -972,6 +993,8 @@ struct DiscoveryReply {
 pub(crate) struct DiscoveryExecution {
     pub kind: String,
     pub argv: Vec<String>,
+    #[serde(default)]
+    pub project: Option<crate::execution_prepared::NpmProject>,
 }
 /// Validated advisory lexical spellings, not images or authority.
 pub(crate) struct ProgramCandidates {
@@ -1221,5 +1244,25 @@ mod discovery_tests {
         value["status"] = json!("unresolved");
         value["reasonCodes"] = json!(["source_unresolved"]);
         assert!(!accepts(&req, &value));
+    }
+
+    #[test]
+    fn npm_discovery_requires_closed_project_snapshot_and_literal_source_argv() {
+        let req = request();
+        let mut value = observed(&req);
+        value["execution"] = json!({"kind":"npm-test-v1","argv":["npm","test"],"project":{
+            "packageJson":{"path":"/project/package.json","sha256":"a".repeat(64)},
+            "npmrc":null,"testScript":"node tests/run.js","pathShadowSha256":"b".repeat(64)}});
+        assert!(accepts(&req, &value));
+        for (pointer, replacement) in [
+            ("/execution/argv/1", json!("install")),
+            ("/execution/project/packageJson", json!(["/project/package.json","a".repeat(64)])),
+            ("/execution/project/pathShadowSha256", json!("bad")),
+            ("/execution/project/npmrc", json!({"path":"/project/.npmrc","sha256":"c".repeat(64)})),
+        ] {
+            let mut bad = value.clone();
+            *bad.pointer_mut(pointer).unwrap() = replacement;
+            assert!(!accepts(&req, &bad), "{pointer}");
+        }
     }
 }

@@ -52,7 +52,14 @@ function npmFixture() {
   const node = image('/generation/node');
   const entry = image('/generation/npm/bin/npm-cli.js');
   input.execution.executable = node;
-  input.execution.argv = [node.path, entry.path, 'test'];
+  input.execution.argv = [
+    node.path,
+    entry.path,
+    '--prefix',
+    input.execution.cwd,
+    '--workspaces=false',
+    'test',
+  ];
   input.execution.stdinBase64 = '';
   input.profile = {
     kind: 'npm-test-v1',

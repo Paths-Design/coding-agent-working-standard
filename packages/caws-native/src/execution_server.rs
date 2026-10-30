@@ -44,7 +44,7 @@ const INPUT_LIMIT: usize = 1024 * 1024;
 const REPLY_LIMIT: usize = 2 * 1024 * 1024;
 const STARTUP_FD: i32 = 3;
 #[path = "execution_private_roots.rs"]
-mod private_roots;
+pub(crate) mod private_roots;
 fn refused() -> io::Error {
     io::Error::other("execution boundary refused")
 }
@@ -1059,6 +1059,7 @@ fn execute_call(
         &config.host,
         &pins,
         &config.discovery,
+        None,
         &prep,
         &cancelled,
         &control,

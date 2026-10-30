@@ -4,15 +4,18 @@
 //! authenticate the host or prove that a descendant was actually sandboxed.
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use crate::execution_prepared::Execution;
+use crate::monotonic_deadline::MonotonicDeadline;
 use std::{
+    collections::BTreeMap,
     fs::{self, DirBuilder, File, OpenOptions},
     io::{self, Read},
     os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt},
     path::{Component, Path, PathBuf},
 };
 
-pub(super) const MANIFEST_FD: i32 = 4;
-pub(super) const ROLE_FDS: [i32; 4] = [5, 6, 7, 8];
+pub(crate) const MANIFEST_FD: i32 = 4;
+pub(crate) const ROLE_FDS: [i32; 4] = [5, 6, 7, 8];
 const MANIFEST_LIMIT: usize = 512 * 1024;
 
 fn denied() -> io::Error {
@@ -63,7 +66,7 @@ fn launch_id() -> io::Result<String> {
     Ok(random.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-pub(super) struct PrivateLaunch {
+pub(crate) struct PrivateLaunch {
     pub launch_id: String,
     pub invocation_root: PathBuf,
     pub output_root: PathBuf,
@@ -158,6 +161,69 @@ impl PrivateLaunch {
 
     pub fn handles(&self) -> &[File; 4] {
         &self.handles
+    }
+
+    fn execution_tuple(execution: &Execution) -> io::Result<Value> {
+        if execution.argv.is_empty()
+            || execution.argv[0] != execution.executable.path
+            || !Path::new(&execution.cwd).is_absolute()
+            || fs::canonicalize(&execution.cwd)? != Path::new(&execution.cwd)
+        {
+            return Err(denied());
+        }
+        let mut environment = BTreeMap::new();
+        for entry in &execution.environment {
+            if entry.name.is_empty() || entry.name.contains('=') || entry.name.contains('\0')
+                || entry.value.contains('\0')
+                || environment.insert(&entry.name, &entry.value).is_some()
+            {
+                return Err(denied());
+            }
+        }
+        Ok(json!({"argv":execution.argv,"cwd":execution.cwd,"environment":environment}))
+    }
+
+    /// Bind the exact USER tuple once, after roots exist and before Source sees
+    /// the final record. The record contains this resulting manifest digest.
+    fn deadline_value(deadline: &MonotonicDeadline) -> io::Result<Value> {
+        deadline.check().map_err(|_| denied())?;
+        let envelope = deadline.envelope();
+        if envelope.expires_ns.checked_sub(envelope.started_ns).is_none_or(|n| n == 0 || n > 30_000_000_000) {
+            return Err(denied());
+        }
+        Ok(json!({"clock":"CLOCK_MONOTONIC","startedNs":envelope.started_ns,"expiresNs":envelope.expires_ns}))
+    }
+
+    pub fn bind_execution(&mut self, execution: &Execution, deadline: &MonotonicDeadline) -> io::Result<()> {
+        self.verify_empty()?;
+        let mut manifest: Value = serde_json::from_slice(&self.manifest)?;
+        if manifest["schema"] != "codex.write-ceiling-launch.v1"
+            || manifest.get("execution").is_some()
+        {
+            return Err(denied());
+        }
+        manifest["schema"] = json!("codex.write-ceiling-launch.v2");
+        manifest["execution"] = Self::execution_tuple(execution)?;
+        manifest["preparationDeadline"] = Self::deadline_value(deadline)?;
+        let bytes = serde_json::to_vec(&manifest)?;
+        if bytes.len() > MANIFEST_LIMIT {
+            return Err(denied());
+        }
+        self.manifest_sha256 = format!("{:x}", Sha256::digest(&bytes));
+        self.manifest = bytes;
+        Ok(())
+    }
+
+    pub fn verify_execution(&self, execution: &Execution, deadline: &MonotonicDeadline) -> io::Result<()> {
+        self.verify_empty()?;
+        let manifest: Value = serde_json::from_slice(&self.manifest)?;
+        if manifest["schema"] != "codex.write-ceiling-launch.v2"
+            || manifest["execution"] != Self::execution_tuple(execution)?
+            || manifest["preparationDeadline"] != Self::deadline_value(deadline)?
+        {
+            return Err(denied());
+        }
+        Ok(())
     }
 
     pub fn verify_empty(&self) -> io::Result<()> {
@@ -260,6 +326,27 @@ mod tests {
         launch.verify_empty().unwrap();
         fs::write(launch.output_root.join("foreign"), b"unexpected").unwrap();
         assert!(launch.verify_empty().is_err());
+    }
+
+    #[test]
+    fn v2_manifest_binds_full_execution_once_without_changing_policy_bytes() {
+        let f = Fixture::new();
+        let mut launch = PrivateLaunch::create(&f.scratch(), &f.project(), "s", "t", "c", "{ \"opaque\": 1 }").unwrap();
+        let mut execution: Execution = serde_json::from_value(json!({
+            "executable":{"path":"/pinned/node","sha256":"a".repeat(64)},
+            "argv":["/pinned/node","/pinned/npm-cli.js","test"],
+            "cwd":f.project(),"environment":[{"name":"LC_ALL","value":"C"}],"stdinBase64":""})).unwrap();
+        let deadline = MonotonicDeadline::capture(std::time::Duration::from_secs(30)).unwrap();
+        launch.bind_execution(&execution, &deadline).unwrap();
+        launch.verify_execution(&execution, &deadline).unwrap();
+        let manifest: Value = serde_json::from_slice(&launch.manifest).unwrap();
+        assert_eq!(manifest["sandboxStateJson"], "{ \"opaque\": 1 }");
+        assert_eq!(manifest["execution"]["argv"][0], "/pinned/node");
+        assert_eq!(manifest["execution"]["environment"], json!({"LC_ALL":"C"}));
+        assert_eq!(manifest["preparationDeadline"]["expiresNs"], deadline.envelope().expires_ns);
+        assert!(launch.bind_execution(&execution, &deadline).is_err());
+        execution.argv.push("substitution".into());
+        assert!(launch.verify_execution(&execution, &deadline).is_err());
     }
 
     #[test]

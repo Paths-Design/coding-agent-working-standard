@@ -422,6 +422,9 @@ pub(crate) fn execute(
     cancelled: Arc<AtomicBool>,
     control: &EffectCheck<'_>,
 ) -> OwnerOutcome {
+    if record.value().profile.kind == "npm-test-v1" {
+        return OwnerOutcome::Failed(failure(Refusal::Unsupported));
+    }
     match execute_inner(record, trusted, pins, deadline, cancelled, control) {
         Ok(v) => OwnerOutcome::Completed(v),
         Err(e) => OwnerOutcome::Failed(e),
