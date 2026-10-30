@@ -1,4 +1,4 @@
-//! In-sandbox direct parent for the two observations and the single USER spawn.
+//! Direct parent for the two observations and the single USER launch attempt.
 //!
 //! The caller must authenticate `TrustedInvocation` from the native startup
 //! carrier, prove a same-host macOS PID/monotonic domain, and retain custody of
@@ -6,7 +6,9 @@
 //! proof. Node, the entry script, their versioned dependency tree and image
 //! directories must be protected against concurrent replacement by untrusted
 //! writers. The fence similarly requires cooperating lifecycle writers.
-//! This owner runs in a dedicated single-threaded worker. Its caller must
+//! This owner runs in a dedicated worker or authenticated single-threaded npm
+//! producer. The npm route delegates only the exact launch to the pinned host.
+//! Its caller must
 //! exclude signal handlers or other threads that open/close descriptors or reap
 //! children. In particular, descriptor setup through spawn requires the
 //! quiescent-table contract in execution_fd_transport. A threaded MCP server
@@ -19,14 +21,16 @@ use crate::{
     execution_fd_transport::{configure_child_fds, configure_private_child},
     execution_fence::ExecutionFence,
     execution_prepared::{PreparedRecord, ProgramImage},
+    execution_server::private_roots::{PrivateLaunch, MANIFEST_FD, ROLE_FDS},
     monotonic_deadline::{self, EffectCheck, MonotonicDeadline},
 };
 use sha2::{Digest, Sha256};
 use std::{
-    fs::{self, OpenOptions},
-    io::{self, Read},
+    cell::RefCell,
+    fs::{self, File, OpenOptions},
+    io::{self, Read, Write},
     os::{
-        fd::AsFd,
+        fd::{AsFd, AsRawFd, FromRawFd},
         unix::{
             fs::{MetadataExt, OpenOptionsExt},
             process::CommandExt,
@@ -59,6 +63,87 @@ pub(crate) struct PinnedAuthorizer {
     pub node: ProgramImage,
     pub entry: ProgramImage,
     pub writer: Option<ProgramImage>,
+}
+
+/// Supplied only by the authenticated producer from its pinned configuration.
+/// The generic worker entry cannot construct or receive this launch context.
+pub(crate) struct NpmLaunch<'a> {
+    pub host: &'a ProgramImage,
+    pub root: &'a str,
+    pub entry: &'a ProgramImage,
+    pub generation_manifest_sha256: &'a str,
+    pub private: &'a PrivateLaunch,
+}
+
+impl NpmLaunch<'_> {
+    fn validate(&self, record: &PreparedRecord, pins: &PinnedAuthorizer,
+        deadline: &MonotonicDeadline, live: &impl Fn() -> Result<(), Refusal>) -> Result<(), Refusal> {
+        let value = record.value();
+        let npm = value.profile.npm.as_ref().ok_or(Refusal::Image)?;
+        let ceiling = value.sandbox.write_ceiling.as_ref().ok_or(Refusal::Image)?;
+        if value.profile.kind != "npm-test-v1"
+            || npm.runtime.node.path != pins.node.path || npm.runtime.node.sha256 != pins.node.sha256
+            || npm.runtime.root != self.root || npm.runtime.entry.path != self.entry.path
+            || npm.runtime.entry.sha256 != self.entry.sha256
+            || npm.runtime.generation_manifest_sha256 != self.generation_manifest_sha256
+            || value.sandbox.launcher.path != self.host.path || value.sandbox.launcher.sha256 != self.host.sha256
+            || ceiling.launch_id != self.private.launch_id || ceiling.manifest_sha256 != self.private.manifest_sha256
+            || Path::new(&ceiling.invocation_root) != self.private.invocation_root
+            || Path::new(&ceiling.output_root) != self.private.output_root
+            || Path::new(&ceiling.tmp_root) != self.private.tmp_root
+            || Path::new(&ceiling.cache_root) != self.private.cache_root
+        { return Err(Refusal::Image); }
+        self.private.verify_execution(&value.execution, deadline).map_err(|_| Refusal::Image)?;
+        let manifest: serde_json::Value = serde_json::from_slice(&self.private.manifest).map_err(|_| Refusal::Image)?;
+        if manifest["sandboxStateJson"].as_str() != std::str::from_utf8(record.sandbox_state()).ok()
+            || manifest["sessionId"] != value.association.session_id
+            || manifest["threadId"] != value.association.thread_id
+            || manifest["callId"] != value.association.call_id
+        { return Err(Refusal::Identity); }
+        image_valid(self.host, live)?;
+        image_valid(self.entry, live)?;
+        image_valid(&npm.project.package_json, live)
+    }
+}
+
+struct ManifestPump {
+    writer: Option<File>,
+    bytes: Vec<u8>,
+    offset: usize,
+}
+impl ManifestPump {
+    fn new(bytes: &[u8]) -> io::Result<(File, Self)> {
+        if bytes.is_empty() || bytes.len() > 512 * 1024 { return Err(io::Error::other("invalid launch manifest")); }
+        let mut raw = [-1; 2];
+        if unsafe { libc::pipe(raw.as_mut_ptr()) } != 0 { return Err(io::Error::last_os_error()); }
+        let reader = unsafe { File::from_raw_fd(raw[0]) };
+        let writer = unsafe { File::from_raw_fd(raw[1]) };
+        for file in [&reader, &writer] {
+            let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) };
+            if flags < 0 || unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        let flags = unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) };
+        if flags < 0 || unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok((reader, Self { writer: Some(writer), bytes: bytes.to_vec(), offset: 0 }))
+    }
+    fn pump(&mut self) -> io::Result<()> {
+        for _ in 0..16 {
+            let Some(writer) = self.writer.as_mut() else { return Ok(()); };
+            match writer.write(&self.bytes[self.offset..]) {
+                Ok(0) => return Err(io::Error::new(io::ErrorKind::WriteZero, "launch manifest closed")),
+                Ok(count) => self.offset += count,
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(()),
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error),
+            }
+            if self.offset == self.bytes.len() { self.writer.take(); return Ok(()); }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -425,9 +510,19 @@ pub(crate) fn execute(
     if record.value().profile.kind == "npm-test-v1" {
         return OwnerOutcome::Failed(failure(Refusal::Unsupported));
     }
-    match execute_inner(record, trusted, pins, deadline, cancelled, control) {
+    match execute_inner(record, trusted, pins, deadline, cancelled, control, None) {
         Ok(v) => OwnerOutcome::Completed(v),
         Err(e) => OwnerOutcome::Failed(e),
+    }
+}
+pub(crate) fn execute_npm(
+    record: PreparedRecord, trusted: &TrustedInvocation, pins: &PinnedAuthorizer,
+    deadline: &MonotonicDeadline, cancelled: Arc<AtomicBool>, control: &EffectCheck<'_>,
+    launch: &NpmLaunch<'_>,
+) -> OwnerOutcome {
+    match execute_inner(record, trusted, pins, deadline, cancelled, control, Some(launch)) {
+        Ok(done) => OwnerOutcome::Completed(done),
+        Err(problem) => OwnerOutcome::Failed(problem),
     }
 }
 fn execute_inner(
@@ -437,6 +532,7 @@ fn execute_inner(
     deadline: &MonotonicDeadline,
     cancelled: Arc<AtomicBool>,
     control: &EffectCheck<'_>,
+    npm_launch: Option<&NpmLaunch<'_>>,
 ) -> Result<Completed, OwnerFailure> {
     if !cfg!(target_os = "macos") || !trusted.same_host_macos_verified {
         return Err(failure(Refusal::Unsupported));
@@ -449,12 +545,15 @@ fn execute_inner(
     ))
     .map_err(|_| failure(Refusal::InvalidDeadline))?;
     let writer = record.value().profile.kind == "caws-evidence-v1";
+    let npm = record.value().profile.kind == "npm-test-v1";
+    if npm != npm_launch.is_some() { return Err(failure(Refusal::Unsupported)); }
     let live = || {
         check(&record, trusted, deadline, &cancelled)?;
         control("execution_preparation").map_err(|_| Refusal::Control)
     };
     live().map_err(failure)?;
     images(&record, pins, &live).map_err(failure)?;
+    if let Some(launch) = npm_launch { launch.validate(&record, pins, deadline, &live).map_err(failure)?; }
     let revision = authorizer(
         &record,
         trusted,
@@ -470,7 +569,7 @@ fn execute_inner(
     live().map_err(failure)?;
     let dir = PathBuf::from(&trusted.project_root).join(".caws");
     let mut fence = ExecutionFence::acquire(&dir).map_err(|_| failure(Refusal::Fence))?;
-    let under_fence = (|| -> Result<(Child, Instant), OwnerFailure> {
+    let under_fence = (|| -> Result<(Child, Instant, Option<ManifestPump>), OwnerFailure> {
         let _ = authorizer(
             &record,
             trusted,
@@ -485,18 +584,30 @@ fn execute_inner(
         )?;
         fence.validate().map_err(|_| failure(Refusal::Fence))?;
         images(&record, pins, &live).map_err(failure)?;
+        if let Some(launch) = npm_launch { launch.validate(&record, pins, deadline, &live).map_err(failure)?; }
         fence.validate().map_err(|_| failure(Refusal::Fence))?;
         live().map_err(failure)?;
         let e = &record.value().execution;
-        let mut command = pipe_command(&e.executable.path);
-        command
-            .arg0(&e.argv[0])
-            .args(&e.argv[1..])
-            .current_dir(&e.cwd)
-            .env_clear();
-        for entry in &e.environment {
-            command.env(&entry.name, &entry.value);
-        }
+        let mut manifest_reader = None;
+        let mut manifest_pump = None;
+        let mut command = if let Some(launch) = npm_launch {
+            let (reader, pump) = ManifestPump::new(&launch.private.manifest).map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
+            manifest_reader = Some(reader);
+            manifest_pump = Some(pump);
+            let mut command = pipe_command(&launch.host.path);
+            command.arg("sandbox").arg("--sandbox-state-json")
+                .arg(std::str::from_utf8(record.sandbox_state()).map_err(|_| failure(Refusal::Image))?)
+                .arg("--sandbox-state-write-ceiling-json").arg(&launch.private.ceiling_json)
+                .arg("--sandbox-state-write-ceiling-manifest-fd").arg(MANIFEST_FD.to_string())
+                .arg("--").args(&e.argv).current_dir("/").env_clear()
+                .env("PATH", "/usr/bin:/bin").env("LC_ALL", "C");
+            command
+        } else {
+            let mut command = pipe_command(&e.executable.path);
+            command.arg0(&e.argv[0]).args(&e.argv[1..]).current_dir(&e.cwd).env_clear();
+            for entry in &e.environment { command.env(&entry.name, &entry.value); }
+            command
+        };
         configure_private_child(&mut command)
             .map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
         if writer {
@@ -504,6 +615,11 @@ fn execute_inner(
             // completion. Generic USER receives no private descriptors.
             configure_child_fds(&mut command, &[(fence.file().as_fd(), 3)])
                 .map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
+        }
+        if let Some(launch) = npm_launch {
+            let mut mapping = vec![(manifest_reader.as_ref().unwrap().as_fd(), MANIFEST_FD)];
+            for (file, target) in launch.private.handles().iter().zip(ROLE_FDS) { mapping.push((file.as_fd(), target)); }
+            configure_child_fds(&mut command, &mapping).map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
         }
         private_exec_check(
             &mut command,
@@ -523,7 +639,7 @@ fn execute_inner(
         let child = command
             .spawn()
             .map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
-        Ok((child, job_deadline))
+        Ok((child, job_deadline, manifest_pump))
     })();
     match under_fence {
         Err(mut problem) => {
@@ -538,16 +654,21 @@ fn execute_inner(
             }
             Err(problem)
         }
-        Ok((child, job_deadline)) => {
-            let (child, mut held_fence) = if writer {
+        Ok((child, job_deadline, manifest_pump)) => {
+            let (child, mut held_fence) = if writer || npm {
                 (child, Some(fence))
             } else {
                 (release_after_spawn(child, fence, grace)?, None)
             };
             // The preparation deadline does not constrain the job lifetime.
             // Liveness/cancellation of the private carrier still does.
+            let manifest_pump = RefCell::new(manifest_pump);
             let job_control = |_: &'static str| {
-                control("execution_job").map_err(|_| "execution control unavailable".to_owned())
+                control("execution_job").map_err(|_| "execution control unavailable".to_owned())?;
+                if let Some(pump) = manifest_pump.borrow_mut().as_mut() {
+                    pump.pump().map_err(|_| "execution manifest unavailable".to_owned())?;
+                }
+                Ok(())
             };
             let serviced = execution_child::service_child(
                 child,
@@ -627,6 +748,32 @@ fn release_after_spawn(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn manifest_pipe_is_private_nonblocking_and_delivers_large_exact_bytes_with_eof() {
+        let bytes: Vec<u8> = (0..512 * 1024).map(|n| (n % 251) as u8).collect();
+        let (mut reader, mut pump) = ManifestPump::new(&bytes).unwrap();
+        let writer = pump.writer.as_ref().unwrap();
+        assert_ne!(unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) } & libc::O_NONBLOCK, 0);
+        for file in [&reader, writer] {
+            assert_ne!(unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) } & libc::FD_CLOEXEC, 0);
+        }
+        pump.pump().unwrap();
+        let observer = std::thread::spawn(move || {
+            let mut result = Vec::new();
+            reader.read_to_end(&mut result).unwrap();
+            result
+        });
+        let bound = Instant::now() + Duration::from_secs(10);
+        while pump.writer.is_some() {
+            assert!(Instant::now() < bound);
+            pump.pump().unwrap();
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(observer.join().unwrap(), bytes);
+        assert!(ManifestPump::new(&[]).is_err());
+        assert!(ManifestPump::new(&vec![0; 512 * 1024 + 1]).is_err());
+    }
 
     #[test]
     #[cfg(target_os = "macos")]

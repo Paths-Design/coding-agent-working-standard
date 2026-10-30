@@ -88,6 +88,7 @@ enum CallStage {
     WriterImage,
     Project,
     Preparation,
+    NpmExecution,
     StartupEncoding,
     StartupSocket,
     WorkerConfiguration,
@@ -109,6 +110,7 @@ impl CallStage {
             Self::WriterImage => "writer-image",
             Self::Project => "project",
             Self::Preparation => "preparation",
+            Self::NpmExecution => "npm-execution",
             Self::StartupEncoding => "startup-encoding",
             Self::StartupSocket => "startup-socket",
             Self::WorkerConfiguration => "worker-configuration",
@@ -989,7 +991,7 @@ fn execute_call(
     trace.at(CallStage::Ingress);
     let call = execution_ingress::parse_call(bytes).map_err(|_| refused())?;
     let id: Value = serde_json::from_str(&call.id_json).map_err(|_| refused())?;
-    let cancelled = AtomicBool::new(false);
+    let cancelled = Arc::new(AtomicBool::new(false));
     trace.at(CallStage::HostIdentity);
     let host = HostContext::capture(&config.host, &prep)?;
     trace.at(CallStage::HostChannel);
@@ -1008,9 +1010,15 @@ fn execute_call(
         if cancelled.load(Ordering::Acquire) {
             return Err("cancelled".to_owned());
         }
+        if stage == "execution_user_spawn" {
+            trace.at(CallStage::NativeImage);
+            verify_self(config, &prep).map_err(|_| "native image unavailable".to_owned())?;
+            trace.at(CallStage::Generation);
+            verify_generation(config, &prep).map_err(|_| "generation unavailable".to_owned())?;
+        }
         if matches!(
             stage,
-            "project_spawn" | "worker_spawn" | "execution_discovery_spawn"
+            "project_spawn" | "worker_spawn" | "execution_discovery_spawn" | "execution_user_spawn"
         ) || Instant::now() >= next_host_check.get()
         {
             trace.at(CallStage::HostIdentity);
@@ -1052,6 +1060,12 @@ fn execute_call(
         }),
     };
     trace.at(CallStage::Preparation);
+    let npm_preparation = config.npm.as_ref().map(|npm| execution_prepare::NpmPreparation {
+        root: &npm.root,
+        entry: &npm.entry,
+        scratch_root: &npm.scratch_root,
+        generation_manifest_sha256: &config.generation.manifest.sha256,
+    });
     let prepared = execution_prepare::prepare(
         &call,
         &host,
@@ -1059,7 +1073,7 @@ fn execute_call(
         &config.host,
         &pins,
         &config.discovery,
-        None,
+        npm_preparation.as_ref(),
         &prep,
         &cancelled,
         &control,
@@ -1069,6 +1083,29 @@ fn execute_call(
         settle(f.child);
         refused()
     })?;
+    if let Some(private) = prepared.npm_launch.as_ref() {
+        trace.at(CallStage::NpmExecution);
+        let npm = config.npm.as_ref().ok_or_else(refused)?;
+        let a = &prepared.association;
+        let trusted = execution_owner::TrustedInvocation {
+            invocation_id: a.invocation_id.clone(), session_id: a.session_id.clone(),
+            thread_id: a.thread_id.clone(), call_id: a.call_id.clone(),
+            caller_anchor: a.caller_anchor.clone(), server_environment_id: a.server_environment_id.clone(),
+            project_root: a.project_root.clone(), environment_anchor: a.environment_anchor.clone(),
+            same_host_macos_verified: cfg!(target_os = "macos"),
+        };
+        let launch = execution_owner::NpmLaunch {
+            host: &config.host, root: &npm.root, entry: &npm.entry,
+            generation_manifest_sha256: &config.generation.manifest.sha256, private,
+        };
+        let outcome = execution_owner::execute_npm(prepared.record, &trusted, &pins, &prep,
+            cancelled.clone(), &control, &launch);
+        possible.set(match &outcome {
+            OwnerOutcome::Completed(_) => true,
+            OwnerOutcome::Failed(problem) => problem.user_spawn_may_have_occurred,
+        });
+        return Ok(worker_reply(outcome));
+    }
     trace.at(CallStage::StartupEncoding);
     let frame = execution_carrier::encode_startup(&prepared, &pins, &prep)?;
     trace.at(CallStage::StartupSocket);
