@@ -3,7 +3,7 @@ title: 'Quarantine Git hook staging and settle only the authorized delta'
 mode: feature
 lifecycle_state: active
 created_at: '2026-11-01T06:29:06.030Z'
-updated_at: '2026-11-01T06:29:06.030Z'
+updated_at: '2026-11-01T06:47:09.310Z'
 created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
 blast_radius:
   modules:
@@ -14,6 +14,7 @@ scope:
   in:
     - 'packages/caws-cli/src/execution/git-hook-transaction.ts'
     - 'packages/caws-cli/tests/execution/git-hook-transaction.test.js'
+    - packages/caws-cli/mutation-policy.json
   out: []
 invariants:
   - 'Hook code never receives real Git metadata write rights; Native-held lifecycle settlement validates every promoted path and object'
