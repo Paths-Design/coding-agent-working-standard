@@ -36,3 +36,11 @@ non_functional: {}
 contracts:
   - name: 'redacted-hook-case-diagnostics'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Root source inspection and independent read-only peer questions inspected the one-file c049→f196 test-only diff. Exact opt-in value1 gates all stderr/clock work; fixed enum labels/counter/monotonic ms/integer exitCode exclude request,payload,env,auth,content and exception strings. Original await ordering, assertions,120000ms case and15000ms request limits remain. Root independently parsed /Users/darianrosebrook/Desktop/Projects/caws/tmp/source-hook-dispatch-trace-01a196ea/exact-case.stderr.log:329records across47ordinals, exact7stages each, whitelist/enums/integer values and monotonic timing valid; no unmatched boundary. Finally visibility when an await never returns is explicitly limited. Actual-diff gates on1path atf196 all5PASS. No production repair or native-context fix is claimed; subagent Edit identity refusal was preserved, child ownership handed back by audited claim, Root native patch succeeded without Bash source writes."
+    recorded_at: "2026-11-01T14:03:16.945Z"
+    command: "'/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node' '/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-hook-dispatch-trace/node_modules/jest/bin/jest.js' '--runInBand' '--selectProjects' 'caws-cli' '--runTestsByPath' '/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-hook-dispatch-trace/packages/caws-cli/tests/runtime/engine-routing.test.js' '--testNamePattern' '^Codex PostToolUse native-engine-compat scans authored patch sections and reports applied edits$' '--json' '--outputFile' '/Users/darianrosebrook/Desktop/Projects/caws/tmp/source-hook-dispatch-trace-01a196ea/exact-case.jest.json'"
+    exit_code: 0
+    commit_sha: f196c5caca29493227ae14d5ee0e9abb57e5c568
