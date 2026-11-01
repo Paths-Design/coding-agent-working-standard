@@ -3,7 +3,7 @@ title: 'Bind Git hook policy to the Native lifecycle startup image'
 mode: feature
 lifecycle_state: active
 created_at: '2026-11-01T03:53:33.616Z'
-updated_at: '2026-11-01T10:05:09.227Z'
+updated_at: '2026-11-01T10:11:39.643Z'
 created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
 blast_radius:
   modules:
@@ -17,6 +17,7 @@ scope:
     - packages/caws-cli/tests/execution/git-hook-bootstrap.test.js
     - packages/caws-cli/src/execution/lifecycle.ts
     - packages/caws-cli/tests/execution/lifecycle.test.js
+    - packages/caws-cli/tests/execution/program-discovery.test.js
   out: []
 invariants:
   - 'Only authenticated startup pins may supply Git hook policy; model records cannot mint hook trust, and ordinary USER receives no private policy descriptors or fence.'
