@@ -37,3 +37,11 @@ non_functional: {}
 contracts:
   - name: 'runtime-profile-fixture-fidelity'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Candidate 89b7704517296421284c2d5d1ff5f28d6eb3e22a, exact Source base7c8b293b237f1d5a8a0155600f939c023a8480e5. System configuration plus cloned original flat environment satisfies inspected runtime/session-cache-admission.ts startup profile. Actual Node22.19 two-suite command exit0:54pass0skip. Existing valid capability, wrong identity/generation/source, startup overrides, dry-run, invalid receipt and reuse rejection assertions pass without edits. Raw /Users/darianrosebrook/Desktop/Projects/caws/tmp/source-profile-fixtures-01a196ea/two-suites stdout/stderr/json; CLI-only build0, correct package lint0. Mechanical --verify checks commit reachability; it does not rerun the recorded command."
+    recorded_at: "2026-11-01T14:43:18.944Z"
+    command: "/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-profile-fixtures/node_modules/jest/bin/jest.js --config /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-profile-fixtures/packages/caws-cli/jest.config.js --runInBand --watchman=false --runTestsByPath /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-profile-fixtures/packages/caws-cli/tests/runtime/containment.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-profile-fixtures/packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js --json --outputFile /Users/darianrosebrook/Desktop/Projects/caws/tmp/source-profile-fixtures-01a196ea/two-suites.json"
+    exit_code: 0
+    commit_sha: "89b7704517296421284c2d5d1ff5f28d6eb3e22a"
