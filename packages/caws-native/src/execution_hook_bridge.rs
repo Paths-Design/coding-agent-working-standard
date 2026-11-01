@@ -3,12 +3,12 @@
 //! The socket is a capability held only by the pinned lifecycle and callback
 //! clients. Deserializing a request does not admit it or grant write authority.
 use super::*;
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{
-    de::{MapAccess, Visitor},
     Deserialize, Deserializer, Serialize,
+    de::{MapAccess, Visitor},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     fmt,
@@ -19,6 +19,8 @@ use std::{
 
 const PROTOCOL: &str = "caws.execution.git-bridge.v1";
 const FRAME_LIMIT: usize = 1024 * 1024;
+// Canonical governance, the owned lane, and the unique target-base checkout.
+const MAX_LIFECYCLE_ROOTS: usize = 3;
 
 /// Non-renewing lifetime of the original lifecycle job. This is distinct from
 /// the <=30-second preparation envelopes used by nested Host admissions.
@@ -829,7 +831,7 @@ impl<'a> GitHookBridge<'a> {
         fence: &ExecutionFence,
         deadline: &GitHookJobDeadline,
     ) -> io::Result<Value> {
-        if self.configured || roots.is_empty() || roots.len() > 2 {
+        if self.configured || roots.is_empty() || roots.len() > MAX_LIFECYCLE_ROOTS {
             return Err(invalid());
         }
         fence.validate()?;
@@ -1612,12 +1614,14 @@ mod tests {
                 "{request}"
             );
         }
-        assert!(parse_frame(
-            envelope(r#"{"operation":"verdict"}"#)
-                .replace("0123456789abcdef0123456789abcdef", "ABC")
-                .as_bytes()
-        )
-        .is_err());
+        assert!(
+            parse_frame(
+                envelope(r#"{"operation":"verdict"}"#)
+                    .replace("0123456789abcdef0123456789abcdef", "ABC")
+                    .as_bytes()
+            )
+            .is_err()
+        );
     }
     #[test]
     fn unix_stream_buffers_partial_and_multiple_frames() {
@@ -1749,6 +1753,97 @@ mod tests {
         };
         test(runtime, root, &base);
         fs::remove_dir_all(base).unwrap();
+    }
+    fn linked_root(root: &Root, base: &Path, name: &str) -> Root {
+        let cwd = base.join(name);
+        fs::DirBuilder::new().mode(0o700).create(&cwd).unwrap();
+        let admin = Path::new(&root.cwd).join(".git/worktrees").join(name);
+        fs::create_dir_all(&admin).unwrap();
+        fs::write(cwd.join(".git"), format!("gitdir: {}\n", admin.display())).unwrap();
+        fs::write(admin.join("commondir"), "../..\n").unwrap();
+        let mut selected = root.clone();
+        selected.cwd = cwd.to_str().unwrap().into();
+        selected
+    }
+    #[test]
+    fn configure_admits_canonical_lane_and_unique_target_base_roots() {
+        fixture(|runtime, root, base| {
+            let lane = linked_root(&root, base, "lane");
+            let target = linked_root(&root, base, "target-base");
+            let expected = [root.cwd.clone(), lane.cwd.clone(), target.cwd.clone()];
+            let (_peer, socket) = UnixStream::pair().unwrap();
+            let mut bridge = GitHookBridge::new(runtime, socket).unwrap();
+            let fence = ExecutionFence::acquire(&base.join("project/.caws")).unwrap();
+            let deadline = GitHookJobDeadline::capture(10_000).unwrap();
+            let configured = bridge
+                .configure(vec![root, lane, target], &fence, &deadline)
+                .unwrap();
+            let rows = configured["shimDirectories"].as_array().unwrap();
+            assert_eq!(rows.len(), expected.len());
+            let mut directories = BTreeSet::new();
+            for (row, cwd) in rows.iter().zip(expected) {
+                assert_eq!(row["cwd"], cwd);
+                let directory = Path::new(row["shimDirectory"].as_str().unwrap());
+                assert_eq!(directory.parent(), Some(bridge.runtime.scratch_root));
+                assert_eq!(fs::metadata(directory).unwrap().mode() & 0o7777, 0o700);
+                assert!(directories.insert(directory.to_path_buf()));
+            }
+            assert_eq!(bridge.roots.len(), 3);
+            assert!(bridge.configured);
+            fence.release().unwrap();
+        });
+    }
+    #[test]
+    fn three_root_admission_retains_bounds_identity_and_source_limits() {
+        for invalid_case in ["fourth", "duplicate", "foreign", "alias", "source-count"] {
+            fixture(|runtime, root, base| {
+                let lane = linked_root(&root, base, "lane");
+                let mut target = linked_root(&root, base, "target-base");
+                let mut roots = vec![root.clone(), lane.clone()];
+                match invalid_case {
+                    "fourth" => {
+                        roots.push(target);
+                        roots.push(linked_root(&root, base, "fourth"));
+                    }
+                    "duplicate" => roots.push(lane),
+                    "foreign" => {
+                        let foreign = base.join("foreign");
+                        fs::create_dir(&foreign).unwrap();
+                        fs::create_dir(foreign.join(".git")).unwrap();
+                        target.cwd = foreign.to_str().unwrap().into();
+                        roots.push(target);
+                    }
+                    "alias" => {
+                        let alias = base.join("alias");
+                        std::os::unix::fs::symlink(&target.cwd, &alias).unwrap();
+                        target.cwd = alias.to_str().unwrap().into();
+                        roots.push(target);
+                    }
+                    "source-count" => {
+                        target.authorized_paths =
+                            (0..257).map(|i| format!("source-{i}.txt")).collect();
+                        roots.push(target);
+                    }
+                    _ => unreachable!(),
+                }
+                let (_peer, socket) = UnixStream::pair().unwrap();
+                let mut bridge = GitHookBridge::new(runtime, socket).unwrap();
+                let fence = ExecutionFence::acquire(&base.join("project/.caws")).unwrap();
+                let deadline = GitHookJobDeadline::capture(10_000).unwrap();
+                assert!(
+                    bridge.configure(roots, &fence, &deadline).is_err(),
+                    "{invalid_case}"
+                );
+                assert!(!bridge.configured, "{invalid_case}");
+                assert!(bridge.roots.is_empty(), "{invalid_case}");
+                assert_eq!(
+                    fs::read_dir(bridge.runtime.scratch_root).unwrap().count(),
+                    0,
+                    "{invalid_case}"
+                );
+                fence.release().unwrap();
+            });
+        }
     }
     #[test]
     fn catalog_detects_new_hooks_mode_changes_and_image_drift() {

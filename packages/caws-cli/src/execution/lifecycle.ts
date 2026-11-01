@@ -197,17 +197,6 @@ export function readExecutionLifecycleHookPolicy(
             /^[0-9a-f]{64}$/.test(entry.sha256),
           'unsupported_profile'
         );
-        const bytes = physicalFile(entry.path)!;
-        requireValue(
-          createHash('sha256').update(bytes).digest('hex') === entry.sha256,
-          'authority_changed'
-        );
-      }
-      for (const path of root.readOnlyPaths as string[]) {
-        requireValue(
-          fs.realpathSync.native(path) === path && !fs.lstatSync(path).isSymbolicLink(),
-          'unsupported_profile'
-        );
       }
     }
     for (const name of GIT_HOOK_NAMES) {
@@ -748,6 +737,21 @@ export function inspectExecutionLifecycleGit(
   // ordinary Git has no hook to run in that existing configuration.
   const baseline = hookPolicy?.roots.find((root) => root.cwd === cwd);
   if (hookPolicy) requireValue(baseline?.hooksDirectory === hookDirectory, 'authority_changed');
+  if (baseline?.formatters) {
+    for (const entry of Object.values(baseline.formatters)) {
+      if (entry === null) continue;
+      const bytes = physicalFile(entry.path)!;
+      requireValue(
+        createHash('sha256').update(bytes).digest('hex') === entry.sha256,
+        'authority_changed'
+      );
+    }
+    for (const path of baseline.readOnlyPaths!)
+      requireValue(
+        fs.realpathSync.native(path) === path && !fs.lstatSync(path).isSymbolicLink(),
+        'unsupported_profile'
+      );
+  }
   if (hookDirectory === '/dev/null') {
     if (baseline)
       requireValue(
@@ -815,6 +819,7 @@ export interface ExecutionLifecycleAuthority {
   readonly canonical: string;
   readonly cawsDir: string;
   readonly pin: string;
+  readonly targetBaseRoot?: string;
   readonly specId: string;
   readonly revision: string;
 }
@@ -826,8 +831,9 @@ function boundedCheckoutInventory(
   canonical: string,
   pin: string,
   args: ExecutionLifecycleArguments,
-  git: LifecycleGitQuery
-): string {
+  git: LifecycleGitQuery,
+  baseRef?: string
+): { inventory: string; targetBaseRoot?: string } {
   const inventory = git(canonical, ['worktree', 'list', '--porcelain', '-z']);
   const records = inventory.split('\0\0');
   requireValue(records.pop() === '', 'context_unresolved');
@@ -845,7 +851,9 @@ function boundedCheckoutInventory(
     const branch = git(cwd, ['rev-parse', '--symbolic-full-name', 'HEAD']).trimEnd();
     if (branch.startsWith('refs/heads/')) affected.add(branch);
   }
+  if (baseRef !== undefined) affected.add(baseRef);
   const observed = new Set<string>();
+  const affectedCheckouts = new Map<string, string[]>();
   requireValue(records.length >= required.size && records.length <= 4096, 'scope_refused');
   for (const record of records) {
     const fields = record.split('\0');
@@ -863,19 +871,35 @@ function boundedCheckoutInventory(
         !observed.has(checkout),
       'scope_refused'
     );
-    requireValue(
-      required.has(checkout) ||
-        fields[2] === 'detached' ||
-        !affected.has(fields[2]!.slice('branch '.length)),
-      'scope_refused'
-    );
+    if (fields[2] !== 'detached') {
+      const branch = fields[2]!.slice('branch '.length);
+      if (affected.has(branch)) {
+        const checkouts = affectedCheckouts.get(branch) ?? [];
+        checkouts.push(checkout);
+        affectedCheckouts.set(branch, checkouts);
+      }
+    }
     observed.add(checkout);
   }
   requireValue(
     [...required].every((checkout) => observed.has(checkout)),
     'scope_refused'
   );
-  return inventory;
+  for (const checkouts of affectedCheckouts.values())
+    requireValue(checkouts.length === 1, 'scope_refused');
+  const bases = baseRef === undefined ? undefined : affectedCheckouts.get(baseRef);
+  if (baseRef !== undefined) requireValue(bases?.length === 1, 'scope_refused');
+  const targetBaseRoot = bases?.[0];
+  if (targetBaseRoot && args.operation === 'worktree-merge')
+    requireValue(targetBaseRoot !== pin, 'scope_refused');
+  for (const cwd of new Set([canonical, pin, ...(targetBaseRoot ? [targetBaseRoot] : [])])) {
+    requireValue(
+      framed(git(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir'])) ===
+        framed(git(canonical, ['rev-parse', '--path-format=absolute', '--git-common-dir'])),
+      'scope_refused'
+    );
+  }
+  return { inventory, ...(targetBaseRoot ? { targetBaseRoot } : {}) };
 }
 
 function mergeWitness(
@@ -935,6 +959,7 @@ export function readExecutionLifecycleAuthority(
   }
   let pin: string;
   let specId: string;
+  let baseRef: string | undefined;
   if (
     args.operation === 'git-stage' ||
     args.operation === 'git-diff' ||
@@ -982,10 +1007,7 @@ export function readExecutionLifecycleAuthority(
     requireValue(
       framed(git(entry.path, ['symbolic-ref', '--quiet', 'HEAD'])) === `refs/heads/${entry.branch}`
     );
-    requireValue(
-      framed(git(context.projectRoot, ['symbolic-ref', '--quiet', 'HEAD'])) ===
-        `refs/heads/${entry.baseBranch}`
-    );
+    baseRef = `refs/heads/${entry.baseBranch}`;
     pin = authority.pin;
     specId = args.specId;
   } else {
@@ -1016,10 +1038,7 @@ export function readExecutionLifecycleAuthority(
       args.mergeCommit,
       context.association.threadId
     );
-    requireValue(
-      framed(git(context.projectRoot, ['symbolic-ref', '--quiet', 'HEAD'])) ===
-        `refs/heads/${(merged.data as Record<string, unknown>).base_branch}`
-    );
+    baseRef = `refs/heads/${(merged.data as Record<string, unknown>).base_branch}`;
     if (args.operation === 'spec-close')
       requireValue(
         readExecutionAuthority(context).binding.spec.id === args.specId,
@@ -1028,11 +1047,19 @@ export function readExecutionLifecycleAuthority(
     pin = context.projectRoot;
     specId = args.specId;
   }
-  const checkoutInventory = boundedCheckoutInventory(context.projectRoot, pin, args, git);
-  if (pin !== context.projectRoot) lifecycleGitConfiguration(pin, git);
-  const trees = [...new Set([context.projectRoot, pin])].map((cwd) =>
-    framed(git(cwd, ['rev-parse', 'HEAD']))
+  const { inventory: checkoutInventory, targetBaseRoot } = boundedCheckoutInventory(
+    context.projectRoot,
+    pin,
+    args,
+    git,
+    baseRef
   );
+  if (pin !== context.projectRoot) lifecycleGitConfiguration(pin, git);
+  if (targetBaseRoot && targetBaseRoot !== pin && targetBaseRoot !== context.projectRoot)
+    lifecycleGitConfiguration(targetBaseRoot, git);
+  const trees = [
+    ...new Set([context.projectRoot, pin, ...(targetBaseRoot ? [targetBaseRoot] : [])]),
+  ].map((cwd) => framed(git(cwd, ['rev-parse', 'HEAD'])));
   // Native creates its fence between analyze and final_validate. Observe that
   // known path in both phases even if the project does not ignore it, so the
   // fence itself cannot change the inactive-attribute authority observation.
@@ -1063,13 +1090,40 @@ export function readExecutionLifecycleAuthority(
           context.execution.environment
         );
   if (args.operation === 'bridge-claim' || args.operation === 'spec-close')
-    git(context.projectRoot, ['merge-base', '--is-ancestor', args.mergeCommit, 'HEAD']);
+    git(targetBaseRoot!, ['merge-base', '--is-ancestor', args.mergeCommit, 'HEAD']);
   const hash = createHash('sha256');
   hash
     .update(checkoutInventory)
     .update(pinClosure)
     .update(canonicalClosure)
     .update(JSON.stringify(homes ?? null));
+  if (targetBaseRoot) {
+    hash.update(targetBaseRoot);
+    if (targetBaseRoot !== pin && targetBaseRoot !== context.projectRoot)
+      hash.update(
+        inspectExecutionLifecycleGit(
+          targetBaseRoot,
+          trees,
+          candidates,
+          context.execution.environment
+        )
+      );
+    if (targetBaseRoot !== context.projectRoot) {
+      hash.update(
+        git(targetBaseRoot, [
+          '--no-optional-locks',
+          'status',
+          '--porcelain=v1',
+          '-z',
+          '--untracked-files=all',
+        ])
+      );
+      const index = framed(
+        git(targetBaseRoot, ['rev-parse', '--path-format=absolute', '--git-path', 'index'])
+      );
+      hashEventLedger(hash, index);
+    }
+  }
   for (const name of [
     'policy.yaml',
     'worktrees.json',
@@ -1083,7 +1137,14 @@ export function readExecutionLifecycleAuthority(
   }
   for (const cwd of new Set([pin, context.projectRoot]))
     hash.update(git(cwd, ['show-ref', '--head']));
-  return { canonical: context.projectRoot, cawsDir, pin, specId, revision: hash.digest('hex') };
+  return {
+    canonical: context.projectRoot,
+    cawsDir,
+    pin,
+    ...(targetBaseRoot ? { targetBaseRoot } : {}),
+    specId,
+    revision: hash.digest('hex'),
+  };
 }
 
 function ownedPaths(context: ExecutionLifecycleContext, paths: readonly string[]): void {
@@ -1096,8 +1157,9 @@ function ownedPaths(context: ExecutionLifecycleContext, paths: readonly string[]
         .split('/')
         .some(
           (part) =>
-            ['.git', '.caws', '.codex', '.claude', '.env'].includes(part.toLowerCase()) ||
-            part.toLowerCase().startsWith('.env.')
+            ['.git', '.caws', '.codex', '.agents', '.claude', '.env'].includes(
+              part.toLowerCase()
+            ) || part.toLowerCase().startsWith('.env.')
         ),
       'scope_refused'
     );
@@ -1129,19 +1191,12 @@ function configureHookRuntime(
   readonly bridgeFd: 4;
 } {
   const git = executionGit(context.execution.environment);
-  const hasSource =
-    args.operation === 'git-stage' ||
-    args.operation === 'git-commit' ||
-    args.operation === 'worktree-merge';
-  const sourceAuthority = hasSource
-    ? readExecutionAuthority({
-        ...context,
-        association: { ...context.association, callerAnchor: authority.pin },
-        execution: { ...context.execution, cwd: authority.pin },
-      })
-    : undefined;
   const roots: GitBridgeRoot[] = [];
-  for (const cwd of new Set([authority.canonical, authority.pin])) {
+  for (const cwd of new Set([
+    authority.canonical,
+    authority.pin,
+    ...(authority.targetBaseRoot ? [authority.targetBaseRoot] : []),
+  ])) {
     const catalog = policy.roots.find((root) => root.cwd === cwd);
     requireValue(
       catalog !== undefined &&
@@ -1149,34 +1204,10 @@ function configureHookRuntime(
         catalog.readOnlyPaths !== undefined,
       'unsupported_profile'
     );
-    const candidates = git(cwd, [
-      'ls-files',
-      '--cached',
-      '--others',
-      '--exclude-standard',
-      '-z',
-    ]).split('\0');
-    requireValue(candidates.pop() === '', 'context_unresolved');
-    if (args.operation === 'git-stage' || args.operation === 'git-commit')
-      candidates.push(...args.paths);
-    const authorizedPaths = sourceAuthority
-      ? [...new Set(candidates)]
-          .filter(
-            (name) =>
-              pathArgument(name) &&
-              !name
-                .split('/')
-                .some(
-                  (part) =>
-                    ['.git', '.caws', '.codex', '.agents', '.claude', '.env'].includes(
-                      part.toLowerCase()
-                    ) || part.toLowerCase().startsWith('.env.')
-                ) &&
-              evaluatePath(name, sourceAuthority.binding, sourceAuthority.policy).kind === 'admit'
-          )
-          .sort()
-      : [];
-    requireValue(authorizedPaths.length <= 10000, 'scope_refused');
+    const authorizedPaths =
+      cwd === authority.pin && (args.operation === 'git-stage' || args.operation === 'git-commit')
+        ? [...args.paths].sort()
+        : [];
     const readOnly = new Set<string>([...catalog.readOnlyPaths, __dirname]);
     // A canonical .caws directory can contain the owned linked checkout.
     // Protect every other subtree without placing a deny over that checkout.
@@ -1602,6 +1633,11 @@ function runExecutionLifecycleConsumerInner(
         data = result.value.data;
         mergeCommit = (data as Record<string, unknown>).merge_commit as string;
         requireValue((data as Record<string, unknown>).canonical_checkout_state === 'in_sync');
+        const baseSync = (data as Record<string, unknown>).base_checkout_sync;
+        requireValue(
+          Array.isArray(baseSync) &&
+            baseSync.some((row) => row.path === authority.targetBaseRoot && row.state === 'in_sync')
+        );
         requireValue(
           ((data as Record<string, unknown>).audit_commit as { kind: string })?.kind === 'committed'
         );

@@ -45,9 +45,14 @@ function fixture() {
   };
   return f;
 }
-function execute(f, argv, { cwd = f.lane, caller = cwd, fence = true, setup = '' } = {}) {
+function execute(
+  f,
+  argv,
+  { cwd = f.lane, caller = cwd, fence = true, setup = '', bridge = false } = {}
+) {
   const lock = path.join(f.caws, 'state.lock');
   let fd;
+  let bridgeFd;
   if (fence) {
     fd = fs.openSync(lock, 'wx+', 0o600);
     fs.writeFileSync(
@@ -62,6 +67,7 @@ function execute(f, argv, { cwd = f.lane, caller = cwd, fence = true, setup = ''
     );
   }
   try {
+    if (bridge) bridgeFd = fs.openSync('/dev/null', 'r+');
     const script = `delete process.env.CAWS_TEST_CHILD_COVERAGE;
       delete process.env.__STRYKER_ACTIVE_MUTANT__;
       ${setup}
@@ -70,12 +76,13 @@ function execute(f, argv, { cwd = f.lane, caller = cwd, fence = true, setup = ''
     return spawnCoveredSync(process.execPath, ['-e', script, ...argv], {
       cwd,
       env: { ...f.env, CAWS_EXECUTION_CALLER: caller },
-      stdio: ['ignore', 'pipe', 'pipe', fd ?? 'ignore'],
+      stdio: ['ignore', 'pipe', 'pipe', fd ?? 'ignore', bridgeFd ?? 'ignore'],
       encoding: 'utf8',
       timeout: 30000,
       maxBuffer: 1048576,
     });
   } finally {
+    if (bridgeFd !== undefined) fs.closeSync(bridgeFd);
     if (fd !== undefined) {
       fs.closeSync(fd);
       fs.unlinkSync(lock);
@@ -84,7 +91,11 @@ function execute(f, argv, { cwd = f.lane, caller = cwd, fence = true, setup = ''
 }
 function success(result) {
   expect(result.error).toBeUndefined();
-  expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+  expect({
+    status: result.status,
+    stderr: result.stderr,
+    failure: result.status === 0 ? '' : result.stdout,
+  }).toEqual({ status: 0, stderr: '', failure: '' });
   return JSON.parse(result.stdout);
 }
 function spec(f) {
@@ -248,9 +259,9 @@ const hookNames = [
   'post-receive',
   'post-update',
 ];
-function pinHookPolicy(f, { version = 1 } = {}) {
+function pinHookPolicy(f, { version = 1, checkoutRoots = [f.root, f.lane] } = {}) {
   const homes = runtimeHomes(f);
-  const roots = [f.root, f.lane].map((cwd) => {
+  const roots = checkoutRoots.map((cwd) => {
     const hooksDirectory = git(cwd, ['rev-parse', '--path-format=absolute', '--git-path', 'hooks']);
     const hooks = Object.fromEntries(
       hookNames.map((name) => {
@@ -292,6 +303,321 @@ function pinHookPolicy(f, { version = 1 } = {}) {
   });
   return policy;
 }
+
+function moveLaneForBridge(f) {
+  const lane = path.join(f.root, 'owned-physical');
+  git(f.root, ['worktree', 'move', f.lane, lane]);
+  f.lane = lane;
+  f.registry.owned.path = lane;
+  f.env.CAWS_EXECUTION_CALLER = lane;
+  fs.writeFileSync(f.registryPath, JSON.stringify(f.registry));
+}
+
+// Component-only Native transport substitute: Git still runs through the real
+// lifecycle runtime with an empty catalog, so no executable hook is skipped.
+function bridgeProbe(f, checkoutRoots) {
+  const journal = path.join(f.root, 'runtime-home', 'bridge-requests.jsonl');
+  fs.writeFileSync(journal, '');
+  const shims = checkoutRoots.map((cwd, index) => {
+    const shimDirectory = path.join(f.root, 'runtime-home', `shim-${index}`);
+    fs.mkdirSync(shimDirectory);
+    return { cwd, shimDirectory };
+  });
+  const client = path.resolve(__dirname, '../../dist/execution/git-hook-client-main.js');
+  const setup = `const client = require(${JSON.stringify(client)});
+    const write = require('node:fs').appendFileSync;
+    client.bridgeRequest = (request) => {
+      write(${JSON.stringify(journal)}, JSON.stringify(request) + '\\n');
+      if (request.operation === 'configure') return {
+        shimDirectories: request.roots.map((root) => ${JSON.stringify(shims)}.find((row) => row.cwd === root.cwd))
+      };
+      if (request.operation === 'verdict') return {failed: false};
+      throw new Error('Unexpected component bridge request');
+    };`;
+  return {
+    setup,
+    requests: () => fs.readFileSync(journal, 'utf8').trim().split('\n').map(JSON.parse),
+  };
+}
+
+function pinLaneFormatterAndReadonly(f, policy) {
+  const catalog = JSON.parse(fs.readFileSync(policy, 'utf8'));
+  const lane = catalog.roots.find((root) => root.cwd === f.lane);
+  const entry = path.join(f.lane, 'src/owned.txt');
+  lane.formatters.eslint = {
+    path: entry,
+    sha256: createHash('sha256').update(fs.readFileSync(entry)).digest('hex'),
+  };
+  lane.readOnlyPaths = [path.join(f.lane, 'src')];
+  fs.writeFileSync(policy, JSON.stringify(catalog));
+  f.env.CAWS_EXECUTION_GIT_HOOK_POLICY_SHA256 = createHash('sha256')
+    .update(fs.readFileSync(policy))
+    .digest('hex');
+}
+
+test('component bridge selects only the explicitly staged and committed source paths', () => {
+  const f = fixture();
+  moveLaneForBridge(f);
+  const paths = Array.from({ length: 257 }, (_, i) => `src/bulk-${i}.txt`);
+  for (const name of paths) fs.writeFileSync(path.join(f.lane, name), 'tracked\n');
+  git(f.lane, ['add', '--', ...paths]);
+  git(f.lane, ['commit', '-m', 'fixture many scoped files']);
+  fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'selected change\n');
+  fs.writeFileSync(path.join(f.lane, 'src/sentinel.txt'), 'unrelated dirty\n');
+  fs.writeFileSync(path.join(f.lane, 'src/untracked.txt'), 'unrelated untracked\n');
+  pinHookPolicy(f, { version: 2 });
+  const probe = bridgeProbe(f, [f.root, f.lane]);
+  success(execute(f, ['git-stage', '--', 'src/owned.txt'], { setup: probe.setup, bridge: true }));
+  const stage = probe.requests().find((row) => row.operation === 'configure');
+  expect(stage.roots.map((row) => [row.cwd, row.authorizedPaths])).toEqual([
+    [f.root, []],
+    [f.lane, ['src/owned.txt']],
+  ]);
+  success(
+    execute(f, ['git-commit', '--message', 'fix: selected only', '--', 'src/owned.txt'], {
+      setup: probe.setup,
+      bridge: true,
+    })
+  );
+  const configs = probe.requests().filter((row) => row.operation === 'configure');
+  expect(configs[1].roots.map((row) => [row.cwd, row.authorizedPaths])).toEqual([
+    [f.root, []],
+    [f.lane, ['src/owned.txt']],
+  ]);
+  expect(git(f.lane, ['show', '--format=', '--name-only', 'HEAD'])).toBe('src/owned.txt');
+  expect(fs.readFileSync(path.join(f.lane, 'src/sentinel.txt'), 'utf8')).toBe('unrelated dirty\n');
+  expect(fs.readFileSync(path.join(f.lane, 'src/untracked.txt'), 'utf8')).toBe(
+    'unrelated untracked\n'
+  );
+});
+
+function nestedBaseFixture() {
+  const f = fixture();
+  moveLaneForBridge(f);
+  const base = path.join(f.root, 'target-base');
+  git(f.root, ['worktree', 'add', '-b', 'feature-base', base]);
+  f.registry.owned.baseBranch = 'feature-base';
+  fs.writeFileSync(f.registryPath, JSON.stringify(f.registry));
+  git(f.root, ['add', '--', '.caws/worktrees.json']);
+  git(f.root, ['commit', '-m', 'fixture nested base authority']);
+  return { f, base };
+}
+
+test('component bridge merges a lane into a unique noncanonical base checkout', () => {
+  const { f, base } = nestedBaseFixture();
+  const dirty = path.join(base, '.gitignore');
+  fs.appendFileSync(dirty, '# unrelated local edit\n');
+  const dirtyBytes = fs.readFileSync(dirty);
+  const canonicalBefore = git(f.root, ['rev-parse', 'HEAD']);
+  const targetBefore = git(base, ['rev-parse', 'HEAD']);
+  const policy = pinHookPolicy(f, { version: 2, checkoutRoots: [f.root, f.lane, base] });
+  pinLaneFormatterAndReadonly(f, policy);
+  const probe = bridgeProbe(f, [f.root, f.lane, base]);
+  const result = success(
+    execute(f, ['worktree-merge', '--worktree', 'owned', '--spec', 'EXEC-001'], {
+      cwd: f.root,
+      setup: probe.setup,
+      bridge: true,
+    })
+  );
+  const config = probe.requests().find((row) => row.operation === 'configure');
+  expect(config.roots.map((row) => row.cwd)).toEqual([f.root, f.lane, base]);
+  expect(config.roots.map((row) => row.authorizedPaths)).toEqual([[], [], []]);
+  expect(git(base, ['rev-parse', 'HEAD'])).toBe(result.data.merge_commit);
+  expect(git(base, ['rev-parse', 'HEAD'])).not.toBe(targetBefore);
+  expect(git(f.root, ['branch', '--show-current'])).not.toBe('feature-base');
+  expect(git(f.root, ['merge-base', '--is-ancestor', canonicalBefore, 'HEAD'])).toBe('');
+  expect(fs.readFileSync(path.join(base, 'src/owned.txt'), 'utf8')).toBe('owned before\n');
+  expect(fs.readFileSync(dirty)).toEqual(dirtyBytes);
+  const merged = result.data.merge_commit;
+  success(
+    execute(f, ['bridge-claim', '--spec', 'EXEC-001', '--merge-commit', merged], {
+      cwd: f.root,
+      setup: probe.setup,
+      bridge: true,
+    })
+  );
+  success(
+    execute(
+      f,
+      [
+        'spec-close',
+        '--spec',
+        'EXEC-001',
+        '--merge-commit',
+        merged,
+        '--reason',
+        'component checked',
+      ],
+      { cwd: f.root, setup: probe.setup, bridge: true }
+    )
+  );
+  const configs = probe.requests().filter((row) => row.operation === 'configure');
+  expect(
+    configs.slice(1).map((row) => row.roots.map((root) => [root.cwd, root.authorizedPaths]))
+  ).toEqual([
+    [
+      [f.root, []],
+      [base, []],
+    ],
+    [
+      [f.root, []],
+      [base, []],
+    ],
+  ]);
+  expect(spec(f).lifecycle_state).toBe('closed');
+  expect(fs.readFileSync(dirty)).toEqual(dirtyBytes);
+});
+
+test('component bridge rejects drift in a selected root formatter before staging', () => {
+  const f = fixture();
+  moveLaneForBridge(f);
+  const policy = pinHookPolicy(f, { version: 2 });
+  pinLaneFormatterAndReadonly(f, policy);
+  fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'formatter pin changed\n');
+  const index = fs.readFileSync(
+    git(f.lane, ['rev-parse', '--path-format=absolute', '--git-path', 'index'])
+  );
+  const probe = bridgeProbe(f, [f.root, f.lane]);
+  const result = execute(f, ['git-stage', '--', 'src/owned.txt'], {
+    setup: probe.setup,
+    bridge: true,
+  });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('authority_changed');
+  expect(
+    fs.readFileSync(git(f.lane, ['rev-parse', '--path-format=absolute', '--git-path', 'index']))
+  ).toEqual(index);
+  expect(probe.requests().map((row) => row.operation)).toEqual(['verdict']);
+});
+
+test('component bridge refuses a duplicate noncanonical base before publication', () => {
+  const { f, base } = nestedBaseFixture();
+  const duplicate = path.join(f.root, 'duplicate-base');
+  git(f.root, ['worktree', 'add', '--force', duplicate, 'feature-base']);
+  const before = git(base, ['rev-parse', 'HEAD']);
+  const index = fs.readFileSync(
+    git(base, ['rev-parse', '--path-format=absolute', '--git-path', 'index'])
+  );
+  pinHookPolicy(f, { version: 2, checkoutRoots: [f.root, f.lane, base] });
+  const probe = bridgeProbe(f, [f.root, f.lane, base]);
+  const result = execute(f, ['worktree-merge', '--worktree', 'owned', '--spec', 'EXEC-001'], {
+    cwd: f.root,
+    setup: probe.setup,
+    bridge: true,
+  });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('scope_refused');
+  expect(git(base, ['rev-parse', 'HEAD'])).toBe(before);
+  expect(
+    fs.readFileSync(git(base, ['rev-parse', '--path-format=absolute', '--git-path', 'index']))
+  ).toEqual(index);
+  expect(fs.existsSync(f.lane)).toBe(true);
+  expect(probe.requests().map((row) => row.operation)).toEqual(['verdict']);
+});
+
+test('component bridge reports an overlapping base refresh as publication failure', () => {
+  const { f, base } = nestedBaseFixture();
+  fs.mkdirSync(path.join(base, 'src'));
+  const conflict = path.join(base, 'src/owned.txt');
+  fs.writeFileSync(conflict, 'preserve local conflict\n');
+  const before = git(base, ['rev-parse', 'HEAD']);
+  pinHookPolicy(f, { version: 2, checkoutRoots: [f.root, f.lane, base] });
+  const probe = bridgeProbe(f, [f.root, f.lane, base]);
+  const result = execute(f, ['worktree-merge', '--worktree', 'owned', '--spec', 'EXEC-001'], {
+    cwd: f.root,
+    setup: probe.setup,
+    bridge: true,
+  });
+  expect(result.status).toBe(1);
+  const observed = JSON.parse(result.stdout);
+  expect(observed).toMatchObject({
+    outcome: 'publication-failure',
+    disposition: 'inspect-before-retry',
+  });
+  expect(observed.mergeCommit).toBe(git(base, ['rev-parse', 'HEAD']));
+  expect(observed.mergeCommit).not.toBe(before);
+  expect(fs.readFileSync(conflict, 'utf8')).toBe('preserve local conflict\n');
+});
+
+test('component bridge refuses noncanonical base drift before publication', () => {
+  const { f, base } = nestedBaseFixture();
+  const before = git(base, ['rev-parse', 'HEAD']);
+  pinHookPolicy(f, { version: 2, checkoutRoots: [f.root, f.lane, base] });
+  const probe = bridgeProbe(f, [f.root, f.lane, base]);
+  const marker = path.join(base, 'drift.txt');
+  const setup = `${probe.setup}
+    const cp = require('node:child_process'); const exec = cp.execFileSync;
+    let changed = false;
+    cp.execFileSync = function(image, args, options) {
+      const result = exec.apply(this, arguments);
+      if (!changed && options?.cwd === ${JSON.stringify(base)} && args.includes('status')) {
+        changed = true; require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'external drift');
+      }
+      return result;
+    };`;
+  const result = execute(f, ['worktree-merge', '--worktree', 'owned', '--spec', 'EXEC-001'], {
+    cwd: f.root,
+    setup,
+    bridge: true,
+  });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('authority_changed');
+  expect(git(base, ['rev-parse', 'HEAD'])).toBe(before);
+  expect(fs.readFileSync(marker, 'utf8')).toBe('external drift');
+  expect(probe.requests().map((row) => row.operation)).toEqual(['verdict']);
+});
+
+test.each(['retargeted base', 'forged merge witness', 'duplicate base'])(
+  'component bridge refuses %s after nested merge before claiming authority',
+  (change) => {
+    const { f, base } = nestedBaseFixture();
+    const oldBase = git(base, ['rev-parse', 'HEAD']);
+    pinHookPolicy(f, { version: 2, checkoutRoots: [f.root, f.lane, base] });
+    const probe = bridgeProbe(f, [f.root, f.lane, base]);
+    const merged = success(
+      execute(f, ['worktree-merge', '--worktree', 'owned', '--spec', 'EXEC-001'], {
+        cwd: f.root,
+        setup: probe.setup,
+        bridge: true,
+      })
+    ).data.merge_commit;
+    if (change === 'retargeted base')
+      git(f.root, ['update-ref', 'refs/heads/feature-base', oldBase, merged]);
+    if (change === 'duplicate base')
+      git(f.root, [
+        'worktree',
+        'add',
+        '--force',
+        path.join(f.root, 'duplicate-base'),
+        'feature-base',
+      ]);
+    const before = {
+      ref: git(base, ['rev-parse', 'HEAD']),
+      registry: fs.readFileSync(f.registryPath),
+      spec: fs.readFileSync(f.specPath),
+      events: fs.readFileSync(path.join(f.caws, 'events.jsonl')),
+    };
+    const result = execute(
+      f,
+      [
+        'bridge-claim',
+        '--spec',
+        'EXEC-001',
+        '--merge-commit',
+        change === 'forged merge witness' ? '0'.repeat(40) : merged,
+      ],
+      { cwd: f.root, setup: probe.setup, bridge: true }
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(git(base, ['rev-parse', 'HEAD'])).toBe(before.ref);
+    expect(fs.readFileSync(f.registryPath)).toEqual(before.registry);
+    expect(fs.readFileSync(f.specPath)).toEqual(before.spec);
+    expect(fs.readFileSync(path.join(f.caws, 'events.jsonl'))).toEqual(before.events);
+    expect(fs.existsSync(path.join(f.caws, 'claims/bridge.json'))).toBe(false);
+  }
+);
 test('multiline commit messages remain data while all other lifecycle words stay single-line', () => {
   const message =
     'fix: preserve literal commit data\n\n- Keep printf blocked > protected.txt in the message';
