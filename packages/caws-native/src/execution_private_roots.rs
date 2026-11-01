@@ -4,8 +4,11 @@
 //! authenticate the host or prove that a descendant was actually sandboxed.
 use crate::execution_prepared::Execution;
 use crate::monotonic_deadline::MonotonicDeadline;
-use serde_json::{Value, json};
+#[path = "execution_source_writes.rs"]
+mod source_writes;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+pub(crate) use source_writes::SourceWriteBinding;
 use std::{
     collections::BTreeMap,
     fs::{self, DirBuilder, File, OpenOptions},
@@ -76,6 +79,7 @@ pub(crate) struct PrivateLaunch {
     pub manifest: Vec<u8>,
     pub manifest_sha256: String,
     handles: [File; 4],
+    source_writes: Option<SourceWriteBinding>,
 }
 
 impl PrivateLaunch {
@@ -154,6 +158,7 @@ impl PrivateLaunch {
             manifest,
             manifest_sha256,
             handles,
+            source_writes: None,
         };
         result.verify_empty()?;
         Ok(result)
@@ -161,6 +166,38 @@ impl PrivateLaunch {
 
     pub fn handles(&self) -> &[File; 4] {
         &self.handles
+    }
+
+    /// Upgrade an already execution-bound launch with an independently admitted binding.
+    pub fn attach_source_writes(&mut self, binding: SourceWriteBinding) -> io::Result<()> {
+        self.verify_empty()?;
+        binding.validate()?;
+        let mut manifest: Value = serde_json::from_slice(&self.manifest)?;
+        if manifest["schema"] != "codex.write-ceiling-launch.v2" || self.source_writes.is_some() {
+            return Err(denied());
+        }
+        let ceiling = json!({"version":2,"invocationRoot":self.invocation_root,"outputRoot":self.output_root,"tmpRoot":self.tmp_root,"cacheRoot":self.cache_root,"sourceFiles":binding.paths()}).to_string();
+        manifest["schema"] = json!("codex.write-ceiling-launch.v3");
+        manifest["ceilingJson"] = json!(ceiling);
+        manifest["sourceRoot"] = json!(binding.root());
+        manifest["sourceRootFd"] = json!(source_writes::SOURCE_ROOT_FD);
+        manifest["sourceFiles"] = json!(binding.records());
+        manifest["readOnlyPaths"] = json!(binding.read_only());
+        let bytes = serde_json::to_vec(&manifest)?;
+        if bytes.len() > MANIFEST_LIMIT {
+            return Err(denied());
+        }
+        self.ceiling_json = ceiling;
+        self.manifest_sha256 = format!("{:x}", Sha256::digest(&bytes));
+        self.manifest = bytes;
+        self.source_writes = Some(binding);
+        Ok(())
+    }
+
+    pub fn source_fd_mappings(&self) -> Vec<(i32, i32)> {
+        self.source_writes
+            .as_ref()
+            .map_or_else(Vec::new, SourceWriteBinding::fd_mappings)
     }
 
     fn execution_tuple(execution: &Execution) -> io::Result<Value> {
@@ -233,7 +270,12 @@ impl PrivateLaunch {
     ) -> io::Result<()> {
         self.verify_empty()?;
         let manifest: Value = serde_json::from_slice(&self.manifest)?;
-        if manifest["schema"] != "codex.write-ceiling-launch.v2"
+        if manifest["schema"]
+            != if self.source_writes.is_some() {
+                "codex.write-ceiling-launch.v3"
+            } else {
+                "codex.write-ceiling-launch.v2"
+            }
             || manifest["execution"] != Self::execution_tuple(execution)?
             || manifest["preparationDeadline"] != Self::deadline_value(deadline)?
         {
@@ -243,6 +285,9 @@ impl PrivateLaunch {
     }
 
     pub fn verify_empty(&self) -> io::Result<()> {
+        if let Some(binding) = &self.source_writes {
+            binding.validate()?;
+        }
         // npm rejects one config path reused as both user and global config.
         // Distinct, absent paths in the producer-owned invocation directory
         // disable both sources without importing ambient configuration.
@@ -278,6 +323,18 @@ impl PrivateLaunch {
             || format!("{:x}", Sha256::digest(&self.manifest)) != self.manifest_sha256
         {
             return Err(denied());
+        }
+        if let Some(binding) = &self.source_writes {
+            let ceiling = json!({"version":2,"invocationRoot":self.invocation_root,"outputRoot":self.output_root,"tmpRoot":self.tmp_root,"cacheRoot":self.cache_root,"sourceFiles":binding.paths()}).to_string();
+            if self.ceiling_json != ceiling
+                || value["schema"] != "codex.write-ceiling-launch.v3"
+                || value["sourceRoot"] != json!(binding.root())
+                || value["sourceRootFd"] != json!(source_writes::SOURCE_ROOT_FD)
+                || value["sourceFiles"] != json!(binding.records())
+                || value["readOnlyPaths"] != json!(binding.read_only())
+            {
+                return Err(denied());
+            }
         }
         Ok(())
     }
@@ -383,6 +440,63 @@ mod tests {
         );
         assert!(launch.bind_execution(&execution, &deadline).is_err());
         execution.argv.push("substitution".into());
+        assert!(launch.verify_execution(&execution, &deadline).is_err());
+    }
+
+    #[test]
+    fn source_binding_v3_preserves_tuple_and_pins_sorted_records_and_digest() {
+        let f = Fixture::new();
+        let mut launch =
+            PrivateLaunch::create(&f.scratch(), &f.project(), "s", "t", "c", "{}").unwrap();
+        let execution: Execution = serde_json::from_value(json!({
+            "executable":{"path":"/pinned/node","sha256":"a".repeat(64)},
+            "argv":["/pinned/node","script"],"cwd":f.project(),"environment":[],"stdinBase64":""}))
+        .unwrap();
+        let deadline = MonotonicDeadline::capture(std::time::Duration::from_secs(30)).unwrap();
+        launch.bind_execution(&execution, &deadline).unwrap();
+        let before: Value = serde_json::from_slice(&launch.manifest).unwrap();
+        let a = f.project().join("a");
+        let z = f.project().join("z");
+        fs::write(&a, b"abc").unwrap();
+        fs::write(&z, b"def").unwrap();
+        let binding =
+            SourceWriteBinding::bind(&f.project(), &[z.clone(), a.clone()], &[f.scratch()])
+                .unwrap();
+        launch.attach_source_writes(binding).unwrap();
+        launch.verify_execution(&execution, &deadline).unwrap();
+        let v: Value = serde_json::from_slice(&launch.manifest).unwrap();
+        assert_eq!(v["schema"], "codex.write-ceiling-launch.v3");
+        assert_eq!(v["execution"], before["execution"]);
+        assert_eq!(v["preparationDeadline"], before["preparationDeadline"]);
+        assert_eq!(v["sourceRootFd"], 10);
+        assert_eq!(v["sourceRoot"], json!(f.project()));
+        assert_eq!(v["sourceFiles"][0]["path"], json!(a));
+        assert_eq!(v["sourceFiles"][0]["fileFd"], 11);
+        assert_eq!(v["sourceFiles"][0]["parentFd"], 12);
+        assert_eq!(v["sourceFiles"][1]["path"], json!(z));
+        assert_eq!(v["sourceFiles"][1]["fileFd"], 13);
+        assert_eq!(v["sourceFiles"][1]["parentFd"], 14);
+        assert_eq!(
+            v["sourceFiles"][0]["sha256"],
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(v["sourceFiles"][0]["size"], "3");
+        let ceiling: Value = serde_json::from_str(&launch.ceiling_json).unwrap();
+        assert_eq!(ceiling["version"], 2);
+        assert_eq!(ceiling["sourceFiles"], json!([a, z]));
+        assert_eq!(
+            launch
+                .source_fd_mappings()
+                .iter()
+                .map(|p| p.1)
+                .collect::<Vec<_>>(),
+            vec![10, 11, 12, 13, 14]
+        );
+        assert_eq!(
+            launch.manifest_sha256,
+            format!("{:x}", Sha256::digest(&launch.manifest))
+        );
+        fs::write(&a, b"changed").unwrap();
         assert!(launch.verify_execution(&execution, &deadline).is_err());
     }
 

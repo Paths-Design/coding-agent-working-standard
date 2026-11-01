@@ -1,13 +1,16 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const yaml = require('js-yaml');
+const { createHash } = require('node:crypto');
 const { spawnCoveredSync } = require('./child-coverage.cjs');
 const { authorityFixture, cleanupAll } = require('./authority-fixture');
 const { git } = require('../helpers/git-repo-factory');
 const {
   parseExecutionLifecycleArguments,
   inspectExecutionLifecycleGit,
+  readExecutionLifecycleAuthority,
   readExecutionLifecycleRuntimeHomes,
+  readExecutionLifecycleHookPolicy,
 } = require('../../dist/execution/lifecycle');
 const { loadEvents } = require('../../dist/store/events-store');
 afterAll(cleanupAll);
@@ -96,6 +99,217 @@ function runtimeHomes(f) {
   Object.assign(f.env, { HOME: home, CAWS_HOME: cawsHome, CODEX_HOME: codexHome });
   return { home, cawsHome, codexHome };
 }
+
+test('event ledger keeps legacy absent-byte ordering and hashes a large tail completely', () => {
+  const f = fixture();
+  const ledger = path.join(f.caws, 'events.jsonl');
+  const read = () => readExecutionLifecycleAuthority(f.record, { operation: 'git-head' }).revision;
+  const absent = read();
+  fs.writeFileSync(ledger, 'absent');
+  expect(read()).toBe(absent);
+  const contents = Buffer.alloc(1048576 + 131, 0x61);
+  contents[contents.length - 1] = 0x7a;
+  fs.writeFileSync(ledger, contents);
+  const originalOpen = fs.openSync.bind(fs);
+  const originalRead = fs.readSync.bind(fs);
+  const observed = createHash('sha256');
+  let bytesRead = 0;
+  let ledgerFd;
+  const open = jest.spyOn(fs, 'openSync').mockImplementation((name, flags, ...rest) => {
+    const fd = originalOpen(name, flags, ...rest);
+    if (
+      name === ledger &&
+      typeof flags === 'number' &&
+      (flags & (fs.constants.O_WRONLY | fs.constants.O_RDWR)) === 0
+    )
+      ledgerFd = fd;
+    return fd;
+  });
+  const readSpy = jest
+    .spyOn(fs, 'readSync')
+    .mockImplementation((fd, buffer, offset, length, position) => {
+      const count = originalRead(fd, buffer, offset, length, position);
+      if (fd === ledgerFd && count > 0) {
+        observed.update(buffer.subarray(offset, offset + count));
+        bytesRead += count;
+      }
+      return count;
+    });
+  let first;
+  try {
+    first = read();
+  } finally {
+    readSpy.mockRestore();
+    open.mockRestore();
+  }
+  expect(bytesRead).toBe(contents.length);
+  expect(observed.digest('hex')).toBe(createHash('sha256').update(contents).digest('hex'));
+  contents[contents.length - 1] = 0x79;
+  fs.writeFileSync(ledger, contents);
+  expect(read()).not.toBe(first);
+});
+
+test.each(['append', 'truncate', 'replace', 'disappear-before-open'])(
+  'event ledger refuses %s during the read',
+  (change) => {
+    const f = fixture();
+    const ledger = path.join(f.caws, 'events.jsonl');
+    fs.writeFileSync(ledger, Buffer.alloc(131073, 0x61));
+    const originalOpen = fs.openSync.bind(fs);
+    const originalRead = fs.readSync.bind(fs);
+    let ledgerFd;
+    let injected = false;
+    const open = jest.spyOn(fs, 'openSync').mockImplementation((name, flags, ...rest) => {
+      if (name === ledger && change === 'disappear-before-open' && !injected) {
+        injected = true;
+        fs.unlinkSync(ledger);
+      }
+      const fd = originalOpen(name, flags, ...rest);
+      if (
+        name === ledger &&
+        typeof flags === 'number' &&
+        (flags & (fs.constants.O_WRONLY | fs.constants.O_RDWR)) === 0
+      )
+        ledgerFd = fd;
+      return fd;
+    });
+    const readSpy = jest
+      .spyOn(fs, 'readSync')
+      .mockImplementation((fd, buffer, offset, length, position) => {
+        const count = originalRead(fd, buffer, offset, length, position);
+        if (fd === ledgerFd && count > 0 && !injected) {
+          injected = true;
+          if (change === 'append') fs.appendFileSync(ledger, 'x');
+          if (change === 'truncate') fs.truncateSync(ledger, 3);
+          if (change === 'replace') {
+            fs.renameSync(ledger, `${ledger}.old`);
+            fs.writeFileSync(ledger, Buffer.alloc(131073, 0x61));
+          }
+        }
+        return count;
+      });
+    try {
+      expect(() => readExecutionLifecycleAuthority(f.record, { operation: 'git-head' })).toThrow();
+    } finally {
+      readSpy.mockRestore();
+      open.mockRestore();
+    }
+    expect(injected).toBe(true);
+  }
+);
+
+test.each(['symlink', 'hardlink'])('event ledger refuses a %s alias', (kind) => {
+  const f = fixture();
+  const ledger = path.join(f.caws, 'events.jsonl');
+  const other = path.join(f.root, 'ledger-other');
+  fs.writeFileSync(other, 'ledger');
+  if (kind === 'symlink') fs.symlinkSync(other, ledger);
+  else fs.linkSync(other, ledger);
+  expect(() => readExecutionLifecycleAuthority(f.record, { operation: 'git-head' })).toThrow();
+});
+
+test('the ordinary metadata file limit remains enforced', () => {
+  const f = fixture();
+  const policy = path.join(f.caws, 'policy.yaml');
+  const original = fs.readFileSync(policy);
+  const atLimit = Buffer.concat([
+    original,
+    Buffer.from('\n#'),
+    Buffer.alloc(1048576 - original.length - 2, 0x78),
+  ]);
+  fs.writeFileSync(policy, atLimit);
+  expect(readExecutionLifecycleAuthority(f.record, { operation: 'git-head' }).specId).toBe(
+    'EXEC-001'
+  );
+  fs.appendFileSync(policy, 'x');
+  expect(() => readExecutionLifecycleAuthority(f.record, { operation: 'git-head' })).toThrow();
+});
+const hookNames = [
+  'applypatch-msg',
+  'pre-applypatch',
+  'post-applypatch',
+  'pre-commit',
+  'pre-auto-gc',
+  'pre-merge-commit',
+  'prepare-commit-msg',
+  'commit-msg',
+  'post-commit',
+  'post-checkout',
+  'post-merge',
+  'pre-push',
+  'pre-rebase',
+  'post-rewrite',
+  'reference-transaction',
+  'post-index-change',
+  'push-to-checkout',
+  'proc-receive',
+  'update',
+  'pre-receive',
+  'post-receive',
+  'post-update',
+];
+function pinHookPolicy(f, { version = 1 } = {}) {
+  const homes = runtimeHomes(f);
+  const roots = [f.root, f.lane].map((cwd) => {
+    const hooksDirectory = git(cwd, ['rev-parse', '--path-format=absolute', '--git-path', 'hooks']);
+    const hooks = Object.fromEntries(
+      hookNames.map((name) => {
+        const file = path.join(hooksDirectory, name);
+        if (!fs.existsSync(file)) return [name, null];
+        const stat = fs.lstatSync(file, { bigint: true });
+        return [
+          name,
+          {
+            path: file,
+            sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
+            dev: stat.dev.toString(),
+            ino: stat.ino.toString(),
+            mode: stat.mode.toString(),
+          },
+        ];
+      })
+    );
+    return version === 2
+      ? {
+          cwd,
+          hooksDirectory,
+          hooks,
+          formatters: { eslint: null, prettier: null },
+          readOnlyPaths: [],
+        }
+      : { cwd, hooksDirectory, hooks };
+  });
+  const policy = path.join(homes.home, 'lifecycle-hooks.json');
+  fs.writeFileSync(
+    policy,
+    JSON.stringify({ schema: `caws.execution.git-hook-policy.v${version}`, roots })
+  );
+  Object.assign(f.env, {
+    CAWS_EXECUTION_GIT_HOOK_POLICY: policy,
+    CAWS_EXECUTION_GIT_HOOK_POLICY_SHA256: createHash('sha256')
+      .update(fs.readFileSync(policy))
+      .digest('hex'),
+  });
+  return policy;
+}
+test('multiline commit messages remain data while all other lifecycle words stay single-line', () => {
+  const message =
+    'fix: preserve literal commit data\n\n- Keep printf blocked > protected.txt in the message';
+  expect(
+    parseExecutionLifecycleArguments(['git-commit', '--message', message, '--', 'src/owned.txt'])
+  ).toStrictEqual({ operation: 'git-commit', message, paths: ['src/owned.txt'] });
+  for (const invalid of [
+    ['git-commit', '--message', 'bad\0message', '--', 'src/owned.txt'],
+    ['git-commit', '--message', 'bad\rmessage', '--', 'src/owned.txt'],
+    ['git-commit', '--message', 'x'.repeat(8193), '--', 'src/owned.txt'],
+    ['git-commit', '--message', message, '--', 'src/owned\n.txt'],
+    ['git-commit\n', '--message', message, '--', 'src/owned.txt'],
+  ])
+    expect(() => parseExecutionLifecycleArguments(invalid)).toThrow(
+      'Execution authority is unavailable'
+    );
+});
+
 test('lifecycle runtime homes are all-or-none physical directories with no alias fallback', () => {
   const f = fixture();
   const homes = runtimeHomes(f);
@@ -116,6 +330,45 @@ test('lifecycle runtime homes are all-or-none physical directories with no alias
   expect(() =>
     readExecutionLifecycleRuntimeHomes([...environment, { name: 'HOME', value: homes.home }])
   ).toThrow();
+});
+test('normal lifecycle preflight readers expose real context without writing authority or indexes', () => {
+  const f = fixture();
+  runtimeHomes(f);
+  const index = (cwd) =>
+    fs.readFileSync(path.resolve(cwd, git(cwd, ['rev-parse', '--git-path', 'index'])));
+  const before = [index(f.root), index(f.lane)];
+  const source = fs.readFileSync(path.join(f.lane, 'src/owned.txt'));
+  const head = git(f.lane, ['rev-parse', 'HEAD']);
+  const status = success(execute(f, ['status']));
+  expect(status).toMatchObject({ action: 'status', specId: 'EXEC-001', exitCode: 0 });
+  expect(status.stdout).toContain('EXEC-001');
+  expect(status.stdout).toContain('thread-owned');
+  const agents = success(execute(f, ['agents-list']));
+  expect(agents).toMatchObject({ action: 'agents-list', specId: 'EXEC-001', exitCode: 0 });
+  expect(agents.stdout).toContain('active: 0');
+  expect(agents.stdout).toContain('.caws/leases (operational cache');
+  const review = success(
+    execute(f, ['worktree-review', '--worktree', 'owned', '--spec', 'EXEC-001'])
+  );
+  expect(review).toMatchObject({ action: 'worktree-review', specId: 'EXEC-001', exitCode: 0 });
+  expect(review.stdout).toContain('EXEC-001');
+  expect(review.stdout).toContain('owned');
+  expect([index(f.root), index(f.lane)]).toEqual(before);
+  expect(git(f.lane, ['rev-parse', 'HEAD'])).toBe(head);
+  expect(fs.readFileSync(path.join(f.lane, 'src/owned.txt'))).toEqual(source);
+  expect(fs.existsSync(path.join(f.caws, 'events.jsonl'))).toBe(false);
+  expect(fs.existsSync(path.join(f.caws, 'leases'))).toBe(false);
+});
+test.each([
+  ['worktree-review', '--worktree', 'foreign', '--spec', 'EXEC-001'],
+  ['worktree-review', '--worktree', 'owned', '--spec', 'OTHER-001'],
+])('preflight review refuses a foreign worktree or spec: %j', (...argv) => {
+  const f = fixture();
+  runtimeHomes(f);
+  const result = execute(f, argv);
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain('scope_refused');
+  expect(fs.existsSync(path.join(f.caws, 'events.jsonl'))).toBe(false);
 });
 test('doctor uses the pinned runtime context and returns the actual diagnostic result', () => {
   const f = fixture();
@@ -181,6 +434,11 @@ test('diagnostic operations cannot fall back to ambient homes or a foreign spec'
   const f = fixture();
   expect(fs.existsSync(path.join(f.caws, 'events.jsonl'))).toBe(false);
   expect(execute(f, ['doctor']).status).not.toBe(0);
+  expect(execute(f, ['status']).status).not.toBe(0);
+  expect(execute(f, ['agents-list']).status).not.toBe(0);
+  expect(
+    execute(f, ['worktree-review', '--worktree', 'owned', '--spec', 'EXEC-001']).status
+  ).not.toBe(0);
   runtimeHomes(f);
   expect(execute(f, ['gates-run', '--spec', 'OTHER-001']).status).not.toBe(0);
   expect(fs.existsSync(path.join(f.caws, 'events.jsonl'))).toBe(false);
@@ -217,6 +475,30 @@ function configureInactiveLocalMetadata(f, { sparse = true } = {}) {
   }
   return marker;
 }
+
+test('VS Code branch merge-base hints are opaque observed authority, while executable keys remain refused', () => {
+  const f = fixture();
+  const read = () => readExecutionLifecycleAuthority(f.record, { operation: 'git-head' }).revision;
+  git(f.root, ['config', 'branch.main.vscode-merge-base', 'refs/heads/base-one']);
+  git(f.root, ['config', 'branch.caws/fixture-base.vscode-merge-base', 'refs/heads/other']);
+  const first = read();
+  expect(read()).toBe(first);
+  git(f.root, ['config', 'branch.main.vscode-merge-base', 'refs/heads/base-two']);
+  expect(read()).not.toBe(first);
+  for (const key of ['branch.main.vscode-merge-base-extra', 'core.fsmonitor', 'alias.status']) {
+    const marker = path.join(f.root, 'config-command-ran');
+    git(f.root, ['config', key, `sh -c 'echo ran > "${marker}"'`]);
+    let caught;
+    try {
+      read();
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ reason: 'unsupported_profile' });
+    expect(fs.existsSync(marker)).toBe(false);
+    git(f.root, ['config', '--unset', key]);
+  }
+});
 
 test('configured inactive LFS and local metadata permit normal sparse stage commit merge bridge and close', () => {
   const f = fixture();
@@ -261,6 +543,8 @@ test('configured inactive LFS and local metadata permit normal sparse stage comm
 test.each([
   ['git-stage', '--', ':(top,glob)**'],
   ['git-stage', '--', '../escape'],
+  ['git-diff', '--', '../escape'],
+  ['git-diff', '--cached', '--', 'src/owned.txt'],
   ['git-stage', '--', '/absolute'],
   ['git-stage', '--', 'src/a', 'src/a'],
   ['git-commit', '--amend', '--message', 'bad', '--', 'src/a'],
@@ -268,6 +552,9 @@ test.each([
   ['spec-close', '--spec', 'EXEC-001', '--merge-commit', '0'.repeat(40), '--reason', ' '],
   ['bridge-claim', '--spec', 'EXEC-001', '--merge-commit', '0'.repeat(40), '--takeover'],
   ['git-status', '--ignored'],
+  ['status', '--heartbeat'],
+  ['agents-list', '--stop'],
+  ['worktree-review', '--worktree', 'owned', '--spec', 'EXEC-001', '--json'],
   ['git-head', 'OTHER_REF'],
   ['git-branch', '--all'],
 ])('rejects closed-protocol escape %j', (...argv) => {
@@ -287,6 +574,14 @@ test('stages literal owned content and commits only it while foreign staged cont
     outcome: 'settled',
     specId: 'EXEC-001',
   });
+  const indexPath = path.resolve(f.lane, git(f.lane, ['rev-parse', '--git-path', 'index']));
+  const stagedBefore = fs.readFileSync(indexPath);
+  const diff = success(execute(f, ['git-diff', '--', 'src/owned.txt']));
+  expect(diff).toMatchObject({ action: 'git-diff', specId: 'EXEC-001', exitCode: 0 });
+  expect(diff.stdout).toContain('+owned after');
+  expect(diff.stdout).not.toContain('sentinel after');
+  expect(fs.readFileSync(indexPath)).toEqual(stagedBefore);
+  expect(git(f.lane, ['rev-parse', 'HEAD'])).toBe(oldHead);
   const committed = success(
     execute(f, ['git-commit', '--message', 'fix: owned source', '--', 'src/owned.txt'])
   );
@@ -337,6 +632,161 @@ test.each(['pre-commit', 'pre-auto-gc', 'reference-transaction', 'post-index-cha
     expect(fs.existsSync(marker)).toBe(false);
     expect(git(f.lane, ['rev-parse', 'HEAD'])).toBe(head);
     expect(git(f.lane, ['diff', '--cached', '--name-only'])).toBe('');
+  }
+);
+
+test('staged diff refuses excluded paths before disclosing their contents or changing the index', () => {
+  const f = fixture();
+  fs.mkdirSync(path.join(f.lane, 'private'));
+  fs.writeFileSync(path.join(f.lane, 'private/excluded.txt'), 'excluded staged contents\n');
+  git(f.lane, ['add', '--', 'private/excluded.txt']);
+  const index = path.resolve(f.lane, git(f.lane, ['rev-parse', '--git-path', 'index']));
+  const before = fs.readFileSync(index);
+  const result = execute(f, ['git-diff', '--', 'private/excluded.txt']);
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain('scope_refused');
+  expect(result.stdout).toBe('');
+  expect(fs.readFileSync(index)).toEqual(before);
+});
+test.each(['git-commit', 'spec-commit'])(
+  'legacy v1 executable hook refuses %s before any Git effect',
+  (operation) => {
+    const f = fixture();
+    const marker = path.join(f.root, 'hook-observation');
+    const script = `const fs=require('node:fs');let data='';try{data=fs.readFileSync(3,'utf8')}catch{};if(data.includes('lifecycle-test-nonce'))process.exit(91);fs.writeFileSync(${JSON.stringify(marker)},JSON.stringify({node:process.execPath,thread:process.env.CODEX_THREAD_ID,surface:process.env.CAWS_AGENT_SURFACE,project:process.env.CAWS_PROJECT_DIR,privateNames:Object.keys(process.env).filter(name=>name.startsWith('CAWS_EXECUTION_'))}));`;
+    const quoted = `'${script.replace(/'/g, "'\\''")}'`;
+    fs.writeFileSync(path.join(f.root, '.git/hooks/pre-commit'), `#!/bin/sh\nnode -e ${quoted}\n`, {
+      mode: 0o755,
+    });
+    pinHookPolicy(f);
+    fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'hook checked change\n');
+    if (operation === 'spec-commit') {
+      f.spec.title = 'Pending audit';
+      fs.writeFileSync(f.specPath, yaml.dump(f.spec));
+    }
+    const index = (cwd) =>
+      fs.readFileSync(git(cwd, ['rev-parse', '--path-format=absolute', '--git-path', 'index']));
+    const before = [index(f.root), index(f.lane)];
+    const heads = [git(f.root, ['rev-parse', 'HEAD']), git(f.lane, ['rev-parse', 'HEAD'])];
+    const args =
+      operation === 'git-commit'
+        ? [
+            'git-commit',
+            '--message',
+            'fix: literal message\n\n- preserve data',
+            '--',
+            'src/owned.txt',
+          ]
+        : ['spec-commit', '--spec', 'EXEC-001'];
+    const result = execute(f, args);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('unsupported_profile');
+    expect(fs.existsSync(marker)).toBe(false);
+    expect([index(f.root), index(f.lane)]).toEqual(before);
+    expect([git(f.root, ['rev-parse', 'HEAD']), git(f.lane, ['rev-parse', 'HEAD'])]).toEqual(heads);
+    expect(fs.readFileSync(path.join(f.lane, 'src/owned.txt'), 'utf8')).toBe(
+      'hook checked change\n'
+    );
+  }
+);
+
+test.each([
+  'partial',
+  'digest',
+  'unknown-root-field',
+  'missing-hook',
+  'duplicate-root',
+  'foreign-hook-path',
+  'invalid-mode',
+])('hook startup policy rejects malformed %s authority', (change) => {
+  const f = fixture();
+  const target = path.join(f.root, '.git/hooks/pre-commit');
+  fs.writeFileSync(target, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const policy = pinHookPolicy(f, { version: 2 });
+  const environment = () => Object.entries(f.env).map(([name, value]) => ({ name, value }));
+  expect(readExecutionLifecycleHookPolicy(environment())).toMatchObject({
+    path: policy,
+    sha256: f.env.CAWS_EXECUTION_GIT_HOOK_POLICY_SHA256,
+  });
+  if (change === 'partial') delete f.env.CAWS_EXECUTION_GIT_HOOK_POLICY_SHA256;
+  else if (change === 'digest') f.env.CAWS_EXECUTION_GIT_HOOK_POLICY_SHA256 = '0'.repeat(64);
+  else {
+    const value = JSON.parse(fs.readFileSync(policy));
+    if (change === 'unknown-root-field') value.roots[0].allow = true;
+    if (change === 'missing-hook') delete value.roots[0].hooks['pre-commit'];
+    if (change === 'duplicate-root') value.roots.push(value.roots[0]);
+    if (change === 'foreign-hook-path')
+      value.roots[0].hooks['pre-commit'].path = '/foreign/pre-commit';
+    if (change === 'invalid-mode') value.roots[0].hooks['pre-commit'].mode = '-1';
+    fs.writeFileSync(policy, JSON.stringify(value));
+    f.env.CAWS_EXECUTION_GIT_HOOK_POLICY_SHA256 = createHash('sha256')
+      .update(fs.readFileSync(policy))
+      .digest('hex');
+  }
+  expect(() => readExecutionLifecycleHookPolicy(environment())).toThrow(
+    'Execution authority is unavailable'
+  );
+});
+
+test('legacy v1 rejecting hook is refused before the hook or commit runs', () => {
+  const f = fixture();
+  const marker = path.join(f.root, 'required-hook-ran');
+  fs.writeFileSync(
+    path.join(f.root, '.git/hooks/pre-commit'),
+    `#!/bin/sh\nprintf checked > '${marker}'\nprintf 'required policy refused\\n' >&2\nexit 23\n`,
+    { mode: 0o755 }
+  );
+  pinHookPolicy(f);
+  fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'refused change\n');
+  const head = git(f.lane, ['rev-parse', 'HEAD']);
+  const result = execute(f, [
+    'git-commit',
+    '--message',
+    'fix: require hook gate',
+    '--',
+    'src/owned.txt',
+  ]);
+  expect(result.status).not.toBe(0);
+  expect(result.stdout).toBe('');
+  expect(result.stderr).toContain('unsupported_profile');
+  expect(fs.existsSync(marker)).toBe(false);
+  expect(git(f.lane, ['rev-parse', 'HEAD'])).toBe(head);
+});
+
+test.each(['bytes', 'remove', 'replace', 'chmod', 'insert', 'redirect'])(
+  'startup hook policy refuses %s drift before index or hook effects',
+  (change) => {
+    const f = fixture();
+    const target = path.join(f.root, '.git/hooks/pre-commit');
+    const marker = path.join(f.root, 'drifted-hook-ran');
+    const body = `#!/bin/sh\nprintf bad > '${marker}'\n`;
+    fs.writeFileSync(target, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    pinHookPolicy(f, { version: 2 });
+    if (change === 'bytes') fs.writeFileSync(target, body);
+    if (change === 'remove') fs.unlinkSync(target);
+    if (change === 'replace') {
+      fs.unlinkSync(target);
+      fs.writeFileSync(target, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    }
+    if (change === 'chmod') fs.chmodSync(target, 0o644);
+    if (change === 'insert')
+      fs.writeFileSync(path.join(f.root, '.git/hooks/post-index-change'), body, { mode: 0o755 });
+    if (change === 'redirect') {
+      const directory = path.join(f.root, 'other-hooks');
+      fs.mkdirSync(directory);
+      fs.writeFileSync(path.join(directory, 'pre-commit'), body, { mode: 0o755 });
+      git(f.root, ['config', 'core.hooksPath', directory]);
+    }
+    const indexPath = git(f.lane, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
+    const before = fs.readFileSync(indexPath);
+    fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'candidate\n');
+    const result = execute(f, ['git-stage', '--', 'src/owned.txt']);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('authority_changed');
+    expect(fs.readFileSync(indexPath)).toEqual(before);
+    expect(fs.existsSync(marker)).toBe(false);
   }
 );
 
@@ -716,7 +1166,95 @@ test('a fence replaced immediately before merge publication cannot advance the b
   expect(fs.existsSync(f.lane)).toBe(true);
 });
 
-test.each(['worktree-merge', 'bridge-claim', 'spec-close'])(
+test('owned lifecycle settles while dirty unrelated and detached worktrees remain byte-identical', () => {
+  const f = fixture();
+  const others = [path.join(f.root, 'owned-unrelated'), path.join(f.root, 'owned-detached')];
+  git(f.root, ['worktree', 'add', '-b', 'unrelated', others[0], 'owned']);
+  git(f.root, ['worktree', 'add', '--detach', others[1], 'owned']);
+  for (const cwd of others) {
+    fs.writeFileSync(path.join(cwd, 'src/sentinel.txt'), 'foreign staged\n');
+    git(cwd, ['add', '--', 'src/sentinel.txt']);
+    fs.writeFileSync(path.join(cwd, 'src/owned.txt'), 'foreign unstaged\n');
+  }
+  git(f.root, ['worktree', 'lock', '--reason', 'foreign work in progress', others[0]]);
+  const before = others.map((cwd) => ({
+    head: git(cwd, ['rev-parse', 'HEAD']),
+    status: git(cwd, ['--no-optional-locks', 'status', '--short']),
+    index: fs.readFileSync(
+      git(cwd, ['rev-parse', '--path-format=absolute', '--git-path', 'index'])
+    ),
+    source: fs.readFileSync(path.join(cwd, 'src/owned.txt')),
+    staged: fs.readFileSync(path.join(cwd, 'src/sentinel.txt')),
+  }));
+  expect(success(execute(f, ['git-status'])).stdout).toBe('');
+  fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'owned fixed\n');
+  success(execute(f, ['git-stage', '--', 'src/owned.txt']));
+  success(
+    execute(f, ['git-commit', '--message', 'fix: update owned source', '--', 'src/owned.txt'])
+  );
+  const merged = success(
+    execute(f, ['worktree-merge', '--worktree', 'owned', '--spec', 'EXEC-001'], { cwd: f.root })
+  ).data.merge_commit;
+  success(
+    execute(f, ['bridge-claim', '--spec', 'EXEC-001', '--merge-commit', merged], { cwd: f.root })
+  );
+  success(
+    execute(
+      f,
+      [
+        'spec-close',
+        '--spec',
+        'EXEC-001',
+        '--merge-commit',
+        merged,
+        '--reason',
+        'consumer checked',
+      ],
+      { cwd: f.root }
+    )
+  );
+  expect(spec(f).lifecycle_state).toBe('closed');
+  expect(fs.readFileSync(path.join(f.root, 'src/owned.txt'), 'utf8')).toBe('owned fixed\n');
+  for (const [index, cwd] of others.entries()) {
+    expect(git(cwd, ['rev-parse', 'HEAD'])).toBe(before[index].head);
+    expect(git(cwd, ['--no-optional-locks', 'status', '--short'])).toBe(before[index].status);
+    expect(
+      fs.readFileSync(git(cwd, ['rev-parse', '--path-format=absolute', '--git-path', 'index']))
+    ).toEqual(before[index].index);
+    expect(fs.readFileSync(path.join(cwd, 'src/owned.txt'))).toEqual(before[index].source);
+    expect(fs.readFileSync(path.join(cwd, 'src/sentinel.txt'))).toEqual(before[index].staged);
+  }
+});
+
+test('duplicate owned branch permits index-only staging but refuses its shared ref publication', () => {
+  const f = fixture();
+  const extra = path.join(f.root, 'owned-duplicate');
+  git(f.root, ['worktree', 'add', '--force', extra, 'owned']);
+  const head = git(extra, ['rev-parse', 'HEAD']);
+  const index = fs.readFileSync(
+    git(extra, ['rev-parse', '--path-format=absolute', '--git-path', 'index'])
+  );
+  fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'owned change\n');
+  expect(success(execute(f, ['git-status'])).stdout).toBe(' M src/owned.txt\n');
+  success(execute(f, ['git-stage', '--', 'src/owned.txt']));
+  const result = execute(f, [
+    'git-commit',
+    '--message',
+    'fix: refuse duplicate ref',
+    '--',
+    'src/owned.txt',
+  ]);
+  expect(result.status).toBe(1);
+  expect(result.stdout).toBe('');
+  expect(result.stderr).toContain('scope_refused');
+  expect(git(extra, ['rev-parse', 'HEAD'])).toBe(head);
+  expect(
+    fs.readFileSync(git(extra, ['rev-parse', '--path-format=absolute', '--git-path', 'index']))
+  ).toEqual(index);
+  expect(git(f.lane, ['diff', '--cached', '--name-only'])).toBe('src/owned.txt');
+});
+
+test.each(['worktree-merge', 'spec-close'])(
   'refuses an extra forced base checkout before %s and preserves that checkout',
   (operation) => {
     const f = fixture();

@@ -21,6 +21,8 @@ import {
   parseExecutionLifecycleArguments,
   readExecutionLifecycleAuthority,
   readExecutionLifecycleRuntimeHomes,
+  readExecutionLifecycleHookPolicy,
+  EXECUTION_GIT_HOOK_POLICY_ENV,
 } from './lifecycle';
 import type {
   AuthorizerReply,
@@ -243,6 +245,12 @@ export async function discoverLifecycleExecution(
     expected.set('HOME', homes.home);
     expected.set('CAWS_HOME', homes.cawsHome);
     expected.set('CODEX_HOME', homes.codexHome);
+  }
+  const hookPolicy = readExecutionLifecycleHookPolicy(record.execution.environment);
+  if (hookPolicy) {
+    if (!homes || record.profile.kind !== 'caws-lifecycle-v1') refuse('unsupported_profile');
+    expected.set(EXECUTION_GIT_HOOK_POLICY_ENV[0], hookPolicy.path);
+    expected.set(EXECUTION_GIT_HOOK_POLICY_ENV[1], hookPolicy.sha256);
   }
   if (
     record.profile.kind === 'caws-lifecycle-v1' &&
@@ -565,6 +573,11 @@ export function executionProfileBindings(
       ? readExecutionLifecycleRuntimeHomes(record.execution.environment)
       : undefined;
   const runtimeNames = homes ? ['HOME', 'CAWS_HOME', 'CODEX_HOME'] : [];
+  if (
+    record.profile.kind !== 'caws-lifecycle-v1' &&
+    EXECUTION_GIT_HOOK_POLICY_ENV.some((name) => values.has(name))
+  )
+    refuse('unsupported_profile');
   for (const [name, [value]] of values) {
     if (['PWD', 'OLDPWD'].includes(name)) refuse('unsupported_profile');
     if (

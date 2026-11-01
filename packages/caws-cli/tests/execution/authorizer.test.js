@@ -4,7 +4,12 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { spawnCoveredSync } = require('./child-coverage.cjs');
 const { authorityFixture, cleanupAll, source, hash } = require('./authority-fixture');
-const { parseExecutionEvidenceArguments } = require('../../dist/execution/authorizer');
+const {
+  parseExecutionEvidenceArguments,
+  executionProfileBindings,
+  executionProfileArguments,
+  isExecutionProfileBuiltin,
+} = require('../../dist/execution/authorizer');
 const { image } = require('./authority-fixture');
 const { snapshotNpmProject } = require('../../dist/execution/npm-project');
 afterAll(cleanupAll);
@@ -763,7 +768,7 @@ describe('dedicated evidence consumer admission, before any writer execution', (
         ],
         'EXEC-001'
       )
-    ).toEqual({
+    ).toStrictEqual({
       id: 'EXEC-001',
       criterionId: 'A1',
       status: 'pass',
@@ -793,7 +798,7 @@ describe('dedicated evidence consumer admission, before any writer execution', (
           ],
           'EXEC-001'
         )
-      ).toEqual({
+      ).toStrictEqual({
         id: 'EXEC-001',
         criterionId: 'A1',
         status,
@@ -802,6 +807,83 @@ describe('dedicated evidence consumer admission, before any writer execution', (
       });
     }
   );
+  const evidenceArgs = (...suffix) => [
+    'specs',
+    'evidence',
+    'EXEC-001',
+    '--ac',
+    'A1',
+    '--status',
+    'pass',
+    '--evidence-ref',
+    'proof',
+    ...suffix,
+  ];
+  test.each([
+    [0, 'spec'],
+    [1, 'record'],
+    [2, 'FOREIGN-001'],
+  ])(
+    'refuses independently changed operation coordinate %s with a valid suffix',
+    (position, replacement) => {
+      const args = evidenceArgs();
+      args[position] = replacement;
+      expect(() => parseExecutionEvidenceArguments(args, 'EXEC-001')).toThrow(
+        expect.objectContaining({ reason: 'scope_refused' })
+      );
+    }
+  );
+  test.each(['A', 'A_1.long-criterion'])(
+    'preserves complete criterion identity %s and omits absent optional members',
+    (criterionId) => {
+      const args = evidenceArgs();
+      args[4] = criterionId;
+      expect(parseExecutionEvidenceArguments(args, 'EXEC-001')).toStrictEqual({
+        id: 'EXEC-001',
+        criterionId,
+        status: 'pass',
+        evidenceRef: 'proof',
+        verify: false,
+      });
+    }
+  );
+  test.each(['0', '1', '19', '-12', String(Number.MAX_SAFE_INTEGER)])(
+    'preserves exact safe exit code %s',
+    (value) => {
+      expect(
+        parseExecutionEvidenceArguments(evidenceArgs('--exit-code', value), 'EXEC-001')
+      ).toStrictEqual({
+        id: 'EXEC-001',
+        criterionId: 'A1',
+        status: 'pass',
+        evidenceRef: 'proof',
+        verify: false,
+        exitCode: Number(value),
+      });
+    }
+  );
+  test.each(['x12', '12x', '01', '-01', ''])('refuses noncanonical exit code %p', (value) =>
+    expect(() =>
+      parseExecutionEvidenceArguments(evidenceArgs('--exit-code', value), 'EXEC-001')
+    ).toThrow(expect.objectContaining({ reason: 'unsupported_profile' }))
+  );
+  test.each(['x' + 'a'.repeat(40), 'a'.repeat(40) + 'x'])(
+    'refuses a commit with a valid SHA substring %s',
+    (value) =>
+      expect(() =>
+        parseExecutionEvidenceArguments(evidenceArgs('--commit-sha', value), 'EXEC-001')
+      ).toThrow(expect.objectContaining({ reason: 'unsupported_profile' }))
+  );
+  test.each([
+    ['--verify'],
+    ['--verify', '--artifact-path', 'src/proof.txt'],
+    ['--verify', '--commit-sha', 'a'.repeat(40)],
+    ['--verify', '--verify', '--artifact-path', 'src/proof.txt', '--commit-sha', 'a'.repeat(40)],
+  ])('refuses incomplete verification or duplicate verification %j', (...suffix) => {
+    expect(() => parseExecutionEvidenceArguments(evidenceArgs(...suffix), 'EXEC-001')).toThrow(
+      expect.objectContaining({ reason: 'unsupported_profile' })
+    );
+  });
   test.each(
     [
       ['specs', 'close', 'EXEC-001'],
@@ -959,7 +1041,166 @@ describe('dedicated evidence consumer admission, before any writer execution', (
     ).toThrow();
   });
 });
+describe('execution profile primitives', () => {
+  test.each([':', 'cd', 'printf', 'echo', 'pwd', 'true', 'false', 'test', '[', 'read'])(
+    'recognizes exact builtin %s',
+    (name) => expect(isExecutionProfileBuiltin(name)).toBe(true)
+  );
+  test.each([
+    '',
+    'command',
+    'exec',
+    'eval',
+    'source',
+    'export',
+    'readonly',
+    'unset',
+    'readarray',
+    'mapfile',
+    'Read',
+    'readx',
+    'xread',
+    '/bin/echo',
+    'echo ',
+  ])('does not broaden builtin authority to %p', (name) =>
+    expect(isExecutionProfileBuiltin(name)).toBe(false)
+  );
+  test('unwraps at most eight command wrappers while preserving argument identities', () => {
+    const leaf = { value: 'printf', source: { start: 80, end: 86 } };
+    const data = { value: null, source: { start: 87, end: 94 } };
+    const plain = [leaf, data];
+    expect(executionProfileArguments(plain)).toBe(plain);
+    for (const separator of [false, true]) {
+      const wrapped = [...Array(8)].flatMap(() =>
+        separator ? [{ value: 'command' }, { value: '--' }] : [{ value: 'command' }]
+      );
+      wrapped.push(leaf, data);
+      const result = executionProfileArguments(wrapped);
+      expect(result).toStrictEqual(plain);
+      expect(result[0]).toBe(leaf);
+      expect(result[1]).toBe(data);
+      expect(wrapped.at(-1)).toBe(data);
+      expect(() => executionProfileArguments([{ value: 'command' }, ...wrapped])).toThrow(
+        expect.objectContaining({ reason: 'unsupported_profile' })
+      );
+    }
+    const flag = { value: '-p' };
+    expect(executionProfileArguments([{ value: 'command' }, flag, leaf])).toStrictEqual([
+      flag,
+      leaf,
+    ]);
+    expect(executionProfileArguments([{ value: 'command' }])).toStrictEqual([]);
+  });
+  test('derives PWD from execution cwd and retains only ordinary inherited application bindings', () => {
+    const f = authorityFixture();
+    for (const name of [
+      'XUID',
+      'UIDX',
+      'XEXECIGNORE',
+      'EXECIGNOREX',
+      'BASH_LONG_NAME',
+      'COMP_LONG_NAME',
+      'UID',
+      'EUID',
+    ])
+      f.record.execution.environment.push({ name, value: name + '-data' });
+    const result = executionProfileBindings(f.record);
+    expect(result.get('PWD')).toStrictEqual([f.lane]);
+    for (const name of ['XUID', 'UIDX', 'XEXECIGNORE', 'EXECIGNOREX'])
+      expect(result.get(name)).toStrictEqual([name + '-data']);
+    for (const name of ['BASH_LONG_NAME', 'COMP_LONG_NAME', 'UID', 'EUID'])
+      expect(result.has(name)).toBe(false);
+  });
+  test('refuses locale controls, inherited cwd and nonphysical PATH directories', () => {
+    const f = authorityFixture();
+    const original = f.record.execution.environment.map((entry) => ({ ...entry }));
+    const directory = path.join(f.root, 'physical-path');
+    const alias = path.join(f.root, 'path-alias');
+    const file = path.join(f.root, 'path-file');
+    fs.mkdirSync(directory);
+    fs.symlinkSync(directory, alias);
+    fs.writeFileSync(file, 'data');
+    const controls = [
+      ['LANG', 'en_US.UTF-8'],
+      ['LC_ALL', ''],
+      ['PWD', f.lane],
+      ['OLDPWD', f.root],
+      ['PATH', ''],
+      ['PATH', 'relative'],
+      ['PATH', alias],
+      ['PATH', file],
+      ['PATH', directory + ':'],
+      ['PATH', ':' + directory],
+    ];
+    for (const [name, value] of controls) {
+      f.record.execution.environment = original.filter((entry) => entry.name !== name);
+      f.record.execution.environment.push({ name, value });
+      expect(() => executionProfileBindings(f.record)).toThrow(
+        expect.objectContaining({ reason: 'unsupported_profile' })
+      );
+    }
+    f.record.execution.environment = original.filter((entry) => entry.name !== 'PATH');
+    expect(() => executionProfileBindings(f.record)).toThrow(
+      expect.objectContaining({ reason: 'unsupported_profile' })
+    );
+    f.record.execution.environment = original;
+    f.record.execution.environment.push({ name: 'LANG', value: 'C' });
+    expect(executionProfileBindings(f.record).get('LANG')).toStrictEqual(['C']);
+  });
+});
+
 describe('private authorizer component observations, without USER execution', () => {
+  test.each(['printf data 2>&1', 'printf data 1>&-', 'read value < src/input.txt'])(
+    'admits modeled descriptors and ordinary read operands without executing %s',
+    async (command) => {
+      const f = authorityFixture();
+      const input = path.join(f.lane, 'src/input.txt');
+      fs.writeFileSync(input, 'literal data\n');
+      const result = await observe(f, command);
+      expect(result).toMatchObject({ decision: 'allow', reasonCodes: [] });
+      expect(fs.readFileSync(input, 'utf8')).toBe('literal data\n');
+    }
+  );
+  test('keeps read options outside the declared bare-destination profile without executing source', async () => {
+    const f = authorityFixture();
+    const input = path.join(f.lane, 'src/input.txt');
+    fs.writeFileSync(input, 'literal data\n');
+    const result = await observe(f, 'read -r value < src/input.txt');
+    expect(result).toMatchObject({ decision: 'unresolved', reasonCodes: ['source_unresolved'] });
+    expect(fs.readFileSync(input, 'utf8')).toBe('literal data\n');
+  });
+  test.each([
+    ['grep', 'grep literal src/input.txt', '/usr/bin/grep'],
+    ['head', 'head -n 1 src/input.txt', '/usr/bin/head'],
+    ['tail', 'tail -n 1 src/input.txt', '/usr/bin/tail'],
+    ['wc', 'wc -l src/input.txt', '/usr/bin/wc'],
+    ['ls', 'ls src', '/bin/ls'],
+    ['cut', 'cut -c 1 src/input.txt', '/usr/bin/cut'],
+    ['tr', 'tr a b < src/input.txt', '/usr/bin/tr'],
+    ['uniq', 'uniq src/input.txt', '/usr/bin/uniq'],
+  ])(
+    'admits pinned actual system reader %s without submitting effects',
+    async (_name, command, utility) => {
+      const f = authorityFixture();
+      const input = path.join(f.lane, 'src/input.txt');
+      fs.writeFileSync(input, 'literal data\n');
+      const result = await observe(f, command, [utility]);
+      expect(result.decision).toBe('allow');
+      expect(result.reasonCodes).toEqual([]);
+      expect(fs.readFileSync(input, 'utf8')).toBe('literal data\n');
+    }
+  );
+  test.each(['node -e', 'node -p "1"', 'node -e "1" extra'])(
+    'holds Node invocation outside the exact inline profile: %s',
+    async (command) => {
+      const f = authorityFixture();
+      f.record.execution.environment.find((entry) => entry.name === 'PATH').value =
+        `${fs.realpathSync.native(path.dirname(process.execPath))}:${f.record.execution.environment.find((entry) => entry.name === 'PATH').value}`;
+      const result = await observe(f, command, [process.execPath]);
+      expect(result.decision).toBe('unresolved');
+      expect(result.reasonCodes).toEqual(['unsupported_profile']);
+    }
+  );
   test('rejects reader aliases to writers or shells while accepting an alias to the actual reader', async () => {
     const f = authorityFixture();
     const directory = path.join(f.root, 'utility-path');

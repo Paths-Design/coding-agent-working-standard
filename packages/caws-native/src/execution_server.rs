@@ -14,9 +14,9 @@ use crate::{
     execution_prepared::{CargoRuntime, ProgramImage},
     monotonic_deadline::MonotonicDeadline,
 };
-use base64::{Engine, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
     cell::{Cell, RefCell},
@@ -34,8 +34,8 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
     time::{Duration, Instant},
 };
@@ -268,6 +268,10 @@ struct Config {
     lifecycle: Option<ProgramImage>,
     #[serde(default)]
     lifecycle_context: Option<execution_owner::RuntimeHomes>,
+    #[serde(default)]
+    git_hooks: Option<ProgramImage>,
+    #[serde(default)]
+    git_runtime: Option<GitRuntimeConfig>,
     generation: Generation,
     #[serde(default)]
     npm: Option<NpmRuntime>,
@@ -279,6 +283,98 @@ struct Config {
 struct Generation {
     root: String,
     manifest: ProgramImage,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GitRuntimeConfig {
+    client: ProgramImage,
+    launcher: ProgramImage,
+    formatter_bootstrap: ProgramImage,
+    scratch_root: String,
+}
+fn git_runtime_pins(config: &Config) -> Option<execution_owner::GitHookRuntimePins> {
+    let runtime = config.git_runtime.as_ref()?;
+    let copy = |image: &ProgramImage| ProgramImage {
+        path: image.path.clone(),
+        sha256: image.sha256.clone(),
+    };
+    Some(execution_owner::GitHookRuntimePins {
+        host: copy(&config.host),
+        client: copy(&runtime.client),
+        launcher: copy(&runtime.launcher),
+        formatter_bootstrap: copy(&runtime.formatter_bootstrap),
+        scratch_root: runtime.scratch_root.clone(),
+    })
+}
+/// Recheck the configured private root at invocation time, not just config load.
+pub(crate) fn verify_git_scratch(value: &str) -> io::Result<()> {
+    let path = Path::new(value);
+    if !path.is_absolute()
+        || value.len() > 4096
+        || value.chars().any(char::is_control)
+        || value
+            .split('/')
+            .skip(1)
+            .any(|c| c.is_empty() || c == "." || c == "..") || path.components().any(|c| {
+        matches!(c, std::path::Component::ParentDir)
+            || matches!(c, std::path::Component::Normal(name) if name == ".git" || name == ".caws")
+    }) || fs::canonicalize(path)? != path
+    {
+        return Err(refused());
+    }
+    for ancestor in path.ancestors() {
+        if fs::symlink_metadata(ancestor)?.file_type().is_symlink() {
+            return Err(refused());
+        }
+    }
+    let handle = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)?;
+    let held = handle.metadata()?;
+    let named = fs::symlink_metadata(path)?;
+    if !held.is_dir()
+        || held.uid() != unsafe { libc::geteuid() }
+        || held.mode() & 0o7777 != 0o700
+        || held.dev() != named.dev()
+        || held.ino() != named.ino()
+    {
+        return Err(refused());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        unsafe extern "C" {
+            fn acl_get_fd_np(fd: libc::c_int, ty: libc::c_int) -> *mut libc::c_void;
+            fn acl_free(p: *mut libc::c_void) -> libc::c_int;
+        }
+        let acl = unsafe { acl_get_fd_np(handle.as_raw_fd(), 0x100) };
+        if !acl.is_null() {
+            unsafe {
+                acl_free(acl);
+            }
+            return Err(refused());
+        }
+        if io::Error::last_os_error().raw_os_error() != Some(libc::ENOENT) {
+            return Err(refused());
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let result = unsafe {
+            libc::fgetxattr(
+                handle.as_raw_fd(),
+                c"system.posix_acl_access".as_ptr(),
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if result >= 0 || io::Error::last_os_error().raw_os_error() != Some(libc::ENODATA) {
+            return Err(refused());
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    return Err(refused());
+    Ok(())
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -415,6 +511,39 @@ fn load_config(path: &Path) -> io::Result<Config> {
             return Err(refused());
         }
     }
+    if let Some(image) = &config.git_hooks {
+        if !shape.pointer("/git_hooks").is_some_and(Value::is_object)
+            || !execution_owner::git_hook_policy_well_formed(
+                image,
+                config.lifecycle.as_ref(),
+                config.lifecycle_context.as_ref(),
+            )
+        {
+            return Err(refused());
+        }
+    } else if shape.get("git_hooks").is_some() {
+        return Err(refused());
+    }
+    if let Some(runtime) = git_runtime_pins(&config) {
+        if ![
+            "/git_runtime",
+            "/git_runtime/client",
+            "/git_runtime/launcher",
+            "/git_runtime/formatter_bootstrap",
+        ]
+        .iter()
+        .all(|p| shape.pointer(p).is_some_and(Value::is_object))
+            || !runtime.well_formed(
+                config.git_hooks.as_ref(),
+                config.lifecycle.as_ref(),
+                config.lifecycle_context.as_ref(),
+            )
+        {
+            return Err(refused());
+        }
+    } else if shape.get("git_runtime").is_some() {
+        return Err(refused());
+    }
     if Path::new(&config.authorizer.path)
         .parent()
         .ok_or_else(refused)?
@@ -448,6 +577,38 @@ fn verify_generation(config: &Config, deadline: &MonotonicDeadline) -> io::Resul
             return Err(refused());
         }
         verify_generation_image(lifecycle, deadline)?;
+    }
+    if let Some(image) = &config.git_hooks {
+        if !execution_owner::git_hook_policy_well_formed(
+            image,
+            config.lifecycle.as_ref(),
+            config.lifecycle_context.as_ref(),
+        ) || !Path::new(&image.path).starts_with(root)
+        {
+            return Err(refused());
+        }
+        verify_generation_image(image, deadline)?;
+    }
+    if let Some(runtime) = git_runtime_pins(config) {
+        if !runtime.well_formed(
+            config.git_hooks.as_ref(),
+            config.lifecycle.as_ref(),
+            config.lifecycle_context.as_ref(),
+        ) {
+            return Err(refused());
+        }
+        verify_git_scratch(&runtime.scratch_root)?;
+        verify_image(&runtime.host, deadline)?;
+        for image in [
+            &runtime.client,
+            &runtime.launcher,
+            &runtime.formatter_bootstrap,
+        ] {
+            if !Path::new(&image.path).starts_with(root) {
+                return Err(refused());
+            }
+            verify_generation_image(image, deadline)?;
+        }
     }
     if let Some(npm) = &config.npm {
         let npm_root = Path::new(&npm.root);
@@ -556,6 +717,26 @@ fn verify_generation(config: &Config, deadline: &MonotonicDeadline) -> io::Resul
             return Err(refused());
         }
         verify_generation_image(lifecycle, deadline)?;
+    }
+    if let Some(image) = &config.git_hooks {
+        if !expected.contains(Path::new(&image.path)) {
+            return Err(refused());
+        }
+        verify_generation_image(image, deadline)?;
+    }
+    if let Some(runtime) = git_runtime_pins(config) {
+        for image in [
+            &runtime.client,
+            &runtime.launcher,
+            &runtime.formatter_bootstrap,
+        ] {
+            if !expected.contains(Path::new(&image.path)) {
+                return Err(refused());
+            }
+            verify_generation_image(image, deadline)?;
+        }
+        verify_git_scratch(&runtime.scratch_root)?;
+        verify_image(&runtime.host, deadline)?;
     }
     if let Some(npm) = &config.npm {
         if !expected.contains(Path::new(&npm.entry.path)) {
@@ -842,10 +1023,11 @@ These paths are configured, not a live generation or authority verification. Eac
         quote(&config.writer.path),
     );
     if let Some(lifecycle) = &config.lifecycle {
-        description.push_str(&format!("\nConfigured lifecycle consumer prefix:\n{} {}\nAppend exactly one typed operation: git-status | git-head | git-branch | git-stage -- PATH... | git-commit --message 'MESSAGE' -- PATH... | spec-commit --spec SPEC_ID | worktree-merge --worktree NAME --spec SPEC_ID | bridge-claim --spec SPEC_ID --merge-commit MERGE_SHA | spec-close --spec SPEC_ID --merge-commit MERGE_SHA --reason 'REASON'. Use literal shell words and quote data. No extra flags, shell expansion, operators, general Git or general CLI passthrough are admitted. Stage and commit paths must fit the current owned spec. Normal executable hooks or unsupported Git configuration refuse; hooks are never disabled. Merge applies the normal CAWS merge with no close; run it from the canonical checkout after an actual host context transition. An explicit bridge claim after merge requires this same thread's exact recorded merge SHA; only then run downstream npm and close. Consumer output reports actual HEAD or a publication-failure requiring inspection before retry.\n", quote(&config.node.path), quote(&lifecycle.path)));
+        description.push_str(&format!("\nConfigured lifecycle consumer prefix:\n{} {}\nAppend exactly one typed operation: git-status | git-head | git-branch | git-stage -- PATH... | git-commit --message 'MESSAGE' -- PATH... | spec-commit --spec SPEC_ID | worktree-merge --worktree NAME --spec SPEC_ID | bridge-claim --spec SPEC_ID --merge-commit MERGE_SHA | spec-close --spec SPEC_ID --merge-commit MERGE_SHA --reason 'REASON'. Use literal shell words and quote data. No extra flags, shell expansion, operators, general Git or general CLI passthrough are admitted. Stage and commit paths must fit the current owned spec. Executable Git hooks require an exact trusted startup policy; unpinned hooks, policy drift and unsupported Git configuration refuse. Required hooks run normally and are never disabled. Unrelated worktrees are preserved; another checkout of a branch being published refuses before effects. Merge applies the normal CAWS merge with no close; run it from the canonical checkout after an actual host context transition. An explicit bridge claim after merge requires this same thread's exact recorded merge SHA; only then run downstream npm and close. Consumer output reports actual HEAD or a publication-failure requiring inspection before retry.\n", quote(&config.node.path), quote(&lifecycle.path)));
     }
     if config.lifecycle_context.is_some() {
-        description.push_str("\nThe same pinned lifecycle prefix also admits exactly doctor or gates-run --spec SPEC_ID. These use the configured private runtime homes and the actual normal CLI diagnostics/policy gates, returning their real exit code and output. Gates publish normal gate_evaluated events; a nonzero diagnostic is not a green result.\n");
+        description.push_str("\nThe pinned lifecycle prefix also admits git-diff -- PATH... to inspect the actual staged diff of explicitly listed owned paths. It is read-only, leaves foreign staging intact, and admits no diff flags or external diff/textconv program.\n");
+        description.push_str("\nThe same pinned lifecycle prefix also admits exactly status | agents-list | worktree-review --worktree NAME --spec SPEC_ID | doctor | gates-run --spec SPEC_ID. Status and agent listing are read-only; review is restricted to this thread's owned worktree and spec. These use the configured private runtime homes and the actual normal CLI readers/diagnostics/policy gates, returning their real exit code and output. Gates publish normal gate_evaluated events; a nonzero diagnostic is not a green result.\n");
     }
     if config.cargo.is_some() {
         description.push_str("\nThe exact literal source cargo run --manifest-path RELATIVE/Cargo.toml admits a minimal standalone dependency-free package with matching lock and src/main.rs. Use only ASCII alphanumeric, underscore, hyphen, dot and slash in the normalized relative operand, without quoting, dot/dotdot components, protected metadata, extra flags or shell syntax. Workspace/config/build-script/dependency routes refuse. The pinned Cargo/rustc/linker run locked, offline, frozen and one-job under the host descendant write ceiling, with fresh private output/tmp/cache; project and governance are read-only. This is not general Cargo passthrough.\n");
@@ -870,7 +1052,7 @@ fn worker_reply(outcome: OwnerOutcome) -> Value {
             settle(f.child.take());
             let mut stdout = Vec::new();
             let mut stderr = Vec::new();
-            let mut exit_code = None;
+            let mut exit_code = f.completed_status.and_then(|status| status.code());
             if let Some(mut job) = f.job_failure.take() {
                 settle(job.retained_child.take());
                 if let execution_child::FailureKind::Nonzero(status) = &job.kind {
@@ -1173,6 +1355,11 @@ fn execute_call(
             sha256: image.sha256.clone(),
         }),
         lifecycle_context: config.lifecycle_context.clone(),
+        git_hooks: config.git_hooks.as_ref().map(|image| ProgramImage {
+            path: image.path.clone(),
+            sha256: image.sha256.clone(),
+        }),
+        git_runtime: git_runtime_pins(config),
     };
     trace.at(CallStage::Preparation);
     let npm_preparation = config
@@ -1379,6 +1566,16 @@ fn worker(config: &Config) -> io::Result<()> {
             _ => true,
         }
         || pins.lifecycle_context != config.lifecycle_context
+        || match (&pins.git_hooks, &config.git_hooks) {
+            (None, None) => false,
+            (Some(pin), Some(config)) => pin.path != config.path || pin.sha256 != config.sha256,
+            _ => true,
+        }
+        || match (&pins.git_runtime, git_runtime_pins(config)) {
+            (None, None) => false,
+            (Some(pin), Some(expected)) => !pin.same_as(&expected),
+            _ => true,
+        }
     {
         return Err(refused());
     }
@@ -1491,6 +1688,30 @@ pub fn main_entry() -> i32 {
 mod tests {
     use super::*;
     use sha2::{Digest, Sha256};
+
+    #[test]
+    fn git_runtime_bridge_failure_preserves_actual_lifecycle_status_and_output() {
+        let status = Command::new("/usr/bin/true").status().unwrap();
+        let result = worker_reply(OwnerOutcome::Failed(execution_owner::OwnerFailure {
+            reason: execution_owner::Refusal::JobIo,
+            child: None,
+            fence: None,
+            job_failure: Some(execution_child::Failure {
+                kind: execution_child::FailureKind::Io("bridge failure".into()),
+                stdout: b"out".to_vec(),
+                stderr: b"err".to_vec(),
+                retained_child: None,
+                cleanup_detail: None,
+            }),
+            authorizer_refusal: None,
+            completed_status: Some(status),
+            user_spawn_may_have_occurred: true,
+        }));
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["exitCode"], 0);
+        assert_eq!(result["stdoutBase64"], STANDARD.encode(b"out"));
+        assert_eq!(result["stderrBase64"], STANDARD.encode(b"err"));
+    }
     use std::sync::atomic::AtomicU64;
     static NEXT: AtomicU64 = AtomicU64::new(0);
     #[derive(Clone, Copy)]
@@ -1615,6 +1836,8 @@ mod tests {
             writer: None,
             lifecycle: None,
             lifecycle_context: None,
+            git_hooks: None,
+            git_runtime: None,
         };
         let trusted = execution_owner::TrustedInvocation {
             invocation_id: "owner-fixture".into(),
@@ -1911,6 +2134,7 @@ mod tests {
                         cleanup_detail: None,
                     }),
                     authorizer_refusal: None,
+                    completed_status: None,
                     user_spawn_may_have_occurred: true,
                 }));
                 assert_eq!(reply["exitCode"], 1);
@@ -1965,6 +2189,8 @@ mod tests {
                 writer: image(&root.join("writer-main.js")),
                 lifecycle: None,
                 lifecycle_context: None,
+                git_hooks: None,
+                git_runtime: None,
                 generation: Generation {
                     root: root.to_str().unwrap().into(),
                     manifest: image(&manifest),
@@ -1980,7 +2206,7 @@ mod tests {
         }
     }
     #[test]
-    fn optional_lifecycle_pin_must_belong_to_exact_generation_inventory() {
+    fn optional_lifecycle_and_git_hook_policy_pins_must_belong_to_exact_generation_inventory() {
         let fixture = Fixture::new();
         let mut config = fixture.config();
         let root = Path::new(&config.generation.root);
@@ -2012,11 +2238,253 @@ mod tests {
         fs::write(&config.generation.manifest.path, &bytes).unwrap();
         config.generation.manifest.sha256 = format!("{:x}", Sha256::digest(&bytes));
         assert!(verify_generation(&config, &deadline).is_ok());
+        let policy_path = root.join("lifecycle-hooks.json");
+        fs::write(&policy_path, b"pinned policy").unwrap();
+        config.git_hooks = Some(ProgramImage {
+            path: policy_path.to_str().unwrap().into(),
+            sha256: format!("{:x}", Sha256::digest(b"pinned policy")),
+        });
+        config.lifecycle_context = Some(execution_owner::RuntimeHomes {
+            home: "/home".into(),
+            caws_home: "/machine".into(),
+            codex_home: "/home/.codex".into(),
+        });
+        assert!(verify_generation(&config, &deadline).is_err());
+        manifest["files"].as_array_mut().unwrap().push(json!({"path":"lifecycle-hooks.json", "sha256":config.git_hooks.as_ref().unwrap().sha256}));
+        manifest["files"].as_array_mut().unwrap().sort_by(|a, b| {
+            a["path"]
+                .as_str()
+                .unwrap()
+                .as_bytes()
+                .cmp(b["path"].as_str().unwrap().as_bytes())
+        });
+        let bytes = serde_json::to_vec(&manifest).unwrap();
+        fs::write(&config.generation.manifest.path, &bytes).unwrap();
+        config.generation.manifest.sha256 = format!("{:x}", Sha256::digest(&bytes));
+        assert!(verify_generation(&config, &deadline).is_ok());
+        fs::write(&policy_path, b"replacement policy").unwrap();
+        assert!(verify_generation(&config, &deadline).is_err());
+        fs::write(&policy_path, b"pinned policy").unwrap();
+        config.git_hooks.as_mut().unwrap().sha256 = "d".repeat(64);
+        assert!(verify_generation(&config, &deadline).is_err());
+        config.git_hooks.as_mut().unwrap().sha256 =
+            format!("{:x}", Sha256::digest(b"pinned policy"));
+        assert!(verify_generation(&config, &deadline).is_ok());
+        fs::remove_file(&policy_path).unwrap();
+        assert!(verify_generation(&config, &deadline).is_err());
+        fs::write(&policy_path, b"pinned policy").unwrap();
+        assert!(verify_generation(&config, &deadline).is_ok());
         fs::write(&path, "replacement").unwrap();
         assert!(
             verify_generation(&config, &deadline).is_err(),
             "replaced consumer must refuse"
         );
+    }
+
+    #[test]
+    fn git_hook_policy_config_requires_exact_shape_sibling_and_runtime_context() {
+        let fixture = Fixture::new();
+        let path = fixture.0.join("config.json");
+        let image = |path: &str| json!({"path":path,"sha256":"a".repeat(64)});
+        let mut value = json!({"schema":"caws.execution.server-config.v1", "native":image("/generation/native"), "host":image("/generation/host"), "node":image("/generation/node"), "authorizer":image("/generation/authorizer.js"), "discovery":image("/generation/discovery.js"), "writer":image("/generation/writer-main.js"), "lifecycle":image("/generation/lifecycle-main.js"), "lifecycle_context":{"home":"/home","caws_home":"/machine","codex_home":"/home/.codex"}, "generation":{"root":"/generation","manifest":image("/manifest.json")}});
+        let load = |value: &Value| {
+            fs::write(&path, serde_json::to_vec(value).unwrap()).unwrap();
+            load_config(&path)
+        };
+        assert!(load(&value).is_ok());
+        let policy = image("/generation/lifecycle-hooks.json");
+        value["git_hooks"] = policy.clone();
+        assert_eq!(
+            load(&value).unwrap().git_hooks.unwrap().path,
+            "/generation/lifecycle-hooks.json"
+        );
+        for replacement in [
+            Value::Null,
+            json!(["/generation/lifecycle-hooks.json", "a".repeat(64)]),
+            image("/foreign/lifecycle-hooks.json"),
+            image("/generation/other.json"),
+            image("relative/lifecycle-hooks.json"),
+            json!({"path":"/generation/lifecycle-hooks.json","sha256":"a".repeat(63)}),
+            json!({"path":"/generation/lifecycle-hooks.json","sha256":"A".repeat(64)}),
+            json!({"path":"/generation/lifecycle-hooks.json","sha256":"a".repeat(64),"allow":true}),
+        ] {
+            let mut bad = value.clone();
+            bad["git_hooks"] = replacement;
+            assert!(load(&bad).is_err());
+        }
+        for field in ["lifecycle", "lifecycle_context"] {
+            let mut bad = value.clone();
+            bad.as_object_mut().unwrap().remove(field);
+            assert!(load(&bad).is_err());
+        }
+        let duplicate = serde_json::to_string(&value).unwrap().replace(
+            "\"git_hooks\":",
+            &format!("\"git_hooks\":{},\"git_hooks\":", policy),
+        );
+        fs::write(&path, duplicate).unwrap();
+        assert!(load_config(&path).is_err());
+    }
+
+    #[test]
+    fn git_runtime_config_requires_closed_object_exact_siblings_and_dependencies() {
+        let fixture = Fixture::new();
+        let path = fixture.0.join("config.json");
+        let image = |p: &str| json!({"path":p,"sha256":"a".repeat(64)});
+        let runtime = json!({"client":image("/generation/git-hook-client-main.js"),"launcher":image("/generation/git-hook-launcher-main.js"),"formatter_bootstrap":image("/generation/git-hook-formatter-main.js"),"scratch_root":"/private/scratch"});
+        let mut value = json!({"schema":"caws.execution.server-config.v1", "native":image("/generation/native"), "host":image("/host"), "node":image("/generation/node"), "authorizer":image("/generation/authorizer.js"), "discovery":image("/generation/discovery.js"), "writer":image("/generation/writer-main.js"), "lifecycle":image("/generation/lifecycle-main.js"), "lifecycle_context":{"home":"/home","caws_home":"/machine","codex_home":"/home/.codex"}, "git_hooks":image("/generation/lifecycle-hooks.json"), "git_runtime":runtime, "generation":{"root":"/generation","manifest":image("/manifest.json")}});
+        let load = |v: &Value| {
+            fs::write(&path, serde_json::to_vec(v).unwrap()).unwrap();
+            load_config(&path)
+        };
+        let loaded = load(&value).unwrap();
+        let pins = git_runtime_pins(&loaded).unwrap();
+        assert_eq!(pins.host.path, "/host");
+        assert_eq!(pins.client.path, "/generation/git-hook-client-main.js");
+        for field in ["git_hooks", "lifecycle", "lifecycle_context"] {
+            let mut bad = value.clone();
+            bad.as_object_mut().unwrap().remove(field);
+            assert!(load(&bad).is_err(), "missing {field}");
+        }
+        for replacement in [Value::Null, json!([]), json!({})] {
+            let mut bad = value.clone();
+            bad["git_runtime"] = replacement;
+            assert!(load(&bad).is_err());
+        }
+        for (field, replacement) in [
+            ("client", Value::Null),
+            ("client", image("/foreign/git-hook-client-main.js")),
+            ("launcher", image("/generation/wrong.js")),
+            (
+                "formatter_bootstrap",
+                json!(["/generation/git-hook-formatter-main.js", "a".repeat(64)]),
+            ),
+            ("scratch_root", json!("relative")),
+            ("extra", json!(true)),
+        ] {
+            let mut bad = value.clone();
+            bad["git_runtime"][field] = replacement;
+            assert!(load(&bad).is_err(), "{field}");
+        }
+        let mut bad = value.clone();
+        bad["git_runtime"]["client"]["extra"] = json!(true);
+        assert!(load(&bad).is_err());
+        let mut bad = value.clone();
+        bad["git_runtime"]["launcher"]["sha256"] = json!("A".repeat(64));
+        assert!(load(&bad).is_err());
+        let duplicate = serde_json::to_string(&value).unwrap().replace(
+            "\"git_runtime\":",
+            &format!("\"git_runtime\":{},\"git_runtime\":", value["git_runtime"]),
+        );
+        fs::write(&path, duplicate).unwrap();
+        assert!(load_config(&path).is_err());
+        value.as_object_mut().unwrap().remove("git_runtime");
+        assert!(load(&value).is_ok());
+    }
+
+    #[test]
+    fn git_runtime_generation_checks_exact_inventory_images_scratch_and_host_identity() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let fixture = Fixture::new();
+        let mut config = fixture.config();
+        let root = PathBuf::from(&config.generation.root);
+        let scratch = fixture.0.join("scratch");
+        fs::create_dir(&scratch).unwrap();
+        fs::set_permissions(&scratch, fs::Permissions::from_mode(0o700)).unwrap();
+        let extra = [
+            "lifecycle-main.js",
+            "lifecycle-hooks.json",
+            "git-hook-client-main.js",
+            "git-hook-launcher-main.js",
+            "git-hook-formatter-main.js",
+        ];
+        for name in extra {
+            fs::write(root.join(name), name).unwrap();
+        }
+        let image = |name: &str| ProgramImage {
+            path: root.join(name).to_str().unwrap().into(),
+            sha256: format!("{:x}", Sha256::digest(name.as_bytes())),
+        };
+        config.lifecycle = Some(image("lifecycle-main.js"));
+        config.git_hooks = Some(image("lifecycle-hooks.json"));
+        config.lifecycle_context = Some(execution_owner::RuntimeHomes {
+            home: "/home".into(),
+            caws_home: "/machine".into(),
+            codex_home: "/home/.codex".into(),
+        });
+        config.git_runtime = Some(GitRuntimeConfig {
+            client: image("git-hook-client-main.js"),
+            launcher: image("git-hook-launcher-main.js"),
+            formatter_bootstrap: image("git-hook-formatter-main.js"),
+            scratch_root: scratch.to_str().unwrap().into(),
+        });
+        let write_manifest = |omit: Option<&str>, config: &mut Config| {
+            let mut names = vec!["authorizer.js", "discovery.js", "node", "writer-main.js"];
+            names.extend(extra);
+            names.sort();
+            let files: Vec<_> = names
+                .into_iter()
+                .filter(|name| Some(*name) != omit)
+                .map(|name| json!({"path":name,"sha256":image(name).sha256}))
+                .collect();
+            let bytes =
+                serde_json::to_vec(&json!({"schema":"caws.execution.generation.v1","files":files}))
+                    .unwrap();
+            fs::write(&config.generation.manifest.path, &bytes).unwrap();
+            config.generation.manifest.sha256 = format!("{:x}", Sha256::digest(&bytes));
+        };
+        let deadline = MonotonicDeadline::capture(Duration::from_secs(30)).unwrap();
+        write_manifest(Some("git-hook-launcher-main.js"), &mut config);
+        assert!(verify_generation(&config, &deadline).is_err());
+        write_manifest(None, &mut config);
+        assert!(verify_generation(&config, &deadline).is_ok());
+        let pin = git_runtime_pins(&config).unwrap();
+        assert!(pin.same_as(&git_runtime_pins(&config).unwrap()));
+        for field in [
+            "host_path",
+            "host_hash",
+            "client_path",
+            "client_hash",
+            "launcher_path",
+            "launcher_hash",
+            "bootstrap_path",
+            "bootstrap_hash",
+            "scratch_root",
+        ] {
+            let mut different = git_runtime_pins(&config).unwrap();
+            match field {
+                "host_path" => different.host.path.push('x'),
+                "host_hash" => different.host.sha256 = "b".repeat(64),
+                "client_path" => different.client.path.push('x'),
+                "client_hash" => different.client.sha256 = "b".repeat(64),
+                "launcher_path" => different.launcher.path.push('x'),
+                "launcher_hash" => different.launcher.sha256 = "b".repeat(64),
+                "bootstrap_path" => different.formatter_bootstrap.path.push('x'),
+                "bootstrap_hash" => different.formatter_bootstrap.sha256 = "b".repeat(64),
+                _ => different.scratch_root.push('x'),
+            }
+            assert!(!pin.same_as(&different), "{field}");
+        }
+        for name in [
+            "git-hook-client-main.js",
+            "git-hook-launcher-main.js",
+            "git-hook-formatter-main.js",
+        ] {
+            fs::write(root.join(name), b"changed").unwrap();
+            assert!(
+                verify_generation(&config, &deadline).is_err(),
+                "changed {name}"
+            );
+            fs::write(root.join(name), name).unwrap();
+        }
+        fs::set_permissions(&scratch, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(verify_generation(&config, &deadline).is_err());
+        fs::set_permissions(&scratch, fs::Permissions::from_mode(0o700)).unwrap();
+        let alias = fixture.0.join("alias");
+        symlink(&scratch, &alias).unwrap();
+        config.git_runtime.as_mut().unwrap().scratch_root = alias.to_str().unwrap().into();
+        assert!(verify_generation(&config, &deadline).is_err());
+        config.git_runtime.as_mut().unwrap().scratch_root = scratch.to_str().unwrap().into();
+        assert!(verify_generation(&config, &deadline).is_ok());
     }
 
     #[test]
@@ -2062,15 +2530,13 @@ mod tests {
         drop(cmd);
         drop(worker);
         let failure = |_: &'static str| Err("cancelled".into());
-        assert!(
-            service_worker(
-                child,
-                producer,
-                Instant::now() + Duration::from_secs(5),
-                &failure
-            )
-            .is_err()
-        );
+        assert!(service_worker(
+            child,
+            producer,
+            Instant::now() + Duration::from_secs(5),
+            &failure
+        )
+        .is_err());
         assert_eq!(fs::read(marker).unwrap(), b"settled");
     }
     #[test]

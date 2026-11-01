@@ -23,8 +23,8 @@ use crate::{
     execution_server::private_roots::PrivateLaunch,
     monotonic_deadline::{self, EffectCheck, MonotonicDeadline},
 };
-use base64::{Engine, engine::general_purpose::STANDARD};
-use serde_json::{Value, json};
+use base64::{engine::general_purpose::STANDARD, Engine};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -446,12 +446,10 @@ fn lower_npm(
         "--workspaces=false",
         "test"
     ]);
-    value["execution"]["environment"] = json!(
-        environment
-            .into_iter()
-            .map(|(name, value)| json!({"name":name,"value":value}))
-            .collect::<Vec<_>>()
-    );
+    value["execution"]["environment"] = json!(environment
+        .into_iter()
+        .map(|(name, value)| json!({"name":name,"value":value}))
+        .collect::<Vec<_>>());
     value["profile"]["kind"] = json!("npm-test-v1");
     value["profile"]["npm"] = json!({"runtime":{
         "node":image_json(&pins.node),"entry":image_json(npm.entry),"root":npm.root,
@@ -576,12 +574,10 @@ fn lower_cargo(
         "--message-format",
         "json-render-diagnostics"
     ]);
-    value["execution"]["environment"] = json!(
-        environment
-            .into_iter()
-            .map(|(name, value)| json!({"name":name,"value":value}))
-            .collect::<Vec<_>>()
-    );
+    value["execution"]["environment"] = json!(environment
+        .into_iter()
+        .map(|(name, value)| json!({"name":name,"value":value}))
+        .collect::<Vec<_>>());
     value["profile"]["kind"] = json!("cargo-run-v1");
     value["profile"]["cargo"] = json!({"runtime":{
         "cargo":image_json(&runtime.cargo),"rustc":image_json(&runtime.rustc),"linker":image_json(&runtime.linker),
@@ -653,6 +649,37 @@ pub(crate) fn prepare(
     if let Some(lifecycle) = &pins.lifecycle {
         pin(lifecycle, &check).map_err(failure)?;
     }
+    if let Some(policy) = &pins.git_hooks {
+        if !crate::execution_owner::git_hook_policy_well_formed(
+            policy,
+            pins.lifecycle.as_ref(),
+            pins.lifecycle_context.as_ref(),
+        ) {
+            return Err(failure(PrepareRefusal::Identity));
+        }
+        pin(policy, &check).map_err(failure)?;
+    }
+    if let Some(runtime) = &pins.git_runtime {
+        if !runtime.well_formed(
+            pins.git_hooks.as_ref(),
+            pins.lifecycle.as_ref(),
+            pins.lifecycle_context.as_ref(),
+        ) || runtime.host.path != host_image.path
+            || runtime.host.sha256 != host_image.sha256
+        {
+            return Err(failure(PrepareRefusal::Identity));
+        }
+        crate::execution_server::verify_git_scratch(&runtime.scratch_root)
+            .map_err(|_| failure(PrepareRefusal::Context))?;
+        for image in [
+            &runtime.host,
+            &runtime.client,
+            &runtime.launcher,
+            &runtime.formatter_bootstrap,
+        ] {
+            pin(image, &check).map_err(failure)?;
+        }
+    }
     pin(discovery, &check).map_err(failure)?;
     let caller = physical_dir(&call.caller_anchor).map_err(failure)?;
     if caller != call.caller_anchor {
@@ -714,6 +741,18 @@ pub(crate) fn prepare(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // Discovery observes project hook authority before a final lifecycle record
+    // exists. Supply only startup-owned context to this private metadata child.
+    if let Some(context) = &pins.lifecycle_context {
+        for (name, value) in context.environment() {
+            command.env(name, value);
+        }
+    }
+    if let Some(policy) = &pins.git_hooks {
+        command
+            .env("CAWS_EXECUTION_GIT_HOOK_POLICY", &policy.path)
+            .env("CAWS_EXECUTION_GIT_HOOK_POLICY_SHA256", &policy.sha256);
+    }
     configure_private_child(&mut command).map_err(|_| failure(PrepareRefusal::DiscoverySpawn))?;
     private_deadline(&mut command, deadline);
     check().map_err(failure)?;
@@ -849,7 +888,10 @@ pub(crate) fn prepare(
                 return Err(failure(PrepareRefusal::Utility));
             }
             if lifecycle
-                && matches!(execution.argv[2].as_str(), "doctor" | "gates-run")
+                && matches!(
+                    execution.argv[2].as_str(),
+                    "status" | "agents-list" | "worktree-review" | "doctor" | "gates-run"
+                )
                 && pins.lifecycle_context.is_none()
             {
                 return Err(failure(PrepareRefusal::Utility));
@@ -868,25 +910,45 @@ pub(crate) fn prepare(
                 }
             }
             if lifecycle {
+                let mut additions = Vec::new();
                 if let Some(context) = &pins.lifecycle_context {
                     if !context.well_formed() {
                         return Err(failure(PrepareRefusal::Identity));
                     }
-                    let environment = final_value["execution"]["environment"]
-                        .as_array_mut()
-                        .unwrap();
                     for (name, value) in context.environment() {
                         physical_dir(value).map_err(failure)?;
-                        environment.push(json!({"name":name,"value":value}));
+                        additions.push(json!({"name":name,"value":value}));
                     }
-                    environment.sort_by(|a, b| {
-                        a["name"]
-                            .as_str()
-                            .unwrap()
-                            .as_bytes()
-                            .cmp(b["name"].as_str().unwrap().as_bytes())
-                    });
                 }
+                if let Some(policy) = &pins.git_hooks {
+                    pin(policy, &check).map_err(failure)?;
+                    additions
+                        .push(json!({"name":"CAWS_EXECUTION_GIT_HOOK_POLICY","value":policy.path}));
+                    additions.push(json!({"name":"CAWS_EXECUTION_GIT_HOOK_POLICY_SHA256","value":policy.sha256}));
+                }
+                if let Some(runtime) = &pins.git_runtime {
+                    crate::execution_server::verify_git_scratch(&runtime.scratch_root)
+                        .map_err(|_| failure(PrepareRefusal::Context))?;
+                    for image in [
+                        &runtime.host,
+                        &runtime.client,
+                        &runtime.launcher,
+                        &runtime.formatter_bootstrap,
+                    ] {
+                        pin(image, &check).map_err(failure)?;
+                    }
+                }
+                let environment = final_value["execution"]["environment"]
+                    .as_array_mut()
+                    .unwrap();
+                environment.extend(additions);
+                environment.sort_by(|a, b| {
+                    a["name"]
+                        .as_str()
+                        .unwrap()
+                        .as_bytes()
+                        .cmp(b["name"].as_str().unwrap().as_bytes())
+                });
             }
             for name in [
                 &pins.node.path,
@@ -985,7 +1047,7 @@ mod consumer_tests {
     use std::{
         io::{BufRead, BufReader},
         process::{Child, Command, Stdio},
-        sync::{Arc, atomic::AtomicBool},
+        sync::{atomic::AtomicBool, Arc},
         time::Duration,
     };
 
@@ -1179,6 +1241,8 @@ process.stdin.resume();
             writer: None,
             lifecycle: None,
             lifecycle_context: None,
+            git_hooks: None,
+            git_runtime: None,
             node: image(&node),
             entry: image(&entry),
         };

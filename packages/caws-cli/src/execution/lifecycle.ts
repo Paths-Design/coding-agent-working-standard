@@ -10,6 +10,7 @@ import { inside } from '../shell/analysis/policies';
 import { acquireBridge } from '../store/bridge-store';
 import { loadEvents } from '../store/events-store';
 import { autoCommit } from '../store/git-autocommit';
+import { executionGitOptions, withExecutionGitRuntime } from '../store/git-runtime';
 import { borrowExecutionLifecycleFence } from '../store/lifecycle-lock';
 import { closeSpec } from '../store/specs-writer';
 import { mergeWorktree } from '../store/worktrees-writer';
@@ -20,17 +21,22 @@ import {
 } from './authority';
 import { verifyInheritedFence } from './fence';
 import type { FenceObservation } from './prepared';
+import { bridgeRequest, type GitBridgeRoot } from './git-hook-client-main';
 
 // Keep fixed command loading after original environment and fence validation.
 const loadFixedApplication = createRequire(__filename);
 
 export type ExecutionLifecycleArguments =
+  | { readonly operation: 'status' }
+  | { readonly operation: 'agents-list' }
+  | { readonly operation: 'worktree-review'; readonly worktree: string; readonly specId: string }
   | { readonly operation: 'doctor' }
   | { readonly operation: 'gates-run'; readonly specId: string }
   | { readonly operation: 'git-status' }
   | { readonly operation: 'git-head' }
   | { readonly operation: 'git-branch' }
   | { readonly operation: 'git-stage'; readonly paths: readonly string[] }
+  | { readonly operation: 'git-diff'; readonly paths: readonly string[] }
   | {
       readonly operation: 'git-commit';
       readonly message: string;
@@ -54,6 +60,188 @@ export interface ExecutionLifecycleRuntimeHomes {
 export interface ExecutionLifecycleContext extends ExecutionAuthorityContext {
   readonly execution: ExecutionAuthorityContext['execution'] & {
     readonly environment?: readonly { readonly name: string; readonly value: string }[];
+  };
+}
+
+export const EXECUTION_GIT_HOOK_POLICY_ENV = [
+  'CAWS_EXECUTION_GIT_HOOK_POLICY',
+  'CAWS_EXECUTION_GIT_HOOK_POLICY_SHA256',
+] as const;
+const GIT_HOOK_NAMES = [
+  'applypatch-msg',
+  'pre-applypatch',
+  'post-applypatch',
+  'pre-commit',
+  'pre-auto-gc',
+  'pre-merge-commit',
+  'prepare-commit-msg',
+  'commit-msg',
+  'post-commit',
+  'post-checkout',
+  'post-merge',
+  'pre-push',
+  'pre-rebase',
+  'post-rewrite',
+  'reference-transaction',
+  'post-index-change',
+  'push-to-checkout',
+  'proc-receive',
+  'update',
+  'pre-receive',
+  'post-receive',
+  'post-update',
+] as const;
+interface ExecutionGitHookImage {
+  readonly path: string;
+  readonly sha256: string;
+  readonly dev: string;
+  readonly ino: string;
+  readonly mode: string;
+}
+interface ExecutionGitHookRoot {
+  readonly cwd: string;
+  readonly hooksDirectory: string;
+  readonly hooks: Readonly<Record<string, ExecutionGitHookImage | null>>;
+  readonly formatters?: {
+    readonly eslint: { readonly path: string; readonly sha256: string } | null;
+    readonly prettier: { readonly path: string; readonly sha256: string } | null;
+  };
+  readonly readOnlyPaths?: readonly string[];
+}
+export interface ExecutionGitHookPolicy {
+  readonly version: 1 | 2;
+  readonly path: string;
+  readonly sha256: string;
+  readonly roots: readonly ExecutionGitHookRoot[];
+}
+function exactObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === keys.length &&
+    keys.every((key) => Object.hasOwn(value, key))
+  );
+}
+
+/** Native supplies this startup catalog through its authenticated record.
+ * Hooks execute only through the private bridge and the Host ceiling; a pinned
+ * entrypoint alone does not protect mutable dependent project commands. */
+export function readExecutionLifecycleHookPolicy(
+  environment: readonly { readonly name: string; readonly value: string }[]
+): ExecutionGitHookPolicy | undefined {
+  const selected = environment.filter((row) =>
+    EXECUTION_GIT_HOOK_POLICY_ENV.includes(
+      row.name as (typeof EXECUTION_GIT_HOOK_POLICY_ENV)[number]
+    )
+  );
+  if (selected.length === 0) return undefined;
+  requireValue(
+    selected.length === 2 && new Set(selected.map((row) => row.name)).size === 2,
+    'unsupported_profile'
+  );
+  const values = new Map(selected.map((row) => [row.name, row.value]));
+  const path = values.get(EXECUTION_GIT_HOOK_POLICY_ENV[0])!;
+  const sha256 = values.get(EXECUTION_GIT_HOOK_POLICY_ENV[1])!;
+  requireValue(isAbsolute(path) && /^[0-9a-f]{64}$/.test(sha256), 'unsupported_profile');
+  const bytes = physicalFile(path)!;
+  requireValue(createHash('sha256').update(bytes).digest('hex') === sha256, 'authority_changed');
+  const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  parseJsonSource(source, 16, 50000, true);
+  const policy: unknown = JSON.parse(source);
+  requireValue(
+    exactObject(policy, ['schema', 'roots']) &&
+      ['caws.execution.git-hook-policy.v1', 'caws.execution.git-hook-policy.v2'].includes(
+        String(policy.schema)
+      ) &&
+      Array.isArray(policy.roots) &&
+      policy.roots.length > 0 &&
+      policy.roots.length <= 4096,
+    'unsupported_profile'
+  );
+  const roots = new Set<string>();
+  const extended = policy.schema === 'caws.execution.git-hook-policy.v2';
+  for (const root of policy.roots) {
+    requireValue(
+      exactObject(
+        root,
+        extended
+          ? ['cwd', 'hooksDirectory', 'hooks', 'formatters', 'readOnlyPaths']
+          : ['cwd', 'hooksDirectory', 'hooks']
+      ) &&
+        typeof root.cwd === 'string' &&
+        isAbsolute(root.cwd) &&
+        !roots.has(root.cwd) &&
+        typeof root.hooksDirectory === 'string' &&
+        isAbsolute(root.hooksDirectory) &&
+        exactObject(root.hooks, GIT_HOOK_NAMES),
+      'unsupported_profile'
+    );
+    roots.add(root.cwd);
+    if (extended) {
+      requireValue(
+        exactObject(root.formatters, ['eslint', 'prettier']) &&
+          Array.isArray(root.readOnlyPaths) &&
+          root.readOnlyPaths.length <= 4096 &&
+          root.readOnlyPaths.every((item) => typeof item === 'string' && isAbsolute(item)) &&
+          new Set(root.readOnlyPaths).size === root.readOnlyPaths.length,
+        'unsupported_profile'
+      );
+      for (const entry of Object.values(root.formatters)) {
+        if (entry === null) continue;
+        requireValue(
+          exactObject(entry, ['path', 'sha256']) &&
+            typeof entry.path === 'string' &&
+            isAbsolute(entry.path) &&
+            typeof entry.sha256 === 'string' &&
+            /^[0-9a-f]{64}$/.test(entry.sha256),
+          'unsupported_profile'
+        );
+        const bytes = physicalFile(entry.path)!;
+        requireValue(
+          createHash('sha256').update(bytes).digest('hex') === entry.sha256,
+          'authority_changed'
+        );
+      }
+      for (const path of root.readOnlyPaths as string[]) {
+        requireValue(
+          fs.realpathSync.native(path) === path && !fs.lstatSync(path).isSymbolicLink(),
+          'unsupported_profile'
+        );
+      }
+    }
+    for (const name of GIT_HOOK_NAMES) {
+      const hook = root.hooks[name];
+      if (hook === null) continue;
+      requireValue(
+        exactObject(hook, ['path', 'sha256', 'dev', 'ino', 'mode']) &&
+          hook.path === join(root.hooksDirectory, name) &&
+          typeof hook.sha256 === 'string' &&
+          /^[0-9a-f]{64}$/.test(hook.sha256) &&
+          ['dev', 'ino', 'mode'].every(
+            (key) =>
+              typeof hook[key] === 'string' && /^(?:0|[1-9][0-9]*)$/.test(hook[key] as string)
+          ),
+        'unsupported_profile'
+      );
+    }
+  }
+  // Legacy catalogs did not provide the private hook execution boundary.
+  // They remain usable only where Git has no executable callback to run.
+  if (!extended)
+    requireValue(
+      (policy.roots as unknown as ExecutionGitHookRoot[]).every((root) =>
+        Object.values(root.hooks).every(
+          (hook) => hook === null || (BigInt(hook.mode) & 0o111n) === 0n
+        )
+      ),
+      'unsupported_profile'
+    );
+  return {
+    version: extended ? 2 : 1,
+    path,
+    sha256,
+    roots: policy.roots as unknown as readonly ExecutionGitHookRoot[],
   };
 }
 
@@ -110,9 +298,20 @@ function pathArgument(value: string): boolean {
 export function parseExecutionLifecycleArguments(
   argv: readonly string[]
 ): ExecutionLifecycleArguments {
-  requireValue(argv.length > 0 && argv.length <= 260 && argv.every(literal), 'unsupported_profile');
   const operation = argv[0];
+  requireValue(
+    argv.length > 0 &&
+      argv.length <= 260 &&
+      argv.every((value, index) =>
+        operation === 'git-commit' && index === 2
+          ? value.length > 0 && value.length <= 8192 && !/[\0\r]/.test(value)
+          : literal(value)
+      ),
+    'unsupported_profile'
+  );
   if (
+    operation === 'status' ||
+    operation === 'agents-list' ||
     operation === 'doctor' ||
     operation === 'git-status' ||
     operation === 'git-head' ||
@@ -121,9 +320,9 @@ export function parseExecutionLifecycleArguments(
     requireValue(argv.length === 1, 'unsupported_profile');
     return { operation };
   }
-  if (operation === 'git-stage' || operation === 'git-commit') {
-    const offset = operation === 'git-stage' ? 1 : 3;
-    requireValue(operation === 'git-stage' || argv[1] === '--message', 'unsupported_profile');
+  if (operation === 'git-stage' || operation === 'git-diff' || operation === 'git-commit') {
+    const offset = operation === 'git-commit' ? 3 : 1;
+    requireValue(operation !== 'git-commit' || argv[1] === '--message', 'unsupported_profile');
     requireValue(argv[offset] === '--', 'unsupported_profile');
     const paths = argv.slice(offset + 1);
     requireValue(
@@ -133,9 +332,11 @@ export function parseExecutionLifecycleArguments(
         new Set(paths).size === paths.length,
       'unsupported_profile'
     );
-    return operation === 'git-stage'
-      ? { operation, paths }
-      : { operation, message: argv[2]!, paths };
+    return operation === 'git-commit'
+      ? { operation, message: argv[2]!, paths }
+      : operation === 'git-stage'
+        ? { operation, paths }
+        : { operation, paths };
   }
   const id = (value: string | undefined): value is string =>
     value !== undefined && /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$/.test(value) && value.length <= 128;
@@ -143,7 +344,7 @@ export function parseExecutionLifecycleArguments(
     requireValue(argv.length === 3 && argv[1] === '--spec' && id(argv[2]), 'unsupported_profile');
     return { operation, specId: argv[2] };
   }
-  if (operation === 'worktree-merge') {
+  if (operation === 'worktree-merge' || operation === 'worktree-review') {
     requireValue(
       argv.length === 5 &&
         argv[1] === '--worktree' &&
@@ -169,21 +370,38 @@ export function parseExecutionLifecycleArguments(
 }
 
 type LifecycleGitQuery = (cwd: string, args: readonly string[], input?: Buffer) => string;
-function executionGit(
+function lifecycleChildEnvironment(
   environment: readonly { readonly name: string; readonly value: string }[] = []
-): LifecycleGitQuery {
+): NodeJS.ProcessEnv {
   const homes = readExecutionLifecycleRuntimeHomes(environment);
-  const gitEnvironment: NodeJS.ProcessEnv = {
-    PATH: '/usr/bin:/bin',
+  const thread = environment.find((entry) => entry.name === 'CAWS_EXECUTION_THREAD')?.value;
+  const project = environment.find((entry) => entry.name === 'CAWS_EXECUTION_PROJECT')?.value;
+  requireValue((thread === undefined) === (project === undefined), 'unsupported_profile');
+  return {
+    PATH: `${dirname(fs.realpathSync.native(process.execPath))}:/usr/bin:/bin`,
     LC_ALL: 'C',
-    ...(homes ? { HOME: homes.home } : {}),
+    GIT_OPTIONAL_LOCKS: '0',
+    ...(homes ? { HOME: homes.home, CAWS_HOME: homes.cawsHome, CODEX_HOME: homes.codexHome } : {}),
+    ...(thread !== undefined
+      ? { CODEX_THREAD_ID: thread, CAWS_AGENT_SURFACE: 'codex', CAWS_PROJECT_DIR: project }
+      : {}),
   };
+}
+function executionGit(
+  environment: readonly { readonly name: string; readonly value: string }[] = [],
+  callbacks = false
+): LifecycleGitQuery {
+  const gitEnvironment = lifecycleChildEnvironment(environment);
   return (cwd, args, input) =>
     execFileSync('/usr/bin/git', [...args], {
       cwd,
-      env: gitEnvironment,
+      ...(callbacks ? executionGitOptions(cwd) : {}),
+      env: { ...gitEnvironment, ...(callbacks ? executionGitOptions(cwd).env : {}) },
       encoding: 'utf8',
-      stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+      stdio:
+        callbacks && input === undefined
+          ? executionGitOptions(cwd).stdio
+          : [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       ...(input === undefined ? {} : { input }),
       timeout: 10000,
       maxBuffer: 1048576,
@@ -223,6 +441,54 @@ function physicalFile(path: string, optional = false): Buffer | undefined {
   } catch (error) {
     if (optional && (error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw error;
+  }
+}
+
+/** Hash the entire ledger with bounded memory. Native invocation deadlines bound
+ * the enclosing operation; this read-only helper has no independent deadline. */
+function hashEventLedger(hash: ReturnType<typeof createHash>, path: string): void {
+  let before: fs.BigIntStats;
+  try {
+    before = fs.lstatSync(path, { bigint: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      hash.update('absent');
+      return;
+    }
+    throw error;
+  }
+  const same = (actual: fs.BigIntStats): boolean =>
+    actual.isFile() &&
+    actual.nlink === 1n &&
+    actual.dev === before.dev &&
+    actual.ino === before.ino &&
+    actual.size === before.size &&
+    actual.mtimeNs === before.mtimeNs &&
+    actual.ctimeNs === before.ctimeNs;
+  requireValue(same(before) && fs.realpathSync.native(path) === path);
+  const fd = fs.openSync(
+    path,
+    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK
+  );
+  try {
+    requireValue(same(fs.fstatSync(fd, { bigint: true })));
+    const block = Buffer.allocUnsafe(65536);
+    let total = 0n;
+    for (;;) {
+      const count = fs.readSync(fd, block, 0, block.length, null);
+      if (count === 0) break;
+      total += BigInt(count);
+      requireValue(total <= before.size);
+      hash.update(block.subarray(0, count));
+    }
+    requireValue(
+      total === before.size &&
+        same(fs.fstatSync(fd, { bigint: true })) &&
+        same(fs.lstatSync(path, { bigint: true })) &&
+        fs.realpathSync.native(path) === path
+    );
+  } finally {
+    fs.closeSync(fd);
   }
 }
 function jsonFile(path: string): Record<string, unknown> {
@@ -341,7 +607,7 @@ function lifecycleGitConfiguration(
     // Remote URL/fetch and credential/UI/default-branch settings cannot select
     // a program here. Promisor/partialClone, includes and aliases stay refused.
     const harmless =
-      /^(?:credential\.helper|user\.(?:name|email)|color\.ui|push\.autosetupremote|http\.postbuffer|pull\.(?:ff|rebase)|core\.(?:repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode)|(?:init|inti)\.defaultbranch|remote\..+\.(?:url|fetch)|branch\..+\.(?:remote|merge))$/.test(
+      /^(?:credential\.helper|user\.(?:name|email)|color\.ui|push\.autosetupremote|http\.postbuffer|pull\.(?:ff|rebase)|core\.(?:repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode)|(?:init|inti)\.defaultbranch|remote\..+\.(?:url|fetch)|branch\..+\.(?:remote|merge|vscode-merge-base))$/.test(
         key
       );
     requireValue(
@@ -460,7 +726,9 @@ export function inspectExecutionLifecycleGit(
   const git = executionGit(environment);
   const { source, hooksPath } = lifecycleGitConfiguration(cwd, git);
   const closure = inactiveFilterClosure(cwd, trees, additionalPaths, git);
-  const revision = createHash('sha256').update(source).update(closure).digest('hex');
+  const hookPolicy = readExecutionLifecycleHookPolicy(environment);
+  const revision = createHash('sha256').update(source).update(closure);
+  if (hookPolicy) revision.update(hookPolicy.path).update(hookPolicy.sha256);
   // Status can recursively launch Git in a tracked submodule, whose executable
   // configuration is outside this inspected closure. This profile has no
   // submodule capability; refuse gitlinks rather than spawning that reader.
@@ -478,50 +746,69 @@ export function inspectExecutionLifecycleGit(
         : join(cwd, hooksPath);
   // A project may already explicitly configure /dev/null. We never set it;
   // ordinary Git has no hook to run in that existing configuration.
-  if (hookDirectory === '/dev/null') return revision;
+  const baseline = hookPolicy?.roots.find((root) => root.cwd === cwd);
+  if (hookPolicy) requireValue(baseline?.hooksDirectory === hookDirectory, 'authority_changed');
+  if (hookDirectory === '/dev/null') {
+    if (baseline)
+      requireValue(
+        Object.values(baseline.hooks).every((hook) => hook === null),
+        'authority_changed'
+      );
+    return revision.digest('hex');
+  }
   try {
     directory(hookDirectory);
-    const active = new Set([
-      'applypatch-msg',
-      'pre-applypatch',
-      'post-applypatch',
-      'pre-commit',
-      'pre-auto-gc',
-      'pre-merge-commit',
-      'prepare-commit-msg',
-      'commit-msg',
-      'post-commit',
-      'post-checkout',
-      'post-merge',
-      'pre-push',
-      'pre-rebase',
-      'post-rewrite',
-      'reference-transaction',
-      'post-index-change',
-      'push-to-checkout',
-      'proc-receive',
-      'update',
-      'pre-receive',
-      'post-receive',
-      'post-update',
-    ]);
-    for (const name of active) {
-      let stat: fs.Stats;
+    for (const name of GIT_HOOK_NAMES) {
+      const target = join(hookDirectory, name);
+      let stat: fs.BigIntStats;
       try {
-        stat = fs.lstatSync(join(hookDirectory, name));
+        stat = fs.lstatSync(target, { bigint: true });
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          if (baseline) requireValue(baseline.hooks[name] === null, 'authority_changed');
+          continue;
+        }
         throw error;
       }
+      const expected = baseline?.hooks[name];
+      if (baseline) {
+        requireValue(
+          expected &&
+            expected.path === target &&
+            stat.dev.toString() === expected.dev &&
+            stat.ino.toString() === expected.ino &&
+            stat.mode.toString() === expected.mode,
+          'authority_changed'
+        );
+        const bytes = physicalFile(target)!;
+        requireValue(
+          createHash('sha256').update(bytes).digest('hex') === expected.sha256,
+          'authority_changed'
+        );
+        const named = fs.lstatSync(target, { bigint: true });
+        requireValue(
+          named.dev.toString() === expected.dev &&
+            named.ino.toString() === expected.ino &&
+            named.mode.toString() === expected.mode,
+          'authority_changed'
+        );
+      }
       requireValue(
-        stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o111) === 0,
+        stat.isFile() &&
+          !stat.isSymbolicLink() &&
+          (baseline !== undefined || (stat.mode & 0o111n) === 0n),
         'unsupported_profile'
       );
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    if (baseline)
+      requireValue(
+        Object.values(baseline.hooks).every((hook) => hook === null),
+        'authority_changed'
+      );
   }
-  return revision;
+  return revision.digest('hex');
 }
 
 export interface ExecutionLifecycleAuthority {
@@ -532,37 +819,62 @@ export interface ExecutionLifecycleAuthority {
   readonly revision: string;
 }
 
-/** Existing merge settlement refreshes every checkout of the base branch.
- * This bounded consumer owns only canonical plus its authenticated pin, so an
- * additional checkout must refuse before any lifecycle publication. NUL
- * framing preserves checkout paths containing line breaks without quoting. */
-function boundedCheckoutInventory(canonical: string, pin: string, git: LifecycleGitQuery): string {
+/** A shared branch publication must not stale another checkout of that ref.
+ * Unrelated checkouts retain their own indexes and files, including dirt.
+ * NUL framing preserves checkout paths containing line breaks without quoting. */
+function boundedCheckoutInventory(
+  canonical: string,
+  pin: string,
+  args: ExecutionLifecycleArguments,
+  git: LifecycleGitQuery
+): string {
   const inventory = git(canonical, ['worktree', 'list', '--porcelain', '-z']);
   const records = inventory.split('\0\0');
   requireValue(records.pop() === '', 'context_unresolved');
-  const allowed = new Set([canonical, pin]);
+  const required = new Set([canonical, pin]);
+  const affected = new Set<string>();
+  const publishing =
+    args.operation === 'git-commit'
+      ? [pin]
+      : args.operation === 'spec-commit' || args.operation === 'spec-close'
+        ? [canonical]
+        : args.operation === 'worktree-merge'
+          ? [canonical, pin]
+          : [];
+  for (const cwd of publishing) {
+    const branch = git(cwd, ['rev-parse', '--symbolic-full-name', 'HEAD']).trimEnd();
+    if (branch.startsWith('refs/heads/')) affected.add(branch);
+  }
   const observed = new Set<string>();
-  requireValue(records.length === allowed.size, 'scope_refused');
+  requireValue(records.length >= required.size && records.length <= 4096, 'scope_refused');
   for (const record of records) {
     const fields = record.split('\0');
     requireValue(
-      fields.length === 3 &&
+      (fields.length === 3 || (fields.length === 4 && /^locked(?: |$)/.test(fields[3]!))) &&
         fields[0]!.startsWith('worktree ') &&
         /^HEAD (?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(fields[1]!) &&
-        (fields[2] === 'detached' || fields[2]!.startsWith('branch refs/heads/')),
+        (fields[2] === 'detached' || /^branch refs\/heads\/[^\0\r\n]+$/.test(fields[2]!)),
       'context_unresolved'
     );
     const checkout = fields[0]!.slice('worktree '.length);
     requireValue(
       isAbsolute(checkout) &&
         fs.realpathSync.native(checkout) === checkout &&
-        allowed.has(checkout) &&
         !observed.has(checkout),
+      'scope_refused'
+    );
+    requireValue(
+      required.has(checkout) ||
+        fields[2] === 'detached' ||
+        !affected.has(fields[2]!.slice('branch '.length)),
       'scope_refused'
     );
     observed.add(checkout);
   }
-  requireValue(observed.size === allowed.size, 'scope_refused');
+  requireValue(
+    [...required].every((checkout) => observed.has(checkout)),
+    'scope_refused'
+  );
   return inventory;
 }
 
@@ -625,19 +937,36 @@ export function readExecutionLifecycleAuthority(
   let specId: string;
   if (
     args.operation === 'git-stage' ||
+    args.operation === 'git-diff' ||
     args.operation === 'git-commit' ||
     args.operation === 'git-status' ||
     args.operation === 'git-head' ||
     args.operation === 'git-branch' ||
     args.operation === 'spec-commit' ||
+    args.operation === 'status' ||
+    args.operation === 'agents-list' ||
+    args.operation === 'worktree-review' ||
     args.operation === 'doctor' ||
     args.operation === 'gates-run'
   ) {
     const authority = readExecutionAuthority(context);
     pin = authority.pin;
     specId = authority.binding.spec.id;
-    if (args.operation === 'spec-commit' || args.operation === 'gates-run')
+    if (
+      args.operation === 'spec-commit' ||
+      args.operation === 'gates-run' ||
+      args.operation === 'worktree-review'
+    )
       requireValue(specId === args.specId, 'scope_refused');
+    if (args.operation === 'worktree-review') {
+      const entry = jsonFile(join(cawsDir, 'worktrees.json'))[args.worktree] as
+        | Record<string, unknown>
+        | undefined;
+      requireValue(
+        authority.binding.kind === 'bound' && entry?.specId === specId && entry.path === pin,
+        'scope_refused'
+      );
+    }
   } else if (args.operation === 'worktree-merge') {
     requireValue(context.execution.cwd === context.projectRoot, 'context_unresolved');
     const registry = jsonFile(join(cawsDir, 'worktrees.json'));
@@ -699,7 +1028,7 @@ export function readExecutionLifecycleAuthority(
     pin = context.projectRoot;
     specId = args.specId;
   }
-  const checkoutInventory = boundedCheckoutInventory(context.projectRoot, pin, git);
+  const checkoutInventory = boundedCheckoutInventory(context.projectRoot, pin, args, git);
   if (pin !== context.projectRoot) lifecycleGitConfiguration(pin, git);
   const trees = [...new Set([context.projectRoot, pin])].map((cwd) =>
     framed(git(cwd, ['rev-parse', 'HEAD']))
@@ -712,7 +1041,11 @@ export function readExecutionLifecycleAuthority(
     '.caws/worktrees.json',
     '.caws/events.jsonl',
     '.caws/state.lock',
-    ...(args.operation === 'git-stage' || args.operation === 'git-commit' ? args.paths : []),
+    ...(args.operation === 'git-stage' ||
+    args.operation === 'git-diff' ||
+    args.operation === 'git-commit'
+      ? args.paths
+      : []),
   ];
   const pinClosure = inspectExecutionLifecycleGit(
     pin,
@@ -744,11 +1077,9 @@ export function readExecutionLifecycleAuthority(
     'claims/bridge.json',
     'events.jsonl',
   ]) {
-    const bytes = physicalFile(
-      join(cawsDir, name),
-      name === 'claims/bridge.json' || name === 'events.jsonl'
-    );
-    hash.update(name).update(bytes ?? 'absent');
+    hash.update(name);
+    if (name === 'events.jsonl') hashEventLedger(hash, join(cawsDir, name));
+    else hash.update(physicalFile(join(cawsDir, name), name === 'claims/bridge.json') ?? 'absent');
   }
   for (const cwd of new Set([pin, context.projectRoot]))
     hash.update(git(cwd, ['show-ref', '--head']));
@@ -786,6 +1117,103 @@ function ownedPaths(context: ExecutionLifecycleContext, paths: readonly string[]
       'scope_refused'
     );
   }
+}
+
+function configureHookRuntime(
+  context: ExecutionLifecycleContext,
+  authority: ExecutionLifecycleAuthority,
+  args: ExecutionLifecycleArguments,
+  policy: ExecutionGitHookPolicy
+): {
+  readonly shimDirectories: readonly { readonly cwd: string; readonly shimDirectory: string }[];
+  readonly bridgeFd: 4;
+} {
+  const git = executionGit(context.execution.environment);
+  const hasSource =
+    args.operation === 'git-stage' ||
+    args.operation === 'git-commit' ||
+    args.operation === 'worktree-merge';
+  const sourceAuthority = hasSource
+    ? readExecutionAuthority({
+        ...context,
+        association: { ...context.association, callerAnchor: authority.pin },
+        execution: { ...context.execution, cwd: authority.pin },
+      })
+    : undefined;
+  const roots: GitBridgeRoot[] = [];
+  for (const cwd of new Set([authority.canonical, authority.pin])) {
+    const catalog = policy.roots.find((root) => root.cwd === cwd);
+    requireValue(
+      catalog !== undefined &&
+        catalog.formatters !== undefined &&
+        catalog.readOnlyPaths !== undefined,
+      'unsupported_profile'
+    );
+    const candidates = git(cwd, [
+      'ls-files',
+      '--cached',
+      '--others',
+      '--exclude-standard',
+      '-z',
+    ]).split('\0');
+    requireValue(candidates.pop() === '', 'context_unresolved');
+    if (args.operation === 'git-stage' || args.operation === 'git-commit')
+      candidates.push(...args.paths);
+    const authorizedPaths = sourceAuthority
+      ? [...new Set(candidates)]
+          .filter(
+            (name) =>
+              pathArgument(name) &&
+              !name
+                .split('/')
+                .some(
+                  (part) =>
+                    ['.git', '.caws', '.codex', '.agents', '.claude', '.env'].includes(
+                      part.toLowerCase()
+                    ) || part.toLowerCase().startsWith('.env.')
+                ) &&
+              evaluatePath(name, sourceAuthority.binding, sourceAuthority.policy).kind === 'admit'
+          )
+          .sort()
+      : [];
+    requireValue(authorizedPaths.length <= 10000, 'scope_refused');
+    const readOnly = new Set<string>([...catalog.readOnlyPaths, __dirname]);
+    // A canonical .caws directory can contain the owned linked checkout.
+    // Protect every other subtree without placing a deny over that checkout.
+    const protect = (target: string): void => {
+      const stat = fs.lstatSync(target);
+      requireValue(
+        !stat.isSymbolicLink() && fs.realpathSync.native(target) === target,
+        'unsupported_profile'
+      );
+      if (target === cwd) return;
+      if (cwd.startsWith(target + '/')) {
+        requireValue(stat.isDirectory(), 'unsupported_profile');
+        for (const entry of fs.readdirSync(target)) protect(join(target, entry));
+      } else readOnly.add(target);
+      requireValue(readOnly.size <= 4096, 'unsupported_profile');
+    };
+    protect(authority.cawsDir);
+    protect(join(cwd, '.git'));
+    protect(framed(git(cwd, ['rev-parse', '--absolute-git-dir'])));
+    protect(framed(git(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir'])));
+    if (catalog.hooksDirectory !== '/dev/null') protect(catalog.hooksDirectory);
+    for (const hook of Object.values(catalog.hooks)) if (hook !== null) protect(hook.path);
+    roots.push({
+      cwd,
+      authorizedPaths,
+      hooksDirectory: catalog.hooksDirectory,
+      hooks: catalog.hooks,
+      formatters: catalog.formatters,
+      readOnlyPaths: [...readOnly].sort(),
+    });
+  }
+  const configured = bridgeRequest({ operation: 'configure', roots });
+  // The bridge client validates the closed response and its root ordering.
+  return {
+    shimDirectories: configured.shimDirectories as { cwd: string; shimDirectory: string }[],
+    bridgeFd: 4,
+  };
 }
 
 export interface ExecutionLifecycleResult {
@@ -843,6 +1271,36 @@ export class ExecutionLifecyclePublicationFailure extends Error {
 /** Only the exact native producer environment and direct inherited fd3 enter
  * this consumer. The capability never releases or replaces the parent fence. */
 export function runExecutionLifecycleConsumer(argv: readonly string[]): ExecutionLifecycleResult {
+  const policy = readExecutionLifecycleHookPolicy(
+    Object.entries(process.env)
+      .filter((row): row is [string, string] => row[1] !== undefined)
+      .map(([name, value]) => ({ name, value }))
+  );
+  const bridged = policy?.version === 2;
+  let verdictAttempted = false;
+  try {
+    const result = runExecutionLifecycleConsumerInner(argv, bridged);
+    if (bridged) {
+      verdictAttempted = true;
+      requireValue(bridgeRequest({ operation: 'verdict' }).failed === false, 'authority_changed');
+    }
+    return result;
+  } catch (error) {
+    if (bridged && !verdictAttempted) {
+      try {
+        bridgeRequest({ operation: 'verdict' });
+      } catch {
+        /* original failure stays primary */
+      }
+    }
+    throw error;
+  }
+}
+
+function runExecutionLifecycleConsumerInner(
+  argv: readonly string[],
+  bridged: boolean
+): ExecutionLifecycleResult {
   const keys = [
     'CAWS_EXECUTION_PROJECT',
     'CAWS_EXECUTION_CALLER',
@@ -857,6 +1315,11 @@ export function runExecutionLifecycleConsumer(argv: readonly string[]): Executio
     .map(([name, value]) => ({ name, value: value! }));
   const homes = readExecutionLifecycleRuntimeHomes(environment);
   if (homes) keys.push('HOME', 'CAWS_HOME', 'CODEX_HOME');
+  const hookPolicy = readExecutionLifecycleHookPolicy(environment);
+  if (hookPolicy) {
+    requireValue(homes !== undefined, 'unsupported_profile');
+    keys.push(...EXECUTION_GIT_HOOK_POLICY_ENV);
+  }
   const cf = process.env.__CF_USER_TEXT_ENCODING;
   requireValue(
     cf === undefined ||
@@ -883,7 +1346,7 @@ export function runExecutionLifecycleConsumer(argv: readonly string[]): Executio
     },
     execution: { cwd: process.cwd(), environment },
   };
-  const git = executionGit(environment);
+  const git = executionGit(environment, true);
   const cawsDir = join(context.projectRoot, '.caws');
   const stat = fs.fstatSync(3, { bigint: true });
   requireValue(stat.isFile() && stat.size > 0n && stat.size <= 4096n, 'fence_unverified');
@@ -899,8 +1362,18 @@ export function runExecutionLifecycleConsumer(argv: readonly string[]): Executio
     nonce: row.nonce,
   };
   requireValue(verifyInheritedFence(cawsDir, fence), 'fence_unverified');
+  // Application/store Git calls inherit only public runtime context. The
+  // original private tuple remains in `context` for authority validation;
+  // neither it nor fd3 belongs to a project callback.
+  const childEnvironment = lifecycleChildEnvironment(environment);
+  for (const name of Object.keys(process.env)) delete process.env[name];
+  Object.assign(process.env, childEnvironment);
   const args = parseExecutionLifecycleArguments(argv);
-  if (args.operation === 'doctor' || args.operation === 'gates-run')
+  const applicationRead =
+    args.operation === 'status' ||
+    args.operation === 'agents-list' ||
+    args.operation === 'worktree-review';
+  if (applicationRead || args.operation === 'doctor' || args.operation === 'gates-run')
     requireValue(homes !== undefined, 'unsupported_profile');
   const authority = readExecutionLifecycleAuthority(context, args);
   const borrowed = borrowExecutionLifecycleFence(cawsDir, fence);
@@ -911,7 +1384,11 @@ export function runExecutionLifecycleConsumer(argv: readonly string[]): Executio
       'authority_changed'
     );
   };
-  if (args.operation === 'git-stage' || args.operation === 'git-commit')
+  if (
+    args.operation === 'git-stage' ||
+    args.operation === 'git-diff' ||
+    args.operation === 'git-commit'
+  )
     ownedPaths(context, args.paths);
   validate();
   const now = new Date();
@@ -925,6 +1402,7 @@ export function runExecutionLifecycleConsumer(argv: readonly string[]): Executio
   let data: unknown;
   const resultRoot =
     args.operation.startsWith('git-') ||
+    applicationRead ||
     args.operation === 'doctor' ||
     args.operation === 'gates-run'
       ? authority.pin
@@ -934,14 +1412,26 @@ export function runExecutionLifecycleConsumer(argv: readonly string[]): Executio
   if (
     args.operation === 'git-status' ||
     args.operation === 'git-head' ||
-    args.operation === 'git-branch'
+    args.operation === 'git-branch' ||
+    args.operation === 'git-diff'
   ) {
     const fixed =
       args.operation === 'git-status'
         ? ['--no-optional-locks', 'status', '--short']
         : args.operation === 'git-head'
           ? ['rev-parse', 'HEAD']
-          : ['branch', '--show-current'];
+          : args.operation === 'git-branch'
+            ? ['branch', '--show-current']
+            : [
+                '--literal-pathspecs',
+                '--no-optional-locks',
+                'diff',
+                '--cached',
+                '--no-ext-diff',
+                '--no-textconv',
+                '--',
+                ...args.paths,
+              ];
     const stdout = git(authority.pin, fixed);
     validate();
     return {
@@ -954,7 +1444,7 @@ export function runExecutionLifecycleConsumer(argv: readonly string[]): Executio
       stdout,
     };
   }
-  if (args.operation === 'doctor' || args.operation === 'gates-run') {
+  if (applicationRead || args.operation === 'doctor' || args.operation === 'gates-run') {
     const output: string[] = [];
     const errors: string[] = [];
     const out = (line: string): void => {
@@ -968,9 +1458,39 @@ export function runExecutionLifecycleConsumer(argv: readonly string[]): Executio
     const beforeEvents = args.operation === 'gates-run' ? loadEvents(cawsDir) : undefined;
     let exitCode: number | undefined;
     try {
-      // Fixed application APIs; no injected report, base override, runner or
-      // process environment rewrite. Native installed the homes before import.
-      if (args.operation === 'doctor') {
+      // Fixed application APIs with public runtime identity only; no injected
+      // report, base override or runner.
+      if (applicationRead) {
+        if (args.operation === 'status') {
+          const { runStatusCommand } = loadFixedApplication(
+            '../shell/commands/status'
+          ) as typeof import('../shell/commands/status');
+          exitCode = runStatusCommand({
+            cwd: authority.pin,
+            env: { CAWS_AGENT_SURFACE: 'codex', CODEX_THREAD_ID: context.association.threadId },
+            sessionId: context.association.threadId,
+            out,
+            err,
+          });
+        } else if (args.operation === 'agents-list') {
+          const { runAgentsListCommand } = loadFixedApplication(
+            '../shell/commands/agents'
+          ) as typeof import('../shell/commands/agents');
+          exitCode = runAgentsListCommand({ cwd: authority.pin, out, err });
+        } else if (args.operation === 'worktree-review') {
+          const { runWorktreeReviewCommand } = loadFixedApplication(
+            '../shell/commands/worktree'
+          ) as typeof import('../shell/commands/worktree');
+          exitCode = runWorktreeReviewCommand({
+            cwd: authority.pin,
+            name: args.worktree,
+            out,
+            err,
+          });
+        }
+        requireValue(exitCode !== undefined && [0, 1, 2].includes(exitCode));
+        validate();
+      } else if (args.operation === 'doctor') {
         const { runDoctorCommand } = loadFixedApplication(
           '../shell/commands/doctor'
         ) as typeof import('../shell/commands/doctor');
@@ -1030,106 +1550,125 @@ export function runExecutionLifecycleConsumer(argv: readonly string[]): Executio
       });
     }
   }
-  try {
-    if (args.operation === 'git-stage')
-      git(authority.pin, ['--literal-pathspecs', 'add', '--', ...args.paths]);
-    else if (args.operation === 'git-commit')
-      git(authority.pin, [
-        '--literal-pathspecs',
-        'commit',
-        '-m',
-        args.message,
-        '--',
-        ...args.paths,
-      ]);
-    else if (args.operation === 'spec-commit') {
-      data = autoCommit({
-        repoRoot: authority.canonical,
-        paths: [`.caws/specs/${args.specId}.yaml`],
-        message: `chore(caws): commit pending audit state for ${args.specId}`,
-        wasDirtyBeforeWrite: false,
-      });
-      requireValue((data as { kind: string }).kind === 'committed');
-    } else if (args.operation === 'worktree-merge') {
-      const input = {
-        name: args.worktree,
-        session,
-        sessionCandidates: {
-          candidates: [{ identity: session, source: 'codex_thread_env' as const }],
-          trace: [],
-        },
-        actor,
-        now: () => now,
-        callerCwd: authority.canonical,
-        noClose: true,
-      };
-      const preflight = mergeWorktree(cawsDir, { ...input, dryRun: true }, borrowed);
-      requireValue(
-        preflight.ok && preflight.value.kind === 'dry_run' && preflight.value.canProceed
-      );
-      validate();
-      const result = mergeWorktree(cawsDir, input, borrowed);
-      if (!result.ok) {
-        const value = result.errors
-          .map((error) => error.data?.merge_commit)
-          .find(
-            (value) => typeof value === 'string' && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value)
-          );
-        if (typeof value === 'string') mergeCommit = value;
-      }
-      requireValue(result.ok && result.value.kind === 'success');
-      data = result.value.data;
-      mergeCommit = (data as Record<string, unknown>).merge_commit as string;
-      requireValue((data as Record<string, unknown>).canonical_checkout_state === 'in_sync');
-      requireValue(
-        ((data as Record<string, unknown>).audit_commit as { kind: string })?.kind === 'committed'
-      );
-    } else if (args.operation === 'bridge-claim') {
-      const result = acquireBridge(
-        cawsDir,
-        { specId: args.specId, session, actor, now, contextCwd: authority.canonical },
-        borrowed
-      );
-      requireValue(result.ok);
-      data = result.value;
-    } else {
-      const result = closeSpec(
-        cawsDir,
-        {
-          id: args.specId,
-          resolution: 'completed',
-          mergeCommit: args.mergeCommit,
-          reason: args.reason,
+  const effect = (): ExecutionLifecycleResult => {
+    try {
+      if (args.operation === 'git-stage')
+        git(authority.pin, ['--literal-pathspecs', 'add', '--', ...args.paths]);
+      else if (args.operation === 'git-commit')
+        git(authority.pin, [
+          '--literal-pathspecs',
+          'commit',
+          '-m',
+          args.message,
+          '--',
+          ...args.paths,
+        ]);
+      else if (args.operation === 'spec-commit') {
+        data = autoCommit({
+          repoRoot: authority.canonical,
+          paths: [`.caws/specs/${args.specId}.yaml`],
+          message: `chore(caws): commit pending audit state for ${args.specId}`,
+          wasDirtyBeforeWrite: false,
+        });
+        requireValue((data as { kind: string }).kind === 'committed');
+      } else if (args.operation === 'worktree-merge') {
+        const input = {
+          name: args.worktree,
+          session,
+          sessionCandidates: {
+            candidates: [{ identity: session, source: 'codex_thread_env' as const }],
+            trace: [],
+          },
           actor,
           now: () => now,
-        },
-        borrowed
-      );
-      requireValue(result.ok && result.value.kind === 'success');
-      data = result.value;
-      requireValue((result.value.data?.audit_commit as { kind: string })?.kind === 'committed');
+          callerCwd: authority.canonical,
+          noClose: true,
+        };
+        const preflight = mergeWorktree(cawsDir, { ...input, dryRun: true }, borrowed);
+        requireValue(
+          preflight.ok && preflight.value.kind === 'dry_run' && preflight.value.canProceed
+        );
+        validate();
+        const result = mergeWorktree(cawsDir, input, borrowed);
+        if (!result.ok) {
+          const value = result.errors
+            .map((error) => error.data?.merge_commit)
+            .find(
+              (value) => typeof value === 'string' && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value)
+            );
+          if (typeof value === 'string') mergeCommit = value;
+        }
+        requireValue(result.ok && result.value.kind === 'success');
+        data = result.value.data;
+        mergeCommit = (data as Record<string, unknown>).merge_commit as string;
+        requireValue((data as Record<string, unknown>).canonical_checkout_state === 'in_sync');
+        requireValue(
+          ((data as Record<string, unknown>).audit_commit as { kind: string })?.kind === 'committed'
+        );
+      } else if (args.operation === 'bridge-claim') {
+        const result = acquireBridge(
+          cawsDir,
+          { specId: args.specId, session, actor, now, contextCwd: authority.canonical },
+          borrowed
+        );
+        requireValue(result.ok);
+        data = result.value;
+      } else {
+        const result = closeSpec(
+          cawsDir,
+          {
+            id: args.specId,
+            resolution: 'completed',
+            mergeCommit: args.mergeCommit,
+            reason: args.reason,
+            actor,
+            now: () => now,
+          },
+          borrowed
+        );
+        requireValue(result.ok && result.value.kind === 'success');
+        data = result.value;
+        requireValue((result.value.data?.audit_commit as { kind: string })?.kind === 'committed');
+      }
+      requireValue(verifyInheritedFence(cawsDir, fence), 'fence_unverified');
+      return {
+        operation: 'caws-lifecycle-v1',
+        action: args.operation,
+        specId: authority.specId,
+        outcome: 'settled',
+        exitCode: 0,
+        head: framed(git(resultRoot, ['rev-parse', 'HEAD'])),
+        ...(data !== undefined ? { data } : {}),
+      };
+    } catch (error) {
+      let headAfter: string | undefined;
+      try {
+        headAfter = framed(git(resultRoot, ['rev-parse', 'HEAD']));
+      } catch {
+        /* retain the observation that is available */
+      }
+      throw new ExecutionLifecyclePublicationFailure(args, authority.specId, {
+        headBefore,
+        ...(headAfter !== undefined ? { headAfter } : {}),
+        ...(mergeCommit !== undefined ? { mergeCommit } : {}),
+        ...(typeof (error as { status?: unknown }).status === 'number'
+          ? { exitCode: (error as { status: number }).status }
+          : {}),
+        ...(typeof (error as { stderr?: unknown }).stderr === 'string'
+          ? { stderr: (error as { stderr: string }).stderr }
+          : {}),
+        ...(typeof (error as { stdout?: unknown }).stdout === 'string'
+          ? { stdout: (error as { stdout: string }).stdout }
+          : {}),
+      });
     }
-    requireValue(verifyInheritedFence(cawsDir, fence), 'fence_unverified');
-    return {
-      operation: 'caws-lifecycle-v1',
-      action: args.operation,
-      specId: authority.specId,
-      outcome: 'settled',
-      exitCode: 0,
-      head: framed(git(resultRoot, ['rev-parse', 'HEAD'])),
-      ...(data !== undefined ? { data } : {}),
-    };
-  } catch {
-    let headAfter: string | undefined;
-    try {
-      headAfter = framed(git(resultRoot, ['rev-parse', 'HEAD']));
-    } catch {
-      /* retain the observation that is available */
-    }
-    throw new ExecutionLifecyclePublicationFailure(args, authority.specId, {
-      headBefore,
-      ...(headAfter !== undefined ? { headAfter } : {}),
-      ...(mergeCommit !== undefined ? { mergeCommit } : {}),
-    });
+  };
+  if (bridged) {
+    requireValue(hookPolicy !== undefined, 'unsupported_profile');
+    return withExecutionGitRuntime(
+      configureHookRuntime(context, authority, args, hookPolicy),
+      effect
+    );
   }
+  return effect();
 }

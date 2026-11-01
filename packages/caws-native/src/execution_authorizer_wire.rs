@@ -2,7 +2,7 @@
 //! The caller must independently establish child exit/EOF, its original deadline,
 //! host association, fence ownership and one-use execution before any effect.
 
-use base64::{Engine, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -383,7 +383,7 @@ impl FrameDecoder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     fn request(phase: Phase) -> RequestRecord {
         RequestRecord::new(
@@ -670,16 +670,14 @@ mod tests {
         assert!(req.correlate_reply(&[255]).is_err());
         assert!(req.correlate_reply(&vec![b' '; REPLY_LIMIT + 1]).is_err());
         assert!(RequestRecord::decode(&vec![b' '; REQUEST_LIMIT + 1]).is_err());
-        assert!(
-            RequestRecord::new(
-                Phase::Analyze,
-                "i".into(),
-                vec![b' '; REQUEST_LIMIT],
-                None,
-                None
-            )
-            .is_err()
-        );
+        assert!(RequestRecord::new(
+            Phase::Analyze,
+            "i".into(),
+            vec![b' '; REQUEST_LIMIT],
+            None,
+            None
+        )
+        .is_err());
     }
 
     #[test]
@@ -1077,7 +1075,7 @@ impl ProgramCandidates {
 #[cfg(test)]
 mod discovery_tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     fn draft() -> Vec<u8> {
         let state = b"{}";
@@ -1148,11 +1146,10 @@ mod discovery_tests {
             "executionDigest":req.request.envelope.execution_digest,"decision":"allow",
             "authorityRevision":"r","reasonCodes":[]});
         assert!(!accepts(&req, &authorizer));
-        assert!(
-            req.request
-                .correlate_reply(&serde_json::to_vec(&base).unwrap())
-                .is_err()
-        );
+        assert!(req
+            .request
+            .correlate_reply(&serde_json::to_vec(&base).unwrap())
+            .is_err());
     }
     #[test]
     fn required_fields_duplicates_unknown_and_representation_are_rejected() {
@@ -1315,6 +1312,20 @@ mod discovery_tests {
             .unwrap();
         assert_eq!(parsed.execution().unwrap().kind, "caws-lifecycle-v1");
         assert_eq!(parsed.execution().unwrap().argv[2], "git-head");
+        let message = "fix: preserve commit data\n\n- Keep printf text > protected.txt inert";
+        value["execution"]["argv"] = json!([
+            "/gen/node",
+            "/gen/lifecycle-main.js",
+            "git-commit",
+            "--message",
+            message,
+            "--",
+            "src/owned.txt"
+        ]);
+        let parsed = req
+            .correlate_reply(&serde_json::to_vec(&value).unwrap())
+            .unwrap();
+        assert_eq!(parsed.execution().unwrap().argv[4], message);
         for execution in [
             json!({"kind":"caws-lifecycle-v1","argv":["/gen/node","/gen/lifecycle-main.js"]}),
             json!({"kind":"caws-lifecycle-v1","argv":["a","b","c"],"project":null}),

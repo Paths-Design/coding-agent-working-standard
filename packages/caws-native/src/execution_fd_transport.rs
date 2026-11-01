@@ -62,7 +62,7 @@ pub(crate) fn configure_private_child(command: &mut Command) -> io::Result<()> {
 }
 
 /// Duplicate sources before installing a child-only mapping. Targets must be
-/// unique, in 3..=32. The duplicates are closed when the command is dropped,
+/// unique, in 3..=522 (the v3 source-binding role range). The duplicates are closed when the command is dropped,
 /// including on partial configuration or spawn failure. The original sources
 /// are never closed or modified by this function.
 ///
@@ -74,9 +74,9 @@ pub(crate) fn configure_child_fds(
     command: &mut Command,
     mappings: &[(BorrowedFd<'_>, RawFd)],
 ) -> io::Result<()> {
-    let mut seen = [false; 33];
+    let mut seen = [false; 523];
     for &(_, target) in mappings {
-        if !(3..=32).contains(&target) || seen[target as usize] {
+        if !(3..=522).contains(&target) || seen[target as usize] {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "invalid or duplicate child fd target",
@@ -84,9 +84,19 @@ pub(crate) fn configure_child_fds(
         }
         seen[target as usize] = true;
     }
+    // Duplicates must lie above every possible target: otherwise a later
+    // dup2 in a mapping cycle could overwrite a still-needed source.
+    let duplicate_floor = mappings
+        .iter()
+        .map(|(_, target)| *target)
+        .max()
+        .unwrap_or(63)
+        .max(63)
+        + 1;
     let mut owned = Vec::with_capacity(mappings.len());
     for &(source, target) in mappings {
-        let duplicate = unsafe { libc::fcntl(source.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 64) };
+        let duplicate =
+            unsafe { libc::fcntl(source.as_raw_fd(), libc::F_DUPFD_CLOEXEC, duplicate_floor) };
         if duplicate < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -176,6 +186,59 @@ mod tests {
         let Ok(mode) = std::env::var("CAWS_FD_FIXTURE") else {
             return;
         };
+        if mode == "high_probe" {
+            let expected_521 = std::env::var("CAWS_EXPECT_521").unwrap();
+            let expected_522 = std::env::var("CAWS_EXPECT_522").unwrap();
+            let (dev, ino) = stat(521);
+            assert_eq!(format!("{dev}:{ino}"), expected_521);
+            let (dev, ino) = stat(522);
+            assert_eq!(format!("{dev}:{ino}"), expected_522);
+            return;
+        }
+        if mode == "high_parent" {
+            let a = std::fs::File::open("/dev/null").unwrap();
+            let b = std::fs::File::open("/dev/zero").unwrap();
+            occupy(521, a.as_raw_fd());
+            occupy(522, b.as_raw_fd());
+            let a_identity = stat(521);
+            let b_identity = stat(522);
+            // SAFETY: both occupied descriptors stay open until command drop.
+            let a_fd = unsafe { BorrowedFd::borrow_raw(521) };
+            let b_fd = unsafe { BorrowedFd::borrow_raw(522) };
+            let mut cmd = fixture("high_probe");
+            cmd.env(
+                "CAWS_EXPECT_521",
+                format!("{}:{}", b_identity.0, b_identity.1),
+            );
+            cmd.env(
+                "CAWS_EXPECT_522",
+                format!("{}:{}", a_identity.0, a_identity.1),
+            );
+            configure_private_child(&mut cmd).unwrap();
+            configure_child_fds(&mut cmd, &[(a_fd, 522), (b_fd, 521)]).unwrap();
+            let out = cmd.output().unwrap();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            assert_eq!(stat(521), a_identity);
+            assert_eq!(stat(522), b_identity);
+            let mut invalid = Command::new("/bin/true");
+            assert_eq!(
+                configure_child_fds(&mut invalid, &[(a_fd, 523)])
+                    .unwrap_err()
+                    .kind(),
+                io::ErrorKind::InvalidInput
+            );
+            assert_eq!(
+                configure_child_fds(&mut invalid, &[(a_fd, 522), (b_fd, 522)])
+                    .unwrap_err()
+                    .kind(),
+                io::ErrorKind::InvalidInput
+            );
+            return;
+        }
         if mode == "hygiene_probe" {
             let fd: RawFd = std::env::var("CAWS_HYGIENE_FD").unwrap().parse().unwrap();
             assert_eq!(unsafe { libc::fcntl(fd, libc::F_GETFD) }, -1);
@@ -420,6 +483,17 @@ mod tests {
     #[test]
     fn inherited_non_cloexec_is_private_and_spawn_errors_survive() {
         let out = fixture("hygiene_parent").output().unwrap();
+        assert!(
+            out.status.success(),
+            "stdout: {} stderr: {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn formatter_transport_high_targets_preserve_cycles_and_refuse_523() {
+        let out = fixture("high_parent").output().unwrap();
         assert!(
             out.status.success(),
             "stdout: {} stderr: {}",

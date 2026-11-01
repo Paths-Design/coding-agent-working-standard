@@ -5,6 +5,7 @@ const { spawnCoveredSync } = require('./child-coverage.cjs');
 const { verifyInheritedFence } = require('../../dist/execution/fence');
 const roots = [];
 afterEach(() => {
+  jest.restoreAllMocks();
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 function holder() {
@@ -106,6 +107,7 @@ describe('inherited canonical execution fence', () => {
         { ...h.value, at: 'not a date' },
         { ...h.value, at: '2026-99-99T00:00:00.000Z' },
         { ...h.value, at: 42 },
+        { ...h.value, at: [h.value.at] },
       ]) {
         write(h, value);
         expect(verifyInheritedFence(h.caws, h.expected, h.fd)).toBe(false);
@@ -121,6 +123,7 @@ describe('inherited canonical execution fence', () => {
       for (const text of [
         '',
         'invalid',
+        '\uFEFF' + JSON.stringify(h.value),
         JSON.stringify(h.value).replace('"pid":', '"pid":1,"pid":'),
         'x'.repeat(4097),
       ]) {
@@ -150,6 +153,75 @@ describe('inherited canonical execution fence', () => {
       expect(verifyInheritedFence(h.caws, h.expected, h.fd)).toBe(false);
       spy.mockRestore();
       expect(fs.readFileSync(h.file, 'utf8')).toBe(JSON.stringify(h.value) + ' ');
+    } finally {
+      fs.closeSync(h.fd);
+    }
+  });
+
+  test('accepts valid metadata at the inclusive 4096-byte limit', () => {
+    const h = holder();
+    try {
+      const text = JSON.stringify(h.value);
+      write(h, text + ' '.repeat(4096 - Buffer.byteLength(text)));
+      expect(fs.fstatSync(h.fd).size).toBe(4096);
+      expect(verifyInheritedFence(h.caws, h.expected, h.fd)).toBe(true);
+    } finally {
+      fs.closeSync(h.fd);
+    }
+  });
+
+  test('rejects a real pathname replacement after the inherited descriptor reaches EOF', () => {
+    const h = holder();
+    const read = fs.readSync;
+    let eofReached = false;
+    try {
+      jest.spyOn(fs, 'readSync').mockImplementation((...args) => {
+        const count = read(...args);
+        if (args[0] === h.fd && count === 0) {
+          eofReached = true;
+          fs.renameSync(h.file, h.file + '.owned');
+          fs.writeFileSync(h.file, JSON.stringify(h.value));
+        }
+        return count;
+      });
+      expect(verifyInheritedFence(h.caws, h.expected, h.fd)).toBe(false);
+      expect(eofReached).toBe(true);
+      expect(fs.readFileSync(h.file, 'utf8')).toBe(JSON.stringify(h.value));
+      expect(fs.fstatSync(h.fd, { bigint: true }).ino.toString()).toBe(h.expected.ino);
+      expect(fs.lstatSync(h.file, { bigint: true }).ino.toString()).not.toBe(h.expected.ino);
+    } finally {
+      fs.closeSync(h.fd);
+    }
+  });
+
+  test.each([
+    ['descriptor', 'dev'],
+    ['descriptor', 'ino'],
+    ['descriptor', 'size'],
+    ['descriptor', 'mtimeNs'],
+    ['descriptor', 'ctimeNs'],
+    ['pathname', 'dev'],
+    ['pathname', 'ino'],
+  ])('rejects a mocked final %s snapshot with only %s changed', (boundary, field) => {
+    const h = holder();
+    const fstat = fs.fstatSync;
+    const lstat = fs.lstatSync;
+    let descriptorReads = 0;
+    let pathnameReads = 0;
+    try {
+      jest.spyOn(fs, 'fstatSync').mockImplementation((fd, options) => {
+        const stat = fstat(fd, options);
+        if (fd !== h.fd || ++descriptorReads !== 2 || boundary !== 'descriptor') return stat;
+        return { ...stat, [field]: stat[field] + 1n };
+      });
+      jest.spyOn(fs, 'lstatSync').mockImplementation((pathname, options) => {
+        const stat = lstat(pathname, options);
+        if (pathname !== h.file || ++pathnameReads !== 2 || boundary !== 'pathname') return stat;
+        return { ...stat, [field]: stat[field] + 1n };
+      });
+      expect(verifyInheritedFence(h.caws, h.expected, h.fd)).toBe(false);
+      expect(descriptorReads).toBe(2);
+      expect(pathnameReads).toBe(2);
     } finally {
       fs.closeSync(h.fd);
     }

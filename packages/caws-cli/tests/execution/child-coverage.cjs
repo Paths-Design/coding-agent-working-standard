@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const preload = path.join(__dirname, 'child-coverage-preload.cjs');
 const MAX_BYTES = 2 * 1024 * 1024;
+const COVERAGE_FD = 5;
 function insist(value) { if (!value) throw new Error('Invalid or missing child mutation coverage'); }
 function object(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function exact(value, keys) { return object(value) && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key)); }
@@ -12,8 +13,8 @@ function prepare(options = {}) {
   const context = { token: randomUUID(), testId: parent?.currentTestId ?? null, activeMutant: String(parent?.activeMutant ?? process.env.__STRYKER_ACTIVE_MUTANT__ ?? ''), instrumented: parent !== undefined };
   insist(context.testId === null || typeof context.testId === 'string');
   const stdio = options.stdio ? [...options.stdio] : ['pipe', 'pipe', 'pipe'];
-  insist(stdio.length <= 4);
-  while (stdio.length < 4) stdio.push('ignore');
+  insist(stdio.length <= COVERAGE_FD);
+  while (stdio.length < COVERAGE_FD) stdio.push('ignore');
   stdio.push('pipe');
   return { parent, context, options: { ...options, encoding: undefined, stdio, env: { ...(options.env ?? process.env), CAWS_TEST_CHILD_COVERAGE: JSON.stringify(context), __STRYKER_ACTIVE_MUTANT__: context.activeMutant } } };
 }
@@ -52,11 +53,29 @@ function mergeCoverage(frame, context, parent) {
   add(destination.static, value.coverage.static);
   for (const [id, hits] of Object.entries(value.coverage.perTest)) add(destination.perTest[id] ?? (destination.perTest[id] = {}), hits);
 }
+function coverageDiagnostic(error, result, frame) {
+  let completeFrames = 0;
+  if (Buffer.isBuffer(frame)) {
+    let offset = 0;
+    while (offset + 4 <= frame.length) {
+      const length = frame.readUInt32BE(offset);
+      if (length > MAX_BYTES || offset + 4 + length > frame.length) break;
+      completeFrames++; offset += 4 + length;
+    }
+  }
+  const stderr = result.stderr == null ? null : result.stderr.toString('utf8').slice(0, 4096);
+  const detail = { status: result.status ?? null, signal: result.signal ?? null,
+    error: result.error?.code ?? result.error?.message ?? null, stderr,
+    coverageBytes: Buffer.isBuffer(frame) ? frame.length : 0, completeFrames };
+  return new Error(`Invalid or missing child mutation coverage: ${JSON.stringify(detail)}`, { cause: error });
+}
 function spawnCoveredSync(command, args, options = {}) {
   insist(command === process.execPath);
   const prepared = prepare(options);
   const result = spawnSync(command, ['--require', preload, ...args], prepared.options);
-  mergeCoverage(result.output?.[4], prepared.context, prepared.parent);
+  const frame = result.output?.[COVERAGE_FD];
+  try { mergeCoverage(frame, prepared.context, prepared.parent); }
+  catch (error) { throw coverageDiagnostic(error, result, frame); }
   if (options.encoding && options.encoding !== 'buffer') {
     result.stdout = result.stdout?.toString(options.encoding) ?? null;
     result.stderr = result.stderr?.toString(options.encoding) ?? null;
@@ -68,15 +87,20 @@ function spawnCovered(command, args, options = {}) {
   const prepared = prepare(options);
   const child = spawn(command, ['--require', preload, ...args], prepared.options);
   const chunks = []; let size = 0; let failure;
-  child.stdio[4].on('data', (chunk) => {
+  child.stdio[COVERAGE_FD].on('data', (chunk) => {
     size += chunk.length;
     if (size > MAX_BYTES + 4) failure = new Error('Child mutation coverage limit');
     else chunks.push(chunk);
   });
-  child.stdio[4].on('error', (error) => { failure = error; });
+  child.stdio[COVERAGE_FD].on('error', (error) => { failure = error; });
   // Resolve the close observation; defer rejection until explicitly consumed,
   // so a child failing during an earlier barrier cannot create an unhandled promise.
   const closed = new Promise((resolve) => child.once('close', resolve));
-  return { child, async completeCoverage() { await closed; if (failure) throw failure; mergeCoverage(Buffer.concat(chunks), prepared.context, prepared.parent); } };
+  return { child, async completeCoverage() {
+    await closed;
+    const frame = Buffer.concat(chunks);
+    try { if (failure) throw failure; mergeCoverage(frame, prepared.context, prepared.parent); }
+    catch (error) { throw coverageDiagnostic(error, { status: child.exitCode, signal: child.signalCode }, frame); }
+  } };
 }
 module.exports = { spawnCoveredSync, spawnCovered, mergeCoverage };

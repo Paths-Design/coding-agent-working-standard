@@ -13,6 +13,10 @@
 //! children. In particular, descriptor setup through spawn requires the
 //! quiescent-table contract in execution_fd_transport. A threaded MCP server
 //! must use a separate worker rather than call this owner in its own process.
+#[path = "execution_hook_bridge.rs"]
+pub(crate) mod git_hook_bridge;
+#[path = "execution_hook_formatter.rs"]
+pub(crate) mod hook_formatter;
 use crate::{
     execution_authorizer_wire::{
         Decision, Fence, FrameDecoder, Phase, ReplyObservation, RequestRecord,
@@ -21,7 +25,7 @@ use crate::{
     execution_fd_transport::{configure_child_fds, configure_private_child},
     execution_fence::ExecutionFence,
     execution_prepared::{CargoRuntime, PreparedRecord, ProgramImage},
-    execution_server::private_roots::{MANIFEST_FD, PrivateLaunch, ROLE_FDS},
+    execution_server::private_roots::{PrivateLaunch, MANIFEST_FD, ROLE_FDS},
     monotonic_deadline::{self, EffectCheck, MonotonicDeadline},
 };
 use serde::Deserialize;
@@ -34,14 +38,15 @@ use std::{
         fd::{AsFd, AsRawFd, FromRawFd},
         unix::{
             fs::{MetadataExt, OpenOptionsExt},
+            net::UnixStream,
             process::CommandExt,
         },
     },
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -66,6 +71,132 @@ pub(crate) struct PinnedAuthorizer {
     pub writer: Option<ProgramImage>,
     pub lifecycle: Option<ProgramImage>,
     pub lifecycle_context: Option<RuntimeHomes>,
+    pub git_hooks: Option<ProgramImage>,
+    pub git_runtime: Option<GitHookRuntimePins>,
+}
+
+/// Startup-owned fixed Git hook transport images; not request authority.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct GitHookRuntimePins {
+    pub host: ProgramImage,
+    pub client: ProgramImage,
+    pub launcher: ProgramImage,
+    pub formatter_bootstrap: ProgramImage,
+    pub scratch_root: String,
+}
+impl GitHookRuntimePins {
+    pub(crate) fn well_formed(
+        &self,
+        policy: Option<&ProgramImage>,
+        lifecycle: Option<&ProgramImage>,
+        context: Option<&RuntimeHomes>,
+    ) -> bool {
+        let valid = |p: &ProgramImage| {
+            Path::new(&p.path).is_absolute()
+                && p.path.len() <= 4096
+                && !p.path.chars().any(char::is_control)
+                && p.sha256.len() == 64
+                && p.sha256
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        };
+        let Some(policy) = policy else {
+            return false;
+        };
+        if !git_hook_policy_well_formed(policy, lifecycle, context)
+            || !valid(&self.host)
+            || !Path::new(&self.scratch_root).is_absolute()
+            || self.scratch_root.len() > 4096
+            || self.scratch_root.chars().any(char::is_control)
+        {
+            return false;
+        }
+        let Some(dir) = lifecycle.and_then(|p| Path::new(&p.path).parent()) else {
+            return false;
+        };
+        [
+            (&self.client, "git-hook-client-main.js"),
+            (&self.launcher, "git-hook-launcher-main.js"),
+            (&self.formatter_bootstrap, "git-hook-formatter-main.js"),
+        ]
+        .into_iter()
+        .all(|(p, name)| valid(p) && Path::new(&p.path) == dir.join(name))
+    }
+    pub(crate) fn same_as(&self, other: &Self) -> bool {
+        let same = |a: &ProgramImage, b: &ProgramImage| a.path == b.path && a.sha256 == b.sha256;
+        same(&self.host, &other.host)
+            && same(&self.client, &other.client)
+            && same(&self.launcher, &other.launcher)
+            && same(&self.formatter_bootstrap, &other.formatter_bootstrap)
+            && self.scratch_root == other.scratch_root
+    }
+}
+
+pub(crate) fn git_hook_policy_well_formed(
+    image: &ProgramImage,
+    lifecycle: Option<&ProgramImage>,
+    context: Option<&RuntimeHomes>,
+) -> bool {
+    Path::new(&image.path).is_absolute()
+        && image.path.len() <= 4096
+        && !image.path.contains('\0')
+        && image.sha256.len() == 64
+        && image
+            .sha256
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        && lifecycle.is_some_and(|consumer| {
+            Path::new(&consumer.path)
+                .parent()
+                .is_some_and(|parent| parent.join("lifecycle-hooks.json") == Path::new(&image.path))
+        })
+        && context.is_some_and(RuntimeHomes::well_formed)
+}
+
+const GIT_HOOK_POLICY: &str = "CAWS_EXECUTION_GIT_HOOK_POLICY";
+const GIT_HOOK_POLICY_SHA256: &str = "CAWS_EXECUTION_GIT_HOOK_POLICY_SHA256";
+
+fn git_hook_policy(
+    record: &PreparedRecord,
+    pins: &PinnedAuthorizer,
+    live: &impl Fn() -> Result<(), Refusal>,
+) -> Result<(), Refusal> {
+    let value = record.value();
+    let expected = if value.profile.kind == "caws-lifecycle-v1" {
+        pins.git_hooks.as_ref()
+    } else {
+        None
+    };
+    for (name, expected_value) in [
+        (GIT_HOOK_POLICY, expected.map(|image| image.path.as_str())),
+        (
+            GIT_HOOK_POLICY_SHA256,
+            expected.map(|image| image.sha256.as_str()),
+        ),
+    ] {
+        if value
+            .execution
+            .environment
+            .iter()
+            .find(|entry| entry.name == name)
+            .map(|entry| entry.value.as_str())
+            != expected_value
+        {
+            return Err(Refusal::Identity);
+        }
+    }
+    if let Some(image) = expected {
+        if !git_hook_policy_well_formed(
+            image,
+            pins.lifecycle.as_ref(),
+            pins.lifecycle_context.as_ref(),
+        ) {
+            return Err(Refusal::Identity);
+        }
+        image_valid(image, live)?;
+    }
+    Ok(())
 }
 
 /// Operational context selected by trusted startup configuration. These paths
@@ -339,6 +470,9 @@ pub(crate) struct OwnerFailure {
     pub fence: Option<ExecutionFence>,
     pub job_failure: Option<Failure>,
     pub authorizer_refusal: Option<AuthorizerRefusalDetail>,
+    /// An already-settled lifecycle process can exit successfully while its
+    /// required Git bridge verdict fails. Preserve that actual exit status.
+    pub completed_status: Option<ExitStatus>,
     pub user_spawn_may_have_occurred: bool,
 }
 pub(crate) enum OwnerOutcome {
@@ -352,6 +486,7 @@ fn failure(reason: Refusal) -> OwnerFailure {
         fence: None,
         job_failure: None,
         authorizer_refusal: None,
+        completed_status: None,
         user_spawn_may_have_occurred: reason == Refusal::UserSpawnMayHaveOccurred,
     }
 }
@@ -476,7 +611,29 @@ fn images(
     pins: &PinnedAuthorizer,
     live: &impl Fn() -> Result<(), Refusal>,
 ) -> Result<(), Refusal> {
+    git_hook_policy(record, pins, live)?;
     let kind = record.value().profile.kind.as_str();
+    if kind == "caws-lifecycle-v1" {
+        if let Some(runtime) = &pins.git_runtime {
+            if !runtime.well_formed(
+                pins.git_hooks.as_ref(),
+                pins.lifecycle.as_ref(),
+                pins.lifecycle_context.as_ref(),
+            ) {
+                return Err(Refusal::Identity);
+            }
+            crate::execution_server::verify_git_scratch(&runtime.scratch_root)
+                .map_err(|_| Refusal::Image)?;
+            for image in [
+                &runtime.host,
+                &runtime.client,
+                &runtime.launcher,
+                &runtime.formatter_bootstrap,
+            ] {
+                image_valid(image, live)?;
+            }
+        }
+    }
     if kind == "caws-evidence-v1" || kind == "caws-lifecycle-v1" {
         let e = &record.value().execution;
         let consumer = Path::new(&pins.entry.path)
@@ -574,6 +731,41 @@ fn private_exec_check(command: &mut Command, deadline: &MonotonicDeadline, wall_
         });
     }
 }
+
+/// Observe the still-owned lifecycle child without consuming its exit status.
+/// The caller excludes concurrent reaping and retains the direct Child handle.
+fn lifecycle_child_live(pid: u32) -> io::Result<bool> {
+    let pid = i32::try_from(pid).map_err(|_| io::Error::other("invalid lifecycle pid"))?;
+    if pid <= 1 {
+        return Err(io::Error::other("invalid lifecycle pid"));
+    }
+    let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+    if unsafe {
+        libc::waitid(
+            libc::P_PID,
+            pid as libc::id_t,
+            info.as_mut_ptr(),
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+        )
+    } != 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    let info = unsafe { info.assume_init() };
+    let seen = unsafe { info.si_pid() };
+    if seen == 0 && info.si_code == 0 {
+        return Ok(true);
+    }
+    if seen == pid
+        && matches!(
+            info.si_code,
+            libc::CLD_EXITED | libc::CLD_KILLED | libc::CLD_DUMPED
+        )
+    {
+        return Ok(false);
+    }
+    Err(io::Error::other("lifecycle identity unavailable"))
+}
 fn authorizer(
     record: &PreparedRecord,
     trusted: &TrustedInvocation,
@@ -653,6 +845,7 @@ fn authorizer(
                 fence: None,
                 job_failure: None,
                 authorizer_refusal: None,
+                completed_status: None,
                 user_spawn_may_have_occurred: false,
             });
         }
@@ -781,7 +974,7 @@ fn execute_inner(
     live().map_err(failure)?;
     let dir = PathBuf::from(&trusted.project_root).join(".caws");
     let mut fence = ExecutionFence::acquire(&dir).map_err(|_| failure(Refusal::Fence))?;
-    let under_fence = (|| -> Result<(Child, Instant, Option<ManifestPump>), OwnerFailure> {
+    let under_fence = (|| -> Result<(Child, Instant, Option<ManifestPump>, Option<(git_hook_bridge::GitHookBridge<'_>, git_hook_bridge::GitHookJobDeadline)>), OwnerFailure> {
         let _ = authorizer(
             &record,
             trusted,
@@ -806,6 +999,24 @@ fn execute_inner(
         let e = &record.value().execution;
         let mut manifest_reader = None;
         let mut manifest_pump = None;
+        let mut bridge_peer = None;
+        let mut bridge = None;
+        if record.value().profile.kind == "caws-lifecycle-v1" {
+            if let Some(runtime) = &pins.git_runtime {
+                let (owner, peer) = UnixStream::pair().map_err(|_| failure(Refusal::Control))?;
+                let context = git_hook_bridge::GitHookRuntime {
+                    host: &runtime.host, node: &pins.node,
+                    lifecycle: pins.lifecycle.as_ref().ok_or_else(|| failure(Refusal::Identity))?,
+                    client: &runtime.client, launcher: &runtime.launcher, formatter_bootstrap: &runtime.formatter_bootstrap,
+                    scratch_root: Path::new(&runtime.scratch_root),
+                    homes: pins.lifecycle_context.as_ref().ok_or_else(|| failure(Refusal::Identity))?,
+                    trusted, sandbox_state_json: std::str::from_utf8(record.sandbox_state()).map_err(|_| failure(Refusal::Identity))?,
+                    agent_surface: "codex",
+                };
+                bridge = Some(git_hook_bridge::GitHookBridge::new(context, owner).map_err(|_| failure(Refusal::Identity))?);
+                bridge_peer = Some(peer);
+            }
+        }
         let mut command = if let Some(launch) = sandboxed_launch {
             let (reader, pump) = ManifestPump::new(&launch.private.manifest)
                 .map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
@@ -847,7 +1058,9 @@ fn execute_inner(
         if trusted_consumer {
             // This dedicated pinned consumer borrows the same fence through
             // completion. Generic USER receives no private descriptors.
-            configure_child_fds(&mut command, &[(fence.file().as_fd(), 3)])
+            let mut mappings = vec![(fence.file().as_fd(), 3)];
+            if let Some(peer) = bridge_peer.as_ref() { mappings.push((peer.as_fd(), 4)); }
+            configure_child_fds(&mut command, &mappings)
                 .map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
         }
         if let Some(launch) = sandboxed_launch {
@@ -870,13 +1083,15 @@ fn execute_inner(
         // Arc<AtomicBool> would not observe later parent writes (copy-on-write).
         check(&record, trusted, deadline, &cancelled).map_err(failure)?;
         control("execution_user_spawn").map_err(|_| failure(Refusal::Control))?;
-        let job_deadline = Instant::now()
+        let bridge_job = if bridge.is_some() { Some(git_hook_bridge::GitHookJobDeadline::capture(record.value().limits.job_timeout_ms).map_err(|_| failure(Refusal::InvalidDeadline))?) } else { None };
+        let job_deadline = if let Some(job) = &bridge_job { job.expires() } else { Instant::now()
             .checked_add(Duration::from_millis(record.value().limits.job_timeout_ms))
-            .ok_or_else(|| failure(Refusal::JobIo))?;
+            .ok_or_else(|| failure(Refusal::JobIo))? };
         let child = command
             .spawn()
             .map_err(|_| failure(Refusal::UserSpawnMayHaveOccurred))?;
-        Ok((child, job_deadline, manifest_pump))
+        drop(command); drop(bridge_peer);
+        Ok((child, job_deadline, manifest_pump, bridge.zip(bridge_job)))
     })();
     match under_fence {
         Err(mut problem) => {
@@ -891,7 +1106,7 @@ fn execute_inner(
             }
             Err(problem)
         }
-        Ok((child, job_deadline, manifest_pump)) => {
+        Ok((child, job_deadline, manifest_pump, bridge)) => {
             let (child, mut held_fence) = if trusted_consumer || sandboxed {
                 (child, Some(fence))
             } else {
@@ -900,11 +1115,39 @@ fn execute_inner(
             // The preparation deadline does not constrain the job lifetime.
             // Liveness/cancellation of the private carrier still does.
             let manifest_pump = RefCell::new(manifest_pump);
-            let job_control = |_: &'static str| {
+            let lifecycle_pid = child.id();
+            let held = RefCell::new(held_fence.take());
+            let bridge = RefCell::new(bridge);
+            let base_control = |_: &'static str| {
+                if cancelled.load(Ordering::Acquire) {
+                    return Err("execution cancelled".to_owned());
+                }
                 control("execution_job").map_err(|_| "execution control unavailable".to_owned())?;
                 if let Some(pump) = manifest_pump.borrow_mut().as_mut() {
                     pump.pump()
                         .map_err(|_| "execution manifest unavailable".to_owned())?;
+                }
+                Ok(())
+            };
+            let nested_control = |stage: &'static str| {
+                base_control(stage)?;
+                if !lifecycle_child_live(lifecycle_pid)
+                    .map_err(|_| "lifecycle identity unavailable".to_owned())?
+                {
+                    return Err("lifecycle exited".to_owned());
+                }
+                Ok(())
+            };
+            let job_control = |_: &'static str| {
+                base_control("execution_job")?;
+                if let Some((bridge, deadline)) = bridge.borrow_mut().as_mut() {
+                    if lifecycle_child_live(lifecycle_pid)
+                        .map_err(|_| "lifecycle identity unavailable".to_owned())?
+                    {
+                        bridge
+                            .pump(&mut held.borrow_mut(), deadline, &nested_control)
+                            .map_err(|_| "git bridge unavailable".to_owned())?;
+                    }
                 }
                 Ok(())
             };
@@ -927,9 +1170,49 @@ fn execute_inner(
                     fence: None,
                     job_failure: Some(e),
                     authorizer_refusal: None,
+                    completed_status: None,
                     user_spawn_may_have_occurred: true,
                 }),
             };
+            if let Some((bridge, bridge_deadline)) = bridge.borrow_mut().as_mut() {
+                // A returned error is not settlement. Keep this worker and the
+                // actual supervisor/observer alive until custody is resolved.
+                while bridge.has_live_custody() {
+                    let _ =
+                        bridge.poll_custody(&mut held.borrow_mut(), bridge_deadline, &base_control);
+                    if bridge.has_live_custody() {
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                }
+                // Once the lifecycle has exited, only finish the socket when
+                // its terminal verdict was already handled: never execute a
+                // newly queued request after the lifecycle child is gone.
+                if serviced.is_ok() && bridge.verdict_requested() && !bridge.is_cleanly_closed() {
+                    let _ = bridge.pump(&mut held.borrow_mut(), bridge_deadline, &base_control);
+                }
+                if !bridge.succeeded() {
+                    serviced = serviced.and_then(|done| {
+                        Err(OwnerFailure {
+                            reason: Refusal::JobIo,
+                            child: None,
+                            fence: None,
+                            job_failure: Some(Failure {
+                                kind: execution_child::FailureKind::Io(
+                                    "git bridge did not finish successfully".into(),
+                                ),
+                                stdout: done.stdout,
+                                stderr: done.stderr,
+                                retained_child: None,
+                                cleanup_detail: None,
+                            }),
+                            authorizer_refusal: None,
+                            completed_status: Some(done.status),
+                            user_spawn_may_have_occurred: true,
+                        })
+                    });
+                }
+            }
+            held_fence = held.into_inner();
             if let Some(mut fence) = held_fence.take() {
                 let retained = serviced
                     .as_ref()
@@ -976,6 +1259,7 @@ fn release_after_spawn(
                 cleanup_detail: Some(detail),
             }),
             authorizer_refusal: None,
+            completed_status: None,
             user_spawn_may_have_occurred: true,
         });
     }
@@ -986,6 +1270,33 @@ fn release_after_spawn(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn git_runtime_lifecycle_liveness_observes_exit_without_reaping() {
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("read line; exit 0")
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        assert!(lifecycle_child_live(child.id()).unwrap());
+        child.stdin.take().unwrap().write_all(b"go\n").unwrap();
+        let mut exited = false;
+        for _ in 0..200 {
+            if !lifecycle_child_live(child.id()).unwrap() {
+                exited = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(exited, "lifecycle exit not observed");
+        assert!(child
+            .try_wait()
+            .unwrap()
+            .expect("waitid must not reap")
+            .success());
+    }
 
     #[test]
     fn npm_config_final_check_rejects_absent_to_present_and_changed_images() {
@@ -1183,6 +1494,121 @@ mod tests {
         });
         PreparedRecord::decode(serde_json::to_vec(&value).unwrap()).unwrap()
     }
+    #[test]
+    fn git_hook_policy_environment_is_complete_lifecycle_only_and_revalidated() {
+        let root = fs::canonicalize(std::env::temp_dir())
+            .unwrap()
+            .join(format!(
+                "caws-owner-hook-policy-{}-{}",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("lifecycle-hooks.json");
+        fs::write(&path, b"pinned policy").unwrap();
+        let plain_image = || ProgramImage {
+            path: "/bin/bash".into(),
+            sha256: "a".repeat(64),
+        };
+        let mut pins = PinnedAuthorizer {
+            node: plain_image(),
+            entry: plain_image(),
+            writer: None,
+            lifecycle: Some(ProgramImage {
+                path: root.join("lifecycle-main.js").to_str().unwrap().into(),
+                sha256: "b".repeat(64),
+            }),
+            lifecycle_context: Some(RuntimeHomes {
+                home: "/home".into(),
+                caws_home: "/machine".into(),
+                codex_home: "/home/.codex".into(),
+            }),
+            git_hooks: Some(ProgramImage {
+                path: path.to_str().unwrap().into(),
+                sha256: format!("{:x}", Sha256::digest(b"pinned policy")),
+            }),
+            git_runtime: None,
+        };
+        let decode = |value: &serde_json::Value| {
+            PreparedRecord::decode(serde_json::to_vec(value).unwrap()).unwrap()
+        };
+        let mut value: serde_json::Value = serde_json::from_slice(prepared().original()).unwrap();
+        value["profile"]["kind"] = json!("caws-lifecycle-v1");
+        value["execution"]["argv"] = json!([
+            "/bin/bash",
+            pins.lifecycle.as_ref().unwrap().path,
+            "git-head"
+        ]);
+        let policy = pins.git_hooks.as_ref().unwrap();
+        value["execution"]["environment"] = json!([{"name": GIT_HOOK_POLICY, "value": policy.path}, {"name": GIT_HOOK_POLICY_SHA256, "value": policy.sha256}]);
+        assert_eq!(git_hook_policy(&decode(&value), &pins, &|| Ok(())), Ok(()));
+        for index in 0..2 {
+            let mut missing = value.clone();
+            missing["execution"]["environment"]
+                .as_array_mut()
+                .unwrap()
+                .remove(index);
+            assert_eq!(
+                git_hook_policy(&decode(&missing), &pins, &|| Ok(())),
+                Err(Refusal::Identity)
+            );
+            let mut replaced = value.clone();
+            replaced["execution"]["environment"][index]["value"] = json!("substitution");
+            assert_eq!(
+                git_hook_policy(&decode(&replaced), &pins, &|| Ok(())),
+                Err(Refusal::Identity)
+            );
+        }
+        let mut ordinary: serde_json::Value =
+            serde_json::from_slice(prepared().original()).unwrap();
+        ordinary["execution"]["environment"] = value["execution"]["environment"].clone();
+        assert_eq!(
+            git_hook_policy(&decode(&ordinary), &pins, &|| Ok(())),
+            Err(Refusal::Identity)
+        );
+        ordinary["profile"]["kind"] = json!("caws-evidence-v1");
+        ordinary["execution"]["argv"] = json!([
+            "/bin/bash",
+            "/generation/writer-main.js",
+            "specs",
+            "evidence",
+            "SPEC"
+        ]);
+        assert_eq!(
+            git_hook_policy(&decode(&ordinary), &pins, &|| Ok(())),
+            Err(Refusal::Identity)
+        );
+        ordinary["execution"]["environment"] = json!([]);
+        assert_eq!(
+            git_hook_policy(&decode(&ordinary), &pins, &|| Ok(())),
+            Ok(())
+        );
+        assert_eq!(
+            git_hook_policy(&decode(&value), &pins, &|| Err(Refusal::Cancelled)),
+            Err(Refusal::Cancelled)
+        );
+        fs::write(&path, b"changed policy").unwrap();
+        assert_eq!(
+            git_hook_policy(&decode(&value), &pins, &|| Ok(())),
+            Err(Refusal::Image)
+        );
+        fs::remove_file(&path).unwrap();
+        assert_eq!(
+            git_hook_policy(&decode(&value), &pins, &|| Ok(())),
+            Err(Refusal::Image)
+        );
+        pins.git_hooks = None;
+        assert_eq!(
+            git_hook_policy(&decode(&value), &pins, &|| Ok(())),
+            Err(Refusal::Identity)
+        );
+        value["execution"]["environment"] = json!([]);
+        assert_eq!(git_hook_policy(&decode(&value), &pins, &|| Ok(())), Ok(()));
+        fs::remove_dir(root).unwrap();
+    }
     fn trusted() -> TrustedInvocation {
         TrustedInvocation {
             invocation_id: "invocation".into(),
@@ -1263,7 +1689,7 @@ mod consumer_tests {
         cell::{Cell, RefCell},
         io::{BufRead, BufReader},
         process::{Child, Command, Stdio},
-        sync::{Arc, atomic::AtomicBool},
+        sync::{atomic::AtomicBool, Arc},
         time::Duration,
     };
 
@@ -1464,6 +1890,8 @@ process.stdin.resume();
             writer: None,
             lifecycle: None,
             lifecycle_context: None,
+            git_hooks: None,
+            git_runtime: None,
             node: image(node.into()),
             entry: image(entry.into()),
         };

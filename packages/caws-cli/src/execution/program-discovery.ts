@@ -52,7 +52,8 @@ export interface ProgramDiscoveryReply {
 
 export async function discoverExecutionPrograms(
   record: PreparedExecutionV1,
-  request: AuthorizerRequest
+  request: AuthorizerRequest,
+  lifecycleStartupEnvironment: readonly { readonly name: string; readonly value: string }[] = []
 ): Promise<ProgramDiscoveryReply> {
   const base = {
     protocol: 'caws.execution.program-discovery.v1' as const,
@@ -71,7 +72,18 @@ export async function discoverExecutionPrograms(
     const lifecycle = await discoverLifecycleExecution(record);
     if (lifecycle) {
       readExecutionLifecycleAuthority(
-        record,
+        {
+          ...record,
+          execution: {
+            ...record.execution,
+            environment: [
+              ...record.execution.environment.filter(
+                (row) => !lifecycleStartupEnvironment.some((startup) => startup.name === row.name)
+              ),
+              ...lifecycleStartupEnvironment,
+            ],
+          },
+        },
         parseExecutionLifecycleArguments(lifecycle.argv.slice(2))
       );
       if (Date.now() >= record.limits.preparationDeadlineUnixMs)

@@ -24,6 +24,7 @@ function run(
     envelope = request(record),
     suffix = Buffer.alloc(0),
     timeout = 5000,
+    lifecycleEnvironment = {},
   } = {}
 ) {
   const body = Buffer.from(JSON.stringify(envelope));
@@ -34,7 +35,7 @@ function run(
     [path.resolve(__dirname, '../../dist/execution', entry)],
     {
       input: Buffer.concat([header, body, suffix]),
-      env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' },
+      env: { PATH: '/usr/bin:/bin', LC_ALL: 'C', ...lifecycleEnvironment },
       timeout,
       maxBuffer: 1048576,
     }
@@ -51,6 +52,132 @@ function observation(result) {
   return value;
 }
 describe('private nonexecuting draft program discovery', () => {
+  test('private startup hook authority reaches lifecycle discovery without executing the hook', () => {
+    const f = authorityFixture();
+    const { git } = require('../helpers/git-repo-factory');
+    const hooksDirectory = path.join(f.root, '.git/hooks');
+    git(f.root, ['config', 'core.hooksPath', hooksDirectory]);
+    const target = path.join(hooksDirectory, 'pre-commit');
+    const marker = path.join(f.root, 'must-not-run-hook');
+    fs.writeFileSync(target, `#!/bin/sh\nprintf bad > '${marker}'\n`, { mode: 0o755 });
+    const names = [
+      'applypatch-msg',
+      'pre-applypatch',
+      'post-applypatch',
+      'pre-commit',
+      'pre-auto-gc',
+      'pre-merge-commit',
+      'prepare-commit-msg',
+      'commit-msg',
+      'post-commit',
+      'post-checkout',
+      'post-merge',
+      'pre-push',
+      'pre-rebase',
+      'post-rewrite',
+      'reference-transaction',
+      'post-index-change',
+      'push-to-checkout',
+      'proc-receive',
+      'update',
+      'pre-receive',
+      'post-receive',
+      'post-update',
+    ];
+    const hooks = Object.fromEntries(names.map((name) => [name, null]));
+    const stat = fs.lstatSync(target, { bigint: true });
+    hooks['pre-commit'] = {
+      path: target,
+      sha256: hash(fs.readFileSync(target)),
+      dev: stat.dev.toString(),
+      ino: stat.ino.toString(),
+      mode: stat.mode.toString(),
+    };
+    const home = path.join(f.root, 'runtime-home');
+    fs.mkdirSync(path.join(home, '.codex'), { recursive: true });
+    fs.mkdirSync(path.join(home, 'machine'));
+    const policy = path.join(home, 'lifecycle-hooks.json');
+    fs.writeFileSync(
+      policy,
+      JSON.stringify({
+        schema: 'caws.execution.git-hook-policy.v2',
+        roots: [f.root, f.lane].map((cwd) => ({
+          cwd,
+          hooksDirectory,
+          hooks,
+          formatters: { eslint: null, prettier: null },
+          readOnlyPaths: [],
+        })),
+      })
+    );
+    const lifecycleEnvironment = {
+      HOME: home,
+      CODEX_HOME: path.join(home, '.codex'),
+      CAWS_HOME: path.join(home, 'machine'),
+      CAWS_EXECUTION_GIT_HOOK_POLICY: policy,
+      CAWS_EXECUTION_GIT_HOOK_POLICY_SHA256: hash(fs.readFileSync(policy)),
+    };
+    const entry = path.resolve(__dirname, '../../dist/execution/lifecycle-main.js');
+    source(f, `'${process.execPath}' '${entry}' git-status`);
+    for (const [name, value] of Object.entries({
+      CAWS_EXECUTION_PROJECT: f.root,
+      CAWS_EXECUTION_CALLER: f.lane,
+      CAWS_EXECUTION_SESSION: f.record.association.sessionId,
+      CAWS_EXECUTION_THREAD: f.record.association.threadId,
+      CAWS_EXECUTION_CALL: f.record.association.callId,
+    }))
+      f.record.execution.environment.push({ name, value });
+    f.record.execution.environment.sort((a, b) =>
+      Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
+    );
+    f.record.execution.environment.find((row) => row.name === 'PATH').value = [
+      ...new Set([fs.realpathSync.native(path.dirname(process.execPath)), '/usr/bin', '/bin']),
+    ].join(':');
+    const authority = require('../../dist/execution/lifecycle').readExecutionLifecycleAuthority(
+      {
+        ...f.record,
+        execution: {
+          ...f.record.execution,
+          environment: [
+            ...f.record.execution.environment,
+            ...Object.entries(lifecycleEnvironment).map(([name, value]) => ({ name, value })),
+          ],
+        },
+      },
+      { operation: 'git-status' }
+    );
+    expect(authority.specId).toBe('EXEC-001');
+    expect(observation(run(f.record)).status).toBe('unresolved');
+    const admitted = observation(run(f.record, { lifecycleEnvironment }));
+    expect({ status: admitted.status, reasonCodes: admitted.reasonCodes }).toEqual({
+      status: 'observed',
+      reasonCodes: [],
+    });
+    expect(admitted.execution).toEqual({
+      kind: 'caws-lifecycle-v1',
+      argv: [process.execPath, entry, 'git-status'],
+    });
+    expect(fs.existsSync(marker)).toBe(false);
+    fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'owned source\n');
+    const message = 'fix: keep multiline data\n\n- Preserve printf text > protected.txt as data';
+    const quotedMessage = `'${message.replace(/'/g, "'\\''")}'`;
+    source(
+      f,
+      `'${process.execPath}' '${entry}' git-commit --message ${quotedMessage} -- src/owned.txt`
+    );
+    const commit = observation(run(f.record, { lifecycleEnvironment }));
+    expect(commit.status).toBe('observed');
+    expect(commit.execution).toEqual({
+      kind: 'caws-lifecycle-v1',
+      argv: [process.execPath, entry, 'git-commit', '--message', message, '--', 'src/owned.txt'],
+    });
+    expect(fs.existsSync(marker)).toBe(false);
+    fs.writeFileSync(target, '#!/bin/sh\nexit 1\n');
+    const changed = observation(run(f.record, { lifecycleEnvironment }));
+    expect(changed.status).toBe('unresolved');
+    expect(changed.reasonCodes).toEqual(['authority_changed']);
+    expect(fs.existsSync(marker)).toBe(false);
+  });
   test('Cargo captures the unchanged standalone project and exact advisory argv without executing it', () => {
     const f = authorityFixture();
     const { git } = require('../helpers/git-repo-factory');

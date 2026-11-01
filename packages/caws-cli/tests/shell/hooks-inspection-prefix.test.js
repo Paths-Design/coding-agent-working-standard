@@ -242,47 +242,6 @@ describe('CAWS literal read routes', () => {
 describe('shared CAWS command authority', () => {
   const purePath = path.join(pkg, 'dist/shell/analysis/caws-read-metadata.js');
   const { CAWS_READ_COMMANDS, isCawsReadInvocation } = require(purePath);
-  test('every reviewed data operand has an explicit role and every option has an effect', () => {
-    for (const definition of Object.values(CAWS_READ_COMMANDS)) {
-      expect(definition.effect).toBe('read');
-      for (const option of definition.options) {
-        expect(['read', 'write', 'execute']).toContain(option.effect);
-        if (option.flag.includes('<')) expect(typeof option.valueRole).toBe('string');
-      }
-      for (const argument of definition.arguments ??
-        (definition.argument ? [definition.argument] : [])) {
-        expect(typeof argument.valueRole).toBe('string');
-      }
-    }
-  });
-  test('registration consumes every reviewed leaf object and its option arity', () => {
-    const { COMMAND_SURFACE_METADATA } = require('../../dist/shell/command-metadata');
-    const { registerShellCommands } = require('../../dist/shell/register');
-    const { Command } = require('commander');
-    const program = new Command('caws');
-    registerShellCommands(program, { exit: () => {} });
-    for (const [route, definition] of Object.entries(CAWS_READ_COMMANDS)) {
-      let catalog = COMMAND_SURFACE_METADATA;
-      let meta,
-        registered = program;
-      for (const name of route.split(' ')) {
-        meta = catalog.find((item) => item.name === name);
-        expect(meta).toBeDefined();
-        catalog = meta.subcommands ?? [];
-        registered = registered.commands.find((command) => command.name() === name);
-        expect(registered).toBeDefined();
-      }
-      if (route === 'specs') expect(meta.options).toBe(definition.options);
-      else expect(meta).toBe(definition);
-      for (const option of definition.options) {
-        expect(registered.options.find((item) => item.flags === option.flag)).toBeDefined();
-      }
-      const declared = definition.arguments ?? (definition.argument ? [definition.argument] : []);
-      expect(registered.registeredArguments.map((item) => [item.name(), item.required])).toEqual(
-        declared.map((item) => [item.name, item.required])
-      );
-    }
-  });
   test('future flags share registration but need an explicit read effect and valid operand', () => {
     const { registerShellCommands } = require('../../dist/shell/register');
     const { Command } = require('commander');

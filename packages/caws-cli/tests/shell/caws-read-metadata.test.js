@@ -12,6 +12,65 @@ const {
 // being tested. A route, effect, operand or dependency drift must change a verdict.
 const read = (...args) => isCawsReadInvocation(['caws', ...args]);
 
+describe('shared CAWS command authority', () => {
+  test('every reviewed data operand has an explicit role and every option has an effect', () => {
+    for (const [route, definition] of Object.entries(CAWS_READ_COMMANDS)) {
+      expect(definition.effect).toBe('read');
+      if (route !== 'specs') expect(definition.description.trim()).not.toBe('');
+      for (const option of definition.options) {
+        expect(['read', 'write', 'execute']).toContain(option.effect);
+        expect(option.description.trim()).not.toBe('');
+        if (option.flag.includes('<')) expect(typeof option.valueRole).toBe('string');
+      }
+      for (const argument of definition.arguments ??
+        (definition.argument ? [definition.argument] : [])) {
+        expect(typeof argument.valueRole).toBe('string');
+      }
+    }
+  });
+  test('registration consumes every reviewed leaf object, help description and option arity', () => {
+    const { COMMAND_SURFACE_METADATA } = require('../../dist/shell/command-metadata');
+    const { registerShellCommands } = require('../../dist/shell/register');
+    const { Command } = require('commander');
+    const program = new Command('caws');
+    registerShellCommands(program, { exit: () => {} });
+    for (const [route, definition] of Object.entries(CAWS_READ_COMMANDS)) {
+      let catalog = COMMAND_SURFACE_METADATA;
+      let meta,
+        registered = program;
+      for (const name of route.split(' ')) {
+        meta = catalog.find((item) => item.name === name);
+        expect(meta).toBeDefined();
+        catalog = meta.subcommands ?? [];
+        registered = registered.commands.find((command) => command.name() === name);
+        expect(registered).toBeDefined();
+      }
+      expect(registered.name()).toBe(route.split(' ').at(-1));
+      expect(meta.kind).toBe(route === 'specs' ? 'group' : 'leaf');
+      const help = registered.helpInformation().replace(/\s+/g, ' ');
+      if (route === 'specs') expect(meta.options).toBe(definition.options);
+      else {
+        expect(meta).toBe(definition);
+        expect(registered.description()).toBe(definition.description);
+        expect(help).toContain(definition.description.replace(/\s+/g, ' '));
+      }
+      for (const option of definition.options) {
+        const actual = registered.options.find((item) => item.flags === option.flag);
+        expect(actual).toBeDefined();
+        const description = option.allowedValues?.length
+          ? `${option.description}: ${option.allowedValues.join(' | ')}`
+          : option.description;
+        expect(actual.description).toBe(description);
+        if (!option.hidden) expect(help).toContain(description.replace(/\s+/g, ' '));
+      }
+      const declared = definition.arguments ?? (definition.argument ? [definition.argument] : []);
+      expect(registered.registeredArguments.map((item) => [item.name(), item.required])).toEqual(
+        declared.map((item) => [item.name, item.required])
+      );
+    }
+  });
+});
+
 describe('closed CAWS read metadata', () => {
   test.each(['caws', '/caws', '/usr/local/bin/caws', '/opt/reviewed tools/caws'])(
     'accepts literal executable syntax %s under trusted lookup',
@@ -66,32 +125,47 @@ describe('closed CAWS read metadata', () => {
     [
       ['status'],
       ['status', '--short', '--json'],
+      ['status', '--data', '--specs', '--worktrees', '--agents'],
       ['working-tree', 'check', '--json'],
       ['goal', 'show'],
       ['message', 'inbox', '--all', '--limit', '0'],
+      ['message', 'inbox', '--me', 'session-1', '--json'],
       ['message', 'history', '--with', 'session-1'],
+      ['message', 'history', '--me', 'session-1', '--with', 'session-2', '--json'],
       ['message', 'status', 'message-1'],
       ['reprieve', 'show', '--session', 'session-1'],
       ['reprieve', 'list'],
       ['agents', 'list', '--include-stale'],
+      ['agents', 'list', '--active', '--json'],
       ['agents', 'show', 'session-1'],
+      ['agents', 'show', 'session-1', '--stale-ttl', '1h', '--json'],
+      ['agents', 'show', 'session-1', '--stale-ttl-ms', '0', '--json'],
       ['events', 'list', '--limit', '2'],
       ['events', 'show', '1'],
+      ['events', 'show', '1', '--json'],
       ['events', 'verify-archive'],
       ['waiver', 'list'],
+      ['waiver', 'list', '--include-expired', '--data'],
       ['waiver', 'show', 'waiver-1'],
+      ['waiver', 'show', 'waiver-1', '--data'],
       ['gates', 'list', '--spec', 'EXAMPLE-001'],
       ['gates', 'explain', 'scope'],
+      ['gates', 'explain', 'scope', '--spec', 'EXAMPLE-001', '--json'],
       ['evidence', 'list', '--spec', 'EXAMPLE-001'],
+      ['evidence', 'list', '--spec', 'EXAMPLE-001', '--type', 'test', '--json'],
       ['evidence', 'show', '1'],
+      ['evidence', 'show', '1', '--json'],
       ['evidence', 'schema', '--type', 'test'],
       ['scope', 'show', 'src/a b.ts'],
+      ['scope', 'show', 'src/a.ts', '--spec', 'EXAMPLE-001', '--data', '--json'],
       ['scope', 'check', 'src/a.ts', '--spec', 'EXAMPLE-001'],
       ['scope', 'plan', '--path', 'src/a.ts', '--path', 'src/b.ts'],
       ['scope', 'plan', '--paths-file', 'paths.json'],
       ['scope', 'contention', 'src/a.ts'],
+      ['scope', 'contention', 'src/a.ts', '--json'],
       ['worktree', 'list', '--json'],
       ['worktree', 'review', 'example'],
+      ['worktree', 'review', 'example', '--json'],
       ['doctor'],
       ['doctor', '--repair-plan', '--json'],
       ['specs'],
@@ -109,6 +183,7 @@ describe('closed CAWS read metadata', () => {
   test.each(
     [
       ['status', 'extra'],
+      ['waiver', 'list', '--include-expired', '--json'],
       ['status', '-'],
       ['status', '--', '--json'],
       ['status', '--short=true'],
@@ -116,6 +191,14 @@ describe('closed CAWS read metadata', () => {
       ['status', '-hh'],
       ['status', '--help', '-h'],
       ['specs', 'show'],
+      ['agents', 'show'],
+      ['events', 'show'],
+      ['waiver', 'show'],
+      ['gates', 'explain'],
+      ['scope', 'show'],
+      ['scope', 'check'],
+      ['scope', 'contention'],
+      ['worktree', 'review'],
       ['specs', 'show', 'EXAMPLE-001', 'EXTRA-002'],
       ['message', 'inbox', '--limit'],
       ['message', 'inbox', '--limit='],

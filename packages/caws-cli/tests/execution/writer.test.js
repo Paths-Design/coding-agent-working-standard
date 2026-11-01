@@ -522,3 +522,280 @@ test.each(['throw', 'unsafe-recovery'])(
     expect(state(f)).toEqual(before);
   }
 );
+
+// These unit controls change returned observations only after the real store
+// succeeds. The fixture's retained disk state remains independently inspectable.
+function publicationObservationScript(mode) {
+  return `
+    const store = require(${JSON.stringify(path.resolve(__dirname, '../../dist/store/specs-writer.js'))});
+    const events = require(${JSON.stringify(path.resolve(__dirname, '../../dist/store/events-store.js'))});
+    const spec = require(${JSON.stringify(path.resolve(__dirname, '../../dist/kernel/spec/index.js'))});
+    const record = store.recordSpecEvidence, load = events.loadEvents, parse = spec.parseAndValidateSpec;
+    const mode = ${JSON.stringify(mode)};
+    let published = false, dispatches = 0, eventObservations = 0, specObservations = 0, altered = false;
+    store.recordSpecEvidence = (...args) => {
+      dispatches++;
+      const result = record(...args);
+      if (result.ok && result.value.kind !== 'partial_failure_recovered') published = true;
+      return result;
+    };
+    events.loadEvents = (...args) => {
+      const result = load(...args);
+      if (!published || !result.ok) return result;
+      eventObservations++;
+      const observed = JSON.parse(JSON.stringify(result));
+      const rows = observed.value.events, event = rows.at(-1);
+      if (mode === 'duplicate-event') { rows.push(JSON.parse(JSON.stringify(event))); altered = true; }
+      if (mode === 'event-kind') { event.event = 'spec_closed'; altered = true; }
+      if (mode === 'event-spec') { event.spec_id = 'FOREIGN-001'; altered = true; }
+      if (mode === 'event-ts') { event.ts = '2000-01-01T00:00:00.000Z'; altered = true; }
+      for (const field of ['id', 'session_id', 'kind', 'platform']) {
+        if (mode === 'actor-' + field) { event.actor[field] = 'unexpected'; altered = true; }
+      }
+      for (const field of ['criterion_id', 'status', 'evidence_ref', 'command', 'exit_code', 'artifact_path', 'commit_sha']) {
+        if (mode === 'event-' + field) { event.data[field] = field === 'exit_code' ? 1 : 'unexpected'; altered = true; }
+      }
+      return observed;
+    };
+    spec.parseAndValidateSpec = (...args) => {
+      const result = parse(...args);
+      if (!published || !result.ok) return result;
+      specObservations++;
+      const observed = JSON.parse(JSON.stringify(result));
+      const row = observed.value.evidence[0];
+      if (mode === 'zero-evidence') { observed.value.evidence = []; altered = true; }
+      if (mode === 'two-evidence') { observed.value.evidence.push({ ...row }); altered = true; }
+      for (const field of ['criterion_id', 'status', 'evidence_ref', 'command', 'exit_code', 'artifact_path', 'commit_sha']) {
+        if (mode === 'spec-' + field) { row[field] = field === 'exit_code' ? 1 : 'unexpected'; altered = true; }
+      }
+      if (mode === 'spec-recorded_at') { row.recorded_at = '2000-01-01T00:00:00.000Z'; altered = true; }
+      if (mode === 'spec-test_nodeid') { row.test_nodeid = 'unexpected.test.js::case'; altered = true; }
+      if (mode === 'spec-test_verified_at') { row.test_verified_at = '2000-01-01T00:00:00.000Z'; altered = true; }
+      return observed;
+    };
+    let outcome;
+    try { outcome = require(${JSON.stringify(path.resolve(__dirname, '../../dist/execution/writer.js'))}).runExecutionEvidenceWriter(process.argv.slice(1)); }
+    catch (error) { outcome = error.outcome ?? { unexpected: String(error) }; process.exitCode = 1; }
+    process.stdout.write(JSON.stringify({ outcome, dispatches, eventObservations, specObservations, altered }));
+  `;
+}
+
+test.each([
+  'unchanged',
+  'duplicate-event',
+  'event-kind',
+  'event-spec',
+  'zero-evidence',
+  'two-evidence',
+  ...['event', 'spec'].flatMap((side) =>
+    [
+      'criterion_id',
+      'status',
+      'evidence_ref',
+      'command',
+      'exit_code',
+      'artifact_path',
+      'commit_sha',
+    ].map((field) => `${side}-${field}`)
+  ),
+  'spec-recorded_at',
+  'event-ts',
+  'actor-id',
+  'actor-session_id',
+  'actor-kind',
+  'actor-platform',
+  'spec-test_nodeid',
+  'spec-test_verified_at',
+])('checks mocked post-publication %s against one real retained transaction', (mode) => {
+  const f = fixture();
+  const before = loadEvents(f.caws);
+  expect(before.ok).toBe(true);
+  const result = execute(f, args(f, ['--command', 'retained command', '--exit-code', '0']), {
+    script: publicationObservationScript(mode),
+  });
+  expect(result.error).toBeUndefined();
+  expect(result.stderr).toBe('');
+  const observed = JSON.parse(result.stdout);
+  expect(observed).toMatchObject({
+    dispatches: 1,
+    eventObservations: 1,
+    specObservations: 1,
+    altered: mode !== 'unchanged',
+  });
+  expect(result.status).toBe(mode === 'unchanged' ? 0 : 1);
+  if (mode === 'unchanged') {
+    expect(observed.outcome).toMatchObject({
+      operation: 'caws-evidence-v1',
+      auditCommit: 'pending',
+    });
+  } else {
+    expect(observed.outcome).toMatchObject({
+      operation: 'caws-evidence-v1',
+      outcome: 'publication-failure',
+      disposition: 'published-unconfirmed',
+      reason: 'publication-unconfirmed',
+      recovery: { retry: 'inspect-before-retry' },
+    });
+  }
+  const retained = loadEvents(f.caws);
+  expect(retained.ok).toBe(true);
+  expect(retained.value.events).toHaveLength(before.value.events.length + 1);
+  const event = retained.value.events.at(-1);
+  const expected = {
+    criterion_id: 'A1',
+    status: 'pass',
+    evidence_ref: 'inspected artifact',
+    command: 'retained command',
+    exit_code: 0,
+    artifact_path: 'src/proof.txt',
+    commit_sha: f.sha,
+  };
+  expect(evidence(f)).toEqual([{ ...expected, recorded_at: event.ts }]);
+  expect(event).toMatchObject({
+    event: 'ac_recorded',
+    spec_id: 'EXEC-001',
+    data: expected,
+    actor: { kind: 'agent', id: 'thread-owned', session_id: 'thread-owned', platform: 'codex' },
+  });
+});
+
+test.each([
+  ['CAWS_EXECUTION_SESSION', ''],
+  ['CAWS_EXECUTION_CALL', ''],
+  ['PATH', '/bin'],
+  ['LC_ALL', 'en_US.UTF-8'],
+])('rejects launch environment %s=%j before publication', (name, value) => {
+  const f = fixture();
+  f.env[name] = value;
+  const before = state(f);
+  const result = execute(f);
+  expect(result.status).toBe(1);
+  expect(result.stdout).toBe('');
+  expect(result.stderr).toBe('caws execution evidence refused: context_unresolved\n');
+  expect(state(f)).toEqual(before);
+});
+
+test.each([
+  ['decimal', true],
+  ['hexadecimal', true],
+  ['empty', false],
+  ['missing-part', false],
+  ['extra-part', false],
+  ['empty-part', false],
+  ['malformed-hex', false],
+  ['negative-part', false],
+  ['wrong-uid', false],
+])('checks mocked Darwin startup encoding %s before publication', (kind, accepted) => {
+  const f = fixture();
+  const before = state(f);
+  const script = `
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    const uid = process.getuid();
+    process.env.__CF_USER_TEXT_ENCODING = {
+      decimal: uid + ':0:0', hexadecimal: '0x' + uid.toString(16) + ':0x0:0xA',
+      empty: '', 'missing-part': uid + ':0', 'extra-part': uid + ':0:0:0',
+      'empty-part': uid + '::0', 'malformed-hex': uid + ':0x:0',
+      'negative-part': uid + ':-1:0', 'wrong-uid': (uid + 1) + ':0:0'
+    }[${JSON.stringify(kind)}];
+    process.argv.splice(1, 0, ${JSON.stringify(entry)});
+    require(${JSON.stringify(entry)});
+  `;
+  const result = execute(f, args(f), { script });
+  expect(result.status).toBe(accepted ? 0 : 1);
+  if (accepted) {
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout).verification).toBe('citation-only');
+    expect(evidence(f)[0].commit_sha).toBe(f.sha);
+  } else {
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('caws execution evidence refused: context_unresolved\n');
+    expect(state(f)).toEqual(before);
+  }
+});
+
+test('confines all three real Git citation queries to exact object-only arguments and environment', () => {
+  const f = fixture();
+  const script = `
+    const child = require('node:child_process');
+    const exec = child.execFileSync, calls = [];
+    child.execFileSync = (...args) => {
+      // Authority's separate rev-parse queries retain their own contract.
+      if (args[1][0] !== 'rev-parse') calls.push(args);
+      return exec(...args);
+    };
+    const result = require(${JSON.stringify(path.resolve(__dirname, '../../dist/execution/writer.js'))}).runExecutionEvidenceWriter(process.argv.slice(1));
+    process.stdout.write(JSON.stringify({ result, calls }));
+  `;
+  const result = execute(f, args(f), { script });
+  expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+  const observed = JSON.parse(result.stdout);
+  expect(observed.result.verification).toBe('citation-only');
+  const prefix = [
+    '--no-lazy-fetch',
+    '-c',
+    'core.fsmonitor=false',
+    '-c',
+    'core.hooksPath=/dev/null',
+    '-c',
+    'commit.gpgSign=false',
+    '-c',
+    'gc.auto=0',
+    '-c',
+    'maintenance.auto=false',
+  ];
+  const options = {
+    cwd: f.lane,
+    env: {
+      PATH: '/usr/bin:/bin',
+      LC_ALL: 'C',
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_OPTIONAL_LOCKS: '0',
+      GIT_NO_LAZY_FETCH: '1',
+    },
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 1000,
+    maxBuffer: 65536,
+  };
+  expect(observed.calls).toEqual([
+    ['/usr/bin/git', [...prefix, 'cat-file', '-e', `${f.sha}^{commit}`], options],
+    [
+      '/usr/bin/git',
+      [...prefix, 'for-each-ref', '--contains', f.sha, '--count=1', '--format=%(refname)'],
+      options,
+    ],
+    ['/usr/bin/git', [...prefix, 'cat-file', '-e', `${f.sha}:src/proof.txt`], options],
+  ]);
+});
+
+test.each(['hardlink', 'symlink', 'regular', 'unrelated-symlink'])(
+  'checks owned spec temporary sibling %s without treating other specs as owned',
+  (kind) => {
+    const f = fixture();
+    const target = path.join(f.root, 'retained-temporary-target');
+    const bytes = 'preserve temporary target\n';
+    fs.writeFileSync(target, bytes);
+    const sibling = path.join(
+      f.caws,
+      'specs',
+      `${kind === 'unrelated-symlink' ? 'FOREIGN-001.yaml' : 'EXEC-001.yaml'}.tmp.retained`
+    );
+    if (kind === 'hardlink') fs.linkSync(target, sibling);
+    else if (kind === 'regular') fs.writeFileSync(sibling, bytes);
+    else fs.symlinkSync(target, sibling);
+    const before = state(f);
+    const result = execute(f);
+    if (kind === 'hardlink' || kind === 'symlink') {
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toBe('caws execution evidence refused: context_unresolved\n');
+      expect(state(f)).toEqual(before);
+    } else {
+      expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+      expect(evidence(f)[0].evidence_ref).toBe('inspected artifact');
+    }
+    expect(fs.readFileSync(target, 'utf8')).toBe(bytes);
+    expect(fs.readFileSync(sibling, 'utf8')).toBe(bytes);
+  }
+);

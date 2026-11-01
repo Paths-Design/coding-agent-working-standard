@@ -534,8 +534,8 @@ describe('mutation policy topology contract', () => {
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
     // The inventory includes execution and all shared inspection decisions.
-    expect(result.stdout).toMatch(/^PASS: 218 source files accounted for exactly once$/m);
-    expect(result.stdout).toMatch(/^PASS: 38 mutation targets across 5 surfaces$/m);
+    expect(result.stdout).toMatch(/^PASS: 227 source files accounted for exactly once$/m);
+    expect(result.stdout).toMatch(/^PASS: 47 mutation targets across 5 surfaces$/m);
   });
 
   test.each([
@@ -766,22 +766,40 @@ describe('mutation policy topology contract', () => {
     expect(config.incremental).toBe(false);
     expect(config).not.toHaveProperty('testFiles');
     expect(config.jest.config.testMatch).toEqual([
+      '<rootDir>/tests/ci/lint-staged-prettier-fence.test.js',
       '<rootDir>/tests/execution/authority-fence.test.js',
       '<rootDir>/tests/execution/authority.test.js',
       '<rootDir>/tests/execution/authorizer.test.js',
+      '<rootDir>/tests/execution/cargo-project.test.js',
       '<rootDir>/tests/execution/fence.test.js',
+      '<rootDir>/tests/execution/git-hook-bootstrap.test.js',
+      '<rootDir>/tests/execution/git-hook-client.test.js',
+      '<rootDir>/tests/execution/git-hook-launcher.test.js',
+      '<rootDir>/tests/execution/git-hook-transaction.test.js',
+      '<rootDir>/tests/execution/lifecycle.test.js',
+      '<rootDir>/tests/execution/npm-project.test.js',
       '<rootDir>/tests/execution/prepared-schema.test.js',
       '<rootDir>/tests/execution/program-discovery.test.js',
       '<rootDir>/tests/execution/protocol.test.js',
       '<rootDir>/tests/execution/writer.test.js',
+      '<rootDir>/tests/store/git-runtime.test.js',
     ]);
     expect(config.mutate).toEqual([
       'src/execution/authority.ts',
       'src/execution/authorizer.ts',
+      'src/execution/cargo-project.ts',
       'src/execution/fence.ts',
+      'src/execution/git-hook-client-main.ts',
+      'src/execution/git-hook-formatter-main.ts',
+      'src/execution/git-hook-launcher-main.ts',
+      'src/execution/git-hook-transaction.ts',
+      'src/execution/lifecycle-main.ts',
+      'src/execution/lifecycle.ts',
+      'src/execution/npm-project.ts',
       'src/execution/prepared-schema.ts',
       'src/execution/protocol.ts',
       'src/execution/writer.ts',
+      'src/store/git-runtime.ts',
       'src/store/lifecycle-lock.ts',
     ]);
   });

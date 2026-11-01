@@ -27,6 +27,7 @@
 //   - Run rm -rf on any path.
 
 import { execFileSync } from 'child_process';
+import { executionGitOptions } from './git-runtime';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -427,7 +428,7 @@ export function classifyMergeTree(base: string, branch: string, cwd: string): Me
     stdout = execFileSync(
       resolveGitBinary(),
       ['merge-tree', '--write-tree', '--name-only', '-z', base, branch],
-      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+      { cwd, encoding: 'utf8', ...executionGitOptions(cwd) }
     );
   } catch (e) {
     const cause = e as {
@@ -598,10 +599,10 @@ function retirementGitObservation(
     execFileSync(resolveGitBinary(), args, {
       cwd,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 2_000,
       killSignal: 'SIGKILL',
       env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+      ...executionGitOptions(cwd),
     });
   let directory: { dev: string; ino: string } | null = null;
   let status: string | null = null;
@@ -658,10 +659,10 @@ function retirementIsMerged(repoRoot: string, branch: string, base: string): boo
     execFileSync(resolveGitBinary(), ['merge-base', '--is-ancestor', branch, base], {
       cwd: repoRoot,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 2_000,
       killSignal: 'SIGKILL',
       env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+      ...executionGitOptions(repoRoot),
     });
     return true;
   } catch {
@@ -2395,7 +2396,7 @@ export function destroyWorktree(
             execFileSync(resolveGitBinary(), ['worktree', 'remove', wtPath], {
               cwd: repoRoot,
               encoding: 'utf8',
-              stdio: ['ignore', 'pipe', 'pipe'],
+              ...executionGitOptions(repoRoot),
               timeout: 10_000,
               killSignal: 'SIGKILL',
             });

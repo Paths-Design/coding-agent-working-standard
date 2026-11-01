@@ -1,7 +1,7 @@
 'use strict';
 
-// Test-only IPC. FD3 belongs to the real fence or lifecycle-test IPC; FD4
-// carries instrumentation counters without changing production wire output.
+// Test-only IPC. FD3 belongs to the fence and FD4 to the native Git broker;
+// FD5 carries instrumentation counters without changing production output.
 const fs = require('node:fs');
 const context = JSON.parse(process.env.CAWS_TEST_CHILD_COVERAGE);
 if (!context || typeof context.token !== 'string' ||
@@ -17,7 +17,7 @@ process.once('exit', () => {
   const frame = Buffer.concat([header, body]);
   let offset = 0;
   while (offset < frame.length) {
-    const count = fs.writeSync(4, frame, offset, frame.length - offset);
+    const count = fs.writeSync(5, frame, offset, frame.length - offset);
     if (count <= 0) throw new Error('Child coverage write failed');
     offset += count;
   }

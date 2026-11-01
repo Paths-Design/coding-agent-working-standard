@@ -11,11 +11,11 @@
 use crate::{
     execution_control::ExecutionControl,
     execution_host::ProducerPeer,
-    execution_owner::{PinnedAuthorizer, TrustedInvocation},
+    execution_owner::{GitHookRuntimePins, PinnedAuthorizer, TrustedInvocation},
     execution_prepared::{PreparedRecord, ProgramImage, RECORD_LIMIT},
     monotonic_deadline::{DeadlineEnvelope, MonotonicDeadline},
 };
-use base64::{Engine, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
@@ -58,6 +58,10 @@ struct Pins {
     lifecycle: Option<ProgramImage>,
     #[serde(default)]
     lifecycle_context: Option<crate::execution_owner::RuntimeHomes>,
+    #[serde(default)]
+    git_hooks: Option<ProgramImage>,
+    #[serde(default)]
+    git_runtime: Option<GitHookRuntimePins>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -163,6 +167,38 @@ fn decode(bytes: &[u8]) -> io::Result<(Frame, PreparedRecord, MonotonicDeadline)
                         .pointer("/authorizer/lifecycle_context")
                         .is_some_and(serde_json::Value::is_object)
             })
+        || match &frame.authorizer.git_hooks {
+            Some(image) => {
+                !shape
+                    .pointer("/authorizer/git_hooks")
+                    .is_some_and(serde_json::Value::is_object)
+                    || !crate::execution_owner::git_hook_policy_well_formed(
+                        image,
+                        frame.authorizer.lifecycle.as_ref(),
+                        frame.authorizer.lifecycle_context.as_ref(),
+                    )
+            }
+            None => shape.pointer("/authorizer/git_hooks").is_some(),
+        }
+        || match &frame.authorizer.git_runtime {
+            Some(runtime) => {
+                ![
+                    "/authorizer/git_runtime",
+                    "/authorizer/git_runtime/host",
+                    "/authorizer/git_runtime/client",
+                    "/authorizer/git_runtime/launcher",
+                    "/authorizer/git_runtime/formatter_bootstrap",
+                ]
+                .iter()
+                .all(|p| shape.pointer(p).is_some_and(serde_json::Value::is_object))
+                    || !runtime.well_formed(
+                        frame.authorizer.git_hooks.as_ref(),
+                        frame.authorizer.lifecycle.as_ref(),
+                        frame.authorizer.lifecycle_context.as_ref(),
+                    )
+            }
+            None => shape.pointer("/authorizer/git_runtime").is_some(),
+        }
         || frame.prepared_base64.len() > 4 * RECORD_LIMIT.div_ceil(3)
     {
         return Err(invalid());
@@ -223,7 +259,7 @@ pub(crate) fn encode_startup(
     let nonce: String = random.iter().map(|b| format!("{b:02x}")).collect();
     let a = &prepared.association;
     let image = |p: &ProgramImage| json!({"path":p.path,"sha256":p.sha256});
-    let body = serde_json::to_vec(&json!({
+    let mut value = json!({
         "schema":"caws.execution.startup.v1", "nonce":nonce,
         "preparedBase64":STANDARD.encode(prepared.record.original()),
         "preparedSha256":format!("{:x}",Sha256::digest(prepared.record.original())),
@@ -234,7 +270,14 @@ pub(crate) fn encode_startup(
         "authorizer":{"node":image(&pins.node),"entry":image(&pins.entry),"writer":pins.writer.as_ref().map(image),"lifecycle":pins.lifecycle.as_ref().map(image),
             "lifecycle_context":pins.lifecycle_context.as_ref().map(|homes| json!({"home":homes.home,"caws_home":homes.caws_home,"codex_home":homes.codex_home}))},
         "deadline":deadline.envelope()
-    })).map_err(|_| invalid())?;
+    });
+    if let Some(policy) = &pins.git_hooks {
+        value["authorizer"]["git_hooks"] = image(policy);
+    }
+    if let Some(runtime) = &pins.git_runtime {
+        value["authorizer"]["git_runtime"] = json!({"host":image(&runtime.host),"client":image(&runtime.client),"launcher":image(&runtime.launcher),"formatter_bootstrap":image(&runtime.formatter_bootstrap),"scratch_root":runtime.scratch_root});
+    }
+    let body = serde_json::to_vec(&value).map_err(|_| invalid())?;
     decode(&body)?;
     let mut bytes = (body.len() as u32).to_be_bytes().to_vec();
     bytes.extend(body);
@@ -332,6 +375,8 @@ pub(crate) fn receive_startup(
             writer: frame.authorizer.writer,
             lifecycle: frame.authorizer.lifecycle,
             lifecycle_context: frame.authorizer.lifecycle_context,
+            git_hooks: frame.authorizer.git_hooks,
+            git_runtime: frame.authorizer.git_runtime,
         },
         deadline,
         control,
@@ -342,7 +387,7 @@ pub(crate) fn receive_startup(
 #[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
     use std::{fs, io::Write, net::Shutdown, time::Duration};
 
     fn fixture() -> (Value, Vec<u8>) {
@@ -406,6 +451,97 @@ mod tests {
         value["authorizer"]["lifecycle"] = Value::Null;
         assert!(decode(&serde_json::to_vec(&value).unwrap()).is_err());
     }
+    #[test]
+    fn git_hook_policy_pin_requires_exact_image_sibling_and_runtime_context() {
+        let (mut value, _) = fixture();
+        value["authorizer"]["lifecycle"] =
+            json!({"path":"/generation/lifecycle-main.js","sha256":"b".repeat(64)});
+        value["authorizer"]["lifecycle_context"] =
+            json!({"home":"/home","caws_home":"/machine","codex_home":"/home/.codex"});
+        let policy = json!({"path":"/generation/lifecycle-hooks.json","sha256":"c".repeat(64)});
+        value["authorizer"]["git_hooks"] = policy.clone();
+        let (frame, _, _) = decode(&serde_json::to_vec(&value).unwrap()).unwrap();
+        let pin = frame.authorizer.git_hooks.unwrap();
+        assert_eq!(pin.path, "/generation/lifecycle-hooks.json");
+        assert_eq!(pin.sha256, "c".repeat(64));
+        for replacement in [
+            Value::Null,
+            json!(["/generation/lifecycle-hooks.json", "c".repeat(64)]),
+            json!({"path":"/generation/other.json","sha256":"c".repeat(64)}),
+            json!({"path":"/foreign/lifecycle-hooks.json","sha256":"c".repeat(64)}),
+            json!({"path":"relative/lifecycle-hooks.json","sha256":"c".repeat(64)}),
+            json!({"path":"/generation/lifecycle-hooks.json","sha256":"C".repeat(64)}),
+            json!({"path":"/generation/lifecycle-hooks.json","sha256":"c".repeat(64),"allow":true}),
+        ] {
+            let mut bad = value.clone();
+            bad["authorizer"]["git_hooks"] = replacement;
+            assert!(decode(&serde_json::to_vec(&bad).unwrap()).is_err());
+        }
+        for field in ["lifecycle", "lifecycle_context"] {
+            let mut bad = value.clone();
+            bad["authorizer"].as_object_mut().unwrap().remove(field);
+            assert!(decode(&serde_json::to_vec(&bad).unwrap()).is_err());
+        }
+        let duplicate = serde_json::to_string(&value).unwrap().replace(
+            "\"git_hooks\":",
+            &format!("\"git_hooks\":{},\"git_hooks\":", policy),
+        );
+        assert!(decode(duplicate.as_bytes()).is_err());
+    }
+    #[test]
+    fn git_runtime_pins_require_closed_exact_sibling_tuple_and_dependencies() {
+        let (mut value, _) = fixture();
+        let image =
+            |name: &str| json!({"path":format!("/generation/{name}"),"sha256":"a".repeat(64)});
+        value["authorizer"]["lifecycle"] = image("lifecycle-main.js");
+        value["authorizer"]["lifecycle_context"] =
+            json!({"home":"/home","caws_home":"/machine","codex_home":"/home/.codex"});
+        value["authorizer"]["git_hooks"] = image("lifecycle-hooks.json");
+        let runtime = json!({"host":image("host"),"client":image("git-hook-client-main.js"),"launcher":image("git-hook-launcher-main.js"),"formatter_bootstrap":image("git-hook-formatter-main.js"),"scratch_root":"/private/scratch"});
+        value["authorizer"]["git_runtime"] = runtime.clone();
+        let (frame, _, _) = decode(&serde_json::to_vec(&value).unwrap()).unwrap();
+        let pin = frame.authorizer.git_runtime.unwrap();
+        assert_eq!(pin.host.path, "/generation/host");
+        assert_eq!(pin.launcher.path, "/generation/git-hook-launcher-main.js");
+        assert_eq!(pin.scratch_root, "/private/scratch");
+        for (field, replacement) in [
+            ("git_runtime", Value::Null),
+            ("git_runtime", json!([])),
+            ("git_hooks", Value::Null),
+            ("lifecycle", Value::Null),
+            ("lifecycle_context", Value::Null),
+        ] {
+            let mut bad = value.clone();
+            bad["authorizer"][field] = replacement;
+            assert!(
+                decode(&serde_json::to_vec(&bad).unwrap()).is_err(),
+                "{field}"
+            );
+        }
+        for (field, replacement) in [
+            ("host", Value::Null),
+            ("client", image("foreign.js")),
+            (
+                "launcher",
+                json!(["/generation/git-hook-launcher-main.js", "a".repeat(64)]),
+            ),
+            ("formatter_bootstrap", image("wrong.js")),
+            ("scratch_root", json!("relative")),
+            ("extra", json!(true)),
+        ] {
+            let mut bad = value.clone();
+            bad["authorizer"]["git_runtime"][field] = replacement;
+            assert!(
+                decode(&serde_json::to_vec(&bad).unwrap()).is_err(),
+                "{field}"
+            );
+        }
+        let duplicate = serde_json::to_string(&value).unwrap().replace(
+            "\"git_runtime\":",
+            &format!("\"git_runtime\":{},\"git_runtime\":", runtime),
+        );
+        assert!(decode(duplicate.as_bytes()).is_err());
+    }
     fn framed(value: &Value) -> Vec<u8> {
         let body = serde_json::to_vec(value).unwrap();
         let mut frame = (body.len() as u32).to_be_bytes().to_vec();
@@ -414,7 +550,19 @@ mod tests {
     }
     #[test]
     fn producer_frame_preserves_original_bytes_and_refuses_association_disagreement() {
-        let (value, original) = fixture();
+        let (mut value, original) = fixture();
+        value["authorizer"]["lifecycle"] =
+            json!({"path":"/generation/lifecycle-main.js","sha256":"b".repeat(64)});
+        value["authorizer"]["lifecycle_context"] =
+            json!({"home":"/home","caws_home":"/machine","codex_home":"/home/.codex"});
+        value["authorizer"]["git_hooks"] =
+            json!({"path":"/generation/lifecycle-hooks.json","sha256":"c".repeat(64)});
+        value["authorizer"]["git_runtime"] = json!({
+            "host":{"path":"/host","sha256":"1".repeat(64)},
+            "client":{"path":"/generation/git-hook-client-main.js","sha256":"2".repeat(64)},
+            "launcher":{"path":"/generation/git-hook-launcher-main.js","sha256":"3".repeat(64)},
+            "formatter_bootstrap":{"path":"/generation/git-hook-formatter-main.js","sha256":"4".repeat(64)},
+            "scratch_root":"/private/scratch"});
         let (frame, record, deadline) = decode(&serde_json::to_vec(&value).unwrap()).unwrap();
         let t = frame.trusted;
         let mut prepared = crate::execution_prepare::PreparedExecution {
@@ -435,15 +583,26 @@ mod tests {
             node: frame.authorizer.node,
             entry: frame.authorizer.entry,
             writer: None,
-            lifecycle: None,
-            lifecycle_context: None,
+            lifecycle: frame.authorizer.lifecycle,
+            lifecycle_context: frame.authorizer.lifecycle_context,
+            git_hooks: frame.authorizer.git_hooks,
+            git_runtime: frame.authorizer.git_runtime,
         };
         let bytes = encode_startup(&prepared, &pins, &deadline).unwrap();
         assert_eq!(
             u32::from_be_bytes(bytes[..4].try_into().unwrap()) as usize,
             bytes.len() - 4
         );
-        let (_, decoded, observed) = decode(&bytes[4..]).unwrap();
+        let (transported, decoded, observed) = decode(&bytes[4..]).unwrap();
+        assert!(transported
+            .authorizer
+            .git_runtime
+            .as_ref()
+            .unwrap()
+            .same_as(pins.git_runtime.as_ref().unwrap()));
+        let policy = transported.authorizer.git_hooks.unwrap();
+        assert_eq!(policy.path, "/generation/lifecycle-hooks.json");
+        assert_eq!(policy.sha256, "c".repeat(64));
         assert_eq!(decoded.original(), original);
         assert_eq!(observed.envelope(), deadline.envelope());
         prepared.association.call_id = "changed".into();
