@@ -2,6 +2,7 @@ id: CAWS-DOCTOR-BRIDGE-BINDINGS-001
 title: 'Recognize session bridge bindings in doctor and status'
 mode: fix
 lifecycle_state: active
+worktree: doctor-bridge-diagnostics
 created_at: '2026-11-01T07:40:16.928Z'
 updated_at: '2026-11-01T12:14:24.191Z'
 created_by_session: '01a195fc-690b-77a2-8052-60a6df2d4e38'
