@@ -553,6 +553,7 @@ function installRealStopSources() {
       sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
     };
   }
+  copy('dispatch.sh', 'runtime/dispatch.sh');
   copy('handler-env.sh', 'runtime/handler-env.sh');
   copy('runtime-paths.sh', 'shared/runtime-paths.sh');
   copy('lib/session-cache.sh', 'shared/lib/session-cache.sh');

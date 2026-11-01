@@ -113,6 +113,8 @@ beforeEach(() => {
       runtimeDigest: installed.digest,
       surface: 'codex',
       event: 'pre_tool_use',
+      configuration: 'system',
+      caller: { cwd: repo, processId: process.pid, environment: { ...environment } },
       payload: {
         tool_name: 'Bash',
         tool_input: { command: 'evaluated text only' },
