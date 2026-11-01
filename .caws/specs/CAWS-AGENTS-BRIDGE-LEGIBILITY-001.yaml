@@ -1,0 +1,44 @@
+id: CAWS-AGENTS-BRIDGE-LEGIBILITY-001
+title: 'Show active session bridge bindings in agents list'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-01T12:53:20.993Z'
+updated_at: '2026-11-01T12:53:20.993Z'
+created_by_session: '01a196ea-962a-7cd1-a8d3-9603cec4e96d'
+blast_radius:
+  modules:
+    - 'Read-only agents-list binding joins, JSON/text disclosures and operator guidance'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/agents.ts'
+    - 'packages/caws-cli/tests/shell/agents-binding-join.test.js'
+    - 'packages/caws-cli/tests/shell/agents-list-disclosure.test.js'
+    - 'docs/guides/multi-agent-workflow.md'
+  out: []
+invariants:
+  - 'List remains read-only: no lease refresh, identity mint, claims/spec/event mutation or authority admission change.'
+  - 'Existing worktree binding facts and source provenance remain intact; active bridge eligibility uses valid owner entries and active specs with worktree precedence.'
+  - 'Lease age controls row visibility only; unreadable authority inputs remain unknown and never become an asserted empty bridge list.'
+acceptance:
+  - id: A1
+    given: 'real claims for active specs and emitted lease sessions including owners of separate worktrees'
+    when: 'agents list renders text and JSON'
+    then: 'deterministic per-session bridge IDs appear separately from worktree bindings with explicit source provenance and no foreign-owner attribution'
+  - id: A2
+    given: 'retired or missing specs, malformed owner entries, subordinate worktree claims, and unreadable claims/spec/worktree inputs'
+    when: 'the list joins bridge ownership'
+    then: 'ineligible claims are excluded and load failures produce unknown bridge data with diagnostics rather than a false absence'
+  - id: A3
+    given: 'active stale and stopped leases plus default and explicit visibility flags'
+    when: 'list fixtures and byte readback run on the committed candidate'
+    then: 'emitted rows retain lease-independent bridge ownership, visibility and JSON/text parity, authority bytes remain identical and the bridge-visibility guidance matches the exercised behavior'
+observability:
+  - 'Text bridges tags and bridge-source disclosure; JSON bridge_bindings resolution, by_session and load diagnostics.'
+rollback:
+  - 'Revert the owned display commit through a governed lane while preserving leases, claims, specs and acceptance history.'
+non_functional: {}
+contracts:
+  - name: 'agents-bridge-binding-display'
+    type: behavior
