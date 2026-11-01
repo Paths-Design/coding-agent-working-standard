@@ -134,7 +134,9 @@ export function buildDashboardModel(state: GatheredDashboardState): DashboardMod
       ? `bound: ${state.binding.binding.spec.id}${
           state.binding.worktreeName !== undefined ? ` · wt ${state.binding.worktreeName}` : ''
         }`
-      : 'unbound (no write authority in this checkout)';
+      : kind === 'bridged'
+        ? `bridged: ${state.binding.binding.spec.id}`
+        : 'unbound (no write authority in this checkout)';
 
   let laneLine: string | undefined;
   if (lanePayload !== undefined) {
