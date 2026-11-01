@@ -29,15 +29,12 @@ function isYamlPath(name: string): boolean {
 
 export function loadSpecs(cawsDir: string): SpecsLoadResult {
   const specsDir = path.join(cawsDir, 'specs');
-  if (!fs.existsSync(specsDir)) {
-    return { specs: [], diagnostics: [] };
-  }
-
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(specsDir, { withFileTypes: true });
   } catch (e) {
     const cause = e as { message?: string; code?: string };
+    if (cause.code === 'ENOENT') return { specs: [], diagnostics: [] };
     return {
       specs: [],
       diagnostics: [

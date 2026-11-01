@@ -1,0 +1,55 @@
+id: CAWS-SOURCE-PROFILE-FIXTURES-001
+title: 'Align containment and Stop fixtures with system startup profiles'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Only3fixture setup insertions from89b7704517296421284c2d5d1ff5f28d6eb3e22a landed normally into recordedSourcebase caws/exclusive-npm-integration exact7c8. Actual Node22.19 bothsuites54pass0skip; private CLI-onlybuild/pkgESLint pass; actual2filegates5pass. A1/A2 spec-eventdualread15626/15627. Independent peer and author source/raw/oracle inspection found no load-bearing defect; assertions/pins/deadlines/production unchanged. Prefix/publication doubles limit evidence to fixture/connection behavior, not genuine Native/full qualification. Coordinator01a17941 explicitly authorized this normal merge/close in messagea11e69c3-1aec-4ebe-a215-673e3c134cef, retains Source integration/parentACs/mainpush; raw tmp logs retained.'
+created_at: '2026-11-01T14:30:54.828Z'
+updated_at: '2026-11-01T14:47:01.450Z'
+created_by_session: '01a196ea-962a-7cd1-a8d3-9603cec4e96d'
+blast_radius:
+  modules:
+    - 'Source runtime startup-profile test fixture construction'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/runtime/containment.test.js'
+    - 'packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js'
+  out: []
+invariants:
+  - 'Only fixture setup changes: system configuration and cloned caller environment snapshot for containment; reviewed real dispatcher copy for Stop.'
+  - 'Production code, source pins, assertions, invalid-input controls, authority checks, floors and execution deadlines remain unchanged.'
+  - 'Use a bound child of the coordinator-approved corrected Source commit; the Source coordinator retains integration, acceptance and publication of the parent runtime.'
+acceptance:
+  - id: A1
+    given: 'containment fixtures executing current startup-profile admission'
+    when: 'the request declares system configuration and a cloned original caller environment snapshot'
+    then: 'valid profiles exercise containment while the existing identity drift, environment mutation and invalid-input rejection assertions remain effective'
+  - id: A2
+    given: 'real Stop fixture sources and the current pinned startup profile'
+    when: 'the reviewed dispatcher joins the existing real handler environment and Stop handlers'
+    then: 'the unchanged connection reuse, pre-effect drift refusal, late drift no replay and reprieve assertions execute against the intended profile'
+observability:
+  - 'Existing test assertions and ignored raw exact-suite output on the committed Source child.'
+rollback:
+  - 'Revert only the two fixture setup changes through the Source coordinator lineage; preserve failed attempts and parent qualification obligations.'
+non_functional: {}
+contracts:
+  - name: 'runtime-profile-fixture-fidelity'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Candidate 89b7704517296421284c2d5d1ff5f28d6eb3e22a, exact Source base7c8b293b237f1d5a8a0155600f939c023a8480e5. System configuration plus cloned original flat environment satisfies inspected runtime/session-cache-admission.ts startup profile. Actual Node22.19 two-suite command exit0:54pass0skip. Existing valid capability, wrong identity/generation/source, startup overrides, dry-run, invalid receipt and reuse rejection assertions pass without edits. Raw /Users/darianrosebrook/Desktop/Projects/caws/tmp/source-profile-fixtures-01a196ea/two-suites stdout/stderr/json; CLI-only build0, correct package lint0. Mechanical --verify checks commit reachability; it does not rerun the recorded command."
+    recorded_at: "2026-11-01T14:43:18.944Z"
+    command: "/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-profile-fixtures/node_modules/jest/bin/jest.js --config /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-profile-fixtures/packages/caws-cli/jest.config.js --runInBand --watchman=false --runTestsByPath /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-profile-fixtures/packages/caws-cli/tests/runtime/containment.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-profile-fixtures/packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js --json --outputFile /Users/darianrosebrook/Desktop/Projects/caws/tmp/source-profile-fixtures-01a196ea/two-suites.json"
+    exit_code: 0
+    commit_sha: "89b7704517296421284c2d5d1ff5f28d6eb3e22a"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Only reviewed dispatcher copy added to real Stop fixture. Actual same committed two-suite run54pass0skip exercises current pins, before-prefix source drift refusal with no effects, late drift one-prefix/no replay, reprieve ordering/publication and preserved-or-stopped lease state; existing assertions/pins/deadlines unchanged. Actual2-file gates all5pass and read-only peer feedback independently grounded against fixture/profile/oracles. Raw /Users/darianrosebrook/Desktop/Projects/caws/tmp/source-profile-fixtures-01a196ea. Explicit prefix/publication doubles mean this is fixture/connection evidence, not real Native custody/full installed/runtime qualification. Source coordinator retains parent integration/ACs/publication. Commit citation verification is reachability only."
+    recorded_at: "2026-11-01T14:43:30.245Z"
+    command: "/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-profile-fixtures/node_modules/jest/bin/jest.js --config /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-profile-fixtures/packages/caws-cli/jest.config.js --runInBand --watchman=false --runTestsByPath /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-profile-fixtures/packages/caws-cli/tests/runtime/containment.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-profile-fixtures/packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js --json --outputFile /Users/darianrosebrook/Desktop/Projects/caws/tmp/source-profile-fixtures-01a196ea/two-suites.json"
+    exit_code: 0
+    commit_sha: "89b7704517296421284c2d5d1ff5f28d6eb3e22a"

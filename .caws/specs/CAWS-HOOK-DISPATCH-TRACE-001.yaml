@@ -1,0 +1,54 @@
+id: CAWS-HOOK-DISPATCH-TRACE-001
+title: 'Locate native PostToolUse case timeout with opt-in stage traces'
+mode: chore
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Opt-in bounded/redacted stage tracing landed only into the recorded advanced Source qualification base. Candidatef196c5caca29493227ae14d5ee0e9abb57e5c568; actual unchanged-deadline compat PostToolUse1pass24skipped,47dispatches329complete7-stage records, maxdispatch1054ms; no timeout/retry and no production defect established. A1/A2 spec-event dualread15601/15602. Independent peer feedback and author source/raw inspection complete. Narrow compatibility observation does not explain prior timeout or establish genuine Native/full/global qualification. Coordinator01a17941 explicitly authorized this normal landing in messagea11e69c3-1aec-4ebe-a215-673e3c134cef and retains normal Source integration/parentACs/mainpush. Raw tmp evidence retained.'
+created_at: '2026-11-01T13:10:17.533Z'
+updated_at: '2026-11-01T14:46:26.709Z'
+created_by_session: '01a196ea-962a-7cd1-a8d3-9603cec4e96d'
+blast_radius:
+  modules:
+    - 'Source engine-routing test harness dispatch-stage observation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/runtime/engine-routing.test.js'
+  out: []
+invariants:
+  - 'No production code, payload semantics, assertions,120-second case timeout or15-second invocation deadlines change.'
+  - 'Opt-in trace output contains only bounded ordinal/tool/event/stage/monotonic elapsed and numeric completion metadata; never payload, environment, authentication or authored content.'
+  - 'Child lane stays on advanced Source lineage; no advanced implementation merges into main or the agents visibility lane, and foreign owner retains Source integration/publication.'
+acceptance:
+  - id: A1
+    given: 'existing runTool prepare dispatch and acknowledgement await boundaries'
+    when: 'CAWS_TEST_TRACE_HOOK_DISPATCH=1 is enabled'
+    then: 'bounded before/after/finally stage observations identify the completed or pending boundary without exposing request data'
+  - id: A2
+    given: 'the exact Node22 native-engine-compat PostToolUse case and matched Source prerequisites'
+    when: 'one bounded unchanged-deadline execution runs'
+    then: 'raw output and exit/termination provenance identify the decisive stage or establish a scoped passing observation without claiming full qualification'
+observability:
+  - 'Opt-in process.stderr stage records and persistent ignored raw exact-case output.'
+rollback:
+  - 'Revert only the owned test instrumentation commit through the Source lineage; retain raw observations and original failure history.'
+non_functional: {}
+contracts:
+  - name: 'redacted-hook-case-diagnostics'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Root source inspection and independent read-only peer questions inspected the one-file c049→f196 test-only diff. Exact opt-in value1 gates all stderr/clock work; fixed enum labels/counter/monotonic ms/integer exitCode exclude request,payload,env,auth,content and exception strings. Original await ordering, assertions,120000ms case and15000ms request limits remain. Root independently parsed /Users/darianrosebrook/Desktop/Projects/caws/tmp/source-hook-dispatch-trace-01a196ea/exact-case.stderr.log:329records across47ordinals, exact7stages each, whitelist/enums/integer values and monotonic timing valid; no unmatched boundary. Finally visibility when an await never returns is explicitly limited. Actual-diff gates on1path atf196 all5PASS. No production repair or native-context fix is claimed; subagent Edit identity refusal was preserved, child ownership handed back by audited claim, Root native patch succeeded without Bash source writes."
+    recorded_at: "2026-11-01T14:03:16.945Z"
+    command: "'/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node' '/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-hook-dispatch-trace/node_modules/jest/bin/jest.js' '--runInBand' '--selectProjects' 'caws-cli' '--runTestsByPath' '/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-hook-dispatch-trace/packages/caws-cli/tests/runtime/engine-routing.test.js' '--testNamePattern' '^Codex PostToolUse native-engine-compat scans authored patch sections and reports applied edits$' '--json' '--outputFile' '/Users/darianrosebrook/Desktop/Projects/caws/tmp/source-hook-dispatch-trace-01a196ea/exact-case.jest.json'"
+    exit_code: 0
+    commit_sha: f196c5caca29493227ae14d5ee0e9abb57e5c568
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "One actual exact anchored Node22.19 case at clean committedf196 (parentc049), current child CLI-only dist, physical private dependencies with matching root lockd75c702f, no Native build. Raw /Users/darianrosebrook/Desktop/Projects/caws/tmp/source-hook-dispatch-trace-01a196ea/exact-case.jest.json has1pass,24skipped,0fail; selected36048ms, overall38186ms. Native PTY66967 exited0 (chunks35f89d/ba67f1); no retry,interrupt or180s outer-bound hit. Provenance and raw stdout/stderr plus trace-summary remain ignored at /Users/darianrosebrook/Desktop/Projects/caws/tmp/source-hook-dispatch-trace-01a196ea.47complete invocations sum35661ms,maxdispatch1054ms,prepare60ms,ack1ms; no single pending await reproduced. Approved Native donor was not exercised by selected compatibility route; optional guard-core receipt helper was explicitly absent, not forged. This passing isolated observation does not explain historical full14 120s timeout or qualify full suite/installed Native. Smallest next action is carry opt-in trace into already-owed Source normal qualification if timeout recurs. Root retains child until explicit Source-owner acceptance/claim and integration into Source lineage; no merge to main or Source landing by Root. Source-owner adjacent fixture request ef061c7a is separately grounded but not yet accepted for implementation; parent improvement goal and Source/Host qualification remain open. --verify checks reachable committed citation only, not rerun or raw-log publication."
+    recorded_at: "2026-11-01T14:03:28.177Z"
+    command: "'/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node' '/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-hook-dispatch-trace/node_modules/jest/bin/jest.js' '--runInBand' '--selectProjects' 'caws-cli' '--runTestsByPath' '/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/source-hook-dispatch-trace/packages/caws-cli/tests/runtime/engine-routing.test.js' '--testNamePattern' '^Codex PostToolUse native-engine-compat scans authored patch sections and reports applied edits$' '--json' '--outputFile' '/Users/darianrosebrook/Desktop/Projects/caws/tmp/source-hook-dispatch-trace-01a196ea/exact-case.jest.json'"
+    exit_code: 0
+    commit_sha: f196c5caca29493227ae14d5ee0e9abb57e5c568

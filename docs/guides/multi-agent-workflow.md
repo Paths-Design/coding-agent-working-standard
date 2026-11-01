@@ -10,8 +10,8 @@ audience: consumer
 
 # Multi-agent workflow
 
-**Each agent works on its own per-feature spec, in its own git worktree, with
-non-overlapping scope.**
+**Each agent works under an owned per-feature spec with non-overlapping scope.
+Worktrees provide isolation; session bridges bind non-worktree contexts.**
 
 This guide describes the v11 multi-agent pattern. For worktree mechanics, see
 [`worktree-isolation.md`](worktree-isolation.md). For the full CLI surface, see
@@ -36,8 +36,20 @@ This guide describes the v11 multi-agent pattern. For worktree mechanics, see
 | Ownership audit        | `.caws/worktrees.json:owner` (session id), `prior_owners` audit on `--takeover`                                   |
 | Agent visibility       | `caws agents list` / `caws agents show <id>` (liveness cache — not authority)                                     |
 | Per-spec gates         | `caws gates run --spec <id>`                                                                                      |
-| Per-spec evidence      | `caws evidence record --type <kind> --spec <id> --data '{...}'`                                                   |
+| Acceptance evidence    | `caws specs evidence <id> --ac A1 --status pass --evidence-ref '<inspected proof>'`                               |
 | Per-spec waivers       | `caws waiver create <id>-w --title "<title>" --gate <gate> --reason "..." --approved-by "..." --expires-at <iso>` |
+
+`caws agents list` takes its rows and liveness buckets from leases. Its worktree
+columns join `.caws/worktrees.json`; the separate `bridges=` column joins claim
+owners with active specs and honors worktree precedence. JSON exposes those
+facts separately in `worktree_bindings` and `bridge_bindings`, with their
+sources. `bridges=(none)` means a successful read found no eligible bridge for
+that row; `bridges=unknown` means a claims, specs or worktree store reported a
+load or validation error. The JSON unreadable state omits `by_session` and
+includes diagnostics. Stale and stopped rows retain their bridge bindings when
+revealed with `--include-stale` and `--include-stopped`; `--active` restricts
+the view to active leases. These display joins do not grant authority or refresh
+leases.
 
 ## Anti-pattern (do not do this)
 
@@ -60,10 +72,10 @@ caws specs create FEAT-002 --title "Payment System" --mode feature --contract "p
 caws specs create FEAT-003 --title "Dashboard UI" --mode feature --contract "dashboard-ui:behavior"
 ```
 
-Each generated spec lives at `.caws/specs/<id>.yaml`. Edit it to define
-non-overlapping `scope.in` and explicitly exclude the other features in
-`scope.out` (defensive — prevents accidental cross-feature edits even if
-`scope.in` is too broad).
+Each generated spec lives at `.caws/specs/<id>.yaml`. Use `caws specs amend` for
+modules, invariants and acceptance, and `caws specs amend-scope` for
+non-overlapping scope. Declare `scope.out` exclusions through the same scope
+command where needed.
 
 Example (`FEAT-001.yaml`):
 
