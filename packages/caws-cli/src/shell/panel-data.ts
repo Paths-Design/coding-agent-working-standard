@@ -27,7 +27,6 @@ import {
   composeStoreSnapshot,
   computeLaneDivergence,
   inboxAllMessages,
-  loadBridges,
   loadLeases,
   type LaneDivergence,
   resolveRepoRoot,
@@ -258,7 +257,6 @@ export function gatherDashboardState(opts: {
   }
 
   // 4. Binding from cwd (bridges surface when one already resolves — no mint)
-  const bridgesLoad = loadBridges(cawsDir);
   const bridgeSession = resolveCallerSession({
     cawsDir,
     worktreeRoot: opts.cwd,
@@ -270,9 +268,9 @@ export function gatherDashboardState(opts: {
     cwd: opts.cwd,
     registry: snapshot.worktrees,
     specs: snapshot.specs,
-    ...(bridgesLoad.ok && bridgeSession.ok
+    ...(snapshot.bridges !== undefined && bridgeSession.ok
       ? {
-          bridges: bridgesLoad.value.bridges,
+          bridges: snapshot.bridges,
           sessionId: bridgeSession.value.identity.session_id,
         }
       : {}),

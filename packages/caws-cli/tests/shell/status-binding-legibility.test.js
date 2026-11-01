@@ -22,6 +22,8 @@ const path = require('path');
 
 const { initProject } = require('../../dist/store/init-store');
 const { runStatusCommand } = require('../../dist/shell/commands/status');
+const { gatherDashboardState } = require('../../dist/shell/panel-data');
+const { buildDashboardModel } = require('../../dist/shell/tui/panels');
 const { composeDoctorSnapshot } = require('../../dist/store/doctor-snapshot');
 const { inspectProjectState, DOCTOR_RULES } = require('../../dist/kernel');
 const { runDoctorCommand } = require('../../dist/shell/commands/doctor');
@@ -446,4 +448,82 @@ describe('status uses one bridge claim observation', () => {
       expect(authorityBytes(caws)).toEqual(before);
     }
   );
+});
+
+describe('interactive status uses the observed bridge claims', () => {
+  test.each(['acquire', 'release'])(
+    'a changing %s observation cannot split dashboard binding from doctor findings',
+    (transition) => {
+      const { root, caws } = mkRepo();
+      writeSpec(caws, 'DASHBOARD-BRIDGE-001');
+      const sessionId = 'dashboard-bridge-session';
+      const claimed = {
+        'DASHBOARD-BRIDGE-001': {
+          session_id: sessionId,
+          acquired_at: '2026-07-04T00:00:00.000Z',
+        },
+      };
+      const initial = transition === 'acquire' ? {} : claimed;
+      const subsequent = transition === 'acquire' ? claimed : {};
+      writeBridges(caws, initial);
+      const claimsFile = fs.realpathSync(path.join(caws, 'claims', 'bridge.json'));
+      const before = authorityBytes(caws);
+      const readFileSync = fs.readFileSync;
+      let reads = 0;
+      const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+        if (file === claimsFile) {
+          reads++;
+          return JSON.stringify(reads === 1 ? initial : subsequent);
+        }
+        return readFileSync(file, ...args);
+      });
+      let state;
+      try {
+        state = gatherDashboardState({
+          cwd: root,
+          env: { CODEX_THREAD_ID: sessionId },
+          now: () => new Date('2026-11-01T00:00:00.000Z'),
+        });
+      } finally {
+        spy.mockRestore();
+      }
+      expect(state.ok).toBe(true);
+      expect(reads).toBe(1);
+      expect(state.snapshot.bridges).toEqual(initial);
+      const backlog = state.findings.filter(
+        (finding) => finding.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG
+      );
+      expect(backlog.map((finding) => finding.data.spec_ids)).toEqual(
+        transition === 'acquire' ? [['DASHBOARD-BRIDGE-001']] : []
+      );
+      expect(state.binding.binding.kind).toBe(transition === 'acquire' ? 'unbound' : 'bridged');
+      expect(buildDashboardModel(state).bindingLine).toBe(
+        transition === 'acquire'
+          ? 'unbound (no write authority in this checkout)'
+          : 'bridged: DASHBOARD-BRIDGE-001'
+      );
+      expect(authorityBytes(caws)).toEqual(before);
+    }
+  );
+
+  test('a stable session bridge is rendered as bridged', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'DASHBOARD-BRIDGE-001');
+    writeBridges(caws, {
+      'DASHBOARD-BRIDGE-001': {
+        session_id: 'dashboard-bridge-session',
+        acquired_at: '2026-07-04T00:00:00.000Z',
+      },
+    });
+    const before = authorityBytes(caws);
+    const state = gatherDashboardState({
+      cwd: root,
+      env: { CODEX_THREAD_ID: 'dashboard-bridge-session' },
+      now: () => new Date('2026-11-01T00:00:00.000Z'),
+    });
+    expect(state.ok).toBe(true);
+    expect(state.binding.binding.kind).toBe('bridged');
+    expect(buildDashboardModel(state).bindingLine).toBe('bridged: DASHBOARD-BRIDGE-001');
+    expect(authorityBytes(caws)).toEqual(before);
+  });
 });
