@@ -661,4 +661,54 @@ describe('bridge-store (AUTH-BINDING-BRIDGE-001)', () => {
     });
     expect(acquire.ok).toBe(false); // fail closed — no mutation off a corrupt store
   });
+
+  test.each(['EACCES', 'EPERM', 'EIO', 'ENOTDIR', undefined])(
+    'A5: a hidden claims read failure (%s) refuses reads and mutations',
+    (code) => {
+      const { cawsDir } = mkRepo();
+      const file = bridgeFile(cawsDir);
+      expect(acquireBridge(cawsDir, bridgeInput('BR-090', 'sess-b'))).toEqual({
+        ok: true,
+        value: { specId: 'BR-090', refreshed: false },
+      });
+      const before = fs.readFileSync(file);
+      const eventsBefore = eventBytes(cawsDir);
+      const read = fs.readFileSync;
+      const exists = fs.existsSync;
+      // existsSync also returns false for inaccessible ancestors. Exercise that
+      // boundary portably, including CI processes that run with elevated access.
+      const existsSpy = jest
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((target) => (target === file ? false : exists(target)));
+      const readSpy = jest.spyOn(fs, 'readFileSync').mockImplementation((target, ...args) => {
+        if (target === file) throw Object.assign(new Error('claims read fault'), { code });
+        return read(target, ...args);
+      });
+      try {
+        const loaded = loadBridges(cawsDir);
+        expect(loaded.ok).toBe(false);
+        expect(loaded.errors[0]).toMatchObject({
+          rule: 'store.claims.bridge_file_invalid',
+          subject: file,
+          message: 'Failed to read bridge claims file: claims read fault',
+        });
+        const acquired = acquireBridge(cawsDir, bridgeInput('BR-091'));
+        expect(acquired.ok).toBe(false);
+        expect(acquired.errors[0].rule).toBe('store.claims.bridge_file_invalid');
+      } finally {
+        readSpy.mockRestore();
+        existsSpy.mockRestore();
+      }
+      expect(fs.readFileSync(file)).toEqual(before);
+      expect(eventBytes(cawsDir)).toEqual(eventsBefore);
+    }
+  );
+
+  test('A5: ENOENT alone is the empty absent registry', () => {
+    const { cawsDir } = mkRepo();
+    expect(loadBridges(cawsDir)).toEqual({ ok: true, value: { bridges: {}, present: false } });
+    fs.mkdirSync(path.dirname(bridgeFile(cawsDir)), { recursive: true });
+    fs.writeFileSync(bridgeFile(cawsDir), '{}');
+    expect(loadBridges(cawsDir)).toEqual({ ok: true, value: { bridges: {}, present: true } });
+  });
 });
