@@ -1,9 +1,10 @@
 id: CAWS-SOURCE-PROFILE-FIXTURES-001
 title: 'Align containment and Stop fixtures with system startup profiles'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: source-profile-fixtures
 created_at: '2026-11-01T14:30:54.828Z'
-updated_at: '2026-11-01T14:30:54.828Z'
+updated_at: '2026-11-01T14:36:51.424Z'
 created_by_session: '01a196ea-962a-7cd1-a8d3-9603cec4e96d'
 blast_radius:
   modules:
