@@ -129,6 +129,8 @@ export const DOCTOR_RULES = {
    * names it. Severity: warning.
    */
   WORKTREE_OWNER_LEASE_MISSING: 'doctor.worktree.owner_lease_missing',
+  /** An active session bridge has no live owner lease; ownership is retained. */
+  SPEC_BRIDGE_OWNER_LEASE_MISSING: 'doctor.spec.bridge_owner_lease_missing',
   /**
    * Leases exist under `.caws/leases/` but the platform's PID liveness signal
    * is unreliable here — specifically, every running lease's recorded pid is

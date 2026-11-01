@@ -34,6 +34,7 @@ import {
   type TemplateCheck,
 } from '../kernel';
 import { loadAgents } from './agents-store';
+import { loadBridges } from './bridge-store';
 import { loadEvents } from './events-store';
 import { loadLeases } from './leases-store';
 import { loadPolicy } from './policy-store';
@@ -81,6 +82,14 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
   const policyResult = loadPolicy(cawsDir);
   const worktreesResult = loadWorktrees(cawsDir);
   const agentsResult = loadAgents(cawsDir);
+  const bridgesResult = loadBridges(cawsDir);
+  const bridgeOwners: Readonly<Record<string, string>> = Object.fromEntries(
+    (isOk(bridgesResult) ? Object.entries(bridgesResult.value.bridges) : [])
+      .filter(
+        ([, entry]) => typeof entry.session_id === 'string' && entry.session_id.trim().length > 0
+      )
+      .map(([specId, entry]) => [specId, entry.session_id] as const)
+  );
   // AGENT-LIVENESS-DOCTOR-001 (D10): load .caws/leases/ so doctor can
   // cross-reference worktrees.json owners against live leases. Leases are
   // operational cache; on load failure we pass {} (doctor's lease checks
@@ -114,7 +123,11 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
       ? { createdWorktreePathExistsByName }
       : {}),
   };
-  const registryDiagnostics = collectRegistryDiagnostics(worktreesResult, agentsResult);
+  const registryDiagnostics = collectRegistryDiagnostics(
+    worktreesResult,
+    agentsResult,
+    bridgesResult
+  );
 
   // WORKTREE-DOCTOR-HALF-STATE-001 — observe git worktree state.
   // Non-fatal: on failure, gitWorktrees is undefined and
@@ -137,6 +150,7 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
     policyWarnings: policyResult.warnings,
     policyErrors: policyResult.errors,
     worktrees,
+    bridgeOwners,
     agents: isOk(agentsResult) ? agentsResult.value : {},
     leases: isOk(leasesResult) ? leasesResult.value.leases : {},
     events: isOk(eventsResult) ? eventsResult.value.events : [],
@@ -659,11 +673,13 @@ function observeCreatedWorktreePaths(
 
 function collectRegistryDiagnostics(
   worktreesResult: ReturnType<typeof loadWorktrees>,
-  agentsResult: ReturnType<typeof loadAgents>
+  agentsResult: ReturnType<typeof loadAgents>,
+  bridgesResult: ReturnType<typeof loadBridges>
 ): readonly Diagnostic[] {
   const out: Diagnostic[] = [];
   if (!isOk(worktreesResult)) out.push(...worktreesResult.errors);
   if (!isOk(agentsResult)) out.push(...agentsResult.errors);
+  if (!isOk(bridgesResult)) out.push(...bridgesResult.errors);
   return out;
 }
 
@@ -729,6 +745,7 @@ export function composeDoctorSnapshot(options: ComposeDoctorOptions): ComposeDoc
     ...(snapshot.policy !== undefined ? { policy: snapshot.policy } : {}),
     policyWarnings: snapshot.policyWarnings,
     worktrees: snapshot.worktrees,
+    ...(snapshot.bridgeOwners !== undefined ? { bridgeOwners: snapshot.bridgeOwners } : {}),
     agents: snapshot.agents,
     leases: snapshot.leases,
     events: snapshot.events,
