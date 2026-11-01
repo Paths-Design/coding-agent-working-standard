@@ -62,3 +62,11 @@ evidence:
     exit_code: 0
     artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/tmp/doctor-bridge-takeover-01a196ea/committed-status.json"
     commit_sha: d74bb4265372c29d809d82236bff38c4e6daf8c4
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "A2 is verified within the unchanged lenient bridge-loader contract: file-level invalid JSON/root/read failures surface through registryDiagnostics; malformed or blank per-entry owner values cannot conceal the exact true backlog. Entry-level corruption warnings are not claimed or added. Real-claims CLI fixtures cover unreadable claims path and malformed JSON plus null,array,string,empty,blank,numeric owner entries; kernel and CLI fixtures cover missing/stopped/stale/active leases and worktree precedence. Inspected semantic assertions and raw committed-status22pass0skip plus related29suites274pass. No authority admission/writer or lease-revocation changes."
+    recorded_at: "2026-11-01T12:09:19.159Z"
+    command: "'node' '/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/doctor-bridge-diagnostics/node_modules/jest/bin/jest.js' '--config' '/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/doctor-bridge-diagnostics/packages/caws-cli/jest.config.js' '--runInBand' '--watchman=false' '--runTestsByPath' '/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/doctor-bridge-diagnostics/packages/caws-cli/tests/shell/status-binding-legibility.test.js' '--json' '--outputFile' '/Users/darianrosebrook/Desktop/Projects/caws/tmp/doctor-bridge-takeover-01a196ea/committed-status.json'"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/tmp/doctor-bridge-takeover-01a196ea/committed-status.json"
+    commit_sha: d74bb4265372c29d809d82236bff38c4e6daf8c4
