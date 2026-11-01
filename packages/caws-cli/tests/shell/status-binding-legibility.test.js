@@ -22,6 +22,10 @@ const path = require('path');
 
 const { initProject } = require('../../dist/store/init-store');
 const { runStatusCommand } = require('../../dist/shell/commands/status');
+const { composeDoctorSnapshot } = require('../../dist/store/doctor-snapshot');
+const { inspectProjectState, DOCTOR_RULES } = require('../../dist/kernel');
+const { runDoctorCommand } = require('../../dist/shell/commands/doctor');
+const { STORE_RULES } = require('../../dist/store/rules');
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
 
 afterAll(() => {
@@ -169,5 +173,129 @@ describe('status separates work in flight from active backlog', () => {
     // line stays off entirely rather than reporting "0 of 0".
     expect(result.out).toContain('2 draft');
     expect(result.out).not.toContain('in flight:');
+  });
+});
+
+function writeBridges(caws, value) {
+  fs.mkdirSync(path.join(caws, 'claims'), { recursive: true });
+  fs.writeFileSync(path.join(caws, 'claims', 'bridge.json'), JSON.stringify(value));
+}
+
+function doctorSnapshot(root, caws) {
+  const composed = composeDoctorSnapshot({
+    repoRoot: root,
+    cawsDir: caws,
+    now: new Date('2026-11-01T00:00:00.000Z'),
+  });
+  return { ...composed, report: inspectProjectState(composed.doctorInput) };
+}
+
+function authorityBytes(directory) {
+  const files = {};
+  function visit(dir, prefix) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const relative = prefix + entry.name;
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) visit(absolute, relative + '/');
+      else
+        files[relative] = entry.isSymbolicLink()
+          ? { symlink: fs.readlinkSync(absolute) }
+          : fs.readFileSync(absolute).toString('base64');
+    }
+  }
+  visit(directory, '');
+  return files;
+}
+
+describe('doctor and status recognize session bridges', () => {
+  test('mixed bindings count once and only true backlog remains, without writes', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'WORKTREE-001', { worktree: 'wt-one' });
+    writeSpec(caws, 'BRIDGED-002');
+    writeSpec(caws, 'UNBOUND-003');
+    writeSpec(caws, 'CLOSED-004', { lifecycleState: 'closed' });
+    writeRegistry(caws, {
+      'wt-one': {
+        specId: 'WORKTREE-001',
+        baseBranch: 'main',
+        path: path.join(caws, 'worktrees', 'wt-one'),
+      },
+    });
+    writeBridges(caws, {
+      'WORKTREE-001': { session_id: 'owner', acquired_at: '2026-07-04T00:00:00.000Z' },
+      'BRIDGED-002': { session_id: 'owner', acquired_at: '2026-07-04T00:00:00.000Z' },
+      'CLOSED-004': { session_id: 'owner', acquired_at: '2026-07-04T00:00:00.000Z' },
+      'MISSING-005': { session_id: 'owner', acquired_at: '2026-07-04T00:00:00.000Z' },
+    });
+    const before = authorityBytes(caws);
+    const result = runStatus(root);
+    const composed = doctorSnapshot(root, caws);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain('2 of 3 active bound (1 worktree, 1 session bridge)');
+    expect(result.out).toContain('1 active unbound (see doctor)');
+    const backlog = composed.report.findings.filter(
+      (f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG
+    );
+    expect(backlog).toHaveLength(1);
+    expect(backlog[0].data.spec_ids).toEqual(['UNBOUND-003']);
+    expect(authorityBytes(caws)).toEqual(before);
+  });
+
+  test('a bridge-only active set is bound even without a live lease', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'BRIDGED-001');
+    writeBridges(caws, {
+      'BRIDGED-001': { session_id: 'absent-owner', acquired_at: '2026-07-04T00:00:00.000Z' },
+    });
+    const result = runStatus(root);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain('1 of 1 active bound (0 worktrees, 1 session bridge)');
+    expect(result.out).not.toContain('active unbound');
+    expect(
+      doctorSnapshot(root, caws).report.findings.filter(
+        (f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG
+      )
+    ).toEqual([]);
+  });
+
+  test.each([null, [], 'owner', {}, { session_id: '' }, { session_id: '   ' }, { session_id: 12 }])(
+    'a malformed bridge entry %j cannot conceal active backlog',
+    (entry) => {
+      const { root, caws } = mkRepo();
+      writeSpec(caws, 'UNBOUND-001');
+      writeBridges(caws, { 'UNBOUND-001': entry });
+      const composed = doctorSnapshot(root, caws);
+      expect(composed.doctorInput.bridgeOwners).toEqual({});
+      expect(
+        composed.report.findings.find((f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG)
+          .data.spec_ids
+      ).toEqual(['UNBOUND-001']);
+    }
+  );
+
+  test('a malformed claims file surfaces an error and cannot conceal backlog or change bytes', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'UNBOUND-001');
+    writeBridges(caws, {});
+    fs.writeFileSync(path.join(caws, 'claims', 'bridge.json'), '{broken');
+    const before = authorityBytes(caws);
+    const composed = doctorSnapshot(root, caws);
+    expect(composed.snapshot.registryDiagnostics.map((d) => d.rule)).toContain(
+      STORE_RULES.BRIDGE_FILE_INVALID
+    );
+    expect(
+      composed.report.findings.find((f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG).data
+        .spec_ids
+    ).toEqual(['UNBOUND-001']);
+    const out = [];
+    const code = runDoctorCommand({
+      cwd: root,
+      now: new Date('2026-11-01T00:00:00.000Z'),
+      out: (s) => out.push(s),
+      err: (s) => out.push(s),
+    });
+    expect(code).toBe(1);
+    expect(out.join('\n')).toContain(STORE_RULES.BRIDGE_FILE_INVALID);
+    expect(authorityBytes(caws)).toEqual(before);
   });
 });

@@ -20,6 +20,7 @@ import { inspectProjectState } from '../../../src/kernel/doctor/inspect';
 import { DOCTOR_RULES } from '../../../src/kernel/doctor/rules';
 import type { DoctorInput } from '../../../src/kernel/doctor/types';
 import type { Spec } from '../../../src/kernel/spec/types';
+import { projectDoctorFindings } from '../../../src/kernel/doctor/projection';
 
 const NOW = new Date('2026-06-15T12:00:00.000Z');
 /** Two hours before NOW — past the 1h default unbound-active threshold. */
@@ -142,5 +143,110 @@ describe('doctor unbound-active backlog aggregate', () => {
     // the demotion path or operators will close specs they have not done.
     expect(aggregate?.narrowRepair).toContain('caws specs deactivate');
     expect(aggregate?.narrowRepair).toContain('caws worktree create');
+  });
+});
+
+describe('doctor session bridge bindings', () => {
+  test.each(['missing', 'stopped', 'stale', 'active'] as const)(
+    '%s owner leases affect activity diagnostics without revoking a bridge',
+    (state) => {
+      const lease = {
+        lease_version: 1 as const,
+        session_id: 'owner',
+        platform: 'codex',
+        status: state === 'stopped' ? ('stopped' as const) : ('active' as const),
+        started_at: STALE,
+        last_active: state === 'stale' ? '2026-06-13T00:00:00.000Z' : FRESH,
+        repo_root: '/fixture',
+        cwd: '/fixture',
+        git_common_dir: '/fixture/.git',
+        git_dir: '/fixture/.git',
+        last_seen_reason: 'status' as const,
+      };
+      const r = report({
+        specs: [spec('BRIDGED-1')],
+        bridgeOwners: { 'BRIDGED-1': 'owner' },
+        leases: state === 'missing' ? {} : { owner: lease },
+      });
+      expect(findings(r, DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG)).toEqual([]);
+      const activity = findings(r, DOCTOR_RULES.SPEC_BRIDGE_OWNER_LEASE_MISSING);
+      expect(activity).toHaveLength(state === 'active' ? 0 : 1);
+      if (state !== 'active') {
+        expect(activity[0]?.data).toEqual({
+          spec_id: 'BRIDGED-1',
+          owner_session_id: 'owner',
+          lease_present: state !== 'missing',
+        });
+        expect(activity[0]?.message).toContain('owner remains authoritative');
+      }
+      expect(projectDoctorFindings(r.findings).activity).toEqual(activity);
+      expect(projectDoctorFindings(r.findings).findings).not.toContainEqual(
+        expect.objectContaining({ rule: DOCTOR_RULES.SPEC_BRIDGE_OWNER_LEASE_MISSING })
+      );
+    }
+  );
+
+  test.each([null, '', '   ', 12])(
+    'invalid bridge owner %j cannot suppress unbound findings',
+    (owner) => {
+      const r = report({
+        specs: [spec('UNBOUND-1')],
+        bridgeOwners: { 'UNBOUND-1': owner } as never,
+      });
+      expect(findings(r, DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG)[0]?.data?.spec_ids).toEqual([
+        'UNBOUND-1',
+      ]);
+    }
+  );
+
+  test('a worktree claim keeps precedence and its integrity finding despite a bridge', () => {
+    const r = report({
+      specs: [spec('BOUND-1', { worktree: 'missing' } as Partial<Spec>)],
+      bridgeOwners: { 'BOUND-1': 'owner' },
+    });
+    expect(findings(r, DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG)).toEqual([]);
+    expect(findings(r, DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY).map((f) => f.subject)).toEqual([
+      'BOUND-1',
+    ]);
+    expect(findings(r, DOCTOR_RULES.SPEC_BRIDGE_OWNER_LEASE_MISSING)).toEqual([]);
+  });
+  test('bridged specs are bound while genuinely unbound work stays in the backlog', () => {
+    const r = report({
+      specs: [spec('BRIDGED-1'), spec('UNBOUND-2')],
+      bridgeOwners: { 'BRIDGED-1': 'owner' },
+      leases: {},
+    });
+    expect(findings(r, DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_STALE).map((f) => f.subject)).toEqual([
+      'UNBOUND-2',
+    ]);
+    expect(findings(r, DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG)[0]?.data?.spec_ids).toEqual([
+      'UNBOUND-2',
+    ]);
+  });
+
+  test('a bridged spec needs no timestamp for the unbound staleness check', () => {
+    const r = report({
+      specs: [spec('BRIDGED-1', { updated_at: undefined } as Partial<Spec>)],
+      bridgeOwners: { 'BRIDGED-1': 'owner' },
+    });
+    expect(findings(r, DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_TIMESTAMP_MISSING)).toEqual([]);
+    expect(findings(r, DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG)).toEqual([]);
+  });
+
+  test('retired and unknown bridge ids cannot reduce a true backlog below the error boundary', () => {
+    const specs = Array.from({ length: 10 }, (_, i) => spec(`UNBOUND-${i}`));
+    const r = report({
+      specs: [
+        ...specs,
+        spec('BRIDGED-1'),
+        spec('CLOSED-1', { lifecycle_state: 'closed' } as Partial<Spec>),
+      ],
+      bridgeOwners: { 'BRIDGED-1': 'owner', 'CLOSED-1': 'owner', 'MISSING-1': 'owner' },
+    });
+    const aggregate = findings(r, DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG);
+    expect(aggregate).toHaveLength(1);
+    expect(aggregate[0]?.severity).toBe('error');
+    expect(aggregate[0]?.data?.spec_ids).toEqual(specs.map((s) => s.id));
+    expect(aggregate[0]?.data?.spec_count).toBe(10);
   });
 });

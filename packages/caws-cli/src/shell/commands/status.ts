@@ -368,6 +368,7 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
     policyLoaded: snapshot.policy !== undefined,
     specs: snapshot.specs,
     worktrees: snapshot.worktrees,
+    ...(snapshot.bridgeOwners !== undefined ? { bridgeOwners: snapshot.bridgeOwners } : {}),
     agents: snapshot.agents,
     leases,
     leaseSummary: effectiveLeaseSummary,

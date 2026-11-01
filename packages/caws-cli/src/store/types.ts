@@ -92,6 +92,8 @@ export interface StoreSnapshot {
   /** Fatal diagnostics that prevented policy loading. */
   readonly policyErrors: readonly Diagnostic[];
   readonly worktrees: WorktreeRegistry;
+  /** Session bridge owners observed by the same snapshot; never inferred from leases. */
+  readonly bridgeOwners?: Readonly<Record<string, string>>;
   readonly agents: AgentRegistry;
   /**
    * Per-session lease registry from `.caws/leases/` (operational cache, never

@@ -49,6 +49,7 @@ export interface StatusRenderInput {
   readonly policyLoaded: boolean;
   readonly specs: readonly Spec[];
   readonly worktrees: WorktreeRegistry;
+  readonly bridgeOwners?: Readonly<Record<string, string>>;
   readonly agents: AgentRegistry;
   readonly eventCount: number;
   /** When undefined, the dashboard renders "no event chain on disk". */
@@ -133,22 +134,26 @@ export function renderShortStatus(input: StatusRenderInput): string {
 }
 
 /**
- * Active specs that no worktree claims and that claim no worktree themselves.
- * Mirrors the doctor's unbound-active predicate (both sides silent) so the two
- * surfaces cannot disagree about what "unbound" means.
+ * Count active execution bindings with worktree precedence. Session bridges
+ * retain their binding independently of lease freshness.
  */
-function countUnboundActiveSpecs(input: StatusRenderInput): number {
+function countActiveBindings(input: StatusRenderInput) {
   const registrySpecIds = new Set<string>();
   for (const record of Object.values(input.worktrees)) {
     if (typeof record?.specId === 'string' && record.specId.length > 0) {
       registrySpecIds.add(record.specId);
     }
   }
-  return input.specs.filter((spec) => {
-    if (spec.lifecycle_state !== 'active') return false;
+  const counts = { worktree: 0, bridge: 0, unbound: 0 };
+  for (const spec of input.specs) {
+    if (spec.lifecycle_state !== 'active') continue;
     const hasSpecPointer = typeof spec.worktree === 'string' && spec.worktree.length > 0;
-    return !registrySpecIds.has(spec.id) && !hasSpecPointer;
-  }).length;
+    const bridgeOwner = input.bridgeOwners?.[spec.id];
+    if (registrySpecIds.has(spec.id) || hasSpecPointer) counts.worktree++;
+    else if (typeof bridgeOwner === 'string' && bridgeOwner.trim().length > 0) counts.bridge++;
+    else counts.unbound++;
+  }
+  return counts;
 }
 
 function countSpecsByLifecycle(specs: readonly Spec[]): Record<string, number> {
@@ -411,21 +416,22 @@ export function renderStatus(input: StatusRenderInput): string {
           .join(', ');
   lines.push(`  specs:       ${lifecycleSummary}`);
 
-  // CAWS-SPEC-ACTIVATION-BINDS-001: `active` means a worktree is bound and the
-  // slice is being worked, so "N active" alone cannot answer the question a
-  // reader actually has — how much of this is in flight? Split it. An
-  // active spec with no binding is the drift signal doctor counts, and naming
-  // it here is what makes the count self-explaining rather than a number to
-  // look up elsewhere.
-  const unboundActive = countUnboundActiveSpecs(input);
+  // Distinguish bound work from unbound backlog without treating a bridge as
+  // a worktree or treating lease liveness as authority.
+  const bindings = countActiveBindings(input);
+  const unboundActive = bindings.unbound;
   const activeTotal = lifecycle['active'] ?? 0;
   if (activeTotal > 0) {
-    const bound = activeTotal - unboundActive;
+    const bound = bindings.worktree + bindings.bridge;
+    const boundSummary =
+      bindings.bridge > 0
+        ? `${bound} of ${activeTotal} active bound (${bindings.worktree} worktree${bindings.worktree === 1 ? '' : 's'}, ${bindings.bridge} session bridge${bindings.bridge === 1 ? '' : 's'})`
+        : `${bound} of ${activeTotal} active bound to a worktree`;
     lines.push(
       unboundActive === 0
-        ? `  in flight:   ${bound} of ${activeTotal} active bound to a worktree`
-        : `  in flight:   ${bound} of ${activeTotal} active bound to a worktree; ` +
-            `${unboundActive} active with no worktree (see doctor)`
+        ? `  in flight:   ${boundSummary}`
+        : `  in flight:   ${boundSummary}; ` +
+            `${unboundActive} active ${bindings.bridge > 0 ? 'unbound' : 'with no worktree'} (see doctor)`
     );
   }
 
