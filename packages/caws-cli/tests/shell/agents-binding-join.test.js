@@ -32,6 +32,7 @@ const {
   runAgentsListCommand,
 } = require('../../dist/shell/commands/agents');
 const { initProject } = require('../../dist/store/init-store');
+const { loadSpecs } = require('../../dist/store/specs-store');
 
 const repos = [];
 afterAll(() => {
@@ -125,7 +126,7 @@ function writeBridgeSpec(root, id, { state = 'active', worktree } = {}) {
 title: 'Bridge visibility fixture'
 mode: fix
 lifecycle_state: ${state}
-${worktree === undefined ? '' : `worktree: ${worktree}\n`}created_at: '2026-07-04T00:00:00.000Z'
+${state === 'closed' ? 'resolution: completed\n' : ''}${worktree === undefined ? '' : `worktree: ${worktree}\n`}created_at: '2026-07-04T00:00:00.000Z'
 updated_at: '2026-07-04T00:00:00.000Z'
 blast_radius:
   modules: [tests]
@@ -376,6 +377,11 @@ describe('agents list session bridge visibility', () => {
       'BRIDGE-MISSING-001': bridge('bridge-owner'),
       'BRIDGE-ABSENT-001': bridge('absent-lease-owner'),
     });
+    expect(
+      loadSpecs(path.join(root, '.caws')).diagnostics.filter(
+        (diagnostic) => diagnostic.severity === 'error'
+      )
+    ).toEqual([]);
     const before = authorityBytes(root);
     const text = list(root);
     const { code, payload } = listJson(root);
