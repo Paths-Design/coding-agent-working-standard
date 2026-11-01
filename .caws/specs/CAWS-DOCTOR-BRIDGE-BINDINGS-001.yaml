@@ -54,3 +54,11 @@ evidence:
     exit_code: 1
     artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a195fc-690b-77a2-8052-60a6df2d4e38/doctor-bridge-bindings-01/observation-red.json"
     commit_sha: ff2863cf152d94578d00bf28c79c9af8de0d9881
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected source and real-claim fixtures at committed candidate d74bb4265. Mixed worktree+bridge+unbound+retired/unknown claims count once: status renders 2 of 3 active bound (1 worktree,1 session bridge), exact backlog IDs contain only UNBOUND-003, and bridge-only active sets have no unbound backlog. Raw committed-status.json executes all22 status controls with0fail0skip; related.json executes29 suites274tests, including kernel backlog and resolver/worktree-precedence regressions. No installed/native activation claim."
+    recorded_at: "2026-11-01T12:09:03.698Z"
+    command: "'node' '/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/doctor-bridge-diagnostics/node_modules/jest/bin/jest.js' '--config' '/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/doctor-bridge-diagnostics/packages/caws-cli/jest.config.js' '--runInBand' '--watchman=false' '--runTestsByPath' '/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/doctor-bridge-diagnostics/packages/caws-cli/tests/shell/status-binding-legibility.test.js' '--json' '--outputFile' '/Users/darianrosebrook/Desktop/Projects/caws/tmp/doctor-bridge-takeover-01a196ea/committed-status.json'"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/tmp/doctor-bridge-takeover-01a196ea/committed-status.json"
+    commit_sha: d74bb4265372c29d809d82236bff38c4e6daf8c4
