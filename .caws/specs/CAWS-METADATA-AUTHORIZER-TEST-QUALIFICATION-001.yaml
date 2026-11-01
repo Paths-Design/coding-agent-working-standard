@@ -3,7 +3,7 @@ title: 'Qualify metadata registration and authorizer contract assertions'
 mode: fix
 lifecycle_state: active
 created_at: '2026-11-01T04:36:17.277Z'
-updated_at: '2026-11-01T04:36:17.277Z'
+updated_at: '2026-11-01T04:37:28.563Z'
 created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
 blast_radius:
   modules:
@@ -12,9 +12,9 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'packages/caws-cli/tests/analysis/caws-read-metadata.test.js'
     - 'packages/caws-cli/tests/shell/hooks-inspection-prefix.test.js'
     - 'packages/caws-cli/tests/execution/authorizer.test.js'
+    - packages/caws-cli/tests/shell/caws-read-metadata.test.js
   out: []
 invariants:
   - 'Preserve the selected mutation surfaces and 80 percent per-file floors. Production behavior and enforcement do not change in this test slice; prove semantic admissions and refusals with independent data.'
