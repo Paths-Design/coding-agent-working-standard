@@ -1,0 +1,38 @@
+id: CAWS-SOURCE-PROFILE-FIXTURES-001
+title: 'Align containment and Stop fixtures with system startup profiles'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-01T14:30:54.828Z'
+updated_at: '2026-11-01T14:30:54.828Z'
+created_by_session: '01a196ea-962a-7cd1-a8d3-9603cec4e96d'
+blast_radius:
+  modules:
+    - 'Source runtime startup-profile test fixture construction'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/runtime/containment.test.js'
+    - 'packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js'
+  out: []
+invariants:
+  - 'Only fixture setup changes: system configuration and cloned caller environment snapshot for containment; reviewed real dispatcher copy for Stop.'
+  - 'Production code, source pins, assertions, invalid-input controls, authority checks, floors and execution deadlines remain unchanged.'
+  - 'Use a bound child of the coordinator-approved corrected Source commit; the Source coordinator retains integration, acceptance and publication of the parent runtime.'
+acceptance:
+  - id: A1
+    given: 'containment fixtures executing current startup-profile admission'
+    when: 'the request declares system configuration and a cloned original caller environment snapshot'
+    then: 'valid profiles exercise containment while the existing identity drift, environment mutation and invalid-input rejection assertions remain effective'
+  - id: A2
+    given: 'real Stop fixture sources and the current pinned startup profile'
+    when: 'the reviewed dispatcher joins the existing real handler environment and Stop handlers'
+    then: 'the unchanged connection reuse, pre-effect drift refusal, late drift no replay and reprieve assertions execute against the intended profile'
+observability:
+  - 'Existing test assertions and ignored raw exact-suite output on the committed Source child.'
+rollback:
+  - 'Revert only the two fixture setup changes through the Source coordinator lineage; preserve failed attempts and parent qualification obligations.'
+non_functional: {}
+contracts:
+  - name: 'runtime-profile-fixture-fidelity'
+    type: behavior
