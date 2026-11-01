@@ -295,7 +295,17 @@ describe('doctor and status recognize session bridges', () => {
       err: (s) => out.push(s),
     });
     expect(code).toBe(1);
-    expect(out.join('\n')).toContain(STORE_RULES.BRIDGE_FILE_INVALID);
+    const output = out.join('\n');
+    expect(output).toContain(DOCTOR_RULES.REGISTRY_MALFORMED_LOADED);
+    expect(output).toContain('Bridge claims file is not valid JSON');
+    expect(output).toContain(fs.realpathSync(path.join(caws, 'claims', 'bridge.json')));
+    expect(
+      composed.report.findings.find((f) => f.rule === DOCTOR_RULES.REGISTRY_MALFORMED_LOADED)
+    ).toMatchObject({
+      severity: 'error',
+      subject: path.join(caws, 'claims', 'bridge.json'),
+      data: { source_rule: STORE_RULES.BRIDGE_FILE_INVALID },
+    });
     expect(authorityBytes(caws)).toEqual(before);
   });
 });

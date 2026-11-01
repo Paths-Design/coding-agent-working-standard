@@ -443,8 +443,8 @@ export const DOCTOR_RULES = {
 
   // ---- registry hygiene (slice 7c.2) -------------------------------------
   /**
-   * worktrees.json or agents.json parsed as something other than a plain
-   * object. Severity is inherited from the source diagnostic so the
+   * A worktree, agent, or session bridge registry could not be loaded.
+   * Severity is inherited from the source diagnostic so the
    * loader's intent (always error today) survives.
    */
   REGISTRY_MALFORMED_LOADED: 'doctor.registry.malformed_loaded',
