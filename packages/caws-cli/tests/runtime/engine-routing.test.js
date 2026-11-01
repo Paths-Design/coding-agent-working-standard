@@ -1076,13 +1076,43 @@ test.each(shortcutRoutes)(
           inputJson: JSON.stringify(payload),
           payload,
         };
-        const invocation = await prepareRuntimeInvocation(request, new AbortController().signal);
-        expect(invocation.active).toBe(true);
-        const { nativeResult } = await invocation.dispatch();
-        await invocation.acknowledgeHandoff(true);
-        lastStderr = Buffer.from(nativeResult.stderr).toString();
-        expect(nativeResult.exitCode).toBe(expectedExit);
-        return Buffer.from(nativeResult.stdout).toString();
+        const traceEnabled = process.env.CAWS_TEST_TRACE_HOOK_DISPATCH === '1';
+        const traceStart = traceEnabled ? process.hrtime.bigint() : 0n;
+        let lastStage = 'before_prepare';
+        let completionCode;
+        const traceStage = (stage) => {
+          if (!traceEnabled) return;
+          lastStage = stage;
+          process.stderr.write(
+            JSON.stringify({
+              ordinal: counter,
+              tool: ['apply_patch', 'Edit', 'Write'].includes(toolName) ? toolName : 'other',
+              event: event === 'pre_tool_use' ? 'pre_tool_use' : 'post_tool_use',
+              stage,
+              elapsedMs: Number((process.hrtime.bigint() - traceStart) / 1000000n),
+              ...(Number.isInteger(completionCode) ? { exitCode: completionCode } : {}),
+            }) + '\n'
+          );
+        };
+        try {
+          traceStage('before_prepare');
+          const invocation = await prepareRuntimeInvocation(request, new AbortController().signal);
+          traceStage('after_prepare');
+          expect(invocation.active).toBe(true);
+          traceStage('before_dispatch');
+          const { nativeResult } = await invocation.dispatch();
+          completionCode = nativeResult.exitCode;
+          traceStage('after_dispatch');
+          traceStage('before_acknowledge');
+          await invocation.acknowledgeHandoff(true);
+          traceStage('after_acknowledge');
+          lastStderr = Buffer.from(nativeResult.stderr).toString();
+          expect(nativeResult.exitCode).toBe(expectedExit);
+          return Buffer.from(nativeResult.stdout).toString();
+        } finally {
+          // A pending await may outlive Jest's case deadline and never reach finally.
+          traceStage('finally:' + lastStage);
+        }
       }
       const runPatch = (command, expectedExit = 0) =>
         runTool('apply_patch', { command }, expectedExit);
