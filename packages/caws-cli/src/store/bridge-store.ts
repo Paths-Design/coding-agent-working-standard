@@ -85,14 +85,16 @@ function ensureClaimsDir(cawsDir: string): Result<void> {
   }
 }
 
-/** Load bridge.json. Absent => ok({bridges: {}, present: false}). Malformed => err. */
+/** Load bridge.json. ENOENT => empty; other read failures and malformed data => err. */
 export function loadBridges(cawsDir: string): Result<LoadBridgesResult> {
   const file = bridgePath(cawsDir);
-  if (!fs.existsSync(file)) return ok({ bridges: {}, present: false });
   let raw: string;
   try {
     raw = fs.readFileSync(file, 'utf8');
   } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+      return ok({ bridges: {}, present: false });
+    }
     return err(
       storeDiagnostic(
         STORE_RULES.BRIDGE_FILE_INVALID,

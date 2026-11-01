@@ -119,7 +119,7 @@ describe('LEASE-WORK-STATE-001', () => {
     expect(after.session_id).toBe('sess-a1');
   });
 
-  test('A2: agents list renders the state; a lease without it renders identically to before', () => {
+  test('A2: agents list renders the state; an absent state adds no work-state placeholder', () => {
     const root = mkRepo();
     register(root, 'sess-with');
     register(root, 'sess-without');
@@ -133,11 +133,11 @@ describe('LEASE-WORK-STATE-001', () => {
       err: s.errFn,
     });
     expect(code).toBe(0);
-    const withLine = s.out.find((l) => l.includes('sess-with'));
-    const withoutLine = s.out.find((l) => l.includes('sess-without'));
+    const withLine = s.out.find((l) => l.startsWith('  sess-with  '));
+    const withoutLine = s.out.find((l) => l.startsWith('  sess-without  '));
     expect(withLine).toContain('review_ready');
-    // Absent field: no placeholder, no extra spacing beyond the legacy shape.
-    expect(withoutLine).toMatch(/sess-without\s+\(no worktree\)\s+\(no spec\)\s*$/);
+    // Bridge visibility is a separate column; absent work-state adds no value.
+    expect(withoutLine).toBe('  sess-without  (no worktree)  (no spec)  bridges=(none)');
   });
 
   test('A3: invalid enum value refuses (exit 1) and writes nothing', () => {
