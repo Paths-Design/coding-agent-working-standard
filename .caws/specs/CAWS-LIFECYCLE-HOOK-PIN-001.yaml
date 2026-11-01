@@ -1,0 +1,31 @@
+id: CAWS-LIFECYCLE-HOOK-PIN-001
+title: 'Bind Git hook policy to the Native lifecycle startup image'
+mode: feature
+lifecycle_state: active
+created_at: '2026-11-01T03:53:33.616Z'
+updated_at: '2026-11-01T03:53:33.616Z'
+created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
+blast_radius:
+  modules:
+    - 'Native lifecycle startup policy and private carrier'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/execution_*.rs'
+  out: []
+invariants:
+  - 'Only authenticated startup pins may supply Git hook policy; model records cannot mint hook trust, and ordinary USER receives no private policy descriptors or fence.'
+acceptance:
+  - id: A1
+    given: 'optional startup hook policy and pinned lifecycle consumer'
+    when: 'strict configuration and generation identities are checked'
+    then: 'only the exact generation sibling policy is admitted and malformed, foreign, incomplete or drifted pins refuse before execution'
+  - id: A2
+    given: 'native lifecycle discovery and final launch'
+    when: 'startup policy is lowered through the private carrier'
+    then: 'policy environment matches Native startup authority in both phases and unsupported or ordinary USER injection is refused, with focused hostile tests passing'
+rollback:
+  - 'Omit the optional startup policy pin and verify that executable hooks remain refused without bypassing them.'
+non_functional: {}
+contracts: []
