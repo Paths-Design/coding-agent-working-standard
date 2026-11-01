@@ -1,9 +1,11 @@
 id: CAWS-DOCTOR-BRIDGE-BINDINGS-001
 title: 'Recognize session bridge bindings in doctor and status'
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed bridge-aware doctor, CLI status and interactive dashboard diagnostics. Candidate26f679691 is merged at1f98737e; all12owned source/test paths match tested bytes on main. Node22.19:30suites285tests pass0skip, build,3typechecks, explicit package lint and actual-diff policy gates pass. Independent peer questions grounded against actual code. A1-A3 pass records match ac_recorded15564-15566; strict citation re-derivation passes with generated logs correctly retained as ignored inspected references. Commit re-derivation is distinct from executed behavioral proof. Parent improvement goal stays active in chat01a196ea: next independent consumer is agents-list bridge legibility; installed/native qualification and context/timeout/app-worktree reconciliation remain open alongside runtime owner01a17941 Source/Host work. No installed/global publication or best-version completion claim. Retain raw checks/history in A3; preserve foreign work and original app checkout.'
 created_at: '2026-11-01T07:40:16.928Z'
-updated_at: '2026-11-01T12:17:35.400Z'
+updated_at: '2026-11-01T12:44:06.009Z'
 created_by_session: '01a195fc-690b-77a2-8052-60a6df2d4e38'
 blast_radius:
   modules:
