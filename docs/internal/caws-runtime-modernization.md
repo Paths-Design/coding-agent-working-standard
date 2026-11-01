@@ -29,52 +29,76 @@ passing unit tests, or the existence of this document.
 
 ## Source location and progress
 
-The owned `caws/exclusive-npm-integration` branch contains lifecycle source
-`ac878ce9558093ad5a43b0926c6d62a65b1712b2`, normal main reconciliation
-`c04966a2ffbf11e27c5b8f14a6534bbd4b276ed0`, and test-control repair
-`ac2cae91d03d1e9cc4939ac4b32b9f9eb6f323aa`. Source qualification and parent
-landing remain separate, unfinished obligations. The audited Host takeover
-belongs to session `01a17941-cbb6-7b92-b5c7-0ba8f5f238d3`; its clean candidate
-`88f8d550f2c0a2f61e058a066fa8dad8d12021b4` includes the production `sha2`
-dependency declaration that the first optimized build exposed as missing.
+The owned `caws/exclusive-npm-integration` branch contains lifecycle repair
+`7c8b293b237f1d5a8a0155600f939c023a8480e5`, normal combined-source merge
+`969a6a0c1763c2a4a9f9e4f7467c7b6e0e1357f5`, and generated-reference test repair
+`0dec33d3b95c22e371fd1653d298fd6fd86e6ff9`. Explicitly selected files receive
+Source write grants only in the owned checkout. Merge, claim and close derive
+the unique actual base checkout while canonical governance remains canonical;
+unused retired catalog rows cannot block that continuation. Three participating
+roots preserve the 256-file writer bound. Unrelated target dirt survives normal
+refresh; stale refreshes retain the merge identity and an inspection-required
+publication failure. Detailed base-sync diagnostics remain available in the
+store result rather than the lifecycle failure envelope.
 
-Root artifacts under
-`/Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3`
-retain `host-v3-focused-kernel-05.log` (31 maintained-helper and kernel checks),
-the failed `host-v3-optimized-build-01.log`, and the continuing cached,
-single-job, locked, offline build `host-v3-optimized-build-02.log`. These checks
-do not establish Node formatter settlement or a genuine exclusive workflow. The
-matched production Native build from immutable `c04966a2` inputs completed; its
-receipt is
-`native-agent-workflow-09/matched-production-build-c04966a2/native-completed.json`.
-The separately built execution producer hashes to
-`d1297cecac24d5b577bde40eadb7c068d1c7178193f31cd7d60b1e7a42ca9e66`.
+Root artifacts live under
+`/Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3`.
+`lifecycle-full-selected-source-19.log` records 104 passing lifecycle cases; the
+focused nine use real Git/store operations and a component bridge substitute.
+`lifecycle-native-execution-tests-19.log` records 135 passes and 12 explicit
+ignores, including the three-root and hostile-boundary controls. Discovery has
+18 passes. The Source fixture child adds only three setup lines and passes 54
+checks; its normal merge is `1349b9a05`. The opt-in trace child merges through
+`212f20c0` and observes 47 complete dispatches without changing deadlines; it
+does not explain the historical timeout. Both bounded child specs are closed
+after dual spec/event readback. The follow-up read-only review finds no
+additional demonstrated defect in the new authority/lifetime changes. These
+results do not establish the live broker/Host or the genuine complete workflow.
 
-`lifecycle-full-source-tests-14.log` preserves the failed complete run: 12 of
-405 suites failed. The repaired rollback harness passes 82 checks; archive race
-and coverage controls pass 24 checks. After fresh locked dependencies, CLI build
-and consumer-doc staging, `lifecycle-source-failures-fresh-16.log` narrows seven
-rerun suites to three failures: containment setup, Stop setup and init-plan
-isolation. The per-fixture machine-home repair passes all four init alias checks
-in `init-dry-run-hermetic-node22-17.log`. A correctly rooted Source peer
-accepted the hook-dispatch diagnostic; the adjacent runtime test repair request
-awaits its own acceptance. Current-source mutation campaigns, every declared
-80-percent file floor, acceptance recording, gates and independent review remain
-owed; the failed Source05 scores are not replaced by these checks.
+Host takeover belongs to session `01a17941-cbb6-7b92-b5c7-0ba8f5f238d3`.
+Candidate `88f8d550f2c0a2f61e058a066fa8dad8d12021b4` builds locked, offline and
+with one compiler job. `host-v3-optimized-build-02.log` completes after the
+first failed build exposed the production dependency declaration. Private image
+`host-v3-optimized-kernel-01/codex`, SHA-256
+`2994a7f81ff335f22243af9f76f7afd34fce1c50e78818d440d05b104c857150`, is 258769216
+bytes, stripped, ad-hoc signed and version-smoke-tested within the unchanged
+268435456-byte limit. Its package receipt retains actual build, lock, image and
+reused-helper identities. The earlier 31 kernel/helper checks remain bounded
+source evidence. Host acceptance and normal landing remain owed.
 
-The next consumer remains genuine session `01a185e5-527d-75b3-a2bd-2a601f74b57c`
-in the existing `exclusive-label-hard-exclusion` worktree: red test, bounded
-edit, green test, Cargo, Native writer, normal Git/CAWS merge, downstream npm
-and close with exclusive `caws_exec`. Its `protected.txt` exclusion and
-unchanged bytes remain explicit. Preserve the failed `exclusive-label-workflow`
-leaf and the original single protected-write refusal; do not repeat that
-attempt. The installed `43f2b11c` hook refused the new private CLI installer
-before execution because validated `execution_workdir` was absent; no alternate
-carrier was attempted. The existing `ac878ce9` CLI-only package is historical
-preparation, not a final matched runtime. GitHub SSH is reachable and remote
-main is `b0d9e6b0be1564c639414332f1b4dffc65f7c5a1`; validated nested landing,
-normal-hook push and direct remote equality remain owed. Secure socket origin,
-global adoption and full first-party Python retirement remain unqualified.
+The immutable CLI export at
+`native-agent-workflow-09/matched-cli-source-0dec33d3` has private locked
+dependencies and a successful build. Its separate package directory permits
+packaging without mutating the live Source test outputs. The immutable
+production Native receipt is
+`native-agent-workflow-09/matched-production-build-969a6a0c/native-completed.json`.
+The new private installer is a pending human execution-context action: installed
+`43f2b11c` lacks authenticated `execution_workdir` and refused before execution.
+The earlier f9 installer request is held and superseded by the frozen 0dec
+snapshot command; no alternate installer carrier was attempted. Runtime
+assembly, registration/trust and actual callbacks remain open. Preserve complete
+failed run `lifecycle-full-source-tests-14.log`, all interrupted Source05
+campaigns and their failed scores. Current full-suite qualification and every
+declared 80-percent file floor remain required; component passes replace
+neither.
+
+The next consumer is the same genuine session
+`01a185e5-527d-75b3-a2bd-2a601f74b57c` in the existing
+`exclusive-label-hard-exclusion` leaf: red, bounded edit, green, Cargo, Native
+writer, normal Git/CAWS merge, downstream npm and close with exclusive
+`caws_exec`. Preserve its explicit `protected.txt` exclusion, the failed
+`exclusive-label-workflow` leaf and the original single protected-write refusal;
+do not repeat that attempt. The app-managed checkout admission case is distinct:
+retain actual native callback/cwd, common-Git, registered-owner, scope and file
+evidence in the real external checkout, rather than inferring it from canonical
+handoffs or the private CAWS leaf. The ordinary exec route lacks a demonstrated
+authenticated command-directory fix. Global activation also needs explicit
+reconciliation of the owned legacy SessionEnd timeout45 registration; upgrading
+the CLI alone does not normalize it. GitHub SSH is reachable and remote main is
+`b0d9e6b0be1564c639414332f1b4dffc65f7c5a1`. Validated qualification/parent
+landing, normal-hook push and direct remote equality remain owed. Secure socket
+origin, global adoption and full first-party Python retirement remain
+unqualified.
 
 Parent checkpoint `9f87d3e1baeb8328b5a51047f641a98abc5137ee` joins the parent's
 `28ef8482` source with main, including the stock scanner and Stop preflight
