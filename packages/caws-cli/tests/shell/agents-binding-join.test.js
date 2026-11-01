@@ -118,6 +118,58 @@ function lineFor(r, sid) {
   return r.out.find((l) => l.startsWith(`  ${sid}`));
 }
 
+function writeBridgeSpec(root, id, { state = 'active', worktree } = {}) {
+  fs.writeFileSync(
+    path.join(root, '.caws', 'specs', `${id}.yaml`),
+    `id: ${id}
+title: 'Bridge visibility fixture'
+mode: fix
+lifecycle_state: ${state}
+${worktree === undefined ? '' : `worktree: ${worktree}\n`}created_at: '2026-07-04T00:00:00.000Z'
+updated_at: '2026-07-04T00:00:00.000Z'
+blast_radius:
+  modules: [tests]
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in: [tests]
+  out: []
+invariants: ['fixture']
+acceptance:
+  - id: A1
+    given: 'fixture'
+    when: 'fixture'
+    then: 'fixture'
+non_functional: {}
+contracts: []
+`
+  );
+}
+
+function writeBridges(root, bridges) {
+  const dir = path.join(root, '.caws', 'claims');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'bridge.json'), JSON.stringify(bridges));
+}
+
+function bridge(owner) {
+  return { session_id: owner, acquired_at: '2026-07-04T00:00:00.000Z' };
+}
+
+function authorityBytes(root) {
+  const result = {};
+  function visit(dir, prefix) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      const key = prefix + entry.name;
+      if (entry.isDirectory()) visit(file, key + '/');
+      else result[key] = fs.readFileSync(file).toString('base64');
+    }
+  }
+  visit(path.join(root, '.caws'), '');
+  return result;
+}
+
 describe('CAWS-AGENTS-LIST-BINDING-JOIN-01', () => {
   // ── A1: a session owning two worktrees shows BOTH ──────────────────────
   test('A1: two worktrees owned by one session render both names and both spec ids', () => {
@@ -283,5 +335,250 @@ describe('CAWS-AGENTS-LIST-BINDING-JOIN-01', () => {
     expect(Object.keys(withStale.payload.worktree_bindings.by_session)).toEqual([
       'sess-active-only',
     ]);
+  });
+});
+
+describe('agents list session bridge visibility', () => {
+  test('active bridge IDs are sorted, owner-specific and separate from worktree bindings', () => {
+    const root = mkRepo();
+    for (const owner of ['bridge-owner', 'other-owner', 'empty-owner']) register(root, owner);
+    for (const id of [
+      'BRIDGE-Z-001',
+      'BRIDGE-A-001',
+      'BRIDGE-OTHER-001',
+      'BRIDGE-REG-001',
+      'BRIDGE-OWNERLESS-001',
+      'BRIDGE-ABSENT-001',
+    ]) {
+      writeBridgeSpec(root, id);
+    }
+    writeBridgeSpec(root, 'BRIDGE-TREE-001', { worktree: 'missing-tree' });
+    writeBridgeSpec(root, 'BRIDGE-CLOSED-001', { state: 'closed' });
+    writeBridgeSpec(root, 'BRIDGE-DRAFT-001', { state: 'draft' });
+    writeRegistry(root, {
+      'wt-other-spec': ownedBy('bridge-owner', 'WORKTREE-001'),
+      'wt-subordinate': ownedBy('other-owner', 'BRIDGE-REG-001'),
+      'wt-ownerless': { path: '/tmp/ownerless-fixture', specId: 'BRIDGE-OWNERLESS-001' },
+    });
+    patchLease(root, 'bridge-owner', {
+      bound_worktree: 'cache-ghost',
+      bound_spec_id: 'CACHE-GHOST',
+    });
+    writeBridges(root, {
+      'BRIDGE-Z-001': bridge('bridge-owner'),
+      'BRIDGE-A-001': bridge('bridge-owner'),
+      'BRIDGE-OTHER-001': bridge('other-owner'),
+      'BRIDGE-REG-001': bridge('bridge-owner'),
+      'BRIDGE-OWNERLESS-001': bridge('bridge-owner'),
+      'BRIDGE-TREE-001': bridge('bridge-owner'),
+      'BRIDGE-CLOSED-001': bridge('bridge-owner'),
+      'BRIDGE-DRAFT-001': bridge('bridge-owner'),
+      'BRIDGE-MISSING-001': bridge('bridge-owner'),
+      'BRIDGE-ABSENT-001': bridge('absent-lease-owner'),
+    });
+    const before = authorityBytes(root);
+    const text = list(root);
+    const { code, payload } = listJson(root);
+    expect(code).toBe(0);
+    expect(payload.sources.bridge_binding).toBe('.caws/claims/bridge.json');
+    expect(payload.bridge_bindings).toEqual({
+      sources: {
+        claims: '.caws/claims/bridge.json',
+        specs: '.caws/specs/',
+        worktrees: '.caws/worktrees.json',
+      },
+      resolution: 'resolved',
+      by_session: {
+        'bridge-owner': ['BRIDGE-A-001', 'BRIDGE-Z-001'],
+        'other-owner': ['BRIDGE-OTHER-001'],
+        'empty-owner': [],
+      },
+    });
+    expect(payload.worktree_bindings.by_session['bridge-owner']).toEqual([
+      { worktree: 'wt-other-spec', spec_id: 'WORKTREE-001' },
+    ]);
+    expect(payload.active.map((lease) => lease.session_id).sort()).toEqual([
+      'bridge-owner',
+      'empty-owner',
+      'other-owner',
+    ]);
+    expect(lineFor(text, 'bridge-owner')).toContain('bridges=BRIDGE-A-001,BRIDGE-Z-001');
+    expect(lineFor(text, 'other-owner')).toContain('bridges=BRIDGE-OTHER-001');
+    expect(lineFor(text, 'empty-owner')).toContain('bridges=(none)');
+    expect(text.text).toContain('bridge-source: .caws/claims/bridge.json');
+    expect(text.text).not.toContain('cache-ghost');
+    expect(authorityBytes(root)).toEqual(before);
+  });
+
+  test('a missing claims file is a resolved empty bridge set', () => {
+    const root = mkRepo();
+    register(root, 'unclaimed-owner');
+    writeBridgeSpec(root, 'BRIDGE-001');
+    fs.rmSync(path.join(root, '.caws', 'claims', 'bridge.json'), { force: true });
+    const before = authorityBytes(root);
+    const { payload } = listJson(root);
+    expect(payload.bridge_bindings.resolution).toBe('resolved');
+    expect(payload.bridge_bindings.by_session).toEqual({ 'unclaimed-owner': [] });
+    expect(lineFor(list(root), 'unclaimed-owner')).toContain('bridges=(none)');
+    expect(authorityBytes(root)).toEqual(before);
+  });
+
+  test.each([
+    null,
+    [],
+    'bridge-owner',
+    {},
+    { session_id: '' },
+    { session_id: '   ' },
+    { session_id: 12 },
+    { session_id: ' bridge-owner ' },
+  ])('a malformed or differently named owner %j is not attributed to a lease session', (entry) => {
+    const root = mkRepo();
+    register(root, 'bridge-owner');
+    writeBridgeSpec(root, 'BRIDGE-001');
+    writeBridges(root, { 'BRIDGE-001': entry });
+    const before = authorityBytes(root);
+    const { payload } = listJson(root);
+    expect(payload.bridge_bindings.resolution).toBe('resolved');
+    expect(payload.bridge_bindings.by_session['bridge-owner']).toEqual([]);
+    expect(lineFor(list(root), 'bridge-owner')).toContain('bridges=(none)');
+    expect(authorityBytes(root)).toEqual(before);
+  });
+
+  test.each(['claims-json', 'claims-read', 'specs', 'worktrees'])(
+    'unreadable %s input makes bridge data unknown without hiding the lease row',
+    (kind) => {
+      const root = mkRepo();
+      register(root, 'bridge-owner');
+      writeBridgeSpec(root, 'BRIDGE-001');
+      writeBridges(root, { 'BRIDGE-001': bridge('bridge-owner') });
+      let failedPath;
+      if (kind === 'claims-json') {
+        failedPath = path.join(root, '.caws', 'claims', 'bridge.json');
+        fs.writeFileSync(failedPath, '{broken');
+      } else if (kind === 'claims-read') {
+        failedPath = path.join(root, '.caws', 'claims', 'bridge.json');
+        fs.unlinkSync(failedPath);
+        fs.mkdirSync(failedPath);
+      } else if (kind === 'specs') {
+        failedPath = path.join(root, '.caws', 'specs');
+        fs.rmSync(failedPath, { recursive: true });
+        fs.writeFileSync(failedPath, 'not a directory');
+      } else {
+        failedPath = path.join(root, '.caws', 'worktrees.json');
+        fs.writeFileSync(failedPath, '{broken');
+      }
+      const before = authorityBytes(root);
+      const text = list(root);
+      const { code, payload } = listJson(root);
+      expect(code).toBe(0);
+      expect(payload.active.map((lease) => lease.session_id)).toEqual(['bridge-owner']);
+      expect(payload.sources.bridge_binding).toBeNull();
+      expect(payload.bridge_bindings.resolution).toBe('unreadable');
+      expect(payload.bridge_bindings.by_session).toBeUndefined();
+      expect(payload.worktree_bindings.resolution).toBe(
+        kind === 'worktrees' ? 'unreadable' : 'resolved'
+      );
+      expect(payload.bridge_bindings.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ subject: fs.realpathSync(failedPath), severity: 'error' }),
+        ])
+      );
+      expect(lineFor(text, 'bridge-owner')).toContain('bridges=unknown');
+      expect(lineFor(text, 'bridge-owner')).not.toContain('bridges=(none)');
+      expect(text.text).toContain('bridge-source: unavailable');
+      expect(authorityBytes(root)).toEqual(before);
+    }
+  );
+
+  test('a malformed claimed spec is unknown rather than an asserted absence', () => {
+    const root = mkRepo();
+    register(root, 'bridge-owner');
+    writeBridgeSpec(root, 'BRIDGE-001');
+    writeBridges(root, { 'BRIDGE-001': bridge('bridge-owner') });
+    const file = path.join(root, '.caws', 'specs', 'BRIDGE-001.yaml');
+    fs.writeFileSync(file, 'id: [');
+    const before = authorityBytes(root);
+    const { payload } = listJson(root);
+    expect(payload.bridge_bindings.resolution).toBe('unreadable');
+    expect(payload.bridge_bindings.by_session).toBeUndefined();
+    expect(payload.bridge_bindings.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ subject: fs.realpathSync(file), severity: 'error' }),
+      ])
+    );
+    expect(authorityBytes(root)).toEqual(before);
+  });
+
+  test('lease visibility flags filter rows without revoking their bridges', () => {
+    const root = mkRepo();
+    const owners = ['live-owner', 'stale-owner', 'stopped-owner'];
+    const claims = {};
+    for (const [index, owner] of owners.entries()) {
+      register(root, owner);
+      patchLease(root, owner, {
+        started_at: '2026-10-28T00:00:00.000Z',
+        last_active:
+          owner === 'stale-owner' ? '2026-10-29T00:00:00.000Z' : '2026-10-31T23:59:00.000Z',
+        status: owner === 'stopped-owner' ? 'stopped' : 'active',
+      });
+      const id = `BRIDGE-${index}-001`;
+      writeBridgeSpec(root, id);
+      claims[id] = bridge(owner);
+    }
+    writeBridges(root, claims);
+    const now = () => new Date('2026-11-01T00:00:00.000Z');
+    const before = authorityBytes(root);
+    const normal = listJson(root, { now });
+    expect(normal.payload.bridge_bindings.by_session).toEqual({ 'live-owner': ['BRIDGE-0-001'] });
+    const options = { now, includeStale: true, includeStopped: true };
+    const all = listJson(root, options);
+    expect(all.payload.bridge_bindings.by_session).toEqual({
+      'live-owner': ['BRIDGE-0-001'],
+      'stale-owner': ['BRIDGE-1-001'],
+      'stopped-owner': ['BRIDGE-2-001'],
+    });
+    const text = list(root, options);
+    for (const [index, owner] of owners.entries()) {
+      expect(lineFor(text, owner)).toContain(`bridges=BRIDGE-${index}-001`);
+    }
+    const activeOnly = listJson(root, { ...options, activeOnly: true });
+    expect(activeOnly.payload.bridge_bindings.by_session).toEqual(
+      normal.payload.bridge_bindings.by_session
+    );
+    expect(activeOnly.payload.visibility.hidden).toEqual([
+      { bucket: 'stale', count: 1, flag: '--include-stale', suppressed_by: '--active' },
+      { bucket: 'stopped', count: 1, flag: '--include-stopped', suppressed_by: '--active' },
+    ]);
+    expect(authorityBytes(root)).toEqual(before);
+  });
+
+  test('worktree columns and bridge precedence share the same worktree observation', () => {
+    const root = mkRepo();
+    register(root, 'bridge-owner');
+    writeBridgeSpec(root, 'BRIDGE-001');
+    writeBridges(root, { 'BRIDGE-001': bridge('bridge-owner') });
+    const initial = { 'wt-one': ownedBy('bridge-owner', 'BRIDGE-001') };
+    writeRegistry(root, initial);
+    const file = fs.realpathSync(path.join(root, '.caws', 'worktrees.json'));
+    const before = authorityBytes(root);
+    const readFileSync = fs.readFileSync;
+    let reads = 0;
+    const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((target, ...args) => {
+      if (target === file) return JSON.stringify(++reads === 1 ? initial : {});
+      return readFileSync(target, ...args);
+    });
+    let result;
+    try {
+      result = listJson(root);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(reads).toBe(1);
+    expect(result.payload.worktree_bindings.by_session['bridge-owner']).toEqual([
+      { worktree: 'wt-one', spec_id: 'BRIDGE-001' },
+    ]);
+    expect(result.payload.bridge_bindings.by_session['bridge-owner']).toEqual([]);
+    expect(authorityBytes(root)).toEqual(before);
   });
 });
