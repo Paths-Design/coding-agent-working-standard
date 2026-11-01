@@ -1,10 +1,11 @@
 id: CAWS-AGENTS-BRIDGE-LEGIBILITY-001
 title: 'Show active session bridge bindings in agents list'
 mode: fix
-lifecycle_state: active
-worktree: agents-bridge-legibility
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Active session bridges are rendered separately from worktree ownership with explicit provenance and unknown states for unreadable authority. Candidate22a54212c9a76252374ec0e2fa7347e1397bbeaa:13 suites193pass0skip, build/typechecks/package-config lint pass, actual9-file gates all5pass; real uid501 EACCES and portable read-fault controls validate nonabsence and refused-write preservation. A1-A3 dual-write evidence read back at15612-15614. Independent read-only peer feedback grounded on the reader branches and test assertions. Installed/native runtime qualification and advanced Source integration remain separate parent obligations.'
 created_at: '2026-11-01T12:53:20.993Z'
-updated_at: '2026-11-01T14:18:16.340Z'
+updated_at: '2026-11-01T14:33:18.396Z'
 created_by_session: '01a196ea-962a-7cd1-a8d3-9603cec4e96d'
 blast_radius:
   modules:
