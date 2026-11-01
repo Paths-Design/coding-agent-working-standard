@@ -1,10 +1,11 @@
 id: CAWS-SOURCE-PROFILE-FIXTURES-001
 title: 'Align containment and Stop fixtures with system startup profiles'
 mode: fix
-lifecycle_state: active
-worktree: source-profile-fixtures
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Only3fixture setup insertions from89b7704517296421284c2d5d1ff5f28d6eb3e22a landed normally into recordedSourcebase caws/exclusive-npm-integration exact7c8. Actual Node22.19 bothsuites54pass0skip; private CLI-onlybuild/pkgESLint pass; actual2filegates5pass. A1/A2 spec-eventdualread15626/15627. Independent peer and author source/raw/oracle inspection found no load-bearing defect; assertions/pins/deadlines/production unchanged. Prefix/publication doubles limit evidence to fixture/connection behavior, not genuine Native/full qualification. Coordinator01a17941 explicitly authorized this normal merge/close in messagea11e69c3-1aec-4ebe-a215-673e3c134cef, retains Source integration/parentACs/mainpush; raw tmp logs retained.'
 created_at: '2026-11-01T14:30:54.828Z'
-updated_at: '2026-11-01T14:36:51.424Z'
+updated_at: '2026-11-01T14:47:01.450Z'
 created_by_session: '01a196ea-962a-7cd1-a8d3-9603cec4e96d'
 blast_radius:
   modules:
