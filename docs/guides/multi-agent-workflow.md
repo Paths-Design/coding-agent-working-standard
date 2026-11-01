@@ -73,8 +73,9 @@ caws specs create FEAT-003 --title "Dashboard UI" --mode feature --contract "das
 ```
 
 Each generated spec lives at `.caws/specs/<id>.yaml`. Use `caws specs amend` for
-intent and acceptance, and `caws specs amend-scope` for non-overlapping scope.
-Declare `scope.out` exclusions through the same scope command where needed.
+modules, invariants and acceptance, and `caws specs amend-scope` for
+non-overlapping scope. Declare `scope.out` exclusions through the same scope
+command where needed.
 
 Example (`FEAT-001.yaml`):
 
