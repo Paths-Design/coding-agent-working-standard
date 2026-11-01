@@ -197,9 +197,9 @@ describe('A1: destroy of a worktree bound to an archived spec', () => {
       const bytes = fs.readFileSync(archived);
       const registry = fs.readFileSync(path.join(caws, 'worktrees.json'));
       const events = fs.readFileSync(path.join(caws, 'events.jsonl'));
-      const original = lifecycleLock.withLifecycleLock;
+      const original = lifecycleLock.withLifecycleMutationFence;
       const lock = jest
-        .spyOn(lifecycleLock, 'withLifecycleLock')
+        .spyOn(lifecycleLock, 'withLifecycleMutationFence')
         .mockImplementation((dir, body, opts) => {
           if (change === 'changed archive')
             fs.appendFileSync(archived, '\n# concurrent archive change\n');
