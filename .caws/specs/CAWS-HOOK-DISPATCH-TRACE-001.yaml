@@ -1,0 +1,37 @@
+id: CAWS-HOOK-DISPATCH-TRACE-001
+title: 'Locate native PostToolUse case timeout with opt-in stage traces'
+mode: chore
+lifecycle_state: draft
+created_at: '2026-11-01T13:10:17.533Z'
+updated_at: '2026-11-01T13:10:17.533Z'
+created_by_session: '01a196ea-962a-7cd1-a8d3-9603cec4e96d'
+blast_radius:
+  modules:
+    - 'Source engine-routing test harness dispatch-stage observation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/runtime/engine-routing.test.js'
+  out: []
+invariants:
+  - 'No production code, payload semantics, assertions,120-second case timeout or15-second invocation deadlines change.'
+  - 'Opt-in trace output contains only bounded ordinal/tool/event/stage/monotonic elapsed and numeric completion metadata; never payload, environment, authentication or authored content.'
+  - 'Child lane stays on advanced Source lineage; no advanced implementation merges into main or the agents visibility lane, and foreign owner retains Source integration/publication.'
+acceptance:
+  - id: A1
+    given: 'existing runTool prepare dispatch and acknowledgement await boundaries'
+    when: 'CAWS_TEST_TRACE_HOOK_DISPATCH=1 is enabled'
+    then: 'bounded before/after/finally stage observations identify the completed or pending boundary without exposing request data'
+  - id: A2
+    given: 'the exact Node22 native-engine-compat PostToolUse case and matched Source prerequisites'
+    when: 'one bounded unchanged-deadline execution runs'
+    then: 'raw output and exit/termination provenance identify the decisive stage or establish a scoped passing observation without claiming full qualification'
+observability:
+  - 'Opt-in process.stderr stage records and persistent ignored raw exact-case output.'
+rollback:
+  - 'Revert only the owned test instrumentation commit through the Source lineage; retain raw observations and original failure history.'
+non_functional: {}
+contracts:
+  - name: 'redacted-hook-case-diagnostics'
+    type: behavior
