@@ -299,3 +299,86 @@ describe('doctor and status recognize session bridges', () => {
     expect(authorityBytes(caws)).toEqual(before);
   });
 });
+
+describe('bridge claim read failures and lease independence', () => {
+  test('a claims path that cannot be read as a file is surfaced without concealing backlog', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'UNBOUND-READ-001');
+    const claimsFile = path.join(caws, 'claims', 'bridge.json');
+    fs.mkdirSync(claimsFile, { recursive: true });
+    const before = authorityBytes(caws);
+    const composed = doctorSnapshot(root, caws);
+    const error = composed.snapshot.registryDiagnostics.find(
+      (d) => d.rule === STORE_RULES.BRIDGE_FILE_INVALID
+    );
+    expect(error.message).toContain('Failed to read bridge claims file');
+    expect(
+      composed.report.findings.find((f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG).data
+        .spec_ids
+    ).toEqual(['UNBOUND-READ-001']);
+    expect(composed.doctorInput.bridgeOwners).toEqual({});
+    expect(fs.statSync(claimsFile).isDirectory()).toBe(true);
+    expect(authorityBytes(caws)).toEqual(before);
+  });
+
+  test.each(['missing', 'stopped', 'stale', 'active'])(
+    'a %s lease cannot revoke a loaded bridge',
+    (state) => {
+      const { root, caws } = mkRepo();
+      writeSpec(caws, 'BRIDGE-LEASE-001');
+      writeBridges(caws, {
+        'BRIDGE-LEASE-001': { session_id: 'owner', acquired_at: '2026-07-04T00:00:00.000Z' },
+      });
+      if (state !== 'missing') {
+        fs.mkdirSync(path.join(caws, 'leases'), { recursive: true });
+        fs.writeFileSync(
+          path.join(caws, 'leases', 'owner.json'),
+          JSON.stringify({
+            lease_version: 1,
+            session_id: 'owner',
+            platform: 'codex',
+            status: state === 'stopped' ? 'stopped' : 'active',
+            started_at: '2026-07-04T00:00:00.000Z',
+            last_active:
+              state === 'stale' ? '2026-07-04T00:00:00.000Z' : '2026-10-31T23:59:00.000Z',
+            repo_root: root,
+            cwd: root,
+            git_common_dir: path.join(root, '.git'),
+            git_dir: path.join(root, '.git'),
+            last_seen_reason: 'status',
+          })
+        );
+      }
+      const before = authorityBytes(caws);
+      const composed = doctorSnapshot(root, caws);
+      expect(Object.keys(composed.doctorInput.leases)).toEqual(
+        state === 'missing' ? [] : ['owner']
+      );
+      expect(composed.doctorInput.leases.owner?.status).toBe(
+        state === 'missing' ? undefined : state === 'stopped' ? 'stopped' : 'active'
+      );
+      expect(
+        composed.report.findings.filter((f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG)
+      ).toEqual([]);
+      expect(
+        composed.report.findings
+          .filter((f) => f.rule === DOCTOR_RULES.SPEC_BRIDGE_OWNER_LEASE_MISSING)
+          .map((f) => f.data)
+      ).toEqual(
+        state === 'active'
+          ? []
+          : [
+              {
+                spec_id: 'BRIDGE-LEASE-001',
+                owner_session_id: 'owner',
+                lease_present: state !== 'missing',
+              },
+            ]
+      );
+      const result = runStatus(root);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain('1 of 1 active bound (0 worktrees, 1 session bridge)');
+      expect(authorityBytes(caws)).toEqual(before);
+    }
+  );
+});

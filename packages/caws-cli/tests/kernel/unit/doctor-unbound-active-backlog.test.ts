@@ -225,8 +225,10 @@ describe('doctor session bridge bindings', () => {
   });
 
   test('a bridged spec needs no timestamp for the unbound staleness check', () => {
+    const bridged = spec('BRIDGED-1');
+    delete bridged.updated_at;
     const r = report({
-      specs: [spec('BRIDGED-1', { updated_at: undefined } as Partial<Spec>)],
+      specs: [bridged],
       bridgeOwners: { 'BRIDGED-1': 'owner' },
     });
     expect(findings(r, DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_TIMESTAMP_MISSING)).toEqual([]);
