@@ -7,7 +7,12 @@ export function projectDoctorFindings(all: readonly DoctorFinding[]) {
     activity: DoctorFinding[] = [];
   for (const f of all) {
     // An error is never demoted by a rule-name classification.
-    if (f.severity !== 'error' && f.rule === 'doctor.worktree.owner_lease_missing')
+    if (
+      f.severity !== 'error' &&
+      ['doctor.worktree.owner_lease_missing', 'doctor.spec.bridge_owner_lease_missing'].includes(
+        f.rule
+      )
+    )
       activity.push(f);
     else if (
       f.severity === 'info' &&

@@ -129,6 +129,8 @@ export const DOCTOR_RULES = {
    * names it. Severity: warning.
    */
   WORKTREE_OWNER_LEASE_MISSING: 'doctor.worktree.owner_lease_missing',
+  /** An active session bridge has no live owner lease; ownership is retained. */
+  SPEC_BRIDGE_OWNER_LEASE_MISSING: 'doctor.spec.bridge_owner_lease_missing',
   /**
    * Leases exist under `.caws/leases/` but the platform's PID liveness signal
    * is unreliable here — specifically, every running lease's recorded pid is
@@ -441,8 +443,8 @@ export const DOCTOR_RULES = {
 
   // ---- registry hygiene (slice 7c.2) -------------------------------------
   /**
-   * worktrees.json or agents.json parsed as something other than a plain
-   * object. Severity is inherited from the source diagnostic so the
+   * A worktree, agent, or session bridge registry could not be loaded.
+   * Severity is inherited from the source diagnostic so the
    * loader's intent (always error today) survives.
    */
   REGISTRY_MALFORMED_LOADED: 'doctor.registry.malformed_loaded',
