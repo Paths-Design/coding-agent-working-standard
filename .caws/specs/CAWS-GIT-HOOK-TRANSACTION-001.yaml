@@ -1,0 +1,32 @@
+id: CAWS-GIT-HOOK-TRANSACTION-001
+title: 'Quarantine Git hook staging and settle only the authorized delta'
+mode: feature
+lifecycle_state: active
+created_at: '2026-11-01T06:29:06.030Z'
+updated_at: '2026-11-01T06:29:06.030Z'
+created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
+blast_radius:
+  modules:
+    - 'Lifecycle Git hook transaction staging'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/execution/git-hook-transaction.ts'
+    - 'packages/caws-cli/tests/execution/git-hook-transaction.test.js'
+  out: []
+invariants:
+  - 'Hook code never receives real Git metadata write rights; Native-held lifecycle settlement validates every promoted path and object'
+acceptance:
+  - id: A1
+    given: 'real Git staging and a bounded owned path set'
+    when: 'hooks stage inside a private index and object directory'
+    then: 'validation preserves foreign entries and refuses malformed or out-of-scope changes before any real publication'
+  - id: A2
+    given: 'a validated private Git transaction under the Native-held fence'
+    when: 'settlement publishes or fails'
+    then: 'scoped staged data reaches the actual Git index and required objects with truthful failure and safe lock cleanup'
+rollback:
+  - 'Omit the mediated hook route and retain executable-hook refusal without disabling required hooks'
+non_functional: {}
+contracts: []
