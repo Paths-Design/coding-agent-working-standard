@@ -4,7 +4,7 @@ authority: working
 status: active
 title: CAWS native runtime migration tracker
 owner: CAWS runtime maintainers
-updated: 2026-10-30
+updated: 2026-11-01
 audience: maintainer
 ---
 
@@ -28,6 +28,53 @@ every logical replacement commit. Do not infer migration from a new module,
 passing unit tests, or the existence of this document.
 
 ## Source location and progress
+
+The owned `caws/exclusive-npm-integration` branch contains lifecycle source
+`ac878ce9558093ad5a43b0926c6d62a65b1712b2`, normal main reconciliation
+`c04966a2ffbf11e27c5b8f14a6534bbd4b276ed0`, and test-control repair
+`ac2cae91d03d1e9cc4939ac4b32b9f9eb6f323aa`. Source qualification and parent
+landing remain separate, unfinished obligations. The audited Host takeover
+belongs to session `01a17941-cbb6-7b92-b5c7-0ba8f5f238d3`; its clean candidate
+`88f8d550f2c0a2f61e058a066fa8dad8d12021b4` includes the production `sha2`
+dependency declaration that the first optimized build exposed as missing.
+
+Root artifacts under
+`/Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3`
+retain `host-v3-focused-kernel-05.log` (31 maintained-helper and kernel checks),
+the failed `host-v3-optimized-build-01.log`, and the continuing cached,
+single-job, locked, offline build `host-v3-optimized-build-02.log`. These checks
+do not establish Node formatter settlement or a genuine exclusive workflow. The
+matched production Native build from immutable `c04966a2` inputs completed; its
+receipt is
+`native-agent-workflow-09/matched-production-build-c04966a2/native-completed.json`.
+The separately built execution producer hashes to
+`d1297cecac24d5b577bde40eadb7c068d1c7178193f31cd7d60b1e7a42ca9e66`.
+
+`lifecycle-full-source-tests-14.log` preserves the failed complete run: 12 of
+405 suites failed. The repaired rollback harness passes 82 checks; archive race
+and coverage controls pass 24 checks. After fresh locked dependencies, CLI build
+and consumer-doc staging, `lifecycle-source-failures-fresh-16.log` narrows seven
+rerun suites to three failures: containment setup, Stop setup and init-plan
+isolation. The per-fixture machine-home repair passes all four init alias checks
+in `init-dry-run-hermetic-node22-17.log`. A correctly rooted Source peer
+accepted the hook-dispatch diagnostic; the adjacent runtime test repair request
+awaits its own acceptance. Current-source mutation campaigns, every declared
+80-percent file floor, acceptance recording, gates and independent review remain
+owed; the failed Source05 scores are not replaced by these checks.
+
+The next consumer remains genuine session `01a185e5-527d-75b3-a2bd-2a601f74b57c`
+in the existing `exclusive-label-hard-exclusion` worktree: red test, bounded
+edit, green test, Cargo, Native writer, normal Git/CAWS merge, downstream npm
+and close with exclusive `caws_exec`. Its `protected.txt` exclusion and
+unchanged bytes remain explicit. Preserve the failed `exclusive-label-workflow`
+leaf and the original single protected-write refusal; do not repeat that
+attempt. The installed `43f2b11c` hook refused the new private CLI installer
+before execution because validated `execution_workdir` was absent; no alternate
+carrier was attempted. The existing `ac878ce9` CLI-only package is historical
+preparation, not a final matched runtime. GitHub SSH is reachable and remote
+main is `b0d9e6b0be1564c639414332f1b4dffc65f7c5a1`; validated nested landing,
+normal-hook push and direct remote equality remain owed. Secure socket origin,
+global adoption and full first-party Python retirement remain unqualified.
 
 Parent checkpoint `9f87d3e1baeb8328b5a51047f641a98abc5137ee` joins the parent's
 `28ef8482` source with main, including the stock scanner and Stop preflight
