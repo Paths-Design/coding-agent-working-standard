@@ -1,9 +1,10 @@
 id: CAWS-AGENTS-BRIDGE-LEGIBILITY-001
 title: 'Show active session bridge bindings in agents list'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: agents-bridge-legibility
 created_at: '2026-11-01T12:53:20.993Z'
-updated_at: '2026-11-01T12:53:20.993Z'
+updated_at: '2026-11-01T12:55:21.380Z'
 created_by_session: '01a196ea-962a-7cd1-a8d3-9603cec4e96d'
 blast_radius:
   modules:
