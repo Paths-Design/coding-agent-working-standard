@@ -150,6 +150,7 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
     policyWarnings: policyResult.warnings,
     policyErrors: policyResult.errors,
     worktrees,
+    ...(isOk(bridgesResult) ? { bridges: bridgesResult.value.bridges } : {}),
     bridgeOwners,
     agents: isOk(agentsResult) ? agentsResult.value : {},
     leases: isOk(leasesResult) ? leasesResult.value.leases : {},

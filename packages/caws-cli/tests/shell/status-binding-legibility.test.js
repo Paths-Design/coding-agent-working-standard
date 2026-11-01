@@ -392,3 +392,58 @@ describe('bridge claim read failures and lease independence', () => {
     }
   );
 });
+
+describe('status uses one bridge claim observation', () => {
+  test.each(['acquire', 'release'])(
+    'a concurrent %s cannot split the binding line from the active summary',
+    (transition) => {
+      const { root, caws } = mkRepo();
+      writeSpec(caws, 'BRIDGE-OBSERVATION-001');
+      const sessionId = 'bridge-observation-session';
+      const claimed = {
+        'BRIDGE-OBSERVATION-001': {
+          session_id: sessionId,
+          acquired_at: '2026-07-04T00:00:00.000Z',
+        },
+      };
+      const initial = transition === 'acquire' ? {} : claimed;
+      const subsequent = transition === 'acquire' ? claimed : {};
+      writeBridges(caws, initial);
+      const claimsFile = fs.realpathSync(path.join(caws, 'claims', 'bridge.json'));
+      const before = authorityBytes(caws);
+      const readFileSync = fs.readFileSync;
+      let reads = 0;
+      const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+        if (file === claimsFile) {
+          reads++;
+          return JSON.stringify(reads === 1 ? initial : subsequent);
+        }
+        return readFileSync(file, ...args);
+      });
+      const out = [];
+      let code;
+      try {
+        code = runStatusCommand({
+          cwd: root,
+          env: { CODEX_THREAD_ID: sessionId },
+          out: (line) => out.push(line),
+          err: (line) => out.push(line),
+        });
+      } finally {
+        spy.mockRestore();
+      }
+      expect(reads).toBe(1);
+      expect(code).toBe(0);
+      const output = out.join('\n');
+      const binding = output.split('\n').find((line) => line.trim().startsWith('binding:'));
+      if (transition === 'acquire') {
+        expect(output).toContain('0 of 1 active bound to a worktree');
+        expect(binding).toContain('unbound (no write authority here');
+      } else {
+        expect(output).toContain('1 of 1 active bound (0 worktrees, 1 session bridge)');
+        expect(binding).toContain('bridged → BRIDGE-OBSERVATION-001');
+      }
+      expect(authorityBytes(caws)).toEqual(before);
+    }
+  );
+});
