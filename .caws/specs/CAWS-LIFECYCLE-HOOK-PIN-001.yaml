@@ -25,6 +25,12 @@ acceptance:
     given: 'native lifecycle discovery and final launch'
     when: 'startup policy is lowered through the private carrier'
     then: 'policy environment matches Native startup authority in both phases and unsupported or ordinary USER injection is refused, with focused hostile tests passing'
+  - id: A3
+    given: 'a lifecycle hook can execute task code and spawn descendants'
+    when: 'Native supervises the admitted launch through writer settlement, including detached descendants'
+    then: >-
+      the canonical fence stays owned until the tracked writer cohort settles; lost
+      observation cannot authorize release, with hostile lifecycle tests
 rollback:
   - 'Omit the optional startup policy pin and verify that executable hooks remain refused without bypassing them.'
 non_functional: {}
