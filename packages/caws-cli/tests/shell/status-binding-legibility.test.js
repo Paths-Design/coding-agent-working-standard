@@ -22,6 +22,12 @@ const path = require('path');
 
 const { initProject } = require('../../dist/store/init-store');
 const { runStatusCommand } = require('../../dist/shell/commands/status');
+const { gatherDashboardState } = require('../../dist/shell/panel-data');
+const { buildDashboardModel } = require('../../dist/shell/tui/panels');
+const { composeDoctorSnapshot } = require('../../dist/store/doctor-snapshot');
+const { inspectProjectState, DOCTOR_RULES } = require('../../dist/kernel');
+const { runDoctorCommand } = require('../../dist/shell/commands/doctor');
+const { STORE_RULES } = require('../../dist/store/rules');
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
 
 afterAll(() => {
@@ -169,5 +175,355 @@ describe('status separates work in flight from active backlog', () => {
     // line stays off entirely rather than reporting "0 of 0".
     expect(result.out).toContain('2 draft');
     expect(result.out).not.toContain('in flight:');
+  });
+});
+
+function writeBridges(caws, value) {
+  fs.mkdirSync(path.join(caws, 'claims'), { recursive: true });
+  fs.writeFileSync(path.join(caws, 'claims', 'bridge.json'), JSON.stringify(value));
+}
+
+function doctorSnapshot(root, caws) {
+  const composed = composeDoctorSnapshot({
+    repoRoot: root,
+    cawsDir: caws,
+    now: new Date('2026-11-01T00:00:00.000Z'),
+  });
+  return { ...composed, report: inspectProjectState(composed.doctorInput) };
+}
+
+function authorityBytes(directory) {
+  const files = {};
+  function visit(dir, prefix) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const relative = prefix + entry.name;
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) visit(absolute, relative + '/');
+      else
+        files[relative] = entry.isSymbolicLink()
+          ? { symlink: fs.readlinkSync(absolute) }
+          : fs.readFileSync(absolute).toString('base64');
+    }
+  }
+  visit(directory, '');
+  return files;
+}
+
+describe('doctor and status recognize session bridges', () => {
+  test('mixed bindings count once and only true backlog remains, without writes', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'WORKTREE-001', { worktree: 'wt-one' });
+    writeSpec(caws, 'BRIDGED-002');
+    writeSpec(caws, 'UNBOUND-003');
+    writeSpec(caws, 'CLOSED-004', { lifecycleState: 'closed' });
+    writeRegistry(caws, {
+      'wt-one': {
+        specId: 'WORKTREE-001',
+        baseBranch: 'main',
+        path: path.join(caws, 'worktrees', 'wt-one'),
+      },
+    });
+    writeBridges(caws, {
+      'WORKTREE-001': { session_id: 'owner', acquired_at: '2026-07-04T00:00:00.000Z' },
+      'BRIDGED-002': { session_id: 'owner', acquired_at: '2026-07-04T00:00:00.000Z' },
+      'CLOSED-004': { session_id: 'owner', acquired_at: '2026-07-04T00:00:00.000Z' },
+      'MISSING-005': { session_id: 'owner', acquired_at: '2026-07-04T00:00:00.000Z' },
+    });
+    const before = authorityBytes(caws);
+    const result = runStatus(root);
+    const composed = doctorSnapshot(root, caws);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain('2 of 3 active bound (1 worktree, 1 session bridge)');
+    expect(result.out).toContain('1 active unbound (see doctor)');
+    const backlog = composed.report.findings.filter(
+      (f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG
+    );
+    expect(backlog).toHaveLength(1);
+    expect(backlog[0].data.spec_ids).toEqual(['UNBOUND-003']);
+    expect(authorityBytes(caws)).toEqual(before);
+  });
+
+  test('a bridge-only active set is bound even without a live lease', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'BRIDGED-001');
+    writeBridges(caws, {
+      'BRIDGED-001': { session_id: 'absent-owner', acquired_at: '2026-07-04T00:00:00.000Z' },
+    });
+    const result = runStatus(root);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain('1 of 1 active bound (0 worktrees, 1 session bridge)');
+    expect(result.out).not.toContain('active unbound');
+    expect(
+      doctorSnapshot(root, caws).report.findings.filter(
+        (f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG
+      )
+    ).toEqual([]);
+  });
+
+  test.each([null, [], 'owner', {}, { session_id: '' }, { session_id: '   ' }, { session_id: 12 }])(
+    'a malformed bridge entry %j cannot conceal active backlog',
+    (entry) => {
+      const { root, caws } = mkRepo();
+      writeSpec(caws, 'UNBOUND-001');
+      writeBridges(caws, { 'UNBOUND-001': entry });
+      const composed = doctorSnapshot(root, caws);
+      expect(composed.doctorInput.bridgeOwners).toEqual({});
+      expect(
+        composed.report.findings.find((f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG)
+          .data.spec_ids
+      ).toEqual(['UNBOUND-001']);
+    }
+  );
+
+  test('a malformed claims file surfaces an error and cannot conceal backlog or change bytes', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'UNBOUND-001');
+    writeBridges(caws, {});
+    fs.writeFileSync(path.join(caws, 'claims', 'bridge.json'), '{broken');
+    const before = authorityBytes(caws);
+    const composed = doctorSnapshot(root, caws);
+    expect(composed.snapshot.registryDiagnostics.map((d) => d.rule)).toContain(
+      STORE_RULES.BRIDGE_FILE_INVALID
+    );
+    expect(
+      composed.report.findings.find((f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG).data
+        .spec_ids
+    ).toEqual(['UNBOUND-001']);
+    const out = [];
+    const code = runDoctorCommand({
+      cwd: root,
+      now: new Date('2026-11-01T00:00:00.000Z'),
+      out: (s) => out.push(s),
+      err: (s) => out.push(s),
+    });
+    expect(code).toBe(1);
+    const output = out.join('\n');
+    expect(output).toContain(DOCTOR_RULES.REGISTRY_MALFORMED_LOADED);
+    expect(output).toContain('Bridge claims file is not valid JSON');
+    expect(output).toContain(fs.realpathSync(path.join(caws, 'claims', 'bridge.json')));
+    expect(
+      composed.report.findings.find((f) => f.rule === DOCTOR_RULES.REGISTRY_MALFORMED_LOADED)
+    ).toMatchObject({
+      severity: 'error',
+      subject: path.join(caws, 'claims', 'bridge.json'),
+      data: { source_rule: STORE_RULES.BRIDGE_FILE_INVALID },
+    });
+    expect(authorityBytes(caws)).toEqual(before);
+  });
+});
+
+describe('bridge claim read failures and lease independence', () => {
+  test('a claims path that cannot be read as a file is surfaced without concealing backlog', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'UNBOUND-READ-001');
+    const claimsFile = path.join(caws, 'claims', 'bridge.json');
+    fs.mkdirSync(claimsFile, { recursive: true });
+    const before = authorityBytes(caws);
+    const composed = doctorSnapshot(root, caws);
+    const error = composed.snapshot.registryDiagnostics.find(
+      (d) => d.rule === STORE_RULES.BRIDGE_FILE_INVALID
+    );
+    expect(error.message).toContain('Failed to read bridge claims file');
+    expect(
+      composed.report.findings.find((f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG).data
+        .spec_ids
+    ).toEqual(['UNBOUND-READ-001']);
+    expect(composed.doctorInput.bridgeOwners).toEqual({});
+    expect(fs.statSync(claimsFile).isDirectory()).toBe(true);
+    expect(authorityBytes(caws)).toEqual(before);
+  });
+
+  test.each(['missing', 'stopped', 'stale', 'active'])(
+    'a %s lease cannot revoke a loaded bridge',
+    (state) => {
+      const { root, caws } = mkRepo();
+      writeSpec(caws, 'BRIDGE-LEASE-001');
+      writeBridges(caws, {
+        'BRIDGE-LEASE-001': { session_id: 'owner', acquired_at: '2026-07-04T00:00:00.000Z' },
+      });
+      if (state !== 'missing') {
+        fs.mkdirSync(path.join(caws, 'leases'), { recursive: true });
+        fs.writeFileSync(
+          path.join(caws, 'leases', 'owner.json'),
+          JSON.stringify({
+            lease_version: 1,
+            session_id: 'owner',
+            platform: 'codex',
+            status: state === 'stopped' ? 'stopped' : 'active',
+            started_at: '2026-07-04T00:00:00.000Z',
+            last_active:
+              state === 'stale' ? '2026-07-04T00:00:00.000Z' : '2026-10-31T23:59:00.000Z',
+            repo_root: root,
+            cwd: root,
+            git_common_dir: path.join(root, '.git'),
+            git_dir: path.join(root, '.git'),
+            last_seen_reason: 'status',
+          })
+        );
+      }
+      const before = authorityBytes(caws);
+      const composed = doctorSnapshot(root, caws);
+      expect(Object.keys(composed.doctorInput.leases)).toEqual(
+        state === 'missing' ? [] : ['owner']
+      );
+      expect(composed.doctorInput.leases.owner?.status).toBe(
+        state === 'missing' ? undefined : state === 'stopped' ? 'stopped' : 'active'
+      );
+      expect(
+        composed.report.findings.filter((f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG)
+      ).toEqual([]);
+      expect(
+        composed.report.findings
+          .filter((f) => f.rule === DOCTOR_RULES.SPEC_BRIDGE_OWNER_LEASE_MISSING)
+          .map((f) => f.data)
+      ).toEqual(
+        state === 'active'
+          ? []
+          : [
+              {
+                spec_id: 'BRIDGE-LEASE-001',
+                owner_session_id: 'owner',
+                lease_present: state !== 'missing',
+              },
+            ]
+      );
+      const result = runStatus(root);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain('1 of 1 active bound (0 worktrees, 1 session bridge)');
+      expect(authorityBytes(caws)).toEqual(before);
+    }
+  );
+});
+
+describe('status uses one bridge claim observation', () => {
+  test.each(['acquire', 'release'])(
+    'a concurrent %s cannot split the binding line from the active summary',
+    (transition) => {
+      const { root, caws } = mkRepo();
+      writeSpec(caws, 'BRIDGE-OBSERVATION-001');
+      const sessionId = 'bridge-observation-session';
+      const claimed = {
+        'BRIDGE-OBSERVATION-001': {
+          session_id: sessionId,
+          acquired_at: '2026-07-04T00:00:00.000Z',
+        },
+      };
+      const initial = transition === 'acquire' ? {} : claimed;
+      const subsequent = transition === 'acquire' ? claimed : {};
+      writeBridges(caws, initial);
+      const claimsFile = fs.realpathSync(path.join(caws, 'claims', 'bridge.json'));
+      const before = authorityBytes(caws);
+      const readFileSync = fs.readFileSync;
+      let reads = 0;
+      const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+        if (file === claimsFile) {
+          reads++;
+          return JSON.stringify(reads === 1 ? initial : subsequent);
+        }
+        return readFileSync(file, ...args);
+      });
+      const out = [];
+      let code;
+      try {
+        code = runStatusCommand({
+          cwd: root,
+          env: { CODEX_THREAD_ID: sessionId },
+          out: (line) => out.push(line),
+          err: (line) => out.push(line),
+        });
+      } finally {
+        spy.mockRestore();
+      }
+      expect(reads).toBe(1);
+      expect(code).toBe(0);
+      const output = out.join('\n');
+      const binding = output.split('\n').find((line) => line.trim().startsWith('binding:'));
+      if (transition === 'acquire') {
+        expect(output).toContain('0 of 1 active bound to a worktree');
+        expect(binding).toContain('unbound (no write authority here');
+      } else {
+        expect(output).toContain('1 of 1 active bound (0 worktrees, 1 session bridge)');
+        expect(binding).toContain('bridged → BRIDGE-OBSERVATION-001');
+      }
+      expect(authorityBytes(caws)).toEqual(before);
+    }
+  );
+});
+
+describe('interactive status uses the observed bridge claims', () => {
+  test.each(['acquire', 'release'])(
+    'a changing %s observation cannot split dashboard binding from doctor findings',
+    (transition) => {
+      const { root, caws } = mkRepo();
+      writeSpec(caws, 'DASHBOARD-BRIDGE-001');
+      const sessionId = 'dashboard-bridge-session';
+      const claimed = {
+        'DASHBOARD-BRIDGE-001': {
+          session_id: sessionId,
+          acquired_at: '2026-07-04T00:00:00.000Z',
+        },
+      };
+      const initial = transition === 'acquire' ? {} : claimed;
+      const subsequent = transition === 'acquire' ? claimed : {};
+      writeBridges(caws, initial);
+      const claimsFile = fs.realpathSync(path.join(caws, 'claims', 'bridge.json'));
+      const before = authorityBytes(caws);
+      const readFileSync = fs.readFileSync;
+      let reads = 0;
+      const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+        if (file === claimsFile) {
+          reads++;
+          return JSON.stringify(reads === 1 ? initial : subsequent);
+        }
+        return readFileSync(file, ...args);
+      });
+      let state;
+      try {
+        state = gatherDashboardState({
+          cwd: root,
+          env: { CODEX_THREAD_ID: sessionId },
+          now: () => new Date('2026-11-01T00:00:00.000Z'),
+        });
+      } finally {
+        spy.mockRestore();
+      }
+      expect(state.ok).toBe(true);
+      expect(reads).toBe(1);
+      expect(state.snapshot.bridges).toEqual(initial);
+      const backlog = state.findings.filter(
+        (finding) => finding.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG
+      );
+      expect(backlog.map((finding) => finding.data.spec_ids)).toEqual(
+        transition === 'acquire' ? [['DASHBOARD-BRIDGE-001']] : []
+      );
+      expect(state.binding.binding.kind).toBe(transition === 'acquire' ? 'unbound' : 'bridged');
+      expect(buildDashboardModel(state).bindingLine).toBe(
+        transition === 'acquire'
+          ? 'unbound (no write authority in this checkout)'
+          : 'bridged: DASHBOARD-BRIDGE-001'
+      );
+      expect(authorityBytes(caws)).toEqual(before);
+    }
+  );
+
+  test('a stable session bridge is rendered as bridged', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'DASHBOARD-BRIDGE-001');
+    writeBridges(caws, {
+      'DASHBOARD-BRIDGE-001': {
+        session_id: 'dashboard-bridge-session',
+        acquired_at: '2026-07-04T00:00:00.000Z',
+      },
+    });
+    const before = authorityBytes(caws);
+    const state = gatherDashboardState({
+      cwd: root,
+      env: { CODEX_THREAD_ID: 'dashboard-bridge-session' },
+      now: () => new Date('2026-11-01T00:00:00.000Z'),
+    });
+    expect(state.ok).toBe(true);
+    expect(state.binding.binding.kind).toBe('bridged');
+    expect(buildDashboardModel(state).bindingLine).toBe('bridged: DASHBOARD-BRIDGE-001');
+    expect(authorityBytes(caws)).toEqual(before);
   });
 });

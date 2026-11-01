@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-HOOKS-INSPECTION-001
 title: 'Describe effective native hooks without unconditional Python inspection'
 mode: fix
-lifecycle_state: active
-worktree: native-hooks-inspection
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Hook-inspection A1-A3 verified for committed d7833c868 with fresh119 built-CLI checks, direct source inspection, independent feedback and retained actual333 ART07 Native/no-Python, corruption/no-replay and explicit legacy probes under documented applicability bounds. Description only; harness trust, callbacks, final coherent package, Python retirement and machine adoption remain parent obligations.'
 created_at: '2026-10-29T22:42:56.880Z'
-updated_at: '2026-10-29T22:58:56.726Z'
+updated_at: '2026-10-30T09:49:35.993Z'
 created_by_session: '01a189cf-33ad-7133-b4a4-1d751e4b9d41'
 blast_radius:
   modules:
@@ -16,7 +17,12 @@ scope:
     - 'packages/caws-cli/src/shell/commands/hooks.ts'
     - 'packages/caws-cli/tests/shell/hooks-readonly.test.js'
     - packages/caws-cli/src/init/hook-inspection-route.ts
+    - packages/caws-cli/package.json
   out: []
+  support:
+    - tmp/rust-cutover-package
+    - package-lock.json
+    - packages/caws-cli/node_modules
 invariants:
   - 'Installed native images do not imply active native harness registration'
   - 'Native description failures never replay the legacy Python entry'
@@ -44,3 +50,22 @@ non_functional:
 contracts:
   - name: 'hooks-effective-selection'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Root inspected actual retained ART07 Native description at /Users/darianrosebrook/Desktop/Projects/caws/tmp/rust-cutover-package/hooks-inspection-01/result.json:333316c84 native-positive describes ten expected handlers without Python, original nested cwd/project preserved. Current d7833c868 fresh hooks-readonly119 exit0 raw committed-hooks-checks.log; source comparison confirms unchanged launcher execution and fixture applicability through added registration checks. Raw ignored receipts were manually inspected, not claimed as tracked artifacts; verify checks commit existence only. No fresh real-Native run for d783, harness trust/callback, package or adoption claim."
+    recorded_at: "2026-10-30T09:39:09.544Z"
+    exit_code: 0
+    commit_sha: d7833c8684184094ffef3f16092925a6ff91cbfb
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Current d7833c868 fresh hooks-readonly119 exit0 verifies installed Native does not override observed legacy registration. Retained333 actual legacy-positive raw stdout and Python marker under /Users/darianrosebrook/Desktop/Projects/caws/tmp/rust-cutover-package/hooks-inspection-01 establish actual legacy bootstrap; d783 leaves launcher invocation unchanged. Independent feedback and root source/raw inspection support bounded applicability. Ignored raw receipts manually verified; verify checks commit existence only. No global selection or final package qualification."
+    recorded_at: "2026-10-30T09:42:48.015Z"
+    exit_code: 0
+    commit_sha: d7833c8684184094ffef3f16092925a6ff91cbfb
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Current d7833c868 fresh hooks-readonly119 exit0 covers missing/corrupt/contradictory/additive registration, alternate CODEX_HOME and nested configuration layers. Retained333 actual Native member-corruption output reports unavailable and available Python was not replayed. Root inspected strict observer and one-launch catch path with no replay. Raw ignored receipts at /Users/darianrosebrook/Desktop/Projects/caws/tmp/rust-cutover-package/hooks-inspection-01 were manually inspected; verify checks commit existence only. Full harness configuration/trust and callback remain unqualified."
+    recorded_at: "2026-10-30T09:43:01.236Z"
+    exit_code: 0
+    commit_sha: d7833c8684184094ffef3f16092925a6ff91cbfb

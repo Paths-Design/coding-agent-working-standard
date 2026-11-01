@@ -1,0 +1,84 @@
+id: CAWS-EXCLUSIVE-WORKFLOW-ROUTE-001
+title: 'Join the exclusive Native lifecycle consumer to the agent workflow'
+mode: feature
+lifecycle_state: active
+created_at: '2026-10-30T03:31:05.440Z'
+updated_at: '2026-11-01T12:17:57.468Z'
+created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
+blast_radius:
+  modules:
+    - 'Native execution preparation owner and startup pins'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/execution_*.rs'
+    - 'packages/caws-native/tests/**'
+    - packages/caws-cli/src/execution/lifecycle.ts
+    - packages/caws-cli/src/execution/lifecycle-main.ts
+    - packages/caws-cli/src/execution/prepared.ts
+    - packages/caws-cli/src/execution/prepared-schema.ts
+    - packages/caws-cli/src/execution/program-discovery.ts
+    - packages/caws-cli/src/execution/authorizer.ts
+    - packages/caws-cli/src/store/lifecycle-lock.ts
+    - packages/caws-cli/src/store/bridge-store.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/tests/execution/lifecycle.test.js
+    - packages/caws-cli/tests/execution/prepared-schema.test.js
+    - packages/caws-cli/tests/execution/program-discovery.test.js
+    - packages/caws-cli/tests/execution/authorizer.test.js
+    - packages/caws-cli/src/execution/cargo-project.ts
+    - packages/caws-cli/tests/execution/cargo-project.test.js
+    - packages/caws-cli/src/execution/npm-project.ts
+    - packages/caws-cli/tests/execution/npm-project.test.js
+    - packages/caws-cli/src/execution/authority.ts
+    - packages/caws-cli/tests/execution/authority.test.js
+    - packages/caws-native/src/lib.rs
+    - packages/caws-cli/src/execution/program-discovery-main.ts
+    - packages/caws-cli/tests/execution/writer.test.js
+    - packages/caws-cli/tests/execution/fence.test.js
+    - packages/caws-cli/tests/shell/caws-read-metadata.test.js
+    - packages/caws-cli/tests/shell/hooks-inspection-prefix.test.js
+    - packages/caws-cli/src/execution/git-hook-transaction.ts
+    - packages/caws-cli/tests/execution/git-hook-transaction.test.js
+    - packages/caws-cli/src/store/repo-root.ts
+    - packages/caws-cli/src/store/git-runtime.ts
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/src/execution/git-hook-formatter-main.ts
+    - packages/caws-cli/src/execution/git-hook-launcher-main.ts
+    - scripts/run-staged-checks.cjs
+    - packages/caws-cli/tests/execution/git-hook-bootstrap.test.js
+    - packages/caws-cli/src/execution/git-hook-client-main.ts
+    - scripts/run-staged-checks.test.cjs
+    - packages/caws-cli/tests/execution/git-hook-client.test.js
+    - packages/caws-cli/src/store/git-autocommit.ts
+    - packages/caws-cli/tests/store/git-runtime.test.js
+    - packages/caws-cli/tests/execution/git-hook-launcher.test.js
+    - packages/caws-cli/tests/execution/child-coverage.cjs
+    - packages/caws-cli/tests/execution/child-coverage-preload.cjs
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-cli/tests/runtime/engine-routing.test.js
+  out: []
+  support:
+    - packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js
+invariants:
+  - 'Lifecycle authority is operation specific and never admits generic Git or general CAWS CLI commands'
+  - 'The canonical fence remains producer owned through consumer settlement and is never exposed to ordinary USER descendants'
+acceptance:
+  - id: A1
+    given: 'a pinned lifecycle consumer and genuine authenticated caller'
+    when: 'an exact typed literal lifecycle call crosses native discovery, analyze and final validation'
+    then: 'only the pinned consumer receives fd3 under the producer held canonical fence and unsupported argv or identity drift is refused before launch'
+  - id: A2
+    given: 'a genuine same agent using exclusive caws_exec'
+    when: 'it runs the owned feature workflow'
+    then: 'scoped commit, native evidence, normal merge, downstream npm and close complete with raw source and installed identity joined evidence'
+observability:
+  - 'Retain raw Native refusal and consumer publication disposition with exact candidate identities'
+rollback:
+  - 'Remove the optional lifecycle startup pin from the private configuration and verify prior profile behavior'
+non_functional:
+  security:
+    - 'Unsupported executable hooks and configuration closures are refused without disabling normal hooks'
+contracts: []

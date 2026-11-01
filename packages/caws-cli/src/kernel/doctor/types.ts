@@ -83,6 +83,9 @@ export interface DoctorInput {
   /** Worktree registry contents. */
   readonly worktrees?: WorktreeRegistry;
 
+  /** Loaded session bridge owners keyed by spec id; lease state never revokes a binding. */
+  readonly bridgeOwners?: Readonly<Record<string, string>>;
+
   /** Agents registry contents (display/freshness only). */
   readonly agents?: AgentRegistry;
 

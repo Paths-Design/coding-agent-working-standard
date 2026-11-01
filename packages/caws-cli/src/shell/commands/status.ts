@@ -56,7 +56,6 @@ import {
   readGitDirInfo,
   resolveRepoRoot,
   safeLeaseFilename,
-  loadBridges,
   inboxAllMessages,
   formatAge,
   type LaneDivergence,
@@ -201,7 +200,6 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   // 4. Binding from cwd — including the acting session's BRIDGE bindings
   //    (AUTH-BINDING-BRIDGE-001). Read-only composition: status never mints
   //    an identity, so a bridge surfaces only when one already resolves.
-  const bridgesLoad = loadBridges(cawsDir);
   const bridgeSession = resolveCallerSession({
     cawsDir,
     worktreeRoot: cwd,
@@ -213,9 +211,9 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
     cwd,
     registry: snapshot.worktrees,
     specs: snapshot.specs,
-    ...(bridgesLoad.ok && bridgeSession.ok
+    ...(snapshot.bridges !== undefined && bridgeSession.ok
       ? {
-          bridges: bridgesLoad.value.bridges,
+          bridges: snapshot.bridges,
           sessionId: bridgeSession.value.identity.session_id,
         }
       : {}),
@@ -368,6 +366,7 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
     policyLoaded: snapshot.policy !== undefined,
     specs: snapshot.specs,
     worktrees: snapshot.worktrees,
+    ...(snapshot.bridgeOwners !== undefined ? { bridgeOwners: snapshot.bridgeOwners } : {}),
     agents: snapshot.agents,
     leases,
     leaseSummary: effectiveLeaseSummary,

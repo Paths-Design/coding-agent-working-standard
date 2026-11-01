@@ -1,4 +1,5 @@
 import type { GlobalHomeObservation, SystemRuntimeObservation } from '../kernel/doctor/types';
+import type { BridgeRegistry } from './bridge-store';
 // Node-only store types.
 //
 // The store layer is the bridge between the filesystem and the pure
@@ -92,6 +93,10 @@ export interface StoreSnapshot {
   /** Fatal diagnostics that prevented policy loading. */
   readonly policyErrors: readonly Diagnostic[];
   readonly worktrees: WorktreeRegistry;
+  /** Raw claims from the same successful load used for diagnostic owners. */
+  readonly bridges?: BridgeRegistry;
+  /** Session bridge owners observed by the same snapshot; never inferred from leases. */
+  readonly bridgeOwners?: Readonly<Record<string, string>>;
   readonly agents: AgentRegistry;
   /**
    * Per-session lease registry from `.caws/leases/` (operational cache, never
