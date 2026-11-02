@@ -1,4 +1,4 @@
-## [12.2.0-rc.3] (2026-10-18)
+## [12.2.0-rc.3]
 
 Third release candidate for the shared machine runtime; targets the `next`
 channel.
@@ -34,16 +34,22 @@ channel.
   nullable summaries and typed transcript lineage.
 - Remove unused runtime `micromatch` and `minimatch` dependencies, update
   compatible transitive fixes, and upgrade Jest, lint-staged, ts-jest and
-  typescript-eslint to eliminate the vulnerable development-tool chain.
+  typescript-eslint.
   Dependency qualification requires both workspace and detached-consumer audits.
 - Update the transitive development dependency Handlebars to 4.7.10 for its
   template compiler security fixes, preserving direct dependency ranges.
+- Add source implementation of a restricted native execution route for selected
+  evidence, lifecycle, npm test and standalone Cargo operations, with
+  prepared-input, authority and executable-image checks. The route requires a
+  paired host and separate native qualification; unsupported profiles refuse.
+- Add the execution mutation surface and expand command-analysis targets, with
+  captured source, build and dependency identities and per-file floors.
 
 ### Fixes and diagnostics
 
 - Preserve hook invocation progress, execution context and interrupted-handler
   evidence; handle large audit payloads without broken-pipe noise.
-- Adopt the Sterling session renderer and accept nullable timestamps emitted
+- Update the shared Python session renderer and accept nullable timestamps emitted
   by its turn-log producer. Keep the optional token-class schema assertion
   compatible with TypeScript's inferred JSON shape.
 - Resolve CLI and guard session identity consistently, propagate OpenCode's
@@ -56,6 +62,14 @@ channel.
   spec amendments, and audit archived or absent spec paths correctly.
 - Add a session-scoped spec work surface, human duration flags and bounded Stop
   refusal handling. Bound Git output capture for large gate indexes.
+- Preserve original Codex file-tool target information for supported writes and
+  reject malformed target inventories. Carry operation-specific lifecycle
+  authority through nested worktree operations.
+- Reconcile recognized stock Codex SessionEnd registrations from ten to three
+  seconds to leave host-shutdown headroom. Unsupported custom budgets require
+  explicit reconciliation.
+- Preserve Bash startup facts for downstream analysis and limit record-time
+  `caws specs evidence --verify` to the requested acceptance criterion.
 
 Release qualification and publication are separate decisions. See
 `docs/release-readiness.md` in the source repository for acceptance and evidence
