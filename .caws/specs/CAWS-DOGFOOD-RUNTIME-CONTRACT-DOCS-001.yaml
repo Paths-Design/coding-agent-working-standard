@@ -1,9 +1,11 @@
 id: CAWS-DOGFOOD-RUNTIME-CONTRACT-DOCS-001
 title: 'Document runtime invocation, qualification and evidence contracts learned from dogfood'
 mode: doc
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Documentation and repair strategy completed at 19895e956 on caws/dogfood-runtime-docs: six existing architecture, doctrine, philosophy and contributor documents updated; A1-A3 evidence recorded and read back with matching events. Source checks cover formatting, metadata, twelve local references, unchanged generated block, whitespace, normal commit hooks and six-path CAWS gate basis. Independent peer finding about whole-projected-spec verification was grounded and corrected in the guidance; pending-criterion execution scoping is proposed runtime work. Branch remains unmerged and unpushed; no runtime implementation or native adoption claim. Next runtime work is guarded caller/CLI parity reproduction, pending-criterion verification and citation feedback, plus isolated replay of existing AST profiles. Trusted producer fact delivery remains required for complete native qualification and does not block independent in-repo repairs.'
 created_at: '2026-11-02T14:11:31.913Z'
-updated_at: '2026-11-02T14:11:31.913Z'
+updated_at: '2026-11-02T14:51:21.516Z'
 created_by_session: '01a19c55-c310-7340-95ca-ecbaa3531b22'
 blast_radius:
   modules:
