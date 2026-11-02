@@ -42,9 +42,11 @@ acceptance:
       the commands succeed as printed: specs create with --mode and valid ids, claim
       ownership semantics, merge-only teardown, non-idempotent revoke
   - id: A5
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'Given the architecture and release docs, when checked against live help and workflows, then stale counts, event types, tag handling, and file citations are corrected'
+    given: 'architecture and release docs'
+    when: 'compared to live help, kernel schemas and workflow files'
+    then: >-
+      stale group counts, evidence types, command leaves, tag handling, file
+      citations and statuses are corrected
   - id: A6
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
