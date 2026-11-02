@@ -172,6 +172,9 @@ function qualificationFixture({ buildBody, coreBody } = {}) {
     'scripts/run-staged-checks.cjs': '// authored repository runner\n',
     '.husky/pre-commit': '#!/bin/sh\nexit 0\n',
     '.husky/lib/fixture.sh': '# authored hook dependency\n',
+    '.gitignore': 'node_modules/\n',
+    '.lintstagedrc.json': '{"*.md":"prettier --write"}\n',
+    '.prettierignore': 'node_modules/\n',
   })) {
     const destination = path.join(repoRoot, file);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
@@ -1798,6 +1801,9 @@ describe('ordinary runner input and build binding mechanics', () => {
       'scripts/run-staged-checks.cjs',
       '.husky/pre-commit',
       '.husky/lib/fixture.sh',
+      '.gitignore',
+      '.lintstagedrc.json',
+      '.prettierignore',
     ]) {
       const physical = path.join(fixture.repoRoot, relative);
       const bytes = fs.readFileSync(physical);
@@ -1858,26 +1864,29 @@ describe('ordinary runner input and build binding mechanics', () => {
     ).toBe(result.receipt.runId);
   });
 
-  test.each(['scripts/run-staged-checks.cjs', '.husky/pre-commit'])(
-    'repository input %s cannot drift during an otherwise passing child',
-    (relative) => {
-      const fixture = qualificationFixture({
-        coreBody: fixtureCoreBody({
-          afterSandbox: `fs.appendFileSync(path.join(context.repoRoot, ${JSON.stringify(relative)}), '// changed during child\\n');`,
-        }),
-      });
-      const result = runQualificationFixture(fixture);
-      expect(result.error).toBeUndefined();
-      expect(result.status).toBe(1);
-      expect(result.stdout).toContain('fixture Stryker child completed with exit zero');
-      expect(result.receipt.stryker.status).toBe(0);
-      expect(result.receipt.status).toBe('failed');
-      expect(result.receipt.error).toContain('persistent authored/input drift: ../../' + relative);
-    }
-  );
+  test.each([
+    'scripts/run-staged-checks.cjs',
+    '.husky/pre-commit',
+    '.gitignore',
+    '.lintstagedrc.json',
+    '.prettierignore',
+  ])('repository input %s cannot drift during an otherwise passing child', (relative) => {
+    const fixture = qualificationFixture({
+      coreBody: fixtureCoreBody({
+        afterSandbox: `fs.appendFileSync(path.join(context.repoRoot, ${JSON.stringify(relative)}), '// changed during child\\n');`,
+      }),
+    });
+    const result = runQualificationFixture(fixture);
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('fixture Stryker child completed with exit zero');
+    expect(result.receipt.stryker.status).toBe(0);
+    expect(result.receipt.status).toBe('failed');
+    expect(result.receipt.error).toContain('persistent authored/input drift: ../../' + relative);
+  });
 
-  test.each(['scripts', '.husky'])(
-    'missing repository input root %s refuses before building',
+  test.each(['scripts', '.husky', '.gitignore', '.lintstagedrc.json', '.prettierignore'])(
+    'missing repository input %s refuses before building',
     (relative) => {
       const fixture = qualificationFixture({ coreBody: fixtureCoreBody() });
       const missing = path.join(fixture.repoRoot, relative);
@@ -1910,6 +1919,27 @@ describe('ordinary runner input and build binding mechanics', () => {
       expect(result.receipt.build).toBeUndefined();
       expect(result.receipt.stryker).toBeUndefined();
       expect(fs.readFileSync(sentinel, 'utf8')).toBe('foreign bytes\n');
+      expect(fs.lstatSync(linked).isSymbolicLink()).toBe(true);
+    }
+  );
+
+  test.each(['.gitignore', '.lintstagedrc.json', '.prettierignore'])(
+    'symlinked repository configuration %s refuses and preserves its target',
+    (relative) => {
+      const fixture = qualificationFixture({ coreBody: fixtureCoreBody() });
+      const foreign = fs.realpathSync(makeTempDir('caws-root-config-foreign-'));
+      const sentinel = path.join(foreign, 'config');
+      fs.writeFileSync(sentinel, 'foreign configuration bytes\n');
+      const linked = path.join(fixture.repoRoot, relative);
+      fs.unlinkSync(linked);
+      fs.symlinkSync(sentinel, linked);
+      const result = runQualificationFixture(fixture);
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      expect(result.receipt.error).toContain('nonregular input: ' + linked);
+      expect(result.receipt.build).toBeUndefined();
+      expect(result.receipt.stryker).toBeUndefined();
+      expect(fs.readFileSync(sentinel, 'utf8')).toBe('foreign configuration bytes\n');
       expect(fs.lstatSync(linked).isSymbolicLink()).toBe(true);
     }
   );

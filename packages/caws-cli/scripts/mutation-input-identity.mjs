@@ -237,7 +237,14 @@ export function captureMutationInputs({ packageRoot, policy, surfaceId }) {
     if (entry === '.license-transport.json' || entry === '.license-transport.lock') continue;
     if (/\.(?:json|js|cjs|mjs)$/.test(entry) || entry === '.npmrc') add(path.join(root, entry));
   }
-  for (const file of ['package.json', 'package-lock.json', 'LICENSE'])
+  for (const file of [
+    'package.json',
+    'package-lock.json',
+    'LICENSE',
+    '.gitignore',
+    '.lintstagedrc.json',
+    '.prettierignore',
+  ])
     add(path.join(repoRoot, file));
   // Selected hook contracts consume repository scripts and authored hooks
   // through Git's repository root, outside the sandbox package.
