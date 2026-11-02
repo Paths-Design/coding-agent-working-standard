@@ -33,18 +33,18 @@ teardown_file() {
 # --- install layout -----------------------------------------------------------
 
 @test "kimi pack: shim, AGENTS.md, and lib overrides install at their destPaths" {
-  [[ -x "$KIMI_SHIM" ]]
-  [[ -f "$KIMI_VENDOR_DIR/AGENTS.md" ]]
-  [[ -f "$KIMI_VENDOR_DIR/hooks/lib/emit.sh" ]]
-  [[ -f "$KIMI_VENDOR_DIR/hooks/lib/run-handlers.sh" ]]
-  [[ -f "$KIMI_VENDOR_DIR/hooks/lib/parse-input.sh" ]]
-  [[ -f "$KIMI_VENDOR_DIR/caws-hooks.toml.example" ]]
+  assert [ -x "$KIMI_SHIM" ]
+  assert [ -f "$KIMI_VENDOR_DIR/AGENTS.md" ]
+  assert [ -f "$KIMI_VENDOR_DIR/hooks/lib/emit.sh" ]
+  assert [ -f "$KIMI_VENDOR_DIR/hooks/lib/run-handlers.sh" ]
+  assert [ -f "$KIMI_VENDOR_DIR/hooks/lib/parse-input.sh" ]
+  assert [ -f "$KIMI_VENDOR_DIR/caws-hooks.toml.example" ]
 }
 
 @test "kimi pack: init without --wire-user-config does NOT write the user-level config" {
   # The install ran without the flag; no config.toml may appear under a
   # KIMI_CODE_HOME pointing at the repo (it would be the merge target).
-  [[ ! -f "$CAWS_TEST_REPO/config.toml" ]]
+  assert [ ! -f "$CAWS_TEST_REPO/config.toml" ]
 }
 
 # --- agent-surface resolution ---------------------------------------------------

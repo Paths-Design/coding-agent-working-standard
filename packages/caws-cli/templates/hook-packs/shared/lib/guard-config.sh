@@ -10,11 +10,11 @@
 #
 # Tier-2 guard configuration: the ACCESSOR half.
 #
-# `lib/guard-config.py` parses `.caws/hooks/hook-policy.json` and
+# `lib/guard-config.cjs` parses `.caws/hooks/hook-policy.json` and
 # `.caws/policy.yaml` exactly once per dispatch and prints `NAME=VALUE` lines.
 # This file exports them and hands adopting guards plain-bash readers that
-# spawn NOTHING. Four guards each shelling out would add ~124ms to every tool
-# call against a measured ~31ms per python3 start; one shared parse does not.
+# spawn NOTHING. One shared parse avoids repeating configuration work in
+# every adopting guard. Explicit custom Python parsers remain selectable.
 #
 # bash 3.2 (what macOS ships) has NO associative arrays, so the table is
 # carried as individually-named variables read back through `${!name}`
@@ -36,7 +36,7 @@ _CAWS_GUARD_CONFIG_SH_SOURCED=1
 # location. HOOKS_DIR is set by run-handlers.sh and is therefore present only
 # when a guard runs inside the chain; a guard invoked directly — by bats, by a
 # harness that calls one hook, by a human debugging — would otherwise resolve
-# "${HOOKS_DIR:-}/lib/guard-config.py" to "/lib/guard-config.py", find nothing,
+# "${HOOKS_DIR:-}/lib/guard-config.cjs" to "/lib/guard-config.cjs", find nothing,
 # and report `unavailable` while the document sat right there. That failure is
 # invisible in the chain and total outside it, which is the worst combination:
 # it looks fine wherever anyone would notice.
@@ -45,7 +45,7 @@ _CAWS_GUARD_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _CAWS_GUARD_LOWER='abcdefghijklmnopqrstuvwxyz'
 _CAWS_GUARD_UPPER='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-# `scope-guard.sh` -> `SCOPE_GUARD_SH`. MUST match mangle() in guard-config.py;
+# `scope-guard.sh` -> `SCOPE_GUARD_SH`. MUST match mangleGuardName() in guard-config-loader.ts;
 # a divergence here is silent (every lookup misses and every guard quietly
 # reverts to its shipped table), so the bats parity arm asserts both agree.
 #
@@ -80,11 +80,13 @@ caws_guard_config_load() {
 
   local project_dir="${1:-${CAWS_PROJECT_DIR:-.}}"
   local script="${CAWS_GUARD_CONFIG_PY:-}"
+  local interpreter="python3"
   if [[ -z "$script" ]]; then
-    script="${_CAWS_GUARD_CONFIG_LIB_DIR:-${HOOKS_DIR:-.}/lib}/guard-config.py"
+    script="${_CAWS_GUARD_CONFIG_LIB_DIR:-${HOOKS_DIR:-.}/lib}/guard-config.cjs"
+    interpreter="node"
   fi
 
-  if [[ ! -f "$script" ]] || ! command -v python3 >/dev/null 2>&1; then
+  if [[ ! -f "$script" ]] || ! command -v "$interpreter" >/dev/null 2>&1; then
     # Unparsed, not "empty": the distinction matters because `unparsed` must
     # not be reported to a caller as a verified-absent configuration.
     export CAWS_GUARD_CONFIG_STATUS="unavailable"
@@ -103,7 +105,7 @@ caws_guard_config_load() {
       *) continue ;;
     esac
     export "$name=$value"
-  done < <(python3 "$script" "$project_dir" 2>/dev/null)
+  done < <("$interpreter" "$script" "$project_dir" 2>/dev/null)
 
   [[ -n "${CAWS_GUARD_CONFIG_STATUS:-}" ]] || export CAWS_GUARD_CONFIG_STATUS="unavailable"
   [[ -n "${CAWS_GUARD_ZONE_COUNT:-}" ]] || export CAWS_GUARD_ZONE_COUNT=0

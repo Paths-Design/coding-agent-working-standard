@@ -1,0 +1,60 @@
+id: CAWS-NATIVE-PRODUCTION-DEPENDENCIES-001
+title: 'Remove unused interactive dependency from the complete native CLI execution image'
+mode: refactor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded unused dependency removal landed with exact target equality, detached20-package maintained image validation, guarded CLI effects,108focused checks and actual positive/hostile pair18. Full runtime cutover remains parent-owned and unaccepted.'
+created_at: '2026-10-24T23:46:44.935Z'
+updated_at: '2026-10-25T00:18:14.012Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'CLI production dependency graph and native image packaging'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/package.json'
+    - 'package-lock.json'
+    - 'packages/caws-cli/jest.config.js'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Preserve all CLI command behavior, selected override semantics, complete declared dependency and license validation, every generation content hash and the original runtime deadline.'
+acceptance:
+  - id: A1
+    given: 'the declared production dependency graph and actual code consumers'
+    when: 'the unused interactive dependency is removed through manifest and lock'
+    then: 'no remaining declared consumer requires it and no unrelated dependency version is changed'
+  - id: A2
+    given: 'a detached packed production installation with no ambient module fallback'
+    when: 'maintained CLI commands and native image preparation execute'
+    then: 'required CLI behavior remains available and the complete validated image excludes the removed dependency closure'
+  - id: A3
+    given: 'the committed candidate and raw checks'
+    when: 'independent review and governed landing finish'
+    then: 'target source matches the checked candidate while installed deadline full parity and cutover remain parent obligations'
+observability:
+  - 'Retain raw package installation, command outputs, dependency inventory, image preparation and source pins outside source control.'
+rollback:
+  - 'Revert the bounded manifest lock and configuration change through ordinary governed history.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Source/import audit and npm-generated lock inspected at a6ec3b05. External artifacts /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/production-dependency-reduction/{commands.json,verification.json,retained-edge-verification.json}: 43 removed records, 776 retained identities unchanged, 1584 retained edges unchanged, only dev flags reclassified; no actual first-party Inquirer consumer. Independent committed review grounded against same source. Commit verification establishes existence, not execution."
+    recorded_at: "2026-10-25T00:13:33.460Z"
+    commit_sha: a6ec3b05a84eb69bff0226ae58f4e114751628c1
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "External root /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252: production-dependency-checks/package-stages-03.json all10stages exit0; maintained API complete 2047file prefix,20third-party packages,no omissions; qualification30equal comparisons/31exits0/233rehashes at production-dependency-qualification/dependency-a6ec3b05-03/root-readback.json. isolated-smoke-state-03 retains13commands and10CJSresolution traces,8316resolutions/412files entirely insideprefix, removedmodules absent; ownlease alone stopped,peerbytes identical,read-only governance unchanged. resolution-negative-01 refuses externalmodule beforeexecution. focused-tests-02 exit0,108checks/4suites,137.949s; original120s aggregate timeout and recipe01mode rejection retained. Compiler SDK mutable; no nativeStop/harness/cutover claim from these checks."
+    recorded_at: "2026-10-25T00:13:43.825Z"
+    exit_code: 0
+    commit_sha: a6ec3b05a84eb69bff0226ae58f4e114751628c1
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Committed candidate a6ec3b05 independently reviewed against actual consumer/lock coordinates and raw checks; ledger4518a423 preserves failed attempts and bounded pair18. Governed merge44b5d017 landed. git diff --exit-code 4518a423 main -- package-lock.json packages/caws-cli/package.json packages/caws-cli/jest.config.js docs/internal/caws-runtime-modernization.md exited0; git merge-base --is-ancestor 4518a423 main exited0. Four source blobs match checked candidate. Pair18 actual positive15563ms and hostile9993ms retained externally; full typed route, replay, usable rollback, harness delivery, residency, Python retirement and machine cutover remain root-owned parent obligations; parent0/8 unchanged."
+    recorded_at: "2026-10-25T00:18:12.594Z"
+    exit_code: 0
+    commit_sha: "44b5d017cf8f7c5866fe1b999148fee4c25553f0"

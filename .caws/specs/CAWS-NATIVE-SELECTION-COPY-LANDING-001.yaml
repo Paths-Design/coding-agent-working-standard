@@ -1,0 +1,69 @@
+id: CAWS-NATIVE-SELECTION-COPY-LANDING-001
+title: 'Land verification-only selection discovery without discarded manifest copies'
+mode: refactor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded verification-only selection discovery landed with all four ACs inspected and dual-read-back. Exact six target blobs match694f6212. Does not close parent failed installed deadline, full parity, or machine cutover.'
+created_at: '2026-10-24T22:49:46.033Z'
+updated_at: '2026-10-24T23:17:09.115Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Runtime selection observation and verification-only IO'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/machine-runtime-state.ts'
+    - 'packages/caws-cli/src/init/selection-read-io.ts'
+    - 'packages/caws-cli/src/runtime/selection-observation.ts'
+    - 'packages/caws-cli/src/runtime/selection.ts'
+    - 'packages/caws-cli/tests/runtime/selection-observation.test.js'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Preserve all captured dependency identity checks, verifier and snapshot separation, public mutable copy ownership, and the original invocation deadline.'
+acceptance:
+  - id: A1
+    given: 'repeated discovery over a verified runtime'
+    when: 'selection retries missing observations'
+    then: 'verification-only calls avoid discarded manifest copies with identical selection and ordered observations'
+  - id: A2
+    given: 'separate verifier identities snapshots roots digests or changed dependencies'
+    when: 'verification is reused'
+    then: 'caches remain separate and changed or incomplete observations are refused'
+  - id: A3
+    given: 'callers requesting manifests and legacy custom IO'
+    when: 'returned values are mutated or verification executes'
+    then: 'public results remain independent and canonical verifier callback and legacy fallback semantics remain intact'
+  - id: A4
+    given: 'the committed candidate and retained raw checks'
+    when: 'source is independently reviewed and landed'
+    then: 'target source matches the candidate and failed installed deadline full parity and machine cutover remain explicit parent obligations'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected publication-integration/selection-copy-baseline-01 raw Jest exit1 specifically45/54 copies; selection-stop-build-01 CLI build0; selection-copy-mutable-02 raw102tests0 and45/54 to0 copies with identical67/56 ordered observations. External root /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/. Landing SUT/test bytes match consumed pins. Commit verification only; actual logs inspected separately. No installed latency claim."
+    recorded_at: "2026-10-24T22:58:36.145Z"
+    exit_code: 0
+    commit_sha: "694f6212806a6bfa7832cc934c89c8d81a3c783e"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected selection-copy-mutable-02 execution.json/stdout.log/stderr.log under /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration:102tests0, unchanged source/dist pins, no timeout, empty final group. Source verifiedRuntime retains exact observation identity, nested collection, verifier/home/digest/snapshot separation; changed-file and malformed native controls pass. Commit existence verification is distinct from inspected execution."
+    recorded_at: "2026-10-24T22:58:37.366Z"
+    exit_code: 0
+    commit_sha: "694f6212806a6bfa7832cc934c89c8d81a3c783e"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "selection-copy-mutable-02 raw102tests0: returned.member assignment succeeds, next reference differs and original contents remain; legacy custom IO gets canonical callback and live changed-file verification refuses. Source helper fallback and public spread inspected. Artifacts /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/selection-copy-mutable-02. Commit verification only; raw check readback supplies test observation."
+    recorded_at: "2026-10-24T22:58:38.714Z"
+    exit_code: 0
+    commit_sha: "694f6212806a6bfa7832cc934c89c8d81a3c783e"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Merge 78a571c54d1286c41b2cd27d5aae01a0baee6c05 lands reviewed candidate694f6212. git diff --exit-code candidate main over all six owned paths and merge-base --is-ancestor both exit0, independently inspected. Review found mutable-copy oracle gap repaired by694f6212; raw selection-copy-mutable-02 shows102tests0. E383 failed installed deadline, full parity and machine cutover remain root-owned parent obligations. Commit verification is not test execution."
+    recorded_at: "2026-10-24T23:16:50.403Z"
+    exit_code: 0
+    commit_sha: "78a571c54d1286c41b2cd27d5aae01a0baee6c05"

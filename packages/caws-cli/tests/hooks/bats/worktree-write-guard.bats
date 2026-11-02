@@ -53,7 +53,7 @@ GUARD() { echo "$CAWS_TEST_HOOKS_DIR/worktree-write-guard.sh"; }
 # from real multi-worktree git setup.
 
 _run_guard_with_contention() {
-  local rel="$1" json="$2"
+  local rel="$1" json="$2" cli_status="${3:-0}"
   local stubdir
   stubdir="$(mktemp -d "${TMPDIR:-/tmp}/caws-wgstub-XXXXXX")"
   # A registry with one active worktree on the current branch so WT_COUNT>0 and
@@ -64,7 +64,7 @@ _run_guard_with_contention() {
     "$CAWS_TEST_REPO" > "$CAWS_TEST_REPO/.caws/worktrees.json"
   cat > "$stubdir/caws" <<STUB
 #!/usr/bin/env bash
-if [[ "\$1" == "scope" && "\$2" == "contention" ]]; then printf '%s' '${json}'; exit 0; fi
+if [[ "\$1" == "scope" && "\$2" == "contention" ]]; then printf '%s' '${json}'; exit ${cli_status}; fi
 exit 0
 STUB
   chmod +x "$stubdir/caws"
@@ -125,4 +125,39 @@ STUB
   run_guard_missing_lib worktree-write-guard.sh agent-surface.sh "$(hook_envelope Write 'packages/owned/x.ts' '')"
   refute [ "$status" -eq 0 ]
   assert_output --partial 'agent-surface.sh'
+}
+
+
+# Command errors must reach the same path policy as a successful unknown
+# observation. A JSON-looking failure cannot assert a clear claim set.
+@test "wt-write-guard: failed or invalid contention retains non-allowlisted approval protection" {
+  local cli_status json
+  for cli_status in 1 2 invalid baseline; do
+    json='{"status":"clear","claimants":[]}'
+    case "$cli_status" in
+      invalid) json='not-json'; cli_status=0 ;;
+      baseline) json='{"status":"undetermined","reason":"missing-specId","worktreeName":"wt-x"}'; cli_status=0 ;;
+    esac
+    _run_guard_with_contention "tests/owned.ts" "$json" "$cli_status"
+    assert_equal "$status" 2
+    assert_output --partial "Scope contention undetermined"
+    assert_output --partial "ask-incapable harness"
+    refute_output --partial "No active worktree's scope.in claims this file"
+    refute_output --partial "claimed by an active worktree"
+  done
+}
+
+@test "wt-write-guard: failed or invalid contention preserves unknown allowlist availability" {
+  local cli_status json
+  for cli_status in 1 2 invalid baseline; do
+    json='{"status":"clear","claimants":[]}'
+    case "$cli_status" in
+      invalid) json='not-json'; cli_status=0 ;;
+      baseline) json='{"status":"undetermined","reason":"missing-specId","worktreeName":"wt-x"}'; cli_status=0 ;;
+    esac
+    _run_guard_with_contention "docs/owned.md" "$json" "$cli_status"
+    assert_equal "$status" 0
+    refute_output --partial "claimed by an active worktree"
+    refute_output --partial "BLOCKED"
+  done
 }

@@ -169,7 +169,11 @@ function getPayloadValidator(eventType: string): ValidateFunction | null {
   if (payloadValidators.has(eventType)) {
     return payloadValidators.get(eventType) ?? null;
   }
-  const schema = PAYLOAD_SCHEMAS[eventType as EventType];
+  // Read-side input can name inherited Object keys even after envelope errors.
+  // Only this release's own declared schemas may reach the code generator.
+  const schema = Object.hasOwn(PAYLOAD_SCHEMAS, eventType)
+    ? PAYLOAD_SCHEMAS[eventType as EventType]
+    : undefined;
   if (schema === undefined) {
     payloadValidators.set(eventType, null);
     return null;

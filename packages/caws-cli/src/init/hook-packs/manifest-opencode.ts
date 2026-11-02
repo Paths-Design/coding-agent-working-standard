@@ -71,7 +71,11 @@ import type { HookPackV1 } from './types';
 // pack now asking when the cwd is unknown, and opencode having no ask, every
 // relative write would have been refused. cwd is ctx.directory (or the bash
 // call's own workdir), never the git root.
-export const OPENCODE_PACK_VERSION = 8;
+// Version 9: lifecycle events retain their own session identity; plugin instances
+// isolate project routing and pending context.
+// Version 10: explicit machine-bound native Stop producer preserves the original
+// plugin directory; other callbacks retain their project dispatchers.
+export const OPENCODE_PACK_VERSION = 10;
 
 export const OPENCODE_PACK: HookPackV1 = {
   id: 'opencode',

@@ -21,8 +21,8 @@ setup_file() {
   cat > "$CAWS_JSYAML_BLOCKER" <<'JS'
 const Module = require('module');
 const _orig = Module._load;
-Module._load = function (request) {
-  if (request === 'js-yaml') {
+Module._load = function (request, parent) {
+  if (request === 'js-yaml' && parent?.filename?.endsWith('/worktree-claim-oracle.cjs')) {
     const e = new Error("Cannot find module 'js-yaml'");
     e.code = 'MODULE_NOT_FOUND';
     throw e;
@@ -81,6 +81,7 @@ _run_bwg_nojsyaml() {
     HOOK_CWD="$CAWS_TEST_REPO" \
     HOOK_SESSION_ID="$sid" \
     NODE_OPTIONS="--require $CAWS_JSYAML_BLOCKER" \
+    NODE_PATH="$_REPO_NM" \
     CAWS_GUARD_NO_ASK=0 \
     bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/bash-write-guard.sh'"
 }
@@ -98,6 +99,18 @@ _run_bwg_nojsyaml() {
 }
 
 # --- A3: foreign worktree-payload mutation, js-yaml absent -> STILL hard-blocks ---
+@test "bash-write-guard: the canonical claim blocks before the oracle-only YAML fault" {
+  _seed_active_worktree
+  local envelope
+  envelope="$(jq -nc --arg d "$CAWS_TEST_REPO" '{tool_name:"Bash",tool_input:{command:"touch packages/seed/src/a.ts"},session_id:"my-session",cwd:$d}')"
+  run env CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$CAWS_TEST_REPO" NODE_PATH="$_REPO_NM" \
+    bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/bash-write-guard.sh'"
+  assert_failure
+  assert_output --partial 'claimed by an active worktree'
+  refute_output --partial 'SKIPPED'
+}
+
 @test "bash-write-guard: a foreign worktree-payload mutation still HARD-BLOCKS when js-yaml is absent (A3)" {
   _seed_active_worktree "foreign-session"
   # Mutating another session's worktree payload — the yaml-free isolation block.

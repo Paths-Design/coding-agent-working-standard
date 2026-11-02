@@ -1,14 +1,13 @@
 import { validateSystemPolicy } from '../init/system-project-policy';
-import { readSystemSurfaceSettings, nativeConfigPath } from '../init/system-surface-settings';
-import type { NativeConfiguration } from '../init/native-hook-identification';
-import type { SystemProjectSettings } from '../init/system-runtime';
+import { readSystemSurfaceSettings } from '../init/system-surface-settings';
+import { systemSurfaceEnabled, type SystemProjectSettings } from '../init/system-runtime';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import { readPointer, verifyRuntime } from '../init/machine-runtime-state';
 import { assertMachinePath } from '../init/machine-paths';
-import { configHasCawsHooks, systemCommand } from '../init/native-hook-identification';
+import { configHasCawsProducerHooks } from '../init/native-hook-identification';
 import type { SystemRuntimeObservation } from '../kernel/doctor/types';
 
 /** Observe disk configuration and verified runtime bytes without loading hooks,
@@ -38,49 +37,18 @@ export function observeSystemRuntime(repo: string): SystemRuntimeObservation | u
     ]) {
       const settings = readSystemSurfaceSettings(home, surface as string);
       const nativeName = surface === 'codex' ? 'hooks.json' : 'settings.json';
-      if (configHasCawsHooks(read(repo, `${vendor}/${nativeName}`)))
+      if (configHasCawsProducerHooks(read(repo, `${vendor}/${nativeName}`), surface as string))
         legacySurfaces.push(surface as string);
       if (settings === undefined) continue;
       if (settings?.version !== 1 || typeof settings.enabled !== 'boolean')
         throw new Error(`Malformed system surface settings: ${surface}`);
       if (!settings.enabled) continue;
       surfaces.push(surface as string);
-      const nativePath = nativeConfigPath(
-        os.homedir(),
-        vendor as string,
-        nativeName,
-        settings.native_config_target
-      );
-      const native = read<NativeConfiguration>(
-        os.homedir(),
-        path.relative(os.homedir(), nativePath)
-      );
-      for (const [event, name] of Object.entries({
-        pre_tool_use: 'PreToolUse',
-        post_tool_use: 'PostToolUse',
-        session_start: 'SessionStart',
-        stop: 'Stop',
-        pre_compact: 'PreCompact',
-        session_end: 'SessionEnd',
-      })) {
-        const groups = native?.hooks?.[name];
-        if (
-          !Array.isArray(groups) ||
-          !groups.some(
-            (group) =>
-              group.enabled !== false &&
-              Array.isArray(group.hooks) &&
-              group.hooks.some(
-                (hook) =>
-                  hook.enabled !== false &&
-                  hook.command === systemCommand(home, surface as string, event)
-              )
-          )
-        )
-          throw new Error(
-            `System native registration missing or customized for ${surface}/${name}`
-          );
-      }
+      // Observe the same effective registration that init/configure qualifies.
+      // Command presence alone misses conditional or incomplete coverage and
+      // mistakes an explicitly selected native transport for legacy drift.
+      if (!systemSurfaceEnabled(surface as string, home))
+        throw new Error(`System surface settings changed during observation: ${surface}`);
       const selected = project?.surfaces[surface as string];
       if (!selected && fs.existsSync(path.join(repo, '.caws/hooks')))
         throw new Error(`Project requires one-time system migration for ${surface}`);

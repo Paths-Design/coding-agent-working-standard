@@ -1,0 +1,221 @@
+id: CAWS-NATIVE-FILE-TOOLS-001
+title: 'Carry authentic Codex file tools through typed stock pre-write enforcement'
+mode: refactor
+lifecycle_state: active
+worktree: native-file-tools
+created_at: '2026-10-29T23:24:56.819Z'
+updated_at: '2026-10-30T19:24:59.187Z'
+created_by_session: '01a1861e-58cc-7392-ac55-1ff3a6051998'
+blast_radius:
+  modules:
+    - 'Codex original file-tool normalization and complete stock pre-write runtime'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/engine.ts'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/runtime/session-cache-admission.ts'
+    - 'packages/caws-cli/src/runtime/codex-file-tools.ts'
+    - 'packages/caws-cli/src/runtime/file-tool-handlers.ts'
+    - 'packages/caws-cli/tests/runtime/file-tools.test.js'
+    - 'packages/caws-cli/tests/runtime/engine-routing.test.js'
+    - 'packages/caws-cli/tests/runtime/engine-core.test.js'
+    - 'packages/caws-cli/tests/runtime/stock-handlers.test.js'
+    - 'packages/caws-cli/tests/runtime/session-cache-admission.test.js'
+    - 'packages/caws-cli/mutation-policy.json'
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/src/runtime/engine-entry.ts
+    - packages/caws-cli/src/runtime/file-tool-context.ts
+    - packages/caws-cli/tests/runtime/file-tool-context.test.js
+    - packages/caws-native/src/main.rs
+    - packages/caws-native/src/protocol.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/src/context_git.rs
+    - packages/caws-native/src/context_git/file_tools.rs
+    - packages/caws-native/src/context_git/stop.rs
+    - packages/caws-native/src/guard_strikes.rs
+    - packages/caws-native/src/guard_strikes/tests.rs
+    - packages/caws-native/src/lib.rs
+    - packages/caws-native/src/guard_strikes_wire.rs
+    - packages/caws-native/src/cli.rs
+    - packages/caws-cli/src/runtime/guard-strikes.ts
+    - packages/caws-cli/tests/runtime/guard-strikes.test.js
+    - packages/caws-cli/templates/hook-packs/shared/guard-strikes.sh
+    - packages/caws-cli/templates/hook-packs/shared/reset-strikes.sh
+    - packages/caws-cli/scripts/prepare-test-prerequisites.js
+    - packages/caws-cli/scripts/lib/native-test-prerequisite-receipt.cjs
+    - packages/caws-cli/tests/helpers/load-native-test-prerequisites.js
+    - packages/caws-cli/jest.config.js
+    - packages/caws-cli/tests/shell/prepare-test-prerequisites.test.js
+    - packages/caws-cli/tests/shell/native-test-prerequisite-receipt.test.js
+    - packages/caws-cli/tests/ci/native-test-preparation.test.js
+    - packages/caws-cli/src/runtime/shortcut-language.ts
+    - packages/caws-cli/tests/runtime/shortcut-language.test.js
+    - packages/caws-native/tests/stock_stop_admission.rs
+    - packages/caws-cli/templates/hook-packs/shared/shortcut-language-check.sh
+  out: []
+  support:
+    - docs/internal/caws-runtime-modernization.md
+    - .github/workflows/release-qualification.yml
+    - turbo.json
+    - .github/workflows/mutation.yml
+    - README.md
+    - docs/architecture/hook-pack-shared-core.md
+    - docs/guides/command-analysis.md
+    - docs/guides/hook-packs.md
+    - packages/caws-cli/package.json
+    - packages/caws-cli/scripts/mutation-input-identity.mjs
+    - packages/caws-cli/scripts/qualify-stop-profile.mjs
+    - packages/caws-cli/scripts/stryker-config.cjs
+    - packages/caws-cli/src/execution/authority.ts
+    - packages/caws-cli/src/execution/authorizer-main.ts
+    - packages/caws-cli/src/execution/authorizer.ts
+    - packages/caws-cli/src/execution/cargo-project.ts
+    - packages/caws-cli/src/execution/fence.ts
+    - packages/caws-cli/src/execution/lifecycle-main.ts
+    - packages/caws-cli/src/execution/lifecycle.ts
+    - packages/caws-cli/src/execution/npm-project.ts
+    - packages/caws-cli/src/execution/prepared-schema.ts
+    - packages/caws-cli/src/execution/prepared.ts
+    - packages/caws-cli/src/execution/program-discovery-main.ts
+    - packages/caws-cli/src/execution/program-discovery.ts
+    - packages/caws-cli/src/execution/protocol.ts
+    - packages/caws-cli/src/execution/writer-main.ts
+    - packages/caws-cli/src/execution/writer.ts
+    - packages/caws-cli/src/init/machine-runtime-state.ts
+    - packages/caws-cli/src/init/native-hook-identification.ts
+    - packages/caws-cli/src/init/native-runtime-entry.ts
+    - packages/caws-cli/src/init/system-runtime.ts
+    - packages/caws-cli/src/runtime/cli-identity-loader.ts
+    - packages/caws-cli/src/runtime/describe-entry.ts
+    - packages/caws-cli/src/shell/analysis/load-parser.d.ts
+    - packages/caws-cli/src/shell/analysis/parser-types.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/bridge-store.ts
+    - packages/caws-cli/src/store/lifecycle-lock.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/tooling/native-qualification-prepare-entry.ts
+    - packages/caws-cli/src/tooling/native-qualification-prepare.ts
+    - packages/caws-cli/src/tooling/native-sqlite-build.ts
+    - packages/caws-cli/stryker.analysis.conf.js
+    - packages/caws-cli/stryker.execution.conf.js
+    - packages/caws-cli/templates/hook-packs/runtime/dispatch.sh
+    - packages/caws-cli/templates/hook-packs/runtime/handler-env.sh
+    - packages/caws-cli/tests/adapter/machine-runtime.test.js
+    - packages/caws-cli/tests/adapter/native-entry-registration.test.js
+    - packages/caws-cli/tests/adapter/native-runtime-entry.test.js
+    - packages/caws-cli/tests/adapter/opencode-project-registration.test.js
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-cli/tests/execution/authority-fence.test.js
+    - packages/caws-cli/tests/execution/authority-fixture.js
+    - packages/caws-cli/tests/execution/authority.test.js
+    - packages/caws-cli/tests/execution/authorizer-input.test.js
+    - packages/caws-cli/tests/execution/authorizer.test.js
+    - packages/caws-cli/tests/execution/cargo-project.test.js
+    - packages/caws-cli/tests/execution/child-coverage-integration.test.js
+    - packages/caws-cli/tests/execution/child-coverage-preload.cjs
+    - packages/caws-cli/tests/execution/child-coverage.cjs
+    - packages/caws-cli/tests/execution/child-coverage.test.js
+    - packages/caws-cli/tests/execution/fence.test.js
+    - packages/caws-cli/tests/execution/lifecycle.test.js
+    - packages/caws-cli/tests/execution/npm-project.test.js
+    - packages/caws-cli/tests/execution/prepared-schema.test.js
+    - packages/caws-cli/tests/execution/program-discovery.test.js
+    - packages/caws-cli/tests/execution/protocol.test.js
+    - packages/caws-cli/tests/execution/writer.test.js
+    - packages/caws-cli/tests/runtime/cli-identity-loader.test.js
+    - packages/caws-cli/tests/runtime/describe-entry.test.js
+    - packages/caws-cli/tests/shell/caws-read-metadata.test.js
+    - packages/caws-cli/tests/shell/command-analysis.test.js
+    - packages/caws-cli/tests/shell/specs-evidence-verify.test.js
+    - packages/caws-cli/tests/tooling/native-qualification-prepare.test.js
+    - packages/caws-cli/tests/tooling/native-sqlite-build.test.js
+    - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
+    - packages/caws-cli/tsconfig.vnext.json
+    - packages/caws-native/src/bin/caws-execution.rs
+    - packages/caws-native/src/bin/caws-prepare-source.rs
+    - packages/caws-native/src/context_git/original_project.rs
+    - packages/caws-native/src/context_git/render.rs
+    - packages/caws-native/src/engine_custody.rs
+    - packages/caws-native/src/engine_custody/tests.rs
+    - packages/caws-native/src/engine_custody/worker.rs
+    - packages/caws-native/src/engine_custody/worker/tests.rs
+    - packages/caws-native/src/execution_authorizer_wire.rs
+    - packages/caws-native/src/execution_carrier.rs
+    - packages/caws-native/src/execution_child.rs
+    - packages/caws-native/src/execution_control.rs
+    - packages/caws-native/src/execution_fd_transport.rs
+    - packages/caws-native/src/execution_fence.rs
+    - packages/caws-native/src/execution_host.rs
+    - packages/caws-native/src/execution_ingress.rs
+    - packages/caws-native/src/execution_owner.rs
+    - packages/caws-native/src/execution_prepare.rs
+    - packages/caws-native/src/execution_prepared.rs
+    - packages/caws-native/src/execution_private_roots.rs
+    - packages/caws-native/src/execution_server.rs
+    - packages/caws-native/src/installed_compatibility.rs
+    - packages/caws-native/src/installed_entry.rs
+    - packages/caws-native/src/installed_generation.rs
+    - packages/caws-native/src/monotonic_deadline.rs
+    - packages/caws-native/src/native_generation.rs
+    - packages/caws-native/src/preparation_parent.rs
+    - packages/caws-native/src/process_effect.rs
+    - packages/caws-native/src/render_context.rs
+    - packages/caws-native/src/render_observation.rs
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/sqlite_build_identity.rs
+    - packages/caws-native/src/stop_budget.rs
+    - packages/caws-native/src/stop_git.rs
+    - packages/caws-native/tests/engine_custody.rs
+    - packages/caws-native/tests/execution_server.rs
+    - packages/caws-native/tests/installed_compatibility.rs
+    - packages/caws-native/tests/installed_deadline.rs
+    - packages/caws-native/tests/installed_entry.rs
+    - packages/caws-native/tests/invoke.rs
+    - packages/caws-native/tests/preparation_parent.rs
+    - packages/caws-native/tests/sqlite_identity.rs
+    - scripts/install-cli-snapshot.mjs
+    - scripts/install-cli-snapshot.test.mjs
+    - AGENTS.md
+invariants:
+  - 'Preserve exact original input and every ordered Add Update Delete Move target; malformed inventories refuse before target effects'
+  - 'Preserve selected guard order and owner scope latch progressive-strike reprieve and secret-scan semantics; legacy and custom routes retain their complete compatibility path before effects'
+  - 'No source test or runtime guard bypass; final joined image and Python retirement remain parent obligations'
+acceptance:
+  - id: A1
+    given: 'raw apply_patch and direct Write Edit inputs including the retained byte-pinned564 request'
+    when: 'typed normalization runs'
+    then: 'exact ordered complete source and destination inventory and identities are preserved while malformed ambiguous and authored fake metadata controls refuse correctly'
+  - id: A2
+    given: >-
+      the exact complete stock eleven-handler Codex pre-write profile and actual
+      policy ownership scope latch secret and shortcut state
+    when: 'the real typed engine and authenticated cache prefix admit or refuse file edits'
+    then: >-
+      the complete selected eleven-handler behavior and effect order are preserved
+      including original direct-Write shortcut classification progressive counters
+      and hostile controls with no skipped guard
+  - id: A3
+    given: 'unsupported custom selected libraries or handler profiles'
+    when: 'the request enters the runtime'
+    then: 'complete compatibility selection occurs before heartbeat or other prefix effects and cannot masquerade as typed retirement'
+  - id: A4
+    given: 'a source-pinned private installed joined image'
+    when: 'the authentic native file tool repeats the original patch and attempts a multi-target protected edit'
+    then: 'the intended source edit completes and protected refusal precedes every target write with actual callback and host effect evidence'
+observability:
+  - 'Retain raw native callbacks input hashes selection and terminal journals actual host file_change and before-after target state; tests alone do not establish consumer execution'
+rollback:
+  - 'Use normal governed source history and preserve compatibility registration; never change the selected global runtime for this development slice'
+non_functional: {}
+contracts:
+  - name: 'codex-original-file-tool'
+    type: behavior
+evidence:
+  - criterion_id: A4
+    status: unchecked
+    evidence_ref: "Pinned component source88170c904 normally joins67410254c with executionada60d4e through mergecaa49db02. Actual production CLI build and package-config lint exit0;107-path gates pass. Normal pinned Rust1.90 locked offline jobs1 feature-off preparation compiles the combined Native binary and libtest, and fresh receipt admits65 lifecycle and artifact checks in251.103seconds. The earlier stale-receipt attempt refused before tests. Genuine same-SID dual-target failure used runtime523b2306 without the new parser or handlers, not674; callback raw1243bytes SHA52d74d52c0a9a7fd0dd4feaf287ccfbfe8c4fb42b29c30cdfb5fe893f857af9c. Failed fixture scope.out is empty, so a first ordinary scope miss is progressive, not a hard exclusion. Original failed criterion, governance and dirty effects remain preserved. Execution owner accepted exact88170 for one matched private package and new explicitly excluded control; build and actual callback qualification remain pending. No final-image original564, before-every-target refusal, repeated benign workflow, Python retirement, source landing or global adoption is claimed."
+    recorded_at: "2026-10-30T16:16:48.498Z"
+    commit_sha: "88170c904f2ea14eebaad017ba0249af94537505"

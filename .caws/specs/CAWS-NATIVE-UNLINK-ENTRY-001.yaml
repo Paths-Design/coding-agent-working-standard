@@ -1,0 +1,58 @@
+id: CAWS-NATIVE-UNLINK-ENTRY-001
+title: 'Preserve final symlink deletion entry ownership'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Owned seven-path deletion-entry/ownership repair landed through Source normal merge f989bde25; canonical source matches verified9413 outside eight governance YAMLs. A1/A2/A3 pass records14261/14265/14266 exact spec/event dual-read; current168Jest/197Bats and ordinary packaged check discharge integrated observed failures while retained8a failure remains audit evidence. Independent committed and changed-question review grounded on source/tests. Root doctor0E5W8I and original owned seven-path gates fivePASS; physical original9ac and Source9413 raw proof preserved by untrack. Scope is final-entry versus referent ownership and failed-transport/registry holds. Installed43 remains unchanged; original refused publication unlink never retried; native producer/finalexecution, Parent full installed scenario/replay/rollback/no-Python/fair workload and machine cutover remain unfinished.'
+created_at: '2026-10-26T15:18:00.132Z'
+updated_at: '2026-10-26T21:47:19.821Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Existing Bash mutation operand and ownership consumer'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh'
+    - 'packages/caws-cli/tests/hooks/bash-write-guard-analysis.test.js'
+    - 'packages/caws-cli/tests/hooks/pytest/test_bash_mutation_boundary.py'
+    - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
+    - packages/caws-cli/tests/hooks/worktree-claim-oracle.test.js
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+  out: []
+invariants:
+  - 'Only statically recognized rm operands gain deletion-entry semantics for a literal final symlink; referent writes and all unsupported or unresolved cases keep existing protective decisions'
+  - 'Resolve physical parents and retain independent per-operand roles, cross-repository and canonical or foreign claims; no generic realpath relaxation, broad utility admission or installed guard bypass'
+acceptance:
+  - id: A1
+    given: 'a statically recognized rm operand naming a final symlink in an owned physical parent'
+    when: 'the existing mutation consumer adjudicates the effect'
+    then: 'it admits only the owned deletion entry and preserves referent bytes while raw candidate compatibility and per-effect role transport remain exact'
+  - id: A2
+    given: 'canonical or foreign entries, aliased ancestors, broken links, ambiguous endings, mixed rm and referent writes, or malformed effect transport'
+    when: 'the existing guard and actual ownership oracle evaluate the command'
+    then: 'hostile ownership and referent effects refuse without new admission while supported ordinary deletion decisions remain unchanged'
+  - id: A3
+    given: 'the committed reviewed candidate isolated from the active frozen guard run'
+    when: 'focused existing producer and copied-hook consumer checks run with matching analyzer and real oracle'
+    then: 'semantic positive and hostile controls pass with retained raw output and fixture effects, without claiming installed publication or machine cutover'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Supersedes FAIL14245 without removing failed Source8a191Bats evidence: committed clean Source9413 narrowly repairs real NoNode/no-registry Write regression and restores causal parent-versus-leaf controls. Root directly inspected9413 delta/assertions and raw current landing-9413fd11-jest.json78468 SHA f7a284f88779a9c9bb8d771dd391b9b2892fa78ba5392e0c9895bcc2a6a2819d168pass0fail0pending; landing-9413fd11-bats.tap122452 SHA d1942c327693a70fbe6bb5074418579ca8605944e3610b40fd7ef6c09c669907197ok/no notok actual3447exit0. Prior unchanged-reach Source8a ten-suite2293pass0fail0pending actual51512exit0/producer17exit0 retained, no claim entire2293 reran9413. Exact original ordinary packaged-smoke25185exit0 log1428 SHA d4b8c71039621f5b89c694549685987903beca16064a4ce5e691a297d1739b47 benignallow/hostiledeny/noeffect/lifecycle23; explicitly syntheticExecutionContext=true/nativeProducerVerified=false. Root seven-path gates fivePASS and committed changed-question review grounded; Source build/doctor/gates/docs reported0. Physical Source raw proof retained by supported untrack, no generated proof committed. Commit verifier establishes reachability only; whole Source A7/native qualified finalexecution, installed publication, machine adoption and Parent cutover remain open."
+    recorded_at: "2026-10-26T21:45:24.396Z"
+    commit_sha: "9413fd11bca0f2c0a336a5609ead7fd0237ae761"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Manually inspected exact producer tests test_bash_mutation_boundary.py133-168 and consumer bash-write-guard-analysis.test.js916-960: per-effect raw repeated paths/roles retained; owned final symlink deletion admitted; fixed-argv temporary-fixture /bin/rm removes only link while referent dev/ino/size/content remain unchanged; touch/truncate/redirection retain referent ownership. Root combined-green-03 at1f6d 243/243 actual85091exit0, subsequent YAML/registry/parent-EACCES controls retained; integrated Source8a full10 landing-8a964035-jest.json2293passed0failed/producer17 actual0, current9413 affected168/197Bats actual0 and exact packaged original25185exit0. Relevant Bash/producer bytes unchanged8a..9413; current Write repair separately exercised. Raw outside repo preserved under Root native-unlink-entry-01 and physical shell-analysis reports/mutation-analysis; artifacts and semantic assertions directly inspected, commit verifier establishes existence only. No installed shared-runtime, actual native producer, original refused publication unlink retry or Parent cutover claim."
+    recorded_at: "2026-10-26T21:44:42.001Z"
+    commit_sha: "9413fd11bca0f2c0a336a5609ead7fd0237ae761"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Directly inspected consumer assertions bash-write-guard-analysis.test.js947-1173: referent touch/truncate/redirection and mixed rm+referent effects refuse2, canonical/foreign entries and aliased physical ancestors retain ownership, broken owned links and ordinary deletion admit, directory ancestors cannot cover foreign payload or narrower canonical claims, YAML/glob/unknown ownership and malformed/missing/partially failed effect streams hold; slash/dot/dotdot/unmodeled options retain refusal. Root retained RED controls and repairs through9ac; integrated Source8a full10 actual51512exit0/2293pass0fail covers updated oracle/consumers; Source9413 current affected168 and full197Bats3447exit0 preserve NoNode proven-absence versus inaccessible/failed-census distinction, LF paths and causal referent-leaf normalization mutants. Raw f7a284f8/d1942c32 and prior8a8aaf31c8 directly inspected. Same-provider independent changed-question peer feedback was grounded against current source/assertions, not treated as correctness evidence. Commit verification proves existence only; no installed-native admission, shared guard replacement, original blocked unlink execution, or Parent completion."
+    recorded_at: "2026-10-26T21:45:13.510Z"
+    commit_sha: "9413fd11bca0f2c0a336a5609ead7fd0237ae761"

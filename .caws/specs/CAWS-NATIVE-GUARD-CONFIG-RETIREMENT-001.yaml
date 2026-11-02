@@ -1,0 +1,76 @@
+id: CAWS-NATIVE-GUARD-CONFIG-RETIREMENT-001
+title: 'Replace stock Python guard configuration with a standalone typed loader'
+mode: refactor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Stock Python guard configuration source and shell consumer retired through standalone typed asset with actual package/guard/custom/hostile controls, reviewed repairs and exact target equality. Full runtime adoption and parent acceptance remain open.'
+created_at: '2026-10-25T00:26:07.356Z'
+updated_at: '2026-10-25T01:11:22.526Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Standalone stock guard configuration, shell consumers and packaged runtime assets'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/guard-config.ts'
+    - 'packages/caws-cli/src/runtime/guard-config-loader.ts'
+    - 'packages/caws-cli/src/runtime/guard-config-entry.ts'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/guard-config.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/guard-config.py'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/guard-config.cjs'
+    - 'packages/caws-cli/templates/hook-packs/shared/advisory_truncate.cjs'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/scripts/generate-runtime-assets.mjs'
+    - 'packages/caws-cli/scripts/qualify-guard-config.ts'
+    - 'packages/caws-cli/tests/runtime/guard-config.test.js'
+    - 'packages/caws-cli/tests/runtime/guard-config-integration.test.js'
+    - 'packages/caws-cli/tests/runtime/generated-runtime-assets.test.js'
+    - 'packages/caws-cli/tests/runtime/guard-config-loader.test.js'
+    - 'packages/caws-cli/tests/hooks/bats/guard-config.bats'
+    - 'packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats'
+    - 'packages/caws-cli/tests/adapter/system-runtime.test.js'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'Preserve whole-document guard semantics, exact integer tokens, supported deep unrelated metadata, public controls and selected custom parser loader runner and startup behavior.'
+  - 'Stock guard configuration executes typed Node without Python; selected foreign custom Python remains explicit compatibility and grants no parent acceptance.'
+acceptance:
+  - id: A1
+    given: 'supported and hostile guard policy bytes'
+    when: 'the typed loader parses and serializes assignments'
+    then: 'valid configuration including deep unrelated metadata preserves exact values while malformed unsafe or float-token grants apply no partial configuration and YAML zones remain independent'
+  - id: A2
+    given: 'a detached package and installed stock shell guards with a targeted Python execution witness'
+    when: 'direct shell and dispatcher consumers load configuration'
+    then: 'the standalone typed asset reaches all four real consumers without stock Python and preserves public NO_ASK defaults and selected custom parser loader runner and startup behavior'
+  - id: A3
+    given: 'the committed candidate and raw hostile checks'
+    when: 'independent review and governed landing complete'
+    then: 'target source matches checked source and complete runtime image harness replay rollback workload and parent acceptance remain separately owned'
+observability:
+  - 'Retain exact source and package identities, commands, raw stdout stderr, hostile controls and actual consumer effects outside source control.'
+rollback:
+  - 'Revert the bounded source manifest and generated asset change through ordinary governed history.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "External raw root /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/guard-config-retirement/committed-01: actual build0, package-scoped lint0, six-suite Jest136pass1supplied-native skip0, Bats51cases0. All16 before/after source hashes match committed blobs; compiled inputs stable, no timeout or supervised group residue. Inspected raw integer/float/duplicate/escaped-key, metadata140, UTF8/NUL and admitted-null outcomes. Initial review-counterexamples-01 fails for actual forbidden-null partial grant and malformed guards3000 exception; schema-aware filtering and caught validation repair both. Actual standalone malformed and forbidden-null outputs retain generated YAML zone plus invalid with no partial prefix; unsafe-byte original retained under nul-baseline-01. Root inspected source, assertions and retained stdout. CLI verify checks commit existence only: absolute external artifact citations are unsupported and were refused without writing. Behavioral verification is the inspected execution, not CLI replay."
+    recorded_at: "2026-10-25T01:10:00.893Z"
+    exit_code: 0
+    commit_sha: "4c72b3e93762d778246860c43954d7201b243d99"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "External raw root /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/guard-config-retirement/committed-01. Npm packed templates install privately; templates fallback removed; PATH only Node and dirname, actual stdout ok|2500. Stock guard-config.py absent in package and installed generation; helper mode0600 executes via Node. Independent four real shell consumers retain scope/writeallowlist/godobject/LOC effects, ENV precedence, public NO_ASK, forged-transport clearing, custom Python parser/loader/runner and startup witnesses. Missing Node/helper and failed helper output unavailable|0|2000. Real dispatcher executes one parse with configured/unconfigured decision flip. Generated asset closure accepts only builtins. Source136Jest pass1nativeSkip and51Bats0 checked at4c72 with exact input hashes and empty supervised groups. CLI verify checks commit existence only; external raw artifacts manually inspected. Complete native image/harness and other Python consumers, replay/rollback/load and parent acceptance remain unverified."
+    recorded_at: "2026-10-25T01:10:02.048Z"
+    exit_code: 0
+    commit_sha: "4c72b3e93762d778246860c43954d7201b243d99"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Committed candidate cf3ced7 independently reviewed against original R06 task and raw checks. Two actual load-bearing counterexamples were reproduced and repaired in4c72b3e; bounded follow-up feedback separately grounded in owner schema, guarded validator call and actual regression/standalone outputs. Postcommit136Jestpass1nativeSkip,51Bats and exact source+compiled hashes establish checked candidate identity. Governed no-close merge d1f0871 landed; git diff --exit-code4c72 main over all16 changed paths and ancestor check both0; generated asset check onmain0. Source remains byte-equal at target. Complete image/harness/native supplied execution, shared session-cache-admission identity join, replay/rollback/workload and parent acceptance remain open under incoming lead. CLI verification establishes commit reachability only; raw execution inspected under external guard-config-retirement/committed-01."
+    recorded_at: "2026-10-25T01:11:21.012Z"
+    exit_code: 0
+    commit_sha: d1f0871ba094ce8cbd145c24138ed0e9d153dec2

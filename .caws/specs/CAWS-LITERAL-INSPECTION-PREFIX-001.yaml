@@ -1,0 +1,131 @@
+id: CAWS-LITERAL-INSPECTION-PREFIX-001
+title: 'Share structural literal inspection-prefix policy with heredoc callers'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Land independently reviewed test-only inventory repair 0ae5f603d854e954b45844ac563a6df5d7b68dbb. Bounded A4 refreshed by event15081 after actual aligned Node22 whole-file CI contract80/80, five gates over one file and doctor0 with0E4W6I; historical failed push04, prior33/47 PATH-mismatch run and guard refusal retained. A1-A3 original ac8 actual05/06/07 proofs unchanged. No runtime/package/policy/floor change; Native-entry integration, fresh publication and full feature/global/strict/Python obligations remain Root-owned.'
+created_at: '2026-10-28T03:50:18.553Z'
+updated_at: '2026-10-28T19:44:25.665Z'
+created_by_session: '01a17f02-2191-7702-8805-227272637592'
+blast_radius:
+  modules:
+    - 'Pure structural inspection-prefix adapter and factored shared inspection argument profiles'
+    - 'Hooks stdin CLI surface, retained43-compatible heredoc caller, focused tests and managed pack metadata'
+    - 'Authoritative command-analysis guide at repo root'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/analysis/inspection-prefix.ts'
+    - 'packages/caws-cli/src/shell/analysis/inspection-profiles.ts'
+    - 'packages/caws-cli/src/shell/analysis/policies.ts'
+    - 'packages/caws-cli/src/shell/commands/hooks.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/bash-write-guard-heredoc.bats'
+    - 'packages/caws-cli/tests/shell/hooks-inspection-prefix.test.js'
+    - 'docs/guides/command-analysis.md'
+    - packages/caws-cli/src/shell/analysis/inspection-prefix-entry.ts
+    - packages/caws-cli/tests/shell/command-analysis.test.js
+    - packages/caws-cli/tests/fixtures/command-analysis/profile-cases.cjs
+    - packages/caws-cli/src/shell/analysis/caws-read-metadata.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/evidence-rederive.ts
+    - packages/caws-cli/mutation-policy.json
+  out: []
+  support:
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+invariants:
+  - 'Preserve genuine session identity, actual caller context, hooks, trust, policies, concurrent work and the foreign archive. No takeover, force, history rewrite, guard exception or manual governance writes.'
+  - 'Reuse the pinned unbash structural parser and factor existing reader, Git and sed argument-role definitions into shared profiles instead of adding a duplicated whitelist. Analyze or mutation-view allow is not an inspection-prefix predicate.'
+  - 'Reject assignments, redirects, shell expansions/substitutions, wrappers, compound/control structures and lookup mutations. Literal quoted operands are supported structurally. Trusted ambient command lookup and Git configuration assumptions remain explicit, never authenticated by this syntax predicate.'
+  - 'Preserve exact prefix, header, terminator, suffix, line counts and trailing bytes, original raw Node interpreter-write scanning and file-sink behavior. This predicate grants neither ownership nor Node-effects admission.'
+  - 'Do not refresh current Bash handlers, strict profiles, mutation-view or interpreter-effects broadly, add shadow retained handlers or vendored dependencies, or change global/private runtime, configuration or authority outside the owned Source unit.'
+  - 'Preserve caws_blank_heredoc_bodies(input) signature. For a nonempty prefix derive the physical managed generation only from the selected library BASH_SOURCE, invoke its absolute native/node and absolute native-prefix/node_modules/@paths.design/caws-cli/dist/shell/analysis/inspection-prefix-entry.js, and clear Node startup controls. Ambient CAWS_BIN, Node or PATH cannot select the classifier. Require exit0 plus the exact versioned positive response; unavailable/old layout, errors, signals, malformed output or exhausted budgets preserve raw input. Node-first empty-prefix projection remains independent.'
+  - 'Bound input bytes, command count, AST visits and output; supervise synchronous parsing in a resource-limited worker thread with a real wall-clock deadline. The diagnostic CLI and generation entry share this pure classifier. The existing managed-snapshot loader/hash and trusted host are assumed; no stronger TOCTOU, ambient identity or Node-effects guarantee is claimed.'
+  - 'The pure caws hooks inspection-prefix stdin prefix API returns0 only for complete newline-separated simple literal inspection commands matching shared closed argument profiles,1 for unsupported input and2 for parse or runtime failure. Source component evidence does not establish execution of the full unchanged actual05 call through the selected installed runtime and genuine native host.'
+acceptance:
+  - id: A1
+    given: >-
+      The unchanged actual05 inspection-prefix call including routine Git diff, the
+      full unchanged actual06 postcommit readback prefix/Node call, the full
+      unchanged actual07 CAWS specs-show evidence-readback prefix/Node call, the
+      prior04 six-line prefix, varied reader-family commands and authoritative CAWS
+      literal read-route families with literal quoted operands, and existing
+      Node-first forms
+    when: >-
+      The shared structural inspection-prefix adapter and heredoc caller project a
+      complete quoted Node heredoc, including replay of the full unchanged actual05,
+      actual06 postcommit readback and actual07 evidence-readback calls through the
+      selected installed runtime and genuine native host
+    then: 'Supported complete inspection commands admit the prefix without fixture-only matching, only the body is projected away, false JavaScript shell targets disappear, and exact prefix/header/terminator/suffix bytes, line counts and trailing newlines remain preserved.'
+  - id: A2
+    given: 'Hostile lookup mutations, assignments, redirects, expansions/substitutions, wrappers, compound/control structures, unsupported options or argument roles, unknown commands, and genuine raw Node fs writes or outer writes'
+    when: 'The predicate and actual relevant guards inspect original commands'
+    then: 'Unsupported syntax declines projection conservatively with the declared status, visible executable shell operations are retained, and raw interpreter writes and outer mutations retain specific guard refusals and unchanged simulated sentinels without blanket Node or ownership admission.'
+  - id: A3
+    given: >-
+      The packaged new CLI/parser and a selected helper in the real physical managed
+      layout, using the unchanged retained43 caller signature
+    when: >-
+      Source fixtures exercise the absolute generation Node/compiled-entry path,
+      exact positive protocol, hostile CAWS_BIN/PATH/Node startup settings,
+      missing/old entry, errors/signals and byte/command/AST/wall-clock resource
+      failures
+    then: >-
+      Only a bounded positively classified complete prefix permits masking; all
+      binding/protocol/runtime failures retain raw input, Node-first and cat/tee
+      remain supported, no strict profile or environment-controlled fake trust hook
+      is introduced, and installed whole-image qualification remains separate.
+  - id: A4
+    given: 'The bounded Source candidate and its declared parser/policy, command surface, helper, tests, metadata and documentation paths'
+    when: 'Relevant build, focused CLI/Bats tests, fingerprints, doctor findings and declared gates are inspected and a normal committed candidate receives independent review before normal acceptance and landing'
+    then: 'Concrete command/revision/exit/raw evidence supports bounded component claims, findings and failures remain visible, and installed native workflow, global cutover, strict qualification and Python retirement remain separate Root/Parent obligations.'
+observability:
+  - 'Retain exact command, cwd, source revision, exit status, selected adapter/guard behavior and raw output in the existing native transcript. No new progress ledger or installed-runtime inference.'
+rollback:
+  - 'Use an ordinary governed source revert of the bounded candidate and matching pack metadata if hostile or compatibility checks refute the implementation.'
+non_functional:
+  security:
+    - 'Inspection classification is pure syntax/argument-role policy under explicit lookup/config assumptions, not execution, ownership, native host authorization or Node payload read-only proof.'
+contracts:
+  - name: 'inspection-prefix-stdin'
+    type: api
+    path: 'packages/caws-cli/src/shell/analysis/inspection-prefix.ts'
+  - name: 'inspection-prefix-status-controls'
+    type: contract-test
+    path: 'packages/caws-cli/tests/shell/hooks-inspection-prefix.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "PASS: supported complete literal prefixes and body-only byte/line preservation. Inspected /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/caws-read-source-catalog-continuation-events.jsonl lines 128/137/142: Bats45, five Jest suites1521, exact05 follow-up all exit0; prior04, exact05/06/07, reader families and Node-first remain covered. NEW genuine consumer 01a183be-b643-78a3-bddf-6d71c1fdb799 executed unchanged original05/06/07 at /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/native-agent-workflow-08/bootstrap-events.jsonl lines 23/63/68, each exit0 with immutable/baseline matches and typed evidence readback; bootstrap SHA256 bbdff57cd8e4d0b5d3fcf1826bf9daeac11765d598170a0f837ac3af9108e56a. Decoded commands independently match 747/908/461 bytes and SHA256 25a3c1015068419cede8e31a58a8193e65118a1d3f5ae2c5c889a9fae5d65d8a / f98fbc3bcd67a4b0f417fe1884a2479a03096f0470ba95ff10a661b717c470eb / 59daf34c7c27febaa466d9f16eeacc198d4febed4a104704c68b89ccc414f74c. Raw observers under native-agent-workflow-01/real-callbacks-01: pre_tool_use-75461-d7b35a199a55fcae1b1fb93e.json, pre_tool_use-72513-be8c6908ffdbcb0418ef9f48.json, pre_tool_use-82471-9aa6bd77698032b1113ca406.json. Matching fresh08 hook journals 75460-1793211768307962000 / 72512-1793211962141582000 / 82464-1793211993688714000 finish all six stages with exit0 under runtime 2f05718bdfb9166ab3f496c6a61e48083a527863027c1d0dba944c0d6a6b0066. Their delivery:not_observed alone is insufficient; actual host command outputs supply execution evidence. Old failed07 and new bootstrap missing-reason close rejection1/correction0 at lines74/79 remain retained. Later unsupported expanded feature diagnostic is a separate Root obligation. Bounded Source acceptance at ac8d4964e7e6bc3eb6b526f6c7d7eb08a64c3aa1. --verify checks commit reachability and committed artifact existence only; it reruns neither tests nor native host execution. Trusted lookup/configuration is assumed; no arbitrary executable authentication, blanket Node admission, strict final-launch, full feature/global cutover, Python retirement or publication claim."
+    recorded_at: "2026-10-28T18:42:17.827Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-inspection-prefix.test.js
+    commit_sha: ac8d4964e7e6bc3eb6b526f6c7d7eb08a64c3aa1
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "PASS: conservative syntax/effect rejection and original raw-write visibility. /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/caws-read-source-catalog-continuation-events.jsonl line128/item65 records actual 45-case Bats exit0, including CAWS raw Node foreign-write, outer-before/after and lookup controls with specific guard exit2 and unchanged simulated sentinels. Line137/item68 final five-suite Jest exit0/1521 covers assignments, redirects, substitutions, wrappers/functions, lookup changes, unknown routes/options, invalid operands/arity, relative executable syntax and recover --out / verify-acs --run effects; protocol status1/2 is asserted. /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/local-rust-cutover-08/installed-KlDnpM/evidence.json SHA256 6662188ae95f4e8af1f01b265129e1f0515e19101847314b3e1d0488f8d42a47 records 37 inert cases:22 exit0/15 expected2, no signals/errors; inspected specific14 foreign-repository write refusals plus danger denial across Codex native and Claude Python routes, including appended exact07 writes. USER payloads are not executed; simulated sentinel checks and inert hook qualification do not establish genuine host protected-write prevention. No mutation score inferred from inventory207. Intermediate failed expectation and missing-fixture-dependency runs at lines76/111 are preserved and superseded by semantic controls1154 at line122 and final run137. Bounded Source acceptance at ac8d4964e7e6bc3eb6b526f6c7d7eb08a64c3aa1. --verify checks commit reachability and committed artifact existence only; it reruns neither tests nor native host execution. Trusted lookup/configuration is assumed; no arbitrary executable authentication, blanket Node admission, strict final-launch, full feature/global cutover, Python retirement or publication claim."
+    recorded_at: "2026-10-28T18:42:30.705Z"
+    command: "../../node_modules/.bin/bats --print-output-on-failure --show-output-of-passing-tests tests/hooks/bats/bash-write-guard-heredoc.bats"
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/hooks/bats/bash-write-guard-heredoc.bats
+    commit_sha: ac8d4964e7e6bc3eb6b526f6c7d7eb08a64c3aa1
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "PASS: bounded protocol and managed-generation binding. /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/caws-read-source-catalog-continuation-events.jsonl line137/item68 final five-suite run exited0/1521, exercising physical generation Node/compiled-entry selection, exact allow protocol, ambient CAWS_BIN/PATH and Node startup controls, missing/old/malformed entry, errors/signals, parser absence and byte/command/AST/wall-clock failures retaining raw input. Node-first and cat/tee remain supported; helper signature is unchanged. Line155/item81 reads helper SHA256 dbb2382397ba26846021f10d8c7dddd721f15efe6de5c5f4efd4ce53403a41b0 and no helper/manifest/fingerprint delta. /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/local-rust-cutover-08/installed-KlDnpM/evidence.json records selected private runtime2f05718b inert positive and refusal controls. Independently compared all1318 packaged and selected-generation dist hashes with /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/integrated-source-image08/build-receipt.json (SHA256 eaf8eb237fe9bf6ba918aeaf36eac4fd2a3e9c44591dc6d08c5aed8d64f01a87); all match. Genuine exact05/06/07 host replay is separately cited in A1. This is not complete whole-image/native/strict qualification, a stronger TOCTOU guarantee or environment-controlled trust admission. Bounded Source acceptance at ac8d4964e7e6bc3eb6b526f6c7d7eb08a64c3aa1. --verify checks commit reachability and committed artifact existence only; it reruns neither tests nor native host execution. Trusted lookup/configuration is assumed; no arbitrary executable authentication, blanket Node admission, strict final-launch, full feature/global cutover, Python retirement or publication claim."
+    recorded_at: "2026-10-28T18:43:24.437Z"
+    command: "../../node_modules/.bin/jest --runInBand tests/shell/hooks-inspection-prefix.test.js tests/shell/command-analysis.test.js tests/shell/hooks-analysis.test.js tests/shell/help-claim-integrity.test.js tests/shell/verify-acs-help-surface.test.js"
+    exit_code: 0
+    artifact_path: packages/caws-cli/src/shell/analysis/inspection-prefix-entry.ts
+    commit_sha: ac8d4964e7e6bc3eb6b526f6c7d7eb08a64c3aa1
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "PASS bounded Source A4 at repair commit 0ae5f603d854e954b45844ac563a6df5d7b68dbb, after Root inspected actual single-file delta, concrete checks and independent committed review. Root artifact base /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/: inventory-pin-implement-aligned-events.jsonl SHA256 7e25d4c9180ba4a6e254231a985290f8685a0dda7c548cf6e4abb4b0f14b0c5c line10/item4 records actual explicit Node22.19.0 plus aligned child PATH whole-file Jest tests/ci/mutation-contract.test.js exit0:80/80 tests,41.045s; line17/item8 doctor0 0E/4W/6I load0; line19/item9 five required gates0 over exactly one staged file, audit15076-15080; line23/item11 ordinary hook-enabled commit0. Validator raw6ce00b:207 sources exactly once,28 targets across4 surfaces. Repair pins207 and asserts the new shared metadata remains exactly in the existing behavioral proofGroup; no policy/floor/threshold/source/runtime/image/package change. Historical FAILURE remains: github-main-push-04.log lines1053-1073 and1268-1294 records required push04 terminal1,378passed/1failed suites,10385passed/1failed/14skipped tests, expected206/actual207; not publication or a passed run. inventory-pin-implement-events.jsonl retains earlier focused terminal1(33failed/47passed) from Node22 runner versus PATH-child Node mismatch and later read-only diagnostic native guard refusal before execution. Root explicitly authorized only the corrected per-command PATH run; no guard/deadline/config workaround. A4 failure event15073 and prior pass15067 remain audited. Original Source build0/fiveJest1521/Bats45/exact05followup/gates and retained intermediate failures remain at scope-enforcement-context-01/caws-read-source-catalog-continuation-events.jsonl; no runtime rebuild required by this test-only correction. A1-A3 original05/06/07 actual fresh08 proofs at ac8 remain unchanged historical bounded evidence. Four doctor warnings remain: unbound-active backlog, release-worktree lifecycle residue, installed pack95-v127 lag and33-file body drift. Root-reported independent review feedback is not test execution or acceptance proof. --verify here checks cited commit reachability and tracked artifact existence only; it does not rerun tests/host workflows or prove citation relevance. This records the narrowly repaired component check, not complete feature/global cutover, whole-image mutation score, strict native authority, Python retirement, fairness, merge or GitHub publication."
+    recorded_at: "2026-10-28T19:43:33.095Z"
+    command: "env PATH=/Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin:/Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/local-rust-cutover-08/bin:/Users/darianrosebrook/.cargo/bin:/Users/darianrosebrook/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /Users/darianrosebrook/.nvm/versions/node/v22.19.0/bin/node ../../node_modules/jest/bin/jest.js --runInBand tests/ci/mutation-contract.test.js"
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/ci/mutation-contract.test.js
+    commit_sha: "0ae5f603d854e954b45844ac563a6df5d7b68dbb"

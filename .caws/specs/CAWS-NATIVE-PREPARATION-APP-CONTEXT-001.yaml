@@ -1,0 +1,59 @@
+id: CAWS-NATIVE-PREPARATION-APP-CONTEXT-001
+title: 'Keep inert app context out of preparation startup'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Exact inert app metadata discard is integrated into Root-owned Parent with closed child environment, hostile near-name and both-order controls, actual-spawn mutation sensitivity, independent review and actual caller advancement. Full preparation export remains failed or unqualified after the 30s run with no terminal receipt; Root retains performance, custody, fresh SQL and complete installed qualification under the unchanged parent goal.'
+created_at: '2026-10-26T11:37:42.935Z'
+updated_at: '2026-10-26T12:09:39.606Z'
+created_by_session: '01a17052-3ea7-79b1-86be-7296991f8fd0'
+blast_radius:
+  modules:
+    - 'Native preparation caller context and closed child startup'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/preparation_parent.rs'
+  out: []
+invariants:
+  - 'Pinned child environment stays closed; inert browser bridge digest metadata never enters identity or child startup, and loader and unknown Node injection variables retain rejection before child launch'
+  - 'The unchanged 30000ms preparation and runtime invocation bounds, original caller identity and all foreign lanes remain preserved'
+acceptance:
+  - id: A1
+    given: 'ordinary Codex browser bridge metadata and a genuine caller identity'
+    when: 'the maintained preparation captures startup context'
+    then: >-
+      the inert digest metadata is discarded while the exact identity is retained
+      and no such variable reaches child startup
+  - id: A2
+    given: >-
+      actual loader or Node injection variables, unknown Node variables and siblings
+      of the inert metadata name
+    when: 'preparation inspects startup environment'
+    then: 'all remain refused before pin or child work; no namespace or prefix allowance is introduced'
+  - id: A3
+    given: 'the committed repair and retained actual pre-child refusal'
+    when: 'benign and hostile controls and the actual ordinary caller path are exercised'
+    then: >-
+      focused controls support the exact classification, the caller no longer fails
+      solely for inert metadata, unchanged deadline and complete preparation outcome
+      remain explicitly reported
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "ActualRoot baseline configured-parent-01 refused exactNODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S beforeNode/writer. Corrected401425c4 discards onlythatkey, neverinterpretsvalue oraddsidentity. Root inspected red-01 actual101 then green/restored-01 actual0 all28preparationunitcontrols. Actualproduction spawn_fixed control proves appmetadata+identity remainabsentfromchild environment with fixedLANG, exactoutput, bothEOF/reap andmandatoryinnercompletionmarker. Source env_clear remains and productionNodeextra=[]; peer claims independentlygrounded. This is boundedstartupclassification, notwholeexport. Raw /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/native-joined-preparation-01; CLIverificationcommitexistenceONLY, runtimeproofmanuallyinspected."
+    recorded_at: "2026-10-26T11:55:21.491Z"
+    commit_sha: "401425c45be224c6313fc0957aa52774998ff42d"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Root inspected exact-name+injection controls inbothiterationorders: NODE_OPTIONS,NODE_PATH,unknownNODE_,near-name suffix/singular,otherNODE_REPL_EXTERNAL_MODULE,DYLD_INSERT_LIBRARIES,LD_PRELOAD allrefusewithsemanticreason. Originalprefixguard beforepins/spawn unchanged. Mutation removedONLYproductionenv_clear: unique CAWS_MUTANT_OPEN_PREPARATION_CHILD_ENV_01 reached, actualchild61 andinner101 fail; restoredcandidate28/28passes. No namespaceallow, externalenvclear, addedruntimeflags or deadlinechange. Independentreviewsourceclaims grounded directly. Raw /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/native-joined-preparation-01; CLIverificationcommitexistenceONLY, runtimeproofmanuallyinspected."
+    recorded_at: "2026-10-26T11:55:29.502Z"
+    commit_sha: "401425c45be224c6313fc0957aa52774998ff42d"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Root ordinarycaller replay configured-parent-02 onmergedParenteb79 usedactualRootCODEXID/cwd/unchangedambientappmetadata andconfiguredbootstrap30000ms; executableSHA9d0248aa89fd96346bef18d9a633b10249f9c794e605e926b6a7351cfe0d59f6. At5s actualpinnedNode11684/Git11735 wereobserved asnativeParent11682 descendants, provingstartupadvancedbeyondbaselineappmetadatarefusal (baseline01 noNode/446ms). Outer02exit2 at30473.117ms/bothEOFs, stdout0/stderr0, no native terminalreceipt; fullSourceexportFAILED/UNQUALIFIED, source+futureBUILDabsent. Postexitknownancestryrows[] areboundedobservationNOTsettlement/escapedcensusproof. Noexternalenvsanitization/extraRuntimeflags/deadlinechange; actualproductionstartupclosure testedby28restoredcontrols anduniqueenv-clear mutantfailure. This closesONLY inertmetadata classification: completepreparation/freshSQL/fullinstalled/custody remainRoot-ownedParent gaps. Raw native-joined-preparation-01 records; CLIverifycommitexistenceONLY, runtime manuallyinspected."
+    recorded_at: "2026-10-26T12:09:31.159Z"
+    commit_sha: eb79c810366add6e2b7e042b2af78a190199029a

@@ -1,0 +1,40 @@
+id: CAWS-SQLITE-TEST-READINESS-001
+title: 'Publish completed SQLite abort fixture readiness atomically'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Atomic temporary-marker rename repairs the observed empty-file readiness race. Independent committed review grounded one-line fixture-only change; full55-case suite and cited abort/reap case passed, gates passed, and spec/event evidence was read back. Existing3s readiness and exact outcome assertions unchanged. No production or universal stdout-drain claim; normal integrated push remains parent work.'
+created_at: '2026-10-24T22:38:03.165Z'
+updated_at: '2026-10-24T22:55:14.734Z'
+created_by_session: '01a16c43-8af5-79e3-9535-9df94edfc037'
+blast_radius:
+  modules:
+    - 'SQLite tooling abort verification fixture'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/tooling/sqlite-static-build.test.js'
+  out: []
+invariants:
+  - 'The readiness deadline and exact yes, abort, SIGKILL, reaping and retained stdout assertions are preserved; production build behavior is unchanged'
+acceptance:
+  - id: A1
+    given: 'a real child producing its readiness marker'
+    when: 'the abort fixture observes the published marker and aborts the child'
+    then: 'completed yes bytes precede the abort and the same direct child is killed and reaped with the exact retained output and abort reason'
+observability:
+  - 'Retain raw focused suite output and original empty-marker full-run failure'
+rollback:
+  - 'Revert the isolated fixture publication commit through an owned lane if readiness or abort semantics differ'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed84578f925b2064e2b44f19cea45d6e4e8244e8d2 writes complete yes bytes to started.pending then publishes started by same-directory rename. Focused complete SQLite tooling suite passed55 cases exit0 in2.962s; raw /private/tmp/caws-sqlite-test-readiness-20261024.log. Exact yes, unchanged3s readiness deadline, SIGKILL, direct-child reaping, abort reason and exact started stdout assertions executed. Original empty-marker failure retained in /private/tmp/caws-origin-main-push-final-20261024-01a16c43.log. Independent review grounded readiness mechanism; no production or universal stdout-drain claim. Full integrated pre-push and remote synchronization remain parent work."
+    recorded_at: "2026-10-24T22:49:05.868Z"
+    test_nodeid: "packages/caws-cli/tests/tooling/sqlite-static-build.test.js::abort after observed start kills and reaps direct child, retaining prior output"
+    exit_code: 0
+    commit_sha: "84578f925b2064e2b44f19cea45d6e4e8244e8d2"
+    test_verified_at: "84578f925b2064e2b44f19cea45d6e4e8244e8d2"

@@ -1,0 +1,1364 @@
+use super::*;
+use std::{
+    fs,
+    os::unix::fs::{DirBuilderExt, PermissionsExt, symlink},
+    sync::atomic::{AtomicU64, Ordering},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+static SERIAL: AtomicU64 = AtomicU64::new(0);
+#[test]
+fn tool_profile_order_matches_canonical_lexical_manifest_order() {
+    assert!(TOOLS.windows(2).all(|pair| pair[0] < pair[1]));
+    assert_eq!(&TOOLS[..3], &["awk", "basename", "bash"]);
+    assert_eq!(OPTIONAL_TOOLS, &["cmp", "iconv"]);
+    assert!(OPTIONAL_TOOLS.iter().all(|name| !TOOLS.contains(name)));
+}
+fn expires() -> Instant {
+    Instant::now() + Duration::from_secs(5)
+}
+struct Scratch(PathBuf);
+impl Scratch {
+    fn new() -> Self {
+        let base = std::env::temp_dir().canonicalize().unwrap();
+        let root = base.join(format!(
+            "caws-image-unit-{}-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            SERIAL.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::DirBuilder::new().mode(0o700).create(&root).unwrap();
+        Self(root)
+    }
+}
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        fn restore(p: &Path) {
+            let Ok(meta) = fs::symlink_metadata(p) else {
+                return;
+            };
+            if meta.is_dir() {
+                let _ = fs::set_permissions(p, fs::Permissions::from_mode(0o700));
+                if let Ok(entries) = fs::read_dir(p) {
+                    for e in entries.flatten() {
+                        restore(&e.path());
+                    }
+                }
+            }
+        }
+        restore(&self.0);
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+fn write_mode(path: &Path, bytes: &[u8], mode: u32) {
+    fs::write(path, bytes).unwrap();
+    fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+}
+
+// Synthetic metadata exercises individual validation stages, not filesystem
+// admission. No foreign source bytes or synthetic admitted backend are used.
+pub(super) fn binding_fixture() -> (PreparedImageManifest, AdmissionContext) {
+    let canonical_project = "/project".to_owned();
+    let runtime_digest = "a".repeat(64);
+    let selection = Selection {
+        canonical_project: canonical_project.clone(),
+        surface: "codex".into(),
+        event: "stop".into(),
+        configuration: "system".into(),
+        runtime_digest: runtime_digest.clone(),
+        selected_index: 0,
+        handlers: vec![Handler {
+            path: "/project/.caws/hooks/session-log.sh".into(),
+            sha256: FOREIGN_PROFILE[0].1.into(),
+            entry: "session-log.sh".into(),
+            name: "session-log.sh".into(),
+            args: vec![],
+            tier: "machine-policy".into(),
+            kind: "project-override".into(),
+        }],
+        libraries: vec![],
+    };
+    let mut closure: Vec<_> = FOREIGN_PROFILE
+        .iter()
+        .map(|(path, hash)| SourceFile {
+            origin: "project".into(),
+            path: format!("/project/.caws/hooks/{path}"),
+            relative_path: (*path).into(),
+            sha256: (*hash).into(),
+            bytes: 1,
+        })
+        .collect();
+    for path in ["service-client.js", "service-protocol.js"] {
+        closure.push(SourceFile {
+            origin: "client".into(),
+            path: format!("/cli/{path}"),
+            relative_path: path.into(),
+            sha256: "b".repeat(64),
+            bytes: 1,
+        });
+    }
+    closure.sort_by(|a, b| (&a.origin, &a.relative_path).cmp(&(&b.origin, &b.relative_path)));
+    let tcb = ToolchainTcb {
+        tools: TOOLS
+            .iter()
+            .map(|name| Tool {
+                name: (*name).into(),
+                path: match *name {
+                    "bash" => fs::canonicalize("/bin/bash")
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .into(),
+                    "caws" => "/index.js".into(),
+                    "sh" => fs::canonicalize("/bin/sh")
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .into(),
+                    _ => format!("/tools/{name}"),
+                },
+                sha256: "c".repeat(64),
+            })
+            .collect(),
+        python_flags: vec!["-I".into(), "-S".into(), "-B".into()],
+        system_dependencies: "trusted-not-hash-complete".into(),
+    };
+    let mut manifest = PreparedImageManifest {
+        schema: IMAGE_SCHEMA.into(),
+        adapter: ADAPTER.into(),
+        profile: PROFILE.into(),
+        selection: selection.clone(),
+        original_closure: closure,
+        original_closure_digest: String::new(),
+        source_generation: String::new(),
+        execution: Execution {
+            root: String::new(),
+            dispatcher: "runtime/dispatch.sh".into(),
+            hooks: "hooks".into(),
+            client: "client/service-client.js".into(),
+            handler_routes: vec![],
+            resolved_libraries: vec![],
+            files: vec![ImageFile {
+                path: "hooks/session-log.sh".into(),
+                sha256: FOREIGN_PROFILE[0].1.into(),
+                bytes: 1,
+                mode: 0o555,
+            }],
+        },
+        toolchain_tcb: tcb,
+    };
+    manifest.original_closure_digest = original_closure_digest(&manifest).unwrap();
+    manifest.source_generation = source_generation(&manifest).unwrap();
+    let mut context = AdmissionContext {
+        home: PathBuf::from("/machine"),
+        canonical_project,
+        runtime_digest,
+        client_root: PathBuf::from("/cli"),
+        template_root: PathBuf::from("/templates/service-image"),
+        client_shell_source: PathBuf::from("/templates/session-render-service-client.sh"),
+        native_executable: None,
+        expected_selection: selection,
+        expected_image_digest: "d".repeat(64),
+        expected_policy_sha256: "e".repeat(64),
+        caller_environment: BTreeMap::new(),
+    };
+    manifest.execution.root = image_parent(&context)
+        .join(image_key(&manifest).unwrap())
+        .to_str()
+        .unwrap()
+        .into();
+    context.expected_image_digest = hash(&json(&manifest).unwrap());
+    (manifest, context)
+}
+fn reseal_metadata(manifest: &mut PreparedImageManifest, context: &mut AdmissionContext) {
+    manifest.original_closure_digest = original_closure_digest(manifest).unwrap();
+    manifest.source_generation = source_generation(manifest).unwrap();
+    manifest.execution.root = image_parent(context)
+        .join(image_key(manifest).unwrap())
+        .to_str()
+        .unwrap()
+        .into();
+    context.expected_image_digest = hash(&json(manifest).unwrap());
+}
+
+#[test]
+fn fixed_system_shell_physical_targets_pass_binding_and_actual_tool_pins() {
+    for name in ["bash", "sh"] {
+        let (mut manifest, mut context) = binding_fixture();
+        let tool = manifest
+            .toolchain_tcb
+            .tools
+            .iter_mut()
+            .find(|tool| tool.name == name)
+            .unwrap();
+        let expected = fs::canonicalize(format!("/bin/{name}")).unwrap();
+        assert_eq!(Path::new(&tool.path), expected, "{name} physical target");
+        tool.sha256 = hash(&fs::read(&expected).unwrap());
+        let tool = tool.clone();
+        reseal_metadata(&mut manifest, &mut context);
+        validate_binding(&manifest, &context, Path::new(&manifest.execution.root)).unwrap();
+        let pin = verify_tool(&tool, &context, expires()).unwrap();
+        check_pins(&[pin], expires()).unwrap();
+    }
+}
+
+#[test]
+fn same_byte_shell_at_a_different_physical_target_cannot_satisfy_system_binding() {
+    let scratch = Scratch::new();
+    for name in ["bash", "sh"] {
+        let (mut manifest, mut context) = binding_fixture();
+        let tool = manifest
+            .toolchain_tcb
+            .tools
+            .iter_mut()
+            .find(|tool| tool.name == name)
+            .unwrap();
+        let expected = fs::canonicalize(format!("/bin/{name}")).unwrap();
+        let bytes = fs::read(&expected).unwrap();
+        let different = scratch.0.join(format!("different-{name}"));
+        write_mode(&different, &bytes, 0o700);
+        assert_ne!(different, expected);
+        tool.path = different.to_str().unwrap().into();
+        tool.sha256 = hash(&bytes);
+        // This physical executable passes the generic pin checks. Exact system
+        // target binding must reject it even with identical selected bytes.
+        verify_tool(tool, &context, expires()).unwrap();
+        reseal_metadata(&mut manifest, &mut context);
+        let error =
+            validate_binding(&manifest, &context, Path::new(&manifest.execution.root)).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::UnsupportedProfile, "{name}");
+        assert_eq!(
+            error.operation(),
+            format!("{name} tool is not canonical system executable")
+        );
+    }
+}
+
+#[test]
+fn shell_alias_to_the_correct_target_fails_binding_and_the_nofollow_tool_walk() {
+    let scratch = Scratch::new();
+    for name in ["bash", "sh"] {
+        let (mut manifest, mut context) = binding_fixture();
+        let tool = manifest
+            .toolchain_tcb
+            .tools
+            .iter_mut()
+            .find(|tool| tool.name == name)
+            .unwrap();
+        let expected = fs::canonicalize(format!("/bin/{name}")).unwrap();
+        let alias = scratch.0.join(format!("alias-{name}"));
+        symlink(&expected, &alias).unwrap();
+        assert_eq!(fs::canonicalize(&alias).unwrap(), expected);
+        tool.path = alias.to_str().unwrap().into();
+        tool.sha256 = hash(&fs::read(&expected).unwrap());
+        let alias_error = verify_tool(tool, &context, expires()).err().unwrap();
+        assert_eq!(alias_error.kind, ErrorKind::Io, "{name}");
+        assert_eq!(alias_error.operation(), "open nofollow component", "{name}");
+        assert_eq!(
+            alias_error
+                .source
+                .as_ref()
+                .and_then(io::Error::raw_os_error),
+            Some(libc::ELOOP),
+            "{name} candidate alias must not bypass the component walk"
+        );
+        reseal_metadata(&mut manifest, &mut context);
+        let error =
+            validate_binding(&manifest, &context, Path::new(&manifest.execution.root)).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::UnsupportedProfile, "{name}");
+        assert_eq!(
+            error.operation(),
+            format!("{name} tool is not canonical system executable")
+        );
+    }
+}
+
+#[test]
+fn native_plan_helper_pin_is_optional_but_never_selected_by_image_or_path() {
+    let (mut manifest, mut context) = binding_fixture();
+    validate_binding(&manifest, &context, Path::new(&manifest.execution.root)).unwrap();
+    manifest.toolchain_tcb.tools.push(Tool {
+        name: PLAN_TOOL.into(),
+        path: "/trusted/native".into(),
+        sha256: "f".repeat(64),
+    });
+    manifest
+        .toolchain_tcb
+        .tools
+        .sort_by(|a, b| a.name.cmp(&b.name));
+    reseal_metadata(&mut manifest, &mut context);
+    assert_eq!(
+        validate_binding(&manifest, &context, Path::new(&manifest.execution.root))
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsupportedProfile
+    );
+    context.native_executable = Some("/trusted/native".into());
+    validate_binding(&manifest, &context, Path::new(&manifest.execution.root)).unwrap();
+    context.native_executable = Some("/other/native".into());
+    assert_eq!(
+        validate_binding(&manifest, &context, Path::new(&manifest.execution.root))
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsupportedProfile
+    );
+}
+
+#[test]
+fn optional_tool_subsets_admit_without_changing_legacy_or_native_helper_requirements() {
+    for optional in [&[][..], &["cmp"][..], &["iconv"][..], &["cmp", "iconv"][..]] {
+        for with_plan in [false, true] {
+            let (mut manifest, mut context) = binding_fixture();
+            for name in optional {
+                manifest.toolchain_tcb.tools.push(Tool {
+                    name: (*name).into(),
+                    path: format!("/tools/{name}"),
+                    sha256: "c".repeat(64),
+                });
+            }
+            if with_plan {
+                manifest.toolchain_tcb.tools.push(Tool {
+                    name: PLAN_TOOL.into(),
+                    path: "/trusted/native".into(),
+                    sha256: "f".repeat(64),
+                });
+                context.native_executable = Some("/trusted/native".into());
+            }
+            manifest
+                .toolchain_tcb
+                .tools
+                .sort_by(|a, b| a.name.cmp(&b.name));
+            reseal_metadata(&mut manifest, &mut context);
+            validate_binding(&manifest, &context, Path::new(&manifest.execution.root))
+                .unwrap_or_else(|error| panic!("optional={optional:?}, plan={with_plan}: {error}"));
+        }
+    }
+}
+
+#[test]
+fn optional_tools_do_not_admit_unknown_duplicate_unsorted_or_incomplete_toolsets() {
+    let (mut manifest, context) = binding_fixture();
+    for name in ["cmp", "iconv", PLAN_TOOL] {
+        manifest.toolchain_tcb.tools.push(Tool {
+            name: name.into(),
+            path: format!("/tools/{name}"),
+            sha256: "c".repeat(64),
+        });
+    }
+    manifest
+        .toolchain_tcb
+        .tools
+        .sort_by(|a, b| a.name.cmp(&b.name));
+    let mut context = context;
+    context.native_executable = Some(format!("/tools/{PLAN_TOOL}").into());
+    let mut cases = Vec::new();
+    for name in ["Cmp", "ICONV", "cmp-extra", "iconv ", "tar"] {
+        let mut changed = manifest.clone();
+        changed.toolchain_tcb.tools.push(Tool {
+            name: name.into(),
+            path: "/tools/unknown".into(),
+            sha256: "c".repeat(64),
+        });
+        changed
+            .toolchain_tcb
+            .tools
+            .sort_by(|a, b| a.name.cmp(&b.name));
+        cases.push((format!("unknown {name:?}"), changed));
+    }
+    for name in ["awk", "cmp", "iconv", PLAN_TOOL] {
+        let mut changed = manifest.clone();
+        let duplicate = changed
+            .toolchain_tcb
+            .tools
+            .iter()
+            .find(|tool| tool.name == name)
+            .unwrap()
+            .clone();
+        changed.toolchain_tcb.tools.push(duplicate);
+        changed
+            .toolchain_tcb
+            .tools
+            .sort_by(|a, b| a.name.cmp(&b.name));
+        cases.push((format!("duplicate {name}"), changed));
+    }
+    let mut changed = manifest.clone();
+    changed.toolchain_tcb.tools.swap(0, 1);
+    cases.push(("noncanonical order".into(), changed));
+    for name in TOOLS {
+        let mut changed = manifest.clone();
+        changed
+            .toolchain_tcb
+            .tools
+            .retain(|tool| tool.name != *name);
+        cases.push((format!("missing mandatory {name}"), changed));
+    }
+    for (label, mut changed) in cases {
+        let mut matching = context.clone();
+        reseal_metadata(&mut changed, &mut matching);
+        assert_eq!(
+            validate_binding(&changed, &matching, Path::new(&changed.execution.root))
+                .unwrap_err()
+                .kind,
+            ErrorKind::UnsupportedProfile,
+            "{label}",
+        );
+    }
+}
+
+#[test]
+fn present_optional_tools_retain_executable_fingerprint_and_custody_checks() {
+    let scratch = Scratch::new();
+    let (_, context) = binding_fixture();
+    for name in ["cmp", "iconv"] {
+        let path = scratch.0.join(name);
+        let source = b"#!/bin/sh\nexit 0\n";
+        write_mode(&path, source, 0o700);
+        let tool = Tool {
+            name: name.into(),
+            path: path.to_str().unwrap().into(),
+            sha256: hash(source),
+        };
+        let pins = vec![verify_tool(&tool, &context, expires()).unwrap()];
+        check_pins(&pins, expires()).unwrap();
+        write_mode(&path, b"#!/bin/sh\nexit 17\n", 0o700);
+        assert_eq!(
+            check_pins(&pins, expires()).unwrap_err().kind,
+            ErrorKind::Changed,
+            "{name} custody"
+        );
+        assert_eq!(
+            verify_tool(&tool, &context, expires()).err().unwrap().kind,
+            ErrorKind::Changed,
+            "{name} bytes"
+        );
+        let changed_tool = Tool {
+            sha256: hash(b"#!/bin/sh\nexit 17\n"),
+            ..tool
+        };
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(
+            verify_tool(&changed_tool, &context, expires())
+                .err()
+                .unwrap()
+                .kind,
+            ErrorKind::UnsafePath,
+            "{name} executable"
+        );
+    }
+}
+
+#[test]
+fn static_foreign_profile_refuses_changed_missing_duplicate_and_unreviewed_code() {
+    let (manifest, _) = binding_fixture();
+    validate_foreign_profile(&manifest.original_closure).unwrap();
+    let project_index = manifest
+        .original_closure
+        .iter()
+        .position(|r| r.origin == "project")
+        .unwrap();
+    let mut rows = manifest.original_closure.clone();
+    rows[project_index].sha256 = "0".repeat(64);
+    assert!(validate_foreign_profile(&rows).is_err());
+    let mut rows = manifest.original_closure.clone();
+    rows.remove(project_index);
+    assert!(validate_foreign_profile(&rows).is_err());
+    let mut rows = manifest.original_closure.clone();
+    rows.push(rows[project_index].clone());
+    assert!(validate_foreign_profile(&rows).is_err());
+    let mut rows = manifest.original_closure.clone();
+    rows[project_index].relative_path = "lib/unreviewed.py".into();
+    assert!(validate_foreign_profile(&rows).is_err());
+    assert_eq!(FOREIGN_PROFILE.len(), 28);
+}
+#[test]
+fn self_consistent_changed_foreign_hash_does_not_manufacture_profile_admission() {
+    let (mut manifest, mut context) = binding_fixture();
+    let row = manifest
+        .original_closure
+        .iter_mut()
+        .find(|r| r.origin == "project" && r.relative_path == "session_log_renderer.py")
+        .unwrap();
+    row.sha256 = "f".repeat(64);
+    reseal_metadata(&mut manifest, &mut context);
+    assert_eq!(
+        validate_binding(&manifest, &context, Path::new(&manifest.execution.root))
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsupportedProfile
+    );
+}
+#[test]
+fn operator_declaration_binds_complete_profile_and_original_handler_not_image_digest() {
+    let (manifest, _) = binding_fixture();
+    let selected = &manifest.selection.handlers[0];
+    let policy = OperatorPolicy {
+        version: 1,
+        adapter: ADAPTER.into(),
+        profile: PROFILE.into(),
+        root: manifest.selection.canonical_project.clone(),
+        handler: OperatorHandler {
+            entry: "session-log.sh".into(),
+            path: selected.path.clone(),
+            sha256: selected.sha256.clone(),
+        },
+        source_profile_digest: manifest.original_closure_digest.clone(),
+    };
+    validate_policy(&policy, &manifest).unwrap();
+    let mut stale = policy.clone();
+    stale.source_profile_digest = "0".repeat(64);
+    assert!(validate_policy(&stale, &manifest).is_err());
+    let mut wrong = policy.clone();
+    wrong.handler.path = "/other/session-log.sh".into();
+    assert!(validate_policy(&wrong, &manifest).is_err());
+    let mut wrong = policy.clone();
+    wrong.root = "/other".into();
+    assert!(validate_policy(&wrong, &manifest).is_err());
+    let mut changed = manifest.clone();
+    changed.toolchain_tcb.tools[0].sha256 = "0".repeat(64);
+    changed.original_closure_digest = original_closure_digest(&changed).unwrap();
+    assert!(validate_policy(&policy, &changed).is_err());
+    let valid = String::from_utf8(json(&policy).unwrap()).unwrap();
+    assert!(
+        serde_json::from_str::<OperatorPolicy>(
+            &valid.replace("\"version\":1", "\"version\":1,\"version\":1")
+        )
+        .is_err()
+    );
+    assert!(
+        serde_json::from_str::<OperatorPolicy>(
+            &valid.replace("\"version\":1", "\"version\":1,\"unknown\":true")
+        )
+        .is_err()
+    );
+}
+#[test]
+fn trusted_selection_and_native_derived_image_location_cannot_be_self_asserted() {
+    let (manifest, context) = binding_fixture();
+    let root = Path::new(&manifest.execution.root);
+    validate_binding(&manifest, &context, root).unwrap();
+    let mut wrong = context.clone();
+    wrong.expected_image_digest = "0".repeat(64);
+    assert!(validate_binding(&manifest, &wrong, root).is_err());
+    let mut wrong = context.clone();
+    wrong.expected_selection.selected_index = 1;
+    assert!(validate_binding(&manifest, &wrong, root).is_err());
+    let mut wrong = context.clone();
+    wrong.canonical_project = "/another-project".into();
+    assert!(validate_binding(&manifest, &wrong, root).is_err());
+    assert!(validate_binding(&manifest, &context, Path::new("/caller-selected/image")).is_err());
+    let mut changed = manifest.clone();
+    changed.selection.configuration = "project-policy".into();
+    let mut matching = context.clone();
+    matching.expected_selection = changed.selection.clone();
+    reseal_metadata(&mut changed, &mut matching);
+    assert!(validate_binding(&changed, &matching, Path::new(&changed.execution.root)).is_err());
+}
+#[test]
+fn unsupported_preloads_refuse_even_with_otherwise_matching_public_hashes() {
+    let (manifest, context) = binding_fixture();
+    for name in [
+        "BASH_ENV",
+        "ENV",
+        "CAWS_PRIOR_BASH_ENV",
+        "CAWS_GUARD_CONFIG_PY",
+        "CAWS_GIT_BINARY",
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_EXTRA_CA_CERTS",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "PYTHONUSERBASE",
+        "PYTHONDONTWRITEBYTECODE",
+        "LD_PRELOAD",
+        "LD_AUDIT",
+        "DYLD_INSERT_LIBRARIES",
+        "CAWS_SERVICE_GIT_DIRECTORY",
+        "CAWS_BIN",
+        "_HOOK_HANDLER_PATH",
+        "_CAWS_SOURCE_PATH",
+        "SHELLOPTS",
+        "BASHOPTS",
+        "BASH_FUNC_f%%",
+    ] {
+        let mut context = context.clone();
+        context
+            .caller_environment
+            .insert(name.into(), "arbitrary".into());
+        assert_eq!(
+            validate_binding(&manifest, &context, Path::new(&manifest.execution.root))
+                .unwrap_err()
+                .kind,
+            ErrorKind::UnsupportedProfile,
+            "{name}"
+        );
+    }
+    let mut permitted = context.clone();
+    for (name, value) in [("PYTHONDONTWRITEBYTECODE", "1"), ("CAWS_BIN", "caws")] {
+        permitted
+            .caller_environment
+            .insert(name.into(), value.into());
+    }
+    validate_binding(&manifest, &permitted, Path::new(&manifest.execution.root)).unwrap();
+}
+#[test]
+fn nofollow_component_walk_and_private_sealed_modes_are_enforced() {
+    let scratch = Scratch::new();
+    let actual = scratch.0.join("actual");
+    fs::DirBuilder::new().mode(0o700).create(&actual).unwrap();
+    symlink(&actual, scratch.0.join("alias")).unwrap();
+    assert!(absolute_directory(&scratch.0.join("alias"), Access::Source, expires()).is_err());
+    assert!(absolute_directory(&actual, Access::SealedDirectory, expires()).is_err());
+    fs::set_permissions(&actual, fs::Permissions::from_mode(0o500)).unwrap();
+    absolute_directory(&actual, Access::SealedDirectory, expires()).unwrap();
+    let file = scratch.0.join("file");
+    write_mode(&file, b"sealed", 0o555);
+    let (bytes, stamp) = read_file(
+        absolute_file(&file, Access::SealedFile, expires()).unwrap(),
+        100,
+        Access::SealedFile,
+        expires(),
+    )
+    .unwrap();
+    assert_eq!(bytes, b"sealed");
+    fs::hard_link(&file, scratch.0.join("linked")).unwrap();
+    assert!(absolute_file(&file, Access::SealedFile, expires()).is_err());
+    fs::remove_file(scratch.0.join("linked")).unwrap();
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(absolute_file(&file, Access::SealedFile, expires()).is_err());
+    write_mode(&file, b"changed length", 0o555);
+    assert_eq!(
+        check_pins(
+            &[Pin {
+                path: file,
+                stamp,
+                access: Access::SealedFile
+            }],
+            expires()
+        )
+        .unwrap_err()
+        .kind,
+        ErrorKind::Changed
+    );
+}
+#[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn named_image_custody_allows_concurrent_sibling_stage_publication() {
+    let scratch = Scratch::new();
+    let root = scratch.0.join("admitted-image");
+    fs::DirBuilder::new().mode(0o500).create(&root).unwrap();
+    let parent = absolute_directory(&scratch.0, Access::PrivateParent, expires()).unwrap();
+    let immutable_parent_stamp = Stamp::of(&parent.metadata().unwrap());
+    let parent_identity = PrivateParentIdentity::checked(&parent).unwrap();
+    let root_stamp = Stamp::of(&fs::metadata(&root).unwrap());
+    let writer_path = scratch.0.clone();
+    // The join fixes the interleaving: a separate caller publishes another
+    // sealed image after custody capture and before the production end check.
+    std::thread::spawn(move || {
+        let stage = writer_path.join(".stage-sibling");
+        fs::DirBuilder::new().mode(0o700).create(&stage).unwrap();
+        write_mode(&stage.join("payload"), b"independent image", 0o555);
+        fs::set_permissions(&stage, fs::Permissions::from_mode(0o500)).unwrap();
+        let parent = absolute_directory(&writer_path, Access::PrivateParent, expires()).unwrap();
+        rename_no_replace(parent.as_raw_fd(), ".stage-sibling", "sibling-image").unwrap();
+    })
+    .join()
+    .unwrap();
+    assert_ne!(
+        Stamp::of(&parent.metadata().unwrap()),
+        immutable_parent_stamp
+    );
+    assert_eq!(
+        fs::read(scratch.0.join("sibling-image/payload")).unwrap(),
+        b"independent image"
+    );
+    assert!(!scratch.0.join(".stage-sibling").exists());
+    check_named_image_custody(&root, &root_stamp, &scratch.0, &parent_identity, expires()).unwrap();
+    assert_eq!(
+        PrivateParentIdentity::checked(&parent).unwrap(),
+        parent_identity
+    );
+}
+
+#[test]
+fn named_image_custody_refuses_replaced_symlink_or_nonprivate_parent() {
+    let scratch = Scratch::new();
+    let parent_path = scratch.0.join("parent");
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&parent_path)
+        .unwrap();
+    let root = parent_path.join("image");
+    fs::DirBuilder::new().mode(0o500).create(&root).unwrap();
+    let parent = absolute_directory(&parent_path, Access::PrivateParent, expires()).unwrap();
+    let identity = PrivateParentIdentity::checked(&parent).unwrap();
+    let stamp = Stamp::of(&fs::metadata(&root).unwrap());
+    for field in ["dev", "ino", "uid", "mode"] {
+        let mut wrong_identity = identity.clone();
+        match field {
+            "dev" => wrong_identity.dev ^= 1,
+            "ino" => wrong_identity.ino ^= 1,
+            // This checks the identity comparison, not a privileged chown.
+            "uid" => wrong_identity.uid ^= 1,
+            "mode" => wrong_identity.mode ^= 0o010,
+            _ => unreachable!(),
+        }
+        assert_eq!(
+            check_named_image_custody(&root, &stamp, &parent_path, &wrong_identity, expires())
+                .unwrap_err()
+                .kind,
+            ErrorKind::Changed,
+            "identity field {field} must remain pinned"
+        );
+    }
+    fs::set_permissions(&parent_path, fs::Permissions::from_mode(0o750)).unwrap();
+    assert_eq!(
+        check_named_image_custody(&root, &stamp, &parent_path, &identity, expires())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsafePath
+    );
+    fs::set_permissions(&parent_path, fs::Permissions::from_mode(0o700)).unwrap();
+    let moved = scratch.0.join("moved-parent");
+    fs::rename(&parent_path, &moved).unwrap();
+    symlink(&moved, &parent_path).unwrap();
+    assert!(check_named_image_custody(&root, &stamp, &parent_path, &identity, expires()).is_err());
+    fs::remove_file(&parent_path).unwrap();
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&parent_path)
+        .unwrap();
+    // Keep the original root coordinate readable to isolate the named-parent
+    // identity check from the independently immutable root check.
+    assert_eq!(
+        check_named_image_custody(
+            &moved.join("image"),
+            &stamp,
+            &parent_path,
+            &identity,
+            expires()
+        )
+        .unwrap_err()
+        .kind,
+        ErrorKind::Changed
+    );
+}
+
+#[test]
+fn retained_stage_custody_refuses_replacement_or_new_child_after_validation() {
+    for replace in [false, true] {
+        let scratch = Scratch::new();
+        let stage = scratch.0.join(".stage-validated");
+        fs::DirBuilder::new().mode(0o500).create(&stage).unwrap();
+        let held_stage = absolute_directory(&stage, Access::SealedDirectory, expires()).unwrap();
+        let stamp = Stamp::of(&held_stage.metadata().unwrap());
+        let identity = PrivateParentIdentity::checked(
+            &absolute_directory(&scratch.0, Access::PrivateParent, expires()).unwrap(),
+        )
+        .unwrap();
+        check_named_image_custody(&stage, &stamp, &scratch.0, &identity, expires()).unwrap();
+        if replace {
+            fs::rename(&stage, scratch.0.join("retired-stage")).unwrap();
+            fs::DirBuilder::new().mode(0o500).create(&stage).unwrap();
+            assert_ne!(
+                held_stage.metadata().unwrap().ino(),
+                fs::metadata(&stage).unwrap().ino()
+            );
+        } else {
+            fs::set_permissions(&stage, fs::Permissions::from_mode(0o700)).unwrap();
+            write_mode(&stage.join("unvalidated-child"), b"unadmitted", 0o555);
+            fs::set_permissions(&stage, fs::Permissions::from_mode(0o500)).unwrap();
+        }
+        assert_eq!(
+            check_named_image_custody(&stage, &stamp, &scratch.0, &identity, expires())
+                .unwrap_err()
+                .kind,
+            ErrorKind::Changed
+        );
+    }
+}
+
+#[test]
+fn mutable_parent_identity_does_not_relax_immutable_file_or_manifest_pins() {
+    for (name, access, mode) in [
+        ("execution", Access::SealedFile, 0o555),
+        ("manifest.json", Access::Manifest, 0o400),
+    ] {
+        let scratch = Scratch::new();
+        let file = scratch.0.join(name);
+        write_mode(&file, b"original bytes", mode);
+        let held = absolute_file(&file, access, expires()).unwrap();
+        let (_, stamp) = read_file(held.try_clone().unwrap(), 100, access, expires()).unwrap();
+        let pin = Pin {
+            path: file.clone(),
+            stamp,
+            access,
+        };
+        check_pins(std::slice::from_ref(&pin), expires()).unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
+        write_mode(&file, b"tampered image contents", mode);
+        assert_eq!(
+            check_pins(std::slice::from_ref(&pin), expires())
+                .unwrap_err()
+                .kind,
+            ErrorKind::Changed
+        );
+        fs::remove_file(&file).unwrap();
+        write_mode(&file, b"original bytes", mode);
+        assert_ne!(
+            held.metadata().unwrap().ino(),
+            fs::metadata(&file).unwrap().ino()
+        );
+        assert_eq!(
+            check_pins(&[pin], expires()).unwrap_err().kind,
+            ErrorKind::Changed
+        );
+    }
+}
+
+#[test]
+fn existing_destination_probe_only_admits_safe_sealed_directory_or_confirmed_absence() {
+    let scratch = Scratch::new();
+    let parent = absolute_directory(&scratch.0, Access::PrivateParent, expires()).unwrap();
+    let key = "a".repeat(64);
+    let target = scratch.0.join(&key);
+    assert!(!existing_image_root(&parent, &key, expires()).unwrap());
+    assert_eq!(
+        existing_image_root(&parent, "../escape", expires())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsafePath
+    );
+    fs::DirBuilder::new().mode(0o500).create(&target).unwrap();
+    assert!(existing_image_root(&parent, &key, expires()).unwrap());
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(
+        existing_image_root(&parent, &key, expires())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsafePath
+    );
+    fs::remove_dir(&target).unwrap();
+    write_mode(&target, b"wrong object", 0o400);
+    assert_eq!(
+        existing_image_root(&parent, &key, expires())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsafePath
+    );
+    fs::remove_file(&target).unwrap();
+    symlink(scratch.0.join("missing-target"), &target).unwrap();
+    assert_eq!(
+        existing_image_root(&parent, &key, expires())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsafePath
+    );
+    assert_eq!(
+        existing_image_root(&parent, &key, Instant::now() - Duration::from_secs(1))
+            .unwrap_err()
+            .kind,
+        ErrorKind::Deadline
+    );
+    fs::remove_file(&target).unwrap();
+    fs::set_permissions(&scratch.0, fs::Permissions::from_mode(0o750)).unwrap();
+    assert_eq!(
+        existing_image_root(&parent, &key, expires())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsafePath
+    );
+}
+
+#[test]
+fn reuse_requires_the_same_validated_stage_manifest() {
+    let (stage, _) = binding_fixture();
+    require_same_prepared_image(&stage, &stage).unwrap();
+    for change in ["generation", "source", "execution", "selection"] {
+        let mut final_image = stage.clone();
+        match change {
+            "generation" => final_image.source_generation = "0".repeat(64),
+            "source" => final_image.original_closure[0].sha256 = "0".repeat(64),
+            "execution" => final_image.execution.root.push_str("-replacement"),
+            "selection" => final_image.selection.selected_index += 1,
+            _ => unreachable!(),
+        }
+        assert_eq!(
+            require_same_prepared_image(&stage, &final_image)
+                .unwrap_err()
+                .kind,
+            ErrorKind::Changed
+        );
+    }
+}
+
+#[test]
+fn publication_phase_wrapper_preserves_order_values_and_original_refusal() {
+    // This exercises the production measurement wrapper, not full image
+    // admission: the reviewed foreign source closure is not embedded here.
+    for final_phase in [
+        PublicationPhase::ValidatePublished,
+        PublicationPhase::ValidateExisting,
+    ] {
+        let mut events = Vec::new();
+        let mut record = |event| events.push(event);
+        let mut observer = PublicationObserver(Some(&mut record));
+        let staged = observer
+            .run(PublicationPhase::ValidateStage, || Ok(17))
+            .unwrap();
+        assert_eq!(staged, 17);
+        let error = observer
+            .run(final_phase, || -> Result<()> {
+                Err(AdmissionError {
+                    kind: ErrorKind::Changed,
+                    publication_may_have_happened: true,
+                    operation: "controlled final validation refusal",
+                    source: Some(io::Error::from_raw_os_error(libc::EIO)),
+                })
+            })
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Changed);
+        assert!(error.publication_may_have_happened);
+        assert_eq!(error.operation(), "controlled final validation refusal");
+        assert_eq!(
+            error.source.as_ref().unwrap().raw_os_error(),
+            Some(libc::EIO)
+        );
+        assert_eq!(
+            events
+                .iter()
+                .map(|e| (e.phase, e.state))
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    PublicationPhase::ValidateStage,
+                    PublicationPhaseState::Started
+                ),
+                (
+                    PublicationPhase::ValidateStage,
+                    PublicationPhaseState::Completed
+                ),
+                (final_phase, PublicationPhaseState::Started),
+                (final_phase, PublicationPhaseState::Refused),
+            ]
+        );
+        assert!(events[0].elapsed_micros.is_none() && events[2].elapsed_micros.is_none());
+        assert!(events[1].elapsed_micros.is_some() && events[3].elapsed_micros.is_some());
+        assert_eq!(events[3].kind, Some(ErrorKind::Changed));
+        assert_eq!(
+            events[3].operation,
+            Some("controlled final validation refusal")
+        );
+        assert!(events[1].kind.is_none() && events[1].operation.is_none());
+        println!(
+            "publication phase wrapper: {}",
+            serde_json::to_string(&events).unwrap()
+        );
+    }
+    let mut observer = PublicationObserver(None);
+    assert_eq!(
+        observer
+            .run(PublicationPhase::ValidateStage, || Ok(23))
+            .unwrap(),
+        23
+    );
+}
+
+#[test]
+fn publication_phase_actual_entry_stops_at_header_or_stage_validation_refusal() {
+    let scratch = Scratch::new();
+    let (manifest, mut context) = binding_fixture();
+    context.home = scratch.0.clone();
+    let parent = image_parent(&context);
+    fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(&parent)
+        .unwrap();
+    let stage = parent.join(".stage-phase-control");
+    fs::DirBuilder::new().mode(0o700).create(&stage).unwrap();
+    write_mode(
+        &stage.join("manifest.json"),
+        &json(&manifest).unwrap(),
+        0o400,
+    );
+    fs::set_permissions(&stage, fs::Permissions::from_mode(0o500)).unwrap();
+    let mut events = Vec::new();
+    let mut record = |event| events.push(event);
+    let error =
+        publish_staged_image_observed(&stage, &context, expires(), Some(&mut record)).unwrap_err();
+    // Synthetic metadata has a different logical root. The actual validator
+    // refuses it before original-source reads, sync, rename or final reuse.
+    assert_eq!(error.kind, ErrorKind::UnsafePath);
+    assert_eq!(
+        error.operation(),
+        "image is outside native-derived image parent"
+    );
+    assert!(!error.publication_may_have_happened);
+    assert_eq!(
+        events
+            .iter()
+            .map(|e| (e.phase, e.state))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                PublicationPhase::ReadStageManifest,
+                PublicationPhaseState::Started
+            ),
+            (
+                PublicationPhase::ReadStageManifest,
+                PublicationPhaseState::Completed
+            ),
+            (
+                PublicationPhase::ValidateStage,
+                PublicationPhaseState::Started
+            ),
+            (
+                PublicationPhase::ValidateStage,
+                PublicationPhaseState::Refused
+            ),
+        ]
+    );
+    assert_eq!(events[3].operation, Some(error.operation()));
+    assert!(stage.exists());
+    assert!(!parent.join(image_key(&manifest).unwrap()).exists());
+    println!(
+        "publication actual stage refusal: {}",
+        serde_json::to_string(&events).unwrap()
+    );
+    fs::set_permissions(
+        stage.join("manifest.json"),
+        fs::Permissions::from_mode(0o600),
+    )
+    .unwrap();
+    write_mode(&stage.join("manifest.json"), b"malformed", 0o400);
+    let mut events = Vec::new();
+    let mut record = |event| events.push(event);
+    let error =
+        publish_staged_image_observed(&stage, &context, expires(), Some(&mut record)).unwrap_err();
+    assert_eq!(error.operation(), "malformed staged image manifest");
+    assert_eq!(
+        events
+            .iter()
+            .map(|e| (e.phase, e.state))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                PublicationPhase::ReadStageManifest,
+                PublicationPhaseState::Started
+            ),
+            (
+                PublicationPhase::ReadStageManifest,
+                PublicationPhaseState::Refused
+            ),
+        ]
+    );
+    assert_eq!(events[1].kind, Some(error.kind));
+    println!(
+        "publication actual header refusal: {}",
+        serde_json::to_string(&events).unwrap()
+    );
+}
+
+#[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn publication_phase_real_rename_distinguishes_publish_existing_and_failure() {
+    let scratch = Scratch::new();
+    let parent = absolute_directory(&scratch.0, Access::PrivateParent, expires()).unwrap();
+    let stage = scratch.0.join(".stage-phase");
+    fs::DirBuilder::new().mode(0o700).create(&stage).unwrap();
+    write_mode(&stage.join("payload"), b"original staged bytes", 0o600);
+    let mut events = Vec::new();
+    let mut record = |event| events.push(event);
+    let mut observer = PublicationObserver(Some(&mut record));
+    let published = observer
+        .run_with_state(PublicationPhase::Rename, || {
+            publication_rename(parent.as_raw_fd(), ".stage-phase", "final")
+        })
+        .unwrap();
+    assert!(published);
+    fs::DirBuilder::new().mode(0o700).create(&stage).unwrap();
+    write_mode(&stage.join("payload"), b"later staged bytes", 0o600);
+    let published = observer
+        .run_with_state(PublicationPhase::Rename, || {
+            publication_rename(parent.as_raw_fd(), ".stage-phase", "final")
+        })
+        .unwrap();
+    assert!(!published);
+    let error = observer
+        .run_with_state(PublicationPhase::Rename, || {
+            publication_rename(parent.as_raw_fd(), ".stage-missing", "absent")
+        })
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Io);
+    assert!(error.publication_may_have_happened);
+    assert_eq!(
+        error.source.as_ref().unwrap().raw_os_error(),
+        Some(libc::ENOENT)
+    );
+    assert_eq!(
+        fs::read(scratch.0.join("final/payload")).unwrap(),
+        b"original staged bytes"
+    );
+    assert_eq!(
+        fs::read(stage.join("payload")).unwrap(),
+        b"later staged bytes"
+    );
+    assert_eq!(
+        events.iter().map(|e| e.state).collect::<Vec<_>>(),
+        vec![
+            PublicationPhaseState::Started,
+            PublicationPhaseState::Completed,
+            PublicationPhaseState::Started,
+            PublicationPhaseState::DestinationExists,
+            PublicationPhaseState::Started,
+            PublicationPhaseState::Refused,
+        ]
+    );
+    assert!(events.iter().all(|e| e.phase == PublicationPhase::Rename));
+    assert_eq!(events[5].kind, Some(ErrorKind::Io));
+    assert_eq!(
+        events[5].operation,
+        Some("atomic no-replace image publication")
+    );
+    println!(
+        "publication actual rename outcomes: {}",
+        serde_json::to_string(&events).unwrap()
+    );
+}
+#[test]
+fn source_cache_exclusion_never_hides_unreviewed_source_or_symlink_entries() {
+    let scratch = Scratch::new();
+    write_mode(&scratch.0.join("module.py"), b"source", 0o644);
+    write_mode(&scratch.0.join("orphan.pyc"), b"not source", 0o644);
+    let cache = scratch.0.join("__pycache__");
+    fs::DirBuilder::new().mode(0o700).create(&cache).unwrap();
+    write_mode(&cache.join("module.cpython.pyc"), b"not copied", 0o644);
+    let root = absolute_directory(&scratch.0, Access::Source, expires()).unwrap();
+    let mut files = BTreeSet::new();
+    let mut dirs = BTreeSet::new();
+    scan_tree(&root, "", false, true, &mut files, &mut dirs, expires()).unwrap();
+    assert_eq!(files, ["module.py".to_owned()].into_iter().collect());
+    assert!(dirs.is_empty());
+    write_mode(&scratch.0.join("unreviewed.py"), b"code", 0o644);
+    let first = names(&root, expires()).unwrap();
+    assert_eq!(
+        names(&root, expires()).unwrap(),
+        first,
+        "directory scans must not share an exhausted offset"
+    );
+    let mut files = BTreeSet::new();
+    let mut dirs = BTreeSet::new();
+    scan_tree(&root, "", false, true, &mut files, &mut dirs, expires()).unwrap();
+    assert!(files.contains("unreviewed.py"));
+    symlink(scratch.0.join("module.py"), scratch.0.join("symlink.pyc")).unwrap();
+    assert!(
+        scan_tree(
+            &root,
+            "",
+            false,
+            true,
+            &mut BTreeSet::new(),
+            &mut BTreeSet::new(),
+            expires()
+        )
+        .is_err()
+    );
+}
+#[test]
+fn sealed_tree_refuses_extra_files_and_file_reads_refuse_byte_bounds() {
+    let scratch = Scratch::new();
+    write_mode(&scratch.0.join("entry"), b"abcd", 0o555);
+    assert!(
+        read_file(
+            absolute_file(&scratch.0.join("entry"), Access::SealedFile, expires()).unwrap(),
+            3,
+            Access::SealedFile,
+            expires()
+        )
+        .is_err()
+    );
+    let root = absolute_directory(&scratch.0, Access::PrivateParent, expires()).unwrap();
+    let mut files = BTreeSet::new();
+    let mut dirs = BTreeSet::new();
+    scan_tree(&root, "", false, false, &mut files, &mut dirs, expires()).unwrap();
+    assert_eq!(files, ["entry".to_owned()].into_iter().collect());
+    write_mode(&scratch.0.join("extra"), b"unadmitted", 0o555);
+    files.clear();
+    scan_tree(&root, "", false, false, &mut files, &mut dirs, expires()).unwrap();
+    assert_ne!(files, ["entry".to_owned()].into_iter().collect());
+    assert!(deadline(Instant::now() - Duration::from_millis(1)).is_err());
+}
+
+#[test]
+fn native_marker_expansion_is_single_pass_and_refuses_missing_duplicate_markers() {
+    assert_eq!(quoted("a'b"), "'a'\\''b'");
+    assert_eq!(
+        expand(
+            "left __ONE__ middle __TWO__ end\n",
+            &[
+                ("__ONE__", "data __TWO__".into()),
+                ("__TWO__", "value".into())
+            ]
+        )
+        .unwrap(),
+        b"left data __TWO__ middle value end\n"
+    );
+    assert!(expand("__ONE____ONE__", &[("__ONE__", "value".into())]).is_err());
+    assert!(expand("missing", &[("__ONE__", "value".into())]).is_err());
+    assert!(replace_exact("a anchor anchor z", "anchor", "replacement", 1).is_err());
+}
+#[test]
+fn package_client_shell_is_independently_required_and_must_match_native_owned_bytes() {
+    let (manifest, _) = binding_fixture();
+    let mut originals = Originals {
+        bytes: TEMPLATES
+            .iter()
+            .map(|(name, source)| {
+                (
+                    ("client".to_owned(), format!("service-image/{name}")),
+                    source.as_bytes().to_vec(),
+                )
+            })
+            .collect(),
+        pins: vec![],
+        runtime_files: BTreeMap::new(),
+    };
+    assert_eq!(
+        execution_bytes(&manifest, &originals)
+            .unwrap_err()
+            .operation(),
+        "required original source missing"
+    );
+    originals.bytes.insert(
+        ("client".into(), "session-render-service-client.sh".into()),
+        b"unreviewed shell".to_vec(),
+    );
+    assert_eq!(
+        execution_bytes(&manifest, &originals)
+            .unwrap_err()
+            .operation(),
+        "service client shell differs from native-owned bytes"
+    );
+    originals.bytes.insert(
+        ("client".into(), "session-render-service-client.sh".into()),
+        CLIENT_SHELL.as_bytes().to_vec(),
+    );
+    // The correct package client passes its own check; this deliberately partial
+    // fixture then refuses at runtime reconstruction, never full admission.
+    assert_eq!(
+        execution_bytes(&manifest, &originals)
+            .unwrap_err()
+            .operation(),
+        "required runtime adaptation source missing"
+    );
+}
+#[test]
+fn first_profile_caws_entry_is_config_derived_not_an_arbitrary_executable() {
+    let (mut manifest, mut context) = binding_fixture();
+    manifest
+        .toolchain_tcb
+        .tools
+        .iter_mut()
+        .find(|t| t.name == "caws")
+        .unwrap()
+        .path = "/mutable/bin/caws".into();
+    reseal_metadata(&mut manifest, &mut context);
+    assert_eq!(
+        validate_binding(&manifest, &context, Path::new(&manifest.execution.root))
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsupportedProfile
+    );
+}
+#[test]
+fn staged_publication_selection_is_native_derived_and_bounded() {
+    let (_, context) = binding_fixture();
+    let allowed = image_parent(&context).join(".stage-Abc123");
+    assert_eq!(stage_name(&allowed, &context).unwrap(), ".stage-Abc123");
+    for path in [
+        image_parent(&context).join(".stage-"),
+        image_parent(&context).join("caller-image"),
+        PathBuf::from("/other/.stage-Abc123"),
+        image_parent(&context).join(format!(".stage-{}", "x".repeat(129))),
+    ] {
+        assert!(stage_name(&path, &context).is_err());
+    }
+}
+#[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn atomic_publication_never_overwrites_an_existing_destination() {
+    let scratch = Scratch::new();
+    let stage = scratch.0.join(".stage-abc123");
+    let destination = scratch.0.join("existing");
+    fs::DirBuilder::new().mode(0o700).create(&stage).unwrap();
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&destination)
+        .unwrap();
+    write_mode(&stage.join("payload"), b"stage bytes", 0o600);
+    write_mode(&destination.join("payload"), b"existing bytes", 0o600);
+    let original = fs::metadata(&stage).unwrap();
+    let parent = absolute_directory(&scratch.0, Access::PrivateParent, expires()).unwrap();
+    assert_eq!(
+        rename_no_replace(parent.as_raw_fd(), ".stage-abc123", "existing")
+            .unwrap_err()
+            .raw_os_error(),
+        Some(libc::EEXIST)
+    );
+    assert_eq!(fs::read(stage.join("payload")).unwrap(), b"stage bytes");
+    assert_eq!(
+        fs::read(destination.join("payload")).unwrap(),
+        b"existing bytes"
+    );
+    rename_no_replace(parent.as_raw_fd(), ".stage-abc123", "published").unwrap();
+    assert!(!stage.exists());
+    assert_eq!(
+        fs::read(scratch.0.join("published/payload")).unwrap(),
+        b"stage bytes"
+    );
+    let published = fs::metadata(scratch.0.join("published")).unwrap();
+    assert_eq!(
+        (published.dev(), published.ino()),
+        (original.dev(), original.ino())
+    );
+}
+
+#[test]
+fn binding_preserves_ordered_stock_stop_chain_and_nonzero_selected_index() {
+    let (mut manifest, mut context) = binding_fixture();
+    let stock = |name: &str| Handler {
+        path: format!("/machine/lib/runtimes/{}/{name}", context.runtime_digest),
+        sha256: "d".repeat(64),
+        entry: name.into(),
+        name: name.into(),
+        args: vec![],
+        tier: "stock".into(),
+        kind: "stock".into(),
+    };
+    manifest
+        .selection
+        .handlers
+        .insert(0, stock("plan-transcript-snapshot.sh"));
+    manifest.selection.handlers.push(stock("agents-stop.sh"));
+    manifest.selection.selected_index = 1;
+    context.expected_selection = manifest.selection.clone();
+    reseal_metadata(&mut manifest, &mut context);
+    validate_binding(&manifest, &context, Path::new(&manifest.execution.root)).unwrap();
+    assert_eq!(
+        manifest
+            .selection
+            .handlers
+            .iter()
+            .map(|h| h.entry.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "plan-transcript-snapshot.sh",
+            "session-log.sh",
+            "agents-stop.sh"
+        ]
+    );
+    assert_eq!(manifest.selection.selected_index, 1);
+}

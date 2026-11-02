@@ -1,0 +1,309 @@
+//! Native-owned Stop eligibility retained across dispatch, prefix and queueing.
+//! The serialized grant routes the selected engine; it cannot construct this
+//! owner or a completed prefix. Unsupported domains retain compatibility only
+//! before any native Stop effects have been attempted.
+use crate::{
+    cli::Config,
+    native_generation::GenerationReceipt,
+    protocol::{Ready, Request},
+    selection_observation::{GenerationValidationScope, SelectionObservationReceipt},
+    stop_admission::{Refusal, StockStopSelection},
+    stop_git::{FailureCustody, StopGitAdmissionReceipt},
+    stop_profile::StopProfileReceipt,
+};
+use std::{collections::BTreeMap, path::Path};
+
+pub(crate) struct EligibleStop<'owners, 'native> {
+    selection: StockStopSelection<'owners, 'native>,
+    profile: StopProfileReceipt<'owners>,
+    git: StopGitAdmissionReceipt<'owners, 'native>,
+}
+
+pub(crate) enum PregrantStop<'owners, 'native> {
+    Eligible(EligibleStop<'owners, 'native>),
+    Unsupported(Option<StockStopSelection<'owners, 'native>>),
+}
+
+/// Match the ordinary engine's inherited-startup calculation. The selected
+/// stock handler-env is infrastructure; any nonempty prior startup is outside
+/// this native domain and must retain its compatibility execution.
+fn ambient_startup(environment: &BTreeMap<String, String>, startup: &Path) -> bool {
+    if environment
+        .get("CAWS_PRIOR_BASH_ENV")
+        .is_some_and(|v| !v.is_empty())
+    {
+        return true;
+    }
+    environment
+        .get("BASH_ENV")
+        .is_some_and(|value| !value.is_empty() && startup.to_str() != Some(value.as_str()))
+}
+
+fn supported_session_id(sid: &str) -> bool {
+    !sid.is_empty()
+        && !matches!(sid, "unknown" | "." | "..")
+        && sid.len() <= 128
+        && sid
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+}
+
+impl<'owners, 'native: 'owners> PregrantStop<'owners, 'native> {
+    /// No eligible result escapes before the fresh generation bracket closes.
+    /// Unsupported selection stays available for post-offer validation.
+    pub(crate) fn admit(
+        original: &'owners caws_native::session_cache_wire::OriginalStopCapture<'native>,
+        config: &Config,
+        readset: &'owners SelectionObservationReceipt<'native>,
+        generation: &'owners GenerationReceipt,
+        ready: &Ready,
+        cancel: impl FnMut() -> Result<(), String>,
+        custody: &mut FailureCustody,
+    ) -> Result<Self, String> {
+        if ready.service_offer.is_some() {
+            return Err("Combined Stop admission cannot enclose a service offer".into());
+        }
+        custody.check()?;
+        let result = readset.validate_with(cancel, |scope, cancel| {
+            let result = (|| {
+                let selected = match StockStopSelection::admit_in_scope(
+                    original, config, readset, scope, cancel,
+                ) {
+                    Ok(selected) => selected,
+                    Err(Refusal::Unsupported(_)) => return Ok(Self::Unsupported(None)),
+                    Err(Refusal::Invalidated(reason)) => return Err(reason),
+                };
+                let Some(profile) =
+                    EligibleStop::profile_in_scope(&selected, generation, ready, scope, cancel)?
+                else {
+                    return Ok(Self::Unsupported(Some(selected)));
+                };
+                let Some(expected_git) = profile.git_distribution() else {
+                    // v1 and v2-null profiles cannot grant native Stop effects.
+                    return Ok(Self::Unsupported(Some(selected)));
+                };
+                let captured = StopGitAdmissionReceipt::capture_in_scope(
+                    scope,
+                    generation,
+                    original,
+                    expected_git,
+                    &mut *cancel,
+                );
+                let Some(git) = custody.retain(captured)? else {
+                    return Ok(Self::Unsupported(Some(selected)));
+                };
+                let eligible = EligibleStop {
+                    selection: selected,
+                    profile,
+                    git,
+                };
+                // Keep the final predispatch readset/profile/SQLite checks; only
+                // the full generation brackets enclose qualification before effects.
+                readset.validate_in_scope(scope, cancel, |cancel| {
+                    eligible.revalidate_in_scope(scope, cancel, custody)
+                })?;
+                Ok(Self::Eligible(eligible))
+            })();
+            // Preserve the first error before the closing bracket replaces it.
+            // Actual Git failures have already moved into root custody.
+            custody.preserve(result)
+        });
+        custody.preserve(result)
+    }
+}
+
+impl<'owners, 'native: 'owners> EligibleStop<'owners, 'native> {
+    fn profile_in_scope(
+        selection: &StockStopSelection<'owners, 'native>,
+        generation: &'owners GenerationReceipt,
+        ready: &Ready,
+        scope: &GenerationValidationScope<'_, 'native>,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<Option<StopProfileReceipt<'owners>>, String> {
+        selection
+            .readset()
+            .validate_in_scope(scope, cancel, |mut cancel| {
+                let original = selection.original();
+                scope.check_binding(generation, original.deadline(), &mut cancel)?;
+                let environment = original.caller_environment();
+                let root = generation.root();
+                if !ready.active
+                    || ready.service_offer.is_some()
+                    || ambient_startup(environment, &root.join("handler-env.sh"))
+                {
+                    return Ok(None);
+                }
+                // Refuse unsupported cwd/session spellings before the mandatory prefix
+                // can publish anything. Registration independently checks them again.
+                let cwd = caws_native::invocation_project::payload_string(
+                    original.original_payload(),
+                    "cwd",
+                )?;
+                let sid = caws_native::invocation_project::payload_string(
+                    original.original_payload(),
+                    "session_id",
+                )?;
+                if !cwd.as_deref().is_some_and(|cwd| {
+                    Path::new(cwd).is_absolute() && Path::new(cwd) == original.query_cwds()[0]
+                }) || !sid.as_deref().is_some_and(|sid| {
+                    supported_session_id(sid) && ready.session_id.as_deref() == Some(sid)
+                }) {
+                    return Ok(None);
+                }
+                use sha2::{Digest, Sha256};
+                let canonical = original
+                    .observed_project()
+                    .canonical_root
+                    .to_str()
+                    .ok_or("native Stop original root is not UTF-8")?;
+                if ready.project_digest.as_deref()
+                    != Some(format!("{:x}", Sha256::digest(canonical.as_bytes())).as_str())
+                {
+                    return Err("native Stop Ready project differs from original capture".into());
+                }
+                let profile = match StopProfileReceipt::capture_in_scope(
+                    scope,
+                    generation,
+                    original,
+                    &mut cancel,
+                ) {
+                    Ok(profile) => profile,
+                    Err(_) => {
+                        // Missing/unsupported semantic data is compatibility, but an
+                        // invalidated source, cancellation or expired clock is not.
+                        scope.check_binding(generation, original.deadline(), &mut cancel)?;
+                        return Ok(None);
+                    }
+                };
+                // Preserve the post-capture member/selector and linked-SQLite checks;
+                // their full generation brackets are supplied by this one scope.
+                profile.revalidate_in_scope(scope, &mut cancel)?;
+                Ok(Some(profile))
+            })
+    }
+
+    fn revalidate_in_scope(
+        &self,
+        scope: &GenerationValidationScope<'_, 'native>,
+        cancel: &mut impl FnMut() -> Result<(), String>,
+        custody: &mut FailureCustody,
+    ) -> Result<(), String> {
+        custody.check()?;
+        let result = (|| {
+            self.profile.revalidate_in_scope(scope, &mut *cancel)?;
+            let checked = self.git.revalidate_in_scope(scope, &mut *cancel);
+            custody.retain(checked)
+        })();
+        custody.preserve(result)
+    }
+
+    pub(crate) fn revalidate(
+        &self,
+        cancel: impl FnMut() -> Result<(), String>,
+        custody: &mut FailureCustody,
+    ) -> Result<(), String> {
+        custody.check()?;
+        let result = self
+            .selection
+            .readset()
+            .validate_with(cancel, |scope, cancel| {
+                self.revalidate_in_scope(scope, cancel, custody)
+            });
+        custody.preserve(result)
+    }
+
+    /// The selected agent-stop consumer consumes the actual admitted Git owner.
+    /// Every Failure reaches root custody before a closing String-only bracket.
+    pub(crate) fn observe_lease_common_dir(
+        self,
+        cancel: impl FnMut() -> Result<(), String>,
+        custody: &mut FailureCustody,
+    ) -> Result<caws_native::context_git::stop::SettledCommonDir, String> {
+        custody.check()?;
+        let Self {
+            selection,
+            profile,
+            git,
+        } = self;
+        let result = selection.readset().validate_with(cancel, |scope, cancel| {
+            let result = (|| {
+                profile.revalidate_in_scope(scope, &mut *cancel)?;
+                custody.retain(git.observe_common_dir(scope, &mut *cancel))
+            })();
+            custody.preserve(result)
+        });
+        custody.preserve(result)
+    }
+
+    pub(crate) fn dispatch(&self, request: &Request) -> Result<Vec<u8>, String> {
+        if request.id != self.selection.original().id()
+            || request.runtime_digest != self.profile.runtime_digest()
+        {
+            return Err("native Stop dispatch differs from qualified original".into());
+        }
+        let (renderer, digits) = self.profile.renderer_selector();
+        let mut bytes = serde_json::to_vec(&serde_json::json!({
+            "schema":"caws.runtime.dispatch.v3", "id":request.id,
+            "runtimeDigest":request.runtime_digest,
+            "nativeStop": {"schema":"caws.runtime.stop-admission.v1",
+                "loggerIndex":self.selection.logger_index(),
+                "sqlProfile":self.profile.sql_selector(),
+                "rendererProfile":renderer,"rendererIntegerMaxDigits":digits}
+        }))
+        .map_err(|e| e.to_string())?;
+        bytes.push(b'\n');
+        Ok(bytes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn skipped_or_unsafe_session_ids_remain_unsupported_before_prefix_effects() {
+        for sid in [
+            "",
+            "unknown",
+            ".",
+            "..",
+            "../neighbor",
+            "雪",
+            "session:other",
+            "sid\0",
+        ] {
+            assert!(!supported_session_id(sid), "{sid:?}");
+        }
+        for sid in ["session-1", "session_2.3", &"x".repeat(128)] {
+            assert!(supported_session_id(sid), "{sid:?}");
+        }
+        assert!(!supported_session_id(&"x".repeat(129)));
+    }
+
+    #[test]
+    fn foreign_or_prior_startup_cannot_be_removed_by_native_dispatch() {
+        let startup = Path::new("/reviewed/runtime/handler-env.sh");
+        for (bash, prior, expected) in [
+            (None, None, false),
+            (Some(""), Some(""), false),
+            (Some("/reviewed/runtime/handler-env.sh"), None, false),
+            (Some("/reviewed/runtime/handler-env.sh"), Some(""), false),
+            (
+                Some("/reviewed/runtime/handler-env.sh"),
+                Some("/user/startup"),
+                true,
+            ),
+            (Some("/user/startup"), None, true),
+            (Some("/user/startup"), Some(""), true),
+            (None, Some("/user/startup"), true),
+        ] {
+            let mut env = BTreeMap::new();
+            if let Some(value) = bash {
+                env.insert("BASH_ENV".into(), value.into());
+            }
+            if let Some(value) = prior {
+                env.insert("CAWS_PRIOR_BASH_ENV".into(), value.into());
+            }
+            assert_eq!(ambient_startup(&env, startup), expected, "{env:?}");
+        }
+    }
+}

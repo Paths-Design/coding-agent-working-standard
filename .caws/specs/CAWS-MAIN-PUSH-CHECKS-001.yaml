@@ -1,0 +1,58 @@
+id: CAWS-MAIN-PUSH-CHECKS-001
+title: 'Repair required main push verification without weakening semantic checks'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Repaired the four required push-check fixture contracts; 120 focused tests and the directory-only seven-test follow-up passed, gates passed, and independent committed-candidate feedback was grounded. Recorded A1/A2 with executed citations. Normal integrated pre-push and remote synchronization remain the parent task.'
+created_at: '2026-10-24T21:10:15.461Z'
+updated_at: '2026-10-24T21:35:39.704Z'
+created_by_session: '01a16c43-8af5-79e3-9535-9df94edfc037'
+blast_radius:
+  modules:
+    - 'CAWS pre-push test verification'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/hooks/opencode-plugin-payload-cwd.test.js'
+    - 'packages/caws-cli/tests/tooling/qualify-stop-profile.test.js'
+    - 'packages/caws-cli/tests/tooling/transcript-runtime-floor.test.js'
+    - 'packages/caws-cli/src/tooling/transcript-runtime-floor.ts'
+    - 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+  out: []
+invariants:
+  - 'Required semantic, hostile-path and mutation checks remain enforced; fixes derive expected values from the governing consumer contract'
+acceptance:
+  - id: A1
+    given: 'the committed main candidate and normal development cache state'
+    when: 'targeted failing checks execute'
+    then: 'path custody, reviewed reference inventory, transcript generation and mutation topology checks pass and reject their declared hostile controls'
+  - id: A2
+    given: 'the repaired fixtures and pinned qualification inputs'
+    when: 'the existing and added hostile controls execute'
+    then: >-
+      changed or omitted semantic source, extra semantic source, corrupt transcript
+      output, and unclassified or duplicate source accounting remain rejected
+observability:
+  - 'Raw push and targeted-check logs retained under /private/tmp'
+rollback:
+  - 'Revert the repair commit through an authorized CAWS lane if its contract is refuted'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Five focused suites passed 120 tests exit 0; raw /private/tmp/caws-push-checks-targeted-20261024.log. Directory-only inventory tightening then passed seven tests exit 0 in /private/tmp/caws-push-checks-reference-20261024.log. Fixed artifact hashes and semantic hostile controls preserved; committed candidate 7fd143e47555d04d31993f61a83b5272c771ffcb."
+    recorded_at: "2026-10-24T21:33:50.017Z"
+    test_nodeid: "packages/caws-cli/tests/tooling/qualify-stop-profile.test.js::request cannot replace fixed oracle with echo recipes or change reviewed corpus"
+    exit_code: 0
+    commit_sha: "7fd143e47555d04d31993f61a83b5272c771ffcb"
+    test_verified_at: "7fd143e47555d04d31993f61a83b5272c771ffcb"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected hostile assertions executed in the 120-test focused pass: changed/omitted/extra reference pins refuse, corrupt transcript bytes or receipts refuse, and missing/duplicate source classification fails. Raw /private/tmp/caws-push-checks-targeted-20261024.log; subsequent directory-only predicate recheck /private/tmp/caws-push-checks-reference-20261024.log. Full pre-push and origin/main synchronization remain parent task obligations."
+    recorded_at: "2026-10-24T21:34:22.994Z"
+    test_nodeid: "packages/caws-cli/tests/tooling/transcript-runtime-floor.test.js::capture is private and immutable on retry, and verifier rejects spill corruption with rewritten receipt"
+    exit_code: 0
+    commit_sha: "7fd143e47555d04d31993f61a83b5272c771ffcb"
+    test_verified_at: "7fd143e47555d04d31993f61a83b5272c771ffcb"

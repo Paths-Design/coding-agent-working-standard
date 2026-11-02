@@ -80,6 +80,13 @@ export function readYamlFile(filePath: string): Result<unknown> {
  * spec/policy loaders, which hand the raw string to the kernel.
  */
 export function readYamlSource(filePath: string): Result<string> {
+  const source = readYamlSourceBytes(filePath);
+  return source.ok ? ok(source.value.toString('utf8')) : err(source.errors);
+}
+
+/** Capture raw source once so an optimistic writer can parse and later compare
+ * the same bytes without losing information through UTF-8 decoding. */
+export function readYamlSourceBytes(filePath: string): Result<Buffer> {
   let stat: fs.Stats;
   try {
     stat = fs.statSync(filePath);
@@ -110,7 +117,7 @@ export function readYamlSource(filePath: string): Result<string> {
   }
 
   try {
-    return ok(fs.readFileSync(filePath, 'utf8'));
+    return ok(fs.readFileSync(filePath));
   } catch (e) {
     const cause = e as { code?: string; message?: string };
     return err(

@@ -81,7 +81,13 @@ function commitAll(repo, message) {
  * commit per path in `foreignPaths` (each outside scope). `otherLane` seeds a
  * second ACTIVE spec admitting the first foreign path.
  */
-function buildLane(prefix, name, specId, foreignPaths, { otherLane } = {}) {
+function buildLane(
+  prefix,
+  name,
+  specId,
+  foreignPaths,
+  { otherLane, scopeIn = ['work.txt'], support = [], otherScopeIn } = {}
+) {
   const repo = mkRepo(prefix);
   const init = initProject(repo);
   if (!init.ok) throw new Error('initProject failed: ' + JSON.stringify(init.errors));
@@ -91,10 +97,16 @@ function buildLane(prefix, name, specId, foreignPaths, { otherLane } = {}) {
     title: 'merge provenance fixture',
     mode: 'chore',
     actor: ACTOR,
-    scopeIn: ['work.txt'],
+    scopeIn,
   });
   if (!seeded.ok || seeded.value.kind !== 'success') {
     throw new Error('seed spec failed: ' + JSON.stringify(seeded));
+  }
+  if (support.length > 0) {
+    const amended = amendScopeSpec(caws, { id: specId, addSupport: support, actor: ACTOR });
+    if (!amended.ok || amended.value.kind !== 'success') {
+      throw new Error('seed support failed: ' + JSON.stringify(amended));
+    }
   }
   if (otherLane !== undefined) {
     const other = createSpec(caws, {
@@ -102,7 +114,7 @@ function buildLane(prefix, name, specId, foreignPaths, { otherLane } = {}) {
       title: 'other lane',
       mode: 'chore',
       actor: ACTOR,
-      scopeIn: [foreignPaths[0]],
+      scopeIn: otherScopeIn ?? [foreignPaths[0]],
     });
     if (!other.ok || other.value.kind !== 'success') {
       throw new Error('seed other spec failed: ' + JSON.stringify(other));
@@ -130,6 +142,7 @@ function buildLane(prefix, name, specId, foreignPaths, { otherLane } = {}) {
   git(wtPath, 'add', 'work.txt');
   git(wtPath, 'commit', '--quiet', '-m', 'lane work');
   for (const f of foreignPaths) {
+    fs.mkdirSync(path.dirname(path.join(wtPath, f)), { recursive: true });
     fs.writeFileSync(path.join(wtPath, f), `not lane work: ${f}\n`);
     git(wtPath, 'add', f);
     git(wtPath, 'commit', '--quiet', '-m', `foreign ${f}`);
@@ -519,4 +532,100 @@ describe('A5: operator copy routes a lane-provenance merge refusal to --add-supp
     // Vacuity guard: the census must actually find the provenance copy.
     expect(provenanceSentences).toBeGreaterThanOrEqual(4);
   });
+});
+
+describe('scope matcher merge provenance', () => {
+  test.each([
+    ['globstar direct child', 'src/direct.ts', { scopeIn: ['work.txt', 'src/**/*.ts'] }, true],
+    ['support braces', 'docs/api/cli.md', { support: ['docs/{api,agents}/cli.md'] }, true],
+    ['support brackets', 'assets/a/x.ts', { support: ['assets/[abc]/x.ts'] }, true],
+    [
+      'single star boundary',
+      'packages/a/b.ts',
+      {
+        scopeIn: ['work.txt', 'packages/*'],
+        otherLane: 'MATCHER-MERGE-002',
+        otherScopeIn: ['packages/**/*.ts'],
+      },
+      false,
+    ],
+    [
+      'phantom alternative lane',
+      'packages/a/b.ts',
+      {
+        otherLane: 'MATCHER-MERGE-002',
+        otherScopeIn: ['packages/*'],
+      },
+      false,
+    ],
+  ])('%s uses kernel semantics before merge mutation', (label, file, options, admitted) => {
+    const { repo, caws, wtPath } = buildLane(
+      'wnmp-matcher-',
+      'wt-matcher',
+      'MATCHER-MERGE-001',
+      [file],
+      options
+    );
+    const refsBefore = git(repo, 'show-ref');
+    const registryBefore = fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8');
+    const eventsBefore = fs.readFileSync(path.join(caws, 'events.jsonl'), 'utf8');
+    const result = runMerge(repo, 'wt-matcher', { dryRun: true, showData: true });
+    const payload = JSON.parse(result.all.slice(result.all.indexOf('\n{\n') + 1));
+    expect(result.code).toBe(admitted ? 0 : 1);
+    expect(payload.can_proceed).toBe(admitted);
+    if (admitted) {
+      expect(payload.merge_check.status).toBe('clean');
+      expect(result.all).not.toContain('outside spec scope:');
+    } else {
+      expect(result.all).toContain(`outside spec scope: ${file}`);
+      if (label === 'single star boundary') {
+        expect(result.all).toContain('active specs already admit the path: MATCHER-MERGE-002');
+      } else {
+        expect(result.all).not.toContain('active specs already admit the path:');
+      }
+    }
+    expect(git(repo, 'show-ref')).toBe(refsBefore);
+    expect(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8')).toBe(registryBefore);
+    expect(fs.readFileSync(path.join(caws, 'events.jsonl'), 'utf8')).toBe(eventsBefore);
+    expect(fs.existsSync(wtPath)).toBe(true);
+  });
+
+  test.each(['oversized lane', 'oversized alternative'])(
+    '%s refuses structurally and retains only independently matching hints',
+    (label) => {
+      const oversized = '[' + 'a'.repeat(65536);
+      const options = {
+        scopeIn: label === 'oversized lane' ? ['work.txt', oversized] : ['work.txt'],
+        otherLane: 'MATCHER-OVERSIZED-002',
+        otherScopeIn: label === 'oversized lane' ? ['src/**/*.ts'] : [oversized],
+      };
+      const { repo, caws, wtPath } = buildLane(
+        'wnmp-oversized-',
+        'wt-oversized',
+        'MATCHER-OVERSIZED-001',
+        ['src/direct.ts'],
+        options
+      );
+      const refsBefore = git(repo, 'show-ref');
+      const registryBefore = fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8');
+      const eventsBefore = fs.readFileSync(path.join(caws, 'events.jsonl'), 'utf8');
+      const result = runMerge(repo, 'wt-oversized', { dryRun: true, showData: true });
+      const payload = JSON.parse(result.all.slice(result.all.indexOf('\n{\n') + 1));
+      expect(result.code).toBe(1);
+      expect(payload.can_proceed).toBe(false);
+      expect(result.all).toContain('outside spec scope: src/direct.ts');
+      expect(payload.next_commands[0]).toBe(
+        'caws specs amend-scope MATCHER-OVERSIZED-001 --add-support src/direct.ts'
+      );
+      if (label === 'oversized lane') {
+        expect(result.all).toContain('active specs already admit the path: MATCHER-OVERSIZED-002');
+      } else {
+        expect(result.all).not.toContain('active specs already admit the path:');
+      }
+      expect(git(repo, 'show-ref')).toBe(refsBefore);
+      expect(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8')).toBe(registryBefore);
+      expect(fs.readFileSync(path.join(caws, 'events.jsonl'), 'utf8')).toBe(eventsBefore);
+      expect(fs.existsSync(wtPath)).toBe(true);
+    }
+  );
 });

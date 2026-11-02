@@ -1,0 +1,33 @@
+id: CAWS-GIT-HOOK-BRIDGE-001
+title: 'Mediate actual Git hooks through the Native lifecycle owner'
+mode: feature
+lifecycle_state: active
+created_at: '2026-11-01T07:45:20.327Z'
+updated_at: '2026-11-01T09:07:33.630Z'
+created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
+blast_radius:
+  modules:
+    - 'Native private Git hook bridge and readonly callback launch'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/execution_hook_bridge.rs'
+    - packages/caws-cli/src/execution/git-hook-launcher-main.ts
+    - packages/caws-cli/tests/execution/git-hook-launcher.test.js
+  out: []
+invariants:
+  - 'Only pinned lifecycle and callback clients receive the private bridge; arbitrary hook code receives no fence or control descriptors and no project writes'
+acceptance:
+  - id: A1
+    given: 'a Native-held canonical fence and pinned lifecycle caller'
+    when: 'private hook requests cross the inherited channel'
+    then: 'closed framing and authorized root and callback identities are enforced before launch'
+  - id: A2
+    given: 'real hooks plus scoped no-fork formatter requests'
+    when: 'the callback completes or fails'
+    then: 'truthful hook outcomes and immutable transaction inputs reach the trusted client while source-writer custody remains owned'
+rollback:
+  - 'Omit the optional hook bridge runtime and refuse executable callbacks without disabling them'
+non_functional: {}
+contracts: []

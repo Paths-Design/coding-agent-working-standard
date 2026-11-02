@@ -4814,3 +4814,171 @@ sent back to make opencode send `ctx.directory` and to scope fail-closed to the
 five surfaces whose payloads carry the field — the lesson being that an input a
 surface may omit needs a written per-surface contract with evidence, absence is
 decided per surface from it, and an identity is never a location.**
+
+## Entry 46: Mail addressed to a session was settled `delivered` into its subagents' contexts; each repair stated the rule correctly and applied it to bytes another layer had already transformed (October 2026)
+
+**Severity:** High (the "reports success while doing nothing" class for the
+recipient: a peer's message was recorded `delivered` while the addressed main
+thread never saw it; in the session that found it, 210 of 796 tool-use hook
+invocations came from subagents, and one coordination request reached its
+addressee 2h13m after settlement) **Era:** v12.x **Agents:** Claude Code session
+`dd67d988-8ccc-438d-a559-ccd670a03a98` (finder and implementer) and Codex
+orchestrator `01a15a2a-5057-75d0-a7e5-69d676673add` (reviewer and integration
+owner)
+
+### What happened
+
+The PreToolUse heartbeat delivers queued mail. It polls
+`caws message poll --me "$HOOK_SESSION_ID" --offer`, writes the message into the
+tool call's `additionalContext`, and settles the offer `delivered` at the
+`adapter_handoff` boundary. Claude Code runs a subagent's tool calls through the
+same hooks, with the parent's `session_id` and a top-level `agent_id` (usually
+with `agent_type`). The heartbeat read only the session id, so a parent's mail
+rode whichever tool call came next. On an orchestrator running background
+subagents, that was often a subagent's. The text landed in the subagent's
+transcript, the ledger said `delivered`, and the sender had no reason to resend.
+For message `3d74b7f0…` the chain was: offer at 22:47:14Z, a `pre_tool_use`
+invocation whose payload carried `agent_id`, settlement at 22:47:27Z, the
+context in `subagents/agent-a13a6319….jsonl` 78 ms later, and the first
+appearance in the parent's transcript through a direct read 2h13m after that.
+
+The repair took four rounds, and three of them repeated one mistake.
+
+1. **The first proposal decided from an exported variable and read a degenerate
+   id as main-thread.** It had the parser export `HOOK_AGENT_ID` and the
+   heartbeat skip delivery when it was non-empty. It treated `agent_id: ""` and
+   non-string ids as main-thread, to match the shared scalar rule. Both halves
+   point the wrong way.
+   - An environment variable is inherited. Project dispatchers do not scrub
+     `HOOK_*`, and the parse fast path trusts an inherited `HOOK_TOOL_NAME`, so
+     a hook process can carry an earlier invocation's identity.
+   - A present but malformed `agent_id` means the actor is unknown. Reading it
+     as main-thread delivers exactly when the classification is in doubt.
+
+   The rule became: only a well-formed JSON object with no top-level `agent_id`
+   key is main-thread, and a valid id is a subagent. Everything else is
+   uncertain, and uncertain retains the mail: an empty, non-string, over-limit
+   or bad-charset id, empty input, a TTY, undecodable bytes, a byte-order mark,
+   or a non-object. The lease write and the peer notice do not depend on the
+   class.
+
+2. **The shell heartbeat classified the parser's output.**
+   `read_hook_input_json` repairs what it reads and re-serializes it. It parses
+   leniently, strips control bytes and escapes undecodable bytes. A raw control
+   byte between members, or a NUL inside the `agent_id` key, therefore
+   classified differently from the bytes the harness sent. The heartbeat now
+   captures its own raw stdin and classifies it before the parser runs.
+3. **The first raw classifier decoded leniently.** An invalid UTF-8 byte inside
+   an ignored string became U+FFFD, the object parsed, and the call read as
+   main-thread. Classification now uses a fatal decoder with `ignoreBOM: true`,
+   followed by `JSON.parse`. A byte-order mark is kept rather than silently
+   consumed, so a BOM-prefixed payload is uncertain, as it is in the typed
+   classifier, where `JSON.parse` rejects U+FEFF. (The launcher's `json.loads`
+   reads bytes and strips a BOM, so on that path the heartbeat never sees one.)
+4. **The typed heartbeat decided from the normalized payload.** The protocol
+   turns empty input into the payload `{}`, which has no `agent_id` key. The
+   typed heartbeat now decides from `request.inputJson` through
+   `ingressActorContext`, which returns uncertain for empty or unparseable
+   input.
+
+The capture itself introduced a cleanup hazard. The parser installs its own EXIT
+trap, replacing the capture's cleanup trap, so a heartbeat terminated mid-parse
+leaked a file holding the payload. The heartbeat now opens the capture on a
+descriptor and unlinks it before parsing. The fast path writes no file.
+
+The tests also passed vacuously more than once:
+
+- **The heartbeat never ran.** The fixture copied the hook tree without the
+  executable bit, and `run_handlers` skips a non-executable handler as
+  `missing`. Every "withheld" assertion therefore held. The custody result now
+  carries a `ran` witness (the lease file), and every withheld row must show
+  `ran: true`.
+- **Timing decided the peer-notice assertion.** The peer notice is rate-limited
+  project-wide (`HEARTBEAT_EMIT_MIN_INTERVAL_MS`, 60 s by default), so its
+  outcome depended on what had run in the previous minute. The fixture sets the
+  limit to 0.
+- **The termination test misread the exit and could hang.** A bash child killed
+  by SIGTERM reports `{ code: null, signal: 'SIGTERM' }` to Node even when its
+  EXIT trap runs; 143 is the shell's own encoding. An unbounded `await` on a
+  child's exit also outlives Jest's timeout, which does not cancel the
+  continuation. The termination test bounds the wait and reaps with SIGKILL in
+  `finally`.
+
+A shared contract table,
+`packages/caws-cli/tests/hooks/actor-context-rows.json`, drives both the
+TypeScript classifier and the shell classifier extracted verbatim from the
+shipped hook. Against candidate `9aabcae9`, each falsifier fails the custody
+tests:
+
+| Falsifier                | Tests failed                                                  |
+| ------------------------ | ------------------------------------------------------------- |
+| Shell guard removed      | 52 of 93                                                      |
+| Uncertain mapped to main | 37 of 93: the uncertain rows and both environment-spoof tests |
+| Typed check removed      | 8 of 31                                                       |
+
+### Root cause
+
+A session id names a conversation, not the context that will read an injection.
+The heartbeat used the mail's address as the reader's identity. The settlement
+compounded this. `delivered` at `adapter_handoff` records that the hook handed
+text to the harness, and it was read downstream as "the addressee received it."
+The mechanism that produced a candidate state was treated as entitled to
+establish it.
+
+The repairs then failed in a quieter way. Each round stated the rule correctly
+and applied it to an input that some layer had already transformed: an inherited
+variable, a repaired parse, a lenient decode, a normalized payload. Each layer
+is reasonable for its own purpose. None of them is the ingress.
+
+### What it doesn't catch / state at time of writing
+
+- **Installed runtimes are not repaired.** The repair is in the shared hook
+  template and the typed heartbeat (`CAWS-SUBAGENT-MAIL-CUSTODY-001`). A machine
+  runtime selected before it keeps delivering into subagents until a runtime
+  that carries the repair is installed and selected. End-to-end delivery inside
+  a live Claude Code session through the installed runtime was not observed.
+- **The project-dispatcher path forwards transformed or empty input.** There the
+  heartbeat classifies whatever the dispatcher forwards on stdin. On the
+  inherited-`HOOK_TOOL_NAME` fast path the dispatcher forwards nothing, and the
+  heartbeat withholds as uncertain. Two repairs remain open: carrying the
+  harness's original bytes through project dispatchers, and scrubbing inherited
+  `HOOK_*` there. Other guards that trust an inherited `HOOK_TOOL_NAME` are not
+  covered.
+- **Codex was not inspected.** Only Claude Code payloads were captured. Whether
+  Codex marks subagent tool calls with a top-level `agent_id` is assumed, not
+  observed.
+- **Retention costs latency.** Mail waits for the parent's next main-thread tool
+  call. An orchestrator that only waits on subagents sees it when it next runs a
+  tool, or by running `caws message poll` itself.
+- **Explicit polls are not attributed.** A `caws message poll` run from a
+  subagent's shell is not attributed to the subagent, because the CLI never sees
+  `agent_id`.
+- **The peer notice is wrong for Claude Code subagents.** It says "a forked
+  session gets its own lease id once it runs its first tool call"
+  (`src/runtime/agent-heartbeat.ts`). Claude Code subagents register no lease.
+
+### Doctrine
+
+> The address of a message is not the identity of its reader. Inject into an
+> agent context only when that hook invocation's own ingress shows the context
+> is the addressee. Decide from the bytes the harness sent, before any parser,
+> decoder or normalizer has touched them, and never from inherited environment.
+> When the reader is in doubt, retain: held mail is late, but misdelivered mail
+> is lost while the ledger reports success. A settlement names the boundary its
+> mechanism observed, and no consumer reads "handed to the adapter" as receipt.
+> A test that asserts nothing happened must also prove that the code under test
+> ran; otherwise it passes when nothing runs at all.
+
+### Single-line synthesis
+
+**Entry 46: Claude Code runs a subagent's tool calls with the parent's
+`session_id` plus a top-level `agent_id`, and the heartbeat, keyed on the
+session id alone, injected the parent's mail into whichever subagent called a
+tool next and settled it `delivered` at `adapter_handoff` while the addressee
+never saw it. The repair kept failing in one way: the rule was stated correctly
+and applied to an exported variable, a parser-repaired payload, a leniently
+decoded string and a protocol-normalized `{}`, and every one of those disagrees
+with the ingress somewhere. Some tests passed because the heartbeat was never
+executable. The lesson is that custody is decided from the invocation's own raw
+bytes and a doubtful actor retains mail. A delivery boundary is not receipt, and
+a "nothing happened" test proves the code ran.**

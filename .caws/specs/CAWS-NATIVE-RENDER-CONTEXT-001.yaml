@@ -1,0 +1,60 @@
+id: CAWS-NATIVE-RENDER-CONTEXT-001
+title: 'Produce original-bound Git context for typed session rendering'
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed dormant original-invocation Git observer and typed consumer at848056e9. A1-A3 verified through final source-matched native/Bash/TS captures, hostile ownership tests, doctor and gates; independent review claims grounded. Historical failed cleanup remains unknown. Production capture/bind carrier, calendar, Linux, combined image and activation remain parent publication obligations.'
+created_at: '2026-10-23T12:21:41.938Z'
+updated_at: '2026-10-23T13:49:00.711Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native original invocation Git observations and typed Render context consumer'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/invocation_project.rs'
+    - 'packages/caws-native/src/render_context.rs'
+    - 'packages/caws-native/src/lib.rs'
+    - 'packages/caws-native/tests/render_context.rs'
+    - 'packages/caws-cli/src/runtime/render-context.ts'
+    - 'packages/caws-cli/tests/runtime/render-context.test.js'
+  out: []
+invariants:
+  - 'Actual original CWD spelling and captured environment select the Git observation; no synthetic context defaults or publication authority are introduced'
+  - 'Preserve selected executable checks, original Child/group/pipe custody, cancellation, bounded output and retained cleanup uncertainty; nonzero Git exits do not erase query evidence'
+  - 'Keep the existing context_git v1 two-query contract unchanged and production Render activation closed until carrier and calendar integration are qualified'
+acceptance:
+  - id: A1
+    given: 'ordinary linked subdirectory detached unborn and dirty repositories'
+    when: 'the actual native producer and unchanged shell context commands observe them'
+    then: 'retained raw bytes statuses and typed branch head dirty-count values match the reviewed command semantics'
+  - id: A2
+    given: 'cancellation held pipes changed executable output exhaustion and partial nonzero output'
+    when: 'context observation runs within the original deadline'
+    then: 'exact failure and cleanup state are retained without stale context replay or publication effects'
+  - id: A3
+    given: 'native serialized observations and hostile malformed or mismatched records'
+    when: 'the typed consumer derives Render context'
+    then: 'original correlation and CWD remain exact invalid observations are refused and no fixture defaults or generic whitespace trimming replace source semantics'
+rollback:
+  - 'Leave the new producer and consumer unselected; revert the coherent source unit through ordinary governed history if its contracts fail'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Bounded dormant component at848056e9; root inspected source and retained external publication-integration/render-context-* artifacts. Committed-source join rehashes all6 blobs against build03, project regression02, native05 and JS03. Normal build0/6.432s;15 project regressions0/5.298s;6 native integration cases0/6.568s;57 JS tests0/0.964s including14 actual native captures, no skips. Source/tool pins stable, no final supervisor residue. Independent committed67462 review C1-C5 grounded and repaired at848056: final regression rerun; ignored raw byte semantics; explicit retained Failure contract with persistent-refusal actual Child; guaranteed group settlement before reap; actual bare repo false-probe semantics. Doctor0E/4W/5I and5 full-six-file gates pass. Commit verification establishes existence only; external artifacts manually inspected. Actual normal, linked, subdirectory, lexical CWD, detached, dirty, unborn and outside captures match separately executed stock Bash commands. Partial failing HEAD preserves bytes plus unknown; LF-only strip and raw status LF counts preserved. Ignored nonUTF8/NUL stderr/probe/status and discarded failed-branch bytes match stock. Bare repo probe exit0/stdoutfalse continues and actual Bash status128 produces no context; typed consumer refuses git_exit. Consumed branch/HEAD invalidUTF8 or NUL remain explicit unsupported profile, not claimed universal byte parity."
+    recorded_at: "2026-10-23T13:48:30.002Z"
+    commit_sha: "848056e9a63f9d85d59b67e367c0059c27ee70ae"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Bounded dormant component at848056e9; root inspected source and retained external publication-integration/render-context-* artifacts. Committed-source join rehashes all6 blobs against build03, project regression02, native05 and JS03. Normal build0/6.432s;15 project regressions0/5.298s;6 native integration cases0/6.568s;57 JS tests0/0.964s including14 actual native captures, no skips. Source/tool pins stable, no final supervisor residue. Independent committed67462 review C1-C5 grounded and repaired at848056: final regression rerun; ignored raw byte semantics; explicit retained Failure contract with persistent-refusal actual Child; guaranteed group settlement before reap; actual bare repo false-probe semantics. Doctor0E/4W/5I and5 full-six-file gates pass. Commit verification establishes existence only; external artifacts manually inspected. Actual timeout404ms/8stdoutbytes, cancellation105ms/0bytes, held-pipes406ms/8bytes, output-limit336ms/1MiB retain raw failure and final observed exit/group settlement/EOF/reap. Replaced selected executable and unsupported environment refuse before query. Three injected persistentEPERM attempts hold one actual Child without reaping; independent teardown alone settles it. Historical native02 failed and cleanup remains UNKNOWN, fresh census is not retroactive proof. Final checks do not prove eventual recovery from permanent refusal. Future carrier must retain/transfer exact Failure after finite retry budget; no carrier or publication selected."
+    recorded_at: "2026-10-23T13:48:30.909Z"
+    commit_sha: "848056e9a63f9d85d59b67e367c0059c27ee70ae"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Bounded dormant component at848056e9; root inspected source and retained external publication-integration/render-context-* artifacts. Committed-source join rehashes all6 blobs against build03, project regression02, native05 and JS03. Normal build0/6.432s;15 project regressions0/5.298s;6 native integration cases0/6.568s;57 JS tests0/0.964s including14 actual native captures, no skips. Source/tool pins stable, no final supervisor residue. Independent committed67462 review C1-C5 grounded and repaired at848056: final regression rerun; ignored raw byte semantics; explicit retained Failure contract with persistent-refusal actual Child; guaranteed group settlement before reap; actual bare repo false-probe semantics. Doctor0E/4W/5I and5 full-six-file gates pass. Commit verification establishes existence only; external artifacts manually inspected. Typed consumer uses exact original id/runtimeDigest/token/CWD/executable identity; UUID and128-byte token controls plus malformed, mismatched, reordered, invalidbase64/status and unconfirmedcleanup records refuse.57 actual JS cases consume14 exact native captures; raw ignored streams remain bytes, only consumed branch/HEAD decode, no generic whitespace trim/default substitution. No production carrier, calendar, Linux execution or machine activation claim."
+    recorded_at: "2026-10-23T13:48:31.822Z"
+    commit_sha: "848056e9a63f9d85d59b67e367c0059c27ee70ae"

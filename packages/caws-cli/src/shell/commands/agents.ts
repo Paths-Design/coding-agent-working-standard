@@ -32,16 +32,17 @@
 //   - list / show: read-only via loadLeases + summarizeActiveAgents.
 
 import * as os from 'node:os';
+import { computeActiveSummary, heartbeatAgentActivity } from '../../application/agent-heartbeat';
+import { stopAgentActivity } from '../../application/agent-stop';
 import {
   isOk,
   registerAgentSession,
-  heartbeatAgentSession,
-  stopAgentSession,
   setAgentLeaseWorkState,
   summarizeActiveAgents,
   LEASE_WORK_STATES,
   type ActivitySummary,
   type AgentLease,
+  type Diagnostic,
   type LeaseContext,
   type LeaseReason,
   type LeaseRegistry,
@@ -51,7 +52,9 @@ import {
 
 import {
   applyLeasePatch,
+  loadBridges,
   loadLeases,
+  loadSpecs,
   loadWorktrees,
   platformEngagement,
   pruneDeadLeases,
@@ -215,50 +218,7 @@ function buildLeaseContext(
 
 // ─── active-summary JSON shape (CAWS-native; NEVER hook envelope) ────────
 
-interface ActiveAgentSummaryEntry {
-  readonly session_id: string;
-  readonly bound_worktree: string | null;
-  readonly bound_spec_id: string | null;
-  readonly branch: string | null;
-  readonly git_dir_kind: 'canonical' | 'worktree';
-  readonly last_active_age_ms: number;
-  readonly is_self: boolean;
-}
-
-interface ActiveSummary {
-  readonly active_agent_count: number;
-  readonly active_agents: ReadonlyArray<ActiveAgentSummaryEntry>;
-}
-
 const DEFAULT_STALE_TTL_MS = 30 * 60 * 1000; // 30m
-
-function computeActiveSummary(
-  registry: LeaseRegistry,
-  selfSessionId: string,
-  now: Date,
-  ttlMs: number = DEFAULT_STALE_TTL_MS
-): ActiveSummary {
-  // Defensive: kernel feature-detect. If summarizeActiveAgents is
-  // missing, fall back to an empty summary. Caller (register/heartbeat
-  // --include-active-summary) receives `active_agent_count: 0` and an
-  // empty active_agents array rather than a Node throw.
-  const summary = callSummarizeActiveAgentsSafe(registry, now, ttlMs) ?? EMPTY_ACTIVITY_SUMMARY;
-  const entries: ActiveAgentSummaryEntry[] = summary.active.map((lease) => ({
-    session_id: lease.session_id,
-    bound_worktree: lease.bound_worktree ?? null,
-    bound_spec_id: lease.bound_spec_id ?? null,
-    branch: lease.branch ?? null,
-    git_dir_kind: lease.git_common_dir === lease.git_dir ? 'canonical' : 'worktree',
-    last_active_age_ms: Math.max(0, now.getTime() - Date.parse(lease.last_active)),
-    is_self: lease.session_id === selfSessionId,
-  }));
-  return {
-    active_agent_count: entries.length,
-    active_agents: entries,
-  };
-}
-
-// ─── caws agents register ─────────────────────────────────────────────────
 
 export interface RegisterOpts extends BaseAgentsOpts {
   readonly reason?: LeaseReason;
@@ -392,86 +352,46 @@ export function runAgentsHeartbeatCommand(opts: HeartbeatOpts = {}): number {
       : typeof env['CAWS_FORKED_FROM'] === 'string' && env['CAWS_FORKED_FROM'].length > 0
         ? env['CAWS_FORKED_FROM']
         : undefined;
-  if (kind !== undefined && kind !== 'main' && kind !== 'fork' && kind !== 'subagent') {
-    err("caws agents heartbeat: --session-kind accepts exactly 'main', 'fork', or 'subagent'.");
-    return 1;
-  }
-  if (forkedFrom !== undefined && kind !== 'fork') {
-    err('caws agents heartbeat: --forked-from is only meaningful with --session-kind fork.');
-    return 1;
-  }
-  const forkedContext: LeaseContext = {
-    ...context,
-    ...(kind !== undefined ? { harness_session_kind: kind } : {}),
-    ...(forkedFrom !== undefined ? { forked_from: forkedFrom } : {}),
-  };
-
-  const now = nowFn();
-  const reason: LeaseReason = opts.reason ?? 'pre_tool_use';
-  const throttleMs = opts.throttleMs ?? 0;
-
-  const loadRes = loadLeases(cawsDir);
-  if (!isOk(loadRes)) {
-    err('caws agents heartbeat: lease directory unreadable.');
-    err(renderDiagnostics(loadRes.errors, { showData }));
-    return 2;
-  }
-  let leases = loadRes.value.leases;
-
-  // Throttle check: if existing lease's last_active is within throttleMs,
-  // skip the write. The active-summary is still computed and returned so
-  // the hook caller doesn't lose visibility during throttle windows.
-  const existing = leases[idRes.identity.session_id];
-  let throttled = false;
-  let wrote = false;
-
-  if (existing !== undefined && throttleMs > 0) {
-    const lastActiveMs = Date.parse(existing.last_active);
-    const age = now.getTime() - lastActiveMs;
-    if (Number.isFinite(lastActiveMs) && age < throttleMs) {
-      throttled = true;
-    }
-  }
-
-  if (!throttled) {
-    const patchRes = heartbeatAgentSession(leases, idRes.identity, forkedContext, now, reason);
-    if (!isOk(patchRes)) {
-      err('caws agents heartbeat: kernel refused.');
-      err(renderDiagnostics(patchRes.errors, { showData }));
+  const result = heartbeatAgentActivity({
+    cawsDir,
+    identity: idRes.identity,
+    context,
+    now: nowFn,
+    ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+    ...(opts.throttleMs !== undefined ? { throttleMs: opts.throttleMs } : {}),
+    ...(opts.includeActiveSummary !== undefined
+      ? { includeActiveSummary: opts.includeActiveSummary }
+      : {}),
+    ...(kind !== undefined ? { sessionKind: kind } : {}),
+    ...(forkedFrom !== undefined ? { forkedFrom } : {}),
+  });
+  if (!result.ok) {
+    if (result.stage === 'fork-context') {
+      err(
+        result.reason === 'invalid-session-kind'
+          ? "caws agents heartbeat: --session-kind accepts exactly 'main', 'fork', or 'subagent'."
+          : 'caws agents heartbeat: --forked-from is only meaningful with --session-kind fork.'
+      );
       return 1;
     }
-    const applyRes = applyLeasePatch(cawsDir, patchRes.value);
-    if (!isOk(applyRes)) {
-      err('caws agents heartbeat: store write failed.');
-      err(renderDiagnostics(applyRes.errors, { showData }));
-      return 1;
+    if (result.stage === 'identity') {
+      err(`caws agents: invalid --session-id "${idRes.identity.session_id}".`);
+    } else {
+      const message = {
+        load: 'caws agents heartbeat: lease directory unreadable.',
+        transition: 'caws agents heartbeat: kernel refused.',
+        apply: 'caws agents heartbeat: store write failed.',
+      }[result.stage];
+      err(message);
     }
-    wrote = applyRes.value.wrote;
-    // Re-load for active summary so we include our own fresh write.
-    const reload = loadLeases(cawsDir);
-    if (isOk(reload)) leases = reload.value.leases;
+    err(renderDiagnostics(result.errors, { showData }));
+    return result.stage === 'load' ? 2 : 1;
   }
-
-  const fn = safeLeaseFilename(idRes.identity.session_id);
-  const leasePath = isOk(fn) ? `.caws/leases/${fn.value}` : null;
-
-  if (json) {
-    const payload: Record<string, unknown> = {
-      ok: true,
-      session_id: idRes.identity.session_id,
-      lease_path: leasePath,
-      wrote,
-      throttled,
-    };
-    if (opts.includeActiveSummary === true) {
-      Object.assign(payload, computeActiveSummary(leases, idRes.identity.session_id, now));
-    }
-    emitJson(out, payload);
-  } else {
+  if (json) emitJson(out, result.value);
+  else
     out(
-      `heartbeat ${idRes.identity.session_id} (${throttled ? 'throttled' : 'wrote'}, lease: ${leasePath ?? '?'})`
+      `heartbeat ${result.value.session_id} (${result.value.throttled ? 'throttled' : 'wrote'}, lease: ${result.value.lease_path ?? '?'})`
     );
-  }
   return 0;
 }
 
@@ -498,37 +418,27 @@ export function runAgentsStopCommand(opts: StopOpts = {}): number {
   );
   if (idRes === null) return 1;
 
-  const now = nowFn();
-
-  const loadRes = loadLeases(cawsDir);
-  if (!isOk(loadRes)) {
-    err('caws agents stop: lease directory unreadable.');
-    err(renderDiagnostics(loadRes.errors, { showData }));
-    return 2;
-  }
-
-  const patchRes = stopAgentSession(loadRes.value.leases, idRes.identity, now);
-  if (!isOk(patchRes)) {
-    err('caws agents stop: kernel refused.');
-    err(renderDiagnostics(patchRes.errors, { showData }));
-    return 1;
-  }
-
-  const applyRes = applyLeasePatch(cawsDir, patchRes.value);
-  if (!isOk(applyRes)) {
-    err('caws agents stop: store write failed.');
-    err(renderDiagnostics(applyRes.errors, { showData }));
-    return 1;
+  const stopped = stopAgentActivity({ cawsDir, identity: idRes.identity, now: nowFn });
+  if (!stopped.ok) {
+    err(
+      stopped.stage === 'load'
+        ? 'caws agents stop: lease directory unreadable.'
+        : stopped.stage === 'apply'
+          ? 'caws agents stop: store write failed.'
+          : 'caws agents stop: kernel refused.'
+    );
+    err(renderDiagnostics(stopped.errors, { showData }));
+    return stopped.stage === 'load' ? 2 : 1;
   }
 
   if (json) {
     emitJson(out, {
       ok: true,
       session_id: idRes.identity.session_id,
-      wrote: applyRes.value.wrote,
-      diagnostics: applyRes.value.diagnostics,
+      wrote: stopped.value.wrote,
+      diagnostics: stopped.value.diagnostics,
     });
-  } else if (applyRes.value.wrote) {
+  } else if (stopped.value.wrote) {
     out(`stopped ${idRes.identity.session_id}`);
   } else {
     out(`no prior lease for ${idRes.identity.session_id} (no-op)`);
@@ -591,8 +501,12 @@ interface OwnedWorktree {
  * be read, and nothing about ownership may be asserted either way.
  */
 type BindingIndex =
-  | { readonly resolved: true; readonly bySession: ReadonlyMap<string, readonly OwnedWorktree[]> }
-  | { readonly resolved: false };
+  | {
+      readonly resolved: true;
+      readonly bySession: ReadonlyMap<string, readonly OwnedWorktree[]>;
+      readonly specIds: ReadonlySet<string>;
+    }
+  | { readonly resolved: false; readonly diagnostics: readonly Diagnostic[] };
 
 const BINDING_UNKNOWN = 'unknown';
 const BINDING_NO_WORKTREE = '(no worktree)';
@@ -601,24 +515,26 @@ const BINDING_SOURCE = '.caws/worktrees.json';
 
 function indexWorktreeBindings(cawsDir: string): BindingIndex {
   const res = loadWorktrees(cawsDir);
-  if (!isOk(res)) return { resolved: false };
+  if (!isOk(res)) return { resolved: false, diagnostics: res.errors };
 
   const bySession = new Map<string, OwnedWorktree[]>();
+  const specIds = new Set<string>();
   // Sorted by worktree name so a session owning several renders the same
   // order on every run, and so the two text columns stay index-aligned.
   for (const name of Object.keys(res.value).sort()) {
     const record = res.value[name];
     if (typeof record !== 'object' || record === null) continue;
-    const sessionId = record.owner?.session_id;
-    if (typeof sessionId !== 'string' || sessionId.length === 0) continue;
     const specId =
       typeof record.specId === 'string' && record.specId.length > 0 ? record.specId : null;
+    if (specId !== null) specIds.add(specId);
+    const sessionId = record.owner?.session_id;
+    if (typeof sessionId !== 'string' || sessionId.length === 0) continue;
     const entry: OwnedWorktree = { worktree: name, spec_id: specId };
     const owned = bySession.get(sessionId);
     if (owned === undefined) bySession.set(sessionId, [entry]);
     else owned.push(entry);
   }
-  return { resolved: true, bySession };
+  return { resolved: true, bySession, specIds };
 }
 
 /**
@@ -649,6 +565,81 @@ function bindingsPayload(index: BindingIndex, sessionIds: readonly string[]) {
     by_session[sessionId] = index.bySession.get(sessionId) ?? [];
   }
   return { source: BINDING_SOURCE, resolution: 'resolved' as const, by_session };
+}
+
+const BRIDGE_SOURCES = {
+  claims: '.caws/claims/bridge.json',
+  specs: '.caws/specs/',
+  worktrees: BINDING_SOURCE,
+} as const;
+
+type BridgeBindingIndex =
+  | { readonly resolved: true; readonly bySession: ReadonlyMap<string, readonly string[]> }
+  | { readonly resolved: false; readonly diagnostics: readonly Diagnostic[] };
+
+/** Active bridge ownership is independent of the lease bucket. A failed
+ * authority read cannot establish absence; worktree precedence uses the
+ * same registry observation that supplied the worktree columns. */
+function indexBridgeBindings(cawsDir: string, worktrees: BindingIndex): BridgeBindingIndex {
+  const claims = loadBridges(cawsDir);
+  const specs = loadSpecs(cawsDir);
+  const diagnostics = [
+    ...(!isOk(claims) ? claims.errors : []),
+    ...specs.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'),
+    ...(!worktrees.resolved ? worktrees.diagnostics : []),
+  ];
+  if (!isOk(claims) || !worktrees.resolved || diagnostics.length > 0) {
+    return { resolved: false, diagnostics };
+  }
+
+  const specsById = new Map(specs.specs.map((spec) => [spec.id, spec]));
+  const bySession = new Map<string, string[]>();
+  for (const specId of Object.keys(claims.value.bridges).sort()) {
+    const entry = claims.value.bridges[specId];
+    if (
+      entry === undefined ||
+      typeof entry.session_id !== 'string' ||
+      entry.session_id.trim().length === 0
+    )
+      continue;
+    const spec = specsById.get(specId);
+    if (spec === undefined || spec.lifecycle_state !== 'active') continue;
+    if (
+      worktrees.specIds.has(specId) ||
+      (typeof spec.worktree === 'string' && spec.worktree.length > 0)
+    )
+      continue;
+    const owned = bySession.get(entry.session_id);
+    if (owned === undefined) bySession.set(entry.session_id, [specId]);
+    else owned.push(specId);
+  }
+  return { resolved: true, bySession };
+}
+
+function bridgeColumn(index: BridgeBindingIndex, sessionId: string): string {
+  if (!index.resolved) return 'bridges=unknown';
+  const owned = index.bySession.get(sessionId) ?? [];
+  return `bridges=${owned.length === 0 ? '(none)' : owned.join(',')}`;
+}
+
+function bridgeBindingsPayload(index: BridgeBindingIndex, sessionIds: readonly string[]) {
+  if (!index.resolved) {
+    return {
+      sources: BRIDGE_SOURCES,
+      resolution: 'unreadable' as const,
+      diagnostics: index.diagnostics,
+    };
+  }
+  const by_session: Record<string, readonly string[]> = Object.fromEntries(
+    sessionIds.map((sessionId) => [sessionId, index.bySession.get(sessionId) ?? []])
+  );
+  return { sources: BRIDGE_SOURCES, resolution: 'resolved' as const, by_session };
+}
+
+function bridgeSourceDisclosureLine(index: BridgeBindingIndex): string {
+  return index.resolved
+    ? `bridge-source: ${BRIDGE_SOURCES.claims} + ${BRIDGE_SOURCES.specs} (authority; active specs, worktree precedence)`
+    : 'bridge-source: unavailable (claims, specs or worktree input unreadable)';
 }
 
 const LEASE_SOURCE = '.caws/leases';
@@ -761,6 +752,7 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
 
   // Ownership is joined from authority, never read off the lease cache.
   const bindings = indexWorktreeBindings(cawsDir);
+  const bridges = indexBridgeBindings(cawsDir, bindings);
 
   const hidden = [
     hiddenBucket(
@@ -801,8 +793,10 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
       sources: {
         liveness: LEASE_SOURCE,
         worktree_binding: bindings.resolved ? BINDING_SOURCE : null,
+        bridge_binding: bridges.resolved ? BRIDGE_SOURCES.claims : null,
       },
       worktree_bindings: bindingsPayload(bindings, emittedSessions),
+      bridge_bindings: bridgeBindingsPayload(bridges, emittedSessions),
       active: summary.active,
       ...(wantsStale ? { stale: summary.stale } : {}),
       ...(wantsStopped ? { stopped: summary.stopped } : {}),
@@ -819,21 +813,24 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
       silent_platforms: silent,
     });
   } else {
-    out(`active: ${summary.active.length}`);
-    for (const l of summary.active) {
+    const renderLease = (l: AgentLease) => {
       // LEASE-WORK-STATE-001: append the visibility-only state tag when
       // declared; absent renders nothing extra.
       const stateTag = l.work_state !== undefined ? `  ${l.work_state}` : '';
       const [worktreeCol, specCol] = bindingColumns(bindings, l.session_id);
-      out(`  ${l.session_id}  ${worktreeCol}  ${specCol}${stateTag}`);
-    }
+      out(
+        `  ${l.session_id}  ${worktreeCol}  ${specCol}  ${bridgeColumn(bridges, l.session_id)}${stateTag}`
+      );
+    };
+    out(`active: ${summary.active.length}`);
+    for (const l of summary.active) renderLease(l);
     if (wantsStale) {
       out(`stale:  ${summary.stale.length}`);
-      for (const l of summary.stale) out(`  ${l.session_id}`);
+      for (const l of summary.stale) renderLease(l);
     }
     if (wantsStopped) {
       out(`stopped: ${summary.stopped.length}`);
-      for (const l of summary.stopped) out(`  ${l.session_id}`);
+      for (const l of summary.stopped) renderLease(l);
     }
     out(visibilityLine(shownCount, summary.total, hidden));
     for (const pair of conjoining.confirmed.slice(0, CONJOINED_TEXT_DETAIL_LIMIT)) {
@@ -878,7 +875,9 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
       out(`silent-platform: ${s.platform} (${s.to} to, ${s.from} from)${recorded}`);
     }
     out(sourceDisclosureLine(bindings));
+    out(bridgeSourceDisclosureLine(bridges));
   }
+  if (!bridges.resolved) err(renderDiagnostics(bridges.diagnostics, { showData }));
   if (loadRes.value.diagnostics.length > 0 && showData) {
     err(renderDiagnostics(loadRes.value.diagnostics, { showData }));
   }

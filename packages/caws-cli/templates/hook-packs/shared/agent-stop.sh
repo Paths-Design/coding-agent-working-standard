@@ -36,9 +36,12 @@ if ! command -v "$CAWS_BIN" >/dev/null 2>&1; then
   exit 0
 fi
 
+# The CLI's human receipt is operational telemetry, not hook context. Preserve
+# it on the original stderr before suppressing CLI diagnostics; forwarding it
+# on stdout would displace an earlier handler's additionalContext envelope.
 caws_run_cli agents stop \
   --session-id "$HOOK_SESSION_ID" \
   --platform "$CAWS_PLATFORM_FLAG" \
-  2>/dev/null || true
+  1>&2 2>/dev/null || true
 
 exit 0

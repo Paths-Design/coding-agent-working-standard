@@ -99,7 +99,14 @@ describe('manifest-vs-disk drift (A2): no drift in either direction', () => {
   // deliberately absent from CLAUDE_CODE_PACK.installedFiles. Listing it here
   // (not silently widening the check) keeps the drift guard sharp: a NEW
   // undeclared file still fails.
+  //
+  // shared/lib/session-render-service-client.sh is a native-image BUILD INPUT:
+  // src/runtime/service-image.ts captures it from the templates tree and
+  // replaces its builder markers; no dispatcher sources it and it carries no
+  // managed header, so a managed install entry would make init stamp a header
+  // that is not there. It must stay out of SHARED_PACK.installedFiles.
   const KNOWN_NON_MANIFEST_FILES = {
+    shared: new Set(['lib/session-render-service-client.sh']),
     'claude-code': new Set(['settings.json.example']),
   };
 
@@ -134,6 +141,17 @@ describe('manifest-vs-disk drift (A2): no drift in either direction', () => {
     expect(fs.existsSync(examplePath)).toBe(true);
     const declared = new Set(CLAUDE_CODE_PACK.installedFiles.map((f) => f.sourcePath));
     expect(declared.has('settings.json.example')).toBe(false);
+  });
+
+  test('session-render-service-client.sh is a build input: present on disk, absent from the shared manifest, no managed header', () => {
+    // Pin the exception: the native image builder reads it from this tree, so
+    // it must exist; an install entry would require a managed header it does
+    // not carry (init stamps SHARED_PACK_VERSION into that header).
+    const clientPath = path.join(PACKS_ROOT, 'shared', 'lib', 'session-render-service-client.sh');
+    expect(fs.existsSync(clientPath)).toBe(true);
+    expect(fs.readFileSync(clientPath, 'utf8').startsWith('# CAWS-MANAGED-HOOK')).toBe(false);
+    const declared = new Set(SHARED_PACK.installedFiles.map((f) => f.sourcePath));
+    expect(declared.has('lib/session-render-service-client.sh')).toBe(false);
   });
 });
 

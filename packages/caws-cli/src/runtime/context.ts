@@ -1,0 +1,284 @@
+import { spawn } from 'node:child_process';
+import { lstatSync, realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { dirname, isAbsolute, resolve, join } from 'node:path';
+import { TextDecoder } from 'node:util';
+import { resolveGitBinaryForEnvironment } from '../store/git-binary';
+import { repoRootFromGitCommonDir } from '../store/repo-root';
+import { isFatalContextGitError } from './context-git-wire';
+import { assertMachinePath } from '../init/machine-paths';
+
+export interface InvocationCaller {
+  readonly cwd: string;
+  readonly environment: Readonly<Record<string, string>>;
+}
+export type RuntimeProjectContext =
+  | { readonly status: 'resolved'; readonly checkout: string; readonly canonical: string }
+  | { readonly status: 'inactive'; readonly reason: string; readonly diagnostic: string };
+export interface ContextGitPort {
+  run(args: readonly string[], cwd: string): Promise<string>;
+}
+
+/** Native environment is ephemeral request data; never persist this snapshot in journals. */
+export function invocationCaller(
+  cwd: string,
+  environment: Readonly<NodeJS.ProcessEnv>
+): InvocationCaller {
+  const nativeText = (value: string): boolean =>
+    !value.includes('\0') && Buffer.from(value, 'utf8').toString('utf8') === value;
+  if (!isAbsolute(cwd) || !nativeText(cwd))
+    throw new TypeError('Caller cwd must be absolute UTF-8 native text.');
+  const snapshot = Object.fromEntries(
+    Object.entries(environment).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string'
+    )
+  );
+  for (const [name, value] of Object.entries(snapshot)) {
+    if (!name || name.includes('=') || !nativeText(name) || !nativeText(value)) {
+      throw new TypeError('Caller environment contains an invalid native entry.');
+    }
+  }
+  return Object.freeze({ cwd, environment: Object.freeze(snapshot) });
+}
+
+/** Inherited Git routing and old parsed hook fields never select the next invocation. */
+export function invocationEnvironment(caller: InvocationCaller): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(caller.environment).filter(
+      ([name]) => !name.startsWith('GIT_') && !name.startsWith('HOOK_')
+    )
+  );
+}
+
+export function createContextGitPort(
+  caller: InvocationCaller,
+  deadlineEpochMs: number
+): ContextGitPort {
+  if (!Number.isSafeInteger(deadlineEpochMs))
+    throw new TypeError('Project deadline must be an integer.');
+  const environment = invocationEnvironment(caller);
+  const binary = resolveGitBinaryForEnvironment(environment, caller.cwd);
+  return {
+    run(args, cwd) {
+      return new Promise((accept, reject) => {
+        const remaining = Math.min(5000, deadlineEpochMs - Date.now());
+        if (!binary || remaining <= 0) {
+          reject(
+            new Error(
+              binary
+                ? 'Project resolution deadline expired'
+                : 'Caller Git executable is unavailable'
+            )
+          );
+          return;
+        }
+        const child = spawn(binary, [...args], {
+          cwd,
+          env: environment,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        const output: Buffer[] = [];
+        const errors: Buffer[] = [];
+        let bytes = 0;
+        let failure: Error | undefined;
+        let settled = false;
+        const fail = (error: Error): void => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          failure ??= error;
+          child.kill('SIGKILL');
+          // A descendant retaining the pipes cannot extend this port's response deadline.
+          // Whole invocation process-group cleanup belongs to the native supervisor.
+          child.stdout.destroy();
+          child.stderr.destroy();
+          reject(failure);
+        };
+        const timer = setTimeout(
+          () => fail(new Error('Project Git resolution timed out')),
+          remaining
+        );
+        const collect =
+          (chunks: Buffer[]) =>
+          (chunk: Buffer): void => {
+            bytes += chunk.length;
+            if (bytes > 1024 * 1024) fail(new Error('Project Git output exceeds byte limit'));
+            else chunks.push(chunk);
+          };
+        child.stdout.on('data', collect(output));
+        child.stderr.on('data', collect(errors));
+        child.once('error', (error) => {
+          clearTimeout(timer);
+          fail(error);
+        });
+        child.once('close', (code) => {
+          clearTimeout(timer);
+          if (settled) return;
+          settled = true;
+          if (failure) reject(failure);
+          else {
+            try {
+              const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+              const stdout = decoder.decode(Buffer.concat(output)).trim();
+              const stderr = decoder.decode(Buffer.concat(errors)).trim();
+              if (code !== 0) reject(new Error(stderr || 'Project Git resolution failed'));
+              else accept(stdout);
+            } catch (error) {
+              reject(new Error('Project Git output is not valid UTF-8: ' + String(error)));
+            }
+          }
+        });
+      });
+    },
+  };
+}
+
+/** Only ENOENT proves absence. Dangling links and inaccessible metadata remain present/uncertain. */
+function entryRequiresResolution(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    return !(
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    );
+  }
+}
+
+/** Cache/runtime contents alone do not opt a directory into project governance. */
+function governanceRequiresResolution(directory: string): boolean {
+  try {
+    if (!lstatSync(directory).isDirectory()) return true;
+  } catch (error) {
+    return !(
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    );
+  }
+  return ['policy.yaml', 'specs', 'working-spec.yaml'].some((name) =>
+    entryRequiresResolution(join(directory, name))
+  );
+}
+
+function governedAncestor(candidate: string): boolean {
+  let current = candidate;
+  for (;;) {
+    if (
+      entryRequiresResolution(join(current, '.git')) ||
+      governanceRequiresResolution(join(current, '.caws'))
+    )
+      return true;
+    const parent = dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
+
+/** Original session candidate; command context never rewrites the retained payload. */
+export function runtimeProjectCandidate(
+  payload: Readonly<Record<string, unknown>>,
+  caller: InvocationCaller,
+  executionWorkdir?: string
+): string {
+  const supplied = payload.cwd;
+  if (supplied !== undefined && supplied !== null && typeof supplied !== 'string')
+    throw new TypeError('Hook cwd must be a string when supplied.');
+  return resolve(
+    caller.cwd,
+    executionWorkdir ?? (supplied || caller.environment.CAWS_PROJECT_DIR || caller.cwd)
+  );
+}
+
+/** Presence and uncertainty require resolution; neither grants project authority.
+ * Failed Git checks physical ancestors. Successfully resolved canonical roots
+ * check their own project artifacts/adoption only: Git is not CAWS adoption. */
+export function runtimeProjectRequiresResolvedAuthority(
+  candidate: string,
+  home: string,
+  mode: 'failed-git' | 'resolved-canonical' = 'failed-git'
+): boolean {
+  let current: string;
+  try {
+    current = realpathSync(candidate);
+  } catch {
+    return true;
+  }
+  try {
+    assertMachinePath(home, join(home, 'state/projects'));
+  } catch {
+    return true;
+  }
+  const adopted = (root: string): boolean =>
+    entryRequiresResolution(
+      join(home, 'state/projects', createHash('sha256').update(root).digest('hex') + '.json')
+    );
+  // Retain an exact known registration even if its canonical spelling aliases
+  // the physical root. This is a protection, not an authority grant.
+  if (mode === 'resolved-canonical' && candidate !== current && adopted(candidate)) return true;
+  for (;;) {
+    if (
+      (mode === 'failed-git' && entryRequiresResolution(join(current, '.git'))) ||
+      governanceRequiresResolution(join(current, '.caws')) ||
+      adopted(current)
+    )
+      return true;
+    if (mode === 'resolved-canonical') return false;
+    const parent = dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
+
+/** Resolved Git coordinates cannot suppress redirected or malformed governance paths.
+ * Missing artifacts and normal cache/legacy directories retain policy selection's
+ * existing inactive outcomes; this validates paths, never activation or authority. */
+export function requireRuntimeProjectGovernancePaths(canonical: string): void {
+  const directory = join(canonical, '.caws');
+  assertMachinePath(canonical, directory);
+  try {
+    if (!lstatSync(directory).isDirectory())
+      throw new Error('Project governance path must be a normal directory');
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')
+      return;
+    throw error;
+  }
+  for (const artifact of ['policy.yaml', 'specs', 'working-spec.yaml'])
+    assertMachinePath(canonical, join(directory, artifact));
+}
+
+/** Actual checkout and canonical authority are separate, using the store's root mapping. */
+export async function resolveRuntimeProject(
+  payload: Readonly<Record<string, unknown>>,
+  caller: InvocationCaller,
+  deadlineEpochMs: number,
+  git: ContextGitPort = createContextGitPort(caller, deadlineEpochMs),
+  executionWorkdir?: string
+): Promise<RuntimeProjectContext> {
+  const candidate = runtimeProjectCandidate(payload, caller, executionWorkdir);
+  let checkout: string;
+  try {
+    checkout = await git.run(['rev-parse', '--show-toplevel'], candidate);
+    if (!isAbsolute(checkout)) throw new Error('Git checkout must be absolute');
+  } catch (error) {
+    if (isFatalContextGitError(error)) throw error;
+    return Object.freeze({
+      status: 'inactive',
+      reason: 'outside a resolvable Git project',
+      diagnostic: governedAncestor(candidate)
+        ? `Project could not be resolved (${String(error)}); continuing without CAWS governance in ${candidate}`
+        : '',
+    });
+  }
+  const common = await git.run(
+    ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+    checkout
+  );
+  const canonical = repoRootFromGitCommonDir(common).repoRoot;
+  return Object.freeze({ status: 'resolved', checkout, canonical });
+}

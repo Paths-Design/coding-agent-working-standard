@@ -126,6 +126,7 @@ _write_payload_file() {
 _hook_extract_scalar_fields() {
   python3 -c '
 import json
+from pathlib import Path
 import shlex
 import sys
 
@@ -135,6 +136,35 @@ except Exception:
     data = {}
 if not isinstance(data, dict):
     data = {}
+
+def execution_workdir(payload, event):
+    """Only the additive host field resolves command context; aliases are consistency checks."""
+    if payload.get("tool_name") != "Bash" or event not in {"pre_tool_use", "post_tool_use"}:
+        return {"status": "not_applicable"}
+    if "execution_workdir" not in payload:
+        return {"status": "unavailable"}
+    def physical(value, field):
+        if (not isinstance(value, str) or not value or "\0" in value or
+                not Path(value).is_absolute()):
+            raise ValueError(field + " must be an absolute native directory")
+        try:
+            value.encode("utf-8")
+            path = Path(value).resolve(strict=True)
+            if not path.is_dir():
+                raise ValueError("not a directory")
+        except (OSError, ValueError, UnicodeError):
+            raise ValueError(field + " must name an existing directory") from None
+        return str(path)
+    path = physical(payload["execution_workdir"], "execution_workdir")
+    if payload["execution_workdir"] != path:
+        raise ValueError("execution_workdir must already be a physical directory path")
+    tool = payload.get("tool_input")
+    tool = tool if isinstance(tool, dict) else {}
+    for alias in ("workdir", "cwd"):
+        if alias in tool and physical(tool[alias], "tool_input." + alias) != path:
+            raise ValueError("tool_input." + alias + " disagrees with execution_workdir")
+    return {"status": "resolved", "path": path}
+
 
 tool_input = data.get("tool_input")
 if not isinstance(tool_input, dict):
@@ -179,13 +209,22 @@ if tool_name == "apply_patch":
 elif file_path:
     file_paths = [file_path]
 
+try:
+    execution = execution_workdir(data, {"PreToolUse": "pre_tool_use", "PostToolUse": "post_tool_use"}.get(data.get("hook_event_name"), ""))
+except ValueError as error:
+    print("[caws execution context] " + str(error), file=sys.stderr)
+    sys.exit(2)
+
 fields = {
     "HOOK_TOOL_NAME": tool_name,
     "HOOK_ORIGINAL_TOOL_NAME": original_tool_name,
     "HOOK_FILE_PATH": file_path,
     "HOOK_FILE_PATHS": "\n".join(file_paths),
     "HOOK_COMMAND": command,
-    "HOOK_CWD": data.get("cwd") or "",
+    "HOOK_SESSION_CWD": data.get("cwd") or "",
+    "HOOK_CWD": execution.get("path", data.get("cwd") or ""),
+    "HOOK_EXECUTION_WORKDIR_STATUS": execution["status"],
+    "HOOK_EXECUTION_WORKDIR": execution.get("path", ""),
     "HOOK_SESSION_ID": data.get("session_id") or "unknown",
     "HOOK_TRANSCRIPT_PATH": data.get("transcript_path") or "",
     "HOOK_EVENT_NAME": data.get("hook_event_name") or "",
@@ -202,7 +241,7 @@ fields = {
 }
 for k, v in fields.items():
     print(f"{k}={shlex.quote(str(v))}")
-' 2>/dev/null || true
+'
 }
 
 parse_hook_input() {
@@ -244,9 +283,9 @@ parse_hook_input() {
   # shell's exported environment.
   local assignments
   if [[ "${HOOK_PAYLOAD_TRUNCATED:-0}" == "1" && -n "${HOOK_PAYLOAD_FILE:-}" ]]; then
-    assignments=$(_hook_extract_scalar_fields < "$HOOK_PAYLOAD_FILE")
+    assignments=$(_hook_extract_scalar_fields < "$HOOK_PAYLOAD_FILE") || return 2
   else
-    assignments=$(printf '%s' "$HOOK_INPUT_JSON" | _hook_extract_scalar_fields)
+    assignments=$(printf '%s' "$HOOK_INPUT_JSON" | _hook_extract_scalar_fields) || return 2
   fi
 
   # Fail-open: if the python subprocess failed for any reason, leave
@@ -263,6 +302,9 @@ parse_hook_input() {
          HOOK_FILE_PATHS="${HOOK_FILE_PATHS:-}" \
          HOOK_COMMAND="${HOOK_COMMAND:-}" \
          HOOK_CWD="${HOOK_CWD:-}" \
+         HOOK_SESSION_CWD="${HOOK_SESSION_CWD:-}" \
+         HOOK_EXECUTION_WORKDIR_STATUS="${HOOK_EXECUTION_WORKDIR_STATUS:-unavailable}" \
+         HOOK_EXECUTION_WORKDIR="${HOOK_EXECUTION_WORKDIR:-}" \
          HOOK_SESSION_ID="${HOOK_SESSION_ID:-unknown}" \
          HOOK_TRANSCRIPT_PATH="${HOOK_TRANSCRIPT_PATH:-}" \
          HOOK_EVENT_NAME="${HOOK_EVENT_NAME:-}" \

@@ -1,0 +1,86 @@
+id: CAWS-CONTEXT-GIT-CUSTODY-001
+title: 'Request-owned native Git custody through the one-shot engine'
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded macOS context-Git custody landed: actual ordinary/linked guard outcomes, same/cross-repository cancellation isolation, and retained custodian through unsettled-pipe failure demonstrated in retained artifacts. A1-A4 recorded through specs evidence with raw execution inspected; commit verification is existence only. Parent cutover, residency, full no-Python parity, all classifier Git and immutable launch remain open.'
+created_at: '2026-10-23T03:26:46.296Z'
+updated_at: '2026-10-23T07:24:48.169Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native process custody and typed runtime project resolution'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/context_git.rs'
+    - 'packages/caws-native/src/context_git/tests.rs'
+    - 'packages/caws-native/tests/context_git.rs'
+    - 'packages/caws-cli/src/runtime/context-git-wire.ts'
+    - 'packages/caws-cli/src/runtime/context-git-client.ts'
+    - 'packages/caws-cli/src/runtime/context.ts'
+    - 'packages/caws-cli/tests/runtime/context-git-client.test.js'
+    - 'packages/caws-cli/tests/runtime/context.test.js'
+    - packages/caws-native/src/lib.rs
+    - packages/caws-native/src/main.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/src/protocol.rs
+    - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-cli/src/runtime/engine-entry.ts
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/tests/runtime/protocol.test.js
+    - packages/caws-cli/tests/runtime/engine-entry.test.js
+    - packages/caws-cli/scripts/qualify-context-git.cjs
+    - docs/internal/caws-runtime-modernization.md
+  out: []
+invariants:
+  - 'Original invocation owns Git child, private group and pipes through actual settlement; client cancellation never means cleanup complete.'
+  - 'Preserve mandatory one-shot safety, caller-selected Git semantics and legitimate inactive-project behavior; cancellation protocol and unsettled faults remain fatal.'
+  - 'Lead owns shared protocol, main/runner and engine injection; child completion requires assembled ordinary one-shot behavior, not helper-only checks.'
+acceptance:
+  - id: A1
+    given: 'the actual native and typed one-shot engine with Lead-owned injection'
+    when: 'project resolution runs on ordinary and linked worktrees using supported caller Git selection'
+    then: 'canonical project and checkout identities match the existing contract and real selected guard outcomes preserve caller authority.'
+  - id: A2
+    given: 'a Git child whose descendant survives leader exit or retains pipes'
+    when: 'cancellation deadline malformed protocol or output bounds interrupt the operation'
+    then: 'original child group and both output pipes settle before ownership release, with fatal typed failure for uncertain cleanup and retained runtime observations.'
+  - id: A3
+    given: 'two actual native clients in same and different repositories'
+    when: 'A is cancelled during owned Git and B executes a real guard control'
+    then: 'A actual child group and pipe settlement is observed, B authority output and journal identity remain isolated, and no resident-worker or 13-session acceptance is inferred.'
+  - id: A4
+    given: 'finite context Git protocol and original invocation identity'
+    when: 'wrong identity token ordinal replay unsupported argv after-Ready request or exceeded frame/output/deadline budget occurs'
+    then: 'the request is refused without unauthorized spawning or conversion to inactive governance.'
+observability:
+  - 'Retain command revision exit status raw frames actual child/group/pipe settlement and same/cross-project native consumer artifacts outside source ledger.'
+rollback:
+  - 'Normal corrective source commit preserving uncertain ownership and existing one-shot path; no machine runtime selection change.'
+non_functional: {}
+contracts:
+  - name: 'context-git-custody'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Actual native binary bea9e86d and compiled engine d4ca764f: ordinary and linked checkout staged owned.txt deletion refused with exact protective output, selected guard hash, canonical/checkout identities, input digest and distinct matching journal. See /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/context-git-custody/ordinary-consumers-pending-02/result.json and ordinary/linked terminals and project-a/.caws/sessions journals; integrated-pending-02 execution.json command exit0, source pins match88a3108c. Normal build ts-committed-build-01 exit0. No full guard or installed-harness claim."
+    recorded_at: "2026-10-23T07:22:50.233Z"
+    commit_sha: "88a3108c5581a5610f2d24398ad7be0d2efb3b38"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Actual original Git group, descendant and custodian settle on cancellation/output/deadline controls: native-integration-04 exit0 rawlogs (16 tests). New actual ordinary frontend pending-pipe case exits2 protective block, retains unreapedGit11428 and custodian11427 afterfrontend11365 exits while escapedpipeholder11540 lives; explicit pipe release then allthree absent. See /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/context-git-custody/ordinary-consumers-pending-02/pending-pipe/{terminal.json,retained-after-frontend.json,settlement-observations.json}; integrated-pending-02 exit0. Escaped group killing/kernel-failure recovery not claimed; ownership retained until EOF."
+    recorded_at: "2026-10-23T07:22:52.094Z"
+    commit_sha: "88a3108c5581a5610f2d24398ad7be0d2efb3b38"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Actual same/crossrepository SIGTERM/SIGKILL A/B controls execute in /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/context-git-custody/ordinary-consumers-pending-02/: four named cases in result.json, each A live-processes and settlement-observations record all originalpids absent, B before-a-cancellation/after-a-settlement show same liveGit/custodian before release, B exactguardblock and distinctjournal. integrated-pending-02 command exit0, retained pins match88a3108c. No residency or13session acceptance."
+    recorded_at: "2026-10-23T07:22:53.712Z"
+    commit_sha: "88a3108c5581a5610f2d24398ad7be0d2efb3b38"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Finite identity/token/ordinal/fixedargv and phase restrictions exercised by native-integration-04 (16 controls inclmalformed/overlap/earlyReady/earlyFailure/afterReady/partialresponse) and native-protocol-02/native-runner-01 exit0. /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/context-git-custody/ts-committed-combined-01 exit0/193 controls includes exactcorrelation, canonicalnumeric/base64, UTF8, unsupportedcapability, output/deadline, cleanupfatal and nofallback. executable metadata checked aroundrun, not immutable launch authority. Commitverification establishes trackedbytesexistence only; raw execution and code inspected independently."
+    recorded_at: "2026-10-23T07:22:55.290Z"
+    commit_sha: "88a3108c5581a5610f2d24398ad7be0d2efb3b38"

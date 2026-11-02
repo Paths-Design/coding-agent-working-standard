@@ -88,13 +88,31 @@ TOOL_NAME="$HOOK_TOOL_NAME"
 SESSION_ID="$HOOK_SESSION_ID"
 
 # Only check Write/Edit operations
-if [[ "$TOOL_NAME" != "Write" ]] && [[ "$TOOL_NAME" != "Edit" ]]; then
+if [[ "$TOOL_NAME" != "Write" && "$TOOL_NAME" != "Edit" && "$TOOL_NAME" != "apply_patch" &&
+      "${HOOK_ORIGINAL_TOOL_NAME:-}" != "apply_patch" ]]; then
   exit 0
 fi
 
-if [[ -z "$FILE_PATH" ]]; then
+if [[ -z "$FILE_PATH" && "$TOOL_NAME" != "apply_patch" &&
+      "${HOOK_ORIGINAL_TOOL_NAME:-}" != "apply_patch" ]]; then
   exit 0
 fi
+
+# Infrastructure and authority-load failures are hard blocks, never strikes.
+# Define this before governance discovery so missing canonical state cannot
+# silently turn an adopted linked checkout into an ungoverned project.
+_scope_env_block() {
+  local msg="$1"
+  local _id="CAWS scope-guard"
+  command -v guard_identity >/dev/null 2>&1 && _id="$(guard_identity scope-guard)"
+  local _reprieve='Session-scoped escape for THIS guard (one session, expires): caws reprieve grant --current --handlers scope-guard.sh --reason "<why>" --approved-by "<approver>" --expires-at "<iso-ts>".'
+  command -v guard_reprieve_hint >/dev/null 2>&1 && _reprieve="$(guard_reprieve_hint scope-guard.sh)"
+  if command -v emit_block >/dev/null 2>&1; then
+    emit_block "$_id: $msg $_reprieve"
+  else
+    printf '%s\n' "$_id: $msg $_reprieve" >&2
+  fi
+}
 
 emit_scope_progression() {
   local detail="$1"
@@ -307,8 +325,6 @@ _caws_normalize_target() {
   fi
 }
 
-FILE_PATH="$(_caws_normalize_target "$FILE_PATH")"
-
 PROJECT_WORKTREE_ROOT="$(resolve_worktree_root "$PROJECT_DIR" || true)"
 
 # CAWS-DEFECT-SCOPE-GUARD-FOREIGN-WORKTREE-CONTAINMENT-BYPASS-01: the repository
@@ -317,6 +333,12 @@ PROJECT_WORKTREE_ROOT="$(resolve_worktree_root "$PROJECT_DIR" || true)"
 SESSION_REPO_ROOT="$PROJECT_DIR"
 if [[ -n "$PROJECT_WORKTREE_ROOT" ]]; then
   SESSION_REPO_ROOT="${PROJECT_WORKTREE_ROOT%/.caws/worktrees/*}"
+fi
+# The retained shared library resolves Git-linked checkouts outside the stock
+# path as well. Keep PROJECT_DIR, HOOK_CWD and WORK_DIR in the leaf checkout;
+# only specification discovery and repository containment use this root.
+if declare -F resolve_canonical_dir >/dev/null 2>&1; then
+  SESSION_REPO_ROOT="$(resolve_canonical_dir "$PROJECT_DIR")"
 fi
 
 # A worktree root inferred from the target path or the hook cwd confers
@@ -342,183 +364,312 @@ owned_worktree_root() {
   fi
   return 0
 }
-FILE_WORKTREE_ROOT="$(owned_worktree_root "$(resolve_worktree_root "$FILE_PATH" || true)")"
-CWD_WORKTREE_ROOT="$(owned_worktree_root "$(resolve_worktree_root "$HOOK_CWD" || true)")"
-
-if [[ -n "$FILE_WORKTREE_ROOT" ]]; then
-  WORK_DIR="$FILE_WORKTREE_ROOT"
-elif [[ -n "$CWD_WORKTREE_ROOT" ]]; then
-  WORK_DIR="$CWD_WORKTREE_ROOT"
-elif [[ -n "$PROJECT_WORKTREE_ROOT" ]]; then
-  WORK_DIR="$PROJECT_WORKTREE_ROOT"
-fi
-
-WORK_DIR="$(cd "$WORK_DIR" 2>/dev/null && pwd || printf '%s\n' "$WORK_DIR")"
-WORKTREE_NAME=""
-if [[ "$WORK_DIR" =~ \/\.caws\/worktrees\/([^/]+)$ ]]; then
-  WORKTREE_NAME="${BASH_REMATCH[1]}"
-fi
-
 # CAWS-LITE-MODE-RETIREMENT-001: lite mode (scope.json without specs/)
 # was removed in pack v8. v11 projects only have .caws/specs/; lite-mode
 # .caws/scope.json is a v10 artifact. Consumers with a legacy
 # .caws/scope.json get a doctor finding (not a hook branch).
-if [[ -d "$WORK_DIR/.caws/specs" ]]; then
-  SPECS_BASE="$WORK_DIR"
-else
-  SPECS_BASE="$PROJECT_DIR"
-fi
+SPECS_BASE="$SESSION_REPO_ROOT"
 
-# No specs directory means no v11 governance to enforce.
+# Policy/specification and binding artifacts declare governance, including
+# damaged files and dangling links. Operational residue such as a duplication
+# cache does not adopt a project merely by creating its .caws directory.
+_scope_has_governance_marker() {
+  local root="${1:-}" marker
+  [[ -n "$root" ]] || return 1
+  for marker in policy.yaml specs worktrees.json claims/bridge.json; do
+    if [[ -e "$root/.caws/$marker" || -L "$root/.caws/$marker" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 if [[ ! -d "$SPECS_BASE/.caws/specs" ]]; then
+  if _scope_has_governance_marker "$SPECS_BASE" ||
+     _scope_has_governance_marker "$PROJECT_DIR" ||
+     _scope_has_governance_marker "${CAWS_MACHINE_POLICY_ROOT:-}"; then
+    _scope_env_block "cannot load canonical governance at '$SPECS_BASE/.caws/specs'. Scope authority is missing or invalid; restore canonical governance before editing."
+    exit 2
+  fi
   exit 0
 fi
 
-FOREIGN_REPO=0
-if [[ "$FILE_PATH" == "$WORK_DIR"/* ]]; then
-  REL_PATH="${FILE_PATH#$WORK_DIR/}"
-elif [[ "$FILE_PATH" == "$PROJECT_DIR"/* ]]; then
-  REL_PATH="${FILE_PATH#$PROJECT_DIR/}"
-elif [[ "$FILE_PATH" == /* ]]; then
-  # SCOPE-GUARD-FOREIGN-REPO-CONTAINMENT-001: an ABSOLUTE path under neither
-  # this session's WORK_DIR nor PROJECT_DIR belongs to a DIFFERENT repository.
-  REL_PATH="$FILE_PATH"
-  FOREIGN_REPO=1
-else
-  REL_PATH="$FILE_PATH"
-fi
-
-# SCOPE-GUARD-FOREIGN-REPO-CONTAINMENT-001: hard-block a Write/Edit to a file in
-# a DIFFERENT repository, immediately — before the kernel scope-check and the
-# 3-strike ramp. Honor absolute allow-prefixes here, before the foreign block,
-# so harness-state writes pass.
-if [[ "$FOREIGN_REPO" == "1" ]]; then
-  for _prefix in "${ALLOW_PREFIXES[@]}"; do
-    [[ "$_prefix" == /* ]] || continue
-    if [[ "$FILE_PATH" == "${_prefix}"* ]]; then
-      exit 0
-    fi
-  done
-  _id="CAWS scope-guard"
-  command -v guard_identity >/dev/null 2>&1 && _id="$(guard_identity scope-guard)"
-  _note="This is a CAWS governance decision, not a harness prompt."
-  command -v guard_not_harness_note >/dev/null 2>&1 && _note="$(guard_not_harness_note)"
-  # When the target sits inside another repository's linked worktree, say so:
-  # the agent that hits this typically CREATED that worktree (via the other
-  # repo's caws) and reads the block as a scope error to widen, not a
-  # repository boundary.
-  _foreign_wt_root="$(resolve_worktree_root "$FILE_PATH" || true)"
-  _foreign_note=""
-  if [[ -n "$_foreign_wt_root" ]]; then
-    _foreign_note=" The target is inside a linked worktree of ${_foreign_wt_root%/.caws/worktrees/*}; the session rooted in THAT repository holds write authority there, even if this session created or owns the worktree."
+# The Codex adapter scalar/list is a projection: it omits Move destinations.
+# Read the ORIGINAL replayed envelope (or its supported transport file), never
+# reconstruct a patch from those exports or execute it to discover targets.
+if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then
+  if [[ ! -f "$HOOK_PAYLOAD_FILE" || ! -r "$HOOK_PAYLOAD_FILE" ]]; then
+    _scope_env_block "cannot read the original target inventory payload. The edit is refused."
+    exit 2
   fi
-  emit_block "$_id: BLOCKED — '$FILE_PATH' is in a DIFFERENT repository than this session's project ($PROJECT_DIR).${_foreign_note} $_note This guard governs edits within the current repo; a session may READ sibling repos freely but must NOT WRITE into another repo from here, so it cannot silently mutate files (especially executables) outside its governing repo. There is no in-band override. To make this change: write an explicit HANDOFF for an agent rooted in that repo — state WHAT to change, WHY, and HOW (the exact edit), then have that repo's own session (or the user) apply it. Do NOT route around this via Bash. bash-write-guard adjudicates the same cross-repository boundary for a target NAMED on the command line (sed -i, cp, mv, rm, tee, a redirect, git path-restore) and for a target appearing as a PATH LITERAL in inline -c/-e code, a heredoc body, or the content of a script file you run — each of those refuses exactly as this did. One residual is honestly outside any command-text guard: a target COMPUTED at runtime (built from shell variables, read from a config file, or piped in via 'python3 -') is invisible to it. That is a residual gap, not an admitted route — using it is the same governance violation as editing the file directly, and it is the one form the runtime cannot stop you from committing."
+elif [[ -z "${HOOK_INPUT_JSON:-}" ]]; then
+  HOOK_INPUT_JSON="$(cat)" || {
+    _scope_env_block "cannot read the original target inventory payload. The edit is refused."
+    exit 2
+  }
+  export -n HOOK_INPUT_JSON 2>/dev/null || true
+fi
+_scope_original_payload() {
+  if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then cat "$HOOK_PAYLOAD_FILE"
+  else printf '%s' "${HOOK_INPUT_JSON:-}"; fi
+}
+_scope_target_inventory() {
+  python3 -c '
+import json
+import sys
+
+def fail(message):
+    raise ValueError(message)
+
+def target(value):
+    if not isinstance(value, str) or not value or value != value.strip() or not value.isprintable():
+        fail("empty or unrepresentable target path")
+    value.encode("utf-8", "strict")
+    return value
+
+try:
+    payload = json.load(sys.stdin)
+    if not isinstance(payload, dict) or not isinstance(payload.get("tool_input"), dict):
+        fail("missing original tool input")
+    tool_input = payload["tool_input"]
+    paths = []
+    if payload.get("tool_name") != "apply_patch":
+        paths.append(target(tool_input.get("file_path")))
+    else:
+        patch = tool_input.get("command")
+        if not isinstance(patch, str):
+            fail("patch command must be text")
+        # Recognize the native text grammar conservatively. Unknown wrappers,
+        # environment selectors and malformed sections refuse as a whole.
+        # Content keeps its diff prefix: +*** Move to is data, not metadata.
+        lines = [line.removesuffix("\r") for line in patch.strip().split("\n")]
+        if len(lines) < 3 or lines[0] != "*** Begin Patch" or lines[-1] != "*** End Patch":
+            fail("missing patch boundaries or empty inventory")
+        headers = ("*** Add File: ", "*** Update File: ", "*** Delete File: ")
+        i, end = 1, len(lines) - 1
+        while i < end:
+            line = lines[i]
+            header = next((prefix for prefix in headers if line.startswith(prefix)), None)
+            if header is None:
+                fail("unsupported or misplaced patch metadata")
+            paths.append(target(line[len(header):]))
+            i += 1
+            if header == headers[2]:
+                continue
+            if header == headers[0]:
+                while i < end and not lines[i].startswith("*** "):
+                    if not lines[i].startswith("+"):
+                        fail("invalid Add content")
+                    i += 1
+                continue
+            if i < end and lines[i].startswith("*** Move to: "):
+                paths.append(target(lines[i][len("*** Move to: "):]))
+                i += 1
+            body, context = 0, False
+            while i < end and not lines[i].startswith(headers):
+                line = lines[i]
+                if line == "@@" or line.startswith("@@ "):
+                    if context and body == 0:
+                        fail("empty update chunk")
+                    body, context = 0, True
+                elif line == "*** End of File":
+                    if body == 0:
+                        fail("empty end-of-file chunk")
+                    i += 1
+                    while i < end and lines[i] == "":
+                        i += 1
+                    break
+                elif line == "" or line[0] in " +-":
+                    body += 1
+                else:
+                    fail("invalid Update content or misplaced Move")
+                i += 1
+            if body == 0:
+                fail("empty Update section")
+        if not paths:
+            fail("empty target inventory")
+    # Paths cannot contain line separators/control bytes; newline framing is
+    # lossless and Bash read -r preserves spaces and backslashes. No truncation.
+    sys.stdout.write("\n".join(dict.fromkeys(paths)))
+except (ValueError, TypeError, UnicodeError) as error:
+    print("[scope-guard] invalid target inventory: " + str(error), file=sys.stderr)
+    sys.exit(2)
+'
+}
+if ! SCOPE_TARGETS="$(_scope_original_payload | _scope_target_inventory)"; then
+  _scope_env_block "cannot determine a complete target inventory from the original payload. The entire edit is refused."
   exit 2
 fi
 
-# Root files use the same kernel scope decision as nested files.
-for prefix in "${ALLOW_PREFIXES[@]}"; do
-  if [[ "$FILE_PATH" == "${prefix}"* ]] || [[ "$REL_PATH" == "${prefix}"* ]]; then
-    exit 0
-  fi
-done
-
-# CAWS-SCOPE-SHOW-JSON-CONTRACT-001: the scope DECISION and its DIAGNOSTIC both
-# come from the kernel via the `caws` CLI. The hook no longer re-parses specs.
-#
-#   1. `caws scope check` gives the admit/refuse decision (exit 0/1) — the
-#      kernel-authoritative ADMIT short-circuits the strike counter entirely.
-#   2. On refuse, `caws scope show --json` renders the stable diagnostic
-#      contract (decision / rule / mode / boundSpecId / matchedPattern /
-#      bindingState / ambiguousClaimants). The hook parses that with jq and maps
-#      it onto the progressive-strike refusal — it does NOT reconstruct the
-#      kernel's scope evaluation with its own js-yaml require.
-#
-# This is the "caws governs caws artifacts" boundary: one evaluator (the
-# kernel), consulted by every consumer's thin hook, instead of an inline
-# parallel evaluator that drifts and depends on a hook-resolvable js-yaml.
-# Fail closed on an ENVIRONMENT fault (no CLI / no jq / unparseable diagnostic)
-# with a direct hard block, NOT the progressive-strike ramp: a missing toolchain
-# is not a scope strike, and emit_block does not depend on strike-file state.
-_scope_env_block() {
-  local msg="$1"
-  local _id="CAWS scope-guard"
-  command -v guard_identity >/dev/null 2>&1 && _id="$(guard_identity scope-guard)"
-  # Fail-closed infra blocks still name the session-scoped escape: a session
-  # wedged by missing infrastructure needs the same sanctioned off-ramp as a
-  # scope refusal, or it starts inventing one.
-  local _reprieve='Session-scoped escape for THIS guard (one session, expires): caws reprieve grant --current --handlers scope-guard.sh --reason "<why>" --approved-by "<approver>" --expires-at "<iso-ts>".'
-  command -v guard_reprieve_hint >/dev/null 2>&1 && _reprieve="$(guard_reprieve_hint scope-guard.sh)"
-  if command -v emit_block >/dev/null 2>&1; then
-    emit_block "$_id: $msg $_reprieve"
-  else
-    printf '%s\n' "$_id: $msg $_reprieve" >&2
+# Queue only the first advisory; scanning must reach every later target before
+# a strike is recorded. A hard refusal anywhere in the tool consumes no strike.
+SCOPE_ADVISORY_DETAIL=""
+_scope_defer_advisory() {
+  if [[ -z "$SCOPE_ADVISORY_DETAIL" ]]; then
+    SCOPE_ADVISORY_DETAIL="$1"
+    SCOPE_ADVISORY_SPEC="${2:-}"
+    SCOPE_ADVISORY_PATH="$REL_PATH"
+    SCOPE_ADVISORY_WORK_DIR="$WORK_DIR"
   fi
 }
 
-if ! command -v caws >/dev/null 2>&1; then
-  # Fail closed: without the CLI we cannot evaluate scope. Refuse rather than
-  # silently admit, and do NOT resurrect an inline parser.
-  _scope_env_block "cannot evaluate scope — the \`caws\` CLI is not on PATH. Scope.in/scope.out cannot be enforced, so the edit is refused rather than silently admitted. Install/restore the caws CLI and retry."
-  exit 0
-fi
-
-# The target lane supplies scope authority even when the harness cwd is canonical.
-if (cd "$WORK_DIR" && caws scope check "$REL_PATH") >/dev/null 2>&1; then
-  # Kernel-authoritative ADMIT. Skip strike counter entirely.
-  exit 0
-fi
-
-# Refused (or no-authority). Pull the structured diagnostic from the kernel.
-# Fail closed on a failed invocation as well as an unreadable diagnostic.
-if ! SCOPE_JSON="$(cd "$WORK_DIR" && caws scope show "$REL_PATH" --json 2>/dev/null)" \
-   || [[ -z "$SCOPE_JSON" ]] || ! command -v jq >/dev/null 2>&1 \
-   || ! printf '%s' "$SCOPE_JSON" | jq -e . >/dev/null 2>&1; then
-  _scope_env_block "refused '$REL_PATH' but could not render the structured diagnostic (\`caws scope show --json\` unavailable or unparseable). The edit is refused rather than silently admitted. Diagnose: caws scope show $REL_PATH."
-  exit 0
-fi
-
-_jq() { printf '%s' "$SCOPE_JSON" | jq -r "$1 // empty" 2>/dev/null; }
-SC_DECISION="$(_jq '.decision')"
-SC_RULE="$(_jq '.rule')"
-SC_MODE="$(_jq '.mode')"
-SC_BOUND_SPEC="$(_jq '.boundSpecId')"
-SC_PATTERN="$(_jq '.matchedPattern')"
-SC_BINDING="$(_jq '.bindingState')"
-SC_CLAIMANTS="$(printf '%s' "$SCOPE_JSON" | jq -r '(.ambiguousClaimants // []) | join(", ")' 2>/dev/null)"
-
-# A one_sided binding means the worktree's bound spec is missing/malformed (it
-# did not load). Scope cannot be enforced authoritatively, so refuse rather than
-# fall back to weaker union-mode checks (preserves the prior malformed-bound-spec
-# refusal — the kernel now surfaces it as one_sided/no_authority).
-if [[ "$SC_BINDING" == "one_sided" ]]; then
-  emit_scope_progression "Your worktree's bound spec did not load (missing or invalid YAML), so scope cannot be enforced authoritatively and the edit is refused rather than falling back to weaker union-mode checks. Fix the bound spec, then retry. Diagnose: caws scope show $REL_PATH."
-  exit 0
-fi
-
-# More than one active spec claims this path: ambiguous authority. Surface the
-# claimants (the kernel already refuses to guess).
-if [[ -n "$SC_CLAIMANTS" ]]; then
-  emit_scope_progression "Ambiguous scope authority for '$REL_PATH': multiple active specs claim it ($SC_CLAIMANTS). CAWS will not guess which governs — narrow one spec's scope.in or route the edit through the single owning worktree. Diagnose: caws scope show $REL_PATH."
-  exit 0
-fi
-
-# A reject whose matched rule is a scope.out pattern is "marked out-of-scope";
-# any other reject/no_authority is "not in the defined scope". The kernel's
-# stable `rule` id carries the distinction (…scope_out vs …not in scope.in).
-if [[ "$SC_DECISION" == "reject" && "$SC_RULE" == *scope_out* ]]; then
-  if [[ "$SC_MODE" == "union" ]]; then
-    emit_scope_progression "This file is marked out-of-scope by pattern '${SC_PATTERN:-<unknown>}'. Mode: union (no authoritative spec bound). An unrelated spec may be blocking this edit. Diagnose: caws scope show $REL_PATH."
-  else
-    emit_scope_progression "This file is marked out-of-scope by pattern '${SC_PATTERN:-<unknown>}' in spec '${SC_BOUND_SPEC:-<unknown>}'. Mode: authoritative (checking only your bound spec)."
+_scope_check_target() {
+  local FILE_PATH WORK_DIR FILE_WORKTREE_ROOT CWD_WORKTREE_ROOT REL_PATH FOREIGN_REPO
+  local prefix _prefix _id _note _foreign_wt_root _foreign_note
+  local SCOPE_JSON SC_DECISION SC_RULE SC_MODE SC_BOUND_SPEC SC_PATTERN SC_BINDING SC_CLAIMANTS
+  FILE_PATH="$(_caws_normalize_target "$1")"
+  WORK_DIR="${HOOK_CWD:-$PROJECT_DIR}"
+  FILE_WORKTREE_ROOT="$(owned_worktree_root "$(resolve_worktree_root "$FILE_PATH" || true)")"
+  CWD_WORKTREE_ROOT="$(owned_worktree_root "$(resolve_worktree_root "$HOOK_CWD" || true)")"
+  if [[ -n "$FILE_WORKTREE_ROOT" ]]; then
+    WORK_DIR="$FILE_WORKTREE_ROOT"
+  elif [[ -n "$CWD_WORKTREE_ROOT" ]]; then
+    WORK_DIR="$CWD_WORKTREE_ROOT"
+  elif [[ -n "$PROJECT_WORKTREE_ROOT" ]]; then
+    WORK_DIR="$PROJECT_WORKTREE_ROOT"
   fi
-  exit 0
-fi
+  WORK_DIR="$(cd "$WORK_DIR" 2>/dev/null && pwd || printf '%s\n' "$WORK_DIR")"
 
-# Default refusal: not in any admitting scope.
-if [[ "$SC_MODE" == "union" ]]; then
-  emit_scope_progression "This file is not in the defined scope of any active spec. Mode: union (no authoritative spec bound). Diagnose: caws scope show $REL_PATH."
-else
-  emit_scope_progression "This file is not in the defined scope of your bound spec '${SC_BOUND_SPEC:-<unknown>}'. Mode: authoritative." "$SC_BOUND_SPEC"
+  FOREIGN_REPO=0
+  if [[ "$FILE_PATH" == "$WORK_DIR"/* ]]; then
+    REL_PATH="${FILE_PATH#$WORK_DIR/}"
+  elif [[ "$FILE_PATH" == "$PROJECT_DIR"/* ]]; then
+    REL_PATH="${FILE_PATH#$PROJECT_DIR/}"
+  elif [[ "$FILE_PATH" == /* ]]; then
+    # SCOPE-GUARD-FOREIGN-REPO-CONTAINMENT-001: an ABSOLUTE path under neither
+    # this session's WORK_DIR nor PROJECT_DIR belongs to a DIFFERENT repository.
+    REL_PATH="$FILE_PATH"
+    FOREIGN_REPO=1
+  else
+    REL_PATH="$FILE_PATH"
+  fi
+
+  # SCOPE-GUARD-FOREIGN-REPO-CONTAINMENT-001: hard-block a Write/Edit to a file in
+  # a DIFFERENT repository, immediately — before the kernel scope-check and the
+  # 3-strike ramp. Honor absolute allow-prefixes here, before the foreign block,
+  # so harness-state writes pass.
+  if [[ "$FOREIGN_REPO" == "1" ]]; then
+    for _prefix in "${ALLOW_PREFIXES[@]}"; do
+      [[ "$_prefix" == /* ]] || continue
+      if [[ "$FILE_PATH" == "${_prefix}"* ]]; then
+        return 0
+      fi
+    done
+    _id="CAWS scope-guard"
+    command -v guard_identity >/dev/null 2>&1 && _id="$(guard_identity scope-guard)"
+    _note="This is a CAWS governance decision, not a harness prompt."
+    command -v guard_not_harness_note >/dev/null 2>&1 && _note="$(guard_not_harness_note)"
+    # When the target sits inside another repository's linked worktree, say so:
+    # the agent that hits this typically CREATED that worktree (via the other
+    # repo's caws) and reads the block as a scope error to widen, not a
+    # repository boundary.
+    _foreign_wt_root="$(resolve_worktree_root "$FILE_PATH" || true)"
+    _foreign_note=""
+    if [[ -n "$_foreign_wt_root" ]]; then
+      _foreign_note=" The target is inside a linked worktree of ${_foreign_wt_root%/.caws/worktrees/*}; the session rooted in THAT repository holds write authority there, even if this session created or owns the worktree."
+    fi
+    emit_block "$_id: BLOCKED — '$FILE_PATH' is in a DIFFERENT repository than this session's project ($PROJECT_DIR).${_foreign_note} $_note This guard governs edits within the current repo; a session may READ sibling repos freely but must NOT WRITE into another repo from here, so it cannot silently mutate files (especially executables) outside its governing repo. There is no in-band override. To make this change: write an explicit HANDOFF for an agent rooted in that repo — state WHAT to change, WHY, and HOW (the exact edit), then have that repo's own session (or the user) apply it. Do NOT route around this via Bash. bash-write-guard adjudicates the same cross-repository boundary for a target NAMED on the command line (sed -i, cp, mv, rm, tee, a redirect, git path-restore) and for a target appearing as a PATH LITERAL in inline -c/-e code, a heredoc body, or the content of a script file you run — each of those refuses exactly as this did. One residual is honestly outside any command-text guard: a target COMPUTED at runtime (built from shell variables, read from a config file, or piped in via 'python3 -') is invisible to it. That is a residual gap, not an admitted route — using it is the same governance violation as editing the file directly, and it is the one form the runtime cannot stop you from committing."
+    exit 2
+  fi
+
+  # Root files use the same kernel scope decision as nested files.
+  for prefix in "${ALLOW_PREFIXES[@]}"; do
+    if [[ "$FILE_PATH" == "${prefix}"* ]] || [[ "$REL_PATH" == "${prefix}"* ]]; then
+      return 0
+    fi
+  done
+
+  # CAWS-SCOPE-SHOW-JSON-CONTRACT-001: the scope DECISION and its DIAGNOSTIC both
+  # come from the kernel via the `caws` CLI. The hook no longer re-parses specs.
+  #
+  #   1. `caws scope check` gives the admit/refuse decision (exit 0/1) — the
+  #      kernel-authoritative ADMIT short-circuits the strike counter entirely.
+  #   2. On refuse, `caws scope show --json` renders the stable diagnostic
+  #      contract (decision / rule / mode / boundSpecId / matchedPattern /
+  #      bindingState / ambiguousClaimants). The hook parses that with jq and maps
+  #      it onto the progressive-strike refusal — it does NOT reconstruct the
+  #      kernel's scope evaluation with its own js-yaml require.
+  #
+  # This is the "caws governs caws artifacts" boundary: one evaluator (the
+  # kernel), consulted by every consumer's thin hook, instead of an inline
+  # parallel evaluator that drifts and depends on a hook-resolvable js-yaml.
+  # Fail closed on an ENVIRONMENT fault (no CLI / no jq / unparseable diagnostic)
+  # with a direct hard block, NOT the progressive-strike ramp: a missing toolchain
+  # is not a scope strike, and emit_block does not depend on strike-file state.
+  if ! command -v caws >/dev/null 2>&1; then
+    # Fail closed: without the CLI we cannot evaluate scope. Refuse rather than
+    # silently admit, and do NOT resurrect an inline parser.
+    _scope_env_block "cannot evaluate scope — the \`caws\` CLI is not on PATH. Scope.in/scope.out cannot be enforced, so the edit is refused rather than silently admitted. Install/restore the caws CLI and retry."
+    exit 2
+  fi
+
+  # The target lane supplies scope authority even when the harness cwd is canonical.
+  if (cd "$WORK_DIR" && caws scope check "$REL_PATH") >/dev/null 2>&1; then
+    # Kernel-authoritative ADMIT. Skip strike counter entirely.
+    return 0
+  fi
+
+  # Refused (or no-authority). Pull the structured diagnostic from the kernel.
+  # Fail closed on a failed invocation as well as an unreadable diagnostic.
+  if ! SCOPE_JSON="$(cd "$WORK_DIR" && caws scope show "$REL_PATH" --json 2>/dev/null)" \
+     || [[ -z "$SCOPE_JSON" ]] || ! command -v jq >/dev/null 2>&1 \
+     || ! printf '%s' "$SCOPE_JSON" | jq -e . >/dev/null 2>&1; then
+    _scope_env_block "refused '$REL_PATH' but could not render the structured diagnostic (\`caws scope show --json\` unavailable or unparseable). The edit is refused rather than silently admitted. Diagnose: caws scope show $REL_PATH."
+    exit 2
+  fi
+
+  _jq() { printf '%s' "$SCOPE_JSON" | jq -r "$1 // empty" 2>/dev/null; }
+  SC_DECISION="$(_jq '.decision')"
+  SC_RULE="$(_jq '.rule')"
+  SC_MODE="$(_jq '.mode')"
+  SC_BOUND_SPEC="$(_jq '.boundSpecId')"
+  SC_PATTERN="$(_jq '.matchedPattern')"
+  SC_BINDING="$(_jq '.bindingState')"
+  SC_CLAIMANTS="$(printf '%s' "$SCOPE_JSON" | jq -r '(.ambiguousClaimants // []) | join(", ")' 2>/dev/null)"
+
+  # A one_sided binding means the worktree's bound spec is missing/malformed (it
+  # did not load). Scope cannot be enforced authoritatively, so refuse rather than
+  # fall back to weaker union-mode checks (preserves the prior malformed-bound-spec
+  # refusal — the kernel now surfaces it as one_sided/no_authority).
+  if [[ "$SC_BINDING" == "one_sided" ]]; then
+    _scope_env_block "Your worktree's bound spec did not load (missing or invalid YAML), so scope cannot be enforced authoritatively and the edit is refused rather than falling back to weaker union-mode checks. Fix the bound spec, then retry. Diagnose: caws scope show $REL_PATH."
+    exit 2
+  fi
+
+  # More than one active spec claims this path: ambiguous authority. Surface the
+  # claimants (the kernel already refuses to guess).
+  if [[ -n "$SC_CLAIMANTS" ]]; then
+    _scope_defer_advisory "Ambiguous scope authority for '$REL_PATH': multiple active specs claim it ($SC_CLAIMANTS). CAWS will not guess which governs — narrow one spec's scope.in or route the edit through the single owning worktree. Diagnose: caws scope show $REL_PATH."
+    return 0
+  fi
+
+  # A reject whose matched rule is a scope.out pattern is "marked out-of-scope";
+  # any other reject/no_authority is "not in the defined scope". The kernel's
+  # stable `rule` id carries the distinction (…scope_out vs …not in scope.in).
+  if [[ "$SC_DECISION" == "reject" && "$SC_RULE" == *scope_out* ]]; then
+    if [[ "$SC_MODE" == "union" ]]; then
+      _scope_defer_advisory "This file is marked out-of-scope by pattern '${SC_PATTERN:-<unknown>}'. Mode: union (no authoritative spec bound). An unrelated spec may be blocking this edit. Diagnose: caws scope show $REL_PATH."
+    else
+      emit_block "CAWS scope-guard: '$REL_PATH' is marked out-of-scope by pattern '${SC_PATTERN:-<unknown>}' in spec '${SC_BOUND_SPEC:-<unknown>}'. Mode: authoritative (checking only your bound spec). The edit is refused before any write. Diagnose: caws scope show $REL_PATH."
+      exit 2
+    fi
+    return 0
+  fi
+
+  # Default refusal: not in any admitting scope.
+  if [[ "$SC_MODE" == "union" ]]; then
+    _scope_defer_advisory "This file is not in the defined scope of any active spec. Mode: union (no authoritative spec bound). Diagnose: caws scope show $REL_PATH."
+  else
+    _scope_defer_advisory "This file is not in the defined scope of your bound spec '${SC_BOUND_SPEC:-<unknown>}'. Mode: authoritative." "$SC_BOUND_SPEC"
+  fi
+}
+
+while IFS= read -r _scope_target; do
+  _scope_check_target "$_scope_target"
+done <<< "$SCOPE_TARGETS"
+if [[ -n "$SCOPE_ADVISORY_DETAIL" ]]; then
+  REL_PATH="$SCOPE_ADVISORY_PATH"
+  WORK_DIR="$SCOPE_ADVISORY_WORK_DIR"
+  emit_scope_progression "$SCOPE_ADVISORY_DETAIL" "$SCOPE_ADVISORY_SPEC"
 fi
 exit 0

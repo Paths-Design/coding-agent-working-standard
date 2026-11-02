@@ -126,6 +126,47 @@ class BashMutationBoundary(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(self.scan(command), targets)
 
+    def test_file_effect_roles_preserve_raw_candidates_and_repeated_paths(self):
+        command = 'rm -- "same path"; touch "same path"; rm -rf directory'
+        self.assertEqual(self.scan(command), ['same path', 'same path', 'directory'])
+        self.assertEqual(self.scan(command, 'caws_bash_mutation_effects'),
+                         ['unlink-entry\tsame path', 'referent\tsame path',
+                          'unlink-entry\tdirectory'])
+
+    def test_rm_literal_dash_and_post_operand_options_remain_operands(self):
+        for command, operands in (('rm -', ['-']),
+                                  ('rm ordinary -f', ['ordinary', '-f']),
+                                  ('rm ordinary --', ['ordinary', '--']),
+                                  ('rm ordinary --target-directory=foo', ['ordinary', '--target-directory=foo']),
+                                  ('rm -f -- -', ['-']),
+                                  ('rm - ordinary -v', ['-', 'ordinary', '-v'])):
+            with self.subTest(command=command):
+                self.assertEqual(self.scan(command), operands)
+                self.assertEqual(self.scan(command, 'caws_bash_mutation_effects'),
+                                 ['unlink-entry\t' + operand for operand in operands])
+
+    def test_file_effect_roles_do_not_reclassify_redirections_or_data(self):
+        command = 'rm first > report; printf "rm decoy"; truncate -s 0 first'
+        self.assertEqual(self.scan(command, 'caws_bash_mutation_effects'),
+                         ['referent\treport', 'unlink-entry\tfirst', 'referent\tfirst'])
+        self.assertEqual(self.scan('echo rm victim', 'caws_bash_mutation_effects'), [])
+
+    def test_file_effect_roles_keep_dynamic_and_unrepresentable_targets_out(self):
+        for command in ('rm "$TARGET"', 'rm core/*.py', "rm $'a\\nb'"):
+            with self.subTest(command=command):
+                self.assertEqual(self.scan(command, 'caws_bash_mutation_effects'), [])
+        self.assertEqual(self.scan('rm core/*.py', 'caws_bash_dynamic_mutations'),
+                         ['core/*.py\tpathname\tcore/\tlexically_proven\t' + str(self.base)])
+        self.assertEqual(self.scan("rm $'a\\nb'", 'caws_bash_unrepresentable_count'), ['1'])
+
+    def test_file_effect_roles_preserve_entry_ownership_for_unmodeled_rm_options(self):
+        for option in ('--unmodeled-option', '-v', '-fv'):
+            with self.subTest(option=option):
+                self.assertEqual(self.scan('rm ' + option + ' link', 'caws_bash_mutation_effects'),
+                                 ['unlink-entry-unresolved\tlink'])
+        self.assertEqual(self.scan('rm -- -filename', 'caws_bash_mutation_effects'),
+                         ['unlink-entry\t-filename'])
+
     def test_changed_coordinates_and_dynamic_dd_do_not_become_literal_paths(self):
         self.assertEqual(self.scan('cd elsewhere; touch relative.txt'), [])
         self.assertEqual(self.scan('cd elsewhere; touch relative.txt',

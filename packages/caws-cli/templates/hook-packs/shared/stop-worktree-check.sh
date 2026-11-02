@@ -21,23 +21,39 @@
 
 set -euo pipefail
 
+stop_activity_unavailable() {
+  printf '[stop-worktree-check] activity unavailable: %s; reminder skipped\n' "$1" >&2
+  exit 0
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
-source "$SCRIPT_DIR/lib/parse-input.sh"
+if [[ ! -f "$SCRIPT_DIR/lib/parse-input.sh" ]] || ! source "$SCRIPT_DIR/lib/parse-input.sh"; then
+  stop_activity_unavailable hook-input
+fi
 # shellcheck source=lib/caws-state.sh
-source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
+if [[ ! -f "$SCRIPT_DIR/lib/caws-state.sh" ]] || ! source "$SCRIPT_DIR/lib/caws-state.sh"; then
+  stop_activity_unavailable canonical-root
+fi
 # Hook does not read stdin fields; only checks worktree registry state.
 # Sourcing parse-input.sh still wires up PATH for node (used below).
 
-# Resolve main repo root (shared helper — HOOK-LIB-CONSOLIDATION-001 T2a).
-PROJECT_DIR="$(resolve_canonical_dir "${CAWS_PROJECT_DIR:-.}")"
+declare -F caws_resolve_canonical_dir_into >/dev/null &&
+  declare -F caws_physical_dir_into >/dev/null || stop_activity_unavailable canonical-root
+PROJECT_DIR=""
+if ! caws_resolve_canonical_dir_into PROJECT_DIR "${CAWS_PROJECT_DIR:-.}" ||
+    ! caws_physical_dir_into PROJECT_DIR "$PROJECT_DIR"; then
+  stop_activity_unavailable canonical-root
+fi
 
 # Check for active worktrees
-if [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>&1; then
-  ACTIVE_INFO=$(node -e "
+if [[ -e "$PROJECT_DIR/.caws/worktrees.json" || -L "$PROJECT_DIR/.caws/worktrees.json" ]]; then
+  command -v node >/dev/null 2>&1 || stop_activity_unavailable worktrees-registry
+  ACTIVE_INFO="$(node -e "
     $CAWS_NODE_ENTRIES_OF
     try {
-      var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
+      var reg = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+      if (!reg || typeof reg !== 'object' || Array.isArray(reg)) process.exit(2);
       // Status-less entries (CLI-created — caws-cli 11.1.7+ persists no
       // status field) count as active alongside the explicit
       // 'active'/'fresh' states (HOOK-LIB-CONSOLIDATION-001 T1b).
@@ -50,11 +66,17 @@ if [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>
       } else {
         console.log('0:');
       }
-    } catch(e) { console.log('0:'); }
-  " 2>/dev/null || echo "0:")
+    } catch(e) { process.exit(2); }
+  " "$PROJECT_DIR/.caws/worktrees.json" 2>/dev/null && printf x0 || printf 'x%s' "$?")"
+  [[ "${ACTIVE_INFO##*x}" == 0 ]] || stop_activity_unavailable worktrees-registry
+  ACTIVE_INFO="${ACTIVE_INFO%x*}"
+  # Remove the reader's one record delimiter, retaining any data bytes.
+  [[ "$ACTIVE_INFO" == *$'\n' ]] || stop_activity_unavailable worktrees-registry
+  ACTIVE_INFO="${ACTIVE_INFO%$'\n'}"
 
-  COUNT=$(echo "$ACTIVE_INFO" | cut -d: -f1)
-  NAMES=$(echo "$ACTIVE_INFO" | cut -d: -f2)
+  COUNT="${ACTIVE_INFO%%:*}"
+  NAMES="${ACTIVE_INFO#*:}"
+  [[ "$COUNT" =~ ^[0-9]+$ ]] || stop_activity_unavailable worktrees-registry
 
   if [[ "$COUNT" -eq 0 ]] 2>/dev/null; then
     echo "REMINDER: No active worktrees. Worktrees are preferred for isolated feature work; on the base branch the write guard's always-allowed allowlist still permits coordination/docs/config edits. To start isolated work: caws worktree create <name> --spec <id>. If a worktree's work is complete, run: caws worktree destroy <name> (then git branch -d <branch> to remove the branch)." >&2

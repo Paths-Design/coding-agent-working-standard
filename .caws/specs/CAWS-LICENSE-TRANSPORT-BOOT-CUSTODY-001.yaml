@@ -1,0 +1,117 @@
+id: CAWS-LICENSE-TRANSPORT-BOOT-CUSTODY-001
+title: 'License transport custody survives reboots; staging relinquishes unverifiable ownership'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge license-boot-custody at 6a46e761d478458faf24b399163f381988e1be72'
+created_at: '2026-10-27T23:43:29.535Z'
+updated_at: '2026-10-28T01:02:15.409Z'
+created_by_session: '4126b194-a8f5-4ff4-aed5-f071b045cfda'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/scripts/clean-staged-docs.mjs (license transport custody: stage/clean/recover)'
+    - 'packages/caws-cli/scripts/stage-consumer-docs.mjs (build-time staging entry; build-cli.js:165, prepack, docs:check)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/clean-staged-docs.mjs'
+    - 'packages/caws-cli/scripts/stage-consumer-docs.mjs'
+    - 'packages/caws-cli/tests/docs/package-license-transport.test.js'
+    - 'packages/caws-cli/.gitignore'
+  out: []
+  support:
+    - packages/caws-cli/.license-transport.json
+invariants:
+  - 'Cleanup never unlinks a license file it cannot prove it created: every recorded field except the boot-scoped device number must match, the object must sit on the package root filesystem now, and owned bytes must hash to the recorded sha256.'
+  - 'Staging never deletes or overwrites a license file or an ownership record; relinquishing moves the record inode aside intact and only reduces deletion authority.'
+  - 'Marker schema v1 is unchanged, so records written by older and newer scripts stay mutually readable across worktrees.'
+  - 'In-run custody races (current() checkpoints), symlinks, nonregular files, an existing operation lock, conflicting destination bytes and missing sources still refuse in both staging and cleanup.'
+acceptance:
+  - id: A1
+    given: 'a ready marker whose recorded dev on the marker and every owned leaf differs from the live device (reboot renumbering) while every other recorded field matches'
+    when: 'staging and then cleanup run'
+    then: 'staging returns created [] and preserved for all three transports with no relinquished key, and cleanup removes exactly the three owned transports and retires the marker'
+  - id: A2
+    given: 'a device-shifted record plus a same-byte foreign replacement (new inode) of the marker or of one owned leaf'
+    when: 'cleanup runs'
+    then: 'it refuses naming the differing ino/birthtimeNs fields and deletes no license'
+  - id: A3
+    given: 'the package root reports a different device than the marker, or than an owned leaf whose own lstat and fstat agree'
+    when: 'cleanup runs'
+    then: 'it refuses naming device for that object and deletes no license'
+  - id: A4
+    given: 'an unverifiable stored record (interrupted staging or cleaning phase, incomplete JSON, same-byte foreign marker, or a replaced owned leaf, including the state a crash mid-staging leaves)'
+    when: 'staging runs'
+    then: 'it succeeds, deletes no license, renames the original marker inode to .license-transport.relinquished-<uuid> with identical bytes, returns relinquished {reason, sha256, retainedAt}, creates only missing transports under a fresh marker, and a later cleanup removes only those freshly created'
+  - id: A5
+    given: 'a relinquish whose rename fails, or whose moved record is not the observed inode and bytes'
+    when: 'staging runs'
+    then: 'it refuses, creates no fresh marker, and preserves every record it observed'
+  - id: A6
+    given: 'an unverifiable stored record'
+    when: 'cleanup runs, and separately staging runs through the real build entry (stage-consumer-docs.mjs)'
+    then: >-
+      cleanup refuses with a message naming the failed predicate and the staging
+      remedy; staging that relinquishes writes a stderr notice itself (so every
+      caller, including the build via inherited stdio, surfaces it) naming the
+      reason, the retained path, the sha256, and that no license file was deleted;
+      staging that relinquishes nothing writes no notice
+  - id: A7
+    given: 'the real caws-cli package after the change'
+    when: 'npm run build runs and the license transport and mutation-contract suites run'
+    then: 'build exits 0 and both suites pass'
+rollback:
+  - 'Revert the fix commit; markers written by the fixed script remain schema-v1 and are read by the reverted code (a dev mismatch then refuses as before; recover with --recover-license-ownership).'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Test bumps recorded dev on marker+all owned entries (reboot simulation; live dev differs, other fields equal). Asserts: staging returns exactly {created:[],preserved:[all 3]} with empty stderr and marker bytes untouched; after rm -rf dist, restaging creates the 2 dist transports, keeps LICENSE owned, no relinquished files; cleanup returns removed=[all 3], all transports and marker gone. Tests-first: failed against pre-fix code with \"ownership marker identity or schema is invalid\". Mutant M2 (compare absolute dev) killed 10 tests incl. this. Not exercised: a real reboot."
+    recorded_at: "2026-10-28T00:46:46.482Z"
+    test_nodeid: "packages/caws-cli/tests/docs/package-license-transport.test.js::a reboot-renumbered device keeps custody through restaging and cleanup"
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Two parametrized cases (LICENSE, .license-transport.json): after a device shift, the object is replaced by a same-byte, same-mode file with a new inode; cleanup refuses with \"owned license replaced or changed (ino...)\" / \"ownership marker identity mismatch (ino[, birthtimeNs])\", the message never names device or sha256, and licenseState() (identity+bytes of all 3 transports) is unchanged, so nothing was deleted. Regex tolerates birthtimeNs absence for filesystems without btime (Linux CI); not run on Linux here."
+    recorded_at: "2026-10-28T00:47:24.270Z"
+    test_nodeid: "packages/caws-cli/tests/docs/package-license-transport.test.js::a device shift never admits a same-byte foreign"
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Two cases inject a Proxy that reports dev+1 for one path (lstat and every fd opened on it, so the object reads self-consistently): (a) package root -> cleanup refuses \"ownership marker identity mismatch (device)\"; (b) owned leaf dist/transcripts/html311/LICENSE.txt -> refuses \"owned license replaced or changed (device): ...\"; faults>0 proves injection ran; licenseState() unchanged and marker phase still ready. Mutant M1 (drop device relation) killed both (3 tests at final HEAD). Simulated device split, not a real mount point."
+    recorded_at: "2026-10-28T00:48:25.902Z"
+    test_nodeid: "packages/caws-cli/tests/docs/package-license-transport.test.js::on another device refuses cleanup and deletes nothing"
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Carried by: test.each \"<class>: cleanup refuses with the remedy; staging relinquishes and deletes nothing\" over interrupted staging phase, interrupted cleaning phase, incomplete JSON, unknown schema, same-byte foreign marker, same-byte foreign owned license -> exact result {created:[],preserved:[3],relinquished:{reason,sha256,retainedAt}}, retained file has the original marker inode and bytes, it is the only relinquished file, marker path absent, licenseState() unchanged, later cleanup removed=[]; plus \"real marker write followed by failure retains uncertain ownership and exact created bytes\" (crash mid-staging: restaging relinquishes, creates only the 2 missing, cleanup removes only those, the pre-crash LICENSE stays) and \"partial cleanup failure ...\" (restaging recreates only LICENSE). Mutants M3/M5 killed. Real-package run: planted incomplete JSON, stage-consumer-docs exit 0, relinquished file kept inode 801923623 + sha 7e3eb5fc."
+    recorded_at: "2026-10-28T00:50:31.122Z"
+    test_nodeid: packages/caws-cli/tests/docs/package-license-transport.test.js
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Carried by \"a failed relinquish rename refuses staging and leaves the record in place\" (injected renameSync throw: refused, faults=1, no notice, observedFile(marker) identical incl. ctime, no relinquished file, licenses unchanged) and \"a record swapped during relinquish is moved aside, never deleted, and no fresh record is made\" (foreign record swapped in before rename: refused \"ownership marker changed while being relinquished\", exactly one relinquished file holding the foreign bytes, no marker created). Mutant M4 (skip moved-inode/bytes check) killed. Related race refusals added after peer review: \"a marker replaced between observation and its writable open refuses staging\" (M8 killed) and \"a marker changed while staging holds it refuses instead of being relinquished\" (M3 killed). The swapped-out original is lost to the injected external rename, not to this code."
+    recorded_at: "2026-10-28T00:54:36.058Z"
+    test_nodeid: packages/caws-cli/tests/docs/package-license-transport.test.js
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Cleanup refusal names predicate + remedy: each of the 6 test.each classes asserts JSON.parse(stderr).message matches /cleanup deletes only files it can prove it created; run `node scripts\\/stage-consumer-docs.mjs`/ alongside the class-specific reason (M6 drop-remedy killed 6). Notice: the same cases assert staged.stderr contains \"no license file was deleted\", the retainedAt name and the sha256; the reboot test asserts a non-relinquishing stage writes stderr \"\" exactly. Real build entry (runtime, not re-derived by --verify): planted incomplete JSON in the worktree package; node scripts/clean-staged-docs.mjs exit 2 with predicate+remedy; node scripts/stage-consumer-docs.mjs exit 0 printing the notice (reason, .license-transport.relinquished-9e240d4a-..., sha256 7e3eb5fc...). build-cli.js:165 runs it with stdio inherit (source trace)."
+    recorded_at: "2026-10-28T00:56:09.448Z"
+    test_nodeid: packages/caws-cli/tests/docs/package-license-transport.test.js
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Re-derived here: mutation-contract suite (its sandbox build imports clean-staged-docs.mjs and calls stageLicenseTransport). License transport suite re-derived under A4-A6 (67/67). Observed this session at HEAD 879979004 in the worktree, NOT re-derived by --verify: npm run build exit 0 (\"caws-cli build complete\"); jest over license + mutation-contract + cli-api-reference-coverage suites 144/144; eslint exit 0. Unrelated pre-existing failure: scripts/install-cli-snapshot.test.mjs fails 9/9 identically on unmodified main 89cd56c35 (fixture lacks src/init/repo-hook-policy.ts) and stubs both transport scripts (lines 139-153), so it exercises none of this code. Not run: full jest suite, CI on Linux, a real reboot."
+    recorded_at: "2026-10-28T00:58:51.618Z"
+    test_nodeid: packages/caws-cli/tests/ci/mutation-contract.test.js
+    commit_sha: "879979004cff54996dd9cb91b1a809c4ab429e84"
+    test_verified_at: "879979004cff54996dd9cb91b1a809c4ab429e84"

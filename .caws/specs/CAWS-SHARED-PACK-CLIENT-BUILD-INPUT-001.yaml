@@ -1,0 +1,47 @@
+id: CAWS-SHARED-PACK-CLIENT-BUILD-INPUT-001
+title: 'Shared pack: the renderer client is a native-image build input, not an installed managed hook'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Renderer client is a native-image build input: manifest entry removed, SHARED_PACK_VERSION back to 105 (install set unchanged), named non-manifest exception with pin test. 4 suites 193/193 in lane; pin negative control exit 1 against the declaring manifest.'
+created_at: '2026-10-23T06:24:05.867Z'
+updated_at: '2026-10-23T06:34:19.801Z'
+created_by_session: 'dd67d988-8ccc-438d-a559-ccd670a03a98'
+blast_radius:
+  modules:
+    - 'shared hook-pack manifest + install-layout drift guard'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/init/hook-install-layout.test.js'
+  out: []
+invariants:
+  - 'lib/session-render-service-client.sh is not installed into projects: it carries builder markers, is read from the templates tree by src/runtime/service-image.ts and native-sqlite-build.ts, and no dispatcher sources it'
+  - 'The drift guard still fails on any new undeclared shared file; the exception is named, reasoned and pinned by its own test'
+acceptance:
+  - id: A1
+    given: 'declaring lib/session-render-service-client.sh as a managed install entry (pack 106) makes init-hook-pack-render fail 5 tests (no CAWS-MANAGED-HOOK header, placeholder stamping) and machine-adoption init exit 1'
+    when: 'the entry and the 105->106 bump are reverted and the file is listed under KNOWN_NON_MANIFEST_FILES.shared with a pin test asserting it exists on disk and is absent from the manifest'
+    then: 'npx jest tests/init/hook-install-layout.test.js tests/init/pack-fingerprint.test.js tests/init/init-hook-pack-render.test.js tests/adapter/machine-adoption.test.js passes'
+  - id: A2
+    given: 'the exception must not widen silently'
+    when: 'the pin test runs against a tree where the client file is missing or declared'
+    then: 'it fails (negative control on a disposable copy)'
+rollback:
+  - 'revert the merge commit'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Worktree shared-pack-client-input at the candidate: turbo build exit 0; npx jest tests/init/hook-install-layout.test.js tests/init/pack-fingerprint.test.js tests/init/init-hook-pack-render.test.js tests/adapter/machine-adoption.test.js --ci exit 0, 4 suites 193/193 (log ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/client-input-wt-jest.log). Baseline main 21a60fc9 pre-push log push-main-21a60fc9.log: init-hook-pack-render 5 failed, machine-adoption init exit 1."
+    recorded_at: "2026-10-23T06:33:35.397Z"
+    commit_sha: bd4a2c75c546c5d4cf40048f024f5f529895f328
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "pin-negative-control.js (artifacts dir) against canonical dist manifest at 21a60fc9 (version 106, client declared): declaresClient true, exit 1 (pin's manifest arm fails); against the lane dist: version 105, declaresClient false, exit 0. The no-managed-header arm is asserted directly in the pin test and holds on the live file."
+    recorded_at: "2026-10-23T06:33:40.712Z"
+    commit_sha: bd4a2c75c546c5d4cf40048f024f5f529895f328

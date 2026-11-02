@@ -1,0 +1,79 @@
+id: CAWS-NATIVE-STOP-PREREQUISITE-LANDING-001
+title: 'Land reviewed OpenCode transport and original Stop capture prerequisites'
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded source delivery only: three recorded criteria retain executed fixture evidence and exact package-byte landing; parent ordinary Stop custody/authentication/profile/consumer integration, residency, full Python retirement and local adoption remain open with root.'
+created_at: '2026-10-24T03:10:15.575Z'
+updated_at: '2026-10-24T03:29:54.400Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'OpenCode machine transport, native original Stop capture and SQLite identity receipts'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/architecture/caws-native-runtime.md'
+    - 'docs/internal/caws-runtime-modernization.md'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-opencode.ts'
+    - 'packages/caws-cli/src/init/machine-adapters.ts'
+    - 'packages/caws-cli/src/init/opencode-native-plugin.ts'
+    - 'packages/caws-cli/src/init/opencode-project-registration.ts'
+    - 'packages/caws-cli/src/init/system-runtime.ts'
+    - 'packages/caws-cli/src/init/system-surface-settings.ts'
+    - 'packages/caws-cli/src/runtime/engine.ts'
+    - 'packages/caws-cli/src/runtime/selection-observation.ts'
+    - 'packages/caws-cli/src/runtime/selection.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/templates/hook-packs/opencode/plugin.ts'
+    - 'packages/caws-cli/tests/adapter/opencode-native-plugin.test.js'
+    - 'packages/caws-cli/tests/adapter/opencode-project-registration.test.js'
+    - 'packages/caws-cli/tests/adapter/system-registration.test.js'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-native/src/agent_pid_cache.rs'
+    - 'packages/caws-native/src/agent_pid_cache/tests.rs'
+    - 'packages/caws-native/src/native_generation.rs'
+    - 'packages/caws-native/src/session_cache.rs'
+    - 'packages/caws-native/src/session_cache_wire.rs'
+    - 'packages/caws-native/src/session_cache_wire/tests.rs'
+    - 'packages/caws-native/src/sqlite_build_identity.rs'
+  out: []
+invariants:
+  - 'This bounded source delivery does not activate ordinary Stop, retire production Python or satisfy parent cutover acceptance'
+  - 'Delivered package source is identical to the inspected candidate and existing reviewed migration policy cannot be inferred from another surface'
+acceptance:
+  - id: A1
+    given: 'exact OpenCode producer and migration candidate'
+    when: 'existing retained executable fixtures and hostile controls are inspected against committed bytes'
+    then: 'original caller context and selected producer identity are retained and unreviewed or custom migration is refused with unchanged fixture state'
+  - id: A2
+    given: 'committed native prefix capture and SQLite identity prerequisites'
+    when: 'actual Git and cache effects, expiry, failure, identity mismatch and behavioral negative controls are inspected'
+    then: 'the bounded library contracts hold while ordinary activation and durable frontend-death custody remain explicitly owed'
+  - id: A3
+    given: 'the reviewed bounded candidate and open parent'
+    when: 'source gates, build and landing execute'
+    then: 'main contains the exact candidate package bytes, the ledger preserves nonclaims, and no machine installation or parent closure is inferred'
+observability:
+  - 'Retained executable fixture outputs, original Git and cache files, mutation failures, exact source pins and governed landing events'
+rollback:
+  - 'Revert the bounded source merge through normal history; preserve selected machine runtime and parent worktree'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Exact package source at739e72f4 matches reviewed0bd415c5. Root inspected stop-prerequisite-build-01 exit0 and corrected stop-prerequisite-tests-02 exit0/113 across six suites, all recorded CLI source pins match landing. Retained argv/input/context, selected plugin/policy and rollback backups establish original caller and migration fixture behavior; E323/E324 retain three behavioral negative controls and reproduced other-surface bypass then unchanged-tree refusals. First combined tests-01 exit1 preserves nonexistent fingerprint-path error while99other cases passed. Independent producer review grounded the migration repair and coherent-source review traced OpenCode Stop through existing compatibility dispatch; no actual installed harness/consumer or Python retirement inferred. External runtime evidence manually inspected; commit verification establishes identity only."
+    recorded_at: "2026-10-24T03:26:30.855Z"
+    commit_sha: "739e72f4adced09c765dbec9bf28598ab353e585"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Root inspected actual original-stop-capture-candidate-01 exit0/37, original-stop-capture native-check and feature-off-check exit0, all99native pins match landing. Actual Git PIDs69474/69477 exit0 with bothEOF/reap and cache envelope/pointer/PID files retain original payload/project/deadline. Six capture mutants execute assertion failures101 with restored bytes. SQLite identity receipt seven controls and two negative controls establish exact linked fields, original-generation corruption/replacement refusal and original expiry; their unchanged implementation dependencies match landing, separate capture additions are listed in stop-prerequisite-landing-01/source-evidence.json. PID10case receipt implementation unchanged, with actual child records. Independent bounded capture review rehashed99pins and found no additional actionable defect; same-provider source review confirms SQLite identity grants no production qualification. Cancellation cleanup settles and lacks both EOF observations, so durable frontend-death/pipe-holder custody remains explicitly owed. No ordinary Stop/profile admission, production retirement or parent acceptance claimed."
+    recorded_at: "2026-10-24T03:26:32.020Z"
+    commit_sha: "739e72f4adced09c765dbec9bf28598ab353e585"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Governed no-close merge96dd5dbe727d5a5723d28d15db50fcbb6bbf3a21 places the bounded candidate on main. Root git diff0bd415c5 HEAD -- packages exits0 with no differences after merge; E326 ledger and all recorded source nonclaims are on main. stop-prerequisite-build-01 exit0, tests-02 exit0/113, original capture37and both compile receipts match exact landing source as recorded in source-evidence.json and434CLI pins. Full branch-basis gates24files5PASS, doctor0E/4W/5I. Independent source review confirms OpenCode Stop uses existing compatibility dispatch including Python; native transport is not native SQL/render retirement. Main selected runtime pointer remains408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0. Publication worktree preserved and root-owned; parent0/8 unchanged. External raw artifacts manually inspected; commit verification checks identity only."
+    recorded_at: "2026-10-24T03:29:52.515Z"
+    commit_sha: "96dd5dbe727d5a5723d28d15db50fcbb6bbf3a21"

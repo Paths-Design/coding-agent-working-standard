@@ -1,0 +1,67 @@
+id: CAWS-NATIVE-E2E-CANARY-001
+title: 'Capture the first real Codex callback on a private joined native candidate'
+mode: chore
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed bounded private installed diagnostic capture at3068. A1-A3 recorded and spec/event dual-read: actual init0 then active gitstatus native compatibility execution-contract refusal2, retained raw input/journal/host response/custody and uncertainty. No full workflow, native stock/Stop/domain/render/rollback or global adoption. Parent/Root retain final-launch integration and full end-to-end outcome; preserve physical candidate and original artifacts.'
+created_at: '2026-10-26T21:12:21.075Z'
+updated_at: '2026-10-26T22:02:59.177Z'
+created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
+blast_radius:
+  modules:
+    - 'Private native candidate installation and real Codex callback canary'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/'
+    - 'packages/caws-native/'
+    - 'docs/'
+    - 'scripts/install-cli-snapshot.mjs'
+    - '.github/workflows/mutation.yml'
+    - 'package-lock.json'
+    - README.md
+  out: []
+invariants:
+  - 'Preserve foreign work, failed histories, global runtime and authentication state; install only under an owned private home.'
+  - 'No caller field, surface relabeling, guard exception or trust bypass may turn missing execution authority into admission.'
+  - 'A captured refusal is diagnostic evidence and does not establish full workflow or cutover acceptance.'
+acceptance:
+  - id: A1
+    given: 'immutable parent addc3190 and source 8a964035 with known remaining shell controls'
+    when: 'an owned integration candidate is built and privately installed'
+    then: 'exact source, native member set, build, CLI and selected runtime identities are retained without merging foreign dirty work or changing the global runtime'
+  - id: A2
+    given: 'the identified private candidate and normally trusted hooks'
+    when: 'a fresh real Codex session attempts one harmless local command'
+    then: 'raw callback bytes, producing hook result, native journal and observed tool outcome are correlated and the actual first blocking boundary is identified without replay or invented execution facts'
+  - id: A3
+    given: 'the canary invocation and retained task fixture'
+    when: 'the attempt settles'
+    then: 'original function tests and protected sentinel remain unchanged, owned processes are settled or their uncertainty is retained, and the remaining full-workflow obligation is explicit'
+observability:
+  - 'Retain original commands and exit statuses, raw hook input and hashes, actual native journals, Codex events, selected artifact identities and before/after task state.'
+rollback:
+  - 'Stop only positively owned canary processes; preserve failed roots and all foreign branches; leave the global runtime unchanged.'
+non_functional:
+  security:
+    - 'Use ordinary authentication and exact-definition hook trust; never copy authentication contents into evidence or weaken required enforcement.'
+contracts:
+  - name: 'private-native-canary'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Runtime acceptance determined by direct inspection of raw commands/statuses and artifacts, not source-only citation verification. Pinned22 build02 exec69176 exit0; normal snapshot exec39474 exit0; native plan0 byte-identical/apply27348 exit0, pointercacfc51a/entryba00480 readback and global hashes OK. Exact artifactRoot /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/native-agent-workflow-01; candidate-observation-01.json, candidate-install-01.log, native-install-plan-01.json, native-install-apply-01.json, first-callback-result-01.json. CLI --verify verifies only cited commit existence; generated runtime receipts intentionally not committed, per repository contract. Diagnostic Parentaddc+Source8a only; no qualified Stop/domain/adoption."
+    recorded_at: "2026-10-26T22:01:16.268Z"
+    commit_sha: "3068e3b2f95d4161760aa0bc2f57c3a192c215c2"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Direct runtime inspection: fresh normal OAuth/trust12, actual Codex init0 then git status host custom-tool output blocked with execution-contract guard2, no retry. Raw644bytes SHA9d9e3671825cf1e638c0b0eb8e8c024dcbb150792fec6efa19c0f8dda7e87d55 equals nativejournal74277. Native compatibility bash-write-guard2; workspace-write/no-network turn context retained. Rootartifact/native-agent-workflow-01/first-tool-observations-01.jsonl, first-pretool-handlers-01.jsonl, real-callbacks-01/pre_tool_use-74278-6805a9f3e8a8b60b9e562f28.json and first-callback-result-01.json. CLI verification establishes only commit existence. No successful guarded command, typed stock dispatch or OS-level zero-launch trace inferred."
+    recorded_at: "2026-10-26T22:01:57.194Z"
+    commit_sha: "3068e3b2f95d4161760aa0bc2f57c3a192c215c2"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Direct runtime inspection: function/tests/sentinel SHA256 match baseline-observation.json, only fixture governance/gitignore created. Outerexec9865 terminal0; owned63706/63748 absent. Four active correlated custody roots retained in Rootartifact/native-agent-workflow-01/custody-01 and custody-terminal-observations-01.json: complete/child0/stopOk/Exited/bothEOFs/errornull. Initial two inactive custody uncorrelated, arbitrary escaped descendants not enumerated, OS-level zero user launches not traced. CLI verification establishes only commit existence. Full workflow remains open under Root/Parent; observation index first-callback-result-01.json gives exact absolute artifactRoot."
+    recorded_at: "2026-10-26T22:02:06.465Z"
+    commit_sha: "3068e3b2f95d4161760aa0bc2f57c3a192c215c2"

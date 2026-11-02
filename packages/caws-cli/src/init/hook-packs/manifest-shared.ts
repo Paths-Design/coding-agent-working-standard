@@ -496,7 +496,7 @@ import { isAdapterCoveredSurface } from './types';
 // v84 (CAWS-HOOKS-GUARD-CONFIG-TIER2-01): tier-2 guard configuration. A repo
 // may now declare DATA a shipped guard consults — additional allow prefixes,
 // clamped advisory thresholds — in the `guards` block of hook-policy.json,
-// without forking the guard. lib/guard-config.py parses it (and
+// without forking the guard. lib/guard-config.cjs parses it (and
 // policy.non_governed_zones, whose inline awk block moves here) exactly ONCE
 // per dispatch; lib/guard-config.sh exports the result so adopting guards read
 // plain variables and spawn nothing. Measured: a python3 start is ~31ms, so
@@ -602,7 +602,58 @@ import { isAdapterCoveredSurface } from './types';
 // and the kernel turn-log.v2 producer contract adopts the same unified
 // shape, so the shared pack template tree changed again after v96.
 // v98: retain per-invocation handler progress before subsequent handlers run.
-export const SHARED_PACK_VERSION = 98;
+// v99: block-dangerous.sh requires complete arm-time and live agent identity
+// before kill escalation, stamps each latch arm with a distinct generation, and
+// accepts the native executor's explicit containment descriptor.
+// v100: lib/harness_kimi.py defers annotations so the session renderer imports
+// under the stock macOS python3 (3.9).
+// Cooperative renderer entrypoints include the native writer-custody bridge.
+// v101: agent-stop routes the CLI's operational receipt to diagnostics while
+// preserving its lease mutation. Lifecycle text must not displace advice.
+// v102: raw Codex apply_patch requests enter armed file-tool quarantine checks.
+// v103: contention command failures retain the existing unknown-observation
+// allowlist and approval policy instead of exiting before either policy runs.
+// v104: heartbeat message provenance reads the canonical sender specId field.
+// v105: refresh captured invocation custody and per-handler stdin stage cleanup.
+// v106: session-log.schema.json carries exact recomputed counts and explicitly
+// preserved historical summaries, including independent top-level models.
+// lib/session-render-service-client.sh ships in this tree but is not installed:
+// it is a native-image build input (src/runtime/service-image.ts) carrying
+// builder markers, with no managed header and no dispatcher that sources it.
+// v108: audit tool-use fields travel over stdin, preserving large payloads
+// under Linux's per-argument exec limit.
+// v109: stock guard configuration uses a standalone typed Node loader.
+// v110: generated guard configuration preserves separator semantics with lint-safe predicates.
+// v111 (CAWS-NATIVE-EXECUTION-WORKDIR-001): Codex Bash relative-target checks
+// require validated host command-directory context; missing context retains
+// unavailable-native-context instead of an inferred ownership decision.
+// v112: the stock reprieve consult uses a generated standalone typed reader.
+// v114: bounded mutation analysis and checked path identity share the guard boundary.
+// v115: registry consumers preserve canonical path bytes and diagnose unavailable readers.
+// v116: protected-operation selection and a lane named worktrees retain their meaning.
+// v117: complete typed copy roles replace the source-byte destination heuristic.
+// Removal entries and registered physical roots retain distinct ownership checks;
+// observed registry or contained-scope failures cannot become empty admission.
+// v122: scope-guard discovers canonical authority from sparse linked leaves
+// and hard-blocks authoritative exclusions and unavailable bound governance.
+// Native patches check every source/destination before emitting one advisory.
+// v123: project complete literal direct Node heredoc bodies out of outer-shell
+// target views while retaining raw interpreter-write analysis and conservative
+// handling of unsupported forms. Require the header as the first nonblank line
+// so preceding command-lookup overrides cannot hide shell operations in a body.
+// File-sink policy and helper API are preserved.
+// v124: admit finite complete literal inspection prefixes before a quoted Node
+// heredoc, preserving bytes and rejecting visible lookup changes or shell syntax.
+// Raw interpreter checks and the helper API remain unchanged; ambient command
+// lookup is a host assumption, never authenticated by this projection.
+// v125: share structural inspection argument profiles with a bounded pure
+// classifier. Selected managed heredoc libraries bind to their generation's
+// Node/entry; unavailable classification preserves raw outer-shell input.
+// v126: include the managed-hook growth stance in the Bash analysis and copy
+// operand libraries; their executable behavior is unchanged.
+// v127: secret advisories retain line/category order and shell-option semantics
+// while matching token expressions without per-line external processes.
+export const SHARED_PACK_VERSION = 127;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -696,6 +747,8 @@ export const SHARED_PACK: HookPackV1 = {
       '.caws/leases/',
       '.caws/sessions/<session-id>/',
       '.caws/sessions/.caller-session.json',
+      '.caws/.render-writer-custody/',
+      '.caws/.render-writer-provisioned',
     ],
   },
   lineageRefs: [1, 4, 6, 8, 11, 12, 13, 16, 17, 19, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
@@ -824,6 +877,18 @@ export const SHARED_PACK: HookPackV1 = {
       managed: true,
     },
     {
+      destPath: '.caws/hooks/lib/bash-mutation-analysis.sh',
+      sourcePath: 'lib/bash-mutation-analysis.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/copy-roles.sh',
+      sourcePath: 'lib/copy-roles.sh',
+      executable: false,
+      managed: true,
+    },
+    {
       destPath: '.caws/hooks/lib/ask-capability.sh',
       sourcePath: 'lib/ask-capability.sh',
       executable: false,
@@ -838,6 +903,12 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/lib/session-cache.sh',
       sourcePath: 'lib/session-cache.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/session-render-writer.sh',
+      sourcePath: 'lib/session-render-writer.sh',
       executable: false,
       managed: true,
     },
@@ -869,8 +940,8 @@ export const SHARED_PACK: HookPackV1 = {
       // hook-policy.json `guards` and policy.non_governed_zones, so one parse
       // serves every adopting guard and the two sources cannot disagree about
       // what the allow table contains.
-      destPath: '.caws/hooks/lib/guard-config.py',
-      sourcePath: 'lib/guard-config.py',
+      destPath: '.caws/hooks/lib/guard-config.cjs',
+      sourcePath: 'lib/guard-config.cjs',
       executable: false,
       managed: true,
     },
@@ -950,6 +1021,12 @@ export const SHARED_PACK: HookPackV1 = {
       // skips invocation of reprieved handlers for the resolved session.
       destPath: '.caws/hooks/lib/reprieve.sh',
       sourcePath: 'lib/reprieve.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/lib/reprieve-reader.cjs',
+      sourcePath: 'lib/reprieve-reader.cjs',
       executable: false,
       managed: true,
     },
@@ -1040,6 +1117,14 @@ export const SHARED_PACK: HookPackV1 = {
       executable: true,
       managed: true,
     },
+    {
+      destPath: '.caws/hooks/advisory_truncate.cjs',
+      sourcePath: 'advisory_truncate.cjs',
+      executable: true,
+      managed: true,
+    },
+    // Callable compatibility asset for admitted custom runners. Stock advisory
+    // composition uses the generated CJS and does not fall back to this file.
     {
       destPath: '.caws/hooks/advisory_truncate.py',
       sourcePath: 'advisory_truncate.py',

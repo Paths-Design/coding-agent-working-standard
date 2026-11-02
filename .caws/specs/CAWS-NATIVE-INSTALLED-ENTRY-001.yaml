@@ -1,0 +1,224 @@
+id: CAWS-NATIVE-INSTALLED-ENTRY-001
+title: 'Integrate staged native installed entry with generation selection and rollback'
+mode: feature
+lifecycle_state: active
+worktree: native-installed-entry
+created_at: '2026-10-22T01:32:17.915Z'
+updated_at: '2026-10-28T20:42:40.017Z'
+created_by_session: '01a15984-840d-7301-a25a-7e681fd83b29'
+blast_radius:
+  modules:
+    - 'Staged native hook entry, immutable generation installation and registration compatibility'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/installed_entry.rs'
+    - 'packages/caws-native/tests/installed_entry.rs'
+    - 'packages/caws-native/Cargo.toml'
+    - 'packages/caws-cli/src/init/native-runtime-entry.ts'
+    - 'packages/caws-cli/tests/adapter/native-runtime-entry.test.js'
+    - 'packages/caws-cli/tests/adapter/native-entry-registration.test.js'
+    - 'packages/caws-cli/src/init/machine-runtime-state.ts'
+    - 'packages/caws-cli/src/init/native-hook-identification.ts'
+    - 'packages/caws-cli/src/init/machine-adapter-policy.ts'
+    - 'packages/caws-cli/src/init/system-runtime.ts'
+    - 'packages/caws-cli/src/runtime/selection.ts'
+    - 'packages/caws-cli/src/runtime/describe-entry.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - packages/caws-native/src/installed_entry_main.rs
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/init/machine-adapters.ts
+    - packages/caws-cli/tests/runtime/selection.test.js
+    - packages/caws-cli/src/store/system-runtime-observation.ts
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/tests/init/claude-settings-merge.test.js
+    - packages/caws-cli/tests/shell/init-plan.test.js
+    - packages/caws-cli/tests/adapter/machine-adoption.test.js
+    - packages/caws-cli/src/init/hook-packs/managed-header.ts
+    - packages/caws-cli/tests/init/init-hook-pack-render.test.js
+    - packages/caws-cli/templates/hook-packs/shared/lib/session-render-writer.sh
+    - packages/caws-cli/src/shell/render/init-hook-pack.ts
+    - packages/caws-cli/tests/adapter/system-runtime.test.js
+    - packages/caws-cli/templates/hook-packs/shared/lib/harness_kimi.py
+    - packages/caws-cli/tests/hooks/pytest/test_template_annotation_compat.py
+    - packages/caws-native/src/installed_generation.rs
+    - packages/caws-native/src/installed_compatibility.rs
+    - packages/caws-native/tests/installed_compatibility.rs
+    - packages/caws-cli/src/runtime/cli-identity-loader.ts
+    - packages/caws-cli/tests/runtime/cli-identity-loader.test.js
+    - packages/caws-cli/scripts/qualify-stop-profile.mjs
+    - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
+    - packages/caws-cli/tests/runtime/describe-entry.test.js
+    - packages/caws-cli/tests/adapter/opencode-project-registration.test.js
+    - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-cli/src/runtime/journal.ts
+    - packages/caws-cli/tests/runtime/engine-core.test.js
+    - packages/caws-cli/tests/runtime/engine-routing.test.js
+  out: []
+  support:
+    - packages/caws-cli/src/tooling/native-sqlite-build.ts
+    - packages/caws-cli/tests/tooling/native-sqlite-build.test.js
+    - packages/caws-native/src/lib.rs
+    - docs/internal/caws-runtime-modernization.md
+    - packages/caws-native/src/cli.rs
+    - packages/caws-native/src/context_git.rs
+    - packages/caws-native/src/context_git/original_project.rs
+    - packages/caws-native/src/context_git/render.rs
+    - packages/caws-native/src/context_git/stop.rs
+    - packages/caws-native/src/engine_custody.rs
+    - packages/caws-native/src/engine_custody/tests.rs
+    - packages/caws-native/src/engine_custody/worker.rs
+    - packages/caws-native/src/engine_custody/worker/tests.rs
+    - packages/caws-native/src/main.rs
+    - packages/caws-native/src/monotonic_deadline.rs
+    - packages/caws-native/src/native_generation.rs
+    - packages/caws-native/src/process_effect.rs
+    - packages/caws-native/src/render_context.rs
+    - packages/caws-native/src/render_observation.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/sqlite_build_identity.rs
+    - packages/caws-native/src/stop_budget.rs
+    - packages/caws-native/src/stop_git.rs
+    - packages/caws-native/tests/engine_custody.rs
+    - packages/caws-native/tests/installed_deadline.rs
+    - packages/caws-native/tests/invoke.rs
+    - packages/caws-native/tests/sqlite_identity.rs
+    - packages/caws-cli/templates/hook-packs/shared/lib/heredoc.sh
+    - packages/caws-cli/tests/hooks/bats/bash-write-guard-heredoc.bats
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/.gitignore
+    - packages/caws-cli/scripts/clean-staged-docs.mjs
+    - packages/caws-cli/tests/docs/package-license-transport.test.js
+    - CLAUDE.md
+    - CONTRIBUTING.md
+    - docs/agents/scope-discipline.md
+    - docs/architecture/repo-local-hook-policy.md
+    - docs/release-procedure.md
+    - docs/guides/command-analysis.md
+    - packages/caws-cli/src/shell/analysis/inspection-prefix-entry.ts
+    - packages/caws-cli/src/shell/analysis/inspection-prefix.ts
+    - packages/caws-cli/src/shell/analysis/inspection-profiles.ts
+    - packages/caws-cli/src/shell/analysis/policies.ts
+    - packages/caws-cli/src/shell/commands/hooks.ts
+    - packages/caws-cli/tests/fixtures/command-analysis/profile-cases.cjs
+    - packages/caws-cli/tests/shell/command-analysis.test.js
+    - packages/caws-cli/tests/shell/hooks-inspection-prefix.test.js
+    - .github/workflows/pr-checks.yml
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-analysis.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/copy-roles.sh
+    - packages/caws-cli/tests/ci/git-fixture-isolation.test.js
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-cli/tests/ci/release-path-integrity.test.js
+    - packages/caws-cli/tests/helpers/isolate-session-env.js
+    - packages/caws-cli/tests/hooks/codex-bash-write-execution-context.test.js
+    - packages/caws-cli/tests/shell/session-resolver-parity.test.js
+    - packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js
+    - packages/caws-cli/src/runtime/stock-handlers.ts
+    - packages/caws-cli/tests/runtime/fixtures/agent-surface-empty-lookup.sh
+    - packages/caws-cli/tests/runtime/fixtures/reviewed-stock/bash-mutation-targets.sh
+    - packages/caws-cli/tests/runtime/fixtures/reviewed-stock/caws-state.sh
+    - packages/caws-cli/tests/runtime/fixtures/reviewed-stock/heredoc.sh
+    - packages/caws-cli/tests/runtime/stock-handlers.test.js
+    - packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js
+    - packages/caws-cli/tests/shell/mutation-view.test.js
+    - packages/caws-cli/templates/hook-packs/shared/scan-secrets.sh
+    - packages/caws-cli/tests/hooks/bats/scan-secrets.bats
+    - packages/caws-cli/src/shell/analysis/caws-read-metadata.ts
+    - packages/caws-cli/src/store/evidence-rederive.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/scripts/run-tests.js
+    - packages/caws-cli/scripts/run-mutation.mjs
+    - packages/caws-cli/scripts/lib/node-process-env.cjs
+    - packages/caws-cli/tests/shell/run-tests-exit-code.test.js
+invariants:
+  - 'Existing Python-readable bin/caws-hook and legacy registrations remain intact during staged installation; no native failure triggers legacy fallback'
+  - 'Selected native image identities derive from one verified generation manifest; per-generation metadata contains no self-referential runtime digest'
+  - 'Resident acquisition main and worker ownership, frozen guard sources and unrelated machine configuration remain untouched'
+acceptance:
+  - id: A1
+    given: 'a staged generation and actual native registration'
+    when: 'the installed entry consumes hook bytes'
+    then: 'the actual native and typed-engine path produces observed outputs with original caller context and no caller-selected image override'
+  - id: A2
+    given: 'malformed invocation or configuration and each supported lifecycle event'
+    when: 'the installed entry refuses before dispatch'
+    then: 'argument errors exit 2, PreToolUse configuration failure blocks, and other lifecycle configuration faults remain diagnostic and released'
+  - id: A3
+    given: 'changed entry or generation, interrupted activation and tampered image'
+    when: 'upgrade, selection race, rollback or repeat-install executes'
+    then: 'one actual selected image is observed, rollback history survives and no failed native dispatch falls back to legacy'
+  - id: A4
+    given: 'legacy registration and scoped native matcher coverage'
+    when: 'actual project and user registration precedence is evaluated'
+    then: 'supported matching commands neither duplicate nor skip governance, and unsupported coverage is explicitly refused'
+  - id: A5
+    given: 'final committed source and exact packaged image'
+    when: 'private integrated controls and independent review run'
+    then: 'commands, statuses, artifacts and identities are retained, remaining compatibility limits are explicit, and no machine adoption is inferred'
+  - id: A6
+    given: >-
+      A configured native or legacy system surface and absent, disabled, restricted,
+      mixed, conditional or tampered registration controls
+    when: >-
+      Read-only system observation and the shared init/configure validator inspect
+      the same private configuration
+    then: >-
+      Valid transports agree, unsupported registration is diagnosed without changing
+      configuration, and absent or disabled surfaces remain inactive
+  - id: A7
+    given: 'A supported Claude Code PreToolUse CAWS registration using either native or legacy transport'
+    when: 'Configure creates or reviews new and existing managed handlers'
+    then: >-
+      New and absent-field handlers require onFailure block, existing block is
+      idempotent, explicit continue or invalid policy refuses before writes, foreign
+      handlers stay unchanged, and other events and harnesses gain no unsupported
+      field
+  - id: A8
+    given: 'A verified retained legacy guard generation and a pinned native transport image'
+    when: 'Installation explicitly selects a base runtime digest before analysis'
+    then: >-
+      The new immutable generation preserves every base member byte and guard
+      policy, normalizes only supported permission modes, records the base manifest,
+      rejects unsafe or changed inputs before activation, and supports return to the
+      previous selected generation without changing harness registration.
+observability:
+  - 'Raw commands and entry stdout/stderr/status, selected engine/handler execution witness, pointer/manifest/images before-after hashes and retained upgrade/rollback state'
+rollback:
+  - 'Revert owned source normally; retain both transport entries and verified prior generations; no selected-machine installation in this slice'
+non_functional: {}
+contracts:
+  - name: 'native-entry-v1'
+    type: schema
+evidence:
+  - criterion_id: A4
+    status: unchecked
+    evidence_ref: "R01 A4 remains UNCHECKED; literaldiscovery/source-registration historicalproof255b4b390 remains in priorA4 audit history and wasNOT rerun here. Newly exercised bounded component: captured immutable caller forwarded at describe-entry.ts65 into actualOpenCodeStop validator, matching engine caller contract. Actualoldcompiled946 baseline opencode-red22-02 selects exact3cases, eachNode22.22.2 childfails2 with missing-original-caller;19total includes16unrelatedpending, not19executed. Root/guard authorized finitej1 overlap withguardfull6two workers, not uncontendedlatencyproof. Supportedexactmarkermaintenance then NORMALbuild opencode-build-02 actualPID54830 exit0/8.187s, source0ae1153pinsunchanged/final1261dist. ActualCLIchildren pinnedNode18.0.0 SHA1f38ec2a and22.22.2 SHA5c899797 run SAME compileddescribe037c804e7ac5a3750d2281a35f46ce313cc57bd4e41519e144b7ada82b63b336; runnerJest isNode22 intentionally. Green18PID32614 exit0/3passed0failed16pending, green22PID71805 exit0/samecounts. Positive0 returns originalproject/private-runtime-digest/opencode-stop-system/exact4orderedstockhandlers with emptyargs and matchingphysicalfilehashes; duplicateoriginalnestedplugin2 exactreconciliationerror, originalopaqueconfig2 exactOPENCODE_CONFIG_CONTENT error, bothstdoutempty. Allsixgreenbefore/afterfixturemaps equal; peerphysicalreadback also matchesallnine red/green maps. All1153sourcepinsets identical across semanticred/build/greens and buildafter1261dist maps exactly equal bothgreenbefore/after; redtogreenonlydescribeJS+2maps changed. IndependentfreshSol inspected committedsource/unabridgedrawchecks/files/actualchildversions, authorgroundedallclaims. Limit: fixtureHOME/XDGroots575-598 empty; hypotheticalhybrid originalcwd/CAWS_HOME/opaqueenv butambientHOME/XDG couldpassthesethree. Currentdescribe-entry51/65 andregistration41-81 directlyreadwholeoriginalcaller, nohybridsource defectfound; claim source-groundedforwarding plus3testedbehaviors, NOT independentbehavioralqualification everyHOME/XDGroute. Additional seededopposingHOME/XDGcontrols neededfor that claim. SyntheticnativepayloadsinspectedONLY, neverexecuted; directCLIcallerJSON notgenuinenativeprincipal/harness. Actualnativeinstalledregistrationprecedence/realcallbacks/noPython/fullR01 remainsOWED. Raw root /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/deadline-producer-20261025/{opencode-red22-02,opencode-build-02,opencode-green18-01,opencode-green22-01}; exactargv/envkeys/status/logs/Jest/fixtures retained. opencode-runtime-readback.json linksraw observations andindependentlyvalidates6cases/4actualhandlerhashes. Before/aftermaps donotexclude transient/outsidewrites, selectedlibraryresolution isnotobservedimports; reprieves/disablelists mayalterexecution. Rootsoletrackerwriter received34988ffc exactremaining row307 falseomission correction; concerncarriedhere untilchanged. No newheavyjobs afterfinitepass, sourceclean0ae, no global/runtime/install/restart/SQL orfrozeninput/dependencychanges. Commitwriterverify reachabilityonly, nottests orcompleteAC."
+    recorded_at: "2026-10-26T15:38:22.306Z"
+    commit_sha: "0ae7969c5900c535821690d8fffed2b25180f78a"
+  - criterion_id: A5
+    status: unchecked
+    evidence_ref: "A5 remains UNCHECKED. Retained ART07 source289605/treea1192bfd, descriptor ae99243f, CLI183382f8 and 33 private receipts establish bounded installed compatibility checks, not full workflow/global adoption. Correction grounded directly on 2026-10-29: original and successful retry decoded apply_patch both564bytes SHA2567d5506225ce9c9e61742a44898dddc0545e23ab7fef5a2c33f19c57d649a47fc. Source genuine session transcript /Users/darianrosebrook/.codex/caws-native-harness/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/user/.codex/sessions/2026/10/28/rollout-2026-10-28T02-51-35-01a181ec-11d5-7270-8073-29aac2fd949d.jsonl lines317/319 retain d8a7 deadline failure; lines404/408 record same-patch actual apply_patch retry completed13.1s. Actual host file_change started/completed and intended enum reexport/import diff: /Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/caws-read-source-image07-events.jsonl lines13,15,16,21, pointer selectedba7b6e7083b5a219d269e1f3e367b4434040d1b08a88aae836b70a599538354e. Raw callback pre67501 SHA1a6fb1d15f1beb91a5a697ae9ebea69aee2dd4d72fcd3dd6a9c7aaa72694ff8f in native-agent-workflow-01/real-callbacks-01 retains exact input. Canonical .caws/sessions/01a181ec-11d5-7270-8073-29aac2fd949d/hook-invocations/67500-1793205613371034000.jsonl and69833-1793205621919350000.jsonl show invocation, compatibility_dispatch_completed0, dispatch_completed0, local stdout handoff0, adapter_finished0. Delivery remains not_observed in local journal; actual host completion plus source diff supplies downstream witness. This supersedes prior narrative that exact564 retry was pending. It proves the historical native stable-entry/TS engine/compatibility parser and shell guard route, not allRust or Python retirement. Current engine routes nonBash tools to compatibility; final pinned typed-filetool consumer and complete same-session file/Bash/npm/Git/tests/evidence/review/merge/Stop/rendering, supported-harness parity, source-qualified profiles and parent cutover acceptance remain owed. ART07 descriptor has neither stopProfile nor cliIdentityDomain; old55080 combined04 profile cannot qualify new bytes."
+    recorded_at: "2026-10-29T23:13:39.527Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3/scope-enforcement-context-01/caws-read-source-image07-events.jsonl"
+    commit_sha: "289605cc09310c13a5902e84859866f2026ca110"
+  - criterion_id: A6
+    status: unchecked
+    evidence_ref: "Bounded recovery contract implemented in bfb548e65ee6fc73f6a1bbc620dcb6791acfb468: shared retained manifest-bound entry identity under machine-home custody aligns installer and observer without qualifying unused native payload. Full selected target/native image and fresh opt-in verification retained. TEN suites563/0 exit0 and direct source API observations /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/rollback-identity/source-api-node18.json and source-api-node22.json show same verified legacyA a3686243..., retained B entry accepted while full B verification and explicit freshnative optin refuse, configureplan changedfalse, enabledtrue, observer digestA,343 file/directory hashes/modes/nlinks unchanged. Prior mismatched recovery and unsafe metadata/link admissions have retained semanticRED controls. Unsupported earlier-syntax candidate discovery/effective registration boundary remains unresolved under A4; no claim every arbitrary conditional/foreign hook is diagnosed. Actual native/harness activation not established. This records component progress without promoting the whole criterion; commit existence verification only."
+    recorded_at: "2026-10-22T11:32:34.206Z"
+    commit_sha: bfb548e65ee6fc73f6a1bbc620dcb6791acfb468
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Source bfb548e65ee6fc73f6a1bbc620dcb6791acfb468 and retained inert API fixtures implement valid legacy recovery with shared entry identity, pre-pointer refusal of invalid metadata/linked entries and dangling native markers, preserved predecessor and explicit known-byte mode repair. See /Users/darianrosebrook/.codex/artifacts/01a15984-840d-7301-a25a-7e681fd83b29/r01-installed-entry/rollback-identity/final-native-fixtures and final-qualified-jest.json; direct Node18/22 source observations retain selectedA/previousB and unchanged maps. Two real private Python SessionStart consumers and rendered turn/audit artifacts succeed after reconciling existing main8a758936 dependency. Native fixture launchers are inert and never executed; actual compiled entry upgrade/selection race/rollback/repeat-install and no-postdispatch-fallback runtime matrix remains unqualified. Exact coherent package, genuine caller/owner and harness receipts required before A3 pass. --verify checks commit reachability, not execution."
+    recorded_at: "2026-10-22T11:32:42.712Z"
+    commit_sha: bfb548e65ee6fc73f6a1bbc620dcb6791acfb468
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "Explicit base selection implementation60d018; selector-red.log8fail oldcompiledbaseline, conventional selector-build.log0 and selector-all.log137pass, gates5pass6paths, packageESLint0. Actual published43 manifest113 copied and fully verified by production installer; private composite v2 image652c43... selectsfe88ca7... preservingbasebytes/provenance. Root artifact published43-compat-01/installed-HwGiqB/evidence.json and twelve rawcommandreceipts: plan/install0, actualcompiledentryGit/npm/Cargo/CAWSallow0, catastrophicpayloadrefusal2(noUSERexecution), rollback43/readback0, cachednativeentryreturn0, reinstallfe88/readback0. CompleteCLI60prefix packagef6d548 plus receiptselectedretainednative/stablepair; not claimnative source60/newexecutionwire. Fullhost/sharedcutover notestablished bythis boundedcriterion. Independentreview sourcequestionsdischarged against capturedbytes andactualgenerationprobe; reviewnotacceptanceauthority. Verify checkscommitexistence; rawlogs wereinspected separately."
+    recorded_at: "2026-10-27T19:01:29.352Z"
+    commit_sha: "60d0183431e56b4e02d8ff6f0a034b86efede41a"

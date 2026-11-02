@@ -1,0 +1,54 @@
+id: CAWS-BATS-ASSERTION-MAIN-001
+title: 'Land the verified Bash 3.2 assertion repair on main'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Verified nine-file assertion repair landed on main; exact predicates and retained179/33checks, current five gates and independent review. Native execution, publication, residency and machine cutover remain separately open.'
+created_at: '2026-10-23T03:29:13.497Z'
+updated_at: '2026-10-23T03:38:01.170Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Nine hook Bats suites and their source landing'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/hooks/bats/block-dangerous.bats'
+    - 'packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats'
+    - 'packages/caws-cli/tests/hooks/bats/kimi-surface.bats'
+    - 'packages/caws-cli/tests/hooks/bats/parse-input.bats'
+    - 'packages/caws-cli/tests/hooks/bats/quiet-merge.bats'
+    - 'packages/caws-cli/tests/hooks/bats/qwen-surface.bats'
+    - 'packages/caws-cli/tests/hooks/bats/reset-strikes.bats'
+    - 'packages/caws-cli/tests/hooks/bats/scan-secrets.bats'
+    - 'packages/caws-cli/tests/hooks/bats/scope-guard.bats'
+  out: []
+invariants:
+  - 'Preserve all 61 predicates and current main; runtime templates, pack metadata and machine configuration are outside this slice'
+acceptance:
+  - id: A1
+    given: 'committed repair fb1ba781 and current main'
+    when: 'the owned lane merges the actual integration branch'
+    then: 'the exact nine-file predicate-preserving repair is retained without additional source changes, supported by the inspected 179-test vectors and 33 negative controls'
+  - id: A2
+    given: 'the exact committed merged candidate'
+    when: 'full-basis gates, doctor and independent committed review run and normal merge lands on main'
+    then: 'main contains the verified source slice with concrete retained checks and explicit cutover nonclaims'
+observability:
+  - 'Exact before/after commits, nine-file diff, raw Bash32 vectors/negative controls and gate outputs'
+rollback:
+  - 'Normal corrective or revert commit; no machine runtime change'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed ec4ba40e merges verified fb1ba781 through actual integration9c31e931 onto current main with exactly nine Bats files61predicate-preserving changes and no runtime/pack changes. Root read exact diff; all nine candidate blobs equal fb1ba781. Root independently parsed all9 baseline/candidate TAPs179/179ok and33mutant TAP failures, including separate22-test scope suite. Raw ~/.claude/artifacts/dd67d988-8ccc-438d-a559-ccd670a03a98/f3-bash32-inventory/repair. No fresh runtime test run inferred; original Bash3.2/bats1.13 tests used integration dist symlink, early unallocated/noPGID and orphan log cannot establish process cleanup or main runtime identity. Independent committed review grounded no source-preservation defect; helper/source predicates and exact retained rewritten bytes inspected. Actual fresh doctor0E4W5I and five full-basis gates PASS over9files; raw /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-image-invocation/bats-main-{doctor,gates}.log. Main source landing remains next transaction; no fullcutover acceptance."
+    recorded_at: "2026-10-23T03:36:21.173Z"
+    commit_sha: ec4ba40ea474c09086bb74feaa4c6e055c97a29c
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Actual normal main merge6713b43cda601bcef34039b9dcca6cab3016c175 contains ec4ba40e and fb1ba781; root independently verified ancestry after --no-close teardown. Fullbasis5gatesPASS over exact9file candidateec4, doctor0E4W5I, exactnineblob preservation and committed independent review supported bounded source landing. Raw gates+doctor /Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/native-image-invocation/bats-main-{gates,doctor}.log. Prior A1 retains179baseline/candidate vectors33negativecontrols and early allocation/dist/process limitations. Only test assertions changed; no runtime templates/pack/native installation acceptance. Current actual nativeimage startup failure remains root-owned under parent/source unit and is not passed by this landing."
+    recorded_at: "2026-10-23T03:37:58.279Z"
+    commit_sha: "6713b43cda601bcef34039b9dcca6cab3016c175"

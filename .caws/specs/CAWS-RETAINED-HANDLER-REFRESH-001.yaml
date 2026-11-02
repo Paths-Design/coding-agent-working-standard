@@ -1,0 +1,40 @@
+id: CAWS-RETAINED-HANDLER-REFRESH-001
+title: 'Refresh an explicitly selected packaged handler in a retained native base'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Explicit retained-handler refresh979d959d4/3b1405cdc: qualified immutable byte delta, source capture and provenance, CLI plans and rollback;156focusedpasses plus review finding red/green. Actual repaired scopeguard compatibility and native host/global activation remain parent cutover obligations.'
+created_at: '2026-10-27T20:15:28.846Z'
+updated_at: '2026-10-27T20:33:17.722Z'
+created_by_session: '01a171b1-ff30-7782-9755-aa02c6c6a3ae'
+blast_radius:
+  modules:
+    - 'Immutable native runtime installation with explicit retained guard updates'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/machine-adapters.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/adapter/native-runtime-entry.test.js'
+    - 'packages/caws-cli/tests/shell/init-plan.test.js'
+  out: []
+invariants:
+  - 'Without an explicit handler refresh the retained base remains byte identical; refresh changes only named registered packaged handlers and records original and replacement identities before activation'
+  - 'Package and retained-base handler compatibility is a separate qualification obligation; byte custody and registered membership alone do not prove semantic dependency compatibility'
+  - 'Refresh requires an explicit verified legacy base and native image; unknown paths, invalid declared inputs, changed inputs and unsafe files refuse before generation publication or entry and pointer changes; the installer lock is operational state, and no runtime failure triggers policy fallback'
+acceptance:
+  - id: A1
+    given: 'a verified retained legacy generation and a reviewed packaged guard correction'
+    when: 'the operator explicitly selects the handler refresh before native installation'
+    then: 'one new immutable generation contains exactly the approved replacement and unchanged other base members, with manifest-bound provenance, hostile input refusal before writes and a verified return to the retained base'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed979d959d4/3b1405cdc implement explicit --refresh-base-handler with native+verifiedlegacybase, currentpack and basepolicy handler membership, capturedsinglelink/nofollow/sourceidentity/mode validation, immutableprovenancev2 and unchangedotherbasebytes/policy. Raw retained-handler-refresh-01: red.log14semanticadapterfail onoldcompiledAPI (initialshellhelpermissing retained separately); cli-red4fail1pass afterhelperdistavailable; build0, green156pass191.664s acrossnative-runtime-entry/init-plan. Checkscompareeverybase member andoriginalsnapshotunchanged, planreadonly, newreplacementold/newhash/mode/source, rollbackbase andresamegeneration, invalid/duplicate/path/library/utility/missingoptions/sourcechange/symlink/hardlink/mode refusals leaveinstalledstateunchanged. Independentreview foundhumanplanomittedhashes; human-plan-red1fail exactmissinglines, review-build0, human-plan-green1pass138skipped19.279s provesactualCLI distinctrepeatselectors plusnormalplanidentities/readonlystate; finalpackageESLint0, doctor0warnings, gates5pass6paths. Temporaryinstallerlock isoperationalwrite; refusals precedepublication/entrypointerchanges. Nativefixturepayloadsinert: noactualhandlerdependencycompatibility, newnativehost orglobalactivation claim; those remainparentcutoverobligations. Verify checkscommitexistence; rawlogsinspectedseparately."
+    recorded_at: "2026-10-27T20:32:53.337Z"
+    commit_sha: "3b1405cdc"

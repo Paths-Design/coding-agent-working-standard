@@ -370,6 +370,7 @@ describe('CAWS-AGENTS-LIST-DISCLOSURE-01', () => {
     expect(payload.sources).toEqual({
       liveness: '.caws/leases',
       worktree_binding: '.caws/worktrees.json',
+      bridge_binding: '.caws/claims/bridge.json',
     });
     // No prose leaked into the machine payload.
     expect(JSON.stringify(payload)).not.toContain('operational cache');
@@ -381,7 +382,11 @@ describe('CAWS-AGENTS-LIST-DISCLOSURE-01', () => {
     writeRegistry(root, '{ not json');
 
     const { payload } = listJson(root);
-    expect(payload.sources).toEqual({ liveness: '.caws/leases', worktree_binding: null });
+    expect(payload.sources).toEqual({
+      liveness: '.caws/leases',
+      worktree_binding: null,
+      bridge_binding: null,
+    });
   });
 
   test('A8c: --active is recorded as the suppressor in the machine payload too', () => {

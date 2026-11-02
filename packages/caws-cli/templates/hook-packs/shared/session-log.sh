@@ -190,7 +190,15 @@ render_session_output() {
     start_sha=""
   fi
 
-  python3 "$RENDERER" \
+  local -a renderer_command=(python3 "$RENDERER")
+  # Explicit cooperative adoption routes the real renderer through native
+  # writer custody. A partial declaration fails closed; legacy inline fallback
+  # cannot follow a refused or uncertain native execution.
+  if [[ -n "${CAWS_RENDER_WRITER_NATIVE:-}${CAWS_RENDER_WRITER_GENERATION:-}${CAWS_RENDER_WRITER_PYTHON:-}" ]]; then
+    source "$SCRIPT_DIR/lib/session-render-writer.sh" || return 75
+    renderer_command=(caws_session_render_writer "$CAWS_ROOT" "${CAWS_RENDER_WRITER_PYTHON:-}" "$RENDERER")
+  fi
+  "${renderer_command[@]}" \
     "$LOG_DIR" \
     "$CWD" \
     "$SESSION_ID" \

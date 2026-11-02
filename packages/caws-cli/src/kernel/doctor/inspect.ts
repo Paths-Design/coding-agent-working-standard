@@ -120,6 +120,12 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     }
   }
 
+  const bridgeOwners = new Map(
+    Object.entries(input.bridgeOwners ?? {}).filter(
+      ([, owner]) => typeof owner === 'string' && owner.trim().length > 0
+    )
+  );
+
   // CAWS-SPEC-ACTIVATION-BINDS-001: collect first, report once. The per-spec
   // findings this loop used to push are aggregated below into a single
   // SPEC_UNBOUND_ACTIVE_BACKLOG finding.
@@ -129,10 +135,10 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     if (spec.lifecycle_state !== 'active') continue;
     const hasRegistryBinding = registrySpecIds.has(spec.id);
     const hasSpecPointer = typeof spec.worktree === 'string' && spec.worktree.length > 0;
-    if (hasRegistryBinding || hasSpecPointer) {
+    if (hasRegistryBinding || hasSpecPointer || bridgeOwners.has(spec.id)) {
       // Either side claims a binding — binding-integrity checks below handle
       // the asymmetric and orphan cases. unbound_active only fires when
-      // BOTH sides are silent.
+      // both worktree sides and the session bridge are silent.
       continue;
     }
 
@@ -141,7 +147,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         finding(
           DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_TIMESTAMP_MISSING,
           'info',
-          `Spec ${spec.id} is active but has no bound worktree and no updated_at to evaluate staleness against.`,
+          `Spec ${spec.id} is active but has no bound worktree or session bridge and no updated_at to evaluate staleness against.`,
           {
             subject: spec.id,
             narrowRepair: 'Set updated_at on the spec or bind a worktree to it.',
@@ -162,7 +168,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         finding(
           DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_TIMESTAMP_MISSING,
           'info',
-          `Spec ${spec.id} is active but has no bound worktree and its updated_at could not be parsed.`,
+          `Spec ${spec.id} is active but has no bound worktree or session bridge and its updated_at could not be parsed.`,
           {
             subject: spec.id,
             data: { spec_id: spec.id, updated_at: spec.updated_at },
@@ -184,7 +190,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         finding(
           DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_STALE,
           'info',
-          `Active spec ${spec.id} has no bound worktree and has exceeded the unbound-active threshold.`,
+          `Active spec ${spec.id} has no bound worktree or session bridge and has exceeded the unbound-active threshold.`,
           {
             subject: spec.id,
             narrowRepair: `Bind a worktree to ${spec.id} via \`caws worktree create <name> --spec ${spec.id}\` (binding a draft also activates it), or demote it with \`caws specs deactivate ${spec.id}\` (no resolution written — does not assert completion), or close it via \`caws specs close ${spec.id}\` (writes a resolution asserting the work concluded).`,
@@ -212,7 +218,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
       finding(
         DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG,
         severity,
-        `${count} active spec(s) have no bound worktree and have exceeded the unbound-active threshold: ${describeSpecIds(ids)}` +
+        `${count} active spec(s) have no bound worktree or session bridge and have exceeded the unbound-active threshold: ${describeSpecIds(ids)}` +
           (severity === 'error'
             ? ` At ${count} (threshold ${unboundActiveErrorCount}), "active" no longer distinguishes work in progress from a backlog.`
             : ''),
@@ -870,6 +876,37 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
             ' --takeover`.',
           data: {
             worktree_name: worktreeName,
+            owner_session_id: ownerSessionId,
+            lease_present: wellFormedLeases.some((l) => l.session_id === ownerSessionId),
+          },
+        }
+      )
+    );
+  }
+
+  // Bridge ownership persists independently of lease freshness, just as a
+  // worktree owner's authority does. Keep dormant ownership visible separately
+  // from the unbound backlog, and honor worktree precedence.
+  for (const spec of specs) {
+    if (spec.lifecycle_state !== 'active') continue;
+    if (
+      registrySpecIds.has(spec.id) ||
+      (typeof spec.worktree === 'string' && spec.worktree.length > 0)
+    )
+      continue;
+    const ownerSessionId = bridgeOwners.get(spec.id);
+    if (ownerSessionId === undefined || liveLeaseSessionIds.has(ownerSessionId)) continue;
+    findings.push(
+      finding(
+        DOCTOR_RULES.SPEC_BRIDGE_OWNER_LEASE_MISSING,
+        'warning',
+        `Spec ${spec.id} is bridged to session ${ownerSessionId}, which has no live lease (absent, stale, or stopped) — display only; the owner remains authoritative.`,
+        {
+          subject: spec.id,
+          narrowRepair:
+            'No automatic action. The bridge owner remains authoritative; confirm an explicit handoff before taking over the claim.',
+          data: {
+            spec_id: spec.id,
             owner_session_id: ownerSessionId,
             lease_present: wellFormedLeases.some((l) => l.session_id === ownerSessionId),
           },

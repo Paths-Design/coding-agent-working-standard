@@ -18,6 +18,14 @@ import type { Command } from 'commander';
 // hidden option via `new Option(flag, desc).hideHelp()` — Commander's
 // `.option(...)` convenience method has no hide-from-help variant.
 import { Option } from 'commander';
+import { CAWS_HELP_OPTION, EVIDENCE_KINDS } from './analysis/caws-read-metadata';
+import {
+  runHooksAnalyzeCommand,
+  runHooksInspectionPrefixCommand,
+  runHooksMutationViewCommand,
+  type HooksAnalyzeOptions,
+  type HooksMutationViewOptions,
+} from './commands/hooks';
 
 import {
   INIT_COMMAND_META,
@@ -236,7 +244,7 @@ function parseDataOption(
 }
 
 function isEvidenceKind(value: unknown): value is EvidenceKind {
-  return value === 'test' || value === 'gate' || value === 'ac' || value === 'human_decision';
+  return EVIDENCE_KINDS.some((kind) => kind === value);
 }
 
 // ── Metadata-driven help wiring (CAWS-CLI-HELP-METADATA-AUTHORITY-001) ──────
@@ -418,6 +426,7 @@ function guardExcessArguments(cmd: Command, leaf: LeafCommandMeta): void {
  * Returns the configured Command so the caller can attach `.action()`. */
 function defineLeaf(group: Command, leaf: LeafCommandMeta): Command {
   const cmd = group.command(leafCommandName(leaf)).description(leaf.description);
+  cmd.helpOption(CAWS_HELP_OPTION.flag, CAWS_HELP_OPTION.description);
   for (const opt of leaf.options) {
     applyOptionMeta(cmd, opt);
   }
@@ -428,6 +437,7 @@ function defineLeaf(group: Command, leaf: LeafCommandMeta): Command {
 /** Apply the group-level description from metadata to a Commander group. */
 function applyGroupMeta(group: Command, meta: GroupCommandMeta): void {
   group.description(meta.description);
+  group.helpOption(CAWS_HELP_OPTION.flag, CAWS_HELP_OPTION.description);
   for (const opt of meta.options ?? []) {
     applyOptionMeta(group, opt);
   }
@@ -438,6 +448,7 @@ function applyGroupMeta(group: Command, meta: GroupCommandMeta): void {
  * Returns the configured Command so the caller can attach `.action()`. */
 function defineFlat(program: Command, leaf: LeafCommandMeta): Command {
   const cmd = program.command(leafCommandName(leaf)).description(leaf.description);
+  cmd.helpOption(CAWS_HELP_OPTION.flag, CAWS_HELP_OPTION.description);
   for (const opt of leaf.options) {
     applyOptionMeta(cmd, opt);
   }
@@ -488,6 +499,8 @@ export function registerShellCommands(
     from?: string;
     projectsRoot?: string;
     nativeConfigTarget?: string;
+    nativeImage?: string;
+    entry?: 'native' | 'legacy';
   };
   const invokeInit = (
     opts: InitOptions,
@@ -543,6 +556,9 @@ export function registerShellCommands(
       (runOpts as { projectsRoot?: string }).projectsRoot = opts.projectsRoot;
     if (opts.nativeConfigTarget !== undefined)
       (runOpts as { nativeConfigTarget?: string }).nativeConfigTarget = opts.nativeConfigTarget;
+    if (opts.nativeImage !== undefined)
+      (runOpts as { nativeImage?: string }).nativeImage = opts.nativeImage;
+    if (opts.entry !== undefined) (runOpts as { entry?: 'native' | 'legacy' }).entry = opts.entry;
     if (opts.from !== undefined) {
       (runOpts as { fromFile?: string }).fromFile = opts.from;
     }
@@ -617,6 +633,22 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   const hooksCmd = program.command('hooks');
   applyGroupMeta(hooksCmd, HOOKS_COMMAND_META);
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'inspection-prefix')).action(async () => {
+    exit(await runHooksInspectionPrefixCommand());
+  });
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'analyze')).action(
+    async (opts: HooksAnalyzeOptions) => {
+      exit(await runHooksAnalyzeCommand(opts));
+    }
+  );
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'mutation-view')).action(
+    async (opts: HooksMutationViewOptions) => {
+      exit(await runHooksMutationViewCommand(opts));
+    }
+  );
 
   defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'list')).action(
     (opts: { event?: string; surface?: string; json?: boolean; data?: boolean }) => {

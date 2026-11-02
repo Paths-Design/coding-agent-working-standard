@@ -1,0 +1,78 @@
+id: CAWS-NATIVE-MAINTAINED-GIT-001
+title: 'Authenticate maintained Apple Git and retain late Stop query custody'
+mode: feature
+lifecycle_state: active
+created_at: '2026-10-25T01:52:24.272Z'
+updated_at: '2026-10-25T09:15:50.214Z'
+created_by_session: '01a170be-3812-7123-ab00-736f9bc2eeb9'
+blast_radius:
+  modules:
+    - 'Native Stop Git distribution admission and private child custody'
+    - 'Versioned Stop semantic profile producer and installation validator'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/stop_git.rs'
+    - 'packages/caws-native/src/context_git/stop.rs'
+    - 'packages/caws-native/src/context_git.rs'
+    - 'packages/caws-native/src/main.rs'
+    - 'packages/caws-native/src/stop_profile.rs'
+    - 'packages/caws-native/src/stop_execution.rs'
+    - 'packages/caws-cli/scripts/qualify-stop-profile.mjs'
+    - 'packages/caws-cli/src/init/native-runtime-entry.ts'
+    - 'packages/caws-cli/tests/tooling/qualify-stop-profile.test.js'
+    - 'packages/caws-cli/tests/adapter/native-runtime-entry.test.js'
+    - packages/caws-native/src/selection_observation.rs
+    - packages/caws-native/src/protocol.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/tests/original_stop_main.rs
+    - packages/caws-cli/src/runtime/protocol.ts
+    - packages/caws-cli/src/runtime/engine-entry.ts
+    - packages/caws-cli/src/runtime/engine.ts
+    - packages/caws-cli/src/runtime/stock-handlers.ts
+    - packages/caws-cli/src/runtime/handler-executor.ts
+    - packages/caws-cli/src/runtime/stop-lease-context.ts
+    - packages/caws-cli/src/runtime/agent-stop.ts
+    - packages/caws-cli/tests/runtime/stop-dispatch-connection.test.js
+    - packages/caws-cli/tests/runtime/stop-lease-context.test.js
+    - packages/caws-cli/tests/runtime/agent-stop-late-context.test.js
+    - packages/caws-cli/src/runtime/cli-identity-loader.ts
+    - packages/caws-cli/tests/runtime/cli-identity-loader.test.js
+    - packages/caws-cli/tests/helpers/cli-identity-unit-domain.js
+    - packages/caws-cli/src/runtime/cli-identity-format.ts
+  out: []
+  support:
+    - packages/caws-native/src/stop_admission.rs
+    - packages/caws-native/tests/stock_stop_admission.rs
+    - packages/caws-cli/src/runtime/cli-identity.ts
+invariants:
+  - 'Caller-supplied hashes, flags, paths and JSON never grant native Stop authority; independent Apple signature authentication and captured generation identity are required'
+  - 'Every fixed resolver and late Git query retains its actual native Child through group settlement, pipe EOF and reap; unknown custom Git retains compatibility before prefix effects'
+acceptance:
+  - id: A1
+    given: 'observed generation-bound Apple Git data'
+    when: 'native admission independently authenticates signatures and resolves default routing'
+    then: 'exact matching supported observations admit and wrappers, unrelated signatures, route changes and forged profile data refuse'
+  - id: A2
+    given: 'an admitted original Stop invocation'
+    when: 'its late fixed common-dir query exits, is cancelled, expires or changes identity'
+    then: 'only settled success produces a fresh common-dir result and failure retains actual remote custody without permission for lease mutation'
+  - id: A3
+    given: 'historical v1 controlled component evidence or explicit pinned native distribution inspection'
+    when: 'producer and installer validate it'
+    then: 'v1 retains no Git eligibility and v2 requires exact observed distribution and provenance without weakening comparison floors'
+observability:
+  - 'Retained external raw checks and native custodian receipts under ~/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/native-maintained-git'
+rollback:
+  - 'Keep component off main and unactivated until parent joins native lease-context transport and typed consumer'
+non_functional:
+  security:
+    - 'Trust only fixed native Apple requirements plus explicit macOS signing and loader TCB; custom and Linux distributions remain compatibility'
+contracts: []
+evidence:
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "Root retains parent late-consumer integration and actual admitted query/lease falsifiers. Current117-file snapshot compiled under reviewed SQLite coordinator: native-maintained-git-sqlite-01/build-result.json completed7steps exit0,reaped directchildren, requestDigest d0ade36e76838cfa597872655c9ac936ce8d4614a8d0e7ed5f48f6bea0fb3674; nativeSHA2efcdb3b31a06d0d8cd46040db51e732d507687947de05473d507b50f817b269, build-readback inputsUnchanged true. Outer supervisor terminal execution/custody receipt ABSENT after hook quarantine, handle55187 missing and observedPID20483 absent. This is compilation evidence only: failed/unknown external custody retained, no reuse/adoption/cleanup proof. Parent checkpoint c7a0ec06 independent source review and default-feature controls pass but synthetic custody owners do not establish actualGit Childfailure transport. Actual source continues offmain; Root owns finalfreshbuild, ordinarygenerationloader+genuineCLIreceipt, SQLite-run positive/latefailedGit, and naturalcleanup under unchanged30s."
+    recorded_at: "2026-10-25T08:08:46.345Z"
+    commit_sha: c7a0ec06f

@@ -13,6 +13,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 
 const packageRoot = path.resolve(__dirname, '..');
 const policy = JSON.parse(fs.readFileSync(path.join(packageRoot, 'mutation-policy.json'), 'utf8'));
@@ -45,13 +46,56 @@ function createStrykerConfig(surfaceId) {
     );
   }
 
+  // stage-consumer-docs resolves ../.. from the sandbox package. A sandbox
+  // nested under the package would resolve to the original package instead
+  // of the canonical repository and consume staged transports as sources.
+  const repoRoot = path.resolve(packageRoot, '../..');
+  const tempDirName =
+    process.env.CAWS_MUTATION_TEMP_DIR ||
+    path.join(repoRoot, `.stryker-${surfaceId}-${process.pid}-${randomUUID()}-tmp`);
+  if (
+    path.dirname(tempDirName) !== repoRoot ||
+    !path.basename(tempDirName).startsWith(`.stryker-${surfaceId}-`)
+  ) {
+    throw new Error('Mutation sandbox parent must be a salted direct child of the repository');
+  }
+  let ancestor = path.parse(tempDirName).root;
+  for (const part of tempDirName.slice(ancestor.length).split(path.sep).filter(Boolean)) {
+    ancestor = path.join(ancestor, part);
+    const stat = fs.lstatSync(ancestor, { throwIfNoEntry: false });
+    if (!stat) {
+      if (ancestor !== tempDirName)
+        throw new Error(`Missing mutation sandbox ancestor: ${ancestor}`);
+      break;
+    }
+    if (!stat.isDirectory() || stat.isSymbolicLink())
+      throw new Error(`Uncertain mutation sandbox ancestry: ${ancestor}`);
+    if (ancestor === tempDirName)
+      throw new Error(`Mutation sandbox parent already exists: ${ancestor}`);
+  }
   const config = {
     mutate: surface.targets.map((target) => target.source),
     testFiles: surface.tests,
+    // Only instrumented targets require type-check suppression. The default
+    // rewrites every JS/TS file, including the runtime asset generator and
+    // its digest inputs, which makes its ordinary --check build fail. Keep
+    // authored generators, non-target sources and tests byte-identical.
+    disableTypeChecks:
+      surface.targets.length === 1
+        ? surface.targets[0].source
+        : `{${surface.targets.map((target) => target.source).join(',')}}`,
     // Surfaces can run concurrently. Stryker excludes only its own tempDirName
     // by default, so sibling sandboxes would be copied while being removed.
     // Keep authored source/tests; exclude only generated run artifacts.
-    ignorePatterns: ['.stryker*-tmp', '/reports', '/coverage', '/tmp', '.venv'],
+    ignorePatterns: [
+      '.stryker*-tmp',
+      '/reports',
+      '/coverage',
+      '/tmp',
+      '.venv',
+      '/.license-transport.json',
+      '/.license-transport.lock',
+    ],
     testRunner: 'jest',
     testRunnerNodeArgs: [],
     // Retained CI/local logs need progress during long mutation runs, not only
@@ -81,7 +125,7 @@ function createStrykerConfig(surfaceId) {
     // still matches the salted name. Report paths are deliberately NOT
     // salted: they are the contract with assert-mutation-report.mjs and the
     // CI artifact upload.
-    tempDirName: `.stryker-${surfaceId}-${process.pid}-tmp`,
+    tempDirName,
     cleanTempDir: 'always',
     jest: {
       projectType: 'custom',
@@ -93,7 +137,16 @@ function createStrykerConfig(surfaceId) {
       config: createJestConfig(surfaceId, surface.tests),
     },
   };
-  if (surface.buildCommand) config.buildCommand = surface.buildCommand;
+  if (surface.buildCommand) {
+    config.buildCommand = surface.buildCommand;
+    if (process.env.CAWS_MUTATION_RUN_CONTEXT) {
+      if (!/^[a-z0-9-]+$/.test(surfaceId)) throw new Error('Unsafe mutation surface identifier');
+      // No caller-controlled filesystem path enters the shell command. The
+      // copied helper and the Node selected by PATH are checked by its input
+      // capture against the runner's context before the build executes.
+      config.buildCommand = `node scripts/mutation-input-identity.mjs sandbox-build ${surfaceId}`;
+    }
+  }
   return config;
 }
 

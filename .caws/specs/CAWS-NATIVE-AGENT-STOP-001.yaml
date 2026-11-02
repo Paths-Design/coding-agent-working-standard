@@ -1,0 +1,50 @@
+id: CAWS-NATIVE-AGENT-STOP-001
+title: 'Execute reviewed stock Stop lease transition in the typed runtime'
+mode: refactor
+lifecycle_state: active
+worktree: native-agent-stop
+created_at: '2026-10-24T22:03:10.762Z'
+updated_at: '2026-10-24T22:03:25.578Z'
+created_by_session: '01a16f4e-d102-79e3-bc84-6dd0217e3668'
+blast_radius:
+  modules:
+    - 'CLI and stock runtime agent Stop adapters over the existing lease kernel/store'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/application/agent-stop.ts'
+    - 'packages/caws-cli/src/runtime/agent-stop.ts'
+    - 'packages/caws-cli/src/shell/commands/agents.ts'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/tests/runtime/agent-stop-typed.test.js'
+  out: []
+invariants:
+  - 'Only exact reviewed stock source and execution policy may replace the selected shell; custom handler, library, CLI and ambient policy retain fallback before typed effects.'
+  - 'Stop never mints identity or a lease, changes peer records or governance evidence, emits hook context, or resets the original invocation deadline.'
+  - 'The ordered composer refusal prevents later stop effects; cancellation and expiry are checked immediately before lease application.'
+acceptance:
+  - id: A1
+    given: 'an admitted exact stock OpenCode Stop and existing own and peer leases'
+    when: 'the typed handler executes in ordered composition'
+    then: 'only the own lease transitions through the existing kernel/store, stdout is empty, the human receipt is diagnostic-only, and no handler shell or Python child starts.'
+  - id: A2
+    given: 'an absent, malformed or unwritable own lease and the CLI stop adapter'
+    when: 'stop is requested'
+    then: 'hook best-effort behavior and exact CLI human and JSON receipts remain intact without minting identity or modifying peer or governance bytes.'
+  - id: A3
+    given: 'a changed handler, dependency, CLI, ambient execution policy, request profile or explicit override'
+    when: 'typed stock admission is attempted'
+    then: 'the typed transition is not invoked and the selected fallback remains available before effects.'
+  - id: A4
+    given: 'a prior protective refusal or original cancellation or deadline expiry before lease application'
+    when: 'ordered Stop processing reaches the stop boundary'
+    then: 'no stop mutation occurs and the original refusal or interruption remains observable.'
+observability:
+  - 'Retain focused raw commands, stdout, stderr, lease before/after bytes, admission negatives and process observations outside the repository.'
+rollback:
+  - 'Revert this bounded typed adapter through an ordinary governed commit; unchanged stock shell remains the compatibility implementation.'
+non_functional: {}
+contracts:
+  - name: 'stock-agent-stop'
+    type: behavior

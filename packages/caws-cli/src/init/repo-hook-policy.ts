@@ -344,7 +344,9 @@ function parseGuards(raw: unknown): GuardsResult {
   const guards: Record<string, GuardConfig> = {};
   for (const [guardName, guardRaw] of Object.entries(raw)) {
     const where = `guards.${guardName}`;
-    const schema = GUARD_CONFIG_SURFACE[guardName];
+    const schema = Object.hasOwn(GUARD_CONFIG_SURFACE, guardName)
+      ? GUARD_CONFIG_SURFACE[guardName]
+      : undefined;
     if (schema === undefined) {
       return {
         ok: false,
@@ -413,7 +415,7 @@ function parseGuards(raw: unknown): GuardsResult {
         return { ok: false, error: `${where}.thresholds must be an object` };
       }
       for (const [name, value] of Object.entries(thresholdsRaw)) {
-        const clamp = schema.thresholds[name];
+        const clamp = Object.hasOwn(schema.thresholds, name) ? schema.thresholds[name] : undefined;
         if (clamp === undefined) {
           return {
             ok: false,
@@ -474,7 +476,7 @@ function invalidPrefix(prefix: unknown): string | null {
   if (typeof prefix !== 'string' || prefix.length === 0) {
     return 'prefix must be a non-empty string';
   }
-  if (prefix.length > MAX_PREFIX_LENGTH) {
+  if (Array.from(prefix).length > MAX_PREFIX_LENGTH) {
     return `prefix must be at most ${MAX_PREFIX_LENGTH} characters`;
   }
   if (prefix.startsWith('/') || /^[A-Za-z]:[\\/]/.test(prefix)) {
@@ -773,7 +775,7 @@ export function effectiveRepoSurfacePolicy(
 
 export interface MachineTier {
   disabled: Record<string, string[]>;
-  extensions: Record<string, PolicyExtension[]>;
+  extensions: Record<string, Pick<PolicyExtension, 'handler' | 'before'>[]>;
   handlers: Record<string, string>;
   libraries: Record<string, string>;
 }
@@ -829,7 +831,7 @@ export function resolveChain(input: ResolveInput): ResolveResult {
 
   const applyTier = (
     disabled: Record<string, string[]>,
-    extensions: Record<string, PolicyExtension[]>,
+    extensions: Record<string, Pick<PolicyExtension, 'handler' | 'before'>[]>,
     tier: string
   ): string | null => {
     const toDrop = disabled[input.event] ?? [];
@@ -1006,7 +1008,7 @@ function settle(policy: RepoHookPolicy, changed: string[]): PolicyMutation {
 }
 
 function invalidReason(reason: unknown, flag: string): string | null {
-  if (typeof reason !== 'string' || reason.trim().length < MIN_REASON) {
+  if (typeof reason !== 'string' || Array.from(reason.trim()).length < MIN_REASON) {
     return `${flag} must be at least ${MIN_REASON} characters: it is the recorded answer to "why is the guard plane different in this repo?", and it propagates to every clone`;
   }
   return null;

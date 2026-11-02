@@ -1,0 +1,243 @@
+id: CAWS-NATIVE-SESSION-PUBLICATION-001
+title: 'Integrate original-bound native publication and exact SessionEnd sealing'
+mode: feature
+lifecycle_state: active
+worktree: native-session-publication
+created_at: '2026-10-22T07:45:38.932Z'
+updated_at: '2026-10-25T15:01:21.125Z'
+created_by_session: '01a15a2a-5057-75d0-a7e5-69d676673add'
+blast_radius:
+  modules:
+    - 'Resident native session operations, anchored publication and ordinary typed consumers'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/main.rs'
+    - 'packages/caws-native/src/protocol.rs'
+    - 'packages/caws-native/src/render_bridge.rs'
+    - 'packages/caws-native/src/runner.rs'
+    - 'packages/caws-native/src/lib.rs'
+    - 'packages/caws-native/src/render_owner.rs'
+    - 'packages/caws-native/src/render_owner/'
+    - 'packages/caws-native/src/session_publication.rs'
+    - 'packages/caws-native/src/session_publication_wire.rs'
+    - 'packages/caws-native/src/service_journal/custody.rs'
+    - 'packages/caws-native/src/service_journal/'
+    - 'packages/caws-native/tests/'
+    - 'packages/caws-cli/src/runtime/engine.ts'
+    - 'packages/caws-cli/src/runtime/engine-entry.ts'
+    - 'packages/caws-cli/src/runtime/protocol.ts'
+    - 'packages/caws-cli/src/runtime/transcript-store-client.ts'
+    - 'packages/caws-cli/src/runtime/session-publication-client.ts'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/runtime/handler-executor.ts'
+    - 'packages/caws-cli/src/transcripts/session-seal-prepare.ts'
+    - 'packages/caws-cli/tests/runtime/'
+    - 'packages/caws-cli/tests/transcripts/session-seal-prepare.test.ts'
+    - 'packages/caws-cli/tests/transcripts/run.cjs'
+    - 'packages/caws-cli/tests/transcripts/tsconfig.json'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/session-log.schema.json'
+    - 'packages/caws-cli/templates/hook-packs/claude-code/README.md'
+    - 'packages/caws-cli/templates/hook-packs/shared/session-log.sh'
+    - 'docs/architecture/caws-native-runtime.md'
+    - packages/caws-cli/src/runtime/session-publication-wire.ts
+    - packages/caws-native/src/render_writer.rs
+    - packages/caws-native/src/service_journal.rs
+    - packages/caws-cli/scripts/qualify-session-publication.cjs
+    - packages/caws-cli/src/runtime/committed-session-reader.ts
+    - packages/caws-cli/src/runtime/json-custody.ts
+    - packages/caws-cli/src/runtime/session-cache-admission.ts
+    - packages/caws-cli/src/runtime/session-cache-client.ts
+    - packages/caws-cli/src/runtime/session-log.ts
+    - packages/caws-cli/src/runtime/session-seal-runtime.ts
+    - packages/caws-native/src/agent_pid_cache.rs
+    - packages/caws-native/src/agent_pid_cache/tests.rs
+    - packages/caws-native/src/session_cache.rs
+    - packages/caws-native/src/session_cache/tests.rs
+    - packages/caws-native/src/session_cache_wire.rs
+    - packages/caws-native/src/session_cache_wire/tests.rs
+    - packages/caws-cli/scripts/qualify-render-owner.ts
+    - packages/caws-cli/src/runtime/service-image.ts
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-native/src/service_image.rs
+    - packages/caws-cli/src/runtime/session-store-publication.ts
+    - packages/caws-cli/src/runtime/render-observation-client.ts
+    - packages/caws-cli/src/runtime/render-observation-wire.ts
+    - packages/caws-native/src/render_observation.rs
+    - packages/caws-native/src/render_context.rs
+    - packages/caws-native/src/renderer_calendar.rs
+    - packages/caws-native/src/context_git.rs
+    - packages/caws-native/src/context_git/
+    - packages/caws-cli/src/transcripts/render-reader.ts
+    - packages/caws-cli/src/transcripts/render-prepare.ts
+    - packages/caws-cli/tests/transcripts/render-reader.test.ts
+    - packages/caws-cli/tests/transcripts/render-prepare.test.ts
+    - packages/caws-cli/src/transcripts/python-html.ts
+    - packages/caws-cli/src/transcripts/harness-claude.ts
+    - packages/caws-cli/tests/transcripts/python-html.test.ts
+    - packages/caws-cli/tests/transcripts/claude.test.ts
+    - packages/caws-cli/tests/transcripts/registry.test.ts
+    - packages/caws-cli/src/init/machine-paths.ts
+    - packages/caws-cli/src/init/machine-runtime-state.ts
+    - packages/caws-cli/src/init/selection-read-io.ts
+    - packages/caws-cli/src/init/system-project-policy.ts
+    - packages/caws-cli/src/init/system-surface-settings.ts
+    - packages/caws-cli/src/runtime/selection.ts
+    - packages/caws-cli/src/runtime/selection-observation.ts
+    - packages/caws-cli/tests/init/selection-read-io.test.js
+    - packages/caws-cli/tests/runtime/selection.test.js
+    - packages/caws-cli/tests/runtime/selection-observation.test.js
+    - packages/caws-native/src/installed_entry.rs
+    - packages/caws-native/src/native_generation.rs
+    - packages/caws-cli/src/transcripts/store-json.ts
+    - packages/caws-cli/src/transcripts/store-projection.ts
+    - packages/caws-cli/tests/transcripts/store-json.test.js
+    - packages/caws-cli/tests/transcripts/store-projection.test.js
+    - packages/caws-cli/tests/transcripts/store-sql-profile.test.js
+    - packages/caws-native/src/installed_generation.rs
+    - packages/caws-native/src/installed_entry_main.rs
+    - packages/caws-native/tests/installed_entry.rs
+    - packages/caws-native/src/monotonic_deadline.rs
+    - packages/caws-cli/templates/hook-packs/opencode/plugin.ts
+    - packages/caws-cli/tests/hooks/opencode-plugin-payload-cwd.test.js
+    - packages/caws-cli/src/init/hook-packs/manifest-opencode.ts
+    - packages/caws-native/src/sqlite_build_identity.rs
+    - packages/caws-cli/src/init/machine-adapters.ts
+    - packages/caws-cli/src/init/opencode-native-plugin.ts
+    - packages/caws-cli/src/init/opencode-project-registration.ts
+    - packages/caws-cli/src/init/system-runtime.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/tests/adapter/opencode-native-plugin.test.js
+    - packages/caws-cli/tests/adapter/opencode-project-registration.test.js
+    - packages/caws-cli/tests/adapter/system-registration.test.js
+    - packages/caws-cli/scripts/qualify-stop-profile.mjs
+    - packages/caws-cli/tests/tooling/qualify-stop-profile.test.js
+    - packages/caws-native/src/selection_observation.rs
+    - packages/caws-native/src/stop_admission.rs
+    - packages/caws-native/src/transcript_store_wire.rs
+    - packages/caws-cli/src/init/native-runtime-entry.ts
+    - packages/caws-cli/tests/adapter/native-runtime-entry.test.js
+    - packages/caws-native/src/stop_profile.rs
+    - packages/caws-native/src/stop_execution.rs
+    - packages/caws-cli/src/runtime/live-protocol.ts
+    - packages/caws-native/src/transcript_store.rs
+    - packages/caws-cli/src/application/agent-stop.ts
+    - packages/caws-cli/src/runtime/agent-stop.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+  out: []
+  support:
+    - .github/workflows/release-qualification.yml
+    - packages/caws-cli/scripts/generate-runtime-assets.mjs
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/src/runtime/render-context.ts
+    - packages/caws-cli/src/transcripts/renderer-calendar.ts
+    - packages/caws-cli/templates/hook-packs/shared/advisory_truncate.cjs
+    - packages/caws-cli/tests/ci/release-qualification.test.js
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/transcripts/renderer-calendar.test.ts
+    - packages/caws-native/src/invocation_project.rs
+    - packages/caws-native/src/service_image/tests.rs
+    - packages/caws-cli/templates/hook-packs/shared/audit.sh
+    - packages/caws-cli/tests/hooks/bats/audit-jsonl.bats
+    - packages/caws-cli/tests/hooks/bats/guard-config.bats
+    - packages/caws-cli/tests/hooks/bats/handler-stdin-feed.bats
+    - packages/caws-cli/tests/hooks/bats/handler-stdin-stage-lifetime.bats
+    - packages/caws-native/src/service_image/prefix-profile.json
+    - package-lock.json
+    - packages/caws-cli/jest.config.js
+    - packages/caws-cli/package.json
+    - packages/caws-cli/src/tooling/transcript-runtime-floor.ts
+    - packages/caws-cli/tests/ci/lint-staged-prettier-fence.test.js
+    - packages/caws-cli/tests/tooling/sqlite-static-build.test.js
+    - scripts/run-staged-checks.test.cjs
+    - docs/internal/caws-runtime-modernization.md
+invariants:
+  - 'Only independently captured original invocation and native custody authorize destination effects; prepared bytes and correlation grant none'
+  - 'No publication after stopped or unsettled acquisition; preserve truthful post-rename uncertainty and no unsafe replay'
+  - 'Release heavy records after definitive terminal consumption while retaining durable original-ID rejection across same-home restart and generation'
+  - 'Preserve exact provider counts, top-level model order, unrelated metadata and explicit historical-summary preservation; never fallback after a native attempt'
+  - 'Continuous same-Arc writer custody spans actual warm-backend retirement, acquisition, anchored publication and exact ordinary-reader CONSUMED; keep at most 256 live heavy operations separately from durable terminal original-ID history, reject replays across restart/generation, and refuse explicit history exhaustion without eviction.'
+  - 'OpenCode lifecycle callbacks bind their own SDK event identity and plugin instance root; missing identity never reuses a previous session or another plugin instance'
+acceptance:
+  - id: A1
+    given: 'fresh original store and SessionEnd invocations'
+    when: 'operations are admitted and consumed'
+    then: 'native binding and durable replay reservation precede effects and heavy-record release restores capacity without replay after restart or generation change'
+  - id: A2
+    given: 'actual exhausted store acquisition and confirmed CLOSED delivery'
+    when: 'prepared projection and renderer artifacts traverse the same operation'
+    then: 'native fenced anchored publication and the ordinary reader consume the exact current generation without first-party per-handler interpreter fan-out'
+  - id: A3
+    given: 'ordinary SessionEnd with existing metadata and ordered turn-v2 files'
+    when: 'typed preparation and native publication execute'
+    then: 'all seven exact counts and independent models are preserved including the retained 4300-digit value while no-contribution summaries are explicitly preserved and unrelated metadata remains exact'
+  - id: A4
+    given: 'hostile paths changed snapshots superseded attempts cancellation failed closure and lost receipts'
+    when: 'publication or consumption is attempted'
+    then: 'no unauthorized partial or stale result is accepted and uncertain effects retain truthful custody without automatic replay'
+  - id: A5
+    given: 'warm renderer and repeated original invocations beyond the prior finite capacity'
+    when: 'real frontend engine owner and ordinary consumers execute'
+    then: 'writer handoff retains one lock and evidence shows terminal consumption release current-reader selection and replay refusal'
+  - id: A6
+    given: 'the committed integrated candidate'
+    when: 'focused checks gates doctor and independent review run'
+    then: 'source and existing documentation match inspected behavior and full package harness fairness and machine cutover obligations remain explicitly with the parent'
+  - id: A7
+    given: >-
+      interleaved OpenCode plugin instances, lifecycle events and SDK-shaped tool
+      post callbacks, including ungoverned explicit instance roots and missing
+      identities
+    when: 'the ordinary lifecycle and tool dispatchers are invoked'
+    then: >-
+      each dispatch carries its own originating event session, arguments and
+      instance project; missing identity never borrows a previous session and
+      explicit ungoverned context never falls through to another host project;
+      retained dispatcher arguments and negative controls establish the behavior
+observability:
+  - 'Actual native and engine frames, original and output digests, current-attempt markers, terminal truth, reader observations, retained failures and process cleanup'
+rollback:
+  - 'Revert the integrated source through normal governed history; retain failed and successful artifacts and preserve existing selected runtime'
+non_functional:
+  security:
+    - 'Bound all framing arithmetic and filesystem work; nofollow anchored effects and no broad row-control or authority widening'
+contracts:
+  - name: 'native-session-publication'
+    type: behavior
+  - name: 'session-seal-metadata'
+    type: contract-test
+evidence:
+  - criterion_id: A4
+    status: unchecked
+    evidence_ref: "Bounded actual queued-refusal join established, not full hostile criterion. production-stop-12-paired-execution-03 exits0/74.808s unchanged source; real held prepared cohort then native store_cohort_waiting, same-inode OpenCode producer mutation, peer_closed withdrawal, exact changed-target native refusal2 at22608.447ms before original30s. Database-open counter1to1; no negative marker/projection/turn/index, no reservation or publication stages. Durable901B refused_before_reservation record SHA bcf499fdf8bfbe1124c5d507bf7ee9d0c75980203cf6092a2c9d675f4e2806fb persists after registry release and natural owner97177exit0/socketabsent. Root inspected actual files/stderr and independently rehashed both durable records and positive session artifacts: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/production-stop-12-paired-03/retained-readback.json. Independent review found executed harness could misattribute holderexpiry; raw holder-causal-order.json closes current attempt: prepared32579 waiting54143 sole peer_closed withdrawal54173 refused55169 released55176. New harness asserts reason/order but has not executed. Earlier failed pairs and source controls retained. Original argument digest not independently reconstructed; authenticated same-original-ID restart, old-reader rollback, full hostile matrix and machine adoption remain unverified."
+    recorded_at: "2026-10-24T19:47:26.383Z"
+    commit_sha: "3cd741fde60e9dd2256ef83049f9b6e11b83986c"
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Pure SessionEnd preparation42e2fa50 landed through normal no-close mergeabdb0338; all3 integrated source/schema/test blobs match. Child A1/A2/A3 PASS11509-11511 and A4 UNCHECKED11516 were read back with matching events. Actual check-03 strict compilation0 and Node22.22.2 TAP42pass/0fail/0skip include retained real4300-digit counts; Ajv6compatibility controls plus actual historical output validate; compiled Number-addition fault fails exact large-count test41pass/1fail. Independent committed reviewer found historical-fraction schema and mathematical-version2 gaps, both source-grounded and repaired before acceptance. No ordinary SessionEnd capture, writer barrier, anchored metadata replacement or actual reader consumption yet; pure helper grants no filesystem/capture/publication authority. Native Rust boundary remains03dclean/rootowned. Root retains A3 ordinary integration and all parent obligations; no native or production Python retirement claim."
+    recorded_at: "2026-10-22T15:23:19.656Z"
+    commit_sha: abdb033854c79ba506445e9abee7d84dacadd4b9
+  - criterion_id: A5
+    status: unchecked
+    evidence_ref: "Direct inspection of retained external artifacts publication-integration/warm-render-actual-05 and capacity-actual-01 under root01a164bc artifact directory. Warm05 exit0/22.159s establishes exact seven positive counts and model, A complete marker/index/turn inventory and consumed digest, A worker settled before B new birth and two expected B turns. Capacity01 f31 source exit0/209.873s:258 unique originals on one original owner98305, maxRetainedRecords1; actual per-ID reserved/writer-retained/consumed/released stages ordered, each release before next reservation. All268 native invocation directories terminal-clean, all258 strict custody and cleanup confirmed; compact consumed records have empty heavy requests, writer probes0. Root rehashed516 marker/tombstone files and read all258 ordinary semantic journals: each seven-field total is the exact4301-digit sum of4300-digit inputs, with independent first/separate/later model union. This corrects prior4300-digit-result wording. Result SHA172380268f12f80cafeac339525ddaa613cdd56e1798c5f32b6a321f1fce80da. Inputs stable, final observed census empty. Intentional ownerChild shutdown differs from no supervisor signals. Sequential reclamation does not prove warm continuous writer exclusion with contender, concurrent fairness, deployed harness, SQL Render activation or machine adoption. Commit verification establishes existence only; external runtime artifacts manually inspected."
+    recorded_at: "2026-10-23T13:25:37.326Z"
+    commit_sha: f31e8401e98a54e04c4579650cb9cb6e4664af1f
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Bounded callback/recording-dispatcher contract at6064daa7: inspected final28case execution0 with exact source pins, actual payloads and NUL argv/cwd/project records under /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/opencode-corrective-final-01 and opencode-corrective-final-fixtures. SDK-after session-a retains actual args/workdir despite intervening B; missing identity/ambiguous args dispatch nothing. root-selection-evidence records absent governance ancestry and host-only dispatch; effect of restoring unconditional cwd fallback is observed in opencode-root-negative-01 exit1 with all3 controls failing and outside-session routed into host. Earlier tests-only baseline exits1 with5 SDK failures; initial HOME/.caws root fixtures were insufficient and replaced. Build/fingerprint codepins match; independent follow-on feedback grounded against source/raw records. Verification checks commit identity only, not artifact execution. No actual OpenCode activation, native Stop/profile admission, editor delivery or parent acceptance claimed."
+    recorded_at: "2026-10-24T01:39:11.108Z"
+    command: node node_modules/jest/bin/jest.js --runInBand --selectProjects caws-cli --runTestsByPath tests/hooks/opencode-plugin-payload-cwd.test.js
+    exit_code: 0
+    commit_sha: "6064daa7efd15776c5f327a8a03a4465b12829ec"
+  - criterion_id: A2
+    status: fail
+    evidence_ref: "Prior E387 positive/hostile compatibility pair remains bounded evidence, not full publication acceptance. Additional typed Stop counterexample retained in lease-stop-landing/git-counterexample-01: one selected control exit1, unexpected typed exit0 and own lease stopped despite PATH Git wrapper requiring shell fallback. Native reachability traced in invocation_project.rs629-715 and original_project.rs777-790 through engine.ts470-501; actual full native/Node wrapper contrast not run. Full typed candidate e51d8e6a deliberately unlanded; shared CLI extraction is separate CAWS-NATIVE-SHARED-STOP-001. Incoming lead01a17052 explicitly accepts installed Git contract, session-cache-admission source identity join, exact combined package and publication/replay/rollback/residency acceptance. Parent criteria unchanged and unmet."
+    recorded_at: "2026-10-25T01:11:21.776Z"
+    commit_sha: e51d8e6a
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "E379/E380 bounded restart evidence landed main6e4de9c3. Same actual production custody: fresh10 reader exits2 invalid closed operation record; fresh12 recovers unknownfalse then idleexits0; byte/mode/inode inventories and actual lock preserved, no submitted request. Probe execution0/1.463s at publication-integration/same-home-reader-restart-01 and -execution-01. Focused release Cargo test0 selects1; six-case refusal family0, all115 source pins independently match. Real Actor/Journal drop-reacquire and new StoreRegistry reject same/changed-generation terminal IDs, drop old Weak owners, release operation/project capacity; fresh ID passes replay gate then separately no-effect refusal. Exact terminalUtf8 retained and SHA5186d5f2 verified. Direct synthetic transport bypasses authenticated native-route and job.complete delivery; actual installed-process same-ID replay remains unverified. Independent source/raw-artifact review grounded against store.rs1692, Fixture::actor120 and Operation452; review is not proof. No usable downgrade, crash/load acceptance or selected machine cutover; parent remains open."
+    recorded_at: "2026-10-24T20:12:46.726Z"
+    commit_sha: "86b5f77f5cdb05981f354ad993e93c5d74b1f841"

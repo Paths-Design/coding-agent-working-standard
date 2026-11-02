@@ -1,0 +1,78 @@
+id: CAWS-SESSION-SEAL-PREPARATION-001
+title: 'Prepare exact SessionEnd metadata for native publication'
+mode: feature
+lifecycle_state: closed
+resolution: superseded
+closure_notes: 'Source already landed and A1-A3 retain bounded pass. Root accepts remaining A4 integration under active publication parent A3-A5. Empty verification-lane teardown incorrectly inferred unstarted and demoted this historically implemented spec; explicitly reactivated for truthful superseded disposition. No source discarded or native completion claimed.'
+created_at: '2026-10-22T07:54:07.396Z'
+updated_at: '2026-10-23T09:48:21.409Z'
+created_by_session: '01a1610b-97e1-7541-a942-31363c3a34f9'
+blast_radius:
+  modules:
+    - 'Exact SessionEnd metadata preparation and schema contract'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/transcripts/session-seal-prepare.ts'
+    - 'packages/caws-cli/tests/transcripts/session-seal-prepare.test.ts'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/session-log.schema.json'
+    - 'packages/caws-cli/templates/hook-packs/claude-code/README.md'
+  out: []
+invariants:
+  - 'Prepared bytes and correlation confer no filesystem or publication authority; helper tests do not complete the ordinary native consumer obligation'
+  - 'Preserve seven independent exact nonnegative mathematical JSON integer counts, ordered top-level turn models, historical summary provenance and unrelated raw metadata values'
+acceptance:
+  - id: A1
+    given: 'bounded metadata and ordered turn-v2 input including the retained 4300-digit count'
+    when: 'metadata preparation executes'
+    then: 'seven exact mathematical integer sums and ordered distinct models are emitted without invented zeros and unrelated metadata value spans remain exact'
+  - id: A2
+    given: 'zero turns or no usage and models contributions'
+    when: 'preparation seals existing metadata'
+    then: 'the historical summary is preserved with explicit preservation mode and reason while ended reason and timestamp are replaced'
+  - id: A3
+    given: 'duplicate members malformed inputs hostile numeric expansion and exhausted resource envelopes'
+    when: 'preparation is attempted'
+    then: 'a typed unavailable result exposes no partial output and every input and arithmetic allocation remains explicitly bounded'
+  - id: A4
+    given: 'the integrated native publication and ordinary SessionEnd consumer'
+    when: 'the prepared metadata traverses original binding anchored publication and the ordinary reader'
+    then: 'retained exact counts models preservation evidence and hostile publication controls are observed before completed closure'
+observability:
+  - 'Owned prepared bytes input and output digests summary mode and bounded unavailable reasons with retained raw focused checks'
+rollback:
+  - 'Revert owned source through normal governed history; preserve failed checks and the parent native consumer obligation'
+non_functional:
+  security:
+    - 'No filesystem authority or interpreter process creation; reject duplicates and bounded arithmetic exhaustion without partial effects'
+contracts:
+  - name: 'session-seal-preparation'
+    type: api
+  - name: 'session-seal-metadata'
+    type: schema
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Exact pure preparation candidate42e2fa50 is integrated at clean abdb0338. Actual check03 Node22.22.2 TAP42pass/0fail/0skip includes seven independent exact mathematical integer sums, omitted absent keys, ordered distinct top-level models, raw metadata forwarding, real retained4300-digit turn and huge carry. Post-review Q1 provenance is now directly closed: fresh strict compilation from clean integratedabdb emits exactly3JS files byte-equal original check03 tested outputs; compile-identity.json records original argv/output hashes and actual Nodev22.22.2 with binarySHA5c899797c4eb8f1db5563eea56538342ddb3e9276ee1b04a5a1f0f1023d2b011. Additional independent exact-digit precision-02 probe9007199254740993+1 returns9007199254740994 exit0; same assertion on isolated Number-addition fault returns validJSON9007199254740992 and fails assertion exit1. Initial precision probe wrong fault module path remains a failed setup attempt, excluded. Prior4300digit Numberfault remains41pass/1fail due Infinity invalidJSON, explicitly weaker than exact-value probe; no full mutation score claimed. Raw artifacts root/session-seal-preparation/check03,check04-integrated/{compile-identity.json,precision-02/execution.json},number-coercion-01. Scoped lint/five3path gates/doctor0E3W4I remain inspected historical candidate checks; independent committed review source fixes retained. A4 ordinary native capture/publication/reader remains UNCHECKED. Commit verify checks reachable source only, not test execution."
+    recorded_at: "2026-10-22T16:12:17.823Z"
+    commit_sha: abdb033854c79ba506445e9abee7d84dacadd4b9
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Candidate42e2fa50 check-03 TAP42/0/0skip directly tests zero_turns and no_contributions preserved summaries, exact raw usage/models (including repeated models and historical0.5), ended reason/timestamp replacement, explicit summary provenance and no invented zeros. Actual Ajv2020 command validates governing metadata subschema: old/unannotated and preserved historical0.5 pass, recomputed0.5 fails, recomputed integer passes, recomputed legacy alias fails, preserved legacy model layout passes; actual helper-produced historical output validates. Root read6case/schema.stdout.log and empty stderr plus actual command in tool transcript. Historical numeric constraints stay compatible; integer-only known-key restriction applies only to recomputed provenance. Independent reviewer supplied historical fraction counterexample, root verified old/source relation and fixed schema plus regression; version2 mathematical spelling mismatch likewise fixed. Full native capture/publication/ordinary metadata reader not exercised; A4 stays unchecked."
+    recorded_at: "2026-10-22T14:50:04.651Z"
+    command: "'env' '-u' 'NODE_OPTIONS' '-u' 'NODE_PATH' 'CAWS_SESSION_SEAL_RETAINED_TURN=/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/review-output-numeric-final/index-only-0/turn-001.json' '/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-qualification/tool-images/node-v22.22.2-darwin-arm64/image/node-v22.22.2-darwin-arm64/bin/node' '--test' '--test-reporter=tap' '/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/session-seal-preparation/check-03/compiled/tests/transcripts/session-seal-prepare.test.js'"
+    exit_code: 0
+    commit_sha: "42e2fa5015d32d7d9014a0defba4d2465e2de6ff"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Candidate42e2fa50 strict compile0 and check-03 Node22 TAP42pass/0fail/0skip exercise duplicate decoded members, nested duplicate input, wrong schema/shape, negative/fractional/non-numeric counts, huge exponents, every declared finite budget, deep/wide structure, quoted delimiters and exact output-limit boundary. All refusal checks assert unavailable and exact output key inventory code/kind/reason, exposing no partial metadata. Root source inspection confirms bounded UTF16 input/turn/total counts, lexical preflight before JSON.parse temporary tree, exact parser depth/node limits, count digit checks before exponent expansion, bounded BigInt inputs/addition and work counter, model cardinality/length and output caps. Scope is the string API, not byte decoding, immutable capture, hard OS/memory deadlines or native publication. Actual schema6controls0 and committed independent review/fixes retained under check-03. No mutation floor changed, no full mutation campaign; A4 integrated consumer remains open."
+    recorded_at: "2026-10-22T14:50:16.515Z"
+    command: "'env' '-u' 'NODE_OPTIONS' '-u' 'NODE_PATH' 'CAWS_SESSION_SEAL_RETAINED_TURN=/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/render-prepare/review-output-numeric-final/index-only-0/turn-001.json' '/Users/darianrosebrook/.codex/artifacts/01a157bd-8bb6-7fc1-9322-6120a73b5a72/store-qualification/tool-images/node-v22.22.2-darwin-arm64/image/node-v22.22.2-darwin-arm64/bin/node' '--test' '--test-reporter=tap' '/Users/darianrosebrook/.codex/artifacts/01a15a2a-5057-75d0-a7e5-69d676673add/session-seal-preparation/check-03/compiled/tests/transcripts/session-seal-prepare.test.js'"
+    exit_code: 0
+    commit_sha: "42e2fa5015d32d7d9014a0defba4d2465e2de6ff"
+  - criterion_id: A4
+    status: unchecked
+    evidence_ref: "Preparation source already landed main6defc8aa. Actual native SessionEnd04 now exercises original binding, anchored metadata, exact seven4300-digit counts/models and lost-ACK/replaced-input controls. Full integrated warm renderer/current-generation/SQL hostile composition remains with root-owned active CAWS-NATIVE-SESSION-PUBLICATION-001 A3-A5. Root accepts this remaining A4 obligation there; retain helper A1-A3 verified string-API results without turning source landing into complete native acceptance."
+    recorded_at: "2026-10-23T09:44:59.082Z"
+    commit_sha: "6defc8aa44d296cda598a97cd7eee2f16a8a54d2"

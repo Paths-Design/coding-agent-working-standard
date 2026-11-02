@@ -255,7 +255,9 @@ EOF
   # catches it. The composer must omit the card rather than let a replacement
   # character into an advisory an agent reads.
   local fake_hooks
-  fake_hooks="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-rh-utf8bad-XXXXXX")"
+  local artifact_parent="${CAWS_TEST_ARTIFACT_DIR:-${TMPDIR:-/tmp}}"
+  mkdir -p "$artifact_parent"
+  fake_hooks="$(mktemp -d "$artifact_parent/caws-bats-rh-utf8bad-XXXXXX")"
   cat > "$fake_hooks/utf8.sh" <<'EOF'
 #!/usr/bin/env bash
 cat >/dev/null
@@ -266,15 +268,22 @@ EOF
   run env -i PATH="$PATH" LC_ALL=en_US.UTF-8 CAWS_HOOK_ADVISORY_BUDGET_BYTES=1000 bash -c "
     source '$CAWS_TEST_HOOKS_DIR/lib/run-handlers.sh'
     # A stub interpreter that emits one invalid UTF-8 byte.
-    python3() { printf '\360'; return 0; }
+    node() { printf called >> '$fake_hooks/helper-called'; printf '\360'; return 0; }
     export HOOKS_DIR='$fake_hooks' HOOK_INPUT_JSON='{}'
-    out=\"\$(run_handlers utf8.sh 2>/dev/null)\"
-    ctx=\"\$(printf '%s' \"\$out\" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null)\"
+    out=\"\$(run_handlers utf8.sh 2>&1)\"
+    printf '%s' \"\$out\" > '$fake_hooks/composed-output.bin'
+    ctx=\"\$(printf '%s' \"\$out\" | tail -1 | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null)\"
     printf 'replacement=%s\n' \"\$(printf '%s' \"\$ctx\" | grep -c $'\\xef\\xbf\\xbd' || true)\"
+    [[ -s '$fake_hooks/helper-called' ]] && printf 'helper_called=1\n'
+    printf 'omitted_count=%s\n' \"\$(printf '%s' \"\$out\" | grep -c 'optional advisory omitted' || true)\"
   "
-  rm -rf "$fake_hooks"
+  printf '%s\n' "$output" > "$fake_hooks/observed-output.txt"
+  printf '%s\n' "$status" > "$fake_hooks/observed-status.txt"
+  [[ -n "${CAWS_TEST_ARTIFACT_DIR:-}" ]] || rm -rf "$fake_hooks"
 
   assert_line 'replacement=0'
+  assert_line 'helper_called=1'
+  assert_line 'omitted_count=1'
 }
 
 @test "advisory budget: an empty truncation result omits the card instead of a marker alone" {
@@ -283,7 +292,9 @@ EOF
   # assertion is on BOTH the absence of a marker and the presence of the
   # omission diagnostic, so removing the zero-output guard fails this test.
   local fake_hooks
-  fake_hooks="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-rh-empty-XXXXXX")"
+  local artifact_parent="${CAWS_TEST_ARTIFACT_DIR:-${TMPDIR:-/tmp}}"
+  mkdir -p "$artifact_parent"
+  fake_hooks="$(mktemp -d "$artifact_parent/caws-bats-rh-empty-XXXXXX")"
   cat > "$fake_hooks/utf8.sh" <<'EOF'
 #!/usr/bin/env bash
 cat >/dev/null
@@ -294,20 +305,25 @@ EOF
   run env -i PATH="$PATH" LC_ALL=en_US.UTF-8 CAWS_HOOK_ADVISORY_BUDGET_BYTES=1000 bash -c "
     source '$CAWS_TEST_HOOKS_DIR/lib/run-handlers.sh'
     # A stub interpreter that succeeds but emits nothing.
-    python3() { cat >/dev/null; return 0; }
+    node() { printf called >> '$fake_hooks/helper-called'; cat >/dev/null; return 0; }
     export HOOKS_DIR='$fake_hooks' HOOK_INPUT_JSON='{}'
     out=\"\$(run_handlers utf8.sh 2>&1)\"
+    printf '%s' \"\$out\" > '$fake_hooks/composed-output.bin'
     ctx=\"\$(printf '%s' \"\$out\" | tail -1 | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null)\"
     printf 'ctx_bytes=%s\n' \"\$(printf '%s' \"\$ctx\" | wc -c | tr -d ' ')\"
     printf 'marker_count=%s\n' \"\$(printf '%s' \"\$out\" | grep -c 'truncated:' || true)\"
     printf 'omitted_count=%s\n' \"\$(printf '%s' \"\$out\" | grep -c 'optional advisory omitted' || true)\"
+    [[ -s '$fake_hooks/helper-called' ]] && printf 'helper_called=1\n'
   "
-  rm -rf "$fake_hooks"
+  printf '%s\n' "$output" > "$fake_hooks/observed-output.txt"
+  printf '%s\n' "$status" > "$fake_hooks/observed-status.txt"
+  [[ -n "${CAWS_TEST_ARTIFACT_DIR:-}" ]] || rm -rf "$fake_hooks"
 
   # No composed content, no marker, and the omission is reported.
   assert_line 'ctx_bytes=0'
   assert_line 'marker_count=0'
   assert_line 'omitted_count=1'
+  assert_line 'helper_called=1'
 }
 
 @test "advisory budget: a budget too small for content declines instead of emitting a bare marker" {

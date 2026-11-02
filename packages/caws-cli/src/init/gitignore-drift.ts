@@ -8,13 +8,23 @@ import { storeDiagnostic } from '../store/repo-root';
 import { EPHEMERAL_CAWS_ENTRIES, computeGitignore } from './gitignore-manage';
 
 export const GITIGNORE_DRIFT_RULE = 'shell.gitignore.ephemeral_state_untracked';
+const SNAPSHOT_CUSTODY_DIRECTORY = '.caws-plan-snapshot-custody';
+const SNAPSHOT_CUSTODY_RULE = `**/${SNAPSHOT_CUSTODY_DIRECTORY}/`;
+// Representative controls, not an inventory of every possible plan location.
+const SNAPSHOT_CUSTODY_PROBES = [
+  `${SNAPSHOT_CUSTODY_DIRECTORY}/v1/__caws_ignore_probe__`,
+  `.caws/plans/${SNAPSHOT_CUSTODY_DIRECTORY}/v1/__caws_ignore_probe__`,
+  `docs/plans/${SNAPSHOT_CUSTODY_DIRECTORY}/v1/__caws_ignore_probe__`,
+];
 function ephemeral(name: string): boolean {
   return EPHEMERAL_CAWS_ENTRIES.some((entry) =>
-    entry.endsWith('/')
-      ? name.startsWith(entry)
-      : entry.includes('*')
-        ? name.startsWith('tmp/guard-strikes-') && name.endsWith('.json')
-        : name === entry
+    entry === SNAPSHOT_CUSTODY_RULE
+      ? name.split('/').slice(0, -1).includes(SNAPSHOT_CUSTODY_DIRECTORY)
+      : entry.endsWith('/')
+        ? name.startsWith(entry)
+        : entry.includes('*')
+          ? name.startsWith('tmp/guard-strikes-') && name.endsWith('.json')
+          : name === entry
   );
 }
 export function inspectGitignoreCoverage(repoRoot: string, cawsDir: string): DoctorFinding[] {
@@ -32,10 +42,14 @@ export function inspectGitignoreCoverage(repoRoot: string, cawsDir: string): Doc
     /* absent */
   }
   const { outcome } = computeGitignore(existing);
-  const probes = EPHEMERAL_CAWS_ENTRIES.map((entry) =>
-    entry.endsWith('/')
-      ? entry + '__caws_ignore_probe__'
-      : entry.replace('*', '__caws_ignore_probe__')
+  const probes = EPHEMERAL_CAWS_ENTRIES.flatMap((entry) =>
+    entry === SNAPSHOT_CUSTODY_RULE
+      ? SNAPSHOT_CUSTODY_PROBES
+      : [
+          entry.endsWith('/')
+            ? entry + '__caws_ignore_probe__'
+            : entry.replace('*', '__caws_ignore_probe__'),
+        ]
   );
   const authority = [
     '.caws/specs/__caws_ignore_probe__.yaml',
@@ -79,12 +93,34 @@ export function inspectGitignoreCoverage(repoRoot: string, cawsDir: string): Doc
       storeDiagnostic(rule, message, { severity, subject: '.gitignore', data }) as DoctorFinding
     );
   try {
-    const tracked = git(['ls-files', '-z', '--cached', '--', '.caws/', 'tmp/'])
+    const tracked = git([
+      'ls-files',
+      '-z',
+      '--cached',
+      '--',
+      '.caws/',
+      'tmp/',
+      `:(glob)**/${SNAPSHOT_CUSTODY_DIRECTORY}/**`,
+    ])
       .split('\0')
       .filter((n) => n && ephemeral(n));
+    // Git discovers existing custody made visible by deeper ignore rules.
+    // Protected files need no additional probe; the representative controls
+    // above remain useful for locations whose custody does not exist yet.
+    const untrackedCustody = git([
+      'ls-files',
+      '--others',
+      '--exclude-standard',
+      '-z',
+      '--',
+      `:(glob)**/${SNAPSHOT_CUSTODY_DIRECTORY}/**`,
+    ])
+      .split('\0')
+      .filter((n) => n && ephemeral(n));
+    const runtimePaths = new Set([...probes, ...untrackedCustody]);
     const fields = git(
       ['check-ignore', '--no-index', '--stdin', '-z', '-v', '--non-matching'],
-      [...probes, ...authority].join('\0') + '\0'
+      [...runtimePaths, ...authority].join('\0') + '\0'
     ).split('\0');
     const rows: {
       path: string;
@@ -115,15 +151,15 @@ export function inspectGitignoreCoverage(repoRoot: string, cawsDir: string): Doc
           !relative.startsWith('.git/'),
       });
     }
-    if (rows.length !== probes.length + authority.length)
+    if (rows.length !== runtimePaths.size + authority.length)
       throw new Error('Git returned incomplete ignore observations');
-    const runtime = rows.filter((r) => probes.includes(r.path));
+    const runtime = rows.filter((r) => runtimePaths.has(r.path));
     const uncovered = runtime.filter((r) => !r.ignored),
       local = runtime.filter((r) => r.ignored && !r.repository_rule);
     if (uncovered.length)
       report(
         GITIGNORE_DRIFT_RULE,
-        'Required runtime probes are not git-ignored. Review the named rules and negations; caws init maintains the repository ignore block.',
+        'Required runtime probes or existing custody files are not git-ignored. Review the named rules and negations; caws init maintains the repository ignore block.',
         'warning',
         { uncovered, observations: runtime, gitignore_outcome_if_init_ran: outcome }
       );

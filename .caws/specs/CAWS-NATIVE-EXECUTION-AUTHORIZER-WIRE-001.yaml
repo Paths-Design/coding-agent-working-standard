@@ -1,0 +1,55 @@
+id: CAWS-NATIVE-EXECUTION-AUTHORIZER-WIRE-001
+title: 'Private execution authorizer wire transport'
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Wire framing and correlation component only. Inherited clean2f candidate; retained10 actual tests and full100 per-file mutants directly inspected. Original bytes, strict framing and hostile correlation controls supported; no subprocess, host identity, fence or USER launch proof inferred. Final executor implementation remains root-owned.'
+created_at: '2026-10-26T23:49:35.903Z'
+updated_at: '2026-10-27T14:58:26.960Z'
+created_by_session: '01a17a9d-b74e-7993-8280-0c09f794de52'
+blast_radius:
+  modules:
+    - 'execution_authorizer_wire'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/execution_authorizer_wire.rs'
+    - 'packages/caws-native/src/lib.rs'
+  out: []
+invariants:
+  - 'Transport observations never confer launch or project authority; record bytes retain their original identity.'
+acceptance:
+  - id: A1
+    given: 'immutable UTF-8 JSON record bytes'
+    when: 'an analyze or final validation request is encoded'
+    then: 'canonical base64 and SHA256 preserve the exact original bytes and invalid envelopes are rejected'
+  - id: A2
+    given: 'bounded incremental reply bytes'
+    when: 'one correlated reply reaches EOF'
+    then: 'strict schema correlation phase revision framing and limits are enforced against hostile inputs'
+observability:
+  - 'Focused tests report only cases and generic errors, never input payloads.'
+rollback:
+  - 'Revert the wire module and its private lib declaration as one logical unit.'
+non_functional:
+  security:
+    - 'No process spawn, identity minting, fd ownership proof, raw source logs or launch permission type.'
+contracts:
+  - name: 'execution-authorizer-v1'
+    type: schema
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Exact original Unicode, escape and whitespace bytes round-trip with independently pinned SHA256; invalid UTF8/JSON/base64/digest/phase/fence and required/duplicate/unknown keys refuse. Actual30451 exit0 ran10 focused tests at committed2f3a2f1e3, raw native-authorizer-wire-01/independent-boundary-tests.log. Source51c closed15reason contract matched. Prior peer-discovered array and enum representation RED101 attempts retained and fixed. No inner-schema, host identity, process, fence or launch authority inferred. Commit verification is existence only."
+    recorded_at: "2026-10-27T02:25:28.736Z"
+    command: "CARGO_TARGET_DIR=/tmp/caws-authorizer-wire-target-01a17a9d CARGO_BUILD_JOBS=1 cargo test --manifest-path packages/caws-native/Cargo.toml --lib execution_authorizer_wire -- --nocapture"
+    exit_code: 0
+    commit_sha: "2f3a2f1e37b72827b2ae1561e2f025498fcaaaf4"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "All byte splits and partial EOFs, terminal trailing/second-frame poison, independent exact4194304/65536 limits and max+1 valid JSON, correlation and final-allow exact revision checked by10 actual focused tests exit0. Full per-file mutation actual31833:100total93caught1missed6unviable0timeout; outcomes SHA256163268850a438bf059ed39f6b59a78a0454b823c24689e452df8da659cfa89a3 under native-authorizer-wire-01/independent-boundary-mutation/mutants.out/outcomes.json. Sole headerlen<4 to<=4 survivor independently grounded equivalent; failed decoders cannot reenter, four-byte header revalidation changes no inputs/expected/payload. All239 snapshot inputs restored. finish represents caller-reported EOF only; physical child EOF/exit/deadline/fence/installed execution unproven. Prior failures retained; commit verification is existence only."
+    recorded_at: "2026-10-27T02:25:29.699Z"
+    command: "CARGO_TARGET_DIR=/tmp/caws-authorizer-wire-target-01a17a9d CARGO_BUILD_JOBS=1 cargo test --manifest-path packages/caws-native/Cargo.toml --lib execution_authorizer_wire -- --nocapture"
+    exit_code: 0
+    commit_sha: "2f3a2f1e37b72827b2ae1561e2f025498fcaaaf4"

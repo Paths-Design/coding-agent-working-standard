@@ -90,13 +90,20 @@ _run_audit() { # $1 = event type, $2 = JSON envelope (no single quotes inside)
   # for exactly the largest tool calls. The envelope is read from a file so
   # the payload never becomes part of a shell command line.
   local payload_file="$BATS_TEST_TMPDIR/big-envelope-a5.json"
+  local real_jq jq_bin="$BATS_TEST_TMPDIR/linux-argv-limit"
+  real_jq=$(command -v jq)
+  mkdir -p "$jq_bin"
+  # Exercise Linux's per-argument boundary even on the macOS test host.
+  printf '#!/bin/bash\nfor arg; do if [ "${#arg}" -ge 131072 ]; then echo "oversized jq argument" >&2; exit 126; fi; done\nexec %q "$@"\n' \
+    "$real_jq" > "$jq_bin/jq"
+  chmod +x "$jq_bin/jq"
   jq -nc '{tool_name:"Write",session_id:"audit-a5",tool_use_id:"tu-5",
            tool_input:{file_path:"/tmp/big.bin",content:("x" * 140000)},
            tool_response:{bytes:140000,marker:"big-payload-marker"},cwd:"/tmp"}' \
     > "$payload_file"
   rm -f "$(_log_file)"
   run env CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" \
-    HOOK_CWD="$CAWS_TEST_REPO" TMPDIR="$BATS_TEST_TMPDIR" \
+    HOOK_CWD="$CAWS_TEST_REPO" TMPDIR="$BATS_TEST_TMPDIR" PATH="$jq_bin:$PATH" \
     bash -c "cat '$payload_file' | bash '$CAWS_TEST_HOOKS_DIR/audit.sh' 'tool-use'"
   assert_success
   local log
@@ -106,6 +113,9 @@ _run_audit() { # $1 = event type, $2 = JSON envelope (no single quotes inside)
   [ "$(jq -r '.tool_input.file_path' "$log")" = "/tmp/big.bin" ]
   [ "$(jq -r '.tool_response.marker' "$log")" = "big-payload-marker" ]
   [ "$(jq -r '.is_error' "$log")" = "false" ]
+  jq -c '.tool_input, .tool_response' "$payload_file" > "$BATS_TEST_TMPDIR/expected-payload.jsonl"
+  jq -c '.tool_input, .tool_response' "$log" > "$BATS_TEST_TMPDIR/observed-payload.jsonl"
+  cmp "$BATS_TEST_TMPDIR/expected-payload.jsonl" "$BATS_TEST_TMPDIR/observed-payload.jsonl"
 }
 
 @test "audit: file-transport record coerces non-dict tool objects to {} (A6)" {

@@ -1,0 +1,48 @@
+id: CAWS-NATIVE-PUBLICATION-DEPENDENCY-REPAIR-001
+title: 'Repair audited publication dependency closure'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Exact compatible lock-only patch landed; bounded audit and consumer/build/full-lint criteria passed against combined guard repair in isolated source99681f7a. Full publication, installed native rerun and parent acceptance remain open.'
+created_at: '2026-10-25T01:31:52.363Z'
+updated_at: '2026-10-25T02:16:18.539Z'
+created_by_session: '01a170a2-efe6-7bd2-a9ac-7cdcc3b070f7'
+blast_radius:
+  modules:
+    - 'npm publication dependency closure'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'package-lock.json'
+  out: []
+invariants:
+  - 'Audit severity policy and package source contracts remain unchanged'
+acceptance:
+  - id: A1
+    given: 'vulnerable fast-uri and zod lock entries'
+    when: 'the npm low-severity audit runs after minimal compatible dependency upgrades'
+    then: 'the lock audit reports zero vulnerabilities'
+  - id: A2
+    given: 'the repaired installed closure'
+    when: 'focused schema and mutation protocol consumers plus build and lint checks run'
+    then: 'consumers preserve valid admission and invalid-input rejection without source changes'
+observability:
+  - 'Retain before and after lock audit JSON and focused raw check outputs outside tracked source'
+rollback:
+  - 'Revert the dependency lock repair commit; this restores the known audit failure'
+non_functional:
+  security:
+    - 'No audit waiver or severity reduction'
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected candidate4a1525a160bc3f3cd9b332e6ab1cabc51f4485eb exact lock-only diff and retained before/after lock Git blob equality. Current low-threshold npm audit --package-lock-only --audit-level=low --json changed from2 vulnerabilities to0, no severity/policy/range changes. Compatible fast-uri3.1.9/zod4.6.6 tarball URLs/integrities match retained registry metadata;204 semantic consumer cases/build and actual two-Ajv/MSP probe pass. Raw evidence /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/native-publication-dependency-repair/. A2 remains open until combined guard repair and unchanged full lint pass. Native production closure/hosted publication/30s qualification unclaimed; old3.1.7 URI falsifier distinct from3.1.8 lock audit. CLI --verify checks commit reachability only; external execution manually inspected."
+    recorded_at: "2026-10-25T01:59:41.778Z"
+    commit_sha: "4a1525a160bc3f3cd9b332e6ab1cabc51f4485eb"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Combined exact source99681f7a37497ba3a4513d1d954501e156cfac04 in isolated native-test-preparation lane: fresh npm ci --ignore-scripts0 under pinned Node22.22.2 SHA5c899797c4eb8f1db5563eea56538342ddb3e9276ee1b04a5a1f0f1023d2b011; ordinary build0, unchanged full CLI lint0, low-threshold lock audit0,204 semantic spec/evidence cases0, real MSP Zod and both Ajv relative-reference/invalid-input/URI injection probes0. Exact target lock equals4a1525a1 and guard parser sources equalde0e1b1c; guards are separately reviewed and landed7c273695. Raw logs under /Users/darianrosebrook/.codex/artifacts/01a17052-3ea7-79b1-86be-7296991f8fd0/combined-source-01/. Doctor0 and all5 gates pass on isolated dependency merge basis. Full ordinary npm test is separate ongoing parent work (attempt1 refused missing Cargo from my test PATH; preserved). No full hosted/publication/native installed/30s/adoption claim. CLI --verify checks commit reachability only; manually inspected external runtime evidence, not replayed by evidence command."
+    recorded_at: "2026-10-25T02:16:02.950Z"
+    commit_sha: "99681f7a37497ba3a4513d1d954501e156cfac04"

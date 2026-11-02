@@ -126,19 +126,18 @@ case "$EVENT_TYPE" in
     FILE_PATH="$HOOK_FILE_PATH"
     COMMAND="$HOOK_COMMAND"
 
-    LOG_ENTRY=$(jq -cn \
-      --arg ts "$TIMESTAMP" \
-      --arg sid "$SESSION_ID" \
-      --arg event "tool_use" \
-      --arg tool "$TOOL_NAME" \
-      --arg tool_use_id "$TOOL_USE_ID" \
-      --argjson tool_input "$TOOL_INPUT" \
-      --argjson tool_response "$TOOL_RESPONSE" \
-      --arg file "$FILE_PATH" \
-      --arg cmd "$COMMAND" \
-      --arg cwd "$CWD" \
-      --arg mode "$PERMISSION_MODE" \
-      '{timestamp: $ts, session_id: $sid, event: $event, tool: $tool, tool_use_id: $tool_use_id, tool_input: $tool_input, tool_response: $tool_response, is_error: (($tool_response.exit_code // 0) != 0), file: $file, command: $cmd, cwd: $cwd, permission_mode: $mode}')
+    # Shell values cannot contain NUL. Feed every value through stdin, separated
+    # by NUL, so neither large JSON objects nor extracted command text becomes
+    # an exec argument (Linux bounds each argument independently of ARG_MAX).
+    LOG_ENTRY=$(printf '%s\0' "$TIMESTAMP" "$SESSION_ID" "$TOOL_NAME" \
+      "$TOOL_USE_ID" "$TOOL_INPUT" "$TOOL_RESPONSE" "$FILE_PATH" \
+      "$COMMAND" "$CWD" "$PERMISSION_MODE" | jq -Rsc '
+      split("\u0000") | (.[4] | fromjson) as $tool_input |
+      (.[5] | fromjson) as $tool_response |
+      {timestamp: .[0], session_id: .[1], event: "tool_use", tool: .[2],
+       tool_use_id: .[3], tool_input: $tool_input,
+       tool_response: $tool_response, is_error: (($tool_response.exit_code // 0) != 0),
+       file: .[6], command: .[7], cwd: .[8], permission_mode: .[9]}')
     ;;
 
   *)

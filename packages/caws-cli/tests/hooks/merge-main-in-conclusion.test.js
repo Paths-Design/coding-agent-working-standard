@@ -16,7 +16,7 @@ const { spawnSync } = require('child_process');
 
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
 
-const HOOK = path.resolve(__dirname, '..', '..', '..', '..', '.husky', 'pre-commit');
+const REPO = path.resolve(__dirname, '..', '..', '..', '..');
 
 afterAll(() => {
   cleanupAll();
@@ -49,13 +49,28 @@ function must(root, args) {
   return r.out;
 }
 
-/** Install .husky/pre-commit as the repo's live pre-commit. makeTempRepo sets
- *  core.hooksPath=/dev/null, so hooksPath must be pointed back at .git/hooks or
- *  the hook never runs and every "refused" assertion is unreachable. */
+/** Install the real hook with its relative runner and installed formatter tools.
+ * makeTempRepo disables hooks; use the ordinary .husky layout so a successful
+ * commit exercises the runner as well as the governance guards. */
 function installHook(root) {
-  const hooksDir = path.join(root, '.git', 'hooks');
+  const hooksDir = path.join(root, '.husky');
   fs.mkdirSync(hooksDir, { recursive: true });
-  fs.copyFileSync(HOOK, path.join(hooksDir, 'pre-commit'));
+  for (const rel of [
+    '.husky/pre-commit',
+    'scripts/run-staged-checks.cjs',
+    'eslint.config.js',
+    '.prettierrc.json',
+    '.prettierignore',
+  ]) {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.copyFileSync(path.join(REPO, rel), path.join(root, rel));
+  }
+  fs.symlinkSync(fs.realpathSync(path.join(REPO, 'node_modules')), path.join(root, 'node_modules'));
+  // Fixture plumbing must not join a later `git add -A` of the authored inputs.
+  fs.appendFileSync(
+    path.join(root, '.git', 'info', 'exclude'),
+    '\n/.husky/\n/scripts/\n/node_modules/\n/eslint.config.js\n/.prettierrc.json\n/.prettierignore\n'
+  );
   fs.chmodSync(path.join(hooksDir, 'pre-commit'), 0o755);
   must(root, ['config', 'core.hooksPath', hooksDir]);
 }
@@ -74,18 +89,18 @@ function write(root, rel, body) {
 function laneMidMerge() {
   const root = makeTempRepo();
   write(root, '.caws/policy.yaml', 'gates:\n  budget_limit: warn\n');
-  write(root, 'src/shared.js', 'base\n');
-  write(root, 'src/gone-a.js', 'a\n');
-  write(root, 'src/gone-b.js', 'b\n');
+  write(root, 'src/shared.js', 'module.exports = 1;\n');
+  write(root, 'src/gone-a.js', 'module.exports = 1;\n');
+  write(root, 'src/gone-b.js', 'module.exports = 2;\n');
   must(root, ['add', '-A']);
   must(root, ['commit', '-q', '-m', 'base']);
   must(root, ['checkout', '-q', '-b', 'lane']);
-  write(root, 'src/shared.js', 'lane\n');
+  write(root, 'src/shared.js', 'module.exports = 2;\n');
   must(root, ['add', '-A']);
   must(root, ['commit', '-q', '-m', 'lane work']);
   must(root, ['checkout', '-q', 'main']);
   must(root, ['rm', '-q', 'src/gone-a.js', 'src/gone-b.js']);
-  write(root, 'src/shared.js', 'main\n');
+  write(root, 'src/shared.js', 'module.exports = 3;\n');
   write(root, '.caws/policy.yaml', 'gates:\n  budget_limit: skip\n');
   must(root, ['add', '-A']);
   must(root, ['commit', '-q', '-m', 'main work']);
@@ -94,7 +109,7 @@ function laneMidMerge() {
   const merged = git(root, ['merge', '--no-commit', 'main']);
   expect(merged.status).not.toBe(0);
   expect(merged.out).toContain('CONFLICT');
-  write(root, 'src/shared.js', 'resolved\n');
+  write(root, 'src/shared.js', 'module.exports=4\n');
   must(root, ['add', 'src/shared.js']);
 
   installHook(root);
@@ -114,6 +129,7 @@ describe('concluding git merge main in a lane', () => {
     expect(staged).toContain('M\t.caws/policy.yaml');
     expect(staged).toContain('D\tsrc/gone-a.js');
     expect(must(root, ['diff', '--cached', '--quiet', 'main', '--', '.caws/policy.yaml'])).toBe('');
+    expect(must(root, ['show', ':src/shared.js'])).toBe('module.exports=4\n');
 
     const commit = git(root, ['commit', '-m', 'merge main into lane']);
 
@@ -122,6 +138,9 @@ describe('concluding git merge main in a lane', () => {
     expect(mergeInProgress(root)).toBe(false);
     expect(must(root, ['log', '-1', '--pretty=%P']).trim().split(' ')).toHaveLength(2);
     expect(fs.readFileSync(path.join(root, '.caws/policy.yaml'), 'utf8')).toContain('skip');
+    expect(fs.readFileSync(path.join(root, 'src/shared.js'), 'utf8')).toBe('module.exports = 4;\n');
+    expect(must(root, ['show', ':src/shared.js'])).toBe('module.exports = 4;\n');
+    expect(must(root, ['show', 'HEAD:src/shared.js'])).toBe('module.exports = 4;\n');
   });
 
   test('an authored policy.yaml edit that matches neither parent is still refused, naming the path', () => {
@@ -143,21 +162,21 @@ describe('concluding git merge main in a lane', () => {
     // merge base: the lane's own change was reverted by hand, which is authored.
     const root = makeTempRepo();
     write(root, '.caws/policy.yaml', 'gates: base\n');
-    write(root, 'src/shared.js', 'base\n');
+    write(root, 'src/shared.js', 'module.exports = 1;\n');
     must(root, ['add', '-A']);
     must(root, ['commit', '-q', '-m', 'base']);
     must(root, ['checkout', '-q', '-b', 'lane']);
     write(root, '.caws/policy.yaml', 'gates: lane\n');
-    write(root, 'src/shared.js', 'lane\n');
+    write(root, 'src/shared.js', 'module.exports = 2;\n');
     must(root, ['add', '-A']);
     must(root, ['commit', '-q', '-m', 'lane work']);
     must(root, ['checkout', '-q', 'main']);
-    write(root, 'src/shared.js', 'main\n');
+    write(root, 'src/shared.js', 'module.exports = 3;\n');
     must(root, ['add', '-A']);
     must(root, ['commit', '-q', '-m', 'main work']);
     must(root, ['checkout', '-q', 'lane']);
     expect(git(root, ['merge', '--no-commit', 'main']).status).not.toBe(0);
-    write(root, 'src/shared.js', 'resolved\n');
+    write(root, 'src/shared.js', 'module.exports=4\n');
     write(root, '.caws/policy.yaml', 'gates: base\n'); // == main's blob, untouched by main
     must(root, ['add', '-A']);
     installHook(root);
@@ -186,6 +205,8 @@ describe('concluding git merge main in a lane', () => {
     expect(concluded.err).not.toContain('BLOCKED');
     expect(concluded.status).toBe(0);
     expect(mergeInProgress(root)).toBe(false);
+    expect(fs.readFileSync(path.join(root, 'src/shared.js'), 'utf8')).toBe('module.exports = 4;\n');
+    expect(must(root, ['show', ':src/shared.js'])).toBe('module.exports = 4;\n');
     // The authored edit survives in the working tree for its own commit.
     expect(fs.readFileSync(path.join(root, '.caws/policy.yaml'), 'utf8')).toContain('block');
     expect(must(root, ['status', '--porcelain'])).toContain(' M .caws/policy.yaml');
@@ -202,12 +223,12 @@ describe('concluding git merge main in a lane', () => {
     // Plain (non-merge) commit mixing policy and code.
     const root = makeTempRepo();
     write(root, '.caws/policy.yaml', 'gates: a\n');
-    write(root, 'src/x.js', 'a\n');
+    write(root, 'src/x.js', 'module.exports = 1;\n');
     must(root, ['add', '-A']);
     must(root, ['commit', '-q', '-m', 'base']);
     installHook(root);
     write(root, '.caws/policy.yaml', 'gates: b\n');
-    write(root, 'src/x.js', 'b\n');
+    write(root, 'src/x.js', 'module.exports = 2;\n');
     must(root, ['add', '-A']);
     const plain = git(root, ['commit', '-m', 'mixed']);
     expect(plain.status).not.toBe(0);

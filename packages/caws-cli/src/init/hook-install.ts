@@ -23,7 +23,9 @@
 //   - absent             → write a fresh settings.json (CAWS wiring only).
 //   - present-but-unwired → append the four entries to existing arrays,
 //                           preserving all other keys.
-//   - already-wired      → no-op (idempotent; byte-identical re-run).
+//   - already-wired      → retrofit absent Claude PreToolUse failure policy;
+//                           exact block policy is a byte-identical no-op.
+//   - supplied non-block policy → refuse before settings writes.
 //   - invalid JSON       → refuse to merge; surface the snippet + error.
 // A .claude/settings.json.example carrying the canonical wiring is always
 // emitted as a reference for the "don't touch my settings.json" case.
@@ -65,6 +67,7 @@ import {
   sharedPackForSurface,
 } from './hook-packs/manifest-shared';
 import { KNOWN_SURFACES, resolveHookPack } from './hook-packs/register';
+import { classifyClaudeDispatcherHook } from './native-hook-identification';
 
 /** Location of the pack templates relative to the caws-cli package root.
  *  Resolved at runtime from __dirname so it works both in dev (running
@@ -123,14 +126,14 @@ function codexCommand(_repoRoot: string, dispatcher: string): string {
 
 /** Stamp the manifest pack version into a file's managed header so the installed
  *  header tracks the pack version (the template literals are frozen at their
- *  authoring value and would otherwise always read as "old version"). Both
- *  header forms are stamped: the `#`-comment form `# hook_pack_version: N` and
+ *  authoring value and would otherwise always read as "old version"). The
+ *  header forms are stamped: `#` or `//` comment `hook_pack_version: N` and
  *  the JSON `description`-field form `hook_pack_version=N`. This is a pure string
  *  rewrite — it must run on BOTH the write path and the comparison path so an
  *  unmodified installed file is byte-identical to the rendered template. */
 function stampPackVersion(content: string, packVersion: number): string {
   return content
-    .replace(/^(#\s*hook_pack_version:\s*)\d+/m, `$1${packVersion}`)
+    .replace(/^((?:#|\/\/)\s*hook_pack_version:\s*)\d+/m, `$1${packVersion}`)
     .replace(/(hook_pack_version=)\d+/, `$1${packVersion}`);
 }
 
@@ -139,7 +142,7 @@ function stampPackVersion(content: string, packVersion: number): string {
  *  file predating the current pack version) from a genuinely edited body. */
 function stripPackVersion(content: string): string {
   return content
-    .replace(/^(#\s*hook_pack_version:\s*)\d+/m, '$1#')
+    .replace(/^((?:#|\/\/)\s*hook_pack_version:\s*)\d+/m, '$1#')
     .replace(/(hook_pack_version=)\d+/, '$1#');
 }
 
@@ -1560,6 +1563,7 @@ export const CANONICAL_HOOK_ENTRIES: Readonly<Record<string, Record<string, unkn
         command:
           'CAWS_AGENT_SURFACE=claude-code CAWS_PROJECT_DIR="$CLAUDE_PROJECT_DIR" "$CLAUDE_PROJECT_DIR"/.caws/hooks/dispatch/pre_tool_use.sh',
         timeout: 45,
+        onFailure: 'block',
       },
     ],
   },
@@ -1641,8 +1645,14 @@ export type SettingsMergeResult =
     }
   /** settings.json already wired all four entries; nothing written. */
   | { readonly kind: 'unchanged'; readonly path: string }
-  /** settings.json existed but could not be parsed; left untouched. */
-  | { readonly kind: 'invalid'; readonly path: string; readonly error: string }
+  /** settings.json could not be parsed or supplied a conflicting managed
+   * policy/invocation; left untouched. Typed refusals carry a reason. */
+  | {
+      readonly kind: 'invalid';
+      readonly path: string;
+      readonly error: string;
+      readonly reason?: 'policy-invalid' | 'registration-reconciliation';
+    }
   /** CAWS-GATED-SURFACE-SCOPE-GUARD-001: user-scope CAWS wiring for this
    *  trust-gated surface exists on this machine, so the project-scope hook
    *  entries were NOT installed (dual-scope wiring double-fires every
@@ -1660,79 +1670,70 @@ export interface SettingsExamplePlanResult {
   readonly readOnly: true;
 }
 
-/** Does this hook-event's entry array already contain a CAWS-owned entry for
- *  `key`? Matches an entry whose command references any of the three known
- *  CAWS dispatch tails so that re-running init on a consumer using an older
- *  wiring does not append a duplicate entry.
+/** Classify the executable operand of supported Claude dispatcher invocations.
+ *  Pathname data passed to foreign executables does not establish ownership.
  *
  *  Recognised tails (all anchored with a leading slash):
  *   1. `/.caws/hooks/dispatch/<snake>.sh`      — current (shared-core) path
  *   2. `/.claude/hooks/caws_dispatch/<snake>.sh` — legacy pre-shared-core path
  *   3. `/.claude/hooks/dispatch/<snake>.sh`     — pre-rename legacy path
  *
- *  Decision (CAWS-HOOK-PACK-SHARED-CORE-001): for this slice recognizing all
- *  three tails to avoid duplicates is sufficient. A fresh install writes the
- *  new shared-core path; consumers on the old path are detected as wired and
- *  no duplicate is appended. Whether to rewrite an old-path entry to the new
- *  path on merge is deferred — idempotent detection is the required invariant. */
+ *  Supported old paths are retained without duplicate entries or command
+ *  rewrites. Known dispatchers with unsupported argv or compound syntax
+ *  require reconciliation before the merge can add or repair wiring. */
+function claudeCawsHookKind(
+  hook: unknown,
+  key: string
+): ReturnType<typeof classifyClaudeDispatcherHook> {
+  if (!hook || typeof hook !== 'object') return 'foreign';
+  const snake = key.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
+  return classifyClaudeDispatcherHook(hook, snake);
+}
+function isClaudeCawsHook(hook: unknown, key: string): hook is Record<string, unknown> {
+  return claudeCawsHookKind(hook, key) === 'managed';
+}
 function arrayHasCawsEntry(entryArray: unknown, key: string): boolean {
   if (!Array.isArray(entryArray)) return false;
-  const snake = key.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
-  const sharedCoreTail = `/.caws/hooks/dispatch/${snake}.sh`;
-  const legacyCawsDispatchTail = `/.claude/hooks/caws_dispatch/${snake}.sh`;
-  const legacyDispatchTail = `/.claude/hooks/dispatch/${snake}.sh`;
   for (const block of entryArray as unknown[]) {
-    const hookList = (block as { hooks?: unknown }).hooks;
+    const hookList = (block as { hooks?: unknown } | null)?.hooks;
     if (!Array.isArray(hookList)) continue;
-    for (const h of hookList as unknown[]) {
-      const cmd = (h as { command?: unknown }).command;
-      if (
-        typeof cmd === 'string' &&
-        (cmd.includes(sharedCoreTail) ||
-          cmd.includes(legacyCawsDispatchTail) ||
-          cmd.includes(legacyDispatchTail))
-      ) {
-        return true;
-      }
-    }
+    if (hookList.some((hook) => isClaudeCawsHook(hook, key))) return true;
   }
   return false;
 }
 
-/**
- * Merge the canonical CAWS hook wiring into `.claude/settings.json`,
- * non-destructively. The CAWS entry for each hook-event is appended only
- * if an equivalent entry (matched by the caws_dispatch command path) is
- * not already present. All other keys — permissions, env, user-authored
- * hooks — are preserved byte-for-byte outside the appended entries.
- *
- * Never overwrites an unparseable file. Idempotent: a second run on a
- * fully-wired settings.json is a no-op and leaves the file byte-identical.
- */
-export function mergeClaudeSettings(repoRoot: string): SettingsMergeResult {
-  const settingsPath = path.join(repoRoot, '.claude', 'settings.json');
+/** Supplied operator policy is never silently replaced. Absence is eligible
+ * for the managed Claude PreToolUse block-policy retrofit. */
+export function claudePreToolUsePolicyError(hook: Record<string, unknown>): string | undefined {
+  return Object.hasOwn(hook, 'onFailure') && hook.onFailure !== 'block'
+    ? 'Claude PreToolUse CAWS hook onFailure failure policy must be "block"; reconcile the supplied policy before registration'
+    : undefined;
+}
 
-  if (!fs.existsSync(settingsPath)) {
-    ensureDir(path.dirname(settingsPath));
-    fs.writeFileSync(
-      settingsPath,
-      `${JSON.stringify(canonicalSettingsObject(), null, 2)}\n`,
-      'utf8'
-    );
-    return { kind: 'created', path: settingsPath };
-  }
-
+/** Pure shared merge computation. All managed policies are validated before
+ * constructing any repair or addition; callers decide whether to write. */
+function computeClaudeSettingsMerge(
+  settingsPath: string,
+  bytes: string | null
+): { result: SettingsMergeResult; after?: string } {
+  if (bytes === null)
+    return {
+      result: { kind: 'created', path: settingsPath },
+      after: `${JSON.stringify(canonicalSettingsObject(), null, 2)}\n`,
+    };
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    parsed = JSON.parse(bytes);
   } catch (e) {
-    return { kind: 'invalid', path: settingsPath, error: (e as Error).message };
+    return { result: { kind: 'invalid', path: settingsPath, error: (e as Error).message } };
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return {
-      kind: 'invalid',
-      path: settingsPath,
-      error: 'settings.json root is not an object',
+      result: {
+        kind: 'invalid',
+        path: settingsPath,
+        error: 'settings.json root is not an object',
+      },
     };
   }
 
@@ -1742,6 +1743,39 @@ export function mergeClaudeSettings(repoRoot: string): SettingsMergeResult {
       ? (root.hooks as Record<string, unknown>)
       : {};
 
+  const managed: Record<string, unknown>[] = [];
+  for (const key of Object.keys(CANONICAL_HOOK_ENTRIES)) {
+    const groups = hooks[key];
+    if (!Array.isArray(groups)) continue;
+    for (const group of groups) {
+      if (!group || !Array.isArray(group.hooks)) continue;
+      for (const hook of group.hooks) {
+        const kind = claudeCawsHookKind(hook, key);
+        if (kind === 'reconciliation')
+          return {
+            result: {
+              kind: 'invalid',
+              path: settingsPath,
+              reason: 'registration-reconciliation',
+              error: `Claude ${key} CAWS registration requires reconciliation before settings changes`,
+            },
+          };
+        if (key !== 'PreToolUse' || kind !== 'managed') continue;
+        const error = claudePreToolUsePolicyError(hook);
+        if (error)
+          return {
+            result: { kind: 'invalid', path: settingsPath, reason: 'policy-invalid', error },
+          };
+        managed.push(hook);
+      }
+    }
+  }
+  const repaired: string[] = [];
+  for (const hook of managed)
+    if (!Object.hasOwn(hook, 'onFailure')) {
+      hook.onFailure = 'block';
+      if (repaired.length === 0) repaired.push('PreToolUse');
+    }
   const added: string[] = [];
   for (const [key, entry] of Object.entries(CANONICAL_HOOK_ENTRIES)) {
     const existing = hooks[key];
@@ -1754,61 +1788,47 @@ export function mergeClaudeSettings(repoRoot: string): SettingsMergeResult {
     added.push(key);
   }
 
-  if (added.length === 0) {
-    return { kind: 'unchanged', path: settingsPath };
+  if (added.length === 0 && repaired.length === 0) {
+    return { result: { kind: 'unchanged', path: settingsPath } };
   }
 
   root.hooks = hooks;
-  fs.writeFileSync(settingsPath, `${JSON.stringify(root, null, 2)}\n`, 'utf8');
-  return { kind: 'merged', path: settingsPath, added };
+  return {
+    result: {
+      kind: 'merged',
+      path: settingsPath,
+      added,
+      ...(repaired.length ? { repaired } : {}),
+    },
+    after: `${JSON.stringify(root, null, 2)}\n`,
+  };
 }
 
-/** Read-only counterpart to mergeClaudeSettings. Computes the same created /
- * merged / unchanged / invalid outcome without writing settings.json. */
-export function planClaudeSettingsMerge(repoRoot: string): SettingsMergePlanResult {
+function readClaudeSettingsMerge(repoRoot: string): ReturnType<typeof computeClaudeSettingsMerge> {
   const settingsPath = path.join(repoRoot, '.claude', 'settings.json');
-
-  if (!fs.existsSync(settingsPath)) {
-    return { kind: 'created', path: settingsPath, readOnly: true };
-  }
-
-  let parsed: unknown;
+  let bytes: string | null;
   try {
-    parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-  } catch (e) {
-    return {
-      kind: 'invalid',
-      path: settingsPath,
-      error: (e as Error).message,
-      readOnly: true,
-    };
+    bytes = fs.existsSync(settingsPath) ? fs.readFileSync(settingsPath, 'utf8') : null;
+  } catch (error) {
+    return { result: { kind: 'invalid', path: settingsPath, error: (error as Error).message } };
   }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return {
-      kind: 'invalid',
-      path: settingsPath,
-      error: 'settings.json root is not an object',
-      readOnly: true,
-    };
+  return computeClaudeSettingsMerge(settingsPath, bytes);
+}
+
+/** Merge additions and absent Claude PreToolUse policy in place. Apply rereads
+ * and revalidates current settings instead of trusting an earlier preview. */
+export function mergeClaudeSettings(repoRoot: string): SettingsMergeResult {
+  const { result, after } = readClaudeSettingsMerge(repoRoot);
+  if (after !== undefined) {
+    ensureDir(path.dirname(result.path));
+    fs.writeFileSync(result.path, after, 'utf8');
   }
+  return result;
+}
 
-  const root = parsed as Record<string, unknown>;
-  const hooks: Record<string, unknown> =
-    root.hooks && typeof root.hooks === 'object' && !Array.isArray(root.hooks)
-      ? (root.hooks as Record<string, unknown>)
-      : {};
-
-  const added: string[] = [];
-  for (const key of Object.keys(CANONICAL_HOOK_ENTRIES)) {
-    if (arrayHasCawsEntry(hooks[key], key)) continue;
-    added.push(key);
-  }
-
-  if (added.length === 0) {
-    return { kind: 'unchanged', path: settingsPath, readOnly: true };
-  }
-
-  return { kind: 'merged', path: settingsPath, added, readOnly: true };
+/** Read-only counterpart using exactly the apply-side merge computation. */
+export function planClaudeSettingsMerge(repoRoot: string): SettingsMergePlanResult {
+  return { ...readClaudeSettingsMerge(repoRoot).result, readOnly: true };
 }
 
 /** Write `.claude/settings.json.example` with the canonical CAWS wiring.

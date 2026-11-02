@@ -59,19 +59,30 @@ test('built CLI preview does not mutate; apply logs one exact receipt and discha
     'gone',
     '--json',
   ];
-  const preview = spawnSync(process.execPath, [CLI, ...args], { cwd: f.root, encoding: 'utf8' });
+  // An explicit env is required: without one, spawnSync inherits the host
+  // process env, not the worker's isolated copy, so --apply would resolve the
+  // invoking agent's session and fail in CI where none exists.
+  const env = { ...process.env, CLAUDE_CODE_SESSION_ID: 'worktree-reconciliation-test' };
+  const preview = spawnSync(process.execPath, [CLI, ...args], {
+    cwd: f.root,
+    encoding: 'utf8',
+    env,
+  });
   expect(preview.status).toBe(0);
   expect(JSON.parse(preview.stdout).candidates[0].state_class).toBe('verified-dead-creation');
   expect(fs.readFileSync(path.join(f.cawsDir, 'events.jsonl'), 'utf8')).toBe(before);
   const applied = spawnSync(process.execPath, [CLI, ...args, '--apply'], {
     cwd: f.root,
     encoding: 'utf8',
+    env,
   });
   expect(applied.status).toBe(0);
   expect(fs.readFileSync(bridges, 'utf8')).toBe(bridgeBytes);
   expect(JSON.parse(applied.stdout).outcomes[0].action).toBe('applied');
   const events = loadEvents(f.cawsDir);
   expect(events.ok).toBe(true);
+  // The receipt is attributed to the test-owned caller, never the invoking session.
+  expect(events.value.events.at(-1).actor.session_id).toBe('worktree-reconciliation-test');
   expect(events.value.events.at(-1).data).toMatchObject({
     h_class: 'verified_dead_creation',
     created_event_seq: f.created.seq,

@@ -35,14 +35,14 @@ teardown_file() {
 # --- install layout -----------------------------------------------------------
 
 @test "qwen pack: shim, doctrine doc, and parse-input override install at their destPaths" {
-  [[ -x "$QWEN_SHIM" ]]
-  [[ -f "$QWEN_VENDOR_DIR/CAWS-HOOKS.md" ]]
-  [[ -f "$QWEN_VENDOR_DIR/hooks/lib/parse-input.sh" ]]
+  assert [ -x "$QWEN_SHIM" ]
+  assert [ -f "$QWEN_VENDOR_DIR/CAWS-HOOKS.md" ]
+  assert [ -f "$QWEN_VENDOR_DIR/hooks/lib/parse-input.sh" ]
 }
 
 @test "qwen pack: init wires .qwen/settings.json and writes the example" {
-  [[ -f "$QWEN_VENDOR_DIR/settings.json" ]]
-  [[ -f "$QWEN_VENDOR_DIR/settings.json.example" ]]
+  assert [ -f "$QWEN_VENDOR_DIR/settings.json" ]
+  assert [ -f "$QWEN_VENDOR_DIR/settings.json.example" ]
   # All five events present, each entry pointing at the shim.
   for event in PreToolUse PostToolUse SessionStart Stop PreCompact; do
     grep -q "\"$event\"" "$QWEN_VENDOR_DIR/settings.json"
@@ -51,7 +51,7 @@ teardown_file() {
 }
 
 @test "qwen pack: init creates QWEN.md carrying the managed doctrine import" {
-  [[ -f "$CAWS_TEST_REPO/QWEN.md" ]]
+  assert [ -f "$CAWS_TEST_REPO/QWEN.md" ]
   grep -q '@.qwen/CAWS-HOOKS.md' "$CAWS_TEST_REPO/QWEN.md"
 }
 

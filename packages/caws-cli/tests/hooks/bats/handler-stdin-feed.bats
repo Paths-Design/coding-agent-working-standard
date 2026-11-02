@@ -36,8 +36,16 @@ _run_chain_with_payload() { # $1 = payload string, $2 = count file
   printf '#!/bin/bash\nwc -c < /dev/stdin > "$COUNT_FILE" 2>/dev/null\nexit 0\n' \
     > "$fake_dir/echo-size.sh"
   chmod +x "$fake_dir/echo-size.sh"
-  run env COUNT_FILE="$2" HOOKS_DIR="$fake_dir" HOOK_INPUT_JSON="$1" \
-    bash -c 'source "'"$CAWS_TEST_HOOKS_DIR"'/lib/run-handlers.sh"; run_handlers echo-size.sh'
+  # A TMPDIR inside the test directory keeps any stage this chain writes out of
+  # the machine's real TMPDIR.
+  mkdir -p "$BATS_TEST_TMPDIR/chain-tmp"
+  # Enter the child with a filename, not an oversized argv/environment value.
+  # The shell-local inline string intentionally exercises the dispatcher stage.
+  local input_file="$BATS_TEST_TMPDIR/chain-input.json"
+  printf '%s' "$1" > "$input_file"
+  run env COUNT_FILE="$2" HOOKS_DIR="$fake_dir" PAYLOAD_INPUT_FILE="$input_file" \
+    TMPDIR="$BATS_TEST_TMPDIR/chain-tmp" \
+    bash -c 'unset HOOK_INPUT_JSON; HOOK_INPUT_JSON=$(cat "$PAYLOAD_INPUT_FILE"); source "'"$CAWS_TEST_HOOKS_DIR"'/lib/run-handlers.sh"; run_handlers echo-size.sh'
 }
 
 @test "handler stdin: a >64KiB inline payload reaches the handler intact, no broken-pipe stderr" {
@@ -56,10 +64,9 @@ _run_chain_with_payload() { # $1 = payload string, $2 = count file
   [ "$(tr -d ' ' < "$count_file")" = "${#big}" ]
 }
 
-@test "handler stdin: a >131072-byte file-transport payload reaches the handler intact, no broken-pipe stderr" {
-  # Above the inline ceiling parse-input already moves the payload to
-  # HOOK_PAYLOAD_FILE; run-handlers must feed handlers from that file rather
-  # than re-serializing the (unexported) inline string through a pipe.
+@test "handler stdin: a >131072-byte shell-local payload reaches the handler intact, no broken-pipe stderr" {
+  # This direct-chain fixture deliberately bypasses parse-input. The installed
+  # dispatch cases below exercise real HOOK_PAYLOAD_FILE transport.
   local big count_file
   big=$(jq -nc '{tool_name:"Bash",tool_input:{command:"bigger"},tool_response:{data:("B" * 200000)}}')
   count_file="$BATS_TEST_TMPDIR/count-file-$$"

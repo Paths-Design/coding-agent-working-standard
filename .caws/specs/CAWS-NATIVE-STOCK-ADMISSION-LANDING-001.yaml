@@ -1,0 +1,64 @@
+id: CAWS-NATIVE-STOCK-ADMISSION-LANDING-001
+title: 'Land native stock Stop admission with retained freshness evidence'
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed exact reviewed stock Stop admission and direct freshness/cancellation falsifier on local main. A1/A2 runtime and A3 postmerge evidence inspected and recorded. Native prefix, qualified profiles, publication/consumer/release, residency, Python retirement and selected cutover remain owned by active parent/publication specs.'
+created_at: '2026-10-24T08:13:35.943Z'
+updated_at: '2026-10-24T08:20:52.235Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native original Stop selection admission and mainline delivery'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/main.rs'
+    - 'packages/caws-native/src/stop_admission.rs'
+    - 'packages/caws-native/tests/original_stop_main.rs'
+    - 'packages/caws-native/tests/stock_stop_admission.rs'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Unsupported selection retains the sealed receipt and predispatch freshness; invalidated original evidence cannot become fallback permission.'
+  - 'This slice grants no native prefix, SQL, publication or full-runtime acceptance and does not change selected machine state.'
+acceptance:
+  - id: A1
+    given: 'actual original capture and sealed native observations'
+    when: 'sparse, stale and cancelled selection enter admission'
+    then: 'sparse selection remains unsupported, stale and cancelled evidence is invalidated, and the retained receipt remains available for predispatch checks.'
+  - id: A2
+    given: 'an isolated installed full image and maintained engine'
+    when: 'an ordinary stock OpenCode Stop executes'
+    then: 'native progress records admitted stock selection and predispatch revalidation within the original deadline, while concrete outputs and compatibility execution remain explicit.'
+  - id: A3
+    given: 'the reviewed committed candidate and passing scoped checks'
+    when: 'the bounded source slice lands on local main'
+    then: 'source ancestry and ledger state agree, with parent acceptance and selected machine runtime unchanged.'
+observability:
+  - 'Retained native progress, direct admission refusal artifacts, raw mutant and fresh-target logs, source and binary pins.'
+rollback:
+  - 'Use a governed source revert if needed; the selected machine generation is not changed by this landing.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Actual original capture plus native custodian/Git: sparse Unsupported, changed sealed read Invalidated, cancellation Invalidated with callback once; no sessions created. Inspected /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/stock-admission-direct-fresh-01 execution.json and generation-artifacts/caws-generation-receipt-34604-0/direct-stock-admit.json, exit0; removing initial revalidation fails exact assertion with cargo101 in stock-admission-mutant-01. Original shared-target failed restoration retained; fresh independent target rebuilt and passed. Source main.rs retains receipt through Unsupported and predispatch revalidates. Main postseal Invalidated routing is source-inspected, not dynamically exercised."
+    recorded_at: "2026-10-24T08:19:05.275Z"
+    command: "cargo test --release --locked --offline --no-default-features -j 2 --test stock_stop_admission direct_admit_rejects_stale_readset_and_preserves_cancellation -- --exact --nocapture --test-threads=1"
+    exit_code: 0
+    commit_sha: "5837aa104633640ce593a2ead8ea2198d46b7812"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/maintained-stock-admission-execution-01/execution.json outer exit0; /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/maintained-stock-admission-observation-01 native-terminal.json exit0 16267ms under original30000ms, native-progress.json stockSelection admitted,364 observations,sealed and predispatch true. Four compatibility handlers exit0; expected user/reply, index1 and byte-equal final snapshot retained. Native binary SHA704c474d46dedf1defa8bef79f3433af6a2925332dc9e13f09e88220c4e127cb matches fresh candidate. No native SQL/publication/Python retirement or selected-machine claim."
+    recorded_at: "2026-10-24T08:19:06.328Z"
+    command: "Maintained image actual-main-selection.cjs; exact argv retained in maintained-stock-admission-execution-01/execution.json"
+    exit_code: 0
+    commit_sha: "5837aa104633640ce593a2ead8ea2198d46b7812"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Local main merge56f917d8af052dbc7f473a04c26a9080ff18c5eb contains reviewed5837aa10. Postmerge inspection in /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/stock-admission-landing-01/postmerge.json establishes exact five source/ledger path equality, candidate ancestry, removed temporary lane, unchanged parent spec hash0c11d997 and selected-machine hashf8a36272. gates.json exit0 evaluates five paths; doctor.json exit0 0E/4W/5I. Peer feedback independently inspected committed candidate; direct source and runtime artifacts support A1/A2; no parent completion or installation claim."
+    recorded_at: "2026-10-24T08:20:50.985Z"
+    commit_sha: "56f917d8af052dbc7f473a04c26a9080ff18c5eb"

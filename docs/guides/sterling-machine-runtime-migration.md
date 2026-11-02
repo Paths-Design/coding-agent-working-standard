@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: Sterling machine runtime migration handoff
 owner: CAWS maintainers
-updated: 2026-10-03
+updated: 2026-10-21
 audience: contributor
 ---
 
@@ -200,8 +200,8 @@ from its existing effective policy; derive Claude independently from its native
 wrappers, dispatchers, helper loads and event behavior. Do not copy Codex's
 policy onto Claude without comparing both chains.
 
-Event keys are `pre_tool_use`, `post_tool_use`, `session_start`, `stop`, and
-`pre_compact`. Extensions are ordered entries such as
+Event keys are `pre_tool_use`, `post_tool_use`, `session_start`, `stop`,
+`pre_compact`, and `session_end`. Extensions are ordered entries such as
 `{"handler":"casr-context.sh","before":"quiet-merge.sh"}`. Handler and library
 maps use canonical-project-relative paths. Handlers must exist and be
 executable. Bootstrap libraries `agent-surface.sh` and `runtime-paths.sh` cannot
@@ -219,6 +219,25 @@ a consumer that directly opens a sibling file. In particular, check the logger's
 renderer selection in code; migrate its load path before dropping its override.
 
 ## 4. Preview and apply from the canonical checkout
+
+Reconcile machine setup before applying a project migration. Upgrade the CLI
+package before updating the shared runtime; use that CLI to preview
+`caws init adapters install --plan --json` and, after review and authorization,
+apply required installation changes. Installation and native registration are
+separate operations.
+
+Preview configuration for each surface you intend to migrate:
+
+```bash
+caws init adapters configure --agent-surface codex --plan --json
+caws init adapters configure --agent-surface claude-code --plan --json
+```
+
+If a preview reports `changed: true`, review its exact registration changes and
+obtain authorization before running that configure command without `--plan`.
+Repeat the configure preview and require `changed: false` for each surface
+before applying its project migration. Migration apply refuses when registration
+needs configuration; a migration preview does not establish this prerequisite.
 
 Land required source changes through governed worktrees first, so every policy
 path resolves from canonical Sterling. Save the reviewed Codex and Claude

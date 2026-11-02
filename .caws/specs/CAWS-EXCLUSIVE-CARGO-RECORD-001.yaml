@@ -1,0 +1,40 @@
+id: CAWS-EXCLUSIVE-CARGO-RECORD-001
+title: 'Strict native Cargo execution records and bounded discovery advisory'
+mode: feature
+lifecycle_state: active
+created_at: '2026-10-30T06:42:48.614Z'
+updated_at: '2026-10-30T06:42:48.614Z'
+created_by_session: '01a18b89-fb40-70f1-9ed7-0251b01485c4'
+blast_radius:
+  modules:
+    - 'Native prepared record decoder and discovery wire'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/execution_prepared.rs'
+    - 'packages/caws-native/src/execution_authorizer_wire.rs'
+  out: []
+invariants:
+  - 'Decoding and discovery observations never grant execution authority; preserve original immutable record bytes and existing Bash npm evidence lifecycle contracts'
+acceptance:
+  - id: A1
+    given: 'an exact cargo-run-v1 prepared tuple with immutable images and deny-only write ceiling'
+    when: 'native decoding runs'
+    then: 'only the bounded exact argv image runtime project and ceiling contract is admitted and hostile shape or field mutations are refused'
+  - id: A2
+    given: 'a correlated Cargo discovery advisory'
+    when: 'native wire decoding runs'
+    then: 'only normalized relative Cargo.toml advisory argv with a valid typed Cargo project is admitted and cross-kind fields unresolved execution and malformed shapes are refused'
+observability:
+  - 'Focused native decoder and discovery hostile-input tests'
+rollback:
+  - 'Revert the owned native decoder slice through an ordinary follow-up commit'
+non_functional:
+  security:
+    - 'Reject unknown duplicate positional null cross-kind and unbounded execution data'
+contracts:
+  - name: 'cargo-prepared'
+    type: behavior
+  - name: 'cargo-discovery'
+    type: behavior

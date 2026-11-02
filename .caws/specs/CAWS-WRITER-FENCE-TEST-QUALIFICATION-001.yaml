@@ -1,0 +1,32 @@
+id: CAWS-WRITER-FENCE-TEST-QUALIFICATION-001
+title: 'Qualify writer and fence hostile-path assertions'
+mode: fix
+lifecycle_state: active
+created_at: '2026-11-01T04:35:43.109Z'
+updated_at: '2026-11-01T04:35:43.109Z'
+created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
+blast_radius:
+  modules:
+    - 'Writer publication readback and inherited fence observations'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/execution/writer.test.js'
+    - 'packages/caws-cli/tests/execution/fence.test.js'
+  out: []
+invariants:
+  - 'Preserve all declared mutation floors and selected production surfaces; only tests change, with semantic and hostile-path oracles rather than implementation-shaped pass checks.'
+acceptance:
+  - id: A1
+    given: 'current writer and fence contracts and retained survivors'
+    when: 'strengthened existing tests execute against the compiled candidate'
+    then: 'publication readback, inherited fence races and malformed input controls pass with actual state assertions'
+  - id: A2
+    given: 'current source and exact captured test/build/dependency identity'
+    when: 'required mutation qualification completes'
+    then: 'writer.ts and fence.ts each meet the unchanged 80 percent floor with retained actual reports'
+rollback:
+  - 'Use an additive reviewed test correction if an oracle contradicts the governing behavior; preserve failed reports and history.'
+non_functional: {}
+contracts: []

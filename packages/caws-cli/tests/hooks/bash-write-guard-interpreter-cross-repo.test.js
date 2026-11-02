@@ -22,13 +22,10 @@
  * was refused with exit 2. Writing the scratch script is permitted by design
  * (see the guard's own `/tmp` rationale); executing it was never adjudicated.
  *
- * The closure: python/node invocations are scanned for write targets that
- * appear as PATH LITERALS in inline -c/-e code, heredoc bodies, or the content
- * of a script file named on the command line. The predicate is CO-OCCURRENCE —
- * a payload counts as a write payload only when it holds BOTH a write verb of
- * that language AND a slash-bearing path fragment. Co-occurrence is what keeps
- * reads legal, and "inside a DIFFERENT git repository" is what keeps /tmp
- * scratch legal.
+ * Interpreter admission requires explicit bounded source effects. Finite Node
+ * write operands reach the normal ownership checks; unknown effects and all
+ * file-entry scripts remain held. Python has no admitted profile in this
+ * version. Script bytes read before launch cannot authorize later execution.
  *
  * Bash-driven: the SUT is a shell script, so every behavioral assertion spawns
  * the real guard and reads its real exit code and stderr. A guard's refusal
@@ -46,11 +43,13 @@ const TEMPLATES = path.join(CLI_PKG_ROOT, 'templates', 'hook-packs', 'shared');
 const BASH_GUARD = path.join(TEMPLATES, 'bash-write-guard.sh');
 const SCOPE_GUARD = path.join(TEMPLATES, 'scope-guard.sh');
 
+function shellQuote(value) {
+  return "'" + value.replace(/'/g, "'\\''") + "'";
+}
+
 /**
- * A fake project with a .caws registry, plus a sibling git repo under a fake
- * $HOME. The sibling sits under HOME on purpose: the observed bypass composed
- * its target from `Path.home() / "Desktop/Projects/<sibling>/..."`, so a
- * literal that is neither absolute nor cwd-relative has to resolve too.
+ * A fake project with a .caws registry and a sibling git repo. These synthetic
+ * complete-context fixtures exercise the component, not the native Codex gate.
  */
 function makeFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bwg-interp-'));
@@ -64,17 +63,29 @@ function makeFixture() {
   fs.mkdirSync(sibling, { recursive: true });
   execFileSync('git', ['init', '-q'], { cwd: sibling });
   fs.writeFileSync(path.join(sibling, 'README.md'), 'sibling\n');
-  return { root, projectDir, home, sibling };
+  const cli = path.join(root, 'caws');
+  fs.writeFileSync(
+    cli,
+    '#!/bin/sh\nexec ' +
+      shellQuote(process.execPath) +
+      ' ' +
+      shellQuote(path.join(CLI_PKG_ROOT, 'dist/index.js')) +
+      ' "$@"\n',
+    { mode: 0o755 }
+  );
+  return { root, projectDir, home, sibling, cli };
 }
 
 /** Run the template guard as a standalone handler with a fake session env. */
-function runGuard(command, fixture) {
+function runGuard(command, fixture, permissionMode = 'bypassPermissions') {
   const env = {
     ...process.env,
     HOOK_TOOL_NAME: 'Bash',
     HOOK_COMMAND: command,
     HOOK_CWD: fixture.projectDir,
+    HOOK_PERMISSION_MODE: permissionMode,
     CAWS_PROJECT_DIR: fixture.projectDir,
+    CAWS_BIN: fixture.cli,
     CAWS_AGENT_SURFACE: 'claude-code',
     HOME: fixture.home,
   };
@@ -82,7 +93,14 @@ function runGuard(command, fixture) {
     const stdout = execFileSync('bash', [BASH_GUARD], {
       env,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
+      input: JSON.stringify({
+        tool_name: 'Bash',
+        cwd: fixture.projectDir,
+        session_id: 'interpreter-fixture-session',
+        permission_mode: permissionMode,
+        tool_input: { command },
+      }),
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     return { exit: 0, stdout, stderr: '' };
   } catch (e) {
@@ -107,6 +125,7 @@ describe('bash-write-guard: cross-repo boundary for targets named on the command
   beforeEach(() => {
     fx = makeFixture();
   });
+  afterEach(() => fs.rmSync(fx.root, { recursive: true, force: true }));
 
   test('sed -i into a sibling repo blocks and names that repository', () => {
     const res = runGuard(`sed -i '' 's/a/b/' ${fx.sibling}/CLAUDE.md`, fx);
@@ -119,12 +138,74 @@ describe('bash-write-guard: cross-repo boundary for targets named on the command
     const res = runGuard('echo scratch > /tmp/bwg-scratch-named.txt', fx);
     expect(res.exit).toBe(0);
   });
+
+  test('foreign repository path identity: the walker retains an LF-ending ancestor', () => {
+    const sibling = `${fx.sibling}\n`;
+    fs.mkdirSync(sibling);
+    execFileSync('git', ['init', '-q'], { cwd: sibling });
+    const physical = fs.realpathSync(sibling);
+    const target = path.join(physical, 'not-written.txt');
+    const observed = execFileSync(
+      'bash',
+      [
+        '--noprofile',
+        '--norc',
+        '-c',
+        'source "$1"; caws_foreign_repo_root "$2" "$3"',
+        '_',
+        path.join(TEMPLATES, 'lib/bash-mutation-targets.sh'),
+        target,
+        fs.realpathSync(fx.projectDir),
+      ],
+      { encoding: 'utf8' }
+    );
+    expect(observed).toBe(physical);
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
+  test('foreign repository path identity: a normal alias cannot hide an LF-ending sibling', () => {
+    const alias = path.join(fx.root, 'foreign-alias');
+    fs.symlinkSync(fx.sibling, alias);
+    const target = path.join(alias, 'not-written.txt');
+    const control = runGuard(`touch ${shellQuote(target)}`, fx);
+    expect(control.exit).toBe(2);
+    expect(control.stderr).toContain('DIFFERENT repository');
+    expect(control.stderr).toContain(fs.realpathSync(fx.sibling));
+
+    const sibling = `${fx.sibling}\n`;
+    fs.mkdirSync(sibling);
+    execFileSync('git', ['init', '-q'], { cwd: sibling });
+    fs.unlinkSync(alias);
+    fs.rmSync(fx.sibling, { recursive: true, force: true });
+    fs.symlinkSync(sibling, alias);
+    expect(fs.existsSync(fx.sibling)).toBe(false);
+    const observed = runGuard(`touch ${shellQuote(target)}`, fx);
+    expect(fs.existsSync(path.join(sibling, 'not-written.txt'))).toBe(false);
+    expect(observed.exit).toBe(2);
+    expect(observed.stderr).toContain('DIFFERENT repository');
+    expect(observed.stderr).toContain(fs.realpathSync(sibling));
+  });
 });
 
 describe('bash-write-guard: interpreter-mediated writes', () => {
   let fx;
   beforeEach(() => {
     fx = makeFixture();
+  });
+  afterEach(() => fs.rmSync(fx.root, { recursive: true, force: true }));
+
+  test('an executable read in an opaque file is held without inventing a foreign write', () => {
+    const target = path.join(fx.projectDir, 'not-written.txt');
+    const script = writeScript(fx, '.tmp/read-executable.js', [
+      "const fs = require('node:fs');",
+      `fs.readFileSync(${JSON.stringify(path.join(fx.sibling, 'README.md'))});`,
+      `fs.writeFileSync(${JSON.stringify(target)}, 'owned');`,
+    ]);
+    const result = runGuard('node ' + shellQuote(script), fx);
+    expect(fs.existsSync(target)).toBe(false);
+    expect(result.exit).toBe(2);
+    expect(result.stderr).toContain('mutation-interpreter-effects');
+    expect(result.stderr).not.toContain('DIFFERENT repository');
   });
 
   test('the observed bypass blocks: node runs a scratch script whose body writes a sibling repo', () => {
@@ -136,8 +217,8 @@ describe('bash-write-guard: interpreter-mediated writes', () => {
     ]);
     const res = runGuard('node .tmp/apply-fix.mjs', fx);
     expect(res.exit).toBe(2);
-    expect(res.stderr).toMatch(/DIFFERENT repository/);
-    expect(res.stderr).toContain(fx.sibling);
+    expect(res.stderr).toContain('mutation-interpreter-effects');
+    expect(fs.existsSync(path.join(fx.sibling, 'packages/core/index.ts'))).toBe(false);
   });
 
   test('a python script composing its target from Path.home() blocks', () => {
@@ -148,20 +229,20 @@ describe('bash-write-guard: interpreter-mediated writes', () => {
     ]);
     const res = runGuard('python3 .tmp/fix_foreign.py', fx);
     expect(res.exit).toBe(2);
-    expect(res.stderr).toMatch(/DIFFERENT repository/);
+    expect(res.stderr).toContain('mutation-interpreter-effects');
   });
 
   test('a python script writing a sibling repo via an absolute literal blocks', () => {
     writeScript(fx, '.tmp/fix_abs.py', [`open("${fx.sibling}/x.md", "w").write("x")`]);
     const res = runGuard('python3 .tmp/fix_abs.py', fx);
     expect(res.exit).toBe(2);
-    expect(res.stderr).toMatch(/DIFFERENT repository/);
+    expect(res.stderr).toContain('mutation-interpreter-effects');
   });
 
   test('python -c inline code writing a sibling repo blocks', () => {
     const res = runGuard(`python3 -c "open('${fx.sibling}/x.md','w').write('x')"`, fx);
     expect(res.exit).toBe(2);
-    expect(res.stderr).toMatch(/DIFFERENT repository/);
+    expect(res.stderr).toContain('mutation-interpreter-effects');
   });
 
   test('node -e writeFileSync into a sibling repo blocks', () => {
@@ -179,41 +260,45 @@ describe('bash-write-guard: interpreter-mediated writes', () => {
     ].join('\n');
     const res = runGuard(cmd, fx);
     expect(res.exit).toBe(2);
-    expect(res.stderr).toMatch(/DIFFERENT repository/);
+    expect(res.stderr).toContain('mutation-interpreter-effects');
   });
 });
 
-describe('bash-write-guard: what the interpreter scan must keep legal', () => {
+describe('bash-write-guard: admitted source profiles and unresolved source selection', () => {
   let fx;
   beforeEach(() => {
     fx = makeFixture();
   });
+  afterEach(() => fs.rmSync(fx.root, { recursive: true, force: true }));
 
-  test('a python script writing only in-project scratch is permitted', () => {
+  test('an in-project Python file remains held without execution custody', () => {
     writeScript(fx, '.tmp/in_project.py', [
       'from pathlib import Path',
       'Path(".tmp/out.json").write_text("x")',
     ]);
     const res = runGuard('python3 .tmp/in_project.py', fx);
-    expect(res.exit).toBe(0);
+    expect(res.exit).toBe(2);
+    expect(res.stderr).toContain('mutation-interpreter-effects');
   });
 
-  test('a python script writing /tmp is permitted: no enclosing git repository', () => {
+  test('a Python file remains held even if its source only names /tmp', () => {
     writeScript(fx, '.tmp/to_tmp.py', [
       'from pathlib import Path',
       'Path("/tmp/bwg-interp-out.md").write_text("x")',
     ]);
     const res = runGuard('python3 .tmp/to_tmp.py', fx);
-    expect(res.exit).toBe(0);
+    expect(res.exit).toBe(2);
+    expect(res.stderr).toContain('mutation-interpreter-effects');
   });
 
-  test('a read-only open of a sibling file is permitted: no write verb, so no co-occurrence', () => {
+  test('apparently readonly file bytes cannot authorize Python execution', () => {
     writeScript(fx, '.tmp/read_foreign.py', [`print(open("${fx.sibling}/README.md").read())`]);
     const res = runGuard('python3 .tmp/read_foreign.py', fx);
-    expect(res.exit).toBe(0);
+    expect(res.exit).toBe(2);
+    expect(res.stderr).toContain('mutation-interpreter-effects');
   });
 
-  test('a python heredoc writing /tmp is permitted', () => {
+  test('Python heredoc effects remain unresolved without a bounded profile', () => {
     const cmd = [
       "python3 <<'EOF'",
       'from pathlib import Path',
@@ -221,19 +306,32 @@ describe('bash-write-guard: what the interpreter scan must keep legal', () => {
       'EOF',
     ].join('\n');
     const res = runGuard(cmd, fx);
-    expect(res.exit).toBe(0);
+    expect(res.exit).toBe(2);
+    expect(res.stderr).toContain('mutation-interpreter-effects');
   });
 
-  test('a python -c with a slash-bearing string but no write verb is permitted', () => {
+  test('absence of Python write verbs does not grant permission', () => {
     const res = runGuard('python3 -c "print(\'hello/world\')"', fx);
+    expect(res.exit).toBe(2);
+    expect(res.stderr).toContain('mutation-interpreter-effects');
+  });
+
+  test('unknown file-entry execution uses the existing human ask channel when available', () => {
+    writeScript(fx, '.tmp/readonly.mjs', ["console.log('apparent readonly source')"]);
+    const res = runGuard('node .tmp/readonly.mjs', fx, 'default');
     expect(res.exit).toBe(0);
+    const output = JSON.parse(res.stdout).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('ask');
+    expect(output.permissionDecisionReason).toContain('mutation-interpreter-effects');
   });
 
   test('`node` appearing inside a path is not an interpreter invocation', () => {
-    // ./node_modules/.bin/tsc must not be tokenized as the `node` command and
-    // drag the whole command text through the node write-verb scan.
+    // This arbitrary executable stays unresolved under the command profile;
+    // the path spelling must not manufacture a Node invocation or effects.
     const res = runGuard('./node_modules/.bin/tsc --noEmit', fx);
-    expect(res.exit).toBe(0);
+    expect(res.exit).toBe(2);
+    expect(res.stderr).toContain('executable-path');
+    expect(res.stderr).not.toContain('mutation-interpreter-effects');
   });
 });
 

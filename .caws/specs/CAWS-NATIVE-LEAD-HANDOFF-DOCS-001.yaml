@@ -1,0 +1,75 @@
+id: CAWS-NATIVE-LEAD-HANDOFF-DOCS-001
+title: 'Land supported operating guidance and document lead transfer'
+mode: doc
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed supported operating guidance and canonical evidence/ownership handoff; exact target docs verified, acceptance records inspected and continuing work acquired by the incoming lead. No parent completion or machine cutover inferred.'
+created_at: '2026-10-25T00:53:05.111Z'
+updated_at: '2026-10-25T01:22:42.398Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Source-grounded merge and rollback guidance and modernization handoff'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/guides/worktree-isolation.md'
+    - 'docs/guides/hook-packs.md'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+  support:
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/scripts/generate-runtime-assets.mjs
+    - packages/caws-cli/src/application/agent-stop.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/src/runtime/guard-config-entry.ts
+    - packages/caws-cli/src/runtime/guard-config-loader.ts
+    - packages/caws-cli/src/runtime/guard-config.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/transcripts/renderer-calendar.ts
+    - packages/caws-cli/templates/hook-packs/shared/advisory_truncate.cjs
+    - packages/caws-cli/templates/hook-packs/shared/lib/guard-config.cjs
+    - packages/caws-cli/templates/hook-packs/shared/lib/guard-config.py
+    - packages/caws-cli/templates/hook-packs/shared/lib/guard-config.sh
+    - packages/caws-cli/tests/adapter/system-runtime.test.js
+    - packages/caws-cli/tests/application/agent-stop.test.js
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
+    - packages/caws-cli/tests/hooks/bats/guard-config.bats
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/runtime/generated-runtime-assets.test.js
+    - packages/caws-cli/tests/runtime/guard-config-integration.test.js
+    - packages/caws-cli/tests/runtime/guard-config-loader.test.js
+    - packages/caws-cli/tests/transcripts/renderer-calendar-mutation.test.js
+    - packages/caws-cli/tests/transcripts/renderer-calendar.test.ts
+    - packages/caws-native/src/renderer_calendar.rs
+    - packages/caws-native/tests/renderer_calendar.rs
+invariants:
+  - 'Document actual main behavior; do not claim the absent shell-analysis backend or full native cutover.'
+acceptance:
+  - id: A1
+    given: 'main worktree merge and retained-entry rollback implementation'
+    when: 'the ready documentation subset is reconciled'
+    then: 'application preview closure teardown partial failure and retained-entry custody descriptions match inspected executable source'
+  - id: A2
+    given: 'source landings and accepted incoming lead'
+    when: 'handoff documentation and bindings are reconciled'
+    then: 'canonical tracker records candidate and target identities concrete evidence limits all remaining owned obligations and audited recipient ownership without declaring parent completion'
+observability:
+  - 'Retain exact source coordinates validation command outputs candidate identity and handoff acceptance.'
+rollback:
+  - 'Revert only the bounded documentation changes through governed history.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Exactly two operating guides imported from older lane with unsupported shell-analysis opening claims excluded. Direct source grounding: worktree.ts815/893 dry-run/apply mutual exclusion and compose; worktrees-writer.ts2730 noClose,2955teardown,2971partialfailure,2998safe branchdelete; machine-adapters.ts157-239 retained identity/recognized mode repair and entrybeforepointer; machine-runtime-state.ts186-211 manifest metadata/hash/mode; system-runtime.ts221-222 observation refusal. Independent read-only committed review inspected same coordinates; diff --check0 and all5policygates pass. Documentation only, no new runtime test or native-adoption claim; commitverify checks existence."
+    recorded_at: "2026-10-25T01:19:00.201Z"
+    commit_sha: "052e2920"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Exact3reviewed documentation blobs03a22b95 equal main after governed merge;895344cb ancestry0 and imported26sourcepaths equalpreexistingmain. E388-E390 retain sharedCLI94bd30b2,calendar416c82f6,R06d1f0871b identities,actual artifacts and explicitlimits; failedtypedchild e51d8e6a A1fail retained. Incoming01a17052 accepted everyunfinishedobligation and live registry readbackconfirmsfivecontinuinglanes underthatowner; claim_taken_over13404-13408 preservepriorowner; bridge13409 namesreceiverafteroutgoingrelease13403. No newsource/runtime acceptance borrowedfromdocs, no fullcutoverclaim. Fullguide requiresforeignshell-analysis; installedGit,admissionidentity,combinedpackage,replay,rollback,residency,hostedtestprep remainowed. Independent committeddocreviewgroundedoperatingcontractsandE390 wording; all5gatespass,docdiffcheck0. --verify commitexistenceonly."
+    recorded_at: "2026-10-25T01:22:41.081Z"
+    commit_sha: "895344cb"

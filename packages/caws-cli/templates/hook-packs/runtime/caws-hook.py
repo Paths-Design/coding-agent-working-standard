@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Machine-level CAWS adapter entry point. No project authority is stored here."""
 import hashlib
+import errno
+import stat
 import json
 import os
 from pathlib import Path
@@ -542,7 +544,98 @@ def describe_selection(identity, canonical, runtime, home, surface, event, hooks
                        'Reprieves and runtime disable lists can skip selected handlers.']}
 
 
-def supplied_context(payload):
+class ExecutionWorkdirError(ValueError):
+    """Malformed present command context is a refusal on both tool events."""
+
+
+def entry_requires_resolution(path):
+    """Only ENOENT proves absence; dangling links and metadata errors remain uncertain."""
+    try:
+        Path(path).lstat()
+        return True
+    except OSError as error:
+        return error.errno != errno.ENOENT
+
+
+def governance_requires_resolution(directory):
+    """A normal cache/runtime directory without project artifacts does not opt in."""
+    try:
+        if not stat.S_ISDIR(Path(directory).lstat().st_mode):
+            return True
+    except OSError as error:
+        return error.errno != errno.ENOENT
+    return any(entry_requires_resolution(Path(directory) / name)
+               for name in ('policy.yaml', 'specs', 'working-spec.yaml'))
+
+
+def project_requires_resolved_authority(candidate, home, resolved_canonical=False):
+    """Protect present/uncertain state; successful Git alone never grants CAWS adoption."""
+    try:
+        probe = Path(candidate).resolve(strict=True)
+    except (OSError, ValueError, RuntimeError):
+        return True
+    try:
+        projects = confined(home, 'state/projects')
+    except (ValueError, OSError):
+        return True
+    def adopted(root):
+        return entry_requires_resolution(projects / (digest(str(root).encode()) + '.json'))
+    if resolved_canonical and Path(candidate) != probe and adopted(Path(candidate)):
+        return True
+    roots = [probe] if resolved_canonical else [probe, *probe.parents]
+    return any((not resolved_canonical and entry_requires_resolution(p / '.git')) or
+               governance_requires_resolution(p / '.caws') or adopted(p) for p in roots)
+
+
+def require_project_governance_paths(canonical):
+    """Validate paths without promoting cache/legacy suppression to active policy."""
+    directory = confined(canonical, '.caws')
+    try:
+        if not stat.S_ISDIR(directory.lstat().st_mode):
+            raise ValueError('Project governance path must be a normal directory')
+    except OSError as error:
+        if error.errno == errno.ENOENT:
+            return
+        raise
+    for artifact in ('policy.yaml', 'specs', 'working-spec.yaml'):
+        target = confined(canonical, '.caws/' + artifact)
+        try:
+            target.lstat()
+        except OSError as error:
+            if error.errno != errno.ENOENT:
+                raise
+
+
+def execution_workdir(payload, event):
+    """Only the additive host field resolves command context; aliases are consistency checks."""
+    if payload.get('tool_name') != 'Bash' or event not in {'pre_tool_use', 'post_tool_use'}:
+        return {'status': 'not_applicable'}
+    if 'execution_workdir' not in payload:
+        return {'status': 'unavailable'}
+    def physical(value, field):
+        if (not isinstance(value, str) or not value or '\0' in value or
+                not Path(value).is_absolute()):
+            raise ExecutionWorkdirError(field + ' must be an absolute native directory')
+        try:
+            value.encode('utf-8')
+            path = Path(value).resolve(strict=True)
+            if not path.is_dir():
+                raise ExecutionWorkdirError('not a directory')
+        except (OSError, ValueError, UnicodeError):
+            raise ExecutionWorkdirError(field + ' must name an existing directory') from None
+        return str(path)
+    path = physical(payload['execution_workdir'], 'execution_workdir')
+    if payload['execution_workdir'] != path:
+        raise ExecutionWorkdirError('execution_workdir must already be a physical directory path')
+    tool = payload.get('tool_input')
+    tool = tool if isinstance(tool, dict) else {}
+    for alias in ('workdir', 'cwd'):
+        if alias in tool and physical(tool[alias], 'tool_input.' + alias) != path:
+            raise ExecutionWorkdirError('tool_input.' + alias + ' disagrees with execution_workdir')
+    return {'status': 'resolved', 'path': path}
+
+
+def supplied_context(payload, event):
     """Transport observations only; session coordinates are not execution authority."""
     def fields(value):
         return sorted(key[:128] for key in value)[:128] if isinstance(value, dict) else []
@@ -562,6 +655,7 @@ def supplied_context(payload):
             'tool_use_id': scalar(payload.get('tool_use_id')),
             'top_level_fields': fields(payload), 'tool_input_fields': fields(tool),
             'explicit_tool_context': explicit,
+            'execution_workdir_resolution': execution_workdir(payload, event),
             'execution_workdir': {key: explicit[key] for key in ('cwd', 'workdir') if key in explicit}
                                 or {'status': 'unavailable'}}
 
@@ -583,7 +677,7 @@ def append_invocation(path, metadata, stage, **values):
         print('[caws invocation record] incomplete: ' + str(error), file=sys.stderr)
 
 
-def start_invocation(canonical, selection, invocation_id, raw, payload, root):
+def start_invocation(canonical, selection, invocation_id, raw, payload, dispatch_cwd):
     metadata = {'schema': 'caws.hook_invocation.v1', 'invocation_id': invocation_id,
                 'surface': selection['surface'], 'event': selection['event'],
                 'runtime_digest': selection['runtime_digest'], 'input_sha256': digest(raw),
@@ -601,7 +695,7 @@ def start_invocation(canonical, selection, invocation_id, raw, payload, root):
         print('[caws invocation record] incomplete: ' + str(error), file=sys.stderr)
         return None, metadata
     append_invocation(target, metadata, 'invocation_started',
-                      supplied_context=supplied_context(payload), dispatch_cwd=str(root),
+                      supplied_context=supplied_context(payload, selection['event']), dispatch_cwd=str(dispatch_cwd),
                       selected_handlers=selection['handlers'])
     return target, metadata
 
@@ -690,23 +784,66 @@ def main():
     payload = json.loads(raw or b'{}')
     if not isinstance(payload, dict):
         raise ValueError('Hook input must be an object')
+    execution = execution_workdir(payload, event)
     candidate = payload.get('cwd') or os.environ.get('CAWS_PROJECT_DIR') or os.getcwd()
+    session_resolved = True
     try:
         root = Path(git(candidate, 'rev-parse', '--show-toplevel'))
     except (ValueError, OSError) as error:
-        # Without a resolvable Git root there is no canonical project authority
-        # to enforce, so the adapter must not block the surface it observes.
-        # A directory with no .git/.caws ancestor is quietly inactive; one with
-        # a broken .git or a CAWS ancestor fails open loudly so the operator
-        # can see governance was not applied.
-        probe = Path(candidate).absolute()
-        if any((p / '.git').exists() or (p / '.caws').exists() for p in [probe, *probe.parents]):
-            print(f'[caws machine adapter] project could not be resolved ({error}); '
-                  f'continuing without CAWS governance in {probe}', file=sys.stderr)
-        return inactive('outside a resolvable Git project')
-    common = Path(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
+        if execution['status'] == 'resolved' and project_requires_resolved_authority(candidate, home):
+            raise ExecutionWorkdirError('Host execution context requires a resolvable session project') from None
+        if execution['status'] == 'resolved' and Path(candidate).resolve() != Path(execution['path']):
+            session_resolved = False
+            try:
+                root = Path(git(execution['path'], 'rev-parse', '--show-toplevel'))
+            except (ValueError, OSError):
+                if project_requires_resolved_authority(execution['path'], home):
+                    raise ExecutionWorkdirError('Host execution directory cannot deactivate session governance') from None
+                return inactive('outside a resolvable Git project')
+        else:
+            probe = Path(candidate).absolute()
+            if project_requires_resolved_authority(probe, home):
+                print(f'[caws machine adapter] project could not be resolved ({error}); '
+                      f'continuing without CAWS governance in {probe}', file=sys.stderr)
+            return inactive('outside a resolvable Git project')
+    try:
+        common = Path(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
+    except (ValueError, OSError):
+        if execution['status'] == 'resolved':
+            raise ExecutionWorkdirError('Host execution directory could not be resolved') from None
+        raise
     canonical = common.parent
-    known_project = confined(home, 'state/projects/' + digest(str(canonical).encode()) + '.json').exists()
+    if execution['status'] == 'resolved' and session_resolved:
+        anchor = canonical
+        anchor_governed = project_requires_resolved_authority(anchor, home, resolved_canonical=True)
+        try:
+            root = Path(git(execution['path'], 'rev-parse', '--show-toplevel'))
+            common = Path(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
+        except (ValueError, OSError):
+            if anchor_governed or project_requires_resolved_authority(execution['path'], home):
+                raise ExecutionWorkdirError('Host execution directory cannot deactivate session governance') from None
+            return inactive('outside a resolvable Git project')
+        canonical = common.parent
+        if anchor_governed and canonical != anchor:
+            raise ExecutionWorkdirError('Host execution directory belongs to a foreign canonical project')
+    try:
+        if execution['status'] == 'resolved':
+            require_project_governance_paths(canonical)
+        project_record = confined(home, 'state/projects/' + digest(str(canonical).encode()) + '.json')
+        if execution['status'] == 'resolved':
+            try:
+                project_record.lstat()
+                known_project = True
+            except OSError as error:
+                if error.errno != errno.ENOENT:
+                    raise
+                known_project = False
+        else:
+            known_project = project_record.exists()
+    except (ValueError, OSError) as error:
+        if execution['status'] == 'resolved':
+            raise ExecutionWorkdirError('Host execution governance paths are unresolved: ' + str(error)) from None
+        raise
     if not (canonical / '.caws').exists():
         if known_project:
             raise ValueError('Adopted project governance is missing')
@@ -767,7 +904,9 @@ def main():
                CAWS_MACHINE_HANDLERS=json.dumps(overrides),
                CAWS_SYSTEM_RUNTIME='1' if system is not None else '0',
                CAWS_ADAPTER_RUNTIME_DIGEST=identity,
-               CAWS_AGENT_SURFACE=surface)
+               CAWS_AGENT_SURFACE=surface,
+               HOOK_EXECUTION_WORKDIR_STATUS=execution['status'],
+               HOOK_EXECUTION_WORKDIR=execution.get('path', ''))
     if system is not None:
         project_key = digest(str(canonical).encode())
         env['CAWS_MACHINE_LOG_DIR'] = str(confined(home, f'state/projects/{project_key}/logs/{surface}'))
@@ -786,9 +925,10 @@ def main():
     if describe:
         print(json.dumps(selection, indent=2, sort_keys=True))
         return 0
+    dispatch_cwd = execution['path'] if execution['status'] == 'resolved' else root
     invocation_id = str(uuid.uuid4())
     invocation_file, invocation_metadata = start_invocation(
-        canonical, selection, invocation_id, raw, payload, root)
+        canonical, selection, invocation_id, raw, payload, dispatch_cwd)
     # Replace inherited diagnostics; they never select policy or grant authority.
     env['CAWS_HOOK_INVOCATION_FILE'] = str(invocation_file) if invocation_file else ''
     env['CAWS_HOOK_INVOCATION_METADATA'] = json.dumps(invocation_metadata)
@@ -814,7 +954,7 @@ def main():
     try:
         append_invocation(invocation_file, invocation_metadata, 'dispatch_started')
         result = subprocess.run(['/bin/bash', str(runtime / 'dispatch.sh'), surface, event, str(hooks), *handlers],
-                                cwd=root, env=env, input=json.dumps(payload).encode(),
+                                cwd=dispatch_cwd, env=env, input=json.dumps(payload).encode(),
                                 stdout=subprocess.PIPE, check=False)
         append_invocation(invocation_file, invocation_metadata, 'dispatch_completed',
                           exit_code=result.returncode)
@@ -880,6 +1020,11 @@ def project_configuration(canonical, surface, event):
 if __name__ == '__main__':
     try:
         sys.exit(main())
+    except ExecutionWorkdirError as error:
+        message = 'CAWS machine adapter: ' + str(error)
+        print('[caws machine adapter] ' + message, file=sys.stderr)
+        print(json.dumps({'decision': 'block', 'reason': message}))
+        sys.exit(2)
     except InvocationError as error:
         print('[caws machine adapter] ' + str(error), file=sys.stderr)
         sys.exit(2)

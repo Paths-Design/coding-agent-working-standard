@@ -1,0 +1,69 @@
+id: CAWS-ORIGINAL-STOP-CUSTODY-LANDING-001
+title: 'Land original Stop custody and native peer prerequisites'
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded original project custodian, Stop capture join and native peer prerequisites landed with three scoped criteria verified and recorded. Parent cutover and installed runtime unchanged. Root retains production registration, ordinary publication/read/release and residency in CAWS-NATIVE-SESSION-PUBLICATION-001.'
+created_at: '2026-10-24T04:08:08.708Z'
+updated_at: '2026-10-24T04:15:29.142Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native original project custody and Stop prefix capture'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/internal/caws-runtime-modernization.md'
+    - 'packages/caws-native/src/context_git.rs'
+    - 'packages/caws-native/src/context_git/original_project.rs'
+    - 'packages/caws-native/src/invocation_project.rs'
+    - 'packages/caws-native/src/lib.rs'
+    - 'packages/caws-native/src/render_owner.rs'
+    - 'packages/caws-native/src/render_owner/native_peer.rs'
+    - 'packages/caws-native/src/session_cache_wire.rs'
+    - 'packages/caws-native/src/session_cache_wire/tests.rs'
+    - 'packages/caws-native/tests/native_peer.rs'
+    - 'packages/caws-native/tests/original_project_custody.rs'
+    - 'packages/caws-native/tests/original_stop_capture.rs'
+  out: []
+invariants:
+  - 'The source landing does not activate production Stop or change the selected machine runtime; parent cutover acceptance remains open'
+  - 'Pending project capture remains failure while cleanup retains the actual custodian and Git process ownership'
+acceptance:
+  - id: A1
+    given: 'the committed original project custodian and Stop capture join'
+    when: 'actual native and Git scenarios plus hostile frontend and pipe-holder cases execute'
+    then: 'original context and deadline reach prefix files and uncertain failure retains cleanup ownership without becoming success'
+  - id: A2
+    given: 'native peer admission in an exact synthetic generation'
+    when: 'actual native and forged Node processes and replacement or exit controls execute'
+    then: 'only the admitted native identity succeeds and meaningful negative controls fail at behavioral assertions'
+  - id: A3
+    given: 'the reviewed bounded source candidate'
+    when: 'the governed landing completes'
+    then: 'main contains exact candidate package bytes with scoped evidence and the machine runtime and parent acceptance remain unchanged'
+observability:
+  - 'Retained raw commands, exact source hashes, actual process births, pipe EOF/reap, prefix files and mutation failures'
+rollback:
+  - 'Revert the bounded source through normal governed history; preserve selected runtime and failed artifacts'
+non_functional: {}
+contracts:
+  - name: 'original-stop-custody-source'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "E328-E329: inspected runtime03 frontend TERM/KILL and held-pipe receipts; integration01 actual /usr/bin/git output, original deadline/prefix bytes, pending retry/Drop retaining custody with no session effects; eight tests exit0 and typed-cause mutant exit101. 104 integration source pins match candidate and landing. Runtime03 production bytes equal candidate; later test-only receiver timeout removed as documented. No installed Stop or kernel-stall claim. Raw artifacts: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration"
+    recorded_at: "2026-10-24T04:14:42.421Z"
+    commit_sha: "5afe64be54e782500abfd6832a1ddcf83364791a"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "E327: inspected native-peer-candidate-05 five actual process cases exit0; peer-observation.json admits exact native host and rejects forged same-UID Node (zero callbacks), exited peer and same-byte member replacement. Executable/member/process mutants exit101 at behavioral assertions, source restored; combined 104 pins match. Synthetic generation only, no request authentication or production activation claim. Raw artifacts: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration"
+    recorded_at: "2026-10-24T04:14:43.539Z"
+    commit_sha: "5afe64be54e782500abfd6832a1ddcf83364791a"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Governed merge a1c175707cb779fd7eee14c5cf3d8e2ceb7e8344 includes reviewed candidate 5afe64be54e782500abfd6832a1ddcf83364791a; git ancestor and package diff checks exit0 with empty diff. All four combined run source inventories (104 each) match. Machine adapter-runtime bytes equal retained before snapshot; parent CAWS-NATIVE-RUNTIME-001 spec diff empty. Doctor exit0 0E/4W/5I and five gates pass over 12 changed paths; independent committed-candidate peer feedback grounded against raw artifacts and source. /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/original-stop-custody-landing-01/landed-state.json. Source-only landing; no installed adoption, production Stop or parent acceptance."
+    recorded_at: "2026-10-24T04:15:27.071Z"
+    commit_sha: a1c175707cb779fd7eee14c5cf3d8e2ceb7e8344

@@ -1,3 +1,4 @@
+import { liveSelectionReadIo, type SelectionReadIo } from './selection-read-io';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { assertMachinePath } from './machine-paths';
@@ -6,21 +7,29 @@ export interface SystemSurfaceSettings {
   version: 1;
   enabled: boolean;
   native_config_target?: string;
+  transport?: 'project-native-stop';
 }
 
 export function readSystemSurfaceSettings(
   home: string,
-  surface: string
+  surface: string,
+  io: SelectionReadIo = liveSelectionReadIo
 ): SystemSurfaceSettings | undefined {
   const file = path.join(home, 'surfaces', surface, 'settings.json');
-  assertMachinePath(home, file);
-  if (!fs.existsSync(file)) return undefined;
-  const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assertMachinePath(home, file, io);
+  if (!io.exists(file)) return undefined;
+  const value = JSON.parse(io.readFile(file).toString('utf8'));
   if (
     !value ||
     value.version !== 1 ||
     typeof value.enabled !== 'boolean' ||
-    Object.keys(value).some((k) => !['version', 'enabled', 'native_config_target'].includes(k)) ||
+    Object.keys(value).some(
+      (k) => !['version', 'enabled', 'native_config_target', 'transport'].includes(k)
+    ) ||
+    (value.transport !== undefined &&
+      (surface !== 'opencode' ||
+        value.transport !== 'project-native-stop' ||
+        value.native_config_target !== undefined)) ||
     (value.native_config_target !== undefined &&
       (typeof value.native_config_target !== 'string' ||
         !path.isAbsolute(value.native_config_target)))

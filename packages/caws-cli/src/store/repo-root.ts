@@ -41,6 +41,13 @@ export interface RepoRoot {
   readonly cawsDir: string;
 }
 
+/** The shared mapping from Git's absolute common directory to CAWS authority. */
+export function repoRootFromGitCommonDir(commonDir: string): RepoRoot {
+  if (!path.isAbsolute(commonDir)) throw new TypeError('Git common directory must be absolute.');
+  const repoRoot = path.dirname(commonDir);
+  return { repoRoot, cawsDir: path.join(repoRoot, '.caws') };
+}
+
 /**
  * Pluggable git invoker. Tests stub this; production uses execFileSync.
  *
@@ -299,8 +306,7 @@ export function resolveRepoRoot(
 
   // commonDir is the path to <main>/.git (or a separate gitdir). The
   // repository root is its parent. We do NOT use --show-toplevel.
-  const repoRoot = path.dirname(commonDir);
-  const cawsDir = path.join(repoRoot, '.caws');
+  const { repoRoot, cawsDir } = repoRootFromGitCommonDir(commonDir);
 
   if (options.requireCawsDir && !fs.existsSync(cawsDir)) {
     return err(

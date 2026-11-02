@@ -74,7 +74,10 @@ import type { HookPackV1 } from './types';
 // adopts per-session advisory suppression keyed on exact text, retaining deny
 // precedence and its exit-1 promotion.
 // Hook port qualification: shared execution records and session-cache custody.
-export const CODEX_PACK_VERSION = 26;
+// Version 27 (CAWS-NATIVE-EXECUTION-WORKDIR-001): the parser validates host
+// execution_workdir separately from session cwd and exports its resolved,
+// unavailable or not_applicable status for directory-sensitive guards.
+export const CODEX_PACK_VERSION = 27;
 
 export const CODEX_PACK: HookPackV1 = {
   id: 'codex',

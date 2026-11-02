@@ -1,0 +1,58 @@
+id: CAWS-NATIVE-REOPEN-LANDING-001
+title: 'Land refusal reopen test and retained reader evidence'
+mode: chore
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Exact reviewed test and E377-E380 ledger delivered to local main, focused and six-case refusal checks inspected, actual reader startup evidence retained. Existing lanes and selected runtime preserved. Full authenticated replay, usable rollback, load and cutover remain with active parent/publication work.'
+created_at: '2026-10-24T20:08:25.487Z'
+updated_at: '2026-10-24T20:12:18.878Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native replay regression and migration evidence'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/render_owner/store/tests/refusal.rs'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Preserve terminal custody and all existing worktree ownership; bounded evidence does not close full runtime parity'
+acceptance:
+  - id: A1
+    given: 'reviewed publication candidate'
+    when: 'the landing is composed'
+    then: 'both source and tracker blobs match the candidate and focused refusal checks retain exact terminal and capacity evidence'
+  - id: A2
+    given: 'existing parent and foreign lanes and selected runtime'
+    when: 'the bounded lane lands on main'
+    then: 'main contains the exact blobs while existing bindings branches and machine selection remain unchanged'
+  - id: A3
+    given: 'the committed candidate'
+    when: 'scoped gates doctor and independent feedback are inspected'
+    then: 'findings are grounded and restart rollback and cutover nonclaims remain explicit'
+observability:
+  - 'Exact commit blobs raw Cargo checks and actual retained custody reader artifacts'
+rollback:
+  - 'Use normal revert for this test and documentation slice; do not alter runtime custody or machine selection'
+non_functional: {}
+contracts:
+  - name: 'refusal-reopen'
+    type: contract-test
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Composition f9fdb006 matches86b5f77f across all packages/docs and exact two changed blobs; root rehashed all115 native source inputs against refusal-owner-reopen-family-01. Focused release test exits0 selects1, exact same/changed-generation refusal, old custody/record/registry Weak owners vanish, project capacity0; fresh ID passes replay gate then separately refuses. Family exits0 executes6 including persistence failure, partial reservation and inode replacement controls. Exact retained terminal UTF8 body and SHA5186d5f2 independently verified in publication-integration/refusal-owner-reopen-01/native-registration-refusal-owner-reopen.json. Raw command exits and source/tool pins retained in execution.json; composition.json under reopen-source-landing-01. Test-only synthetic transport; no installed authenticated replay claim."
+    recorded_at: "2026-10-24T20:10:59.454Z"
+    commit_sha: f9fdb00684c7c650314f87dd638d4549308da031
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Five scoped gates pass over the two landing paths; doctor exits0 with0E4W5I. Independent read-only Sol review inspected committed86b5f77f and raw focused/family/actual-reader artifacts. Root grounds reviewer coordinates: Fixture::actor reacquires existing custody/journal, Operation is plain data, acquire_publication_job1692 native route and job.complete join are bypassed by direct test. Therefore authenticated installed-process replay/completion delivery remain explicitly unverified, with no claim of usable old-reader rollback or cutover. All packages/docs at f9fdb006 equal reviewed86b5f77f; E379/E380 retain exact outcomes and scope. Feedback is not acceptance proof; actual source and raw logs support only bounded claims."
+    recorded_at: "2026-10-24T20:11:22.505Z"
+    commit_sha: f9fdb00684c7c650314f87dd638d4549308da031
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Normal governed merge6e4de9c3 delivers both exact candidate86b5f77f blobs to local main; all packages/docs equal candidate. Root postmerge.json in publication-integration/reopen-source-landing-01 verifies all11 preexisting registry entries and every existing nonmain branch tip unchanged, disposable landing lane removed, foreign canonical untracked archive preserved. Actual selected runtime pointer SHA f8a3627299bc8c3d325eb42472f889b43e7c26c8a4e4c02996091867cb9f4f7e unchanged, stilllegacy408. No parent or publication lane closure; no remote push, package installation or machine adoption."
+    recorded_at: "2026-10-24T20:12:17.639Z"
+    commit_sha: "6e4de9c3b255a9f33d348a7a3819fd933634e87c"

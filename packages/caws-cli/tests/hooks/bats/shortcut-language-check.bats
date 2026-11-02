@@ -68,12 +68,18 @@ _invoke_shortcut() {
 # scan <Write|Edit> <file_path> <content> — sets bats' status/output and
 # STRIKES (the strike file this case would have written).
 scan() {
-  local tool="$1" fp="$2" content="$3" home field=content envelope
+  local tool="$1" fp="$2" content="$3" home field=content envelope event=PreToolUse
   home="$(mktemp -d "$BATS_TEST_TMPDIR/home.XXXXXX")"
-  [[ "$tool" == Edit ]] && field=new_string
+  [[ "$fp" == /repo/* ]] && fp="$CAWS_TEST_REPO/cases/$BATS_TEST_NUMBER${fp#/repo}"
+  mkdir -p "$(dirname "$fp")"
+  if [[ "$tool" == Edit ]]; then
+    field=new_string
+    event=PostToolUse
+    printf '%s' "$content" > "$fp"
+  fi
   envelope=$(jq -nc --arg t "$tool" --arg fp "$fp" --arg f "$field" --arg c "$content" \
-    --arg s "$SESSION" --arg cwd "$CAWS_TEST_REPO" \
-    '{session_id:$s, cwd:$cwd, tool_name:$t, tool_input:{file_path:$fp, ($f):$c}}')
+    --arg s "$SESSION" --arg cwd "$CAWS_TEST_REPO" --arg event "$event" \
+    '{hook_event_name:$event, session_id:$s, cwd:$cwd, tool_name:$t, tool_input:({file_path:$fp, ($f):$c} + (if $t == "Edit" then {old_string:""} else {} end))}')
   run _invoke_shortcut "$home" <<<"$envelope"
   STRIKES="$home/.caws/state/sessions/$SESSION/strikes.json"
 }

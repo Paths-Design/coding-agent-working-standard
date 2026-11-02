@@ -4,11 +4,17 @@ authority: reference
 status: active
 title: CAWS shared runtime setup and hook maintenance
 owner: CAWS maintainers
-updated: 2026-10-05
+updated: 2026-10-26
 audience: consumer
 ---
 
 # Hook packs: the edit-time advisory quality plane
+
+The optional worktree pin guard uses
+[bounded command analysis](command-analysis.md) to inspect assignments, finite
+loops, argument roles and Git routing without executing submitted source. Its
+structured CLI distinguishes policy violations from unresolved syntax or values;
+it remains opt-in in the shared dispatcher.
 
 CAWS distributes guards, dispatchers and session renderers through a user-level
 runtime in `~/.caws`. Configure the native harness once and migrate existing
@@ -16,6 +22,46 @@ project registrations once; subsequent runtime updates serve every adopted
 project. See [Machine adapter installation](#machine-adapter-installation).
 Legacy project packs remain supported during migration. The first part of this
 guide documents the **advisory quality plane** added by `QG-HOOKS-EXTRACT-001`.
+
+The runtime also carries mandatory authority guards. In shared PreToolUse
+dispatch, `bash-write-guard.sh` requires the bounded mutation backend and fails
+closed without a legacy fallback; `worktree-pin-guard.sh` is opt-in. These are
+separate from the four advisory quality hooks below. See
+[bounded command analysis](command-analysis.md) for execution context, effect
+coverage and verification.
+
+Copy guards share the bounded backend's required `cp`/`mv` operand roles.
+Single-link regular-file destinations, destination-directory children and
+move-source deletions receive explicit path checks. Effective final symlink
+destinations refuse with exit 2 even when approval is available, because a force
+copy can replace the link entry. Directory-parent aliases with regular children
+remain supported; known referent violations keep their specific refusal. A
+source path alone cannot classify an external artifact destination as a
+canonical write. Unknown options, incomplete roles and unmodeled filesystem
+cases refuse; the
+[command analysis guide](command-analysis.md#active-write-guard-integration)
+defines this closed profile and its filesystem snapshot limits.
+
+Removal checks distinguish a final link entry from its referent. The modeled
+`rm` profile checks an owned deletion entry without borrowing the referent's
+ownership; unsupported removal options remain held. Bash and Write/Edit share
+registered physical-path ownership checks, including migrated worktree
+locations. Metadata and documentation allowlists cannot override foreign payload
+ownership or erase unresolved payload identity. A failed role channel cannot
+become an empty allow. Malformed, unreadable or non-regular existing registry
+entries remain held.
+
+Ordinary runtime installation changes the shared handlers consumed by enabled
+registrations. The bounded analyzer and private package observations do not
+qualify native adoption. The known reduced Codex producer is held because its
+command projection cannot bind the complete final command, shell and startup
+context. A validated host execution directory establishes only that coordinate.
+The analyzer bridge's inherited `CAWS_BIN` or `PATH` selection also requires
+generation-bound Node and CLI identity through launch. The guide's owned
+execution boundary is proposed. Retain the deployed runtime until complete
+final-launch and rewrite custody, useful benign admission, an isolated native
+canary and rollback are demonstrated. A protective refusal is not evidence of a
+qualified rollout.
 
 These four hooks are _advisory_ edit-time signals. They implement the
 load-bearing edit-time quality checks (`god_object`, `todo_detection`,
@@ -365,6 +411,22 @@ rollback. Never edit snapshot bytes. An interrupted install leaves
 `state/system-configuration.lock` plus exact before/after backups. Inspect the
 owning process and partial bytes before removing a stale lock and retrying.
 Rollback refuses to overwrite a concurrent edit.
+
+Rollback verifies the selected target generation before changing the pointer. An
+existing native registration can continue through a verified legacy generation
+when its stable entry matches a retained manifest-bound entry identity. This
+compatibility check verifies manifest integrity, supported hashed metadata and
+the retained launcher's regular-file, single-link, byte and executable-mode
+identity under machine-home custody. It does not qualify unused native image
+payloads or authenticate publisher history. Fresh native opt-in, native
+selection and rollback into a native generation require full image verification.
+
+Observation requires the matching stable entry to have mode `0755` and never
+repairs it. Explicit installation or rollback can restore a missing stable entry
+from validated retained bytes or repair the mode of recognized bytes; unknown
+bytes, symbolic links and multiple links refuse before pointer publication.
+Native dispatch failures never trigger legacy fallback. Filesystem checks and
+fixture tests do not establish native harness execution or adoption.
 
 ## Human latch recovery
 

@@ -1,0 +1,60 @@
+id: CAWS-NATIVE-PLAN-CACHE-LANDING-001
+title: 'Land immutable manifest planning and bounded evidence'
+mode: refactor
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bounded source delivery complete: exact4f3f6214 implementation/tracker landed through456e4de2 and f66e60b9; admitted provenance and retained checks inspected, A1-A3 recorded/read back. All11 existing lanes, parent/publication acceptance and machine pointer preserved. Full session-selection semantics, durable pre-reservation rejection/reclamation, resident fairness and actual local cutover remain active parent/publication obligations.'
+created_at: '2026-10-24T17:40:01.750Z'
+updated_at: '2026-10-24T17:46:53.695Z'
+created_by_session: '01a164bc-7a2b-75e2-be81-5da9d0a29252'
+blast_radius:
+  modules:
+    - 'Native immutable manifest directory planning and diagnostics'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/installed_generation.rs'
+    - 'packages/caws-native/src/native_generation.rs'
+    - 'packages/caws-native/src/main.rs'
+    - 'docs/internal/caws-runtime-modernization.md'
+  out: []
+invariants:
+  - 'Land exact reviewed source without changing parent acceptance, existing dependent lanes or selected runtime; retain all full hash and live inventory checks.'
+acceptance:
+  - id: A1
+    given: 'Reviewed candidate4f3f6214 and exact source checks'
+    when: 'Source lands through a separate main-based governed lane'
+    then: 'Main implementation and tracker equal the reviewed candidate with admitted path provenance.'
+  - id: A2
+    given: 'Candidate component tests and fresh10 artifacts'
+    when: 'Bounded source acceptance is adjudicated'
+    then: 'Retained hostile and mutation evidence supports immutable-plan reuse while SQL session oracle, pre-reservation cleanup, deadline reliability and cutover gaps remain explicit.'
+  - id: A3
+    given: 'Existing dependent lanes, parent specs and machine selection'
+    when: 'The landing completes'
+    then: 'Existing branch tips, physical lanes, parent acceptance and selected machine bytes remain unchanged.'
+observability:
+  - 'Exact Git blob equality, retained runtime/test receipts, registry/spec/pointer snapshots and matching acceptance events.'
+rollback:
+  - 'Use normal governed corrective or revert commit; do not rewrite history or alter machine selection.'
+non_functional: {}
+contracts:
+  - name: 'bounded-plan-cache-source'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Main f66e60b9 contains exact4f3f6214 through reviewed composition456e4de2. Four source/tracker blobs match; all contributed paths admitted by full worktree review; all five gates and merge dry-run/apply exit0. Direct inspected composition/postmerge receipts: /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/plan-cache-landing-01. --verify proves commit presence only; blob/provenance evidence inspected separately. Bounded source delivery only."
+    recorded_at: "2026-10-24T17:45:55.613Z"
+    commit_sha: f66e60b9496bc3a1b7f492cb531d753b0df3d216
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Exact2258630c source retained in landed implementation. Inspected actual-image03 three5973-hash/162328887-byte passes with zero reused planning, initial cancellation, changed manifest and empty-directory controls; empty-directory mutant Cargo101 with Ok versus expected refusal; restored bin187pass1ignored and lib443pass2ignored. E370 retains fresh10 native0/28737.663ms and actual marker/reader/consumed/cleanup, but identical-session oracle gap, pre-reservation capacity leak, deadline distribution and machine cutover remain open under parent/publication. Source review and artifacts support this bounded optimization, not full runtime acceptance."
+    recorded_at: "2026-10-24T17:46:04.977Z"
+    commit_sha: f66e60b9496bc3a1b7f492cb531d753b0df3d216
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Direct postmerge comparison exit0: all11 prior registry entries, physical lanes, branch tips and non-main dependent bases preserved; parent/publication spec bytes unchanged and active; selected adapter-runtime bytes unchanged at408c06a7. Receipt /Users/darianrosebrook/.codex/artifacts/01a164bc-7a2b-75e2-be81-5da9d0a29252/publication-integration/plan-cache-landing-01/postmerge.json. Only disposable landing lane/branch removed. --verify checks commit presence only; retained comparisons inspected directly."
+    recorded_at: "2026-10-24T17:46:14.168Z"
+    commit_sha: f66e60b9496bc3a1b7f492cb531d753b0df3d216

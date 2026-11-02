@@ -1,0 +1,33 @@
+id: CAWS-METADATA-AUTHORIZER-TEST-QUALIFICATION-001
+title: 'Qualify metadata registration and authorizer contract assertions'
+mode: fix
+lifecycle_state: active
+created_at: '2026-11-01T04:36:17.277Z'
+updated_at: '2026-11-01T04:37:28.563Z'
+created_by_session: '01a17941-cbb6-7b92-b5c7-0ba8f5f238d3'
+blast_radius:
+  modules:
+    - 'Command metadata consumers and exact execution authorizer grammar'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/shell/hooks-inspection-prefix.test.js'
+    - 'packages/caws-cli/tests/execution/authorizer.test.js'
+    - packages/caws-cli/tests/shell/caws-read-metadata.test.js
+  out: []
+invariants:
+  - 'Preserve the selected mutation surfaces and 80 percent per-file floors. Production behavior and enforcement do not change in this test slice; prove semantic admissions and refusals with independent data.'
+acceptance:
+  - id: A1
+    given: 'current metadata and authorizer requirements'
+    when: 'strengthened selected consumer tests execute'
+    then: 'registration/help completeness and exact grammar, environment, builtin and invocation controls are asserted without vacuous oracles'
+  - id: A2
+    given: 'exact current source, tests, build and dependency capture'
+    when: 'mutation qualification completes'
+    then: 'caws-read-metadata.ts and authorizer.ts each meet the unchanged 80 percent floor with retained actual reports'
+rollback:
+  - 'Correct an invalid oracle through an additive reviewed commit; preserve prior failing reports and history.'
+non_functional: {}
+contracts: []

@@ -35,29 +35,61 @@ rollback one-liner.
 
 Use `caws --help` for the current command tree. Common project operations:
 
-| Command                                                                                                                                                                                                                 | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `caws init`                                                                                                                                                                                                             | Initialize project governance. `init adapters` manages the shared runtime and native registration; `init migrate` converts reviewed legacy governance. Dedicated subcommand help describes each operation.                                                                                                                                                                                                                     |
-| `caws doctor`                                                                                                                                                                                                           | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure).                                                                                                                                                                                                                                                                                                                  |
-| `caws status`                                                                                                                                                                                                           | Read-only dashboard: project, current context, agents, claim, doctor findings. Never mutates `.caws/`.                                                                                                                                                                                                                                                                                                                         |
-| `caws scope show / check / contention`                                                                                                                                                                                  | Explain scope, enforce scope, or report cross-worktree path contention.                                                                                                                                                                                                                                                                                                                                                        |
-| `caws claim [--takeover] [--paths <path>] [--spec <id>] [--release]`                                                                                                                                                    | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover; `--paths` declares working-tree ownership metadata on the current lease; `--spec`/`--release` acquire/release a BRIDGE binding (session↔spec authority for non-worktree contexts).                                                                                                                                                |
-| `caws gates run --spec <id> [--context <cli\|commit\|ci>]`                                                                                                                                                              | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate.                                                                                                                                                                                                                                                                                                                                         |
-| `caws evidence record --type <kind> --spec <id> --data <json>`                                                                                                                                                          | Append a typed evidence event (`test` / `gate` / `human_decision`; AC closure uses `specs evidence`) to `.caws/events.jsonl`.                                                                                                                                                                                                                                                                                                  |
-| `caws events migrate / rotate / verify-archive`                                                                                                                                                                         | Maintenance for the hash-chained `.caws/events.jsonl` (v10→v11 migration, rotation, archive integrity).                                                                                                                                                                                                                                                                                                                        |
-| `caws waiver create / list / show / revoke`                                                                                                                                                                             | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. `create` requires `--title`, `--gate`, `--reason`, `--approved-by`, `--expires-at`.                                                                                                                                                                                                                                            |
-| `caws reprieve grant / show / revoke / list`                                                                                                                                                                            | Session-scoped guard reprieve: skip a PreToolUse guard for one session until expiry.                                                                                                                                                                                                                                                                                                                                           |
-| `caws specs create / list / show / recover / restore / retire-draft / prune-drafts / activate / deactivate / amend / amend-scope / evidence / close / reopen / archive / prune-archive / migrate / validate / relocate` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. `create` writes `lifecycle_state: draft` by default (`--activate` creates active directly); the normal path is `caws worktree create --spec <id>`, which activates on bind. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`.                                                                                              |
-| `caws worktree create / list / ensure / bind / destroy / untrack / merge / review / migrate-registry / repair-sparse / repair / prune / cleanup-plan`                                                                   | Manage CAWS worktrees bound to active specs (`ensure` is the idempotent create-or-admit form; `review` is a read-only pre-merge gate; `repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune`/`cleanup-plan` are dry-run-by-default cleanup planners). |
-| `caws agents register / heartbeat / stop / list / show / work-state / prune`                                                                                                                                            | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. `work-state` is a visibility-only annotation (`working`/`blocked_awaiting_human`/`review_ready`/`done`) a session sets on its own lease.                                                                                                                                                                                                 |
-| `caws message send / reply / poll / inbox / history / status / prune`                                                                                                                                                   | Directed inter-agent message channel over `.caws/messages.jsonl`. Not authority; verify claims before acting.                                                                                                                                                                                                                                                                                                                  |
-| `caws session prune / pickup`                                                                                                                                                                                           | `prune`: dry-run-default retention for `.caws/sessions/` turn logs. `pickup`: records a `manual_pickup` event when one session continues another's paused work. The full lifecycle (`start`/`checkpoint`/`end`) remains deferred.                                                                                                                                                                                              |
-| `caws working-tree check / ack`                                                                                                                                                                                         | Working-tree provenance advisory: `check` reports uncommitted overlap with another session's lease; `ack` acknowledges it.                                                                                                                                                                                                                                                                                                     |
-| `caws handoff export / import`                                                                                                                                                                                          | Portable handoff briefs for session-to-session continuity.                                                                                                                                                                                                                                                                                                                                                                     |
+| Command                                                                                                                                                                                                                              | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `caws init`                                                                                                                                                                                                                          | Initialize project governance. `init adapters` manages the shared runtime and native registration; `init migrate` converts reviewed legacy governance. Dedicated subcommand help describes each operation.                                                                                                                                                                                                                     |
+| `caws doctor`                                                                                                                                                                                                                        | Drift detection over `.caws/` state. Exits 0 (no error-severity findings or load errors; warnings may remain) / 1 (error-severity findings or load errors) / 2 (composition failure).                                                                                                                                                                                                                                          |
+| `caws status`                                                                                                                                                                                                                        | Read-only dashboard: project, current context, agents, claim, doctor findings. Never mutates `.caws/`.                                                                                                                                                                                                                                                                                                                         |
+| `caws scope show / check / contention`                                                                                                                                                                                               | Explain scope, enforce scope, or report cross-worktree path contention.                                                                                                                                                                                                                                                                                                                                                        |
+| `caws claim [--takeover] [--paths <path>] [--spec <id>] [--release]`                                                                                                                                                                 | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover; `--paths` declares working-tree ownership metadata on the current lease; `--spec`/`--release` acquire/release a BRIDGE binding (session↔spec authority for non-worktree contexts).                                                                                                                                                |
+| `caws gates run --spec <id> [--context <cli\|commit\|ci>]`                                                                                                                                                                           | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate.                                                                                                                                                                                                                                                                                                                                         |
+| `caws evidence record --type <kind> --spec <id> --data <json>`                                                                                                                                                                       | Append a typed evidence event (`test` / `gate` / `human_decision`; AC closure uses `specs evidence`) to `.caws/events.jsonl`.                                                                                                                                                                                                                                                                                                  |
+| `caws events migrate / rotate / verify-archive`                                                                                                                                                                                      | Maintenance for the hash-chained `.caws/events.jsonl` (v10→v11 migration, rotation, archive integrity).                                                                                                                                                                                                                                                                                                                        |
+| `caws waiver create / list / show / revoke`                                                                                                                                                                                          | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. `create` requires `--title`, `--gate`, `--reason`, `--approved-by`, `--expires-at`.                                                                                                                                                                                                                                            |
+| `caws reprieve grant / show / revoke / list`                                                                                                                                                                                         | Session-scoped guard reprieve: skip a PreToolUse guard for one session until expiry.                                                                                                                                                                                                                                                                                                                                           |
+| `caws specs create / list / show / recover / restore / retire-draft / prune-drafts / activate / deactivate / amend / amend-scope / evidence / verify-acs / close / reopen / archive / prune-archive / migrate / validate / relocate` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. `create` writes `lifecycle_state: draft` by default (`--activate` creates active directly); the normal path is `caws worktree create --spec <id>`, which activates on bind. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`.                                                                                              |
+| `caws worktree create / list / ensure / bind / destroy / untrack / merge / review / migrate-registry / repair-sparse / repair / prune / cleanup-plan`                                                                                | Manage CAWS worktrees bound to active specs (`ensure` is the idempotent create-or-admit form; `review` is a read-only pre-merge gate; `repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune`/`cleanup-plan` are dry-run-by-default cleanup planners). |
+| `caws agents register / heartbeat / stop / list / show / work-state / prune`                                                                                                                                                         | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. `work-state` is a visibility-only annotation (`working`/`blocked_awaiting_human`/`review_ready`/`done`) a session sets on its own lease.                                                                                                                                                                                                 |
+| `caws message send / reply / poll / inbox / history / status / prune`                                                                                                                                                                | Directed inter-agent message channel over `.caws/messages.jsonl`. Not authority; verify claims before acting.                                                                                                                                                                                                                                                                                                                  |
+| `caws session prune / pickup`                                                                                                                                                                                                        | `prune`: dry-run-default retention for `.caws/sessions/` turn logs. `pickup`: records a `manual_pickup` event when one session continues another's paused work. The full lifecycle (`start`/`checkpoint`/`end`) remains deferred.                                                                                                                                                                                              |
+| `caws working-tree check / ack`                                                                                                                                                                                                      | Working-tree provenance advisory: `check` reports uncommitted overlap with another session's lease; `ack` acknowledges it.                                                                                                                                                                                                                                                                                                     |
+| `caws handoff export / import`                                                                                                                                                                                                       | Portable handoff briefs for session-to-session continuity.                                                                                                                                                                                                                                                                                                                                                                     |
 
 Run `caws <group> --help` for live options, or see
 [`docs/command-reference.md`](docs/command-reference.md) for the exhaustive leaf
 and flag surface.
+
+### Bounded shell analysis
+
+The [command analysis guide](docs/guides/command-analysis.md) describes the
+bounded analyzer, mandatory write-guard consumer and private package checks. The
+two diagnostic commands have different exit contracts:
+
+| Command                    | Exit contract                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `caws hooks analyze`       | 0: bounded allow; 1: deny; 2: unresolved.                                                                    |
+| `caws hooks mutation-view` | 0: completed projection, including projections with issues; 2: a caught decoding or outer-command exception. |
+
+A mutation projection has no permission verdict. Consumers inspect its schema,
+issues and effect coverage; parser or backend failures can appear as issues in
+an exit-zero projection. The guide's owned execution boundary is proposed. The
+implemented copy guards consume complete operand roles for a closed regular-file
+`cp`/`mv` profile, so external artifact copies are distinguished from canonical
+writes. Unknown roles, hard-link aliases and unmodeled filesystem cases refuse.
+A copy's effective final symlink destination refuses even when approval is
+available; a destination-directory alias with a regular final child is
+supported. Removal effects keep final-link entry ownership separate from
+referent writes; unsupported removal options remain unresolved. The shared
+ownership oracle follows registered physical worktree roots, including migrated
+locations, before path allowlists can permit a write. Unavailable or ambiguous
+payload ownership cannot grant admission. Existing registry read or format
+errors retain ownership uncertainty.
+
+Native adoption requires complete final-launch context, custody through later
+rewrites, generation-bound Node and analyzer CLI identities, an isolated canary
+and rollback. A validated host execution directory establishes only that
+coordinate. The known reduced Codex command projection remains held; that
+protective refusal does not qualify native deployment.
 
 ## Quick start
 
@@ -124,14 +156,19 @@ help.
 ### Author a spec
 
 ```bash
-caws specs create FEAT-1 --title "Short title" --mode feature
+caws specs create FEAT-1 --title "Short title" --mode feature \
+  --scope-in src/foo.ts --module "Feature view" \
+  --invariant "Rendering preserves input items" \
+  --acceptance "given: no items; when: the view renders; then: an empty state is shown"
 ```
 
-This creates `.caws/specs/FEAT-1.yaml` in `lifecycle_state: draft`. Edit it to
-fill in `scope.in`/`scope.out`, `invariants`, `acceptance` (Given/When/Then),
-`non_functional`, and `contracts` — see existing specs in this repo's
-`.caws/specs/` for the shape, and [`docs/api/schema.md`](docs/api/schema.md) for
-the field reference.
+This creates `.caws/specs/FEAT-1.yaml` in `lifecycle_state: draft`. Supply
+contracts, observability, rollback and security requirements through the create
+flags when relevant. Use `caws specs amend` for modules, invariants and
+Given/When/Then acceptance text, and `caws specs amend-scope` for scope changes.
+These writers preserve the audit trail; rewriting an acceptance criterion resets
+its recorded evidence. Use each command's `--help` for flags and
+[`docs/api/schema.md`](docs/api/schema.md) for the field reference.
 
 `caws worktree create <name> --spec FEAT-1` activates the draft as it binds it,
 so `active` means the slice is being worked rather than merely written down.
@@ -154,7 +191,17 @@ caws waiver create FOO-1 \
 caws evidence record \
   --type test --spec FEAT-1 \
   --data '{"command":"npm test","exit_code":0}'
+# Record an AC after inspecting the evidence; this writes the spec and audit event.
+caws specs evidence FEAT-1 --ac A1 --status pass --evidence-ref "npm test"
+caws specs verify-acs FEAT-1 --run
 ```
+
+`caws evidence record --type ac` is refused; `caws specs evidence` is the AC
+writer. Add a machine-checkable citation (`--test-nodeid`, `--artifact-path` or
+`--commit-sha`) and `--verify` to re-derive it before recording. A command-only
+reference is never executed by verification and remains self-reported. Later
+`specs verify-acs` checks can refute citations; close reports refuted citations
+in warn mode. A real citation also needs review for relevance to the criterion.
 
 ## Multi-agent work
 
@@ -168,6 +215,9 @@ from `scope.in`/`scope.out`; ownership lives in `.caws/worktrees.json`.
 # `caws parallel setup`; it does not exist and is not planned)
 # Declare the boundary this change must preserve.
 caws specs create FEAT-AUTH-001 --title "Auth" --mode feature \
+  --scope-in src/auth --module "Authentication" \
+  --invariant "Unauthenticated requests cannot access protected resources" \
+  --acceptance "given: an unauthenticated request; when: it accesses a protected resource; then: access is refused" \
   --contract "auth-api:behavior"
 caws worktree create wt-auth --spec FEAT-AUTH-001   # writes the binding atomically
 cd .caws/worktrees/wt-auth
@@ -176,10 +226,23 @@ cd .caws/worktrees/wt-auth
 caws status            # Agents panel + claim ownership
 caws agents list       # active / stale / stopped sessions
 
-# Finish: merge (auto-closes the bound spec) and destroy
+# After committing, checks, review and AC evidence, leave the target worktree.
+cd ../../..                                # repository root
+# Merge closes the spec and removes the worktree.
 caws worktree merge wt-auth
-caws worktree destroy wt-auth
+# No separate destroy is needed after a successful merge.
+# Safe branch deletion is attempted; inspect any branch-deletion warning.
 ```
+
+Merge computes in Git's object database and advances the base ref atomically
+without checking out the base branch. When the canonical checkout is on the base
+branch, it refreshes its index and files with `git read-tree -u -m`. Unrelated
+edits are preserved; overlapping edits can refuse the refresh, leaving that
+checkout stale with the merge landed. Spec closure, audit writes and teardown
+follow publication, so a later failure can leave lifecycle steps unfinished.
+Inspect the reported merge commit and checkout/spec/event/registry state,
+preserve local edits, and follow the recovery diagnostic. See
+[merge recovery in AGENTS.md](AGENTS.md#merge-publication-checkout-refresh-and-recovery).
 
 `caws agents` leases (`.caws/leases/`) are **visibility only** — a stale lease
 is evidence, never authority. The only authority transition is an explicit
@@ -222,7 +285,8 @@ Three layers:
 ### Exit codes
 
 - `0` — success / observation
-- `1` — domain failure (gate failed, doctor finding, scope refused)
+- `1` — domain failure (gate failed, doctor error-severity finding or load
+  error, scope refused)
 - `2` — composition failure (not a git repo, can't read `.caws/`, missing
   required tooling)
 

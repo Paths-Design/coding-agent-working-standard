@@ -1,0 +1,61 @@
+id: CAWS-NATIVE-BUILD-STABLE-ENTRY-001
+title: 'Bind stable hook entry to versioned native build receipts'
+mode: feature
+lifecycle_state: active
+worktree: native-build-stable-entry
+created_at: '2026-10-22T15:26:58.512Z'
+updated_at: '2026-10-22T15:27:23.187Z'
+created_by_session: '01a1620e-59d6-7373-b74b-25d9f5f7b1e9'
+blast_radius:
+  modules:
+    - 'Native SQLite build request, Cargo selection and receipt loading'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/tooling/native-sqlite-build.ts'
+    - 'packages/caws-cli/src/tooling/native-sqlite-build-entry.ts'
+    - 'packages/caws-cli/tests/tooling/native-sqlite-build.test.js'
+  out: []
+invariants:
+  - 'Legacy v1 request and seven-artifact completion remain exact; stable entry capability requires explicit versioned source-bound receipt and confers no adoption authority.'
+acceptance:
+  - id: A1
+    given: 'legacy v1 and explicit v2 requests for debug and release'
+    when: 'coordinator selects targets and versioned receipts are loaded'
+    then: 'v1 retains its original artifact contract while v2 requires the stable hook entry and refuses version downgrade or unknown schemas.'
+  - id: A2
+    given: 'retained Cargo records for a freshly built stable hook entry'
+    when: 'source target profile path freshness uniqueness or executable identity differ'
+    then: 'selection and artifact loading refuse the mismatch and produce no usable stable-entry capability.'
+  - id: A3
+    given: 'focused source and boundary test results'
+    when: 'component evidence is recorded and handed to the cutover lead'
+    then: 'exact commands revisions raw outputs and remaining actual build image producer and runtime qualification obligations are preserved without claiming parity or adoption.'
+observability:
+  - 'Versioned request and receipt identities, exact selected Cargo record and executable hash, raw targeted test output and retained hostile controls.'
+rollback:
+  - 'Continue selecting legacy v1 build requests; preserve prior qualified requests and artifacts without rewriting or adopting any runtime.'
+non_functional: {}
+contracts:
+  - name: 'native-build-receipt'
+    type: behavior
+evidence:
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "Candidate3a2422fc clean; source923590f2 unchanged from compiled3e4fb235, testc98ecf38. Actual attempt03 named serial Jest79executed79pass0fail0pending exit0 in2.505s; exec99153 terminal0. Literal source/tool before-after pins identical; three actual emitted module hashes identical before-after and to attempt02 compiler0; retained compiled bytes outside lane. Earlier setup failure and75pass2oraclefail execution preserved; test-only same-size corruption and separate exact oversize controls derived from readBounded-before-hash source, independently inspected. These synthetic Cargo and real private-FS controls establish bounded version/target/source/path/freshness/hash/mode refusals. They do not execute successful full v2 coordinator completion publication or stable-only loader reconstruction. A1 remains unchecked as written. Lead01a15a2a explicitly accepts and owns actual fresh debug/release v2 build/load, producer-derived image and parent integration; this session retains component verification and active-spec continuity through coordinated normal no-close source landing. No runtime/harness/adoption or complete parity claim."
+    recorded_at: "2026-10-22T16:56:46.315Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a1620e-59d6-7373-b74b-25d9f5f7b1e9/native-build-stable-entry/attempt-03/terminal.json"
+    commit_sha: "3a2422fcb5f9bcae0b392c7193b4760cb94ecbab"
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "Actual79-case named suite exits0 on pinned3a2422fc, including duplicate/cached/wrong source/manifest/kind/profile/path/escaped Cargo-record controls and changed hash/mode/symlink/path/shape/oversize private-file controls. Production selector/verifier executed against synthetic Cargo records and real private filesystem files; no freshly built stable-entry Cargo record or successful complete v2 build/load was produced. Therefore the freshly built-entry premise of A2 remains unestablished and A2 stays unchecked. Lead01a15a2a retains actual fresh debug/release v2 artifact production and parent image/consumer qualification; component source landing does not establish that premise."
+    recorded_at: "2026-10-22T17:16:33.556Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a1620e-59d6-7373-b74b-25d9f5f7b1e9/native-build-stable-entry/attempt-03/terminal.json"
+    commit_sha: "3a2422fcb5f9bcae0b392c7193b4760cb94ecbab"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Provenance/handoff criterion only. Inspected actual attempt03 terminalc86699f4 and raw JestJSON/stderr/exit:79selected79pass0fail0pending, exit0,2.505s; exact argv/packagecwd and candidate3a2422fc retained. Literal before/after Node/compiler/Jest/source/test pins agree; actual three compiled-module hashes match both attempt02 compiler output and posttest state, with their bytes retained outside lane. Attempt01 setup refusal and missing original pins remain explicit; attempt02 actual75pass2oraclefail output and size-before-hash correction retained; no failed output overwritten. Source3e and test-only3a received independent committed read-only inspection, not acceptance authority. Lead received actual start/terminal/pins and independently inspected79test JSON and source/test delta, explicitly accepting remaining actual debug/release v2 build/load, producer-derived image and parent integration. A1/A2 remain unchecked; no fullpackage/native/harness/adoption/parity claim. Final source gates on3a/f5ad pass5; doctor0E3W4I. Readback of this spec record and matching event is required and performed separately."
+    recorded_at: "2026-10-22T17:16:35.411Z"
+    artifact_path: "/Users/darianrosebrook/.codex/artifacts/01a1620e-59d6-7373-b74b-25d9f5f7b1e9/native-build-stable-entry/attempt-03/terminal.json"
+    commit_sha: "3a2422fcb5f9bcae0b392c7193b4760cb94ecbab"

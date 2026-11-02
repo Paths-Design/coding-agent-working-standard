@@ -60,6 +60,7 @@ const distDir = path.join(pkgRoot, 'dist');
  * or by something on this list (transitively).
  */
 const JS_ALLOWLIST = [
+  'shell/analysis/load-parser.js',
   'index.js',
   'config/index.js',
   'error-handler.js',
@@ -90,6 +91,10 @@ function run(cmd, args, cwd) {
     process.exit(r.status ?? 1);
   }
 }
+
+// Check the committed projection before destructive build output cleanup.
+// Generation is explicit: a build must not silently repair a stale asset.
+run(process.execPath, ['scripts/generate-runtime-assets.mjs', '--check'], pkgRoot);
 
 // 1. Clean dist
 rmrf(distDir);
