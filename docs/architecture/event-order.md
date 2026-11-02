@@ -97,7 +97,9 @@ destroyWorktree(cawsDir, { ..., now: sharedNowFactory });
 
 ## Test invariant
 
-A unit test in `worktrees-writer.test` SHOULD assert that all three events
-emitted by a single `mergeWorktree` invocation share the same `ts` value when
-the input `now` factory is fixed. This locks the composed-operation contract in
-place.
+The implementation threads one `mergeNow` clock through the merge, the
+`spec_closed` event and the post-merge teardown
+(`src/store/worktrees-writer.ts`), so the three events emitted by one
+`mergeWorktree` invocation share a `ts` value when the input `now` factory is
+fixed. No dedicated test pins that composed timestamp today; a test asserting it
+is still owed.

@@ -16,16 +16,18 @@ Multiple AI agents working on the same repo in parallel must work in **isolated
 git worktrees**. This guide covers the v11.1 workflow: create worktrees with
 `caws worktree create`, surface and govern ownership with `caws claim`.
 
-> **v11 surface.** The current v11 line ships full worktree lifecycle:
-> `caws worktree create | list | bind | destroy | untrack | merge | migrate-registry | repair-sparse | repair | prune | cleanup-plan`.
+> **v11 surface.** The current line ships full worktree lifecycle:
+> `caws worktree create | ensure | list | bind | destroy | untrack | merge | review | migrate-registry | repair-sparse | repair | prune | cleanup-plan`.
 > Use these commands — they write bidirectional bindings, emit audit events, and
 > enforce ownership. (`caws worktree repair` is the governed half-state executor
 > for ghost registry entries and dead spec→worktree bindings; `repair-sparse`
 > restores the `.caws/specs` sparse-checkout invariant — the two are unrelated.
 > `untrack` releases the registry binding while keeping the directory;
 > `prune`/`cleanup-plan` are dry-run-by-default cleanup planners, registry and
-> physical respectively.) `caws parallel setup` does not exist and is not
-> planned; loop `caws worktree create` per spec instead.
+> physical respectively. `ensure <name> --spec <id>` is the idempotent
+> create-or-admit affordance; `review <name>` is the read-only pre-merge gate.)
+> `caws parallel setup` does not exist and is not planned; loop
+> `caws worktree create` per spec instead.
 
 ## Why worktrees?
 
@@ -108,15 +110,15 @@ file-level boundaries:
 
 ```bash
 # Host-side: create specs then bind worktrees
-caws specs create auth --title "Auth feature"
-caws specs create payments --title "Payments feature"
+caws specs create AUTH-001 --title "Auth feature" --mode feature
+caws specs create PAYMENTS-001 --title "Payments feature" --mode feature
 
 # Edit each spec's scope.in before creating the worktrees
-# .caws/specs/auth.yaml:     scope.in: [src/auth/**, tests/auth/**]
-# .caws/specs/payments.yaml: scope.in: [src/payments/**, tests/payments/**]
+# .caws/specs/AUTH-001.yaml:     scope.in: [src/auth/**, tests/auth/**]
+# .caws/specs/PAYMENTS-001.yaml: scope.in: [src/payments/**, tests/payments/**]
 
-caws worktree create proj-auth --spec auth
-caws worktree create proj-payments --spec payments
+caws worktree create proj-auth --spec AUTH-001
+caws worktree create proj-payments --spec PAYMENTS-001
 
 # Inside each worktree, the agent runs
 caws claim
@@ -135,8 +137,8 @@ Each agent owns a layer (frontend, backend, infra). Same shape — different
 A worktree is a cheap way to try a risky change without polluting `main`:
 
 ```bash
-caws specs create experiment-new-orm --title "Experiment: new ORM"
-caws worktree create proj-experiment --spec experiment-new-orm
+caws specs create ORM-EXPERIMENT-001 --title "Experiment: new ORM" --mode feature
+caws worktree create proj-experiment --spec ORM-EXPERIMENT-001
 cd .caws/worktrees/proj-experiment
 # ... try it ...
 # Leave the worktree before either merge or destroy removes it.
@@ -206,10 +208,19 @@ that lane, and record which checkout supplied the source and dependencies.
 **Option B — install in the worktree** (preferred when the slice is long enough
 that you'll cd in and out often):
 
+`caws worktree create` links recognized git-ignored artifact paths
+(`node_modules`, `.pnpm-store`, Python venvs, Rust `target`, Swift `.build`)
+from the canonical checkout into the worktree as relative symlinks by default.
+Those links share the canonical directory, so **unlink every shared Node
+dependency path before running any package-manager install**, even when
+manifests are unchanged — or create the lane with `--no-link-node-modules` when
+you know you want an independent install.
+
 ```bash
 # From inside the linked worktree:
 cd .caws/worktrees/<name>
-pnpm install --prefer-offline   # or: npm install, yarn install
+unlink node_modules               # only if create linked it
+pnpm install --prefer-offline     # or: npm install, yarn install
 ```
 
 This materializes a parallel `node_modules/` tree inside the worktree.
@@ -217,11 +228,11 @@ Subsequent `pnpm test` / `npm test` calls work natively. The extra disk is real
 (often several hundred MB for a large monorepo); only pay it for longer-lived
 worktrees.
 
-**A third workaround you may see in scripts** — symlinking the canonical
-`node_modules/` into the worktree — works but is fragile: workspace package
-managers sometimes write into `node_modules/.bin/` during script execution, and
-a shared symlink means those writes appear in canonical's tree too. Prefer
-Option A or B over symlinks unless you understand the failure modes.
+**Symlinks that create already made** are useful for read-only work but fragile
+for installs: workspace package managers sometimes write into
+`node_modules/.bin/` during script execution, and a shared symlink means those
+writes appear in canonical's tree too. Use Option A or B when the worktree will
+run installs.
 
 `node_modules/` is `.gitignore`d in every well-formed repo, so neither recovery
 option ever commits the dependency tree.
@@ -262,21 +273,23 @@ the worktree. Read their `.caws/sessions/<sessionId>/` log. Take over only with
 explicit authorization (`caws claim --takeover`).
 
 **`caws status` shows worktree findings under doctor.** Doctor surfaces drift:
-orphaned worktree entries, missing directories, ownership conflicts. The repair
-string in each finding is v11-honest — it points to manual `git worktree`
-operations or `caws claim`.
+orphaned worktree entries, missing directories, ownership conflicts. Each
+finding's repair string names a governed CAWS command
+(`caws worktree create/destroy/bind/prune`, `caws specs deactivate/close`,
+`caws claim --takeover`), not a raw `git worktree` operation.
 
 **Agents are still committing to base.** Check that each agent is `cd`'d into
-its worktree, not the main repo. The pre-commit hook in this repo blocks direct
-base-branch commits during active worktree sessions; only `merge(worktree):` and
-`wip(checkpoint):` commits are allowed.
+its worktree, not the main repo. This repo's `.husky/commit-msg` hook allows
+only `merge(worktree):`, `wip(checkpoint):` and `chore(caws):` messages on a
+branch that is the base of an active lane; the `.husky/pre-commit` hook does not
+enforce that policy.
 
 ## See also
 
 - [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md)
   — doctrine source (kept commands, removed commands, invariants)
-- [`docs/api/cli.md`](../api/cli.md) — full v11 CLI reference (see §5
-  `caws claim`)
+- [`docs/api/cli.md`](../api/cli.md) — CLI task and option semantics (the
+  exhaustive catalogue is live `caws --help`)
 - [`docs/guides/multi-agent-workflow.md`](multi-agent-workflow.md) — agent
   coordination patterns
 - [`AGENTS.md`](../../AGENTS.md) — agent quickstart for working in v11 projects

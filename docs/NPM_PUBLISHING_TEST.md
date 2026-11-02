@@ -20,7 +20,8 @@ Before publishing CAWS to npm, verify these requirements:
 - [ ] npm account created at [npmjs.com](https://www.npmjs.com)
 - [ ] 2FA enabled on npm account (required for publishing interactively)
 - [ ] Member of `@paths.design` organization on npm (or owner)
-- [ ] Granular npm token created with publish permissions and 2FA-bypass enabled
+- [ ] No granular publish token is required: CI authenticates with OIDC trusted
+      publishing (see Step 2 and Step 9). Do not create or set one.
 
 ### 2. GitHub Environment Configured
 
@@ -105,7 +106,7 @@ npm run build
 
 # Verify build output
 ls -lh dist/
-ls -lh dist-bundle/
+ls -lh dist/
 
 # Test the built CLI
 node dist/index.js --version
@@ -141,7 +142,7 @@ npm install -g ./paths.design-caws-cli-*.tgz
 # Verify CLI works
 caws --version
 caws --help
-caws init test-project
+mkdir test-project && cd test-project && git init && caws init
 
 # Cleanup
 npm uninstall -g @paths.design/caws-cli
@@ -160,23 +161,20 @@ npm publish --dry-run
 
 ### Step 7: Local Token-Based Publish Test (Optional)
 
+CI never uses a stored token (see Step 9). A bare `export NPM_TOKEN` is not read
+by npm either: the repo `.npmrc` sets no `_authToken` line, so `npm whoami`
+reports an anonymous session rather than validating the token. To test a
+personal token, point npm at a temporary userconfig:
+
 ```bash
-# Test token-based auth locally. This is a manual/local publish path, not
-# CI's mechanism — CI publishes via OIDC trusted publishing with no stored
-# token at all (see Step 9). Use this only to test a personal token or for
-# an out-of-band manual publish.
-export NPM_TOKEN="npm_xxxxx"
-export NODE_AUTH_TOKEN="${NPM_TOKEN}"
-npm whoami
-# Verifies the token is valid
-
-# If you need to publish manually to a beta tag:
-npm publish --tag beta --provenance
-npm view @paths.design/caws-cli@beta
-
-# If successful, promote to latest (only after confirming quality)
-# npm dist-tag add @paths.design/caws-cli@11.1.6 latest
+TMPCONF=$(mktemp)
+printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN" > "$TMPCONF"
+npm --userconfig "$TMPCONF" whoami          # validates the token, not a session
+npm --userconfig "$TMPCONF" publish --tag beta   # out-of-band beta only
 ```
+
+A local publish cannot attach provenance (that requires the CI OIDC exchange),
+so treat this path as an exception, not a rehearsal of the release workflow.
 
 ---
 

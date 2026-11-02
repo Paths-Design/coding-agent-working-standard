@@ -3,8 +3,9 @@ doc_id: caws-reflexivity
 authority: reference
 status: active
 title: CAWS Reflexivity — Self-Auditing Architecture (proposed philosophy)
-owner: @darianrosebrook
-updated: 2026-05-15
+owner: '@darianrosebrook'
+updated: 2026-11-02
+audience: maintainer
 ---
 
 # CAWS Reflexivity: Self-Auditing Architecture
@@ -519,8 +520,8 @@ integrity.**
 ## Additional Resources
 
 - [CAWS Feature Spec](../api/schema.md)
-- [Provenance Tracking](../guides/provenance.md)
-- [Waiver System](../guides/waivers.md)
+- [Audit trail (events.jsonl)](../api/schema.md#audit-surface-cawseventsjsonl)
+- [Waiver troubleshooting](../guides/waiver-troubleshooting.md)
 
 ---
 

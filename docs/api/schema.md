@@ -2,9 +2,9 @@
 doc_id: caws-schema
 authority: reference
 status: active
-title: CAWS Schema Specifications (v11.9.0)
+title: CAWS Schema Specifications (12.2.0-rc.2)
 owner: vNext rewrite team
-updated: 2026-08-19
+updated: 2026-11-02
 ---
 
 # CAWS Schema Specifications
@@ -12,8 +12,8 @@ updated: 2026-08-19
 ## Overview
 
 CAWS uses JSON Schema for validation and TypeScript interfaces for type safety.
-This document provides complete specifications for all CAWS schemas and data
-structures.
+This document specifies the current CAWS kernel schemas and data structures.
+CAWS has no SBOM/SPDX schema and no producer that emits one.
 
 ## Feature Specification Schema
 
@@ -40,7 +40,6 @@ constraints.
   "required": [
     "id",
     "title",
-    "risk_tier",
     "mode",
     "lifecycle_state",
     "blast_radius",
@@ -66,7 +65,7 @@ constraints.
     "risk_tier": {
       "type": "integer",
       "enum": [1, 2, 3],
-      "description": "Tier 1 most strict, Tier 3 least. String forms ('T1', '1') are NOT accepted."
+      "description": "Legacy optional field. Preserved on existing records; new spec creation omits it."
     },
     "mode": {
       "type": "string",
@@ -347,10 +346,10 @@ are matched as boundary-safe prefixes only.
 
 ```typescript
 interface CawsSpec {
-  // Required fields (11)
+  // Required fields (10; risk_tier is legacy optional)
   id: string; // Pattern: ^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$
   title: string;
-  risk_tier: 1 | 2 | 3;
+  risk_tier?: 1 | 2 | 3; // Legacy optional; new specs omit it.
   mode: 'feature' | 'refactor' | 'fix' | 'doc' | 'chore';
   lifecycle_state: 'draft' | 'active' | 'closed' | 'archived';
   blast_radius: BlastRadius;
@@ -375,6 +374,28 @@ interface CawsSpec {
   updated_at?: string; // ISO 8601
   owner?: string;
   closure_notes?: string;
+  // Provenance only (never authority): session whose `caws specs create` wrote
+  // this spec. Absent on hand-authored or pre-field specs; validates unchanged.
+  created_by_session?: string;
+  // Per-criterion verified status — the close gate's CLOSURE AUTHORITY.
+  // Written only by `caws specs evidence` (dual-writes this block and an
+  // ac_recorded event). status: pass/waived satisfy closure; fail/unchecked
+  // are recorded for audit only.
+  evidence?: SpecEvidence[];
+}
+
+interface SpecEvidence {
+  criterion_id: string; // ^A\d+$; must match a declared acceptance[].id
+  status: 'pass' | 'fail' | 'unchecked' | 'waived';
+  evidence_ref?: string; // test node id, artifact path, or waiver id
+  waiver_reason?: string; // mandatory iff status === 'waived'
+  recorded_at: string; // ISO 8601
+  test_nodeid?: string;
+  command?: string;
+  exit_code?: number;
+  artifact_path?: string;
+  commit_sha?: string; // 7-40 hex
+  test_verified_at?: string; // HEAD where --verify executed the cited test
 }
 
 interface BlastRadius {
@@ -620,28 +641,39 @@ type ToolAllowlist = string[];
 
 ## Waivers
 
-In v11, waivers are per-file records at `.caws/waivers/<id>.yaml`. They are
-created, listed, and revoked via the `caws waiver` command group (singular —
-there is no `caws waivers` alias).
+In v11+, waivers are per-file records at `.caws/waivers/<id>.yaml`. They are
+created, listed, shown, revoked and pruned via the `caws waiver` command group
+(singular — there is no `caws waivers` alias).
 
-### v11 Waiver File Schema
+### Waiver File Schema
 
 Each `.caws/waivers/<id>.yaml` file has the following shape:
 
 ```yaml
 id: WAIVER-001
-gate: coverage
+title: 'Coverage gate not yet wired for this package'
+status: active # active | revoked; expired is derived, never stored
+gates:
+  - coverage
 reason: 'Bootstrapping phase — coverage gate not yet wired for this package'
 approved_by: 'darianrosebrook'
+created_at: '2026-06-01T00:00:00Z'
 expires_at: '2026-08-01T00:00:00Z'
-spec_id: CAWS-AUTH-001 # optional: scope waiver to a specific spec
-created_at: '2026-05-28T00:00:00Z'
+scope:
+  spec_id: CAWS-AUTH-001 # optional: scope the waiver to one spec
 ```
+
+`title` (≥5 characters) and a non-empty `gates` array are required; `created_at`
+is written by `caws waiver create`. `status` is the stored lifecycle value while
+`effectiveness` (active/revoked/expired/not_applicable) is derived at read time.
+Revocation appends a `revocation` block and is not idempotent: a second revoke
+is refused.
 
 ### Creating a Waiver
 
 ```bash
 caws waiver create <id> \
+  --title "<short title>" \
   --gate <gate-name> \
   --reason "..." \
   --approved-by "<approver>" \
@@ -656,139 +688,16 @@ reason field is free-text — no closed enum.
 
 ```typescript
 interface WaiverRecord {
-  id: string; // Waiver identifier
-  gate: string; // Policy-defined gate name (free-text; not a closed enum)
-  reason: string; // Free-text rationale
-  approved_by: string; // Approver identifier
+  id: string;
+  title: string; // Required, >= 5 characters
+  status: 'active' | 'revoked';
+  gates: string[]; // Non-empty; policy-defined gate ids
+  reason: string;
+  approved_by: string;
+  created_at: string; // ISO 8601; written by `caws waiver create`
   expires_at: string; // ISO 8601
-  spec_id?: string; // Optional: scope waiver to a specific spec
-  created_at?: string; // ISO 8601
-}
-```
-
-## SBOM Schema (SPDX)
-
-### JSON Schema
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "SPDX Software Bill of Materials",
-  "type": "object",
-  "properties": {
-    "spdxId": {
-      "type": "string",
-      "const": "SPDXRef-DOCUMENT"
-    },
-    "spdxVersion": {
-      "type": "string",
-      "const": "SPDX-2.3"
-    },
-    "creationInfo": {
-      "type": "object",
-      "properties": {
-        "created": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "creators": {
-          "type": "array",
-          "items": { "type": "string" }
-        }
-      },
-      "required": ["created", "creators"]
-    },
-    "name": { "type": "string" },
-    "dataLicense": { "type": "string" },
-    "SPDXID": { "type": "string" },
-    "documentNamespace": { "type": "string" },
-    "packages": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "SPDXID": { "type": "string" },
-          "name": { "type": "string" },
-          "version": { "type": "string" },
-          "downloadLocation": { "type": "string" },
-          "filesAnalyzed": { "type": "boolean" },
-          "supplier": { "type": "string" },
-          "originator": { "type": "string" },
-          "copyrightText": { "type": "string" },
-          "packageVerificationCode": {
-            "type": "object",
-            "properties": {
-              "packageVerificationCodeValue": { "type": "string" }
-            }
-          }
-        },
-        "required": ["SPDXID", "name", "downloadLocation", "filesAnalyzed"]
-      }
-    },
-    "relationships": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "spdxElementId": { "type": "string" },
-          "relationshipType": { "type": "string" },
-          "relatedSpdxElement": { "type": "string" }
-        },
-        "required": ["spdxElementId", "relationshipType", "relatedSpdxElement"]
-      }
-    }
-  },
-  "required": [
-    "spdxId",
-    "spdxVersion",
-    "creationInfo",
-    "name",
-    "dataLicense",
-    "SPDXID",
-    "documentNamespace",
-    "packages"
-  ]
-}
-```
-
-### TypeScript Interface
-
-```typescript
-interface SPDXDocument {
-  spdxId: 'SPDXRef-DOCUMENT';
-  spdxVersion: 'SPDX-2.3';
-  creationInfo: CreationInfo;
-  name: string;
-  dataLicense: string;
-  SPDXID: string;
-  documentNamespace: string;
-  packages: Package[];
-  relationships?: Relationship[];
-}
-
-interface CreationInfo {
-  created: string; // ISO 8601
-  creators: string[];
-}
-
-interface Package {
-  SPDXID: string;
-  name: string;
-  version: string;
-  downloadLocation: string;
-  filesAnalyzed: boolean;
-  supplier?: string;
-  originator?: string;
-  copyrightText?: string;
-  packageVerificationCode?: {
-    packageVerificationCodeValue: string;
-  };
-}
-
-interface Relationship {
-  spdxElementId: string;
-  relationshipType: string;
-  relatedSpdxElement: string;
+  scope?: { spec_id?: string };
+  revocation?: { revoked_at: string; revoked_by?: string; reason?: string };
 }
 ```
 
@@ -911,8 +820,6 @@ Users can extend CAWS schemas with care:
 - [`packages/caws-cli/src/kernel/schemas/spec.v1.json`](../../packages/caws-cli/src/kernel/schemas/spec.v1.json)
   — canonical spec schema (authority)
 - [JSON Schema Specification](https://json-schema.org/)
-- [SPDX Specification](https://spdx.github.io/spdx-spec/)
-- [SLSA Specification](https://slsa.dev/spec/v0.1/)
 
 For questions about schema validation or extension, see the
 [CAWS Documentation](../README.md) or create a GitHub issue.

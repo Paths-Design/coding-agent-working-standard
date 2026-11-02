@@ -245,9 +245,9 @@ When authoring a new spec, before flipping to `active`:
   sibling's `scope.in` paths in your `scope.out` will refuse YOUR edits to those
   paths even when admitted (it's enforcement, not documentation). Either omit or
   accept the collision.
-- **Cross-check governed paths** (`.caws/policy.yaml`, `CODEOWNERS`,
-  `change_budget` keys) and explicitly list them in `scope.out` so future agents
-  know you intentionally excluded them.
+- **Cross-check governed paths** (`.caws/policy.yaml`, `CODEOWNERS`) and
+  explicitly list them in `scope.out` so future agents know you intentionally
+  excluded them.
 - **Cross-check active sibling worktrees.** If another agent is actively editing
   files in `packages/foo/`, putting `packages/foo` broadly in your scope.in
   creates a union-mode collision when both specs are active. Either narrow your

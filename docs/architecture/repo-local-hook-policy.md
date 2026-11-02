@@ -187,9 +187,9 @@ observable rather than silent, and `caws doctor` names the offending key.
 Every list entry requires a `reason` of 12–280 characters. Because the document
 is committed, that turns "the guard is broken" into a reviewable artifact in the
 diff instead of a private grievance. `caws hooks list` renders the recorded
-reason for a tier-1 `disabled` entry and for a `forks` entry; **it does not yet
-render tier-2 `additional_allow_prefixes` reasons**, so today those are read in
-review, not from the CLI.
+reason for a tier-1 `disabled` entry and for a `forks` entry, and also for each
+tier-2 `additional_allow_prefixes` entry (`--json` exposes the same rows under
+`guards`).
 
 ### The configurable surface
 

@@ -1,9 +1,27 @@
+---
+doc_id: session-ownership-metadata
+authority: architecture
+status: active
+title: Session ownership metadata — design note
+owner: CAWS maintainers
+updated: 2026-11-02
+audience: maintainer
+---
+
 # Session ownership metadata — design note
 
 Status: implemented (post-doctrinal-amendment) Date: 2026-05-22 (original),
 amended 2026-05-28 Spec: `.caws/specs/SESSION-OWNERSHIP-METADATA-001.yaml`
 Related: `MULTI-AGENT-PUSH-RANGE-GUARD-001`,
 `WORKING-TREE-PROVENANCE-GUARD-001`, `MULTI-AGENT-HANDOFF-EVENT-001`
+
+> **Shipped state (2026-11-02) — where the plan below did not ship as written.**
+> `caws claim --paths <path>` stores each value **verbatim**: no glob expansion
+> and no normalization (`src/shell/commands/claim.ts`). The planned 256-entry
+> CLI cap was **not** implemented; the only enforced cap is the writer's 1000
+> FIFO bound on `last_modified_paths` (`src/kernel/worktree/leases.ts`). Read
+> "glob" and "256-entry cap" passages below as plan history, not current
+> behavior.
 
 > **Doctrinal amendment 2026-05-28 — substrate pivot (READ FIRST).**
 >
@@ -228,7 +246,7 @@ disambiguation is needed (each lease file IS its `AgentLease`).
 ## Q1 — Implicit vs explicit claim semantics
 
 Spec status: locked at draft — **explicit** declaration via a new surface
-(`caws claim --paths <glob>...`).
+(`caws claim --paths <path>...`).
 
 This note: confirmed. The soft-middle question ("implicit `last_modified_paths`
 but explicit `claimed_paths`?") is answered **yes**:

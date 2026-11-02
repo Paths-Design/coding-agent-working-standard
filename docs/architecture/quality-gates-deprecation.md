@@ -57,10 +57,10 @@ CLI. The version is not unpublished or reused; it is left as a known historical
 artifact because npm version reuse is forbidden and unpublishing would create
 more ambiguity than it removes.
 
-The repository has since moved to tag-driven `caws-cli` publishing. The legacy
-multi-package release script now contains only `@paths.design/caws-cli` in its
-package list, and it explicitly denies `quality-gates` as a non-owned release
-scope.
+The repository has since moved to tag-driven `caws-cli` publishing.
+`scripts/release-tag-publish.mjs` is the only release script; its package list
+contains only `@paths.design/caws-cli`, and it refuses `caws-kernel-v*` tags.
+`quality-gates` is asserted absent by `scripts/check-removed-commands.mjs`.
 
 ## Current State
 

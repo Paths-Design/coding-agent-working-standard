@@ -58,9 +58,10 @@ A `CommandFact` carries a `facets` object. Each facet is a small closed enum.
 
 ### The facet → decision lattice
 
-Evaluated top-down; first match wins. (Slice 0 ships this table as data; the
-**capability pass is a stub returning `None`**, so the table governs nothing yet
-— Slices 2–3 activate it.)
+Evaluated top-down; first match wins. Slice 0 shipped this table as data. The
+capability pass is now active (Slice 2): `classify_capability_pass` in the hook
+classifier returns lattice decisions and is the sole source of confirm-class
+asks, with legacy families still falling through to the advisory classifiers.
 
 1. `kind=PRIV_ESC` → **deny** (privilege escalation is never auto-allowed).
 2. `kind=SECRETS_READ` → **deny** (credential exfiltration risk).

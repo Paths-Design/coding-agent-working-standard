@@ -5,7 +5,7 @@ status: active
 title: Sterling machine runtime migration handoff
 owner: CAWS maintainers
 updated: 2026-10-21
-audience: contributor
+audience: maintainer
 ---
 
 # Sterling machine runtime migration handoff
@@ -19,17 +19,19 @@ scope in the receiving session.
 ## October 3, 2026 investigation
 
 This is a read-only selection/source audit, not a migration or native execution
-qualification. Both Codex and Claude now register the machine launcher. The
-active runtime digest is
-`5ec110240096ef7dc31ceecf6b80e81ab5028325c4112366f6bc537098b4d0df`.
+qualification. Both Codex and Claude now register the machine launcher. At the
+October 3 observation the active runtime digest was
+`5ec110240096ef7dc31ceecf6b80e81ab5028325c4112366f6bc537098b4d0df`; it is now
+retained but not active (`~/.caws/state/adapter-runtime.json` currently records
+digest `43f2b11c…`, previous `a596e5a7…`).
 `caws hooks list --surface <surface> --json` resolves each event and gives the
 selected path/hash, origin tier, and unselected local difference. The machine
-project policy contains 33 grouped handler/library entries across the surfaces.
-The candidate CLI preview inventories 29 transferable groups, two retained floor
-overrides and two retained library groups. All 12 proposed event chains preserve
-selection. Whole-import still refuses the floor replacements without writes;
-selective migration is the supported path. These observations supersede the
-September wiring inventory below.
+project policy contains 27 grouped handler/library entries plus 6 extensions
+across the surfaces. The candidate CLI preview inventories 29 transferable
+groups, two retained floor overrides and two retained library groups. All 12
+proposed event chains preserve selection. Whole-import still refuses the floor
+replacements without writes; selective migration is the supported path. These
+observations supersede the September wiring inventory below.
 
 | Local behavior                                                | Current source/selection evidence                                                                                                                                                                                                                                                        | Disposition before any migration                                                                                                                       |
 | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -72,13 +74,11 @@ returned `changed: false`. Codex and Claude configuration previews also returned
 native enforcement or rendering probes.
 
 CAWS itself has system policy for both surfaces with no explicit overrides.
-Sterling has only Codex system policy. Its `.codex/hooks.json` has no remaining
-local hook registrations; `.claude/settings.json` still invokes local dispatch.
-The Claude migration preview reports:
-
-```text
-Custom dispatcher logic requires review; use --from with an explicit surface policy
-```
+Sterling's machine project record lists both `codex` and `claude-code`, and
+neither surface has local hook registrations left: `.codex/hooks.json` is clear
+and `.claude/settings.json` is `{"hooks": {}}` (local registrations retired
+2026-09-08). The earlier Claude migration preview ("Custom dispatcher logic
+requires review") predates that retirement and no longer applies.
 
 Sterling's Codex policy still overrides `block-dangerous.sh`,
 `bash-write-guard.sh`, `worktree-guard.sh`, and `session-log.sh`. The local

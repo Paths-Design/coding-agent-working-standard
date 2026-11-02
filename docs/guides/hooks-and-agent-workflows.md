@@ -14,18 +14,28 @@ updated: 2026-05-15
 
 ## Overview
 
-CAWS does not ship its own runtime hooks. The integration patterns below
-describe how _agent runtimes_ should call out to v11 CAWS commands during their
-own hook lifecycles.
+CAWS ships its own runtime hooks, in two planes. The **machine runtime** under
+`CAWS_HOME` (normally `~/.caws`) is the launcher installed into each harness's
+user configuration: `~/.caws/bin/caws-hook <surface> <event> --system` is wired
+from `~/.claude/settings.json` and `~/.codex/hooks.json` and resolves the
+handler chain from the home directory. The **repo-local plane** is
+`.caws/hooks/dispatch/<event>.sh`, which the harnesses that read project hooks
+directly (qwen-code, kimi-code, opencode, zcode, dsh) execute in place. Run
+`caws hooks list` to see the effective chain per event and the tier that put
+each handler there.
 
-> **v11 posture (A1).** The current v11 line ships seventeen command groups:
-> `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`,
-> `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`, `session`,
-> `working-tree`, `handoff`. The hook examples that follow use the subset
-> relevant to agent integration. References to removed v10 commands (`evaluate`,
-> `iterate`, `validate`, `provenance`, `hooks install`, `scaffold`,
-> `quality-gates`, `waivers` plural) have been replaced with v11 equivalents.
-> Doctrine source:
+The integration patterns below describe how each agent runtime participates in
+those planes and how it should call out to current CAWS commands during its own
+hook lifecycles.
+
+> **Current posture (A1).** The CLI now ships twenty command groups: `init`,
+> `doctor`, `hooks`, `scope`, `status`, `tui`, `claim`, `gates`, `evidence`,
+> `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`,
+> `session`, `goal`, `working-tree`, `handoff`. The hook examples that follow
+> use the subset relevant to agent integration. References to removed v10
+> commands (`evaluate`, `iterate`, `validate`, `provenance`, `hooks install`,
+> `scaffold`, `quality-gates`, `waivers` plural) have been replaced with v11
+> equivalents. Doctrine source:
 > [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
 
 ## Integration Patterns
@@ -488,11 +498,14 @@ caws waiver create <id>-w --title "<title>" --gate <g> --reason "..." --approved
 
 ### Platform-Specific Migration
 
-- **Claude Code Users**: Install the Claude Code hook pack:
-  `caws init --agent-surface claude-code`
-- **Codex Users**: Install the Codex project-local hook pack:
-  `caws init --agent-surface codex`, then restart/reopen Codex and review/trust
-  the project hooks with `/hooks`
+- **Claude Code Users**: Install/update the shared machine runtime with
+  `caws init adapters install`, then write the native user configuration with
+  `caws init adapters configure --agent-surface claude-code`, and restart the
+  harness. In a project, `caws init --agent-surface claude-code` adds project
+  governance only; on a configured system surface it installs no project hook
+  copies.
+- **Codex Users**: The same path with `--agent-surface codex`; trust the native
+  user-level hooks with `/hooks` after `configure` writes the registration.
 - **Cursor Users**: Cursor is a declared surface but does not have an
   implemented v11 hook pack yet
 - **VS Code Users**: Install CAWS extension from marketplace
