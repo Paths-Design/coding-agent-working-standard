@@ -246,6 +246,8 @@ test.each([
   (scenario) => {
     const refusing = ['early-refusal', 'pointer-failure'].includes(scenario);
     const f = cacheFixture(refusing ? ['block-dangerous.sh'] : []);
+    let nongitOrigin;
+    let nongitAfter;
     try {
       const native =
         process.env.CAWS_TEST_NATIVE_EXECUTABLE ||
@@ -296,9 +298,51 @@ test.each([
         fs.mkdirSync(nested);
         payload.execution_workdir = nested;
         if (scenario === 'host-nongit-origin') {
-          // A retained fixture may itself be inside another Git checkout.
-          // Use a physical root, and prove it is nongit before the exchange.
-          const origin = fs.realpathSync(path.parse(f.root).root);
+          // Retained artifacts may be inside Git. Create only an owned scratch
+          // directory beneath a verified nongit, ungoverned temporary parent.
+          const parents = [
+            ...new Set([os.tmpdir(), '/tmp'].map((value) => fs.realpathSync(value))),
+          ];
+          const observations = [];
+          for (const parent of parents) {
+            let governed = false;
+            for (let cursor = parent; ; cursor = path.dirname(cursor)) {
+              if (fs.existsSync(path.join(cursor, '.caws'))) governed = true;
+              if (path.dirname(cursor) === cursor) break;
+            }
+            const checked = cp.spawnSync(
+              '/usr/bin/git',
+              ['-C', parent, 'rev-parse', '--show-toplevel'],
+              {
+                env: f.environment,
+                encoding: 'utf8',
+              }
+            );
+            observations.push({
+              parent,
+              governed,
+              status: checked.status,
+              signal: checked.signal,
+              error: checked.error?.message || null,
+              stdout: checked.stdout,
+              stderr: checked.stderr,
+            });
+            if (
+              !governed &&
+              !checked.error &&
+              checked.signal === null &&
+              checked.status === 128 &&
+              /not a git repository/i.test(checked.stderr)
+            ) {
+              nongitOrigin = fs.realpathSync(
+                fs.mkdtempSync(path.join(parent, 'caws-nongit-origin-'))
+              );
+              break;
+            }
+          }
+          f.put(path.join(f.root, 'nongit-parent-observations.json'), observations);
+          if (!nongitOrigin) throw new Error('No verified nongit, ungoverned temporary parent');
+          const origin = nongitOrigin;
           expect(fs.existsSync(path.join(origin, '.git'))).toBe(false);
           expect(fs.existsSync(path.join(origin, '.caws'))).toBe(false);
           const args = ['-C', origin, 'rev-parse', '--show-toplevel'];
@@ -620,8 +664,28 @@ test.each([
         }
       }
     } finally {
-      f.dispose();
+      try {
+        if (nongitOrigin) {
+          const entries = fs.readdirSync(nongitOrigin).sort();
+          if (entries.length === 0) fs.rmdirSync(nongitOrigin);
+          nongitAfter = {
+            origin: nongitOrigin,
+            entries,
+            removedEmptyOrigin: entries.length === 0,
+          };
+          f.put(path.join(f.root, 'nongit-origin-after.json'), nongitAfter);
+        }
+      } finally {
+        f.dispose();
+      }
     }
+    if (nongitAfter && nongitAfter.entries.length !== 0)
+      throw new Error(
+        'Unexpected writes retained in owned nongit origin: ' +
+          nongitOrigin +
+          ' ' +
+          JSON.stringify(nongitAfter.entries)
+      );
   },
   25000
 );
