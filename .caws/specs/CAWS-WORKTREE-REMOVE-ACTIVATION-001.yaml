@@ -40,7 +40,7 @@ evidence:
     recorded_at: "2026-11-02T20:07:16.954Z"
     commit_sha: "7efe208ac4018cc6522ea2f2c2f758297cd5e9bc"
   - criterion_id: A2
-    status: unchecked
-    evidence_ref: "Installed-package removal qualification is owed after A1 activation. Fresh built source passed26 removal and lifecycle-lock cases in .caws/state/worktree-remove-safety/activation-build-check.log; this does not establish installed CLI behavior. Next: resolve global caws target, compare repaired module hashes, run installed-package denied-metadata and successful targeted-removal fixtures, record observed results, close activation spec, and remove owned packaging lane. No permission to bypass native hook refusal is inferred."
-    recorded_at: "2026-11-02T19:50:35.203Z"
+    status: pass
+    evidence_ref: "Installed snapshot2a665 modules passed26 actual mapped removal and lock fixtures; Jest showConfig confirms all ../../dist imports map to installed package, not checkout output (installed-checks.log and installed-validation.json). Cases cover real permission denial preserving bytes/authority, allowed real Git removal, exact orphan cleanup preserving another lane, dirty/foreign/locked refusals, merged diagnostics and live/concurrent lock protection. Independently ran GLOBAL caws worktree destroy worktree-remove-activation in actual sandbox: exit1 at metadata mkdtemp EPERM before deletion; installer source hash, spec hash, exact registry entry, checkout and node_modules unchanged. Receipt retained under canonical .caws/state/worktree-remove-safety. Per-entry ACL completeness and atomic Git deletion unproved; no shared runtime reconfiguration."
+    recorded_at: "2026-11-02T20:07:35.000Z"
     commit_sha: "7efe208ac4018cc6522ea2f2c2f758297cd5e9bc"
