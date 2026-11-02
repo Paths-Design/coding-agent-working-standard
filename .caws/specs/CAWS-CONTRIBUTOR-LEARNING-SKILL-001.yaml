@@ -1,9 +1,11 @@
 id: CAWS-CONTRIBUTOR-LEARNING-SKILL-001
 title: 'Carry contributor findings into bounded repairs and maintained agent guidance'
 mode: doc
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed the project contributor-learning source slice at39904099dbcfb8a5225788fbb316d04d0a6fa321 on clean caws/dogfood-runtime-docs; unmerged and unpushed. Seven owned files add the project skill and entrypoint routes, evidence-backed recursive maintenance procedure, and move17 command contracts from startup into the existing guide. Startup delivery qualified in one tool-free headless Terra observation; two explicitly guided native Sol/Terra cases and independent committed-candidate review inspected. AC A1-A3 manually assessed and dual-writes read back; no test-execution stamps or general performance claim. This slice extends CAWS-DOGFOOD-RUNTIME-CONTRACT-DOCS-001 and does not discharge runtime repair/native release obligations. Next independently executable runtime increment: scope verifyPendingEvidence to the selected criterion before runner planning; retain selected criterion declarations/pending evidence, reject unknown criteria before runner work, test sibling declared and recorded nodes remain idle, preserve whole-spec verify-acs and dual writer, then replay with packaged CLI. Other pending boundaries remain trusted producer workdir/launch facts, caller/generation consistency, effect-analysis replay and citation feedback. Managed-worktree shell refusal retained and shared with release owner via message2484da86-4a31-4f3e-9983-48a75d4462ad; source/global runtime unchanged. Doctor exit1 retains12 errors: unbound active backlog, installed Codex SessionEnd teardown-budget reconciliation, and10 other sessions rooted in removed directories. These do not invalidate direct source manifest/link/format/move checks or the successful scoped CLI gate/evidence transactions; they prevent a clean machine/native qualification claim and require their owning runtime/session work, not cleanup from this documentation slice. No new backlog specs or peer/global state edits. Retain current managed worktree for review and eventual governed integration.'
 created_at: '2026-11-02T16:35:53.302Z'
-updated_at: '2026-11-02T18:21:08.772Z'
+updated_at: '2026-11-02T18:56:40.130Z'
 created_by_session: '01a19c55-c310-7340-95ca-ecbaa3531b22'
 blast_radius:
   modules:
