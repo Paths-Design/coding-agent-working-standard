@@ -80,3 +80,8 @@ evidence:
     evidence_ref: "Commit 964190970: docs/api/README.md states the six service specs are never-implemented; each docs/api/*.yaml opens with an ARCHIVED DESIGN RECORD banner; source inspection shows no HTTP server constructs or openapi deps"
     recorded_at: "2026-11-02T13:03:37.703Z"
     commit_sha: "964190970"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Commit 964190970: caws specs create AUTH-001/PAYMENTS-001/ORM-EXPERIMENT-001 --mode feature --plan => valid candidate; claim ownership text matches kernel OWNERSHIP_NO_OWNER_RECORDED; merge teardown matches worktrees-writer; waiver revoke refuses double-revoke per CLI help"
+    recorded_at: "2026-11-02T13:03:40.038Z"
+    commit_sha: "964190970"
