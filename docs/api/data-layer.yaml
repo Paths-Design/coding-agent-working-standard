@@ -1,3 +1,10 @@
+# ARCHIVED DESIGN RECORD — NOT THE CAWS API.
+# This file specifies a JSON-over-HTTP service that CAWS has never implemented
+# and does not ship. CAWS is a commander CLI (@paths.design/caws-cli); there is
+# no HTTP server, and nothing in this repository consumes or validates this
+# document. It was imported in bulk and is retained as design history only.
+# See docs/api/README.md for the live equivalents. Do not cite as current
+# reference.
 openapi: 3.0.3
 info:
   title: CAWS Data Layer API

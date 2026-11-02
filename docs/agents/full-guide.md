@@ -165,7 +165,8 @@ contracts:
 ```bash
 # 1. Create the spec via CLI — this is the canonical path.
 #    Optional --contract declares a boundary ("name:type[:path]", where type is
-#    api|schema|contract-test|behavior); the command refuses without it.
+#    api|schema|contract-test|behavior); omitting it writes contracts: []. The
+#    kernel schema does not require a contract.
 caws specs create <id> --title "Feature title" --mode feature \
   --contract "core-api:behavior"
 
@@ -319,7 +320,7 @@ Review requirements should follow the affected boundary and consequences.
 ```bash
 caws init                # idempotent; refuses legacy .caws/working-spec.yaml residue
                           # creates .caws/specs/, .caws/waivers/, policy.yaml, worktrees.json, agents.json
-                          # there is no --force in v11
+                          # --overwrite previews replacements; --force applies them
 ```
 
 ### Upgrading installed hook packs (diff → three-way → port)
@@ -1039,7 +1040,7 @@ surface.
 | `worktree_bound`    | `caws worktree create` / `caws worktree bind <name>`            |
 | `gate_evaluated`    | `caws gates run --spec <id>` (one per declared gate)            |
 | `evidence_recorded` | `caws evidence record --type <kind> --spec <id> --data '{...}'` |
-| `worktree_takeover` | `caws claim --takeover` (records `prior_owners` audit)          |
+| `claim_taken_over`  | `caws claim --takeover` (records `prior_owners` audit)          |
 
 There is no other path that writes `events.jsonl`. Hand-editing is forbidden —
 it breaks the chain.
@@ -1266,7 +1267,9 @@ temporarily, but you cannot push without fixing. If the lint rule is incorrect:
 1. Fix the code to satisfy the lint
 2. Or request human discussion of the lint rule
 3. Human can update lint config if appropriate
-4. Note: `git push --no-verify` is BLOCKED
+4. Note: a git hook cannot police its own bypass — `--no-verify` skips
+   `.husky/pre-push` entirely. The repo policy forbids it, and the real control
+   is review plus branch protection, not the hook.
 
 ### Q: How do I record an AI-assisted change in the audit trail?
 

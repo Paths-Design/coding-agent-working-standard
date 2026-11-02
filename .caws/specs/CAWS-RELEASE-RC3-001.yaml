@@ -4,7 +4,7 @@ mode: chore
 lifecycle_state: active
 worktree: release-12-2-rc3
 created_at: '2026-10-18T21:40:25.174Z'
-updated_at: '2026-11-02T10:19:00.643Z'
+updated_at: '2026-11-02T10:39:05.589Z'
 created_by_session: '01a150f0-0f54-78f1-902e-92e66137ba34'
 blast_radius:
   modules:
@@ -27,6 +27,14 @@ scope:
     - .github/workflows/
     - README.md
     - turbo.json
+    - .husky/
+    - .gitignore
+    - AGENTS.md
+    - CLAUDE.md
+    - CONTRIBUTING.md
+    - package.json
+    - rust-toolchain.toml
+    - node_modules/
 invariants:
   - 'Publish only a fresh version whose package, lockfile, changelog and tag agree'
   - 'Do not push a release tag while required qualification or native delivery evidence is missing or failed'
@@ -55,9 +63,49 @@ acceptance:
     then: >-
       the lockfile uses Handlebars 4.7.10 without changing direct dependency ranges
       and the workspace audit reports zero findings
+  - id: A5
+    given: 'The committed integrated rc.3 candidate and its complete declared five-surface mutation policy'
+    when: >-
+      Current CI and local qualification execute with exact source, test, build and
+      dependency identity retained
+    then: >-
+      Required tests, audit, typecheck, lint, documentation, coverage and every
+      declared per-file mutation floor pass, including the complete sixteen-file
+      execution and nine-file analysis campaigns without exclusions or reduced
+      floors
+  - id: A6
+    given: 'The exact built rc.3 tarball retained with its SHA256 and installed consumer identity'
+    when: >-
+      One complete detached ten-case installed upgrade qualification runs with
+      existing deadlines on the required platform matrix
+    then: >-
+      The run exits zero with all ten cases, raw command statuses and streams,
+      governance before-after bytes, lifecycle rendering, corrupt-snapshot refusal,
+      rollback and clean detached-consumer dependency audit retained for that
+      artifact
+  - id: A7
+    given: >-
+      The exact qualified rc.3 package and selected runtime registered through
+      normal native trust on each supported harness
+    when: >-
+      Actual native sessions start, perform an admitted owned-lane operation,
+      attempt a protected write, stop and render the user and tool record
+    then: >-
+      Retained authentic payloads and host events join the package, runtime, host
+      and caller identities, distinguish session cwd from tool workdir, show a
+      delivered refusal within unchanged deadlines with protected bytes unchanged,
+      and preserve actual Start, Stop and semantic rendered output for each
+      supported harness
 observability:
   - 'Retain raw local check output and remote run URLs with exact candidate identities outside tracked source'
 rollback:
   - 'Before publication preserve the candidate and withhold the tag if qualification fails; after an npm publish attempt preserve tag provenance and inspect registry identity before recovery'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "Outcome: qualify integrated rc.3 without tags or npm publication; user-authorized takeover preserves original release commits. Current clean lane caws/release-12-2-rc3 at 9d1d82ef5b8cd7894ea4572a3ccfbbd9b3545be0 merges main and committed Source416e5077. Root owns all lane edits; foreign Source branches/dirt preserved. Completed enabling commits b63b6afadc0a1877d0a3f8ab837f1e1ab6cb3f51 (bounded notes), cf79cf5e4c7914e7b21d4b78bd459eb45023c608 and2912d743d (mutation input/receipt custody), a081a7e97165a6933546022a4978c9696b2bb5ad (authenticated historical prefix fixture; production/pins unchanged),9d1d82ef5 (generated report exclusions with real negative controls). Raw artifacts under packages/caws-cli/reports/release-rc3: root-config-red.log/json and root-config-green.log/json (120tests),native-retained-green.log compilefailure and native-retained-typed.log (43 service_image tests),artifact-boundary-config-red.log/json,release-hardening-green.log/json and release-hardening-receipts (9tests),lint.log failure and lint-green.log exit0 with shell warnings,typecheck.log exit0,build.log exit0. Independent peer examined committed custody/native/boundary changes; bounded claims grounded in source/receipts, not review verdict. Full coverage live exec session65070 full-coverage.log from9d1d82ef5 using independently installed deps and pinned Node22.23.4 SHA2cc28a1880d0774616959f2210ee739bffa6ac695c887e8988a496a21271f6c0. Next deliverable: finish full coverage then frozen full5surface mutation (47targets including16execution/9analysis, per-file floors unchanged), current exact-SHA remote CI, six-platform complete10case tarball qualification. Historical partialSource mutation and analysis-dry-run.log (5605 discovery,2066baseline) are not final floor evidence. Native7 actual normal trust/start/ownedwrite/protectedrefusal/stop/render remain unverified; current root callback lacks authenticated execution_workdir, global custom SessionEnd45 prevents stock plan. Need fresh private candidate homes, ordinary auth/trust with pinned producer-capable host; no credential copying/global adoption/guard disabling. gh auth status currently invalid, connector/SSH separately unchecked. AllA1-A7 acceptance remains pending; no release tag/npm publication authorized."
+    recorded_at: "2026-11-02T12:22:53.882Z"
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/release-12-2-rc3/packages/caws-cli/reports/release-rc3"
+    commit_sha: "9d1d82ef5b8cd7894ea4572a3ccfbbd9b3545be0"

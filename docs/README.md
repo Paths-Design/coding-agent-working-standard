@@ -7,38 +7,69 @@ Working Standard) framework.
 
 ```
 docs/
-├── README.md              # This file - documentation overview
-├── command-reference.md   # Authored landing page; full reference is generated when packaging
-├── failure-lineage.md     # Incident-derived doctrine, entry per failure class
-├── release-procedure.md   # Tag-driven release procedure
-├── api/                   # API reference documentation
-│   ├── cli.md            # CLI tool documentation
-│   └── schema.md         # Schema specifications
-├── agents/                # Agent-specific guides and tutorials
-│   ├── EXAMPLES.md        # Agent examples
-│   ├── full-guide.md      # Complete agent guide
-│   ├── scope-discipline.md # Pre-edit scope admission procedure
-│   └── TUTORIAL.md        # Agent tutorial
-├── architecture/           # Architecture doctrine, ADRs, design notes
-│   └── caws-vnext-command-surface.md  # Command-surface doctrine source
-├── guides/                # General guides and documentation
-│   ├── agent-integration-guide.md    # Agent integration guide
-│   ├── caws-contracts.md             # Contract authoring
-│   ├── caws-developer-guide.md       # Developer guide
-│   ├── hook-packs.md                 # Hook pack structure
-│   ├── hooks-and-agent-workflows.md  # Unified hooks and agent workflows
-│   ├── multi-agent-workflow.md       # Multi-agent worktree pattern
+├── README.md                  # This file - documentation overview
+├── DOCUMENTATION_STANDARDS.md # Front-matter schema + validator contract
+├── command-reference.md       # Authored landing page; full reference is generated when packaging
+├── agent-workflow-tools.md    # Agent block-recovery / tool-selection notes
+├── failure-lineage.md         # Incident-derived doctrine, entry per failure class
+├── v11-surface-matrix.yaml    # v10.2 → v11 command disposition matrix (doctrine)
+├── api/                       # API and schema reference
+│   ├── cli.md                 # CLI task semantics (defers the option catalogue to --help)
+│   ├── schema.md              # Kernel schema specifications
+│   └── *.yaml                 # Never-implemented service designs — see api/README.md
+├── agents/                    # Agent-specific guides and tutorials
+│   ├── EXAMPLES.md            # Agent examples
+│   ├── full-guide.md          # Complete agent guide
+│   ├── scope-discipline.md    # Pre-edit scope admission procedure
+│   └── TUTORIAL.md            # Agent tutorial
+├── architecture/              # Architecture doctrine, ADRs, design notes
+│   ├── caws-vnext-command-surface.md  # Command-surface doctrine source
+│   ├── caws-native-runtime.md         # Native runtime contract
+│   ├── event-order.md                 # Event ordering guarantees
+│   ├── hook-pack-shared-core.md       # Shared hook-pack core
+│   ├── read-surface-authority.v1.yaml # Read-surface authority contract
+│   ├── repo-local-hook-policy.md      # Repo-local hook policy
+│   ├── session-ownership-metadata.md  # Session ownership metadata design
+│   ├── quality-gates-deprecation.md   # Quality-gates package removal
+│   ├── cli-ux-job-model-audit.md      # CLI UX audit
+│   ├── command-capability-taxonomy.md # Capability classification doctrine
+│   ├── command-capability-taxonomy-candidate.md
+│   ├── agent-bash-mutation-scope-bypass.md  # Design (not yet built)
+│   ├── danger-latch-reset-doctrine-eval.md
+│   ├── adr/                   # Architecture decision records
+│   └── design/                # Design notes (hook I/O, PID correlation, prepush attribution)
+├── audits/                    # Point-in-time qualification reports (dated, not current policy)
+├── guides/                    # General guides and documentation
+│   ├── agent-integration-guide.md
+│   ├── caws-contracts.md
+│   ├── caws-developer-guide.md
+│   ├── coding-rigor.md
+│   ├── command-analysis.md
+│   ├── doctor-current-state.md
+│   ├── hook-packs.md
+│   ├── hooks-and-agent-workflows.md
+│   ├── multi-agent-workflow.md
 │   ├── placeholder-governance.md     # Historical — see file banner
-│   ├── waiver-troubleshooting.md     # Waiver debugging
-│   └── worktree-isolation.md         # Worktree lifecycle
-├── philosophy/             # Cross-cutting design philosophy
+│   ├── sterling-machine-runtime-migration.md
+│   ├── waiver-troubleshooting.md
+│   └── worktree-isolation.md
+├── philosophy/                # Cross-cutting design philosophy
 │   └── reflexivity.md
-├── rewrite/                # vNext rewrite corpus and investigation notes
-│   ├── corpus/            # Point-in-time reference corpus (delivered snapshot)
-│   └── investigations/    # Point-in-time investigation logs
-└── internal/              # Untracked, gitignored local scratch notes —
-                            # content varies by checkout; not part of the
-                            # tracked doc tree
+├── DEPLOYMENT.md              # Hosting / deployment operations
+├── MONITORING.md              # Observability and monitoring operations
+├── ROLLBACK.md                # Rollback procedures
+├── NPM_PUBLISHING_TEST.md     # npm publication and auth testing
+├── release-procedure.md       # Tag-driven release procedure
+├── release-readiness.md       # Release readiness guidance
+├── migration-v10-to-v11.md    # v10.2 → v11 migration guide
+├── MIGRATION_GUIDE_V3.5.md    # Superseded historical guide
+├── rewrite/                   # vNext rewrite corpus and investigation notes
+│   ├── corpus/                # Point-in-time reference corpus (delivered snapshot)
+│   └── investigations/        # Point-in-time investigation logs
+└── internal/                  # One tracked cutover ledger
+                               # (caws-runtime-modernization.md) plus gitignored
+                               # local scratch; `git ls-files docs/internal` is the
+                               # authority for what is tracked
 ```
 
 ## Core Documentation
@@ -112,9 +143,15 @@ boundaries.
 
 ### Naming Conventions
 
-- **File Names**: Use `kebab-case.md` (e.g., `agent-integration-guide.md`)
+- **New file names**: use `kebab-case.md` (e.g., `agent-integration-guide.md`)
 - **Directory Names**: Use `kebab-case/` (e.g., `agent-workflows/`)
-- **Avoid**: SCREAMING_SNAKE_CASE, camelCase, or spaces in filenames
+- **Avoid for new files**: SCREAMING_SNAKE_CASE, camelCase, or spaces in
+  filenames
+- **Existing exceptions**: earlier docs that use upper-case names
+  (`DEPLOYMENT.md`, `MONITORING.md`, `ROLLBACK.md`, `NPM_PUBLISHING_TEST.md`,
+  `MIGRATION_GUIDE_V3.5.md`, `DOCUMENTATION_STANDARDS.md`, `agents/EXAMPLES.md`,
+  `agents/TUTORIAL.md`) are kept as-is because renaming breaks inbound links;
+  the rule applies forward.
 - **Purpose-first**: Name files by their primary purpose, not implementation
   details
 

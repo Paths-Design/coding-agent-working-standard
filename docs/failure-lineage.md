@@ -10,7 +10,11 @@ Each entry follows the pattern:
 
 - **What happened** — the incident
 - **What we built** — the guard or mitigation
-- **Where it lives** — file paths
+- **Where it lives** — file paths recorded at the time of the incident. Some v10
+  guards cited here (`worktree-manager.js`, `parallel-manager.js`,
+  `scope-guard.js`) have since been deleted or reimplemented; the live guard
+  chain is `.caws/hooks/` in this repo, and lifecycle state is written by
+  `packages/caws-cli/src/store/`.
 - **What it doesn't catch** — known gaps
 
 ---

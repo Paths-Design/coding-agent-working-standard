@@ -1,0 +1,44 @@
+id: CAWS-DOGFOOD-RUNTIME-CONTRACT-DOCS-001
+title: 'Document runtime invocation, qualification and evidence contracts learned from dogfood'
+mode: doc
+lifecycle_state: active
+created_at: '2026-11-02T14:11:31.913Z'
+updated_at: '2026-11-02T14:11:31.913Z'
+created_by_session: '01a19c55-c310-7340-95ca-ecbaa3531b22'
+blast_radius:
+  modules:
+    - 'Runtime architecture, contributor doctrine and evidence guidance'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'README.md'
+    - 'docs/architecture/caws-native-runtime.md'
+    - 'docs/architecture/caws-vnext-command-surface.md'
+    - 'docs/guides/coding-rigor.md'
+    - 'docs/guides/agent-integration-guide.md'
+    - 'docs/guides/multi-agent-workflow.md'
+    - 'docs/philosophy/reflexivity.md'
+  out: []
+invariants:
+  - 'Documentation distinguishes source implementation, installed runtime, native delivery and semantic acceptance'
+  - 'No borrowed caller context, weakened authority, generated-log commits or invented readiness'
+acceptance:
+  - id: A1
+    given: 'the captured runtime failures and inspected owning source'
+    when: 'contributors read the architecture and doctrine'
+    then: 'producer context, invocation identity, analysis generation and citation boundaries and their decisive repair checks are explicit without claiming unverified fixes'
+  - id: A2
+    given: 'an inspected test run with ignored raw logs'
+    when: 'contributors follow the evidence examples'
+    then: 'recording, citation checks, executed verification and criterion relevance are distinguished without directing generated artifacts into source commits'
+  - id: A3
+    given: 'the changed authoritative documents'
+    when: 'formatting, metadata, source references and local links are checked'
+    then: 'checks pass and current guidance remains separate from retained historical philosophy'
+observability:
+  - 'Retain baseline and final doc checks plus inspected source coordinates in task context'
+rollback:
+  - 'Revert the isolated documentation commit; runtime behavior and machine settings are unchanged'
+non_functional: {}
+contracts: []

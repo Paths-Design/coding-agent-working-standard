@@ -5,7 +5,7 @@ status: active
 title: Current state and logged reconciliation
 owner: CAWS maintainers
 updated: 2026-10-03
-audience: contributor
+audience: maintainer
 ---
 
 # Current state and logged reconciliation

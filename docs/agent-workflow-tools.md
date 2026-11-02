@@ -36,6 +36,7 @@ caws gates run --spec <id>          # exit 1 + diagnostic output
 
 # 2. Either fix the underlying issue, or open a waiver
 caws waiver create <id>-w \
+  --title "<short justification title>" \
   --gate <gate-name> \
   --reason "Why the violation is acceptable + mitigation plan" \
   --approved-by "approver@example.com" \

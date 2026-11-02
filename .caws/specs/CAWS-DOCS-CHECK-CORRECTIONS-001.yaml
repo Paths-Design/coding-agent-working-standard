@@ -1,0 +1,108 @@
+id: CAWS-DOCS-CHECK-CORRECTIONS-001
+title: 'Correct doc-check drift across docs/'
+mode: doc
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge docs-doc-check-corrections at b39fb77ec145a370681bf679c48d673221411569'
+created_at: '2026-11-02T12:54:50.757Z'
+updated_at: '2026-11-02T13:04:00.854Z'
+created_by_session: 'session-47e85a86-f324-4d1e-adf3-5a32262e53de'
+blast_radius:
+  modules:
+    - 'docs/ tracked documentation and index'
+    - 'packages/caws-cli/package.json docs:check wiring'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs'
+    - 'packages/caws-cli/package.json'
+  out: []
+invariants:
+  - 'Every corrected claim is re-derived from the installed CLI 12.2.0-rc.2, repo source, kernel schemas or workflow files at the landed revision; another doc repeating the claim is not confirmation.'
+  - 'Point-in-time records keep their dates and explicit non-claims; a historical entry is not rewritten as current procedure.'
+  - 'Every command example left in a strict-set consumer doc succeeds as printed against the installed CLI.'
+acceptance:
+  - id: A1
+    given: 'docs checks run in CI through release-qualification docs:check'
+    when: 'the corrections land'
+    then: 'validate-docs.mjs runs inside docs:check and exits 0 for the strict set'
+  - id: A2
+    given: 'the front-matter standard document'
+    when: 'compared to validate-docs.mjs'
+    then: >-
+      required fields include audience, the strict set description matches
+      STRICT_SET, and the documented backlog matches --all output
+  - id: A3
+    given: 'a reader opens any of the six docs/api service specs'
+    when: 'they read the file header'
+    then: 'it states the spec is a never-implemented design and not the CAWS API'
+  - id: A4
+    given: 'a reader runs the command examples in the strict-set consumer guides'
+    when: 'executed against the installed CLI'
+    then: >-
+      the commands succeed as printed: specs create with --mode and valid ids, claim
+      ownership semantics, merge-only teardown, non-idempotent revoke
+  - id: A5
+    given: 'architecture and release docs'
+    when: 'compared to live help, kernel schemas and workflow files'
+    then: >-
+      stale group counts, evidence types, command leaves, tag handling, file
+      citations and statuses are corrected
+  - id: A6
+    given: 'a maintainer uses docs/README.md as the index'
+    when: 'they follow it'
+    then: 'docs/internal is described accurately and the omitted areas and files are listed'
+  - id: A7
+    given: 'a doc cites a test, script, release artefact or anchor as evidence'
+    when: 'the cited path is resolved at the landed revision'
+    then: 'the citation resolves, or the doc states the artefact is historical or unimplemented'
+  - id: A8
+    given: 'hook and machine-runtime docs'
+    when: 'compared to the live dispatch chain and machine launcher'
+    then: >-
+      legacy project-pack layouts are labelled legacy and current system-runtime
+      install paths are documented
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Commit 964190970: packages/caws-cli/package.json docs:check now runs validate-docs.mjs first; node packages/caws-cli/scripts/validate-docs.mjs exit 0 (5 strict-set docs valid, 25 lenient warnings)"
+    recorded_at: "2026-11-02T13:03:33.274Z"
+    commit_sha: "964190970"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Commit 964190970: DOCUMENTATION_STANDARDS.md required-fields table adds audience, strict set described as STRICT_SET's five docs, CI path restated as docs:check; measured backlog from --all = 58 docs / 38 violations (25 no front-matter, 13 missing audience)"
+    recorded_at: "2026-11-02T13:03:35.577Z"
+    commit_sha: "964190970"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Commit 964190970: docs/api/README.md states the six service specs are never-implemented; each docs/api/*.yaml opens with an ARCHIVED DESIGN RECORD banner; source inspection shows no HTTP server constructs or openapi deps"
+    recorded_at: "2026-11-02T13:03:37.703Z"
+    commit_sha: "964190970"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Commit 964190970: caws specs create AUTH-001/PAYMENTS-001/ORM-EXPERIMENT-001 --mode feature --plan => valid candidate; claim ownership text matches kernel OWNERSHIP_NO_OWNER_RECORDED; merge teardown matches worktrees-writer; waiver revoke refuses double-revoke per CLI help"
+    recorded_at: "2026-11-02T13:03:40.038Z"
+    commit_sha: "964190970"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Commit 964190970: caws --help = 20 groups; caws evidence record --help refuses --type ac; caws specs --help includes commit/verify-acs; release.yml:240-248 preserves script_ran=true tags; quality-gates-deprecation script clause retargeted; read-surface-authority gains a tui row; v11-surface-matrix statuses/test note corrected"
+    recorded_at: "2026-11-02T13:03:46.294Z"
+    commit_sha: "964190970"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Commit 964190970: docs/README.md now states docs/internal is one tracked cutover ledger plus gitignored scratch, lists audits/, architecture/adr/, architecture/design/, the six api design records, the full guides set, and the top-level operational docs; naming rule marked forward-looking"
+    recorded_at: "2026-11-02T13:03:47.686Z"
+    commit_sha: "964190970"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Commit 964190970: link/anchor/fence/doc_id scan over docs/ (excluding worktree-sparse docs/internal .caws/specs link) reports zero broken links or anchors; validator YAML/JSON parse checks pass for v11-surface-matrix and read-surface-authority; docs/api/schema.md JSON block parses with required=10 fields"
+    recorded_at: "2026-11-02T13:03:49.063Z"
+    commit_sha: "964190970"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "Commit 964190970: hook-pack-shared-core.md separates system-runtime layout from legacy project-pack layout; hooks-and-agent-workflows.md describes the two live hook planes and current install path; repo-local-hook-policy.md tier-2 rendering corrected; sterling migration digest/count/surface state re-derived"
+    recorded_at: "2026-11-02T13:03:50.511Z"
+    commit_sha: "964190970"

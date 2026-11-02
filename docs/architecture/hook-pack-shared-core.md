@@ -212,7 +212,25 @@ templates/hook-packs/
                                # value; no wiring/override files shipped yet)
 ```
 
-Installed layout in a consumer repo:
+Two installed layouts exist. Current `caws init --agent-surface <surface>` on a
+configured system surface installs **no** project hook pack: the machine runtime
+under `CAWS_HOME` owns the launcher, and the harness's user-level configuration
+wires it.
+
+System-runtime layout (what a configured surface gets):
+
+```
+~/.caws/                      # machine runtime (CAWS_HOME)
+  bin/caws-hook               # stable launcher: <surface> <event> --system
+  surfaces/<surface>/settings.json
+  lib/*
+~/.claude/settings.json       # user-level wiring -> ~/.caws/bin/caws-hook
+~/.codex/hooks.json           # user-level wiring -> ~/.caws/bin/caws-hook
+<repo>/.caws/                 # project governance only (policy, specs, events)
+```
+
+Legacy project-pack layout (surfaces without system-runtime wiring, and pack
+maintenance via `init diff`/`init port`):
 
 ```
 .caws/hooks/                  # shared core, installed once

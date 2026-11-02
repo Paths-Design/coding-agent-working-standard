@@ -17,14 +17,15 @@ This guide describes the v11 multi-agent pattern. For worktree mechanics, see
 [`worktree-isolation.md`](worktree-isolation.md). For the full CLI surface, see
 [`docs/api/cli.md`](../api/cli.md).
 
-> **v11 surface.** The current v11 line ships seventeen command groups: `init`,
-> `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`,
-> `reprieve`, `specs`, `worktree`, `agents`, `message`, `session`,
-> `working-tree`, `handoff` (plus the auto-generated `help`). Use
-> `caws specs create` to author specs, `caws worktree create <name> --spec <id>`
-> to bind worktrees (this also activates a draft spec), and
-> `caws worktree merge <name>` to close out. Removed and not returning:
-> `validate`, `iterate`, `evaluate`, `diagnose`, `parallel setup`.
+> **Current surface.** The CLI now ships twenty command groups: `init`,
+> `doctor`, `hooks`, `scope`, `status`, `tui`, `claim`, `gates`, `evidence`,
+> `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`,
+> `session`, `goal`, `working-tree`, `handoff` (plus the auto-generated `help`).
+> Use `caws specs create` to author specs,
+> `caws worktree create <name> --spec <id>` to bind worktrees (this also
+> activates a draft spec), and `caws worktree merge <name>` to close out.
+> Removed and not returning: `validate`, `iterate`, `evaluate`, `diagnose`,
+> `parallel setup`.
 
 ## The pattern
 
@@ -124,7 +125,9 @@ Inside its assigned worktree, each agent surfaces ownership:
 ```bash
 cd .caws/worktrees/proj-auth
 caws claim
-# Prints current owner. If unclaimed, records this session as owner in .caws/worktrees.json.
+# Surfaces the owner. Exit 0 only when this session already owns the worktree;
+# an unowned or foreign lane exits 1. Ownership was written by
+# `caws worktree create/bind` — claim never mints it.
 ```
 
 If `caws claim` reports a foreign owner, do not take over without explicit user
@@ -178,18 +181,20 @@ caws status                              # observability snapshot
 ```
 
 When the spec is complete, use `caws worktree merge` — it merges the branch into
-base and auto-closes the bound spec in a single transaction. Then destroy the
-worktree:
+base, auto-closes the bound spec and then destroys the worktree in a composed
+transaction:
 
 ```bash
-# From the main worktree (canonical checkout)
+# From the main worktree (canonical checkout), not from inside the lane
 caws worktree merge proj-auth
-caws worktree destroy proj-auth
 ```
 
-`caws worktree merge` emits a `worktree_merged` event and calls
-`caws specs close` on the bound spec automatically. `caws worktree destroy`
-removes the filesystem tree and the registry entry.
+`caws worktree merge` emits a `worktree_merged` event, calls `caws specs close`
+on the bound spec automatically, and its final step removes the worktree
+directory, the git worktree and the registry entry. Do not follow it with
+`caws worktree destroy`; that command then fails with "not found in registry".
+Use `--no-close` when you need to record evidence or close the spec explicitly
+after landing.
 
 ## Detecting scope conflicts
 
@@ -224,9 +229,10 @@ session's log under `.caws/sessions/<sessionId>/` first. `--takeover` only with
 explicit user authorization; it writes a durable `prior_owners` audit.
 
 **Pitfall: agents commit to the base branch.** Each agent must `cd` into its
-worktree before working. The pre-commit hook in this repo blocks direct
-base-branch commits while worktrees are active; only `merge(worktree):` and
-`wip(checkpoint):` formats are allowed.
+worktree before working. This repo's `.husky/commit-msg` hook allows only
+`merge(worktree):`, `wip(checkpoint):` and `chore(caws):` messages on a branch
+that is the base of an active lane; `.husky/pre-commit` does not enforce that
+policy.
 
 **Pitfall: trying `caws validate` / `caws iterate`.** These are removed in v11.
 Use `caws specs create` to author specs; validate via `caws doctor` and
@@ -255,8 +261,8 @@ When two features need to interact (e.g., the dashboard consumes the auth API):
 4. **Per-spec gates and evidence:** `caws gates run --spec <id>`,
    `caws evidence record --spec <id>`.
 5. **Waivers, not policy edits**, when a gate legitimately needs to pass.
-6. **Merge and close with `caws worktree merge <name>`**; then
-   `caws worktree destroy <name>` to remove the tree.
+6. **Merge, close and tear down with `caws worktree merge <name>`** — it
+   destroys the lane itself; a following `caws worktree destroy` would fail.
 
 ## See also
 
@@ -264,7 +270,8 @@ When two features need to interact (e.g., the dashboard consumes the auth API):
   — doctrine source
 - [`docs/guides/worktree-isolation.md`](worktree-isolation.md) — worktree
   mechanics
-- [`docs/api/cli.md`](../api/cli.md) — full v11 CLI reference
+- [`docs/api/cli.md`](../api/cli.md) — CLI task and option semantics (the
+  exhaustive catalogue is live `caws --help`)
 - [`AGENTS.md`](../../AGENTS.md) — agent quickstart
 - [`docs/guides/waiver-troubleshooting.md`](waiver-troubleshooting.md) — waiver
   patterns

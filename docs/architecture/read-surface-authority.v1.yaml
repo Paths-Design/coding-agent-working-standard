@@ -116,6 +116,14 @@ read_surfaces:
     tier: derived_advisory
     asserts: [session_identity, liveness_classification, worktree_spec_binding, spec_lifecycle_state, scope_admission]
     is_not: authoritative for anything it prints; it is a join over four sources
+  tui:
+    subject: repository
+    tier: derived_advisory
+    asserts: [session_identity, liveness_classification, worktree_spec_binding, spec_lifecycle_state, scope_admission]
+    is_not: >-
+      a separate authority. Its panels are assembled by the same selector module
+      that builds `caws status --json` (src/shell/panel-data.ts), and running it
+      never mutates governance state.
   doctor:
     subject: repository
     tier: derived_advisory
