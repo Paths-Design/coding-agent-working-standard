@@ -70,3 +70,8 @@ evidence:
     evidence_ref: "Commit 964190970: packages/caws-cli/package.json docs:check now runs validate-docs.mjs first; node packages/caws-cli/scripts/validate-docs.mjs exit 0 (5 strict-set docs valid, 25 lenient warnings)"
     recorded_at: "2026-11-02T13:03:33.274Z"
     commit_sha: "964190970"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Commit 964190970: DOCUMENTATION_STANDARDS.md required-fields table adds audience, strict set described as STRICT_SET's five docs, CI path restated as docs:check; measured backlog from --all = 58 docs / 38 violations (25 no front-matter, 13 missing audience)"
+    recorded_at: "2026-11-02T13:03:35.577Z"
+    commit_sha: "964190970"
