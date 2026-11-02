@@ -64,3 +64,9 @@ acceptance:
       install paths are documented
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Commit 964190970: packages/caws-cli/package.json docs:check now runs validate-docs.mjs first; node packages/caws-cli/scripts/validate-docs.mjs exit 0 (5 strict-set docs valid, 25 lenient warnings)"
+    recorded_at: "2026-11-02T13:03:33.274Z"
+    commit_sha: "964190970"
