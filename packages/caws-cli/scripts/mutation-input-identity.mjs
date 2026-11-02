@@ -40,7 +40,11 @@ function readRegular(file) {
   return { bytes, stat: after };
 }
 
-function walk(directory, visit, { markdownOnly = false, dependencies = false } = {}) {
+function walk(
+  directory,
+  visit,
+  { markdownOnly = false, dependencies = false, excludedDirectory = null } = {}
+) {
   assertDirectoryAncestry(directory);
   for (const entry of fs
     .readdirSync(directory, { withFileTypes: true })
@@ -56,8 +60,10 @@ function walk(directory, visit, { markdownOnly = false, dependencies = false } =
       const canonical = fs.realpathSync(file);
       if (!fs.statSync(canonical).isFile()) fail(`nonregular dependency link: ${file}`);
       visit(canonical, file);
-    } else if (entry.isDirectory()) walk(file, visit, { markdownOnly, dependencies });
-    else if (entry.isFile() && (!markdownOnly || entry.name.endsWith('.md'))) visit(file, file);
+    } else if (entry.isDirectory()) {
+      if (file !== excludedDirectory)
+        walk(file, visit, { markdownOnly, dependencies, excludedDirectory });
+    } else if (entry.isFile() && (!markdownOnly || entry.name.endsWith('.md'))) visit(file, file);
     else if (!entry.isFile()) fail(`nonregular input: ${file}`);
   }
 }
@@ -233,6 +239,13 @@ export function captureMutationInputs({ packageRoot, policy, surfaceId }) {
   }
   for (const file of ['package.json', 'package-lock.json', 'LICENSE'])
     add(path.join(repoRoot, file));
+  // Selected hook contracts consume repository scripts and authored hooks
+  // through Git's repository root, outside the sandbox package.
+  walk(path.join(repoRoot, 'scripts'), (file) => add(file));
+  const hooksRoot = path.join(repoRoot, '.husky');
+  walk(hooksRoot, (file) => add(file), {
+    excludedDirectory: path.join(hooksRoot, '_'),
+  });
   const npmrc = path.join(repoRoot, '.npmrc');
   if (fs.existsSync(npmrc)) add(npmrc);
   walk(path.join(repoRoot, 'docs'), (file) => add(file), { markdownOnly: true });
@@ -368,13 +381,21 @@ function sameSandboxInputs(original, sandbox, surface, surfaceId) {
     const source = original.typeConsumerSources?.[file];
     const captured = original.files.find((entry) => entry.path === file);
     if (
-      typeof source !== 'string' || !captured ||
-      captured.sha256 !== sha256(source) || captured.size !== Buffer.byteLength(source)
-    ) fail(`unbound type consumer source: ${file}`);
+      typeof source !== 'string' ||
+      !captured ||
+      captured.sha256 !== sha256(source) ||
+      captured.size !== Buffer.byteLength(source)
+    )
+      fail(`unbound type consumer source: ${file}`);
     const transformed = '// @ts-nocheck\n' + source;
-    expected.set(file, fingerprint({
-      ...captured, sha256: sha256(transformed), size: Buffer.byteLength(transformed),
-    }));
+    expected.set(
+      file,
+      fingerprint({
+        ...captured,
+        sha256: sha256(transformed),
+        size: Buffer.byteLength(transformed),
+      })
+    );
   }
   for (const [file, digest] of expected) {
     if (!actual.has(file)) fail(`missing sandbox input: ${file}`);

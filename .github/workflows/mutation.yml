@@ -111,5 +111,7 @@ jobs:
           path: |
             packages/caws-cli/reports/mutation-${{ matrix.surface }}/mutation-report.json
             packages/caws-cli/reports/mutation-${{ matrix.surface }}/index.html
+            packages/caws-cli/reports/mutation-${{ matrix.surface }}/mutation-run.json
+            packages/caws-cli/reports/mutation-${{ matrix.surface }}/runs/
           if-no-files-found: warn
           retention-days: 30

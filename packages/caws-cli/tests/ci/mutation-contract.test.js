@@ -168,6 +168,16 @@ function qualificationFixture({ buildBody, coreBody } = {}) {
   fs.writeFileSync(path.join(repoRoot, 'LICENSE'), 'Fixture root license\n');
   fs.writeFileSync(path.join(repoRoot, 'package.json'), '{"private":true}\n');
   fs.writeFileSync(path.join(repoRoot, 'package-lock.json'), '{"lockfileVersion":3}\n');
+  for (const [file, contents] of Object.entries({
+    'scripts/run-staged-checks.cjs': '// authored repository runner\n',
+    '.husky/pre-commit': '#!/bin/sh\nexit 0\n',
+    '.husky/lib/fixture.sh': '# authored hook dependency\n',
+  })) {
+    const destination = path.join(repoRoot, file);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.writeFileSync(destination, contents);
+  }
+  fs.chmodSync(path.join(repoRoot, '.husky/pre-commit'), 0o755);
   put(
     'package.json',
     JSON.stringify({
@@ -1784,6 +1794,22 @@ describe('ordinary runner input and build binding mechanics', () => {
     });
     expect(result.receipt.sandboxBuilds).toHaveLength(1);
     const built = result.receipt.sandboxBuilds[0];
+    for (const relative of [
+      'scripts/run-staged-checks.cjs',
+      '.husky/pre-commit',
+      '.husky/lib/fixture.sh',
+    ]) {
+      const physical = path.join(fixture.repoRoot, relative);
+      const bytes = fs.readFileSync(physical);
+      const expected = {
+        path: '../../' + relative,
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+        size: bytes.length,
+        mode: fs.statSync(physical).mode & 0o777,
+      };
+      expect(result.receipt.inputIdentity.files).toContainEqual(expected);
+      expect(built.inputIdentity.files).toContainEqual(expected);
+    }
     expect(built.runId).toBe(result.receipt.runId);
     expect(built.command).toBe('node scripts/build-fixture.cjs');
     expect(built.status).toBe(0);
@@ -1830,6 +1856,101 @@ describe('ordinary runner input and build binding mechanics', () => {
     expect(
       JSON.parse(fs.readFileSync(path.join(retained, 'mutation-run.json'), 'utf8')).runId
     ).toBe(result.receipt.runId);
+  });
+
+  test.each(['scripts/run-staged-checks.cjs', '.husky/pre-commit'])(
+    'repository input %s cannot drift during an otherwise passing child',
+    (relative) => {
+      const fixture = qualificationFixture({
+        coreBody: fixtureCoreBody({
+          afterSandbox: `fs.appendFileSync(path.join(context.repoRoot, ${JSON.stringify(relative)}), '// changed during child\\n');`,
+        }),
+      });
+      const result = runQualificationFixture(fixture);
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain('fixture Stryker child completed with exit zero');
+      expect(result.receipt.stryker.status).toBe(0);
+      expect(result.receipt.status).toBe('failed');
+      expect(result.receipt.error).toContain('persistent authored/input drift: ../../' + relative);
+    }
+  );
+
+  test.each(['scripts', '.husky'])(
+    'missing repository input root %s refuses before building',
+    (relative) => {
+      const fixture = qualificationFixture({ coreBody: fixtureCoreBody() });
+      const missing = path.join(fixture.repoRoot, relative);
+      fs.rmSync(missing, { recursive: true });
+      const result = runQualificationFixture(fixture);
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      expect(result.receipt.status).toBe('failed');
+      expect(result.receipt.error).toContain(missing);
+      expect(result.receipt.build).toBeUndefined();
+      expect(result.receipt.stryker).toBeUndefined();
+      expect(fs.existsSync(path.join(fixture.packageRoot, 'dist'))).toBe(false);
+    }
+  );
+
+  test.each(['scripts', '.husky'])(
+    'symlinked repository input root %s refuses and preserves its target',
+    (relative) => {
+      const fixture = qualificationFixture({ coreBody: fixtureCoreBody() });
+      const foreign = fs.realpathSync(makeTempDir('caws-root-input-foreign-'));
+      const sentinel = path.join(foreign, 'sentinel');
+      fs.writeFileSync(sentinel, 'foreign bytes\n');
+      const linked = path.join(fixture.repoRoot, relative);
+      fs.rmSync(linked, { recursive: true });
+      fs.symlinkSync(foreign, linked, 'dir');
+      const result = runQualificationFixture(fixture);
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      expect(result.receipt.error).toContain('uncertain directory ancestry');
+      expect(result.receipt.build).toBeUndefined();
+      expect(result.receipt.stryker).toBeUndefined();
+      expect(fs.readFileSync(sentinel, 'utf8')).toBe('foreign bytes\n');
+      expect(fs.lstatSync(linked).isSymbolicLink()).toBe(true);
+    }
+  );
+
+  test('generated Husky installation changes do not replace authored hook custody', () => {
+    const fixture = qualificationFixture({
+      coreBody: fixtureCoreBody({
+        afterSandbox:
+          "fs.appendFileSync(path.join(context.repoRoot, '.husky/_/h'), '// generated change\\n');",
+      }),
+    });
+    const generated = path.join(fixture.repoRoot, '.husky/_/h');
+    fs.mkdirSync(path.dirname(generated));
+    fs.writeFileSync(generated, '# generated installation\n');
+    const result = runQualificationFixture(fixture);
+    expect(result.error).toBeUndefined();
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(result.receipt.status).toBe('input-build-report-bound');
+    const paths = result.receipt.inputIdentity.files.map((file) => file.path);
+    expect(paths).toContain('../../.husky/pre-commit');
+    expect(paths).toContain('../../.husky/lib/fixture.sh');
+    expect(paths.some((file) => file.startsWith('../../.husky/_/'))).toBe(false);
+    expect(fs.readFileSync(generated, 'utf8')).toContain('// generated change');
+  });
+
+  test('a symlink at the generated Husky path is refused without changing its target', () => {
+    const fixture = qualificationFixture({ coreBody: fixtureCoreBody() });
+    const foreign = fs.realpathSync(makeTempDir('caws-generated-hook-foreign-'));
+    const sentinel = path.join(foreign, 'h');
+    fs.writeFileSync(sentinel, 'foreign hook bytes\n');
+    const linked = path.join(fixture.repoRoot, '.husky/_');
+    fs.symlinkSync(foreign, linked, 'dir');
+    const result = runQualificationFixture(fixture);
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.receipt.error).toContain('symlink input: ' + linked);
+    expect(result.receipt.build).toBeUndefined();
+    expect(result.receipt.stryker).toBeUndefined();
+    expect(fs.readFileSync(sentinel, 'utf8')).toBe('foreign hook bytes\n');
+    expect(fs.lstatSync(linked).isSymbolicLink()).toBe(true);
   });
 
   test('persistent authored drift during a passing child cannot acquire a bound verdict', () => {
@@ -2153,6 +2274,21 @@ describe('active workflow topology contract', () => {
     }
     expect(workflow).toContain('mutation:dry-run');
     expect(workflow).toContain('actions/upload-artifact@v4');
+    const retained = parsed.jobs.mutation.steps.find(
+      (step) => step.name === 'Retain mutation evidence'
+    );
+    expect(retained.if).toBe('always()');
+    expect(
+      retained.with.path
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+    ).toEqual([
+      'packages/caws-cli/reports/mutation-${{ matrix.surface }}/mutation-report.json',
+      'packages/caws-cli/reports/mutation-${{ matrix.surface }}/index.html',
+      'packages/caws-cli/reports/mutation-${{ matrix.surface }}/mutation-run.json',
+      'packages/caws-cli/reports/mutation-${{ matrix.surface }}/runs/',
+    ]);
     expect(workflow).toContain('GITHUB_STEP_SUMMARY');
     expect(workflow).toContain('github.sha');
   });
