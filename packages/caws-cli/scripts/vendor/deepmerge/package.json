@@ -1,0 +1,11 @@
+{
+  "name": "@paths.design/deepmerge",
+  "version": "4.3.1-caws.1",
+  "private": true,
+  "description": "CAWS-maintained deepmerge 4.3.1 prototype-key patch for development tooling",
+  "main": "index.cjs",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -62,9 +62,11 @@
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@types/node": "^20.0.0",
+    "deepmerge": "file:./packages/caws-cli/scripts/vendor/deepmerge",
     "eslint": "^9.0.0",
     "jest": "30.5.1",
     "lint-staged": "16.4.0",
+    "minimatch": "file:./packages/caws-cli/scripts/vendor/minimatch-legacy-adapter",
     "prettier": "^3.0.0",
     "tiktoken": "1.0.22",
     "ts-jest": "29.4.14",
@@ -76,6 +78,32 @@
     "npm": ">=10.0.0"
   },
   "overrides": {
+    "jest-config@30.5.1": {
+      "deepmerge": "$deepmerge"
+    },
+    "glob": {
+      ".": "14.0.3",
+      "minimatch": "11.0.4"
+    },
+    "@stryker-mutator/core@9.6.1": {
+      "minimatch": "11.0.4"
+    },
+    "@typescript-eslint/typescript-estree@8.71.0": {
+      "minimatch": "11.0.4"
+    },
+    "test-exclude@7.0.2": {
+      "minimatch": "11.0.4"
+    },
+    "eslint": {
+      ".": "$eslint",
+      "minimatch": "$minimatch"
+    },
+    "@eslint/config-array@0.21.0": {
+      "minimatch": "$minimatch"
+    },
+    "@eslint/eslintrc@3.3.1": {
+      "minimatch": "$minimatch"
+    },
     "js-yaml": "4.3.2",
     "lodash": "^4.17.22",
     "lodash-es": "^4.17.22",
