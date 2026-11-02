@@ -36,9 +36,11 @@ acceptance:
     when: 'they read the file header'
     then: 'it states the spec is a never-implemented design and not the CAWS API'
   - id: A4
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'Given the strict-set consumer guides, when their documented commands are run, then they succeed as printed (specs create --mode, valid ids, claim ownership, merge/destroy, waiver revoke)'
+    given: 'a reader runs the command examples in the strict-set consumer guides'
+    when: 'executed against the installed CLI'
+    then: >-
+      the commands succeed as printed: specs create with --mode and valid ids, claim
+      ownership semantics, merge-only teardown, non-idempotent revoke
   - id: A5
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
