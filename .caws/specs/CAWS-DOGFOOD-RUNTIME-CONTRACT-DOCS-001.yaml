@@ -42,3 +42,9 @@ rollback:
   - 'Revert the isolated documentation commit; runtime behavior and machine settings are unchanged'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Source-inspected architecture and doctrine at 19895e956 distinguish trusted host facts, caller identity, installed versus source analysis, bounded interpreter profiles and citation semantics. Repair matrix includes owned admission plus hostile controls and keeps producer-unavailable work independent. Current source behavior is separated from proposed repairs; no native qualification or runtime implementation claim. This spec has no executable test citations; mechanical verification checks commit identity only."
+    recorded_at: "2026-11-02T14:48:17.189Z"
+    commit_sha: "19895e9565340952b292998b57553c5ff3ef2354"
