@@ -32,6 +32,7 @@ const mainProject = {
   // workers. The global worker cap also bounds contention with native harnesses
   // and interactive jobs; it changes no test or invocation deadline.
   testMatch: ['<rootDir>/tests/**/*.test.js', '<rootDir>/src/**/*.test.js'],
+  modulePathIgnorePatterns: ['<rootDir>/reports/'],
   // tests/helpers, tests/fixtures, AND tests/kernel (the kernel project owns it)
   // are not test files for THIS project.
   testPathIgnorePatterns: [
@@ -60,6 +61,7 @@ const kernelProject = {
   setupFiles: ['<rootDir>/tests/helpers/isolate-session-env.js'],
   rootDir: '.',
   testMatch: ['<rootDir>/tests/kernel/**/*.test.ts'],
+  modulePathIgnorePatterns: ['<rootDir>/reports/'],
   moduleFileExtensions: ['ts', 'js', 'json'],
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.kernel-test.json' }],

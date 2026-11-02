@@ -27,6 +27,7 @@ module.exports = [
       'dist/**',
       'build/**',
       'coverage/**',
+      'reports/**',
       '.stryker*-tmp/**',
       'test-*/**',
       '**/.venv/**',

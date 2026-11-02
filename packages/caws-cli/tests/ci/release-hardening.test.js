@@ -164,3 +164,153 @@ test('the effective coverage config includes unexecuted runtime files and enforc
   expect(covered.error).toBeUndefined();
   expect(covered.status).toBe(0);
 }, 60000);
+
+test('lint ignores generated reports but retains authored source rules', async () => {
+  const { ESLint } = require('eslint');
+  const lint = new ESLint({
+    cwd: packageRoot,
+    overrideConfigFile: true,
+    overrideConfig: require('../../eslint.config'),
+  });
+  const report = path.join(packageRoot, 'reports/fixture/generated.js');
+  expect(await lint.isPathIgnored(report)).toBe(true);
+  const [ignored] = await lint.lintText('const unusedProbe = 1;\n', { filePath: report });
+  expect(ignored.errorCount).toBe(0);
+  expect(ignored.messages.some((message) => /ignored/i.test(message.message))).toBe(true);
+  for (const relative of [
+    'src/probe.js',
+    'scripts/probe.mjs',
+    'scripts/probe.cjs',
+    'templates/probe.js',
+    'tests/probe.js',
+    'src/probe.ts',
+    'scripts/probe.ts',
+    'templates/probe.ts',
+    'tests/probe.ts',
+  ]) {
+    const filePath = path.join(packageRoot, relative);
+    expect(await lint.isPathIgnored(filePath)).toBe(false);
+    const [result] = await lint.lintText('const unusedProbe = 1;\n', { filePath });
+    expect(result.errorCount).toBeGreaterThan(0);
+    expect(
+      result.messages.some(
+        (message) =>
+          message.ruleId === 'no-unused-vars' ||
+          message.ruleId === '@typescript-eslint/no-unused-vars'
+      )
+    ).toBe(true);
+  }
+});
+
+test('Jest excludes report package collisions without hiding authored tests or modules', () => {
+  const actual = require('../../jest.config');
+  const root = fixture();
+  const put = (relative, bytes) => {
+    const dest = path.join(root, relative);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, bytes);
+  };
+  put(
+    'src/authored/package.json',
+    JSON.stringify({ name: 'caws-crawler-probe', main: 'index.js' })
+  );
+  put('src/authored/index.js', 'module.exports = 17;\n');
+  put(
+    'reports/generated/package.json',
+    JSON.stringify({ name: 'caws-crawler-probe', main: 'index.js' })
+  );
+  put('reports/generated/index.js', 'module.exports = 99;\n');
+  put(
+    'tests/visible.test.js',
+    "test('main selected', () => expect(require('caws-crawler-probe')).toBe(17));\n"
+  );
+  put(
+    'tests/kernel/visible.test.ts',
+    "test('kernel selected', () => expect(require('caws-crawler-probe')).toBe(17));\n"
+  );
+  const config = {
+    ...actual,
+    rootDir: root,
+    projects: actual.projects.map((project) => ({
+      ...project,
+      rootDir: root,
+      // Crawler-only fixture: no native preparation or TS compilation claim.
+      globalSetup: undefined,
+      setupFiles: [],
+      transform: {},
+    })),
+  };
+  const configPath = path.join(root, 'jest.config.json');
+  const run = (args, label) => {
+    const command = [
+      require.resolve('jest/bin/jest'),
+      '--config',
+      configPath,
+      '--runInBand',
+      '--no-cache',
+      ...args,
+    ];
+    const result = spawnSync(process.execPath, command, {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, FORCE_COLOR: '0' },
+    });
+    if (process.env.CAWS_RELEASE_ARTIFACT_DIR) {
+      fs.mkdirSync(process.env.CAWS_RELEASE_ARTIFACT_DIR, { recursive: true });
+      fs.writeFileSync(
+        path.join(
+          process.env.CAWS_RELEASE_ARTIFACT_DIR,
+          path.basename(root) + '-' + label + '.json'
+        ),
+        JSON.stringify(
+          {
+            command: [process.execPath, ...command],
+            cwd: root,
+            status: result.status,
+            signal: result.signal,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            configuration: config,
+          },
+          null,
+          2
+        )
+      );
+    }
+    return result;
+  };
+  const save = () => fs.writeFileSync(configPath, JSON.stringify(config));
+  save();
+  const listed = run(['--listTests', '--json'], 'selection');
+  expect(listed.error).toBeUndefined();
+  expect(listed.status).toBe(0);
+  expect(JSON.parse(listed.stdout).sort()).toEqual(
+    [
+      path.join(root, 'tests/visible.test.js'),
+      path.join(root, 'tests/kernel/visible.test.ts'),
+    ].sort()
+  );
+  const good = run([], 'ignored-report');
+  expect(good.error).toBeUndefined();
+  expect(good.status).toBe(0);
+  expect(good.stderr).not.toMatch(/Haste module naming collision/i);
+  expect(good.stderr).toMatch(/2 passed/);
+
+  put('src/authored/index.js', 'module.exports = 18;\n');
+  const badSource = run([], 'authored-fault');
+  expect(badSource.error).toBeUndefined();
+  expect(badSource.status).toBe(1);
+  expect(badSource.stderr).toMatch(/Expected: 17/);
+  put('src/authored/index.js', 'module.exports = 17;\n');
+
+  // Removing this boundary must make the duplicate observable to the crawler.
+  config.projects.forEach((project) => {
+    project.modulePathIgnorePatterns = [];
+  });
+  save();
+  const colliding = run([], 'removed-boundary');
+  expect(colliding.error).toBeUndefined();
+  expect(colliding.stdout + colliding.stderr).toMatch(/Haste module naming collision/i);
+  expect(colliding.stderr).toContain('several different files');
+  expect(colliding.status).not.toBe(0);
+}, 60000);
