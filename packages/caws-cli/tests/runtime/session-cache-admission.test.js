@@ -61,6 +61,7 @@ const qualify = () => {
 };
 afterAll(() => {
   if (!artifactRoot) return;
+  fs.mkdirSync(artifactRoot, { recursive: true });
   fs.writeFileSync(
     path.join(artifactRoot, 'admission-decisions.json'),
     JSON.stringify(observations, null, 2) + '\n'

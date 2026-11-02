@@ -123,6 +123,8 @@ test('a selected project override receives complete Codex normalization through 
 // separately by the Rust invocation fixtures.
 function cacheFixture(handlers = ['block-dangerous.sh']) {
   const base = process.env.CAWS_TEST_ARTIFACT_DIR;
+  if (base && !path.isAbsolute(base)) throw new Error('Artifact root must be absolute');
+  if (base) fs.mkdirSync(base, { recursive: true });
   const root = fs.realpathSync(fs.mkdtempSync(path.join(base || os.tmpdir(), 'cache-engine-')));
   const repo = path.join(root, 'project');
   const home = path.join(root, 'machine');
@@ -294,8 +296,29 @@ test.each([
         fs.mkdirSync(nested);
         payload.execution_workdir = nested;
         if (scenario === 'host-nongit-origin') {
-          const origin = path.join(f.root, 'nongit-session');
-          fs.mkdirSync(origin);
+          // A retained fixture may itself be inside another Git checkout.
+          // Use a physical root, and prove it is nongit before the exchange.
+          const origin = fs.realpathSync(path.parse(f.root).root);
+          expect(fs.existsSync(path.join(origin, '.git'))).toBe(false);
+          expect(fs.existsSync(path.join(origin, '.caws'))).toBe(false);
+          const args = ['-C', origin, 'rev-parse', '--show-toplevel'];
+          const observed = cp.spawnSync('/usr/bin/git', args, {
+            env: f.environment,
+            encoding: 'utf8',
+          });
+          f.put(path.join(f.root, 'nongit-origin-receipt.json'), {
+            command: '/usr/bin/git',
+            args,
+            status: observed.status,
+            signal: observed.signal,
+            error: observed.error?.message || null,
+            stdout: observed.stdout,
+            stderr: observed.stderr,
+          });
+          expect(observed.error).toBeUndefined();
+          expect(observed.signal).toBeNull();
+          expect(observed.status).toBe(128);
+          expect(observed.stderr).toMatch(/not a git repository/i);
           payload.cwd = origin;
         }
       }
