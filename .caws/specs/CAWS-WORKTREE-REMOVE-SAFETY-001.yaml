@@ -26,9 +26,14 @@ invariants:
   - 'No success or destroyed audit is emitted while target Git metadata remains registered'
 acceptance:
   - id: A1
-    given: 'an owned clean merged worktree whose Git metadata writes are denied'
+    given: >-
+      an owned clean merged worktree with directory-wide Git metadata write denial,
+      including the native sandbox restriction
     when: 'destroy runs'
-    then: 'removal is refused before checkout or artifact-link deletion and authority bytes remain unchanged'
+    then: >-
+      real metadata write/delete probes refuse removal before checkout or
+      artifact-link deletion and authority bytes remain unchanged; per-entry
+      deletion ACLs and atomic recursive removal are outside this probe guarantee
   - id: A2
     given: 'a missing checkout with retained Git metadata or a removal failure'
     when: 'destroy is retried or merge teardown fails'
