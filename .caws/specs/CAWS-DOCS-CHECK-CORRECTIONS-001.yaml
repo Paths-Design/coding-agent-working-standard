@@ -32,9 +32,9 @@ acceptance:
       required fields include audience, the strict set description matches
       STRICT_SET, and the documented backlog matches --all output
   - id: A3
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'Given the six docs/api service specs, when a reader opens them, then each states it is a never-implemented design and not the CAWS API'
+    given: 'a reader opens any of the six docs/api service specs'
+    when: 'they read the file header'
+    then: 'it states the spec is a never-implemented design and not the CAWS API'
   - id: A4
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
