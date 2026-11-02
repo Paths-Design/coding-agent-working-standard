@@ -41,3 +41,9 @@ rollback:
   - 'Revert the isolated skill and entrypoint commit without changing installed machine guidance or runtime behavior'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed project skill is reached from AGENTS, CLAUDE and CONTRIBUTING. Real skill-creator validator passed with Python3.11/PyYAML; UI YAML and 13 new local references checked; source frontmatter validator passed for both guides with identical validator bytes. Fresh tool-free headless Terra startup01a19d8d-04a6-7f62-a6b3-f0133a1ef207 named caws-contributor-learning and quoted the actual final AGENTS rule from launch context. Startup source reduced58700 to28652 bytes; all17 moved command contracts and remaining startup prose preserved. This is a bounded discovery/input-delivery observation, not automatic selection or runtime qualification."
+    recorded_at: "2026-11-02T18:44:33.320Z"
+    commit_sha: "39904099dbcfb8a5225788fbb316d04d0a6fa321"
