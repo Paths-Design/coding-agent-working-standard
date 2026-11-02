@@ -26,9 +26,11 @@ acceptance:
     when: 'the corrections land'
     then: 'validate-docs.mjs runs inside docs:check and exits 0 for the strict set'
   - id: A2
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'Given a reader following docs/DOCUMENTATION_STANDARDS.md, when they follow the front-matter schema, then required fields and the measured backlog match validate-docs.mjs behavior'
+    given: 'the front-matter standard document'
+    when: 'compared to validate-docs.mjs'
+    then: >-
+      required fields include audience, the strict set description matches
+      STRICT_SET, and the documented backlog matches --all output
   - id: A3
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
