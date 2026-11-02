@@ -72,6 +72,16 @@ acceptance:
       declared per-file mutation floor pass, including the complete sixteen-file
       execution and nine-file analysis campaigns without exclusions or reduced
       floors
+  - id: A6
+    given: 'The exact built rc.3 tarball retained with its SHA256 and installed consumer identity'
+    when: >-
+      One complete detached ten-case installed upgrade qualification runs with
+      existing deadlines on the required platform matrix
+    then: >-
+      The run exits zero with all ten cases, raw command statuses and streams,
+      governance before-after bytes, lifecycle rendering, corrupt-snapshot refusal,
+      rollback and clean detached-consumer dependency audit retained for that
+      artifact
 observability:
   - 'Retain raw local check output and remote run URLs with exact candidate identities outside tracked source'
 rollback:
