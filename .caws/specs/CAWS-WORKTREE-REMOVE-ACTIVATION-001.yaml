@@ -1,10 +1,11 @@
 id: CAWS-WORKTREE-REMOVE-ACTIVATION-001
 title: 'Activate and qualify the landed worktree removal repair in the installed CLI'
 mode: chore
-lifecycle_state: active
-worktree: worktree-remove-activation
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'CLI snapshot2a665a115bbbf1ed is active and independently matched to the qualified removal repair; installed-module fixtures passed26 and the global CLI refused actual sandbox metadata denial before deleting checkout bytes or authority. Native registration hashes preserved; previous snapshot retained. Per-entry ACL completeness and atomic recursive deletion remain outside the tested guarantee.'
 created_at: '2026-11-02T19:31:29.750Z'
-updated_at: '2026-11-02T19:33:01.945Z'
+updated_at: '2026-11-02T20:10:05.100Z'
 created_by_session: '01a19d1c-1d90-7833-92d2-38c5735da9e2'
 blast_radius:
   modules:
