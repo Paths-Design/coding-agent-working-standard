@@ -35,9 +35,9 @@ non_functional: {}
 contracts: []
 evidence:
   - criterion_id: A1
-    status: unchecked
-    evidence_ref: "Owner 01a19d1c-1d90-7833-92d2-38c5735da9e2 retains activation. Clean build 7efe208ac from local main contains unchanged removal repair a7c47e2ca. Isolated npm ci completed; strict tsc and authoritative JS allowlist copy completed; activation-build-check.log under canonical .caws/state/worktree-remove-safety shows26 focused cases passing. Normal scripts/install-cli-snapshot.mjs with absolute package/bin/home was refused pre-execution by installed bash-write-guard.sh: unavailable-native-context for relative target dist/.; no validated host command directory/execution_workdir. No shell exit status exists for refused installer. Prior CLI640dea279f5fcac9 remains active; CLI target and native registration hashes unchanged (activation-before.txt, readback). Required asset check and installer/package qualification remain pending. Resume trigger: user runs the exact normal installer in a human terminal, or trusted native execution_workdir transport is repaired. Preserve owned packaging lane until installed qualification and A2 complete."
-    recorded_at: "2026-11-02T19:50:25.642Z"
+    status: pass
+    evidence_ref: "User ran standard atomic installer successfully. Independently read back global caws target at retained snapshot2a665a115bbbf1ed-jBSXQX and hashed retained tarball:2a665a115bbbf1eda4b3f9ed737d97c697b85d354480eefc74b8a7240e6a0d26. Installed dist/index.js and three repaired store modules match clean build7efe208ac byte-for-byte; previous640dea snapshot remains. Native hook/settings/launcher hashes unchanged. Raw identity and test/refusal receipt at canonical .caws/state/worktree-remove-safety/installed-validation.json; commit verification only checks cited source identity."
+    recorded_at: "2026-11-02T20:07:16.954Z"
     commit_sha: "7efe208ac4018cc6522ea2f2c2f758297cd5e9bc"
   - criterion_id: A2
     status: unchecked
