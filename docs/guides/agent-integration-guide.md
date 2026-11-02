@@ -162,7 +162,7 @@ caws waiver show <id>-w
 caws waiver revoke <id>-w
 ```
 
-Waivers are the legitimate escape from a blocking gate. Editing `policy.yaml` directly will be rejected by CI and is a violation of the governed-paths discipline. Risk-tier budgets need neither: `budget_limit` is an advisory sizing goal that reports an overage and never blocks, so do not trim, defer or stub work to fit it.
+Waivers are the legitimate escape from a blocking gate. A change to `policy.yaml` must land as its own pull request with two approvals: CI refuses a PR that mixes `.caws/policy.yaml` with non-`.caws/` code changes, and at edit time the path needs an Edit under an active spec whose `scope.in` admits it. Risk-tier budgets need neither: `budget_limit` is an advisory sizing goal that reports an overage and never blocks, so do not trim, defer or stub work to fit it.
 
 ## Worktree ownership (multi-agent)
 
@@ -212,7 +212,7 @@ caws doctor && \
 - **No quality scoring API** (`caws evaluate` is removed). Use `caws gates run` exit code + the per-gate event in `events.jsonl`.
 - **No git-hook installer** (`caws hooks install` is removed). <!-- agent-surfaces-prose:start --> Use `caws init --agent-surface <claude-code | codex | opencode | zcode | kimi-code | qwen-code | dsh | cursor | windsurf | none>` to initialize a project. Configured system surfaces inherit machine hooks without project copies. Use `caws init adapters install` for shared updates and `configure`/`migrate` for one-time native setup. Legacy pack templates for `claude-code`, `codex`, `opencode`, `zcode`, `kimi-code`, `qwen-code`, `dsh` are implemented; `cursor`, `windsurf` are declared surfaces but not implemented. <!-- agent-surfaces-prose:end -->
 - **No provenance subsystem** (`caws provenance` is removed). The hash-chained `events.jsonl` is the audit surface.
-- **No `caws parallel setup`** (deferred to v11.3+). Loop `caws worktree create` per spec instead.
+- **No `caws parallel setup`** (removed; not planned). Loop `caws worktree create` per spec instead.
 
 ## CI integration
 

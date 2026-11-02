@@ -371,6 +371,12 @@ module.exports = { captureError };
 
 ## Performance Monitoring
 
+> **Proposed — not implemented.** CAWS does not currently ship
+> `tests/perf-budgets.test.js`, a `perf:budgets` npm script, a
+> `performance-monitoring.yml` workflow, or a `dist-bundle/` output (the build
+> emits `dist/`). The examples in this section are a proposed harness, not
+> current state; add the real one before relying on these checks.
+
 ### CLI Performance Budgets
 
 ```javascript

@@ -127,6 +127,21 @@ caws doctor
 
 **Expected**: exit 0 (no findings).
 
+### Bind a worktree before writing code
+
+A draft spec confers no write authority. Bind it to a worktree and work inside
+that checkout: from the canonical checkout the scope guard answers
+`scope.no_authority.unbound` for every edit.
+
+```bash
+caws worktree create prefs-001 --spec PREF-001
+cd .caws/worktrees/prefs-001
+caws claim
+caws scope show src/preferences/     # ADMIT — the proof before the first write
+```
+
+Every later path in this tutorial is relative to that bound worktree.
+
 ---
 
 ## Step 2: Plan the Implementation
@@ -405,17 +420,18 @@ npm test
 
 ## Step 5: Verify Quality Gates
 
-### Check Change Budget
+### Check scope and the advisory budget
+
+`change_budget` is not a v11 spec field. The `budget_limit` gate reports the
+staged change against the policy sizing goals for the spec's risk tier, and it
+is advisory — it never fails the run:
 
 ```bash
-# Count files changed
-find src/ tests/ -name "*.ts" -newer .caws/specs/<spec-id>.yaml | wc -l
-
-# Count lines changed
-find src/ tests/ -name "*.ts" -newer .caws/specs/<spec-id>.yaml -exec wc -l {} + | tail -1
+caws gates run --spec PREF-001
 ```
 
-**Expected**: Within budget (8 files, 200 lines)
+**Expected**: each policy gate reports its disposition; a `budget_limit` overage
+prints `[advisory — never blocks]` and does not change the exit code.
 
 ### Run quality gates
 
@@ -497,8 +513,6 @@ language settings.
 ## Feature Spec
 
 - **ID**: PREF-001
-- **Risk Tier**: 2
-- **Change Budget**: 8 files, 200 lines
 - **Actual Changes**: 6 files, 145 lines
 
 ## Files Changed

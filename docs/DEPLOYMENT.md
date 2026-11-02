@@ -222,20 +222,21 @@ graph LR
 
 ### Tag conventions
 
-| Tag pattern       | Outcome                                                   |
-| ----------------- | --------------------------------------------------------- |
-| `caws-cli-vX.Y.Z` | **Accepted** — triggers publish                           |
-| `caws-kernel-v*`  | **Refused and deleted** — kernel publishes manually in v1 |
-| `v*` (bare)       | **Refused and deleted** — legacy convention, auto-cleaned |
+| Tag pattern       | Outcome                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------- |
+| `caws-cli-vX.Y.Z` | **Accepted** — triggers publish                                                              |
+| `caws-kernel-v*`  | **Refused and deleted** — kernel is absorbed into the CLI; nothing publishes for this prefix |
+| `v*` (bare)       | **Refused and deleted** — legacy convention, auto-cleaned                                    |
 
 **Never push a bare `v*` tag** — it gets auto-deleted by the workflow.
 
 ### Asymmetric failure invariant
 
-| Failure stage                                    | Tag handling      | Registry        |
-| ------------------------------------------------ | ----------------- | --------------- |
-| Pre-publish (validate / build / smoke / publish) | Tag **DELETED**   | Untouched       |
-| Post-publish (registry-verify / GitHub Release)  | Tag **PRESERVED** | Has the version |
+| Failure stage                                   | Tag handling      | Registry                                                             |
+| ----------------------------------------------- | ----------------- | -------------------------------------------------------------------- |
+| Pre-publish (validate / build / smoke)          | Tag **DELETED**   | Untouched                                                            |
+| `npm publish` exits non-zero (publish started)  | Tag **PRESERVED** | Unknown — inspect the registry and artifact identity before retrying |
+| Post-publish (registry-verify / GitHub Release) | Tag **PRESERVED** | Has the version                                                      |
 
 When a pre-publish step fails, delete-and-retag. When a post-publish step fails,
 the workflow emits a repair command — run it; do not retag.
@@ -551,11 +552,16 @@ spec:
 **Scenario: Complete Loss**
 
 ```bash
-# Worst case: Rebuild from git history
+# Worst case: restore the released commit and re-drive the tag-driven workflow.
+# Do NOT `npm publish` from a clone: that bypasses provenance, tag/version
+# validation and the next-vs-latest channel selection.
 git clone https://github.com/Paths-Design/coding-agent-working-standard
-npm install
-npm run build
-npm publish --force
+cd coding-agent-working-standard
+git fetch --tags
+git checkout caws-cli-vX.Y.Z
+# Re-run the release by re-pushing the tag (delete it first only when the
+# version never reached the registry); otherwise use the repair command the
+# original workflow emitted in its post-publish failure message.
 ```
 
 ---

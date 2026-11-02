@@ -1,13 +1,14 @@
 ---
 doc_id: agent-bash-mutation-scope-bypass
-authority: design
-status: proposed
+authority: architecture
+status: draft
 title:
   Post-Bash scope check for core-source edits/deletes that route around the
   scope guard
 owner: '@darianrosebrook'
 spec: AGENT-BASH-MUTATION-SCOPE-BYPASS-001
 created: 2026-06-10
+updated: 2026-06-10
 audience: maintainer
 ---
 

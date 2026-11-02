@@ -136,7 +136,7 @@ caws waiver create FEAT-1a \
 caws waiver list                     # all waivers
 caws waiver show FEAT-1a            # one waiver
 
-# Revoke (idempotent)
+# Revoke (not idempotent — a second revoke is refused)
 caws waiver revoke FEAT-1a
 ```
 
@@ -216,7 +216,8 @@ After opening:
 
 - [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md)
   — doctrine source
-- [`docs/api/cli.md`](../api/cli.md) — full CLI reference (§8 `caws waiver`)
+- [`docs/api/cli.md`](../api/cli.md) — CLI task and option semantics (the
+  exhaustive catalogue is live `caws --help`)
 - [`docs/agent-workflow-tools.md`](../agent-workflow-tools.md) — agent
   block-recovery patterns
 - [`AGENTS.md`](../../AGENTS.md) — agent quickstart

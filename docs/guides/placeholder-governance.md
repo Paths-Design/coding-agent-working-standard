@@ -5,9 +5,9 @@
 > `validatePlaceholderGovernance`, `passesPlaceholderGovernance`,
 > `assertNoBlockingPlaceholders`, `calculateDebtScore`,
 > `DEFAULT_PLACEHOLDER_CONFIG`, `PlaceholderGovernanceConfig`).
-> `packages/caws-types` was deleted in `CAWS-ABSORB-KERNEL-01` — it has no
-> `src/` or `package.json` and is untracked by git; what's on disk is stale
-> `dist/` build output. This doc also describes a "placeholder governance gate"
+> `packages/caws-types` was deleted in `CAWS-ABSORB-KERNEL-01` — the directory
+> is absent entirely (no `src/`, no `package.json`, no `dist/`), and it is
+> untracked by git. This doc also describes a "placeholder governance gate"
 > running as part of `caws gates run`; the current gate set (`caws gates list`)
 > is exactly `budget_limit`, `spec_completeness`, `scope_boundary`,
 > `god_object`, `todo_detection` — there is no placeholder-governance gate. The

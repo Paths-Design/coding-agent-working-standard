@@ -13,7 +13,9 @@
 #           retirement-readiness campaign).
 #
 # Runtime mirror: packages/caws-cli/src/shell/legacy-command-map.js
-# Equivalence test: packages/caws-cli/tests/matrix/surface-matrix-completeness.test.js
+# Equivalence test: none at this revision. Re-add
+# packages/caws-cli/tests/matrix/surface-matrix-completeness.test.js when the
+# mirror is next regenerated; without it this file is not mechanically locked.
 #
 # This file is doctrine. The CLI does not read it at runtime (it is not
 # bundled — see packages/caws-cli/package.json "files"). Runtime classifiers
@@ -26,14 +28,12 @@ source_authority:
   migration_doc: docs/migration-v10-to-v11.md
   command_surface_doc: docs/architecture/caws-vnext-command-surface.md
 
-# The set of v11 command groups that the CLI registers today.
-# Cross-checked against packages/caws-cli/src/shell/register.ts inline
-# .command() calls at lines 106, 163, 178, 211, 227, 272, 306, 369, 453,
-# 578, 793, 928. Twelve groups; matches caws --help output. The runtime
-# unknown-command suggester in packages/caws-cli/src/index.js consumes
-# this same twelve-group set via REGISTERED_COMMAND_GROUPS (unified by
-# CAWS-REMOVED-COMMAND-DIAGNOSTICS-001; the prior 8-entry hand-list is
-# gone).
+# The set of command groups that the CLI registers today.
+# Re-derived from `caws --help` at 12.2.0-rc.2: twenty groups. The runtime
+# unknown-command suggester consumes REGISTERED_COMMAND_GROUPS in
+# packages/caws-cli/src/shell/registered-command-groups.js, which currently
+# lists eighteen (it predates `hooks` and `goal`); regenerate it from
+# `caws --help` when the mirror is updated.
 v11_registered_groups:
   - init
   - doctor
@@ -52,6 +52,9 @@ v11_registered_groups:
   - session
   - working-tree
   - handoff
+  - hooks
+  - tui
+  - goal
 
 # Multi-token legacy commands appear with the full string in `command`
 # (e.g., "sidecar gaps"). The longest-prefix classifier lands in Slice 2;
@@ -565,17 +568,17 @@ v10_2_commands:
 
   - command: session
     disposition: deferred
-    v11_status: planned
+    v11_status: shipped
     replacement: null
-    since: null
+    since: '11.1'
     source_docs:
       - 'docs/migration-v10-to-v11.md#deferred'
       - 'docs/architecture/caws-vnext-command-surface.md'
     implementation_probe:
-      group: null
+      group: session
     runtime_diagnostic:
-      kind: deferred
-      message: 'caws session is deferred to v11.3+. Per-worktree binding remains the v11 isolation primitive until then.'
+      kind: shipped
+      message: 'caws session prune and pickup shipped in v11.1.x. The full lifecycle (start/checkpoint/end/list/show/briefing) is not shipped.'
 
   - command: session start
     disposition: deferred
@@ -661,31 +664,31 @@ v10_2_commands:
         - 'caws worktree create <name> --spec <id>'
 
   - command: worktree prune
-    disposition: deferred
-    v11_status: planned
+    disposition: kept
+    v11_status: shipped
     replacement: null
-    since: null
+    since: '11.1'
     source_docs:
-      - 'docs/migration-v10-to-v11.md#deferred'
+      - 'docs/migration-v10-to-v11.md'
       - 'docs/architecture/caws-vnext-command-surface.md'
     implementation_probe:
-      group: null
+      group: worktree
     runtime_diagnostic:
-      kind: deferred
-      message: 'caws worktree prune is planned for v11.2. Until then, use caws status to inspect worktree state and clean up via git worktree directly.'
+      kind: shipped
+      message: 'caws worktree prune shipped in v11.1 as a dry-run-default cleanup planner; use caws worktree cleanup-plan for physical residue.'
 
   - command: worktree repair
-    disposition: deferred
-    v11_status: planned
+    disposition: kept
+    v11_status: shipped
     replacement: null
-    since: null
+    since: '11.1'
     source_docs:
-      - 'docs/migration-v10-to-v11.md#deferred'
+      - 'docs/migration-v10-to-v11.md'
     implementation_probe:
-      group: null
+      group: worktree
     runtime_diagnostic:
-      kind: deferred
-      message: 'caws worktree repair is planned for v11.2. Distinct from worktree repair-sparse (shipped).'
+      kind: shipped
+      message: 'caws worktree repair shipped in v11.1 as the governed half-state executor. Distinct from worktree repair-sparse (also shipped).'
 
   - command: worktree reconcile
     disposition: deferred
@@ -698,7 +701,7 @@ v10_2_commands:
       group: null
     runtime_diagnostic:
       kind: deferred
-      message: 'caws worktree reconcile is planned for v11.2.'
+      message: 'caws worktree reconcile was never built; use caws worktree repair/prune/cleanup-plan instead.'
 
   # ─── History gaps (deleted pre-v11; surfaced in pre-investigation) ───
   - command: quality-gates

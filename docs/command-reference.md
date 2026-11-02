@@ -28,6 +28,7 @@ an exhaustive reference generated from
 registers the live parser and help. Maintainers build the CLI and run
 `npm run docs:stage --workspace @paths.design/caws-cli`; the resulting
 `packages/caws-cli/docs/command-reference.md` is ignored and never committed.
-`npm run docs:check --workspace @paths.design/caws-cli` checks that artifact and
-the authored guidance markers. See [CLI workflows](api/cli.md) for the distinctions
-between installation, configuration, adoption, and governance.
+`npm run docs:check --workspace @paths.design/caws-cli` checks the committed
+front-matter schema, that artifact, and the authored guidance markers. See
+[CLI workflows](api/cli.md) for the distinctions between installation,
+configuration, adoption, and governance.
