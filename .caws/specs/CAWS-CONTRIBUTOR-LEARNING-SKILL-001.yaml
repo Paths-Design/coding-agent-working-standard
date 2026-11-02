@@ -1,0 +1,42 @@
+id: CAWS-CONTRIBUTOR-LEARNING-SKILL-001
+title: 'Carry contributor findings into bounded repairs and maintained agent guidance'
+mode: doc
+lifecycle_state: active
+created_at: '2026-11-02T16:35:53.302Z'
+updated_at: '2026-11-02T16:35:53.302Z'
+created_by_session: '01a19c55-c310-7340-95ca-ecbaa3531b22'
+blast_radius:
+  modules:
+    - 'Repository agent guidance and contributor workflow'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'AGENTS.md'
+    - 'CLAUDE.md'
+    - 'CONTRIBUTING.md'
+    - 'docs/guides/coding-rigor.md'
+    - '.agents/skills/caws-contributor-learning/**'
+  out: []
+invariants:
+  - 'Project policy and bound specs retain authority; instruction maintenance grants no exception or global configuration permission'
+  - 'Consequential findings remain attached to the requested consumer outcome without requiring unrelated cleanup or new progress ledgers'
+acceptance:
+  - id: A1
+    given: 'a contributor working in this repository'
+    when: 'the contributor reads the harness entrypoint or contribution guide'
+    then: 'the project skill is reachable and its manifest and references validate without requiring a global installation'
+  - id: A2
+    given: 'an encountered defect or misleading instruction'
+    when: 'the skill is followed'
+    then: 'source applicability, bounded repair, evidence-backed guidance maintenance and a finite stopping condition preserve parent acceptance and authority'
+  - id: A3
+    given: 'the completed skill and representative contributor tasks'
+    when: 'fresh agents use it with relevant raw source'
+    then: 'inspectable decisions distinguish consequential repair from unrelated cleanup and instruction changes from runtime fixes, with evaluation limits retained'
+observability:
+  - 'Keep raw validation and behavioral probe outputs in the current task context; generated logs remain outside source commits'
+rollback:
+  - 'Revert the isolated skill and entrypoint commit without changing installed machine guidance or runtime behavior'
+non_functional: {}
+contracts: []
