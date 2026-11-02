@@ -62,6 +62,16 @@ acceptance:
     then: >-
       the lockfile uses Handlebars 4.7.10 without changing direct dependency ranges
       and the workspace audit reports zero findings
+  - id: A5
+    given: 'The committed integrated rc.3 candidate and its complete declared five-surface mutation policy'
+    when: >-
+      Current CI and local qualification execute with exact source, test, build and
+      dependency identity retained
+    then: >-
+      Required tests, audit, typecheck, lint, documentation, coverage and every
+      declared per-file mutation floor pass, including the complete sixteen-file
+      execution and nine-file analysis campaigns without exclusions or reduced
+      floors
 observability:
   - 'Retain raw local check output and remote run URLs with exact candidate identities outside tracked source'
 rollback:
