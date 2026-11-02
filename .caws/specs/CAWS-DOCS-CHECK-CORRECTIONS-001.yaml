@@ -100,3 +100,8 @@ evidence:
     evidence_ref: "Commit 964190970: link/anchor/fence/doc_id scan over docs/ (excluding worktree-sparse docs/internal .caws/specs link) reports zero broken links or anchors; validator YAML/JSON parse checks pass for v11-surface-matrix and read-surface-authority; docs/api/schema.md JSON block parses with required=10 fields"
     recorded_at: "2026-11-02T13:03:49.063Z"
     commit_sha: "964190970"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "Commit 964190970: hook-pack-shared-core.md separates system-runtime layout from legacy project-pack layout; hooks-and-agent-workflows.md describes the two live hook planes and current install path; repo-local-hook-policy.md tier-2 rendering corrected; sterling migration digest/count/surface state re-derived"
+    recorded_at: "2026-11-02T13:03:50.511Z"
+    commit_sha: "964190970"
