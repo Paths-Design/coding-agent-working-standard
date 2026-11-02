@@ -1,0 +1,46 @@
+id: CAWS-DOCS-CHECK-CORRECTIONS-001
+title: 'Correct doc-check drift across docs/'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-11-02T12:54:50.757Z'
+updated_at: '2026-11-02T12:54:50.757Z'
+created_by_session: 'session-47e85a86-f324-4d1e-adf3-5a32262e53de'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs'
+    - 'packages/caws-cli/package.json'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'Given the doc-check audit at e0c192bfe, when corrections land, then validate-docs.mjs runs as part of docs:check and exits 0 on the strict set'
+  - id: A2
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'Given a reader following docs/DOCUMENTATION_STANDARDS.md, when they follow the front-matter schema, then required fields and the measured backlog match validate-docs.mjs behavior'
+  - id: A3
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'Given the six docs/api service specs, when a reader opens them, then each states it is a never-implemented design and not the CAWS API'
+  - id: A4
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'Given the strict-set consumer guides, when their documented commands are run, then they succeed as printed (specs create --mode, valid ids, claim ownership, merge/destroy, waiver revoke)'
+  - id: A5
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'Given the architecture and release docs, when checked against live help and workflows, then stale counts, event types, tag handling, and file citations are corrected'
+  - id: A6
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'Given docs/README.md, when a maintainer uses it as the index, then it describes docs/internal correctly and lists the omitted areas'
+non_functional: {}
+contracts: []
