@@ -131,10 +131,10 @@ function registerTests({ test, after }) {
         false
       );
       assert.equal(fs.existsSync(path.join(root, '.git/refs/stash')), false);
-    assert.equal(
-      fs.readdirSync(path.join(root, '.git')).filter(name => name.includes('lint-staged')).length,
-      0
-    );
+      assert.equal(
+        fs.readdirSync(path.join(root, '.git')).filter(name => name.includes('lint-staged')).length,
+        0
+      );
     };
     return { root, env, git, write, run, index, sparse, calls, noBackup };
   }
@@ -359,6 +359,156 @@ function registerTests({ test, after }) {
     assert.equal(f.index('source.js'), 'const =\n');
     f.noBackup();
   });
+
+  test('Native channel sends complete file data before formatting and restages real formatter output', () => {
+    const f = fixture();
+    f.write('source.js', 'const value=1\n');
+    f.git('add', 'source.js');
+    const replyRoot = path.join(f.root, 'native-replies');
+    fs.mkdirSync(replyRoot, { mode: 0o700 });
+    const nonce = 'ab'.repeat(32);
+    const requests = [];
+    const directFormatters = [];
+    let diagnostics = '';
+    const status = main({
+      cwd: f.root,
+      env: {
+        ...f.env,
+        CAWS_HOOK_FORMAT_CHANNEL: JSON.stringify({
+          schema: 'caws.git-hook.format-channel.v1',
+          nonce,
+          replyRoot,
+          timeoutMs: 30000,
+        }),
+      },
+      error: text => {
+        diagnostics += text;
+      },
+      spawn: (command, args, options) => {
+        if (command === process.execPath) directFormatters.push(args);
+        return spawnSync(command, args, options);
+      },
+      // This unit test supplies the producer's reply. Actual Native/Host
+      // admission and no-fork enforcement require the separate integrated run.
+      output: text => {
+        if (!text.startsWith('CAWS_FORMATTER_REQUEST_V1 ')) return;
+        const request = JSON.parse(Buffer.from(text.trim().split(' ')[1], 'base64'));
+        requests.push(request);
+        assert.deepEqual(request, {
+          schema: 'caws.git-hook.format-request.v1',
+          nonce,
+          sequence: requests.length - 1,
+          kind: requests.length === 1 ? 'eslint' : 'prettier',
+          paths: ['source.js'],
+          allPaths: ['source.js'],
+        });
+        const manifestPath = require.resolve(`${request.kind}/package.json`, { paths: [f.root] });
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        const bin = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin[request.kind];
+        const args =
+          request.kind === 'eslint'
+            ? ['--fix', '--', './source.js']
+            : ['--write', '--no-error-on-unmatched-pattern', '--', './source.js'];
+        const result = spawnSync(
+          process.execPath,
+          [path.resolve(path.dirname(manifestPath), bin), ...args],
+          { cwd: f.root, env: f.env }
+        );
+        assert.equal(result.status, 0, result.stderr?.toString());
+        fs.writeFileSync(
+          path.join(replyRoot, `format-${nonce}-${request.sequence}.json`),
+          JSON.stringify({
+            schema: 'caws.git-hook.format-reply.v1',
+            nonce,
+            sequence: request.sequence,
+            exitCode: result.status,
+            stdoutBase64: result.stdout.toString('base64'),
+            stderrBase64: result.stderr.toString('base64'),
+          }),
+          { flag: 'wx', mode: 0o600 }
+        );
+      },
+    });
+    assert.equal(status, 0, diagnostics);
+    assert.deepEqual(directFormatters, []);
+    assert.deepEqual(
+      requests.map(request => request.kind),
+      ['eslint', 'prettier']
+    );
+    assert.equal(f.index('source.js'), 'const value = 1;\n');
+    f.noBackup();
+  });
+
+  for (const control of ['nonzero', 'wrong-nonce', 'symlink', 'timeout']) {
+    test(`Native formatter ${control} refuses before restaging`, () => {
+      const f = fixture();
+      f.write('doc.md', UNFORMATTED);
+      f.git('add', 'doc.md');
+      const replyRoot = path.join(f.root, 'native-replies');
+      fs.mkdirSync(replyRoot, { mode: 0o700 });
+      const nonce = 'cd'.repeat(32);
+      let diagnostics = '';
+      const status = main({
+        cwd: f.root,
+        env: {
+          ...f.env,
+          CAWS_HOOK_FORMAT_CHANNEL: JSON.stringify({
+            schema: 'caws.git-hook.format-channel.v1',
+            nonce,
+            replyRoot,
+            timeoutMs: control === 'timeout' ? 20 : 30000,
+          }),
+        },
+        error: text => {
+          diagnostics += text;
+        },
+        spawn: (command, args, options) => {
+          assert.notEqual(
+            command,
+            process.execPath,
+            'bounded script cannot spawn formatters directly'
+          );
+          return spawnSync(command, args, options);
+        },
+        output: text => {
+          if (!text.startsWith('CAWS_FORMATTER_REQUEST_V1 ') || control === 'timeout') return;
+          const request = JSON.parse(Buffer.from(text.trim().split(' ')[1], 'base64'));
+          const destination = path.join(replyRoot, `format-${nonce}-${request.sequence}.json`);
+          const bytes = JSON.stringify({
+            schema: 'caws.git-hook.format-reply.v1',
+            nonce: control === 'wrong-nonce' ? 'ef'.repeat(32) : nonce,
+            sequence: request.sequence,
+            exitCode: control === 'nonzero' ? 23 : 0,
+            stdoutBase64: '',
+            stderrBase64: Buffer.from('formatter control\n').toString('base64'),
+          });
+          if (control === 'symlink') {
+            const target = path.join(replyRoot, 'other');
+            fs.writeFileSync(target, bytes, { mode: 0o600 });
+            fs.symlinkSync(target, destination);
+          } else fs.writeFileSync(destination, bytes, { flag: 'wx', mode: 0o600 });
+        },
+      });
+      assert.equal(status, control === 'nonzero' ? 23 : 1, diagnostics);
+      assert.equal(f.index('doc.md'), UNFORMATTED);
+      assert.equal(fs.readFileSync(path.join(f.root, 'doc.md'), 'utf8'), UNFORMATTED);
+      assert.equal(
+        f.calls().some(args => args.includes('add')),
+        false
+      );
+      assert.ok(
+        diagnostics.includes(
+          control === 'nonzero'
+            ? 'exited 23'
+            : control === 'timeout'
+              ? 'timed out'
+              : control === 'symlink'
+                ? 'ELOOP'
+                : 'Invalid Native formatter reply'
+        )
+      );
+    });
+  }
 
   test('a symlink working file or parent cannot redirect a formatter outside the tracked path', () => {
     const f = fixture();

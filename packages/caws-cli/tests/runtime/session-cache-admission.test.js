@@ -12,6 +12,23 @@ const {
 } = require('../../dist/runtime/session-cache-admission');
 const templates = path.resolve(__dirname, '../../templates/hook-packs');
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+const legacyStartup = {
+  'dispatch.sh': {
+    sha256: '5f8a185f8b63e601aa29af3431d0ddafedb9a44f45d6a2d9279d32410fc2150f',
+    text: '#!/bin/bash\n# CAWS machine adapter runtime. Project policy supplies ordered handler entries;\n# executable adapter libraries come from one immutable machine snapshot.\nset -uo pipefail\nRUNTIME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\nexport CAWS_SHARED_LIB_DIR="$RUNTIME_DIR/lib"\nexport CAWS_MACHINE_ADAPTER_LIB_DIR="$RUNTIME_DIR/surfaces/$1/lib"\nexport CAWS_MACHINE_RUNTIME=1\nexport CAWS_AGENT_SURFACE="$1"\nEVENT="$2"\nHOOKS_DIR="$3"\nshift 3\nexport HOOKS_DIR\n\nmissing() {\n  echo "[caws machine adapter] Required runtime library failed: $1" >&2\n  exit 2\n}\nsource "$RUNTIME_DIR/runtime-paths.sh" || missing runtime-paths.sh\nsource "$RUNTIME_DIR/lib/agent-surface.sh" || missing agent-surface.sh\ncaws_source_lib parse-input.sh || missing parse-input.sh\nparse_hook_input || missing input\ncaws_source_lib session-id.sh || missing session-id.sh\ncaws_normalize_session_env "$(resolve_caws_session_id_with_payload "${HOOK_SESSION_ID:-}")" >/dev/null || missing session-id\ncaws_source_lib run-handlers.sh || missing run-handlers.sh\nexport CAWS_PRIOR_BASH_ENV="${BASH_ENV:-}"\nexport BASH_ENV="$RUNTIME_DIR/handler-env.sh"\n[[ "$#" -gt 0 ]] || exit 0\nif [[ "$EVENT" == pre_tool_use ]]; then\n  run_handlers --short-circuit-on-block "$@"\nelse\n  # Preserve the legacy PostToolUse dispatcher\'s runtime-only disable list.\n  # Policy retains the declared list, so removing an environment override can\n  # re-enable a handler without another adoption or a policy rewrite.\n  if [[ "$EVENT" == post_tool_use ]]; then\n    HANDLERS=()\n    for handler in "$@"; do\n      case ":${CAWS_DISABLED_HANDLERS:-}:" in\n        *":${handler%% *}:"*) ;;\n        *) HANDLERS+=("$handler") ;;\n      esac\n    done\n    [[ "${#HANDLERS[@]}" -gt 0 ]] || exit 0\n    run_handlers "${HANDLERS[@]}"\n  else\n    run_handlers "$@"\n  fi\nfi\n',
+  },
+  'handler-env.sh': {
+    sha256: '901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7',
+    text: '#!/bin/bash\n# Preload the selected adapter in Bash handler children. Existing guard scripts\n# can keep sourcing their local libraries: the shared idempotence flags preserve\n# the selected parser, identity resolver and native emitters. Guard code and\n# ownership oracles remain project-owned. Preserve an existing Bash startup file.\nif [[ -n "${CAWS_PRIOR_BASH_ENV:-}" && "${CAWS_PRIOR_BASH_ENV}" != "${BASH_ENV:-}" ]]; then\n  source "$CAWS_PRIOR_BASH_ENV" || exit 2\nfi\nsource "${CAWS_SHARED_LIB_DIR}/agent-surface.sh" || exit 2\ncaws_source_lib parse-input.sh || exit 2\ncaws_source_lib session-id.sh || exit 2\ncaws_source_lib emit.sh || exit 2\n',
+  },
+};
+function installLegacyStartup() {
+  for (const [name, row] of Object.entries(legacyStartup)) {
+    expect(sha(Buffer.from(row.text))).toBe(row.sha256);
+    fs.writeFileSync(path.join(runtime, name), row.text);
+    expect(sha(fs.readFileSync(path.join(runtime, name)))).toBe(row.sha256);
+  }
+}
 const libraryKinds = {
   'agent-surface.sh': 'shared',
   'parse-input.sh': 'surface',
@@ -171,6 +188,20 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test.each(['Write', 'Edit', 'apply_patch'])(
+  'original %s file-tool input qualifies the stock prefix without rewriting payload',
+  (tool) => {
+    const tool_input =
+      tool === 'apply_patch'
+        ? { command: '*** Begin Patch\n*** Delete File: src/a\n*** End Patch\n' }
+        : { file_path: 'src/a', content: 'ordinary' };
+    payload({ tool_name: tool, tool_input, cwd: checkout, session_id: 'original' });
+    const before = request.inputJson;
+    expect(qualify()).toBe(true);
+    expect(request.inputJson).toBe(before);
+  }
+);
+
 function sessionEnd(surface = 'codex') {
   selection.surface = request.surface = surface;
   selection.event = request.event = 'session_end';
@@ -205,6 +236,57 @@ function sessionEnd(surface = 'codex') {
     },
   ];
 }
+test('current startup pair admits the actual apply_patch carrier with absent startup keys', () => {
+  expect(sha(fs.readFileSync(path.join(runtime, 'dispatch.sh')))).toBe(
+    'ae1b3b5bae0028da2f5a87a41f55fe1a5a8b60eb63169361c50de2a44cf5cdd5'
+  );
+  expect(sha(fs.readFileSync(path.join(runtime, 'handler-env.sh')))).toBe(
+    '04c7cb5485bfb1b5f3f64ab6ef0a17981db795dc5454134cdc257e7752b0ebdb'
+  );
+  payload({
+    tool_name: 'apply_patch',
+    tool_input: {
+      command: '*** Begin Patch\n*** Update File: src/a.js\n@@\n-a\n+b\n*** End Patch',
+    },
+  });
+  expect(qualify()).toBe(true);
+});
+
+test('the exact legacy startup pair retains its reviewed admission', () => {
+  expect(qualify()).toBe(true);
+  installLegacyStartup();
+  expect(qualify()).toBe(true);
+});
+
+test.each(['dispatch.sh', 'handler-env.sh'])(
+  'a mixed startup pair refuses the legacy %s member',
+  (name) => {
+    expect(qualify()).toBe(true);
+    const current = fs.readFileSync(path.join(runtime, name));
+    const row = legacyStartup[name];
+    expect(sha(Buffer.from(row.text))).toBe(row.sha256);
+    fs.writeFileSync(path.join(runtime, name), row.text);
+    expect(qualify()).toBe(false);
+    fs.writeFileSync(path.join(runtime, name), current);
+    expect(qualify()).toBe(true);
+  }
+);
+
+test.each(['original', 'effective'])(
+  'current startup pair refuses every own startup-key presence in the %s environment',
+  (side) => {
+    const target = side === 'original' ? request.caller.environment : environment;
+    expect(qualify()).toBe(true);
+    for (const name of ['BASH_ENV', 'CAWS_PRIOR_BASH_ENV', 'CAWS_PRIOR_BASH_ENV_SET']) {
+      for (const value of ['', 'x', 'unknown', path.join(runtime, 'handler-env.sh')]) {
+        target[name] = value;
+        expect(qualify()).toBe(false);
+        delete target[name];
+        expect(qualify()).toBe(true);
+      }
+    }
+  }
+);
 const qualifyEnd = (sessionId = 'original') =>
   qualifiesForNativeSessionEndPrefix({
     request,
@@ -220,6 +302,43 @@ test.each(['codex', 'claude-code'])(
     const before = snapshot(root);
     expect(qualifyEnd()).toBe(true);
     expect(snapshot(root)).toEqual(before);
+    expect(fs.existsSync(path.join(checkout, '.caws/sessions'))).toBe(false);
+  }
+);
+
+test.each(['codex', 'claude-code'])(
+  'SessionEnd retains the exact legacy startup pair for %s',
+  (surface) => {
+    sessionEnd(surface);
+    expect(qualifyEnd()).toBe(true);
+    installLegacyStartup();
+    expect(qualifyEnd()).toBe(true);
+  }
+);
+
+test.each(['codex', 'claude-code'])(
+  'SessionEnd current startup pair refuses mixed sources and original/effective key presence for %s',
+  (surface) => {
+    sessionEnd(surface);
+    expect(qualifyEnd()).toBe(true);
+    for (const name of ['dispatch.sh', 'handler-env.sh']) {
+      const file = path.join(runtime, name);
+      const original = fs.readFileSync(file);
+      fs.writeFileSync(file, legacyStartup[name].text);
+      expect(qualifyEnd()).toBe(false);
+      fs.writeFileSync(file, original);
+      expect(qualifyEnd()).toBe(true);
+    }
+    for (const target of [request.caller.environment, environment]) {
+      for (const name of ['BASH_ENV', 'CAWS_PRIOR_BASH_ENV', 'CAWS_PRIOR_BASH_ENV_SET']) {
+        for (const value of ['', 'x', 'unknown', path.join(runtime, 'handler-env.sh')]) {
+          target[name] = value;
+          expect(qualifyEnd()).toBe(false);
+          delete target[name];
+          expect(qualifyEnd()).toBe(true);
+        }
+      }
+    }
     expect(fs.existsSync(path.join(checkout, '.caws/sessions'))).toBe(false);
   }
 );
@@ -408,6 +527,7 @@ test('exact derived roots and maps are optional, while present mismatches refuse
 });
 
 test('derived startup is absent, empty or exact pinned path; original startup is independently refused', () => {
+  installLegacyStartup();
   for (const value of ['', path.join(runtime, 'handler-env.sh')]) {
     environment.BASH_ENV = value;
     environment.CAWS_PRIOR_BASH_ENV = '';
@@ -426,6 +546,7 @@ test('derived startup is absent, empty or exact pinned path; original startup is
 
 const startupKeys = ['BASH_ENV', 'CAWS_PRIOR_BASH_ENV', 'ENV', 'SHELLOPTS', 'BASHOPTS'];
 test('empty original startup and shell-option values remain inert', () => {
+  installLegacyStartup();
   for (const name of startupKeys) request.caller.environment[name] = '';
   expect(qualify()).toBe(true);
 });

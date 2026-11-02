@@ -11,6 +11,7 @@ const {
   nativeSqliteCargoArguments,
   selectNativeSqliteCargoArtifacts,
   verifyNativeSqliteBuildArtifacts,
+  validateNativeSqliteBuildIdentity,
 } = require('../../dist/tooling/native-sqlite-build');
 
 const HEADER_SHA = '919e7f2e8ed1d8f56ac17b412b8971c76aa5d1a879752cc6058f75e7d5910e1d';
@@ -738,5 +739,58 @@ describe('native SQLite coordinator pre-Cargo refusals and explicit loader bindi
     const file = path.join(root, 'invalid-request.json');
     fs.writeFileSync(file, Buffer.from([0xff]));
     expect(() => loadNativeSqliteBuild(file)).toThrow(/not valid for encoding utf-8/);
+  });
+});
+
+describe('versioned native diagnostic capability data (no native execution)', () => {
+  const prefix = 'b'.repeat(64);
+  const legacy = () => ({
+    schema: 'caws.sqlite_build_identity.v1',
+    version: '3.53.4',
+    sourceId:
+      '2026-07-24 19:02:57 bf7c7f30031888f4e796e429ab3978879485813aaca6f641c7b33e4e09459bcc',
+    threadSafe: 1,
+    compileOptions: ['THREADSAFE=1', 'OMIT_LOAD_EXTENSION', 'ENABLE_API_ARMOR'],
+    compiledPrefixSha256: prefix,
+  });
+  const current = () => ({
+    ...legacy(),
+    schema: 'caws.sqlite_build_identity.v2',
+    installedInvocation: { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 30000 },
+  });
+  test('retains old diagnostic admission without manufacturing capability', () => {
+    const parsed = validateNativeSqliteBuildIdentity(legacy(), prefix);
+    expect(parsed).toEqual(legacy());
+    expect(Object.hasOwn(parsed, 'installedInvocation')).toBe(false);
+    expect(validateNativeSqliteBuildIdentity(current(), prefix)).toEqual(current());
+  });
+  test.each([
+    'missing',
+    'null',
+    'extra',
+    'protocol',
+    'max',
+    'string max',
+    'schema',
+    'v1 capability',
+  ])('refuses malformed or falsely labeled capability: %s', (kind) => {
+    const value = current();
+    if (kind === 'missing') delete value.installedInvocation;
+    if (kind === 'null') value.installedInvocation = null;
+    if (kind === 'extra') value.installedInvocation.renew = true;
+    if (kind === 'protocol') value.installedInvocation.protocol = 'invoke';
+    if (kind === 'max') value.installedInvocation.maxOriginalTimeoutMs = 30001;
+    if (kind === 'string max') value.installedInvocation.maxOriginalTimeoutMs = '30000';
+    if (kind === 'schema') value.schema = 'caws.sqlite_build_identity.v3';
+    if (kind === 'v1 capability') value.schema = 'caws.sqlite_build_identity.v1';
+    expect(() => validateNativeSqliteBuildIdentity(value, prefix)).toThrow();
+  });
+  test('capability does not bypass native SQLite prefix or compile-option checks', () => {
+    expect(() => validateNativeSqliteBuildIdentity(current(), 'c'.repeat(64))).toThrow(
+      /identity mismatch/
+    );
+    const value = current();
+    value.compileOptions = ['THREADSAFE=1'];
+    expect(() => validateNativeSqliteBuildIdentity(value, prefix)).toThrow(/compile options/);
   });
 });

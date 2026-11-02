@@ -19,6 +19,7 @@ import { execFileSync, type ExecFileSyncOptionsWithStringEncoding } from 'child_
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolveGitBinary } from './git-binary';
+import { executionGitOptions } from './git-runtime';
 import {
   diagnostic,
   err,
@@ -61,7 +62,7 @@ export const defaultGitRunner: GitRunner = (args, options) => {
   const execOptions: ExecFileSyncOptionsWithStringEncoding = {
     cwd: options.cwd,
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
+    ...executionGitOptions(options.cwd),
   };
   return execFileSync(resolveGitBinary(), args, execOptions).trim();
 };
@@ -87,7 +88,7 @@ export function runGit(
     const stdout = execFileSync(resolveGitBinary(), [...args], {
       cwd,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
+      ...executionGitOptions(cwd),
     });
     return { ok: true, stdout: stdout.toString() };
   } catch (e) {
@@ -210,19 +211,19 @@ export function readGitDirInfo(cwd: string): GitDirInfo | null {
     const commonDir = execFileSync(
       resolveGitBinary(),
       ['rev-parse', '--path-format=absolute', '--git-common-dir'],
-      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+      { cwd, encoding: 'utf8', ...executionGitOptions(cwd) }
     ).trim();
     const gitDir = execFileSync(
       resolveGitBinary(),
       ['rev-parse', '--path-format=absolute', '--git-dir'],
-      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+      { cwd, encoding: 'utf8', ...executionGitOptions(cwd) }
     ).trim();
     let branch: string | undefined;
     try {
       branch = execFileSync(resolveGitBinary(), ['rev-parse', '--abbrev-ref', 'HEAD'], {
         cwd,
         encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
+        ...executionGitOptions(cwd),
       }).trim();
     } catch {
       // detached HEAD; leave undefined

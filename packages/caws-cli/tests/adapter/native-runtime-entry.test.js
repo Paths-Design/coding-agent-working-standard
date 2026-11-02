@@ -10,7 +10,9 @@ const nativeBuildTooling = require(path.join(dist, 'tooling/native-sqlite-build'
 const { installMachineRuntime, rollbackMachineRuntime } = require(
   path.join(dist, 'init/machine-adapters')
 );
-const { verifyRuntime } = require(path.join(dist, 'init/machine-runtime-state'));
+const { verifyRuntime, readRetainedNativeEntryIdentity } = require(
+  path.join(dist, 'init/machine-runtime-state')
+);
 const { configureSystemRuntime, systemSurfaceEnabled } = require(
   path.join(dist, 'init/system-runtime')
 );
@@ -770,12 +772,26 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
         requestDigest: 'a'.repeat(64),
         sourceTreeDigest: 'b'.repeat(64),
         profile: 'debug',
+        observedIdentity: {
+          schema: 'caws.sqlite_build_identity.v2',
+          version: '3.53.4',
+          sourceId:
+            '2026-07-24 19:02:57 bf7c7f30031888f4e796e429ab3978879485813aaca6f641c7b33e4e09459bcc',
+          threadSafe: 1,
+          compileOptions: ['THREADSAFE=1', 'OMIT_LOAD_EXTENSION', 'ENABLE_API_ARMOR'],
+          compiledPrefixSha256: 'c'.repeat(64),
+          installedInvocation: { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 30000 },
+        },
         artifacts: {
           native: reviewedFile('receipt-native', nativeBytes, 0o755),
           stableEntry: reviewedFile('receipt-stable-entry', stableBytes, 0o755),
         },
       },
     };
+    loaded.build.artifacts.runtimeIdentity = reviewedFile(
+      'receipt-runtime-identity.json',
+      JSON.stringify(loaded.build.observedIdentity)
+    );
     const { native, ...shared } = input;
     delete shared.stableEntry;
     descriptor = {
@@ -808,6 +824,61 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       jest.restoreAllMocks();
     }
   });
+
+  function replaceDiagnostic(value) {
+    loaded.build.observedIdentity = value;
+    loaded.build.artifacts.runtimeIdentity = reviewedFile(
+      'receipt-runtime-identity.json',
+      JSON.stringify(value)
+    );
+  }
+  test('old diagnostic receipt cannot be stamped as an installed-capable image', () => {
+    const old = { ...loaded.build.observedIdentity, schema: 'caws.sqlite_build_identity.v1' };
+    delete old.installedInvocation;
+    replaceDiagnostic(old);
+    const before = fixtureState();
+    expect(() => prepareDescriptor()).toThrow(/old receipts cannot produce entry v2/);
+    expect(fixtureState()).toEqual(before);
+  });
+  test.each(['missing', 'null', 'extra', 'protocol', 'maximum'])(
+    'receipt capability refuses %s before image publication',
+    (kind) => {
+      const value = globalThis.structuredClone(loaded.build.observedIdentity);
+      if (kind === 'missing') delete value.installedInvocation;
+      if (kind === 'null') value.installedInvocation = null;
+      if (kind === 'extra') value.installedInvocation.downgrade = true;
+      if (kind === 'protocol') value.installedInvocation.protocol = 'invoke';
+      if (kind === 'maximum') value.installedInvocation.maxOriginalTimeoutMs = 120000;
+      replaceDiagnostic(value);
+      const before = fixtureState();
+      expect(() => prepareDescriptor()).toThrow(/shape|capability/);
+      expect(fixtureState()).toEqual(before);
+    }
+  );
+  test('diagnostic bytes and receipt observation must agree under the selected pin', () => {
+    const other = globalThis.structuredClone(loaded.build.observedIdentity);
+    other.compileOptions.push('OTHER=1');
+    loaded.build.artifacts.runtimeIdentity = reviewedFile(
+      'other-runtime-identity.json',
+      JSON.stringify(other)
+    );
+    expect(() => prepareDescriptor()).toThrow(/identity mismatch/);
+  });
+  test('changed retained diagnostic bytes refuse their pin before image construction', () => {
+    fs.appendFileSync(loaded.build.artifacts.runtimeIdentity.path, ' ');
+    expect(() => prepareDescriptor()).toThrow(/size mismatch|pin mismatch/);
+  });
+  test.each([0, 30001, 120000, 1.5])('installed image refuses timeout %s', (timeout) => {
+    descriptor.timeoutMs = timeout;
+    expect(() => prepareDescriptor()).toThrow(/1\.\.30000/);
+  });
+  test.each([1, 30000])(
+    'installed image retains configured timeout %s without renewal',
+    (timeout) => {
+      descriptor.timeoutMs = timeout;
+      expect(prepareDescriptor().metadata.timeoutMs).toBe(timeout);
+    }
+  );
 
   function syntheticSemanticData(prepared) {
     // Mechanical image inclusion only. These synthetic rows do not establish an
@@ -1076,7 +1147,8 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       'Reviewed fixture notice\n'
     );
     expect(prepared.metadata).toEqual({
-      schema: 'caws.runtime.native-entry.v1',
+      schema: 'caws.runtime.native-entry.v2',
+      installedInvocation: { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 30000 },
       nativeExecutable: 'native/caws-native',
       nodeExecutable: 'native/node',
       engineEntry: `native-prefix/${cli}/dist/runtime/engine-entry.js`,
@@ -1316,3 +1388,45 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     }
   );
 });
+
+test.each([1, 2])('retained entry identity admits exact metadata v%s', (version) => {
+  const home = path.join(root, 'retained-metadata-home');
+  let digest = install(home).digest;
+  if (version === 2)
+    digest = rewriteRetainedMetadata(home, digest, (metadata) => {
+      metadata.schema = 'caws.runtime.native-entry.v2';
+      metadata.installedInvocation = {
+        protocol: 'invoke-installed-v1',
+        maxOriginalTimeoutMs: 30000,
+      };
+    });
+  expect(verifyRuntime(home, digest)['native-entry.json']).toMatch(/^[a-f0-9]{64}$/);
+  const retained = readRetainedNativeEntryIdentity(home, digest);
+  expect(retained.digest).toBe(digest);
+  expect(retained.sha256).toBe(sha(retained.bytes));
+});
+test.each(['missing', 'null', 'extra', 'protocol', 'maximum', 'timeout', 'v1 capability'])(
+  'retained metadata rejects a manifest-rebound invalid capability: %s',
+  (kind) => {
+    const home = path.join(root, 'hostile-retained-home');
+    const original = install(home).digest;
+    const digest = rewriteRetainedMetadata(home, original, (metadata) => {
+      metadata.schema = 'caws.runtime.native-entry.v2';
+      metadata.installedInvocation = {
+        protocol: 'invoke-installed-v1',
+        maxOriginalTimeoutMs: 30000,
+      };
+      if (kind === 'missing') delete metadata.installedInvocation;
+      if (kind === 'null') metadata.installedInvocation = null;
+      if (kind === 'extra') metadata.installedInvocation.renew = true;
+      if (kind === 'protocol') metadata.installedInvocation.protocol = 'invoke';
+      if (kind === 'maximum') metadata.installedInvocation.maxOriginalTimeoutMs = 120000;
+      if (kind === 'timeout') metadata.timeoutMs = 30001;
+      if (kind === 'v1 capability') metadata.schema = 'caws.runtime.native-entry.v1';
+    });
+    expect(() => verifyRuntime(home, digest)).toThrow(/metadata|schema|capability|timeout/);
+    expect(() => readRetainedNativeEntryIdentity(home, digest)).toThrow(
+      /metadata|schema|capability|timeout/
+    );
+  }
+);

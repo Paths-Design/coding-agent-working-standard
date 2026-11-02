@@ -55,6 +55,83 @@ function mkdirp(p) {
   fs.mkdirSync(p, { recursive: true });
 }
 
+function nodeFixture() {
+  const repo = mkdtemp('wa-node-repo-');
+  const wt = mkGitWorktree();
+  for (const rel of [
+    'package.json',
+    'package-lock.json',
+    'packages/app/package.json',
+    '.caws/hooks/package.json',
+    'Cargo.toml',
+  ]) {
+    for (const root of [repo, wt]) {
+      const file = path.join(root, rel);
+      mkdirp(path.dirname(file));
+      fs.writeFileSync(file, rel === 'Cargo.toml' ? '[package]\n' : '{}');
+    }
+  }
+  for (const rel of [
+    'node_modules',
+    'packages/app/node_modules',
+    '.caws/hooks/node_modules',
+    'target',
+  ]) {
+    const dir = path.join(repo, rel);
+    mkdirp(dir);
+    fs.writeFileSync(path.join(dir, 'sentinel'), `canonical:${rel}`);
+  }
+  return { repo, wt };
+}
+
+test('Node opt-out skips all discovered Node links and leaves Rust linking intact', () => {
+  const { repo, wt } = nodeFixture();
+  const { statuses } = linkWorktreeArtifacts(repo, wt, false);
+  for (const rel of ['node_modules', 'packages/app/node_modules', '.caws/hooks/node_modules']) {
+    expect(statuses.find((s) => s.path === rel)?.state).toBe('skipped_node_link_by_option');
+    expect(fs.existsSync(path.join(wt, rel))).toBe(false);
+    expect(fs.readFileSync(path.join(repo, rel, 'sentinel'), 'utf8')).toBe(`canonical:${rel}`);
+  }
+  expect(statuses.find((s) => s.path === 'target')?.state).toBe('linked');
+  expect(fs.lstatSync(path.join(wt, 'target')).isSymbolicLink()).toBe(true);
+  expect(fs.realpathSync(path.join(wt, 'target'))).toBe(fs.realpathSync(path.join(repo, 'target')));
+});
+
+test('Node opt-out leaves existing physical and symbolic paths untouched', () => {
+  const { repo, wt } = nodeFixture();
+  const physical = path.join(wt, 'node_modules');
+  const symbolic = path.join(wt, 'packages/app/node_modules');
+  mkdirp(physical);
+  fs.writeFileSync(path.join(physical, 'local'), 'preserved');
+  const external = mkdtemp('wa-external-');
+  fs.writeFileSync(path.join(external, 'local'), 'external');
+  fs.symlinkSync(external, symbolic, 'dir');
+  const { statuses } = linkWorktreeArtifacts(repo, wt, false);
+  for (const rel of ['node_modules', 'packages/app/node_modules'])
+    expect(statuses.find((s) => s.path === rel)?.state).toBe('skipped_node_link_by_option');
+  expect(fs.lstatSync(physical).isDirectory()).toBe(true);
+  expect(fs.readFileSync(path.join(physical, 'local'), 'utf8')).toBe('preserved');
+  expect(fs.lstatSync(symbolic).isSymbolicLink()).toBe(true);
+  expect(fs.readlinkSync(symbolic)).toBe(external);
+  expect(fs.readFileSync(path.join(external, 'local'), 'utf8')).toBe('external');
+});
+
+test('default continues to link all recognized Node and Rust artifacts', () => {
+  const { repo, wt } = nodeFixture();
+  const { statuses } = linkWorktreeArtifacts(repo, wt);
+  for (const rel of [
+    'node_modules',
+    'packages/app/node_modules',
+    '.caws/hooks/node_modules',
+    'target',
+  ]) {
+    expect(statuses.find((s) => s.path === rel)?.state).toBe('linked');
+    const link = path.join(wt, rel);
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(fs.realpathSync(link)).toBe(fs.realpathSync(path.join(repo, rel)));
+  }
+});
+
 describe('CAWS-WORKTREE-ARTIFACT-CAWS-HOOKS-NODE-MODULES-001', () => {
   test('A1: canonical checkout with .caws/hooks/node_modules links it into the worktree', () => {
     const repo = mkdtemp('wa-repo-');

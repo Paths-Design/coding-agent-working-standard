@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { typeCheckConsumers } from './stryker-config.cjs';
 
 export const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const slash = (file) => file.split(path.sep).join('/');
@@ -260,6 +261,14 @@ export function captureMutationInputs({ packageRoot, policy, surfaceId }) {
     surface.tests.map((file) => [file, readRegular(path.join(root, file)).bytes.toString('utf8')])
   );
   const files = [...records.values()].sort((a, b) => a.path.localeCompare(b.path));
+  const typeConsumerSources = Object.fromEntries(
+    typeCheckConsumers(surfaceId).map((file) => {
+      const source = readRegular(path.join(root, file)).bytes.toString('utf8');
+      if (records.get(file)?.sha256 !== sha256(source))
+        fail(`type consumer changed during capture: ${file}`);
+      return [file, source];
+    })
+  );
   return {
     schemaVersion: 1,
     packageRoot: root,
@@ -267,6 +276,7 @@ export function captureMutationInputs({ packageRoot, policy, surfaceId }) {
     files,
     targets,
     tests,
+    typeConsumerSources,
     packageNodeModules,
     digest: sha256(JSON.stringify(files)),
   };
@@ -328,7 +338,7 @@ export function assertBuildOutputsUnchanged(captured, packageRoot) {
     fail('emitted dist changed after build');
 }
 
-function sameSandboxInputs(original, sandbox, surface) {
+function sameSandboxInputs(original, sandbox, surface, surfaceId) {
   const targetBinding = (binding) =>
     binding && {
       canonical: binding.canonical,
@@ -351,6 +361,21 @@ function sameSandboxInputs(original, sandbox, surface) {
   const actual = new Map(
     sandbox.files.map((entry) => [key(entry.path, sandbox.packageRoot), fingerprint(entry)])
   );
+  // Only the exact installed preprocessor prefix may change these non-target
+  // consumers. Bind its suffix to the captured authored hash, size and mode;
+  // neither an arbitrary replacement nor a generator/test rewrite is admitted.
+  for (const file of typeCheckConsumers(surfaceId)) {
+    const source = original.typeConsumerSources?.[file];
+    const captured = original.files.find((entry) => entry.path === file);
+    if (
+      typeof source !== 'string' || !captured ||
+      captured.sha256 !== sha256(source) || captured.size !== Buffer.byteLength(source)
+    ) fail(`unbound type consumer source: ${file}`);
+    const transformed = '// @ts-nocheck\n' + source;
+    expected.set(file, fingerprint({
+      ...captured, sha256: sha256(transformed), size: Buffer.byteLength(transformed),
+    }));
+  }
   for (const [file, digest] of expected) {
     if (!actual.has(file)) fail(`missing sandbox input: ${file}`);
     if (!targets.has(file) && actual.get(file) !== digest)
@@ -443,7 +468,7 @@ export function validateSandboxBuildRecord({ context, surface, record, fileName 
     )
       fail(`detached sandbox test input: ${file}`);
   }
-  sameSandboxInputs(context.inputIdentity, input, surface);
+  sameSandboxInputs(context.inputIdentity, input, surface, context.surfaceId);
 }
 
 export function runSandboxBuild(contextFile, surfaceId) {
@@ -468,7 +493,7 @@ export function runSandboxBuild(contextFile, surfaceId) {
   mirrorPackageNodeModules(context, cwd);
   const options = { packageRoot: cwd, policy, surfaceId };
   const inputIdentity = captureMutationInputs(options);
-  sameSandboxInputs(context.inputIdentity, inputIdentity, surface);
+  sameSandboxInputs(context.inputIdentity, inputIdentity, surface, surfaceId);
   const startedAtMs = Date.now();
   const result = spawnSync(surface.buildCommand, {
     cwd,

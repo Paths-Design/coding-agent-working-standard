@@ -33,7 +33,11 @@ import * as path from 'node:path';
 import { type Actor, type EventBody, type Result, err, ok } from '../kernel';
 
 import { writeFileAtomic } from './atomic-write';
-import { withLifecycleLock } from './lifecycle-lock';
+import {
+  withLifecycleLock,
+  withLifecycleMutationFence,
+  type BorrowedExecutionLifecycleFence,
+} from './lifecycle-lock';
 import { runLifecycleTransaction } from './lifecycle-transaction';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
@@ -156,9 +160,14 @@ export interface AcquireBridgeInput {
  */
 export function acquireBridge(
   cawsDir: string,
-  input: AcquireBridgeInput
+  input: AcquireBridgeInput,
+  execution?: BorrowedExecutionLifecycleFence
 ): Result<{ readonly specId: string; readonly refreshed: boolean }> {
-  return withLifecycleLock(cawsDir, () => acquireBridgeUnderLock(cawsDir, input));
+  return withLifecycleMutationFence(
+    cawsDir,
+    () => acquireBridgeUnderLock(cawsDir, input),
+    execution
+  );
 }
 
 function acquireBridgeUnderLock(

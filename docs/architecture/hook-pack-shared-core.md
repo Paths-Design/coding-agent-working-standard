@@ -77,13 +77,22 @@ locations are quiet when the installed runtime is healthy.
 
 The execution root is the actual Git checkout; settings, extensions and
 governance resolve to its canonical root through Git's common directory.
-Inherited `GIT_*` variables cannot select another repository. Bash children
-preload the selected parser, session resolver and emitter. Project library
-declarations take priority over user adapter libraries, then packaged surface
-libraries, then shared defaults. Bootstrap libraries cannot be overridden.
-Explicit library entries apply at the `caws_source_lib` adapter seam; arbitrary
-directly sourced helper files require a reviewed handler override or an upstream
-fix.
+Inherited `GIT_*` variables cannot select another repository. Bash handler
+children preload the selected parser, session resolver and emitter. Project
+library declarations take priority over user adapter libraries, then packaged
+surface libraries, then shared defaults. Bootstrap libraries cannot be
+overridden. Explicit library entries apply at the `caws_source_lib` adapter
+seam; arbitrary directly sourced helper files require a reviewed handler
+override or an upstream fix.
+
+The machine dispatcher retains the presence and value of `BASH_ENV` before
+installing its handler preload. Each handler restores that retained startup fact
+for downstream inspection; the adapter's own preload path is not user startup
+evidence. A genuine prior value remains visible, including an empty value or a
+prior script that changes the variable. This snapshot follows the dispatcher's
+own Bash startup and does not establish a native final-launch environment.
+Nested Bash helpers inherit the restored startup value; helpers that need
+selected adapter libraries must load them through the documented library seam.
 
 Codex maps exit 2 to a native refusal reason on stderr. Stop plain observations
 become a JSON `systemMessage`; structured decisions remain intact. The Codex
@@ -371,9 +380,33 @@ implemented decoder, source-profile limits and producer evidence.
 Native adoption also requires the checked source and context to survive every
 later transformation. `quiet-merge.sh` follows blocking guards and can prepend a
 canonical-root directory change; an earlier decision cannot authorize changed
-bytes. The guide's typed executor and permit sequence are proposed. Complete
+bytes. The private Node authorizer decodes an immutable prepared record, derives
+canonical binding and scope, and checks the inherited final-validation fence.
+Its framed reply is an observation tied to original record bytes and authority
+revision, not a permit. A separate draft program-discovery entry returns lexical
+utility candidates using the same bounded analyzer and initial bindings. The
+producer must resolve and hash those candidates, freeze the final record and
+perform both authorizer phases; an empty candidate list grants no permission.
+Neither entry acquires the launch fence or spawns the user program. The complete
+typed executor and single-use permit sequence remain proposed. Complete
 final-launch mediation, native canary and rollback require separate proof before
 the deployed runtime is replaced.
+
+The separate native `caws-execution` adapter owns a restricted producer/worker
+route. It checks local socket peer credentials and the live pinned host image;
+these checks do not establish the origin of bytes queued before a same-PID exec.
+Complete channel authentication requires separate proof. Parent image identity
+alone does not authenticate pipe contents. Preparation and final validation bind
+original source, typed argv, environment, images and opaque sandbox state into
+the execution digest. The dedicated `caws-evidence-v1` consumer retains the
+lifecycle fence through the canonical evidence transaction. It checks requested
+artifact/commit citations without test runners, legacy actor discovery or
+automatic Git commits. The public `caws specs commit <id>` command completes the
+audit step through normal Git hooks. Generic user execution retains its separate
+descriptor and fence-release rules. Protected transitive generation custody,
+actual sandbox placement, genuine-agent workflow, canary and rollback are native
+qualification obligations; source and component checks do not establish
+adoption.
 
 ## Dispatcher resolution
 

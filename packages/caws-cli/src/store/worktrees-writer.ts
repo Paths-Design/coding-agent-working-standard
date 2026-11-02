@@ -27,6 +27,7 @@
 //   - Run rm -rf on any path.
 
 import { execFileSync } from 'child_process';
+import { executionGitOptions } from './git-runtime';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -64,7 +65,12 @@ import { closeSpec, SCOPE_IN_PLACEHOLDER, type SpecWriterOutcome } from './specs
 import { loadSpecs } from './specs-store';
 import { loadWorktrees } from './worktrees-store';
 import { runLifecycleTransaction } from './lifecycle-transaction';
-import { withLifecycleLock } from './lifecycle-lock';
+import {
+  withLifecycleLock,
+  withLifecycleMutationFence,
+  verifyBorrowedExecutionLifecycleFence,
+  type BorrowedExecutionLifecycleFence,
+} from './lifecycle-lock';
 import { admitsOwner, describeCandidateTrace } from '../shell/session/resolve-session';
 import type { SessionCandidates } from '../shell/session/types';
 import { resolveGitBinary } from './git-binary';
@@ -84,6 +90,7 @@ export interface CreateWorktreeInput {
   /** Optional: new branch name for the worktree. Defaults to the
    *  worktree name. */
   readonly branch?: string;
+  readonly linkNodeModules?: boolean;
   readonly session: SessionIdentity;
   readonly actor: EventBody['actor'];
   readonly now?: () => Date;
@@ -421,7 +428,7 @@ export function classifyMergeTree(base: string, branch: string, cwd: string): Me
     stdout = execFileSync(
       resolveGitBinary(),
       ['merge-tree', '--write-tree', '--name-only', '-z', base, branch],
-      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+      { cwd, encoding: 'utf8', ...executionGitOptions(cwd) }
     );
   } catch (e) {
     const cause = e as {
@@ -592,10 +599,10 @@ function retirementGitObservation(
     execFileSync(resolveGitBinary(), args, {
       cwd,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 2_000,
       killSignal: 'SIGKILL',
       env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+      ...executionGitOptions(cwd),
     });
   let directory: { dev: string; ino: string } | null = null;
   let status: string | null = null;
@@ -652,10 +659,10 @@ function retirementIsMerged(repoRoot: string, branch: string, base: string): boo
     execFileSync(resolveGitBinary(), ['merge-base', '--is-ancestor', branch, base], {
       cwd: repoRoot,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 2_000,
       killSignal: 'SIGKILL',
       env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+      ...executionGitOptions(repoRoot),
     });
     return true;
   } catch {
@@ -1266,7 +1273,7 @@ export function createWorktree(
       cause: txnOutcome.value.cause,
     });
   }
-  const artifactLinks = linkWorktreeArtifacts(repoRoot, wtPath);
+  const artifactLinks = linkWorktreeArtifacts(repoRoot, wtPath, input.linkNodeModules);
   const autoCommitOutcome = autoCommitTransition(
     cawsDir,
     input.specId,
@@ -2131,7 +2138,8 @@ export function bindWorktreeRepair(
 
 export function destroyWorktree(
   cawsDir: string,
-  input: DestroyWorktreeInput
+  input: DestroyWorktreeInput,
+  execution?: BorrowedExecutionLifecycleFence
 ): Result<WorktreeWriterOutcome> {
   const nameValidation = validateWorktreeName(input.name);
   if (!nameValidation.ok) return nameValidation;
@@ -2354,57 +2362,61 @@ export function destroyWorktree(
     data: eventData,
   } as unknown as EventBody;
 
-  const txnOutcome = withLifecycleLock(cawsDir, () => {
-    const currentGit = captureRetirementGit(
-      input.name,
-      repoRoot,
-      wtPath,
-      entry.branch,
-      entry.baseBranch
-    );
-    if (!currentGit.ok) return currentGit;
-    if (JSON.stringify(currentGit.value) !== JSON.stringify(gitBefore.value))
-      return err(
-        storeDiagnostic(
-          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-          `Git state changed while planning retirement of "${input.name}"; retry.`,
-          { subject: input.name }
-        )
+  const txnOutcome = withLifecycleMutationFence(
+    cawsDir,
+    () => {
+      const currentGit = captureRetirementGit(
+        input.name,
+        repoRoot,
+        wtPath,
+        entry.branch,
+        entry.baseBranch
       );
-    const events = demotionEvent !== null ? [event, demotionEvent] : [event];
-    return retirementTransaction(
-      cawsDir,
-      input.name,
-      retirement.value.bytes,
-      expectedSpec,
-      plannedWrites,
-      events,
-      () => {
-        if (!fs.existsSync(wtPath)) return ok(false);
-        removeWorktreeArtifactLinks(repoRoot, wtPath);
-        try {
-          execFileSync(resolveGitBinary(), ['worktree', 'remove', wtPath], {
-            cwd: repoRoot,
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            timeout: 10_000,
-            killSignal: 'SIGKILL',
-          });
-        } catch (e) {
-          return err(
-            storeDiagnostic(
-              STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-              `git worktree remove failed or timed out for ${wtPath}; physical effects may be incomplete (path exists: ${fs.existsSync(wtPath)}): ${String(e)}`,
-              { subject: input.name }
-            )
-          );
+      if (!currentGit.ok) return currentGit;
+      if (JSON.stringify(currentGit.value) !== JSON.stringify(gitBefore.value))
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+            `Git state changed while planning retirement of "${input.name}"; retry.`,
+            { subject: input.name }
+          )
+        );
+      const events = demotionEvent !== null ? [event, demotionEvent] : [event];
+      return retirementTransaction(
+        cawsDir,
+        input.name,
+        retirement.value.bytes,
+        expectedSpec,
+        plannedWrites,
+        events,
+        () => {
+          if (!fs.existsSync(wtPath)) return ok(false);
+          removeWorktreeArtifactLinks(repoRoot, wtPath);
+          try {
+            execFileSync(resolveGitBinary(), ['worktree', 'remove', wtPath], {
+              cwd: repoRoot,
+              encoding: 'utf8',
+              ...executionGitOptions(repoRoot),
+              timeout: 10_000,
+              killSignal: 'SIGKILL',
+            });
+          } catch (e) {
+            return err(
+              storeDiagnostic(
+                STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+                `git worktree remove failed or timed out for ${wtPath}; physical effects may be incomplete (path exists: ${fs.existsSync(wtPath)}): ${String(e)}`,
+                { subject: input.name }
+              )
+            );
+          }
+          removedGitWorktree = true;
+          eventData.removed_git_worktree = true;
+          return ok(true);
         }
-        removedGitWorktree = true;
-        eventData.removed_git_worktree = true;
-        return ok(true);
-      }
-    );
-  });
+      );
+    },
+    execution
+  );
 
   if (!txnOutcome.ok) return err(txnOutcome.errors);
   if (txnOutcome.value.kind !== 'success') {
@@ -3046,9 +3058,13 @@ function mergeViaCompareAndSwap(
   repoRoot: string,
   baseBranch: string,
   branch: string,
-  message: string
+  message: string,
+  execution?: BorrowedExecutionLifecycleFence
 ): MergeCasOutcome {
   const ref = `refs/heads/${baseBranch}`;
+  const fenceValid = (): boolean =>
+    execution === undefined ||
+    verifyBorrowedExecutionLifecycleFence(path.join(repoRoot, '.caws'), execution);
 
   for (let attempt = 1; attempt <= MERGE_CAS_MAX_ATTEMPTS; attempt++) {
     // Read the base ref immediately before computing the merge. This value is
@@ -3067,6 +3083,12 @@ function mergeViaCompareAndSwap(
     // Compute the merged tree in the object database. No working tree, no
     // index, no HEAD — so a dirty canonical checkout cannot corrupt the
     // result and a conflict cannot strand a half-merged tree on disk.
+    if (!fenceValid())
+      return {
+        ok: false,
+        message: 'Execution fence unavailable before merge computation.',
+        contention: false,
+      };
     const treeResult = classifyMergeTree(baseBefore, branch, repoRoot);
     if (treeResult.kind === 'conflict') {
       // A genuine conflict, not contention: retrying cannot help, and the
@@ -3096,6 +3118,12 @@ function mergeViaCompareAndSwap(
 
     // Build the merge commit. Two parents, base first, matching the shape
     // `git merge --no-ff` would have produced.
+    if (!fenceValid())
+      return {
+        ok: false,
+        message: 'Execution fence unavailable before merge object creation.',
+        contention: false,
+      };
     const commitResult = runGit(
       ['commit-tree', mergedTree, '-p', baseBefore, '-p', branch, '-m', message],
       repoRoot
@@ -3126,6 +3154,12 @@ function mergeViaCompareAndSwap(
     // The atomic instant. Passing baseBefore as the expected-old value makes
     // this a compare-and-swap: if another agent advanced the base since we
     // read it, git refuses and writes nothing.
+    if (!fenceValid())
+      return {
+        ok: false,
+        message: 'Execution fence unavailable before merge publication.',
+        contention: false,
+      };
     const casResult = runGit(['update-ref', ref, mergeCommit, baseBefore], repoRoot);
     if (casResult.ok) {
       const baseCheckoutSync = refreshBaseCheckouts(checkouts.paths, ref, baseBefore, mergeCommit);
@@ -3177,8 +3211,13 @@ function mergeViaCompareAndSwap(
 
 export function mergeWorktree(
   cawsDir: string,
-  input: MergeWorktreeInput
+  input: MergeWorktreeInput,
+  execution?: BorrowedExecutionLifecycleFence
 ): Result<WorktreeWriterOutcome> {
+  if (execution !== undefined && !verifyBorrowedExecutionLifecycleFence(cawsDir, execution))
+    return err(
+      storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, 'Execution fence unavailable.')
+    );
   const nameValidation = validateWorktreeName(input.name);
   if (!nameValidation.ok) return nameValidation;
 
@@ -3421,7 +3460,7 @@ export function mergeWorktree(
   const laneTipResult = runGit(['rev-parse', branch], repoRoot);
   const laneTip = laneTipResult.ok ? laneTipResult.stdout.trim() : undefined;
 
-  const casOutcome = mergeViaCompareAndSwap(repoRoot, baseBranch, branch, message);
+  const casOutcome = mergeViaCompareAndSwap(repoRoot, baseBranch, branch, message, execution);
   if (!casOutcome.ok) {
     return err(
       storeDiagnostic(STORE_RULES.LIFECYCLE_WRITE_FAILED, casOutcome.message, {
@@ -3542,21 +3581,25 @@ export function mergeWorktree(
     // --closure-notes (audit provenance when the spec carried no notes).
     const stubReason = `Auto-closed by caws worktree merge ${input.name} at ${mergeCommit}`;
     const reason = input.closureNotes !== undefined ? input.closureNotes : stubReason;
-    closeResult = closeSpec(cawsDir, {
-      id: specId,
-      resolution: 'completed',
-      reason,
-      mergeCommit,
-      actor: input.actor,
-      now: sharedNowFactory,
-      // CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001: the `reason`
-      // above is a machine-generated stub (or operator-authored notes).
-      // Insert-only mode keeps it from clobbering closure_notes an author
-      // wrote on the bound spec — the reason fills closure_notes only when
-      // the spec carried none. Operator-authored --closure-notes therefore
-      // wins over an ABSENT field but never over pre-written YAML notes.
-      preserveExistingNotes: true,
-    });
+    closeResult = closeSpec(
+      cawsDir,
+      {
+        id: specId,
+        resolution: 'completed',
+        reason,
+        mergeCommit,
+        actor: input.actor,
+        now: sharedNowFactory,
+        // CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001: the `reason`
+        // above is a machine-generated stub (or operator-authored notes).
+        // Insert-only mode keeps it from clobbering closure_notes an author
+        // wrote on the bound spec — the reason fills closure_notes only when
+        // the spec carried none. Operator-authored --closure-notes therefore
+        // wins over an ABSENT field but never over pre-written YAML notes.
+        preserveExistingNotes: true,
+      },
+      execution
+    );
   }
 
   if (!isOk(closeResult)) {
@@ -3686,12 +3729,15 @@ export function mergeWorktree(
   // The worktree_merged event is appended via runLifecycleTransaction
   // even though we have no file writes for this step; the substrate's
   // append path is the only sanctioned writer for events.jsonl.
-  const mergedTxn = withLifecycleLock(cawsDir, () =>
-    runLifecycleTransaction({
-      cawsDir,
-      plannedWrites: [],
-      events: [mergedEvent],
-    })
+  const mergedTxn = withLifecycleMutationFence(
+    cawsDir,
+    () =>
+      runLifecycleTransaction({
+        cawsDir,
+        plannedWrites: [],
+        events: [mergedEvent],
+      }),
+    execution
   );
   if (!mergedTxn.ok) {
     return err(
@@ -3760,22 +3806,26 @@ export function mergeWorktree(
 
   // Destroy the worktree last. Reuse the same merge-baseline clock
   // so worktree_destroyed.ts matches the rest of the composed merge.
-  const destroyResult = destroyWorktree(cawsDir, {
-    name: input.name,
-    session: input.session,
-    sessionCandidates: input.sessionCandidates,
-    actor: input.actor,
-    now: sharedNowFactory,
-    // CAWS-FIX-CWD-GUARD-COVERAGE-001: defense-in-depth — thread callerCwd
-    // into the merge's own teardown so the guard covers this destroy path
-    // too. Unreachable when dry-run (mergeWorktree returns at the dry-run
-    // branch before teardown) and preceded by the early guard in real
-    // merges, so this cannot change observable behavior today, but it
-    // protects any future path that reaches this destroy. Conditionally
-    // spread because exactOptionalPropertyTypes forbids assigning
-    // `string | undefined` to an optional `string` field.
-    ...(input.callerCwd !== undefined ? { callerCwd: input.callerCwd } : {}),
-  });
+  const destroyResult = destroyWorktree(
+    cawsDir,
+    {
+      name: input.name,
+      session: input.session,
+      sessionCandidates: input.sessionCandidates,
+      actor: input.actor,
+      now: sharedNowFactory,
+      // CAWS-FIX-CWD-GUARD-COVERAGE-001: defense-in-depth — thread callerCwd
+      // into the merge's own teardown so the guard covers this destroy path
+      // too. Unreachable when dry-run (mergeWorktree returns at the dry-run
+      // branch before teardown) and preceded by the early guard in real
+      // merges, so this cannot change observable behavior today, but it
+      // protects any future path that reaches this destroy. Conditionally
+      // spread because exactOptionalPropertyTypes forbids assigning
+      // `string | undefined` to an optional `string` field.
+      ...(input.callerCwd !== undefined ? { callerCwd: input.callerCwd } : {}),
+    },
+    execution
+  );
   if (!isOk(destroyResult)) {
     // The merge + close + merged event all succeeded. The destroy
     // failed. Surface as partial-failure with a manual recovery hint.

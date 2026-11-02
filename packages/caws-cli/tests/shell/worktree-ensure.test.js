@@ -107,6 +107,107 @@ function readSpecState(root, id) {
 }
 
 describe('WORKTREE-ENSURE-AFFORDANCE-001', () => {
+  test('create opt-out reaches the CLI and isolates an offline npm ci from canonical dependencies', () => {
+    const root = mkRepo();
+    const write = (rel, value) => {
+      const file = path.join(root, rel);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, value);
+    };
+    const pkg = {
+      name: 'fixture-root',
+      version: '1.0.0',
+      private: true,
+      workspaces: ['packages/app'],
+    };
+    const app = { name: 'fixture-app', version: '1.0.0', private: true };
+    const lock = {
+      name: pkg.name,
+      version: pkg.version,
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': pkg,
+        'node_modules/fixture-app': { resolved: 'packages/app', link: true },
+        'packages/app': { name: app.name, version: app.version },
+      },
+    };
+    write('package.json', JSON.stringify(pkg));
+    write('package-lock.json', JSON.stringify(lock));
+    write('packages/app/package.json', JSON.stringify(app));
+    write('Cargo.toml', '[package]\nname = "fixture"\nversion = "0.1.0"\n');
+    write('.gitignore', 'node_modules\ntarget\n');
+    execFileSync('git', [
+      '-C',
+      root,
+      'add',
+      'package.json',
+      'package-lock.json',
+      'packages/app/package.json',
+      'Cargo.toml',
+      '.gitignore',
+    ]);
+    execFileSync('git', ['-C', root, 'commit', '--quiet', '-m', 'fixture']);
+    write('.caws/hooks/package.json', '{}');
+    const nodePaths = ['node_modules', 'packages/app/node_modules', '.caws/hooks/node_modules'];
+    for (const rel of [...nodePaths, 'target']) write(`${rel}/sentinel`, `canonical:${rel}`);
+    mkSpec(root, 'ENS-NODE-001');
+    const cli = path.resolve(__dirname, '..', '..', 'dist', 'index.js');
+    const output = execFileSync(
+      process.execPath,
+      [cli, 'worktree', 'create', 'wt-node', '--spec', 'ENS-NODE-001', '--no-link-node-modules'],
+      { cwd: root, env: { ...fixtureEnv }, encoding: 'utf8' }
+    );
+    const wt = path.join(root, '.caws', 'worktrees', 'wt-node');
+    expect(output).toContain('Inspect this path and unlink any shared symlink before installing');
+    for (const rel of nodePaths) {
+      expect(output).toContain(`skipped node link by option ${rel}`);
+      expect(fs.existsSync(path.join(wt, rel))).toBe(false);
+    }
+    expect(fs.lstatSync(path.join(wt, 'target')).isSymbolicLink()).toBe(true);
+    expect(fs.realpathSync(path.join(wt, 'target'))).toBe(
+      fs.realpathSync(path.join(root, 'target'))
+    );
+    const config = path.join(root, 'empty-npmrc');
+    const globalConfig = path.join(root, 'empty-global-npmrc');
+    fs.writeFileSync(config, '');
+    fs.writeFileSync(globalConfig, '');
+    execFileSync(
+      'npm',
+      [
+        'ci',
+        '--offline',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--cache',
+        path.join(root, 'private-npm-cache'),
+        '--userconfig',
+        config,
+        '--globalconfig',
+        globalConfig,
+      ],
+      { cwd: wt, env: { PATH: process.env.PATH, HOME: root }, encoding: 'utf8', timeout: 30000 }
+    );
+    expect(fs.lstatSync(path.join(wt, 'node_modules')).isDirectory()).toBe(true);
+    expect(fs.realpathSync(path.join(wt, 'node_modules/fixture-app'))).toBe(
+      fs.realpathSync(path.join(wt, 'packages/app'))
+    );
+    for (const rel of nodePaths)
+      expect(fs.readFileSync(path.join(root, rel, 'sentinel'), 'utf8')).toBe(`canonical:${rel}`);
+    let unknownFlag = false;
+    try {
+      execFileSync(
+        process.execPath,
+        [cli, 'worktree', 'ensure', 'wt-node', '--spec', 'ENS-NODE-001', '--no-link-node-modules'],
+        { cwd: root, env: { ...fixtureEnv }, stdio: 'pipe' }
+      );
+    } catch (e) {
+      unknownFlag = /unknown option/.test(String(e.stderr));
+    }
+    expect(unknownFlag).toBe(true);
+  }, 45000);
+
   test('A1: absent worktree + draft spec => full create path (events, activation, cd path)', () => {
     const root = mkRepo();
     mkSpec(root, 'ENS-001');

@@ -18,7 +18,33 @@ fn sqlite_identity_is_explicit_and_never_falls_back() {
         assert!(exact.stderr.is_empty());
         let value: serde_json::Value =
             serde_json::from_slice(&exact.stdout).expect("identity JSON");
-        assert_eq!(value["schema"], "caws.sqlite_build_identity.v1");
+        assert_eq!(value["schema"], "caws.sqlite_build_identity.v2");
+        assert_eq!(
+            value["installedInvocation"],
+            serde_json::json!({
+                "protocol": "invoke-installed-v1", "maxOriginalTimeoutMs": 30_000,
+            })
+        );
+        let keys: std::collections::BTreeSet<_> = value
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(
+            keys,
+            [
+                "schema",
+                "version",
+                "sourceId",
+                "threadSafe",
+                "compileOptions",
+                "compiledPrefixSha256",
+                "installedInvocation",
+            ]
+            .into_iter()
+            .collect()
+        );
         assert_eq!(value["version"], "3.53.4");
         assert_eq!(value["threadSafe"], 1);
         assert!(

@@ -60,6 +60,8 @@ test('native and helper source inputs participate in the existing Turbo test cac
       'packages/caws-native/build.rs',
       'packages/caws-native/src/**',
       'packages/caws-native/tests/**',
+      'packages/caws-native/examples/**',
+      'packages/caws-cli/templates/**',
       'packages/caws-cli/scripts/**',
       'packages/caws-cli/tsconfig*.json',
     ])
@@ -143,5 +145,37 @@ test('actual macOS context Git custody is a mandatory job with bounded resource 
   expect(custody.run).not.toMatch(/\|\|\s*true|--ignore|--features\s+sqlite-store/);
   expect(fs.readFileSync(path.join(repoRoot, 'rust-toolchain.toml'), 'utf8')).toContain(
     'channel = "1.90.0"'
+  );
+});
+
+test('main Jest setup verifies the prepared pin before workers and performs no compilation', () => {
+  const config = require('../../jest.config');
+  expect(config.projects.find((project) => project.displayName === 'caws-cli').globalSetup).toBe(
+    '<rootDir>/tests/helpers/load-native-test-prerequisites.js'
+  );
+  expect(
+    config.projects.find((project) => project.displayName === 'kernel').globalSetup
+  ).toBeUndefined();
+  const setup = fs.readFileSync(
+    path.join(packageRoot, 'tests/helpers/load-native-test-prerequisites.js'),
+    'utf8'
+  );
+  expect(setup).toContain('preparedEnvironment(projectConfig.rootDir, process.env)');
+  expect(setup).not.toMatch(/spawn|execFile|cargo|prepare-test-prerequisites/);
+});
+test('existing release tests job executes real Native strike parent-process tests', () => {
+  const job = release.jobs.tests;
+  const index = job.steps.findIndex(
+    (step) => step.name === 'Exercise Native guard strike transactions and process contention'
+  );
+  expect(index).toBeGreaterThan(job.steps.indexOf(preparation(job)));
+  const step = job.steps[index];
+  expect(step.if).toBeUndefined();
+  expect(step['continue-on-error']).toBeUndefined();
+  expect(step.run).toBe(
+    'cargo +1.90.0 test --locked --offline --manifest-path packages/caws-native/Cargo.toml --no-default-features --lib guard_strikes::tests:: --jobs 1 -- --test-threads=1'
+  );
+  expect(job.steps.findIndex((entry) => (entry.run || '').startsWith('npm test'))).toBeGreaterThan(
+    index
   );
 });

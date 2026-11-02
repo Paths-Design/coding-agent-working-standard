@@ -24,6 +24,7 @@ const availableProcessors =
 /** @type {import('jest').Config} */
 const mainProject = {
   displayName: 'caws-cli',
+  globalSetup: '<rootDir>/tests/helpers/load-native-test-prerequisites.js',
   testEnvironment: 'node',
   setupFiles: ['<rootDir>/tests/helpers/isolate-session-env.js'],
   testTimeout: 60000,

@@ -89,11 +89,15 @@ test('help and current generated reference do not offer tier selection', () => {
   expect(help.stdout).not.toMatch(/--(?:risk-tier|tier)|Tier [123]|tier [123]/);
   expect(help.stdout).toContain('--contract');
   expect(help.stdout).toContain('--security');
-  const reference = fs.readFileSync(
-    path.resolve(__dirname, '../../docs/command-reference.md'),
-    'utf8'
+  const reference = spawnSync(
+    process.execPath,
+    [path.resolve(__dirname, '../../scripts/generate-command-reference.mjs'), '--stdout'],
+    { encoding: 'utf8' }
   );
-  expect(reference).not.toMatch(/--risk-tier|--tier <n>/);
+  expect(reference.error).toBeUndefined();
+  expect(reference.status).toBe(0);
+  expect(reference.stderr).toBe('');
+  expect(reference.stdout).not.toMatch(/--risk-tier|--tier <n>/);
 });
 
 test('tierless validation and sizing never assign a hidden legacy tier', () => {

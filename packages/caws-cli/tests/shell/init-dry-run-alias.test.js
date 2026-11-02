@@ -17,7 +17,7 @@ function runCli(root, args) {
   return spawnSync(process.execPath, [CLI, ...args], {
     cwd: root,
     encoding: 'utf8',
-    env: { ...process.env, CAWS_QUIET: '1' },
+    env: { ...process.env, CAWS_HOME: path.join(root, 'machine'), CAWS_QUIET: '1' },
   });
 }
 

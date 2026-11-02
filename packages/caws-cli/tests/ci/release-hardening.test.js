@@ -87,13 +87,19 @@ test.each([0, 17])('real npm routes the workflow audit to root and preserves exi
 
 test('the effective coverage config includes unexecuted runtime files and enforces a real failing verdict', () => {
   const actual = require('../../jest.config');
-  const root = fixture();
+  const workspace = fixture();
+  const root = path.join(workspace, 'packages/caws-cli');
   fs.mkdirSync(path.join(root, 'dist/store'), { recursive: true });
   fs.mkdirSync(path.join(root, 'tests/helpers'), { recursive: true });
-  fs.copyFileSync(
-    path.join(packageRoot, 'tests/helpers/isolate-session-env.js'),
-    path.join(root, 'tests/helpers/isolate-session-env.js')
-  );
+  fs.mkdirSync(path.join(root, 'scripts/lib'), { recursive: true });
+  fs.mkdirSync(path.join(workspace, 'packages/caws-native'), { recursive: true });
+  for (const relative of [
+    'tests/helpers/isolate-session-env.js',
+    'tests/helpers/load-native-test-prerequisites.js',
+    'scripts/lib/native-test-prerequisite-receipt.cjs',
+  ]) {
+    fs.copyFileSync(path.join(packageRoot, relative), path.join(root, relative));
+  }
   fs.writeFileSync(path.join(root, 'dist/store/probe.js'), 'exports.value = () => 7;\n');
   fs.writeFileSync(
     path.join(root, 'dist/store/unexecuted.js'),
@@ -118,6 +124,8 @@ test('the effective coverage config includes unexecuted runtime files and enforc
     coverageDirectory: path.join(root, 'coverage'),
   };
   fs.writeFileSync(path.join(root, 'jest.config.json'), JSON.stringify(config));
+  const childEnvironment = { ...process.env, FORCE_COLOR: '0' };
+  delete childEnvironment.CAWS_TEST_GUARD_STRIKES_CORE_TEST_BINARY;
   const run = () =>
     spawnSync(
       process.execPath,
@@ -131,7 +139,7 @@ test('the effective coverage config includes unexecuted runtime files and enforc
       {
         cwd: root,
         encoding: 'utf8',
-        env: { ...process.env, FORCE_COLOR: '0' },
+        env: childEnvironment,
       }
     );
   const deficient = run();

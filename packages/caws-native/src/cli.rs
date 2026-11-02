@@ -97,7 +97,14 @@ impl Config {
 
 /// A single invocation clock. Installed transport restricts timing and binds
 /// the selected generation; this data never grants origin or dispatch authority.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InvocationRoute {
+    Direct,
+    InstalledV1,
+}
+
 pub struct Invocation {
+    pub route: InvocationRoute,
     pub config: Config,
     pub deadline: MonotonicDeadline,
 }
@@ -128,7 +135,11 @@ impl Invocation {
         if args.first().map(String::as_str) != Some("invoke-installed-v1") {
             let config = Config::parse(args)?;
             let deadline = MonotonicDeadline::capture(config.timeout).map_err(|e| e.to_string())?;
-            return Ok(Self { config, deadline });
+            return Ok(Self {
+                route: InvocationRoute::Direct,
+                config,
+                deadline,
+            });
         }
         if args.len() != 17 {
             return Err("invoke-installed-v1 requires the existing invoke flags and one --original-deadline".into());
@@ -173,7 +184,11 @@ impl Invocation {
         // capture(), and ambient environment never supplies a missing handoff.
         let deadline = MonotonicDeadline::receive(envelope)
             .map_err(|e| format!("invalid installed original deadline: {e}"))?;
-        Ok(Self { config, deadline })
+        Ok(Self {
+            route: InvocationRoute::InstalledV1,
+            config,
+            deadline,
+        })
     }
 }
 
@@ -282,12 +297,36 @@ mod installed_deadline_tests {
             expires_ns: original.expires_ns - 1_000_000_000,
         };
         let received = Invocation::parse(&args(envelope, 30_000)).unwrap();
+        assert_eq!(received.route, InvocationRoute::InstalledV1);
         assert_eq!(received.deadline.envelope(), envelope);
         assert_eq!(received.config.timeout, Duration::from_secs(30));
         received.deadline.check().unwrap();
         assert!(
             received.deadline.expires().duration_since(Instant::now()) <= Duration::from_secs(29)
         );
+    }
+
+    #[test]
+    fn route_identity_comes_from_the_command_for_every_event() {
+        for event in EVENTS {
+            let original = MonotonicDeadline::capture(Duration::from_secs(30)).unwrap();
+            let mut installed = args(original.envelope(), 30_000);
+            installed[8] = (*event).into();
+            // Configuration flags cannot downgrade the installed command.
+            installed[14] = "project".into();
+            let received = Invocation::parse(&installed).unwrap();
+            assert_eq!(received.route, InvocationRoute::InstalledV1);
+            assert_eq!(received.deadline.envelope(), original.envelope());
+            let mut direct = installed[..15].to_vec();
+            direct[0] = "invoke".into();
+            assert_eq!(
+                Invocation::parse(&direct).unwrap().route,
+                InvocationRoute::Direct
+            );
+            // A direct command carrying an installed-only flag is refused.
+            installed[0] = "invoke".into();
+            assert!(Invocation::parse(&installed).is_err());
+        }
     }
 
     #[test]

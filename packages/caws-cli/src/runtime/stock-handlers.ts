@@ -21,7 +21,10 @@ import { createGuardUtilityPorts, runGuardUtilities } from './guard-utilities';
 import type { HandlerResult } from './composer';
 import type { RuntimeRequest } from './protocol';
 import type { ActiveInvocationSelection, SelectedHandler } from './selection';
-import { qualifiesForNativeSessionEndPrefix } from './session-cache-admission';
+import {
+  qualifiesForNativeSessionEndPrefix,
+  qualifiesForNativeStartupProfile,
+} from './session-cache-admission';
 
 /** Compatibility identities, not trust inferred from a filename or the current template bytes. */
 const HANDLERS: Readonly<Record<string, string>> = {
@@ -68,7 +71,6 @@ const LIBRARIES: Readonly<Record<string, readonly string[]>> = {
   ],
 };
 const STARTUP_SOURCES: Readonly<Record<string, readonly string[]>> = {
-  'handler-env.sh': ['901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7'],
   'runtime-paths.sh': ['c2cc098b08c110723c2d1805170ba2d73a855f0864e5792bb7a88a2c3def7f08'],
   'lib/session-cache.sh': ['eea9bb74ec74d07931eb13ac45e6822a348ce7fb49e4a7baa9d590e321e093cb'],
   'lib/agent-surface.sh': LIBRARIES['agent-surface.sh']!,
@@ -236,6 +238,7 @@ function compatible(handler: SelectedHandler, context: StockHandlerContext): boo
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return false;
     }
+    if (!qualifiesForNativeStartupProfile(context)) return false;
     const direct: Record<string, readonly string[]> = { ...STARTUP_SOURCES };
     for (const name of extra) direct['lib/' + name] = LIBRARIES[name]!;
     for (const [name, expected] of Object.entries(direct)) {
@@ -295,16 +298,7 @@ export function qualifiesForNativeContainment(
     ].some((value) => Boolean(value && value !== '0'))
   )
     return false;
-  const startup = join(selection.runtimeDirectory, 'handler-env.sh');
-  try {
-    assertMachinePath(selection.runtimeDirectory, startup);
-    return (
-      lstatSync(startup).isFile() &&
-      sha(startup) === '901ecd961b65f5383a48ec0e4db7ef2117975963f117ff48d5ed1fab75773cc7'
-    );
-  } catch {
-    return false;
-  }
+  return qualifiesForNativeStartupProfile(context);
 }
 
 /** Prove absence without guessing the session resolver's live PID/cached identity. */
@@ -382,6 +376,47 @@ export function assertNativeStopAgentSelection(
   }
 }
 
+/** No effects: file tools share the exact heartbeat source/CLI boundary with Bash. */
+export function qualifiesForFileToolHeartbeat(
+  handler: SelectedHandler,
+  context: StockHandlerContext
+): boolean {
+  return (
+    ['apply_patch', 'Write', 'Edit'].includes(String(context.request.payload.tool_name)) &&
+    heartbeatCompatible(handler, context)
+  );
+}
+
+function heartbeatCompatible(handler: SelectedHandler, context: StockHandlerContext): boolean {
+  const { request, selection, environment } = context;
+  return (
+    handler.name === 'agent-heartbeat.sh' &&
+    compatible(handler, context) &&
+    selection.surface === 'codex' &&
+    selection.event === 'pre_tool_use' &&
+    request.surface === selection.surface &&
+    request.event === selection.event &&
+    request.runtimeDigest === selection.runtimeDigest &&
+    (!environment.CAWS_BIN || environment.CAWS_BIN === 'caws') &&
+    heartbeatCliCompatible(environment) &&
+    !Object.entries(environment).some(
+      ([name, value]) =>
+        Boolean(value) &&
+        (name === 'NODE_OPTIONS' ||
+          name === 'NODE_PATH' ||
+          name.startsWith('LD_') ||
+          name.startsWith('DYLD_') ||
+          name.startsWith('BASH_FUNC_'))
+    ) &&
+    !selection.handlers.some((entry) => entry.kind !== 'stock') &&
+    !Object.values(selection.libraries).some(
+      (entry) => entry.kind === 'project' || entry.kind === 'user'
+    ) &&
+    !Object.keys(selection.overrides).length &&
+    !Object.keys(selection.libraryOverrides).length
+  );
+}
+
 /** Null means execute the selected shell source; it never means skip the handler. */
 export function tryExecuteStockHandler(
   handler: SelectedHandler,
@@ -418,30 +453,9 @@ export function tryExecuteStockHandler(
   const toolInput = object(payload.tool_input) ? payload.tool_input : {};
   if (handler.name === 'agent-heartbeat.sh') {
     if (
-      selection.surface !== 'codex' ||
-      selection.event !== 'pre_tool_use' ||
-      request.surface !== selection.surface ||
-      request.event !== selection.event ||
-      request.runtimeDigest !== selection.runtimeDigest ||
       payload.tool_name !== 'Bash' ||
       typeof toolInput.command !== 'string' ||
-      (environment.CAWS_BIN && environment.CAWS_BIN !== 'caws') ||
-      !heartbeatCliCompatible(environment) ||
-      Object.entries(environment).some(
-        ([name, value]) =>
-          Boolean(value) &&
-          (name === 'NODE_OPTIONS' ||
-            name === 'NODE_PATH' ||
-            name.startsWith('LD_') ||
-            name.startsWith('DYLD_') ||
-            name.startsWith('BASH_FUNC_'))
-      ) ||
-      selection.handlers.some((entry) => entry.kind !== 'stock') ||
-      Object.values(selection.libraries).some(
-        (entry) => entry.kind === 'project' || entry.kind === 'user'
-      ) ||
-      Object.keys(selection.overrides).length ||
-      Object.keys(selection.libraryOverrides).length
+      !heartbeatCompatible(handler, context)
     )
       return null;
     return executeAgentHeartbeat(context);

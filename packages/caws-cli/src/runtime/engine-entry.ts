@@ -8,6 +8,8 @@ import {
   SESSION_PUBLICATION_CAPABILITY,
   STOP_PREFIX_CAPABILITY,
   STOP_LEASE_CONTEXT_CAPABILITY,
+  FILE_TOOL_CONTEXT_CAPABILITY,
+  GUARD_STRIKES_CAPABILITY,
   TRANSCRIPT_STORE_CAPABILITY,
   type RuntimeRequest,
 } from './protocol';
@@ -35,6 +37,8 @@ import { compareCliIdentity, type ReviewedCliIdentity } from './cli-identity';
 import { loadGenerationCliIdentity } from './cli-identity-loader';
 import { createNativeStopLeaseContextPort } from './stop-lease-context';
 import { createNativeContextGitPort } from './context-git-client';
+import { createNativeFileToolContextPort } from './file-tool-context';
+import { createNativeGuardStrikesPort } from './guard-strikes';
 import {
   CONTEXT_GIT_CAPABILITY,
   EXECUTION_WORKDIR_CONTEXT_GIT_CAPABILITY,
@@ -175,7 +179,27 @@ export async function runEngineEntry(reviewedCliIdentity?: ReviewedCliIdentity):
       stopCandidate && request.stopLeaseContext === STOP_LEASE_CONTEXT_CAPABILITY
         ? createNativeStopLeaseContextPort(request, stopTransport, controller.signal)
         : undefined,
-      cliIdentity?.status === 'matched' ? cliIdentity.receipt : undefined
+      cliIdentity?.status === 'matched' ? cliIdentity.receipt : undefined,
+      request.fileToolContext === FILE_TOOL_CONTEXT_CAPABILITY
+        ? createNativeFileToolContextPort(
+            request,
+            {
+              read: (signal) => reader.read(signal),
+              write: (frame, signal) => writeRuntimeFrame(process.stdout, frame, signal),
+            },
+            controller.signal
+          )
+        : undefined,
+      request.guardStrikes === GUARD_STRIKES_CAPABILITY
+        ? createNativeGuardStrikesPort(
+            request,
+            {
+              read: (signal) => reader.read(signal),
+              write: (frame, signal) => writeRuntimeFrame(process.stdout, frame, signal),
+            },
+            controller.signal
+          )
+        : undefined
     );
     await writeRuntimeFrame(
       process.stdout,

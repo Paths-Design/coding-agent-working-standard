@@ -4,7 +4,7 @@ authority: working
 status: active
 title: CAWS native runtime migration tracker
 owner: CAWS runtime maintainers
-updated: 2026-10-25
+updated: 2026-11-01
 audience: maintainer
 ---
 
@@ -29,19 +29,112 @@ passing unit tests, or the existence of this document.
 
 ## Source location and progress
 
-Published source checkpoint `dabdb0eb26c7c8dc885972c152b5d3277071f732` includes
-the installed-deadline receiver `72fb7557`, in addition to reviewed CLI identity
-and late Stop context (`63745eb9b0`), shared/Codex pack metadata (`7fd6be290`)
-and host-workdir cache admission (`0888c0cdf`). Source publication does not
-establish native-image qualification or selected execution. The
-[canonical parent evidence](../../.caws/specs/CAWS-NATIVE-RUNTIME-001.yaml)
-records unchecked A1/A7 outcomes, including receiver boundary event13732. The
-retained genuine private CLI attempt03 reviews domain `67cb0b92…11f538a4` for 21
-packages and 2083 regular prefix files. Its 3014.670208ms carrier match and
-revalidation is a fixture observation under the original 30000ms budget, not
-native request custody, image admission, rollback or machine adoption. Native
-preparation is held at the deployed guard refusal on a pinned Node read; Root
-retains the required owner coordination and full installed qualification.
+The owned `caws/exclusive-npm-integration` branch contains lifecycle repair
+`7c8b293b237f1d5a8a0155600f939c023a8480e5`, normal combined-source merge
+`969a6a0c1763c2a4a9f9e4f7467c7b6e0e1357f5`, and generated-reference test repair
+`0dec33d3b95c22e371fd1653d298fd6fd86e6ff9`. Explicitly selected files receive
+Source write grants only in the owned checkout. Merge, claim and close derive
+the unique actual base checkout while canonical governance remains canonical;
+unused retired catalog rows cannot block that continuation. Three participating
+roots preserve the 256-file writer bound. Unrelated target dirt survives normal
+refresh; stale refreshes retain the merge identity and an inspection-required
+publication failure. Detailed base-sync diagnostics remain available in the
+store result rather than the lifecycle failure envelope.
+
+Root artifacts live under
+`/Users/darianrosebrook/.codex/artifacts/01a17941-cbb6-7b92-b5c7-0ba8f5f238d3`.
+`lifecycle-full-selected-source-19.log` records 104 passing lifecycle cases; the
+focused nine use real Git/store operations and a component bridge substitute.
+`lifecycle-native-execution-tests-19.log` records 135 passes and 12 explicit
+ignores, including the three-root and hostile-boundary controls. Discovery has
+18 passes. The Source fixture child adds only three setup lines and passes 54
+checks; its normal merge is `1349b9a05`. The opt-in trace child merges through
+`212f20c0` and observes 47 complete dispatches without changing deadlines; it
+does not explain the historical timeout. Both bounded child specs are closed
+after dual spec/event readback. The follow-up read-only review finds no
+additional demonstrated defect in the new authority/lifetime changes. These
+results do not establish the live broker/Host or the genuine complete workflow.
+
+Host takeover belongs to session `01a17941-cbb6-7b92-b5c7-0ba8f5f238d3`.
+Candidate `88f8d550f2c0a2f61e058a066fa8dad8d12021b4` builds locked, offline and
+with one compiler job. `host-v3-optimized-build-02.log` completes after the
+first failed build exposed the production dependency declaration. Private image
+`host-v3-optimized-kernel-01/codex`, SHA-256
+`2994a7f81ff335f22243af9f76f7afd34fce1c50e78818d440d05b104c857150`, is 258769216
+bytes, stripped, ad-hoc signed and version-smoke-tested within the unchanged
+268435456-byte limit. Its package receipt retains actual build, lock, image and
+reused-helper identities. The earlier 31 kernel/helper checks remain bounded
+source evidence. Host acceptance and normal landing remain owed.
+
+The immutable CLI export at
+`native-agent-workflow-09/matched-cli-source-0dec33d3` has private locked
+dependencies and a successful build. Its separate package directory permits
+packaging without mutating the live Source test outputs. The immutable
+production Native receipt is
+`native-agent-workflow-09/matched-production-build-969a6a0c/native-completed.json`.
+The new private installer is a pending human execution-context action: installed
+`43f2b11c` lacks authenticated `execution_workdir` and refused before execution.
+The earlier f9 installer request is held and superseded by the frozen 0dec
+snapshot command; no alternate installer carrier was attempted. Runtime
+assembly, registration/trust and actual callbacks remain open. Preserve complete
+failed run `lifecycle-full-source-tests-14.log`, all interrupted Source05
+campaigns and their failed scores. Current full-suite qualification and every
+declared 80-percent file floor remain required; component passes replace
+neither.
+
+The next consumer is the same genuine session
+`01a185e5-527d-75b3-a2bd-2a601f74b57c` in the existing
+`exclusive-label-hard-exclusion` leaf: red, bounded edit, green, Cargo, Native
+writer, normal Git/CAWS merge, downstream npm and close with exclusive
+`caws_exec`. Preserve its explicit `protected.txt` exclusion, the failed
+`exclusive-label-workflow` leaf and the original single protected-write refusal;
+do not repeat that attempt. The app-managed checkout admission case is distinct:
+retain actual native callback/cwd, common-Git, registered-owner, scope and file
+evidence in the real external checkout, rather than inferring it from canonical
+handoffs or the private CAWS leaf. The ordinary exec route lacks a demonstrated
+authenticated command-directory fix. Global activation also needs explicit
+reconciliation of the owned legacy SessionEnd timeout45 registration; upgrading
+the CLI alone does not normalize it. GitHub SSH is reachable and remote main is
+`b0d9e6b0be1564c639414332f1b4dffc65f7c5a1`. Validated qualification/parent
+landing, normal-hook push and direct remote equality remain owed. Secure socket
+origin, global adoption and full first-party Python retirement remain
+unqualified.
+
+Parent checkpoint `9f87d3e1baeb8328b5a51047f641a98abc5137ee` joins the parent's
+`28ef8482` source with main, including the stock scanner and Stop preflight
+repairs. Owned file-tool candidate `88170c904f2ea14eebaad017ba0249af94537505`
+joins file-tool source `67410254c` and execution source `ada60d4e6` through
+normal merge `caa49db02`. Its only conflict resolution retains both Rust module
+sets. The worktree writer retains the execution lifecycle fences and optional
+dependency-link setting. The production CLI build, package-config lint and
+107-path gates pass. After a stale prerequisite receipt refuses before test
+execution, normal preparation compiles the combined Native binary and libtest
+with Rust 1.90.0, locked, offline, feature-off and one job. The fresh receipt
+admits the focused lifecycle and artifact suites: 65 checks pass in 251.103
+seconds. The fixed module loader preserves the two literal diagnostic imports
+after environment and fence validation. These are component checks; the private
+matched-image consumer, source landing and package qualification remain open.
+The [canonical parent evidence](../../.caws/specs/CAWS-NATIVE-RUNTIME-001.yaml)
+retains failed A2 and unchecked cutover criteria.
+
+The retained ART07 descriptor `ae99243f…adfdb` binds source `289605cc`, CLI
+package `183382f8` and its native build receipts. It omits both the Stop profile
+and CLI identity domain. Its private checks cannot substitute for a refreshed,
+coherent package with the qualified typed Stop path. The older combined
+`55080eb1` image has a Stop profile; its bytes remain historical evidence.
+
+The original 564-byte `apply_patch` request has a successful genuine retry on
+private runtime `ba7b6e70`. Both decoded requests hash to
+`7d5506225ce9c9e61742a44898dddc0545e23ab7fef5a2c33f19c57d649a47fc`. The Source
+transcript for session `01a181ec-11d5-7270-8073-29aac2fd949d` records the
+timeout at lines 317/319 and the successful retry at 404/408;
+`scope-enforcement-context-01/caws-read-source-image07-events.jsonl` records the
+actual file change at lines 15/16 and intended diff at 21. Canonical native
+pre/post journals `67500-1793205613371034000` and `69833-1793205621919350000`
+reach exit zero through compatibility dispatch. This establishes that bounded
+file-tool retry; the final pinned image must exercise the same case through its
+actual selected route. Python parsing and shell guards remain part of the
+retained successful path.
 
 The retained source lineage includes main merge
 `1c39bd3cd708076d54a34bfec10d8992de8f3286`, reconciled candidate
@@ -85,16 +178,203 @@ records the landing and its bounded checks.
 The coverage measure is 36/37 rows with qualifying partial implementation
 (97.3%). It is not an overall completion percentage. Parent acceptance is 0/8;
 zero complete production Python rows are retired. The selected machine runtime
-is `408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0`. Component
-acceptance, integration-branch landing, delivery on `main`, package
-qualification and selected-machine adoption are separate states.
+is `43f2b11c345e7b1a6a0fe1ad13e6364a600bc9bf3b70aabeb42ea61de709baf3`; the
+previous runtime is
+`408c06a7cbdb1950e24f53a7486428c3a51e45bbeb86292cb9b2dec30177baa0`. This
+selected legacy consumer does not establish native cutover. The installed CLI
+remains the `89061bdd4624688f-6RMqqI` snapshot. Component acceptance,
+integration-branch landing, delivery on `main`, package qualification and
+selected-machine adoption are separate states.
 
 ## Ownership and execution
 
-- Bound lane owner and cutover coordinator: Codex chat
-  `01a17052-3ea7-79b1-86be-7296991f8fd0`, following the user's lead transfer.
-  The live registry records this owner for both `native-runtime-modernization`
-  and `native-session-publication`.
+- Bound parent and installed-entry lane owner and cutover coordinator: Codex
+  chat `01a1861e-58cc-7392-ac55-1ff3a6051998`, through the user's explicit
+  takeover authorization. The registry and prior-owner audit record both
+  `native-runtime-modernization` and `native-installed-entry`.
+- `native-session-publication` remains owned by chat
+  `01a17052-3ea7-79b1-86be-7296991f8fd0`; it is outside that takeover.
+- The coordinator owns Git, acceptance and integration for three delegated
+  implementation chunks: typed Codex file-tool enforcement in
+  `native-file-tools` (`CAWS-NATIVE-FILE-TOOLS-001`); native CLI hooks
+  inspection in `native-hooks-inspection` (`CAWS-NATIVE-HOOKS-INSPECTION-001`);
+  and actual installed recovery qualification in `native-recovery-qualification`
+  (`CAWS-NATIVE-RECOVERY-QUALIFICATION-001`). Native file-hook identity and
+  registry ownership match the parent. Child CLI identity remains distinct.
+- Chat `01a17941-cbb6-7b92-b5c7-0ba8f5f238d3` retains its execution, npm and
+  frozen Source05 mutation qualification work. Its retry4 logs retain the
+  restarted campaigns; no final report or per-file floor verdict is established.
+  Final-image applicability requires matching captured inputs or
+  requalification. The user's clarified ownership decision assigns the
+  execution-owner continuation to that chat; this coordinator performs no
+  takeover or owner restoration there. That owner also retains the reported
+  Source app-bridge authority mismatch and the genuine same-session
+  execution/lifecycle consumer.
+- The origin probe under `CAWS-RUST-CUTOVER-ORIGIN-001` remains unexecuted after
+  the installed guard refusal. A validated execution route and actual genuine
+  host positive plus hostile transferred/prequeued-channel controls remain owed.
+- The parent is a protected base for existing lanes. The six owned tracker and
+  file-tool changes moved byte-for-byte to `native-file-tools` under the user's
+  repo-scoped worktree-guard exception; only those parent changes were restored.
+  Parent state is clean, and the exception is revoked with no active handlers.
+  File-tool source includes the native-owned context port, with capture before
+  Ready and fresh observation before ownership, plus truthful bare-primary
+  inventory. Independent source counterexamples corrected unused-capability
+  compatibility and terminal-reserve handling. The joined TypeScript production
+  build and 311 port, handler and cache checks pass for the context-only slice.
+  That slice also passes a private default-feature Rust check and selected
+  protocol/context tests. The joined strike core, Native wire and client have a
+  passing TypeScript build, 44 strict client checks and lint. The
+  default-feature Rust check and both test executables compile with pinned Rust
+  1.90. Sixteen core tests cover real filesystem locking, hostile paths,
+  migration, reset preimages and crash release; two ignored subprocess endpoints
+  are invoked by parent tests. Five wire tests and four pending/terminal tests
+  pass. The actual two-Rust-process TypeScript oracle passes one warning, one
+  denial, persisted count two, preservation of an unrelated guard key and no
+  target writes. This proves the fixture's core behavior, not final-image
+  callback execution. The pre-repair deterministic two-isolate scope-strike
+  check fails: both callers warn and publish count one, rather than one warning,
+  one denial and count two. The Native transaction core and client integration
+  are committed as `935703bd3`, with direct package-config lint coverage. Root
+  pre-commit's ignored TypeScript warnings are not lint evidence. Review
+  identifies a physical-path gap: the typed scope check admits final and
+  ancestor dangling symlinks. Two negative controls reproduce it; the repair
+  refuses existing unresolved entries while preserving a resolvable in-scope
+  symlink. The corrected two-worker file-tool/client run passes all 152 checks.
+  Actual host symlink behavior remains unobserved. Focused Native review finds
+  no additional concrete defect in original identity, one-shot transaction,
+  publication retention or bounded cleanup; joined Native IPC is unqualified. A
+  test-only Rust subprocess bridge preserves the real count-two oracle without
+  adding a public counter command. Actual `npm run test:prepare` succeeds with
+  Node 22 and pinned Rust 1.90, feature-off locked/offline jobs one, in a
+  physical lane-local target. The owned target symlink was removed; the
+  canonical shared target remains intact. The compiler-reported artifact and
+  source/toolchain receipt feed a two-worker Jest run without a manual override:
+  all 149 file-tool and client checks pass. The prepared feature-off artifact
+  also passes the 16 core parent tests. Forty-eight preparation/receipt/CI
+  checks cover stale inputs, failed compilation, shared-target refusal,
+  collision preservation and cleanup failures. Raw normal preparation and
+  consumer output are siblings `normal-test-preparation.log` and
+  `prepared-runtime-consumer.log` of the retained concurrency logs.
+  Participating shell/reset writers remain owed: live stock keys are file-tool
+  `scope_guard` and PostToolUse `shortcut_language`, not Bash `worktree_guard`.
+  The shared-runtime reset script also derives its project audit root from the
+  machine-library location. Those repairs and explicit prior-generation
+  drain/rollback handling remain open. Raw failure is retained in
+  `/private/tmp/caws-native-file-tools-01a1861e.b84kXw/strike-concurrency-red.log`.
+  The corresponding successful oracle is retained in
+  `/private/tmp/caws-native-file-tools-01a1861e.b84kXw/strike-concurrency-green.log`.
+  A broader sandboxed JavaScript attempt was interrupted with exit 130 after
+  repeated macOS developer-tool failures in Git fixture setup; it supplies no
+  suite verdict. The retry with verified host Git access passes all 475 checks
+  across the five affected JavaScript suites in 108.719 seconds; its raw output
+  is `strike-concurrency-green.log`'s sibling `joined-runtime-host-tests.log`.
+  The three source-only admission checks pass with child-launch APIs forbidden;
+  they exclude the other 105 stock-handler cases. The prior pathological run's
+  handle is missing and its descendants are unproved. The human reset the
+  resulting session danger latch; no signal retry is authorized or planned. The
+  genuine same-SID two-target probe in execution fixture
+  `native-agent-workflow-09` changes both `src/label.js` and `protected.txt`.
+  Its preserved raw callback is 1,243 bytes, SHA
+  `52d74d52c0a9a7fd0dd4feaf287ccfbfe8c4fb42b29c30cdfb5fe893f857af9c`;
+  `tool_input.command` contains the source target first and protected target
+  second. Effective hooks select private runtime `523b2306`, which contains
+  neither new file-tool parser nor handler modules. This is not execution of
+  `67410254c`. The retained fixture also has empty `scope.out`: prose naming
+  `protected.txt` does not turn the first progressive scope miss into a hard
+  exclusion. Its A3 remains failed, with original policy, dirty effects and raw
+  evidence preserved. The execution owner creates a distinct same-SID hard
+  exclusion fixture with persisted `scope.out`, and owns one matched private
+  package, registration and consumer qualification from the integrated source.
+  No retry or scope alteration of the failed fixture supplies acceptance. Stock
+  shell participation remains unfinished. A descriptor inherited by the complete
+  compatibility dispatcher reaches unrelated helper processes and cannot attest
+  the selected counter writer. Per-child PostToolUse execution also needs the
+  Codex original-tool/path normalization and durable session envelope prefix
+  before replacing the dispatcher. Counter client/control drafts in agent
+  context are uncompiled data, not an installed implementation.
+- Hook-inspection candidate `d7833c868` lands on `main` through merge
+  `4104a1d0c`; component closure is `8e14dd057`. All three inspection criteria
+  are recorded through `caws specs evidence` and read back with events
+  15343–15345; event15346 records closure. Its production build and fresh 119
+  built-CLI checks pass; raw `committed-hooks-checks.log` is retained beside the
+  actual consumer result. The human-executed private ART07 probe against
+  `333316c84` at `tmp/rust-cutover-package/hooks-inspection-01/result.json`
+  binds native description with Python absent from PATH, native
+  member-corruption refusal without legacy replay, and explicit legacy
+  description. It preserves fixture inventories and describes ten handlers; it
+  executes no handlers and proves no genuine harness trust or callback.
+  Independent feedback identified alternate `CODEX_HOME` and nested caller-layer
+  selection gaps; the committed repairs refuse unsupported homes and inspect
+  bounded caller/canonical layers. Direct Native and legacy description also
+  pass against the corrected build. The actual harness trust/configuration stack
+  and callback remain unqualified.
+- Recovery qualifier repairs are committed as `6e7b5206c`, with 60 passing
+  evidence/filesystem/SQL checks. The installed CLI link resolves the immutable
+  package's actual bin entry, and retained outputs are bracketed before owner
+  restart rather than after it. ART07 Git inspection is retained under the
+  recovery lane's `tmp/rust-cutover-recovery/art07`: the command-sandbox attempt
+  refuses with `CSSMERR_TP_NOT_TRUSTED`, while the host-access attempt succeeds
+  with observation SHA
+  `4c5091249644e9256c939e69be8a56874b130bdc3e3d8899f7d694f4d780dbc7`. The failed
+  first profile root `/private/tmp/caws-art07-stop-component-output` is
+  preserved. Candidate `23225278b` validates the complete diagnostic envelope
+  before projecting semantic SQLite v1; 14 hostile checks pass. The real ART07
+  run matches all 30 component comparisons with 31 clean executions and emits
+  profile SHA
+  `1e178cf516d1550b24bd51e57a240564c4ed29e0053fa87f25aeae5e67f0e1bb`.
+  Independent feedback checks the committed source and raw comparison receipts.
+  The owned `tmp/rust-cutover-recovery/art07` inputs include the exact
+  397-importer, 1,472-request domain, a fresh Node22 replay of all 38 ESM edges
+  and 17 target pins, and descriptor SHA
+  `93e1bcd73169237ca01b1391ad24d02d5889118c79dbacc24060f5e0eaf29d4c`. ART07's
+  installed reader admits that descriptor. No Native Stop scenario has run:
+  neither CLI template set reproduces selected prior `43f2…` (actual CLI
+  recreates `408c…`, ART07 recreates `a596…`). A bounded, verified fixture
+  restore through the maintained installer transaction is assigned. Its driver
+  must pin the complete private CLI snapshot and loaded dependency closure
+  before using the helper; bootstrap `408c…` is distinct from restored prior
+  `43f2…`. The 113-member retained source remains untouched. The four-path
+  restore change is applied in the recovery lane; its source helper compiles and
+  17 real private installer transaction controls pass. Restore/loader support is
+  committed as `0821501f5`; the complete adapter suite passes 72 checks and the
+  driver suite passes 76 after an earlier per-file refusal is accepted by the
+  tree-drift oracle with phase/no-output assertions. Review establishes that the
+  exact prior CLI's `status` exits zero despite load failures. The follow-up
+  requires its supported read-only `doctor --repair-plan --json` report, zero
+  error/load-error counts and retained warnings; the corrected driver suite
+  passes 84 checks. Candidate `81508e3be` checks the prior reader before
+  restart; `57d07165d` applies the same oracle after rollback. A complete
+  private restorer snapshot and actual retained-source fixture are pending. The
+  maintained installer refuses probe projects beneath `.caws/worktrees`; the
+  canonical ignored cache location passes CLI scope admission, but the agent
+  Bash guard refuses its materialization as a claimed lane path while the native
+  caller remains canonical. The reviewed human-terminal installer command for
+  `tmp/rust-cutover-recovery/art07/restorer-tool-home-01` is pending; no
+  alternate carrier bypasses that refusal. After its actual receipt exists,
+  capture the whole physical install prefix and run one explicit baseline
+  request with exact retained prior `43f2…`. These unit fixtures run no Native
+  Stop scenario. Native Stop/recovery/rollback acceptance remains unearned.
+- Native signing source supplies all-architectures, strict and the installed
+  SDK's `kSecCSNoNetworkAccess` bit 29 to `SecStaticCodeCheckValidity`. Two
+  tests observe those outbound flags and preserve refusal errors. The rebuilt
+  debug inspector fails at the original five-second Git deadline; the attempt is
+  retained in `/private/tmp/caws-native-file-tools-01a1861e.b84kXw` and grants
+  no final-image, successful Git or packet-observed no-network claim. The older
+  ART07 observation predates this repair. The host's optimized build has a raw
+  exit-zero terminal record and no Cargo/rustc process remains; its signing,
+  size and smoke qualification are unproved. The coordinator's one-job locked,
+  offline check and test compilation complete in its existing private target.
+  The execution owner resumes its source and genuine consumer work. Its reported
+  native execution test/build terminals release one compiler slot for the
+  coordinator's normal preparation; that preparation exits zero and releases the
+  slot back. Host package qualification and the execution owner's remaining
+  workflow/mutation evidence need direct verification. Their work stays with the
+  existing owners; no source takeover is inferred.
+- The source inventory contains 46 tracked Python files: 14 installed hook
+  copies, 16 package templates, 13 pytest files and three developer tools.
+  Embedded Python and selected custom consumers remain additional retirement
+  obligations; a stock-path replacement does not retire those consumers.
 - Prior coordinators: Codex chats `01a164bc-7a2b-75e2-be81-5da9d0a29252` and
   `01a15a2a-5057-75d0-a7e5-69d676673add`. The live worktree registry and
   `caws claim` identify the current owner; this tracker grants no authority.
@@ -326,7 +606,7 @@ bounded assignments transfer execution only, not acceptance ownership.
 | R24 | One-shot typed engine                                                                                               | `packages/caws-cli/src/runtime`                                            | opt-in prototype; isolated nonlatching Codex branch exercised                                                                                               | Native client runs the actual typed engine and a production-selected stock guard in E33; full chain, stateful containment, other harnesses and installation remain unqualified                                                                                                                                                                                                                                                                                                                                                                                            |
 | R25 | Demand-start, warm residency and idle exit                                                                          | Rust service owner/retained workers + typed engine                         | Isolated renderer profile E81 and bounded resident store acquisition E240; complete resident engine unreplaced                                              | E240 observes the original owner and retained store record beyond frontend death and idle eligibility. Unreleased finite records pin that owner; explicit release and sustained capacity, machine-wide fair admission, heartbeat retention, drain/version and the thirteen-session workload remain open.                                                                                                                                                                                                                                                                  |
 | R26 | Persistent request outcomes / deferred queue                                                                        | Rust durable journal + typed TS outcomes and bounded scheduler             | normal/queued/dispatched cancellation and host-crash restart observed on native43, E128/E130                                                                | Runtime build39 and qualifier266 retain actual partial writes, accepted Unknown, correlated retry/capacity denials and reap/EOF/absence receipts. Fatal worker loss, generation replacement, autonomous drain and production retention remain unqualified                                                                                                                                                                                                                                                                                                                 |
-| R27 | Package/install/upgrade/rollback and trust                                                                          | Existing TS init/store adapters + native artifact distribution             | native-image installation component and CLI03 closure/carrier exercised; fresh image/adoption held                                                          | Historical combined-installed-01/post-build-04 observes actual native-image installation, pointer and tree verification under 30000ms; its pair invokes the frontend directly, not the stable entry. CLI03/domain67cb separately exercises the installed CLI carrier. Neither closes A7. Fresh native image, installed stable-entry/consumer routing, trust, upgrade/rollback and no-Python execution remain open; global408/CLI89061 unchanged.                                                                                                                          |
+| R27 | Package/install/upgrade/rollback and trust                                                                          | Existing TS init/store adapters + native artifact distribution             | native-image installation component and CLI03 closure/carrier exercised; fresh image/adoption held                                                          | Historical combined-installed-01/post-build-04 observes actual native-image installation, pointer and tree verification under 30000ms; its pair invokes the frontend directly, not the stable entry. CLI03/domain67cb separately exercises the installed CLI carrier. Neither closes A7. Fresh native image, installed stable-entry/consumer routing, trust, upgrade/rollback and no-Python execution remain open. The selected legacy consumer is `43f2`, with `408` previous; CLI `89061` is unchanged.                                                                 |
 | R28 | Performance and load qualification                                                                                  | Replayable TS/native workload                                              | workload and exact semantic/ordering hostile controls tested, E91/E94; runtime unqualified                                                                  | Thirteen simultaneous sessions across four repositories; per-project/session distributions, stage cost, RSS, process count, fairness and bounded overload; 100 ms warm is a target                                                                                                                                                                                                                                                                                                                                                                                        |
 | R29 | SOLID boundaries and existing CLI integration                                                                       | Shared typed kernel/store adapters                                         | shared heartbeat/message operations reused by CLI and typed stock consumer, E172 (`ad3a6d24`); complete boundary qualification open                         | Explicit canonical directory, identity, context, clock and store ports reuse existing lease kernel/store and message queue. Application and consumer semantic checks support this bounded slice; full dependency closure, installed parity and cutover remain open.                                                                                                                                                                                                                                                                                                       |
 | R30 | Stop infrastructure budget persistence                                                                              | Rust project/session budget library                                        | library and native protocol-fixture consumption exercised                                                                                                   | E34 persists actual native charge/refusal/release/reset snapshots; production-engine Stop, full identity and harness recovery remain unqualified                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -11151,9 +11431,34 @@ acceptance remains 0/8.
 
 ## Ordered next work
 
-The lead integrates three outcomes. The immediate assignments below precede the
-detailed retained dependency list; completing a bounded assignment does not
-complete its parent outcome.
+The coordinator integrates the delegated chunks with the execution chat's
+candidate, keeping these consumer steps and final acceptance distinct:
+
+1. Complete typed file-tool pre-write enforcement and native hooks inspection,
+   then exercise the original real file-tool edit and protected-target refusal.
+   Preserve complete original patch inventory, handler order, owner/scope/latch
+   checks, custom selections and explicit unavailable outcomes.
+2. Freeze the joined CLI, runtime, native executables, dependencies, guards and
+   observed registration. Generate fresh Stop and CLI identity profiles from
+   those bytes. A successful historical image or a partially qualified package
+   can support a reversible probe but cannot earn final-image acceptance.
+3. Run the actual installed 30000ms typed Stop/publication consumer, then loss
+   after persistent writes, same-session restart with durable Unknown and no
+   replay, independent project progress and ordinary old-reader work after
+   rollback. Qualifier oracle tests alone do not establish those behaviors.
+4. Complete the same-session everyday file/Bash/npm/Git/test/evidence/review/
+   merge/Stop/rendering workflow and origin/launch enforcement. Judge the full
+   execution and analysis mutation reports against every unchanged per-file
+   floor and their actual source/build/dependency applicability.
+5. Qualify cold/warm deadlines, overload, cross-project isolation and upgrades
+   under the thirteen-session/four-repository workload; complete Python consumer
+   retirement, package qualification and documentation. Record earned parent
+   acceptance through the single writer before machine adoption, then verify
+   selected execution and rollback.
+
+The detailed dependency history below retains earlier observations and their
+limits. The execution sequence above governs the next consumer increments;
+completion of a bounded assignment does not complete its parent outcome.
 
 E357 establishes actual prefix completion followed by expiry after original
 reservation. Root owns verification-cost reduction, the retained owner's

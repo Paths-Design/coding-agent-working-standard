@@ -84,6 +84,31 @@ pub(crate) struct GenerationReceipt {
     ancestors: BTreeMap<PathBuf, MemberMetadata>,
 }
 impl GenerationReceipt {
+    pub(crate) fn capture_installed_with_diagnostics(
+        home: &Path,
+        config: &Config,
+        original_deadline: &caws_native::monotonic_deadline::MonotonicDeadline,
+        receipt_revalidation_timings: CheckTimings,
+        mut cancel: impl FnMut() -> Result<(), String>,
+    ) -> Result<Self, String> {
+        let mut checkpoint = || {
+            cancel()?;
+            original_deadline.check().map_err(|error| error.to_string())
+        };
+        let mut verify = Verification::new(original_deadline.expires(), &mut checkpoint);
+        verify.checkpoint()?;
+        let running = std::env::current_exe();
+        verify.checkpoint()?;
+        Self::capture_at_for_invocation(
+            home,
+            config,
+            &running.map_err(|error| error.to_string())?,
+            Some(original_deadline),
+            &mut verify,
+            receipt_revalidation_timings,
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn capture(
         home: &Path,
@@ -138,8 +163,36 @@ impl GenerationReceipt {
         verify: &mut Verification<'_>,
         receipt_revalidation_timings: CheckTimings,
     ) -> Result<Self, String> {
+        Self::capture_at_for_invocation(
+            home,
+            config,
+            running_native,
+            None,
+            verify,
+            receipt_revalidation_timings,
+        )
+    }
+
+    fn capture_at_for_invocation(
+        home: &Path,
+        config: &Config,
+        running_native: &Path,
+        installed_deadline: Option<&caws_native::monotonic_deadline::MonotonicDeadline>,
+        verify: &mut Verification<'_>,
+        receipt_revalidation_timings: CheckTimings,
+    ) -> Result<Self, String> {
         verify.checkpoint()?;
         let selection = Selection::read_generation(home, &config.digest, verify)?;
+        if let Some(original_deadline) = installed_deadline {
+            selection.validate_installed_invocation(
+                running_native,
+                &config.node,
+                &config.engine,
+                config.timeout.as_millis() as u64,
+                original_deadline,
+                verify,
+            )?;
+        }
         let (native, node, engine) = selection.native_paths(verify)?;
         if running_native != native || config.node != node || config.engine != engine {
             return Err("Invocation paths differ from admitted native generation".into());

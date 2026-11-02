@@ -1,6 +1,7 @@
 //! Private per-invocation engine custody. This is transport and original-child
 //! ownership, never project authority or permission to adopt a process by PID.
 use crate::cli::Config;
+use caws_native::monotonic_deadline::{DeadlineEnvelope, MonotonicDeadline};
 use caws_native::owned_group::{GroupSettlement, GroupStop, SettlementError, StopError};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -24,7 +25,7 @@ use std::{
 #[cfg(test)]
 mod tests;
 pub(crate) mod worker;
-pub(super) const CONFIG_SCHEMA: &str = "caws.engine.custody.configuration.v1";
+pub(super) const CONFIG_SCHEMA: &str = "caws.engine.custody.configuration.v2";
 pub(super) const RECEIPT_SCHEMA: &str = "caws.engine.custody.receipt.v1";
 pub(super) const MAX_CONFIG: u64 = 65_536;
 pub(super) const MAX_JOURNAL: u64 = 1_048_576;
@@ -36,6 +37,7 @@ pub(super) struct Configuration {
     pub schema: String,
     pub invocation_id: String,
     pub runtime_digest: String,
+    pub deadline: DeadlineEnvelope,
     pub node: PathBuf,
     pub engine: PathBuf,
     pub control_fd: RawFd,
@@ -290,7 +292,11 @@ impl Owner {
         config: &Config,
         invocation_id: &str,
         render: Option<[RawFd; 3]>,
+        original_deadline: &MonotonicDeadline,
     ) -> Result<Spawned, String> {
+        original_deadline
+            .check()
+            .map_err(|error| error.to_string())?;
         let parent = std::env::temp_dir()
             .canonicalize()
             .map_err(|e| e.to_string())?;
@@ -337,6 +343,7 @@ impl Owner {
             schema: CONFIG_SCHEMA.into(),
             invocation_id: invocation_id.into(),
             runtime_digest: config.digest.clone(),
+            deadline: original_deadline.envelope(),
             node: config.node.clone(),
             engine: config.engine.clone(),
             control_fd: remote.as_raw_fd(),
@@ -386,6 +393,7 @@ impl Owner {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         remove_preloads(&mut command);
+        let original_envelope = original_deadline.envelope();
         unsafe {
             command.pre_exec(move || {
                 if libc::setsid() < 0 {
@@ -396,9 +404,13 @@ impl Owner {
                         return Err(io::Error::last_os_error());
                     }
                 }
-                Ok(())
+                caws_native::monotonic_deadline::check_before_exec(original_envelope)
+                    .map_err(io::Error::from_raw_os_error)
             });
         }
+        original_deadline
+            .check()
+            .map_err(|error| error.to_string())?;
         let child = command
             .spawn()
             .map_err(|e| format!("engine custodian spawn: {e}; retained {}", root.display()))?;
@@ -431,8 +443,25 @@ impl Owner {
     }
 
     fn refresh(&mut self) -> Result<(), String> {
+        self.refresh_checked(&mut || Ok(()))
+    }
+    fn refresh_checked(
+        &mut self,
+        check: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
         use std::os::unix::fs::FileExt;
+        self.refresh_checked_with(check, |file, bytes, offset| file.read_at(bytes, offset))
+    }
+    // The reader seam permits actual partial-read/Interrupted controls in unit
+    // tests. Production always supplies the retained receipt File's read_at.
+    fn refresh_checked_with(
+        &mut self,
+        check: &mut impl FnMut() -> Result<(), String>,
+        mut read: impl FnMut(&File, &mut [u8], u64) -> io::Result<usize>,
+    ) -> Result<(), String> {
+        check()?;
         let length = self.receipt.metadata().map_err(|e| e.to_string())?.len();
+        check()?;
         if length > MAX_JOURNAL {
             return Err("custody journal exceeds byte limit".into());
         }
@@ -440,19 +469,33 @@ impl Owner {
             return Err("custody journal was truncated".into());
         }
         let mut bytes = vec![0; length as usize];
-        self.receipt
-            .read_exact_at(&mut bytes, 0)
-            .map_err(|e| e.to_string())?;
+        let mut offset = 0usize;
+        while offset < bytes.len() {
+            // read_exact_at hides Interrupted retries. Each explicit retry and
+            // finite chunk must consume the same original frontend bound.
+            check()?;
+            let end = (offset + 8192).min(bytes.len());
+            match read(&self.receipt, &mut bytes[offset..end], offset as u64) {
+                Ok(0) => return Err("custody journal shortened during read".into()),
+                Ok(count) => offset += count,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error.to_string()),
+            }
+            check()?;
+        }
+        check()?;
         if !bytes.starts_with(&self.observed_prefix) {
             return Err("custody journal prefix changed".into());
         }
         let mut latest = None;
         for line in bytes.split_inclusive(|&b| b == b'\n') {
+            check()?;
             if !line.ends_with(b"\n") {
                 break;
             }
             let receipt: Receipt = serde_json::from_slice(line)
                 .map_err(|e| format!("invalid custody journal: {e}"))?;
+            check()?;
             if receipt.schema != RECEIPT_SCHEMA
                 || receipt.invocation_id != self.invocation_id
                 || receipt.runtime_digest != self.runtime_digest
@@ -484,8 +527,10 @@ impl Owner {
             {
                 return Err("custody journal state regressed".into());
             }
+            check()?;
             latest = Some(receipt);
         }
+        check()?;
         self.observed_length = length;
         self.observed_prefix = bytes;
         if let Some(receipt) = latest {
@@ -506,8 +551,38 @@ impl Owner {
             .map(|message| message.chars().take(1024).collect()))
     }
 
+    pub fn pre_creation_failure_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Result<Option<String>, String> {
+        let mut check = || Self::check_frontend_until(original, until);
+        self.refresh_checked(&mut check)?;
+        check()?;
+        Ok(self
+            .latest
+            .as_ref()
+            .filter(|receipt| receipt.state == ReceiptState::NoChild && receipt.terminal())
+            .and_then(|receipt| receipt.error.as_deref())
+            .filter(|message| !message.is_empty())
+            .map(|message| message.chars().take(1024).collect()))
+    }
     pub fn exit_observed(&mut self) -> Result<bool, String> {
-        self.refresh()?;
+        self.exit_observed_checked(&mut || Ok(()))
+    }
+    pub fn exit_observed_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Result<bool, String> {
+        self.exit_observed_checked(&mut || Self::check_frontend_until(original, until))
+    }
+    fn exit_observed_checked(
+        &mut self,
+        check: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<bool, String> {
+        self.refresh_checked(check)?;
+        check()?;
         if self.latest.as_ref().is_some_and(Receipt::terminal) {
             return Ok(true);
         }
@@ -515,6 +590,7 @@ impl Owner {
             return Err("custodian exited without terminal receipt".into());
         };
         let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+        check()?;
         if unsafe {
             libc::waitid(
                 libc::P_PID,
@@ -526,6 +602,7 @@ impl Owner {
         {
             return Err(io::Error::last_os_error().to_string());
         }
+        check()?;
         if unsafe { info.assume_init().si_pid() } != 0 {
             return Err(format!(
                 "custodian exited without confirmed engine cleanup; retained {}",
@@ -534,18 +611,46 @@ impl Owner {
         }
         Ok(false)
     }
+    fn check_frontend_until(original: &MonotonicDeadline, until: Instant) -> Result<(), String> {
+        original.check().map_err(|error| error.to_string())?;
+        if Instant::now() >= until.min(original.expires()) {
+            return Err("engine cleanup deadline expired; custodian retains Child".into());
+        }
+        Ok(())
+    }
     fn join_terminal(&mut self, deadline: Instant) -> Result<(), String> {
+        self.join_terminal_checked(deadline, || Ok(()))
+    }
+    fn join_terminal_checked(
+        &mut self,
+        deadline: Instant,
+        mut check: impl FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
+        let mut checked = || {
+            check()?;
+            if Instant::now() >= deadline {
+                return Err("engine cleanup deadline expired; custodian retains Child".into());
+            }
+            Ok(())
+        };
         loop {
-            self.refresh()?;
+            checked()?;
+            self.refresh_checked(&mut checked)?;
+            checked()?;
             if self.latest.as_ref().is_some_and(Receipt::terminal) {
                 if let Some(child) = &mut self.child {
+                    checked()?;
                     match child.try_wait().map_err(|e| e.to_string())? {
                         Some(status) => {
                             self.custodian_exit = Some(status);
                             self.child.take();
                         }
                         None if Instant::now() < deadline => {
-                            std::thread::sleep(Duration::from_millis(2));
+                            checked()?;
+                            std::thread::sleep(
+                                Duration::from_millis(2)
+                                    .min(deadline.saturating_duration_since(Instant::now())),
+                            );
                             continue;
                         }
                         None => {
@@ -565,6 +670,7 @@ impl Owner {
                         self.root.display()
                     ));
                 }
+                checked()?;
                 return Ok(());
             }
             if Instant::now() >= deadline {
@@ -573,8 +679,11 @@ impl Owner {
                     self.root.display()
                 ));
             }
-            self.exit_observed()?;
-            std::thread::sleep(Duration::from_millis(2));
+            self.exit_observed_checked(&mut checked)?;
+            checked()?;
+            std::thread::sleep(
+                Duration::from_millis(2).min(deadline.saturating_duration_since(Instant::now())),
+            );
         }
     }
     pub fn finish(&mut self, deadline: Instant) -> Result<ExitStatus, String> {
@@ -590,6 +699,50 @@ impl Owner {
                     self.root.display()
                 )
             })
+    }
+    pub fn finish_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Result<ExitStatus, String> {
+        let until = until.min(original.expires());
+        self.join_terminal_checked(until, || Self::check_frontend_until(original, until))?;
+        Self::check_frontend_until(original, until)?;
+        let receipt = self.latest.as_ref().expect("terminal receipt");
+        receipt
+            .child_exit_raw
+            .map(ExitStatus::from_raw)
+            .ok_or_else(|| {
+                format!(
+                    "engine not spawned: {:?}; receipt {}",
+                    receipt.error,
+                    self.root.display()
+                )
+            })
+    }
+    pub fn cleanup_until(
+        &mut self,
+        original: &MonotonicDeadline,
+        until: Instant,
+    ) -> Result<(), String> {
+        // Taking the sole endpoint makes cancellation one best-effort request.
+        // EOF still reaches the existing custodian when the stop write fails.
+        let stop_error = self
+            .control
+            .take()
+            .and_then(|mut control| match control.write(b"S") {
+                Ok(1) => None,
+                Ok(_) => Some("custodian stop channel accepted no byte".to_owned()),
+                Err(error) if error.kind() == io::ErrorKind::BrokenPipe => None,
+                Err(error) => Some(format!("custodian stop request: {error}")),
+            });
+        let until = until.min(original.expires());
+        let settled =
+            self.join_terminal_checked(until, || Self::check_frontend_until(original, until));
+        match (settled, stop_error) {
+            (Err(error), Some(stop)) => Err(format!("{stop}; {error}")),
+            (result, _) => result,
+        }
     }
     pub fn cleanup(&mut self) -> Result<(), String> {
         if let Some(control) = &mut self.control {
@@ -611,17 +764,15 @@ impl Drop for Owner {
         // Closing this sole frontend endpoint triggers cleanup even after an
         // interrupted stop write. Keep the original custodian Child in a passive
         // join while this process lives; never kill it to make cleanup look done.
-        if let Some(mut child) = self.child.take()
-            && let Err(error) = std::thread::Builder::new()
+        if let Some(mut child) = self.child.take() {
+            let _ = std::thread::Builder::new()
                 .name("caws-custodian-reap".into())
                 .spawn(move || {
                     let _ = child.wait();
-                })
-        {
-            eprintln!(
-                "custodian passive reap thread unavailable: {error}; retained {}",
-                self.root.display()
-            );
+                });
+            // Thread creation can fail. The independent custodian retains Node
+            // custody; this supplies no monitor-retention or settlement proof.
+            // Drop performs no potentially blocking foreground diagnostic write.
         }
         // Diagnostic receipts are retained, including after frontend death.
         // They are operational evidence, never authority or replay permission.

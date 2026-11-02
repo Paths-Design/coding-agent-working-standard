@@ -569,3 +569,260 @@ test('existing reviewed OpenCode policy permits repeated init without inferring 
   expect(fs.readFileSync(path.join(repo, '.opencode/plugins/caws.ts'))).toEqual(plugin);
   expect(fs.readFileSync(systemProjectPath(home, repo))).toEqual(policy);
 });
+
+function describeCliFixture() {
+  configure();
+  legacy();
+  migrateSystemProject(reviewed());
+  const nested = path.join(repo, 'nested', 'caller');
+  const ambientCwd = path.join(root, 'ambient', 'cwd');
+  const ambientEnvironment = {
+    HOME: path.join(root, 'ambient', 'user'),
+    CAWS_HOME: path.join(root, 'ambient', 'machine'),
+    XDG_CONFIG_HOME: path.join(root, 'ambient', 'config'),
+    XDG_DATA_HOME: path.join(root, 'ambient', 'data'),
+    XDG_STATE_HOME: path.join(root, 'ambient', 'state'),
+    XDG_CACHE_HOME: path.join(root, 'ambient', 'cache'),
+    OPENCODE_CONFIG_CONTENT: 'ambient-only unsupported fixture',
+  };
+  for (const directory of [
+    nested,
+    ambientCwd,
+    ...Object.values(ambientEnvironment).filter(path.isAbsolute),
+  ])
+    fs.mkdirSync(directory, { recursive: true });
+  return {
+    caller: { cwd: nested, environment: { ...environment, CAWS_HOME: home } },
+    ambientCwd,
+    ambientEnvironment,
+  };
+}
+
+function describeCliTree() {
+  const rootStat = fs.lstatSync(root);
+  const entries = {
+    '.': {
+      kind: 'directory',
+      mode: rootStat.mode & 0o7777,
+      uid: rootStat.uid,
+      gid: rootStat.gid,
+      links: rootStat.nlink,
+      modifiedMs: rootStat.mtimeMs,
+      changedMs: rootStat.ctimeMs,
+    },
+  };
+  const visit = (directory) => {
+    for (const name of fs.readdirSync(directory).sort()) {
+      const file = path.join(directory, name);
+      const stat = fs.lstatSync(file);
+      const metadata = {
+        mode: stat.mode & 0o7777,
+        uid: stat.uid,
+        gid: stat.gid,
+        links: stat.nlink,
+        modifiedMs: stat.mtimeMs,
+        changedMs: stat.ctimeMs,
+      };
+      if (stat.isDirectory()) {
+        entries[path.relative(root, file)] = { ...metadata, kind: 'directory' };
+        visit(file);
+      } else if (stat.isFile()) {
+        entries[path.relative(root, file)] = {
+          ...metadata,
+          kind: 'file',
+          bytes: stat.size,
+          sha256: sha(fs.readFileSync(file)),
+        };
+      } else if (stat.isSymbolicLink()) {
+        entries[path.relative(root, file)] = {
+          ...metadata,
+          kind: 'symlink',
+          target: fs.readlinkSync(file),
+        };
+      } else {
+        throw new Error('Unexpected describe fixture entry: ' + file);
+      }
+    }
+  };
+  // Include .git and all private caller/ambient roots. Reading the snapshots can
+  // change access times, so access times are not part of this comparison.
+  visit(root);
+  return entries;
+}
+
+function describeCliRootMap(cwd, values) {
+  return {
+    cwd,
+    ...Object.fromEntries(
+      [
+        'HOME',
+        'CAWS_HOME',
+        'XDG_CONFIG_HOME',
+        'XDG_DATA_HOME',
+        'XDG_STATE_HOME',
+        'XDG_CACHE_HOME',
+        'OPENCODE_CONFIG_CONTENT',
+      ]
+        .filter((name) => Object.hasOwn(values, name))
+        .map((name) => [name, values[name]])
+    ),
+  };
+}
+
+function describeCliProcessResult(result) {
+  return {
+    pid: result.pid ?? null,
+    status: result.status,
+    signal: result.signal,
+    error: result.error
+      ? { name: result.error.name, code: result.error.code ?? null, message: result.error.message }
+      : null,
+    stdout: result.stdout ?? null,
+    stderr: result.stderr ?? null,
+  };
+}
+
+function runOpenCodeDescribeCli(fixture) {
+  const requestedExecutable = process.env.CAWS_DESCRIBE_ENTRY_NODE || process.execPath;
+  if (!path.isAbsolute(requestedExecutable))
+    throw new Error('Test-only CAWS_DESCRIBE_ENTRY_NODE must be an absolute executable path');
+  const executable = fs.realpathSync(requestedExecutable);
+  const executableSha256 = sha(fs.readFileSync(executable));
+  const entry = path.resolve(__dirname, '../../dist/runtime/describe-entry.js');
+  const argv = [
+    entry,
+    '--surface',
+    'opencode',
+    '--event',
+    'stop',
+    '--runtime-digest',
+    installed.digest,
+    '--configuration',
+    'system',
+  ];
+  // This inert field must neither select a project nor escape into selection
+  // output. It is deliberately not an admission clock for this direct CLI call.
+  const clockObservation = {
+    original: { startedNs: '1', expiresNs: '30000000001' },
+    selected: null,
+  };
+  const childEnvironment = {
+    PATH: environment.PATH,
+    ...fixture.ambientEnvironment,
+    CAWS_NATIVE_DESCRIBE_CONTEXT: JSON.stringify({
+      ...fixture.caller,
+      deadlineObservation: clockObservation,
+    }),
+  };
+  const before = describeCliTree();
+  const version = spawnSync(executable, ['--version'], {
+    cwd: fixture.ambientCwd,
+    env: childEnvironment,
+    encoding: 'utf8',
+    timeout: 5000,
+    maxBuffer: 64 * 1024,
+  });
+  const result = spawnSync(executable, argv, {
+    cwd: fixture.ambientCwd,
+    env: childEnvironment,
+    encoding: 'utf8',
+    timeout: 5000,
+    maxBuffer: 1024 * 1024,
+  });
+  const after = describeCliTree();
+  if (artifactRoot)
+    write(path.join(root, 'describe-cli-observation.json'), {
+      executable: {
+        requested: requestedExecutable,
+        resolved: executable,
+        sha256: executableSha256,
+        version: version.stdout?.trim() ?? null,
+        versionArgv: [executable, '--version'],
+        versionResult: describeCliProcessResult(version),
+      },
+      entry: { path: entry, sha256: sha(fs.readFileSync(entry)) },
+      argv: [executable, ...argv],
+      result: describeCliProcessResult(result),
+      caller: describeCliRootMap(fixture.caller.cwd, fixture.caller.environment),
+      inertClockObservation: clockObservation,
+      ambient: describeCliRootMap(fixture.ambientCwd, fixture.ambientEnvironment),
+      environmentValuesOmitted: ['PATH'],
+      filesystem: { root, before, after },
+      scope:
+        'Real built Node describe CLI and local registration selection; synthetic native assets are only inspected, never executed. No installed-entry, harness loading or SQL qualification.',
+    });
+  // Retain the actual process result and both maps before any oracle can fail.
+  expect(after).toEqual(before);
+  expect(version.error).toBeUndefined();
+  expect(version.signal).toBeNull();
+  expect(version.status).toBe(0);
+  expect(version.stderr).toBe('');
+  expect(version.stdout.trim()).toMatch(/^v\d+\.\d+\.\d+(?:[-+][^\s]+)?$/);
+  expect(result.error).toBeUndefined();
+  expect(result.signal).toBeNull();
+  return result;
+}
+
+test('describe CLI selects OpenCode Stop from original caller roots despite unrelated ambient roots', () => {
+  const fixture = describeCliFixture();
+  const result = runOpenCodeDescribeCli(fixture);
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe('');
+  const selected = JSON.parse(result.stdout);
+  expect(selected).not.toHaveProperty('deadlineObservation');
+  expect(selected).not.toHaveProperty('caller');
+  expect(selected).not.toHaveProperty('environment');
+  expect({
+    schema: selected.schema,
+    runtime_digest: selected.runtime_digest,
+    project: selected.project,
+    surface: selected.surface,
+    event: selected.event,
+    configuration: selected.configuration,
+  }).toEqual({
+    schema: 'caws.hook_selection.v1',
+    runtime_digest: installed.digest,
+    project: fs.realpathSync(repo),
+    surface: 'opencode',
+    event: 'stop',
+    configuration: 'system',
+  });
+  const runtime = path.join(home, 'lib/runtimes', installed.digest);
+  expect(selected.handlers).toEqual(
+    ['goal-ac-gate.sh', 'plan-transcript-finalize.sh', 'session-log.sh', 'agent-stop.sh'].map(
+      (entry) => ({
+        entry,
+        arguments: [],
+        path: path.join(runtime, entry),
+        sha256: sha(fs.readFileSync(path.join(runtime, entry))),
+        kind: 'stock',
+        tier: 'stock',
+      })
+    )
+  );
+});
+
+test('describe CLI rejects a second plugin discovered from the original nested caller cwd', () => {
+  const fixture = describeCliFixture();
+  write(
+    path.join(fixture.caller.cwd, '.opencode/plugins/second.ts'),
+    'export default () => ({})\n'
+  );
+  const result = runOpenCodeDescribeCli(fixture);
+  expect(result.status).toBe(2);
+  expect(result.stdout).toBe('');
+  expect(result.stderr).toBe(
+    '[caws native describe] Error: OpenCode requires exactly one understood project plugin; reconcile missing, duplicate or unknown producers\n'
+  );
+});
+
+test('describe CLI rejects unsupported OpenCode configuration in the original caller environment', () => {
+  const fixture = describeCliFixture();
+  fixture.caller.environment.OPENCODE_CONFIG_CONTENT = 'caller-only unsupported fixture';
+  const result = runOpenCodeDescribeCli(fixture);
+  expect(result.status).toBe(2);
+  expect(result.stdout).toBe('');
+  expect(result.stderr).toBe(
+    '[caws native describe] Error: Unsupported OpenCode registration environment: OPENCODE_CONFIG_CONTENT\n'
+  );
+});

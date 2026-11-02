@@ -108,8 +108,8 @@ const SESSION_END_SOURCES: Readonly<Record<string, string>> = {
   'lib/guard-config.cjs': 'b7947a24da1670613bb43a548be9951d7fe3be6d4be2f9418607a35dac945a85',
 };
 
-// SessionEnd accepts only its original profile and the reviewed exact-path
-// root fallback; do not inherit other session-cache profile alternatives.
+// SessionEnd keeps its independent body/library identities and exact-path root
+// fallback. The two startup sources are checked together by the paired profile.
 function sessionEndIdentities(relative: string): readonly string[] {
   const expected = SESSION_END_SOURCES[relative];
   if (!expected) return [];
@@ -175,6 +175,7 @@ export function qualifiesForNativeSessionEndPrefix(context: {
       !directory(selection.canonical) ||
       selection.runtimeDirectory !== path.join(home, 'lib/runtimes', request.runtimeDigest) ||
       !directory(selection.runtimeDirectory) ||
+      !qualifiesForNativeStartupProfile(context) ||
       !environmentSupported(request.caller.environment, null) ||
       !environmentSupported(environment, path.join(selection.runtimeDirectory, 'handler-env.sh'))
     )
@@ -222,8 +223,6 @@ export function qualifiesForNativeSessionEndPrefix(context: {
       'emit.sh': request.surface === 'codex' ? 'surface' : 'shared',
     };
     const required = new Set([
-      'dispatch.sh',
-      'handler-env.sh',
       'runtime-paths.sh',
       'session-log.sh',
       'lib/parse-input.sh',
@@ -256,6 +255,42 @@ export function qualifiesForNativeSessionEndPrefix(context: {
       if (!expected.length || !pinned(selection.runtimeDirectory, relative, expected)) return false;
     }
     return true;
+  } catch {
+    return false;
+  }
+}
+
+const CURRENT_STARTUP: Readonly<Record<string, string>> = {
+  'dispatch.sh': 'ae1b3b5bae0028da2f5a87a41f55fe1a5a8b60eb63169361c50de2a44cf5cdd5',
+  'handler-env.sh': '04c7cb5485bfb1b5f3f64ab6ef0a17981db795dc5454134cdc257e7752b0ebdb',
+};
+const STARTUP_KEYS = ['BASH_ENV', 'CAWS_PRIOR_BASH_ENV', 'CAWS_PRIOR_BASH_ENV_SET'] as const;
+
+/** Admit the reviewed presence-restoring pair only with retained original absence. */
+export function qualifiesForNativeStartupProfile(context: {
+  readonly request: RuntimeRequest;
+  readonly selection: ActiveInvocationSelection;
+  readonly environment: Readonly<Record<string, string>>;
+}): boolean {
+  const { request, selection, environment } = context;
+  const root = selection.runtimeDirectory;
+  try {
+    if (
+      pinned(root, 'dispatch.sh', [PREFIX['dispatch.sh']!]) &&
+      pinned(root, 'handler-env.sh', [PREFIX['handler-env.sh']!])
+    )
+      return true;
+    return (
+      request.configuration === 'system' &&
+      ((request.surface === 'codex' && request.event === 'pre_tool_use') ||
+        (['codex', 'claude-code'].includes(request.surface) && request.event === 'session_end') ||
+        (request.surface === 'opencode' && request.event === 'stop')) &&
+      [request.caller.environment, environment].every((snapshot) =>
+        STARTUP_KEYS.every((name) => !Object.hasOwn(snapshot, name))
+      ) &&
+      pinned(root, 'dispatch.sh', [CURRENT_STARTUP['dispatch.sh']!]) &&
+      pinned(root, 'handler-env.sh', [CURRENT_STARTUP['handler-env.sh']!])
+    );
   } catch {
     return false;
   }
@@ -317,9 +352,10 @@ export function qualifiesForNativeSessionCache(context: {
       !/^[a-f0-9]{64}$/.test(request.runtimeDigest) ||
       selection.runtimeDigest !== request.runtimeDigest ||
       selection.hooksDirectory !== selection.runtimeDirectory ||
-      request.payload.tool_name !== 'Bash' ||
+      !['Bash', 'apply_patch', 'Write', 'Edit'].includes(String(request.payload.tool_name)) ||
       !object(request.payload.tool_input) ||
-      typeof request.payload.tool_input.command !== 'string' ||
+      (request.payload.tool_name === 'Bash' &&
+        typeof request.payload.tool_input.command !== 'string') ||
       Object.keys(selection.overrides).length > 0 ||
       Object.keys(selection.libraryOverrides).length > 0 ||
       selection.handlers.some((handler) => handler.kind !== 'stock') ||
@@ -336,6 +372,7 @@ export function qualifiesForNativeSessionCache(context: {
       !directory(selection.canonical) ||
       selection.runtimeDirectory !== path.join(home, 'lib/runtimes', request.runtimeDigest) ||
       !directory(selection.runtimeDirectory) ||
+      !qualifiesForNativeStartupProfile(context) ||
       !environmentSupported(request.caller.environment, null) ||
       !environmentSupported(environment, path.join(selection.runtimeDirectory, 'handler-env.sh'))
     )
@@ -394,8 +431,10 @@ export function qualifiesForNativeSessionCache(context: {
       )
         return false;
     }
-    for (const relative of Object.keys(PREFIX))
+    for (const relative of Object.keys(PREFIX)) {
+      if (relative === 'dispatch.sh' || relative === 'handler-env.sh') continue;
       if (!pinned(selection.runtimeDirectory, relative)) return false;
+    }
     return true;
   } catch {
     return false;

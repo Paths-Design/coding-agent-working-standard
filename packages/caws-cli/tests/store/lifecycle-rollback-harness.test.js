@@ -645,15 +645,31 @@ function createAuthorityBytes(caws, id) {
 }
 
 function beforeCreateLock(fn, afterRelease = () => {}) {
-  const original = lifecycleLock.withLifecycleLock;
-  return jest.spyOn(lifecycleLock, 'withLifecycleLock').mockImplementation((dir, body, opts) => {
-    fn(dir);
-    try {
-      return original(dir, body, opts);
-    } finally {
-      afterRelease(dir);
-    }
-  });
+  let depth = 0;
+  let calls = 0;
+  for (const name of ['withLifecycleLock', 'withLifecycleMutationFence']) {
+    const original = lifecycleLock[name];
+    jest.spyOn(lifecycleLock, name).mockImplementation((dir, ...args) => {
+      if (depth > 0) return original(dir, ...args);
+      depth++;
+      try {
+        calls++;
+        fn(dir);
+        try {
+          return original(dir, ...args);
+        } finally {
+          afterRelease(dir);
+        }
+      } finally {
+        depth--;
+      }
+    });
+  }
+  return {
+    get calls() {
+      return calls;
+    },
+  };
 }
 
 describe('create authority lock and compensation', () => {
@@ -1084,7 +1100,7 @@ describe('retirement authority race and compensation', () => {
     (op) => {
       const { caws, wtPath, invoke } = fixture(op);
       let competing;
-      beforeCreateLock((dir) => {
+      const seam = beforeCreateLock((dir) => {
         const registry = path.join(dir, 'worktrees.json');
         const value = JSON.parse(fs.readFileSync(registry, 'utf8'));
         value['wt-retire'].owner.session_id = 'competitor';
@@ -1092,6 +1108,7 @@ describe('retirement authority race and compensation', () => {
         competing = createAuthorityBytes(dir, 'WT-RETIRE-001');
       });
       const result = invoke();
+      expect(seam.calls).toBe(1);
       expect(result.ok).toBe(false);
       expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(competing);
       if (op !== 'prune') expect(fs.existsSync(wtPath)).toBe(true);
@@ -1103,7 +1120,7 @@ describe('retirement authority race and compensation', () => {
     (op) => {
       const { caws, wtPath, invoke } = fixture(op);
       let competing;
-      beforeCreateLock((dir) => {
+      const seam = beforeCreateLock((dir) => {
         const spec = path.join(dir, 'specs', 'WT-RETIRE-001.yaml');
         const source = fs.readFileSync(spec, 'utf8');
         expect(source).toContain('payload.txt');
@@ -1111,6 +1128,7 @@ describe('retirement authority race and compensation', () => {
         competing = createAuthorityBytes(dir, 'WT-RETIRE-001');
       });
       const result = invoke();
+      expect(seam.calls).toBe(1);
       expect(result.ok).toBe(false);
       expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(competing);
       if (op !== 'prune') expect(fs.existsSync(wtPath)).toBe(true);
@@ -1197,7 +1215,7 @@ describe('retirement authority race and compensation', () => {
       const spec = path.join(caws, 'specs', 'WT-RETIRE-001.yaml');
       fs.appendFileSync(spec, Buffer.from([10, 35, 32, 0x80, 10]));
       let competing;
-      beforeCreateLock((dir) => {
+      const seam = beforeCreateLock((dir) => {
         const original = fs.readFileSync(spec);
         const index = original.lastIndexOf(0x80);
         expect(index).toBeGreaterThan(-1);
@@ -1212,6 +1230,7 @@ describe('retirement authority race and compensation', () => {
         competing = createAuthorityBytes(dir, 'WT-RETIRE-001');
       });
       const result = invoke();
+      expect(seam.calls).toBe(1);
       expect(result.ok).toBe(false);
       expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(competing);
       if (op !== 'prune') expect(fs.existsSync(wtPath)).toBe(true);
@@ -1225,7 +1244,7 @@ describe('retirement authority race and compensation', () => {
       const spec = path.join(caws, 'specs', 'WT-RETIRE-001.yaml');
       fs.appendFileSync(spec, '\n# \ufffd\n');
       let competing;
-      beforeCreateLock((dir) => {
+      const seam = beforeCreateLock((dir) => {
         const original = fs.readFileSync(spec);
         const index = original.lastIndexOf(Buffer.from('\ufffd'));
         expect(index).toBeGreaterThan(-1);
@@ -1240,6 +1259,7 @@ describe('retirement authority race and compensation', () => {
         competing = createAuthorityBytes(dir, 'WT-RETIRE-001');
       });
       const result = invoke();
+      expect(seam.calls).toBe(1);
       expect(result.ok).toBe(false);
       expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(competing);
       if (op !== 'prune') expect(fs.existsSync(wtPath)).toBe(true);
@@ -1327,12 +1347,13 @@ describe('retirement authority race and compensation', () => {
   test('destroy refuses a branch advanced at the lifecycle lock seam', () => {
     const { caws, wtPath, invoke } = fixture('destroy');
     const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
-    beforeCreateLock(() => {
+    const seam = beforeCreateLock(() => {
       fs.writeFileSync(path.join(wtPath, 'new-work'), 'owned');
       execFileSync('git', ['-C', wtPath, 'add', 'new-work']);
       execFileSync('git', ['-C', wtPath, 'commit', '-qm', 'new work']);
     });
     const result = invoke();
+    expect(seam.calls).toBe(1);
     expect(result.ok).toBe(false);
     expect(fs.readFileSync(path.join(wtPath, 'new-work'), 'utf8')).toBe('owned');
     expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
@@ -1341,8 +1362,9 @@ describe('retirement authority race and compensation', () => {
   test.each(['destroy', 'untrack'])('%s refuses dirt appearing at the lock seam', (op) => {
     const { caws, wtPath, invoke } = fixture(op);
     const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
-    beforeCreateLock(() => fs.writeFileSync(path.join(wtPath, 'new-work'), 'owned'));
+    const seam = beforeCreateLock(() => fs.writeFileSync(path.join(wtPath, 'new-work'), 'owned'));
     const result = invoke();
+    expect(seam.calls).toBe(1);
     expect(result.ok).toBe(false);
     expect(fs.readFileSync(path.join(wtPath, 'new-work'), 'utf8')).toBe('owned');
     expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
@@ -1351,8 +1373,11 @@ describe('retirement authority race and compensation', () => {
   test.each(['destroy', 'untrack'])('%s refuses checkout disappearance at the lock seam', (op) => {
     const { caws, root, wtPath, invoke } = fixture(op);
     const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
-    beforeCreateLock(() => execFileSync('git', ['-C', root, 'worktree', 'remove', wtPath]));
+    const seam = beforeCreateLock(() =>
+      execFileSync('git', ['-C', root, 'worktree', 'remove', wtPath])
+    );
     const result = invoke();
+    expect(seam.calls).toBe(1);
     expect(result.ok).toBe(false);
     expect(createAuthorityBytes(caws, 'WT-RETIRE-001')).toEqual(before);
   });
