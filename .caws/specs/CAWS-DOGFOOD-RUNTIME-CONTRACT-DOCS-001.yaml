@@ -48,3 +48,8 @@ evidence:
     evidence_ref: "Source-inspected architecture and doctrine at 19895e956 distinguish trusted host facts, caller identity, installed versus source analysis, bounded interpreter profiles and citation semantics. Repair matrix includes owned admission plus hostile controls and keeps producer-unavailable work independent. Current source behavior is separated from proposed repairs; no native qualification or runtime implementation claim. This spec has no executable test citations; mechanical verification checks commit identity only."
     recorded_at: "2026-11-02T14:48:17.189Z"
     commit_sha: "19895e9565340952b292998b57553c5ff3ef2354"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected coding-rigor and both contributor guide examples against specs.ts verifyPendingEvidence, kernel rederivation planning and store artifact/test consumers. Manual recording omits --verify; generated logs stay ignored in narrative references; tracked artifact paths are repository-relative. Existing whole-spec test execution during --verify is explicitly disclosed and pending-criterion scoping is a planned repair. Peer finding grounded and corrected in a separate commit; citation verification is not criterion proof."
+    recorded_at: "2026-11-02T14:48:18.495Z"
+    commit_sha: "19895e9565340952b292998b57553c5ff3ef2354"
