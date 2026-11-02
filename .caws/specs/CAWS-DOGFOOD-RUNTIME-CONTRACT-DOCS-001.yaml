@@ -53,3 +53,8 @@ evidence:
     evidence_ref: "Inspected coding-rigor and both contributor guide examples against specs.ts verifyPendingEvidence, kernel rederivation planning and store artifact/test consumers. Manual recording omits --verify; generated logs stay ignored in narrative references; tracked artifact paths are repository-relative. Existing whole-spec test execution during --verify is explicitly disclosed and pending-criterion scoping is a planned repair. Peer finding grounded and corrected in a separate commit; citation verification is not criterion proof."
     recorded_at: "2026-11-02T14:48:18.495Z"
     commit_sha: "19895e9565340952b292998b57553c5ff3ef2354"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Scoped checks exited zero: formatting of five non-generator-owned docs; metadata of all six changed docs; twelve new local file/anchor references; one generator-owned integration-guide block preserved byte-identically; git diff --check. Final normal commit hook passed. CAWS gates evaluated six committed paths from base 12d9f572 with all five dispositions PASS at 19895e956. Raw commands/results retained in task transcript; headers unchanged by review correction. No runtime tests or native behavior are established by these doc checks."
+    recorded_at: "2026-11-02T14:48:20.027Z"
+    commit_sha: "19895e9565340952b292998b57553c5ff3ef2354"
