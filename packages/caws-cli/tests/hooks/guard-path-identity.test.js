@@ -10,14 +10,17 @@ const quote = (value) => "'" + value.replace(/'/g, "'\\''") + "'";
 let fx;
 
 function git(cwd, ...args) {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))
+  );
   return execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
+    env: { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
   });
 }
 
-function fixture(basename = 'project', governed = true, lane = 'linked') {
+function fixture(basename = 'project', governed = true, lane = 'linked', external = false) {
   const base = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'caws-guard-identity-'));
   const project = path.join(base, basename);
   fs.mkdirSync(project);
@@ -52,7 +55,9 @@ function fixture(basename = 'project', governed = true, lane = 'linked') {
   fx = { base, project, hooks, cli, alias, marker: path.join(base, 'submitted-payload-ran') };
   expect(fs.realpathSync(project)).toBe(project);
   if (governed) {
-    const linked = path.join(project, '.caws/worktrees', lane);
+    const linked = external
+      ? path.join(base, 'external-lane')
+      : path.join(project, '.caws/worktrees', lane);
     git(project, 'worktree', 'add', '-q', '-b', 'worker', linked);
     const entry = {
       name: lane,
@@ -61,6 +66,7 @@ function fixture(basename = 'project', governed = true, lane = 'linked') {
       baseBranch: 'main',
       spec_id: 'FIXTURE',
     };
+    fs.mkdirSync(path.join(project, '.caws'), { recursive: true });
     fs.writeFileSync(path.join(project, '.caws/worktrees.json'), JSON.stringify({ linked: entry }));
     Object.assign(fx, { linked, entry });
   }
@@ -127,6 +133,301 @@ function check(result, status, reason) {
 function payload(command) {
   return command + '; printf executed > ' + quote(fx.marker);
 }
+
+function retainForeignIdentity(observation) {
+  const root = process.env.CAWS_TEST_ARTIFACT_DIR;
+  if (!root) return;
+  fs.mkdirSync(root, { recursive: true });
+  const directory = fs.mkdtempSync(path.join(root, 'foreign-identity-'));
+  fs.writeFileSync(path.join(directory, 'observation.json'), JSON.stringify(observation, null, 2));
+}
+
+test('standalone repository predicate preserves newline and symlink identity without governance helpers', () => {
+  fixture('project\n', true, 'linked', true);
+  const foreign = path.join(fx.base, 'foreign\n');
+  fs.mkdirSync(foreign);
+  git(foreign, 'init', '-q', '-b', 'main');
+  const script = 'set -eu; source "$1"; caws_foreign_repo_root "$2" "$3"';
+  const invokePredicate = (target) =>
+    spawnSync(
+      '/bin/bash',
+      [
+        '-c',
+        script,
+        'predicate',
+        path.join(fx.hooks, 'lib/bash-mutation-targets.sh'),
+        target,
+        fx.alias,
+      ],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GIT_DIR: path.join(fx.project, '.git'),
+          GIT_COMMON_DIR: path.join(fx.project, '.git'),
+        },
+      }
+    );
+  const linked = invokePredicate(path.join(fx.linked, 'missing.txt'));
+  const different = invokePredicate(path.join(foreign, 'missing.txt'));
+  retainForeignIdentity({
+    project: fx.project,
+    alias: fx.alias,
+    lane: fx.linked,
+    foreign,
+    linked,
+    different,
+    proof: 'Standalone predicate identity only',
+  });
+  expect({
+    status: linked.status,
+    signal: linked.signal,
+    stdout: linked.stdout,
+    stderr: linked.stderr,
+  }).toEqual({ status: 0, signal: null, stdout: '', stderr: '' });
+  expect({
+    status: different.status,
+    signal: different.signal,
+    stdout: different.stdout,
+    stderr: different.stderr,
+  }).toEqual({ status: 0, signal: null, stdout: foreign, stderr: '' });
+});
+
+test('a readonly Git override cannot force a foreign repository to share identity', () => {
+  fixture();
+  const foreign = path.join(fx.base, 'foreign');
+  fs.mkdirSync(foreign);
+  git(foreign, 'init', '-q', '-b', 'main');
+  const target = path.join(foreign, 'missing.txt');
+  const script =
+    'set -eu; readonly GIT_DIR="$4"; export GIT_DIR; source "$1"; caws_foreign_repo_root "$2" "$3"';
+  const result = spawnSync(
+    '/bin/bash',
+    [
+      '-c',
+      script,
+      'predicate',
+      path.join(fx.hooks, 'lib/bash-mutation-targets.sh'),
+      target,
+      fx.project,
+      path.join(fx.project, '.git'),
+    ],
+    { encoding: 'utf8' }
+  );
+  retainForeignIdentity({ project: fx.project, foreign, target, result });
+  expect({
+    status: result.status,
+    signal: result.signal,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  }).toEqual({ status: 0, signal: null, stdout: foreign, stderr: '' });
+});
+
+test('a common metadata directory ending in LF cannot borrow its canonical neighbor identity', () => {
+  fixture();
+  const foreign = path.join(fx.base, 'separate-checkout');
+  fs.mkdirSync(foreign);
+  git(foreign, 'init', '-q', '-b', 'main');
+  const metadata = path.join(fx.project, '.git\n');
+  fs.renameSync(path.join(foreign, '.git'), metadata);
+  fs.symlinkSync(metadata, path.join(foreign, '.git'), 'dir');
+  const projectCommon = git(fx.project, 'rev-parse', '--path-format=absolute', '--git-common-dir');
+  const foreignCommon = git(foreign, 'rev-parse', '--path-format=absolute', '--git-common-dir');
+  expect(fs.realpathSync(projectCommon.slice(0, -1))).not.toBe(
+    fs.realpathSync(foreignCommon.slice(0, -1))
+  );
+  const target = path.join(foreign, 'missing.txt');
+  const result = spawnSync(
+    '/bin/bash',
+    [
+      '-c',
+      'set -eu; source "$1"; caws_foreign_repo_root "$2" "$3"',
+      'predicate',
+      path.join(fx.hooks, 'lib/bash-mutation-targets.sh'),
+      target,
+      fx.project,
+    ],
+    { encoding: 'utf8' }
+  );
+  retainForeignIdentity({
+    project: fx.project,
+    foreign,
+    target,
+    result,
+    projectCommon,
+    foreignCommon,
+  });
+  expect({
+    status: result.status,
+    signal: result.signal,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  }).toEqual({ status: 0, signal: null, stdout: foreign, stderr: '' });
+});
+
+test.each([
+  { owner: 'identity-fixture', alias: false },
+  { owner: 'identity-fixture', alias: true },
+  { owner: 'foreign', alias: false },
+  { owner: 'foreign', alias: true },
+])('external linked checkout keeps repository and owner distinct: %j', ({ owner, alias }) => {
+  fixture('project', true, 'linked', true);
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/worktrees.json'),
+    JSON.stringify({ linked: { ...fx.entry, owner: { session_id: owner } } })
+  );
+  const realTarget = path.join(fx.linked, 'owned.txt');
+  fs.writeFileSync(realTarget, 'before\n');
+  const aliasRoot = path.join(fx.base, 'external-alias');
+  fs.symlinkSync(fx.linked, aliasRoot, 'dir');
+  const target = path.join(alias ? aliasRoot : fx.linked, 'owned.txt');
+  const command = 'printf "after\\n" > ' + quote(target);
+  const before = fs.readFileSync(realTarget).toString('base64');
+  const result = invoke('bash-write-guard.sh', fx.project, command);
+  const afterGuard = fs.readFileSync(realTarget).toString('base64');
+  let execution = null;
+  if (result.status === 0) {
+    const body = spawnSync('/bin/bash', ['-c', command], { cwd: fx.linked, encoding: 'utf8' });
+    execution = {
+      status: body.status,
+      signal: body.signal,
+      stdout: body.stdout,
+      stderr: body.stderr,
+    };
+  }
+  const afterBody = fs.readFileSync(realTarget).toString('base64');
+  retainForeignIdentity({
+    owner,
+    alias,
+    project: fx.project,
+    lane: fx.linked,
+    target,
+    command,
+    projectCommon: git(fx.project, 'rev-parse', '--path-format=absolute', '--git-common-dir'),
+    laneCommon: git(fx.linked, 'rev-parse', '--path-format=absolute', '--git-common-dir'),
+    result,
+    before,
+    afterGuard,
+    execution,
+    afterBody,
+    proof:
+      'Direct shell guard followed by a test-driver write only when admitted; no native harness claim',
+  });
+  check(
+    result,
+    owner === 'identity-fixture' ? 0 : 2,
+    owner === 'foreign' ? 'DIFFERENT session' : undefined
+  );
+  expect(afterGuard).toBe(before);
+  if (owner === 'identity-fixture') {
+    expect(execution).toEqual({ status: 0, signal: null, stdout: '', stderr: '' });
+    expect(fs.readFileSync(realTarget, 'utf8')).toBe('after\n');
+  } else {
+    expect(execution).toBeNull();
+    expect(afterBody).toBe(before);
+    expect(result.stderr).not.toContain('DIFFERENT repository');
+  }
+});
+
+test.each([undefined, 'GIT_DIR', 'GIT_COMMON_DIR'])(
+  'a nested distinct repository remains foreign beneath the canonical prefix with %s',
+  (override) => {
+    fixture();
+    fs.writeFileSync(path.join(fx.project, '.caws/worktrees.json'), '{}');
+    const nested = path.join(fx.project, 'nested-repository');
+    fs.mkdirSync(nested);
+    git(nested, 'init', '-q', '-b', 'main');
+    const target = path.join(nested, 'sentinel.txt');
+    fs.writeFileSync(target, 'unchanged\n');
+    const command = 'printf changed > ' + quote(target);
+    const result = invoke(
+      'bash-write-guard.sh',
+      fx.project,
+      command,
+      override ? { [override]: path.join(fx.project, '.git') } : {}
+    );
+    const after = fs.readFileSync(target, 'utf8');
+    retainForeignIdentity({
+      project: fx.project,
+      nested,
+      target,
+      command,
+      override,
+      result,
+      after,
+    });
+    check(result, 2, 'DIFFERENT repository');
+    expect(after).toBe('unchanged\n');
+  }
+);
+
+test.each(['invalid-gitfile', 'dangling-gitfile'])(
+  'external repository identity failure stays refused: %s',
+  (failure) => {
+    fixture('project', true, 'linked', true);
+    fs.writeFileSync(
+      path.join(fx.project, '.caws/worktrees.json'),
+      JSON.stringify({ linked: { ...fx.entry, owner: { session_id: 'identity-fixture' } } })
+    );
+    const target = path.join(fx.linked, 'sentinel.txt');
+    fs.writeFileSync(target, 'unchanged\n');
+    const gitfile = path.join(fx.linked, '.git');
+    if (failure === 'invalid-gitfile')
+      fs.writeFileSync(gitfile, 'gitdir: /nonexistent-caws-identity-fixture\n');
+    else {
+      fs.unlinkSync(gitfile);
+      fs.symlinkSync(path.join(fx.base, 'missing-gitfile'), gitfile);
+    }
+    const command = 'printf changed > ' + quote(target);
+    const result = invoke('bash-write-guard.sh', fx.project, command);
+    const after = fs.readFileSync(target, 'utf8');
+    retainForeignIdentity({
+      failure,
+      project: fx.project,
+      lane: fx.linked,
+      target,
+      command,
+      result,
+      after,
+    });
+    check(result, 2, 'DIFFERENT repository');
+    expect(after).toBe('unchanged\n');
+  }
+);
+
+test('owned external checkout still encounters the dedicated protected-hook refusal', () => {
+  fixture('project', true, 'linked', true);
+  fs.writeFileSync(
+    path.join(fx.project, '.caws/worktrees.json'),
+    JSON.stringify({ linked: { ...fx.entry, owner: { session_id: 'identity-fixture' } } })
+  );
+  const target = path.join(fx.project, '.caws/hooks/protected-sentinel.sh');
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, '#!/bin/bash\n# protected fixture\n');
+  const before = fs.readFileSync(target).toString('base64');
+  const mode = fs.statSync(target).mode;
+  const command = 'printf changed > ' + quote(target);
+  const ownership = invoke('bash-write-guard.sh', fx.linked, command);
+  const result = invoke('protected-paths.sh', fx.linked, command);
+  const after = fs.readFileSync(target).toString('base64');
+  retainForeignIdentity({
+    project: fx.project,
+    lane: fx.linked,
+    target,
+    command,
+    ownership,
+    result,
+    before,
+    after,
+    mode,
+    afterMode: fs.statSync(target).mode,
+  });
+  check(ownership, 0);
+  check(result, 2, 'protected');
+  expect(result.stderr).not.toContain('DIFFERENT repository');
+  expect(after).toBe(before);
+  expect(fs.statSync(target).mode).toBe(mode);
+});
 
 test.each(['project', 'project\n', "project'quoted", 'project[*?]'])(
   'exact canonical registry survives root %p and an ordinary alias',

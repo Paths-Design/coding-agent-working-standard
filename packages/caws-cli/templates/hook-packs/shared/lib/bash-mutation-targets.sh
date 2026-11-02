@@ -951,9 +951,30 @@ caws_bash_token_records() {
 # each caller's posture stays its own decision rather than a hidden property of
 # the library.
 
+# A linked checkout can live outside the canonical directory. Compare Git's
+# common metadata identity without borrowing inherited directory overrides.
+# The subshell keeps the caller's environment unchanged. Sentinels preserve
+# directory-name bytes; remove only the LF terminating each Git record.
+_caws_same_git_common_dir() (
+  local left="$1" right="$2" left_common right_common
+  unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE 2>/dev/null || return 1
+  left_common="$(builtin command git -C "$left" rev-parse --path-format=absolute --git-common-dir 2>/dev/null && printf x)" || return 1
+  right_common="$(builtin command git -C "$right" rev-parse --path-format=absolute --git-common-dir 2>/dev/null && printf x)" || return 1
+  left_common="${left_common%x}"
+  right_common="${right_common%x}"
+  [[ "$left_common" == *$'\n' && "$right_common" == *$'\n' ]] || return 1
+  left_common="${left_common%$'\n'}"
+  right_common="${right_common%$'\n'}"
+  [[ "$left_common" == /* && "$right_common" == /* &&
+     -d "$left_common" && -d "$right_common" &&
+     "$left_common" -ef "$right_common" ]]
+)
+
 # caws_foreign_repo_root <target> <project_dir>
 #   Echo the root of the git repository owning <target> when that repository is
-#   NOT <project_dir>. Empty output means no other repository owns the path.
+#   NOT <project_dir>. An unresolved Git identity is conservatively reported
+#   rather than admitted. Empty output means no different repository was found;
+#   it grants no worktree ownership or scope authority.
 #
 #   The boundary is deliberately NARROWER than scope-guard's "any absolute path
 #   outside the project": applying that to Bash would refuse ordinary scratch
@@ -964,7 +985,6 @@ caws_foreign_repo_root() {
   local target="$1" project_dir="${2:-}" dir
   [[ -n "$project_dir" ]] || return 0
   case "$target" in
-    "$project_dir"|"$project_dir"/*) return 0 ;;
     /*) ;;
     *) return 0 ;;
   esac
@@ -976,8 +996,11 @@ caws_foreign_repo_root() {
     [[ -n "$dir" ]] || dir=/
   fi
   while [[ -n "$dir" && "$dir" != "/" ]]; do
-    if [[ -e "$dir/.git" ]]; then
-      [[ "$dir" != "$project_dir" ]] && printf '%s' "$dir"
+    if [[ -e "$dir/.git" || -L "$dir/.git" ]]; then
+      if [[ "$dir" == "$project_dir" ]] || _caws_same_git_common_dir "$dir" "$project_dir"; then
+        return 0
+      fi
+      printf '%s' "$dir"
       return 0
     fi
     dir="${dir%/*}"
