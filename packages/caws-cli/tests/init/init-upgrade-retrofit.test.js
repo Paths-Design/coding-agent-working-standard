@@ -95,13 +95,41 @@ function installedRepo(prefix) {
 function runInit(opts) {
   const out = [];
   const err = [];
+  const home = opts.home ?? fs.mkdtempSync(path.join(os.tmpdir(), 'caws-retrofit-home-'));
+  if (opts.home === undefined) repos.push(home);
   const code = runInitCommand({
-    home: fs.mkdtempSync(path.join(os.tmpdir(), 'caws-retrofit-home-')),
+    home,
     ...opts,
     out: (line) => out.push(line),
     err: (line) => err.push(line),
   });
   return { code, out: out.join('\n'), err: err.join('\n') };
+}
+
+function snapshotTree(root) {
+  const rows = {};
+  function visit(directory) {
+    for (const name of fs.readdirSync(directory).sort()) {
+      const file = path.join(directory, name);
+      const stat = fs.lstatSync(file);
+      const relative = path.relative(root, file);
+      if (stat.isSymbolicLink()) rows[relative] = { link: fs.readlinkSync(file) };
+      else if (stat.isDirectory()) {
+        rows[relative] = 'directory';
+        visit(file);
+      } else rows[relative] = fs.readFileSync(file).toString('base64');
+    }
+  }
+  visit(root);
+  return rows;
+}
+
+function retainCheckoutObservation(observation) {
+  const artifactRoot = process.env.CAWS_TEST_ARTIFACT_DIR;
+  if (!artifactRoot) return;
+  fs.mkdirSync(artifactRoot, { recursive: true });
+  const directory = fs.mkdtempSync(path.join(artifactRoot, 'init-checkout-'));
+  fs.writeFileSync(path.join(directory, 'observation.json'), JSON.stringify(observation, null, 2));
 }
 
 const GUARD = '.caws/hooks/scope-guard.sh';
@@ -379,12 +407,160 @@ describe('CAWS-HOOKPACK-UPGRADE-RETROFIT-001', () => {
     expect(diff.code).toBe(0);
   });
 
-  test('A7: init refuses to run from inside a CAWS worktree', () => {
-    const repoRoot = mkRepo('ur-a7-');
-    const wtDir = path.join(repoRoot, '.caws', 'worktrees', 'wt-x');
-    fs.mkdirSync(wtDir, { recursive: true });
-    const r = runInit({ cwd: wtDir });
-    expect(r.code).toBe(1);
-    expect(r.err).toContain('refusing to run from inside a CAWS worktree');
+  test.each(['standard', 'custom'])(
+    'A7: real linked checkout at %s path refuses init and adoption without writes',
+    (layout) => {
+      const repoRoot = mkRepo('ur-a7-');
+      fs.writeFileSync(path.join(repoRoot, 'seed.txt'), 'canonical sentinel\n');
+      execFileSync('git', ['-C', repoRoot, 'add', 'seed.txt']);
+      execFileSync('git', [
+        '-C',
+        repoRoot,
+        'commit',
+        '--quiet',
+        '-m',
+        'test: seed checkout fixture',
+      ]);
+      const home = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-retrofit-home-'));
+      repos.push(home);
+      expect(runInit({ cwd: repoRoot, home, agentSurface: 'none' }).code).toBe(0);
+      const wtDir =
+        layout === 'standard'
+          ? path.join(repoRoot, '.caws', 'worktrees', 'wt-x')
+          : path.join(repoRoot, 'linked-checkout');
+      execFileSync('git', [
+        '-C',
+        repoRoot,
+        'worktree',
+        'add',
+        '--quiet',
+        '-b',
+        'fixture-lane',
+        wtDir,
+      ]);
+      const identity = execFileSync(
+        'git',
+        [
+          '-C',
+          wtDir,
+          'rev-parse',
+          '--absolute-git-dir',
+          '--path-format=absolute',
+          '--git-common-dir',
+        ],
+        { encoding: 'utf8' }
+      )
+        .trim()
+        .split('\n');
+      expect(identity[0]).not.toBe(identity[1]);
+      const nested = path.join(wtDir, 'nested');
+      fs.mkdirSync(nested);
+      for (const plan of [true, false]) {
+        for (const action of ['init', 'adopt']) {
+          const before = {
+            canonical: snapshotTree(repoRoot),
+            lane: snapshotTree(wtDir),
+            machine: snapshotTree(home),
+          };
+          const result = runInit({
+            cwd: nested,
+            home,
+            plan,
+            agentSurface: 'codex',
+            ...(action === 'adopt' ? { action: 'adapters', actionArg: 'adopt' } : {}),
+          });
+          const after = {
+            canonical: snapshotTree(repoRoot),
+            lane: snapshotTree(wtDir),
+            machine: snapshotTree(home),
+          };
+          retainCheckoutObservation({
+            layout,
+            action,
+            plan,
+            cwd: nested,
+            identity,
+            result,
+            before,
+            after,
+          });
+          expect(result.code).toBe(1);
+          expect(result.err).toContain(
+            action === 'adopt'
+              ? 'run from the canonical project root'
+              : 'refusing to run from inside a CAWS worktree'
+          );
+          expect(after).toEqual(before);
+        }
+      }
+    }
+  );
+
+  test('A7: standalone repository beneath a worktree-shaped path initializes its own checkout', () => {
+    const parent = mkRepo('ur-a7-parent-');
+    fs.writeFileSync(path.join(parent, 'canonical-sentinel.txt'), 'parent stays separate\n');
+    const repoRoot = path.join(parent, '.caws', 'worktrees', 'standalone');
+    fs.mkdirSync(repoRoot, { recursive: true });
+    execFileSync('git', ['init', '--quiet', '-b', 'main', repoRoot]);
+    execFileSync('git', ['-C', repoRoot, 'config', 'user.email', 'test@example.com']);
+    execFileSync('git', ['-C', repoRoot, 'config', 'user.name', 'Test']);
+    const identity = execFileSync(
+      'git',
+      [
+        '-C',
+        repoRoot,
+        'rev-parse',
+        '--absolute-git-dir',
+        '--path-format=absolute',
+        '--git-common-dir',
+      ],
+      { encoding: 'utf8' }
+    )
+      .trim()
+      .split('\n');
+    expect(identity[0]).toBe(identity[1]);
+    const parentGit = snapshotTree(path.join(parent, '.git'));
+    const before = snapshotTree(repoRoot);
+    const preview = runInit({ cwd: repoRoot, agentSurface: 'none', plan: true, json: true });
+    const afterPreview = snapshotTree(repoRoot);
+    const applied = runInit({ cwd: repoRoot, agentSurface: 'none' });
+    retainCheckoutObservation({
+      identity,
+      preview,
+      applied,
+      before,
+      afterPreview,
+      afterApply: snapshotTree(repoRoot),
+    });
+    expect(preview.code).toBe(0);
+    expect(JSON.parse(preview.out).repo_root).toBe(fs.realpathSync(repoRoot));
+    expect(afterPreview).toEqual(before);
+    expect(applied.code).toBe(0);
+    expect(fs.existsSync(path.join(repoRoot, '.caws', 'policy.yaml'))).toBe(true);
+    expect(fs.existsSync(path.join(parent, '.caws', 'policy.yaml'))).toBe(false);
+    expect(snapshotTree(path.join(parent, '.git'))).toEqual(parentGit);
+    expect(fs.readFileSync(path.join(parent, 'canonical-sentinel.txt'), 'utf8')).toBe(
+      'parent stays separate\n'
+    );
   });
+
+  test.each(['init', 'adopt'])(
+    'A7: %s refuses unavailable Git identity before writes',
+    (action) => {
+      const repoRoot = mkRepo('ur-a7-unavailable-');
+      fs.rmSync(path.join(repoRoot, '.git'), { recursive: true });
+      expect(spawnSync('git', ['-C', repoRoot, 'rev-parse', '--show-toplevel']).status).not.toBe(0);
+      const before = snapshotTree(repoRoot);
+      const result = runInit({
+        cwd: repoRoot,
+        agentSurface: 'codex',
+        ...(action === 'adopt' ? { action: 'adapters', actionArg: 'adopt' } : {}),
+      });
+      const after = snapshotTree(repoRoot);
+      retainCheckoutObservation({ action, result, before, after });
+      expect(result.code).toBe(2);
+      expect(result.err).toContain('Git checkout identity unavailable');
+      expect(after).toEqual(before);
+    }
+  );
 });

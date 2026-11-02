@@ -89,7 +89,13 @@ import {
   planGitignore,
   type GitignorePlanResult,
 } from '../../init/gitignore-manage';
-import { initProject, planInitProject, resolveRepoRoot, type InitProjectPlan } from '../../store';
+import {
+  initProject,
+  planInitProject,
+  readGitDirInfo,
+  resolveRepoRoot,
+  type InitProjectPlan,
+} from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
 import { renderGitignore, renderGitignoreSkippedNotGit } from '../render/init-gitignore';
 import { renderInit } from '../render/init';
@@ -1212,7 +1218,12 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
           err('caws init adapters adopt: --agent-surface is required');
           return 2;
         }
-        if (/(?:^|\/)\.caws\/worktrees\//.test(cwd)) {
+        const checkout = readGitDirInfo(cwd);
+        if (checkout === null) {
+          err('caws init adapters adopt: Git checkout identity unavailable; no files changed');
+          return 2;
+        }
+        if (checkout.git_dir !== checkout.git_common_dir) {
           err('caws init adapters adopt: run from the canonical project root');
           return 1;
         }
@@ -1262,11 +1273,15 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     return 2;
   }
 
-  // A7 (CAWS-HOOKPACK-UPGRADE-RETROFIT-001): init mutates the CANONICAL
-  // checkout's hooks and settings. Run from inside a linked worktree it
-  // silently targets main-checkout state (the 2026-08-15 gotcha a parallel
-  // session hit and had to repair by hand) — refuse instead of guessing.
-  if (/(?:^|\/)\.caws\/worktrees\/[^/]+(?:\/|$)/.test(cwd)) {
+  // A7 (CAWS-HOOKPACK-UPGRADE-RETROFIT-001): init targets canonical state.
+  // Git identity distinguishes a linked checkout from an independent nested
+  // repository; the directory name cannot establish either relationship.
+  const checkout = readGitDirInfo(cwd);
+  if (checkout === null) {
+    err('caws init: Git checkout identity unavailable; no files changed');
+    return 2;
+  }
+  if (checkout.git_dir !== checkout.git_common_dir) {
     err(`caws init: refusing to run from inside a CAWS worktree (${cwd}).`);
     err('  init installs hooks/settings for the canonical checkout; from inside');
     err('  a worktree it would silently mutate main-checkout state. Run it from');
