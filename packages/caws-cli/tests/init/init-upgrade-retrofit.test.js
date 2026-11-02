@@ -113,11 +113,13 @@ function snapshotTree(root) {
       const file = path.join(directory, name);
       const stat = fs.lstatSync(file);
       const relative = path.relative(root, file);
-      if (stat.isSymbolicLink()) rows[relative] = { link: fs.readlinkSync(file) };
+      const mode = stat.mode & 0o7777;
+      if (stat.isSymbolicLink()) rows[relative] = { link: fs.readlinkSync(file), mode };
       else if (stat.isDirectory()) {
-        rows[relative] = 'directory';
+        rows[relative] = { type: 'directory', mode };
         visit(file);
-      } else rows[relative] = fs.readFileSync(file).toString('base64');
+      } else
+        rows[relative] = { type: 'file', mode, bytes: fs.readFileSync(file).toString('base64') };
     }
   }
   visit(root);
@@ -542,6 +544,111 @@ describe('CAWS-HOOKPACK-UPGRADE-RETROFIT-001', () => {
     expect(fs.readFileSync(path.join(parent, 'canonical-sentinel.txt'), 'utf8')).toBe(
       'parent stays separate\n'
     );
+  });
+
+  test.each(
+    ['GIT_DIR', 'GIT_COMMON_DIR', 'GIT_WORK_TREE'].flatMap((key) =>
+      ['init', 'adopt'].map((action) => ({ key, action }))
+    )
+  )('A7: Git directory overrides cannot redirect %j', ({ key, action }) => {
+    const repoRoot = mkRepo('ur-a7-env-');
+    execFileSync('git', [
+      '-C',
+      repoRoot,
+      'commit',
+      '--quiet',
+      '--allow-empty',
+      '-m',
+      'test: seed Git override fixture',
+    ]);
+    const linked = path.join(repoRoot, '.caws', 'worktrees', 'linked');
+    execFileSync('git', [
+      '-C',
+      repoRoot,
+      'worktree',
+      'add',
+      '--quiet',
+      '-b',
+      'fixture-lane',
+      linked,
+    ]);
+    const gitDir = execFileSync('git', ['-C', linked, 'rev-parse', '--absolute-git-dir'], {
+      encoding: 'utf8',
+    }).trim();
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-retrofit-home-'));
+    repos.push(home);
+    const value =
+      key === 'GIT_DIR'
+        ? path.join(repoRoot, '.git')
+        : key === 'GIT_COMMON_DIR'
+          ? gitDir
+          : repoRoot;
+    const previous = process.env[key];
+    try {
+      process.env[key] = value;
+      for (const plan of [true, false]) {
+        const before = { project: snapshotTree(repoRoot), machine: snapshotTree(home) };
+        const result = runInit({
+          cwd: linked,
+          home,
+          plan,
+          agentSurface: 'none',
+          ...(action === 'adopt' ? { action: 'adapters', actionArg: 'adopt' } : {}),
+        });
+        const after = { project: snapshotTree(repoRoot), machine: snapshotTree(home) };
+        retainCheckoutObservation({ key, action, plan, value, result, before, after });
+        expect(result.code).toBe(2);
+        expect(result.err).toContain(key);
+        expect(after).toEqual(before);
+      }
+    } finally {
+      if (previous === undefined) delete process.env[key];
+      else process.env[key] = previous;
+    }
+  });
+
+  test('A7: separate Git metadata cannot redirect initialization outside the checkout', () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'ur-a7-separate-'));
+    repos.push(base);
+    const checkout = path.join(base, 'checkout');
+    const outside = path.join(base, 'outside');
+    const home = path.join(base, 'machine');
+    fs.mkdirSync(outside);
+    fs.mkdirSync(home);
+    execFileSync('git', [
+      'init',
+      '--quiet',
+      '--separate-git-dir',
+      path.join(outside, 'metadata'),
+      checkout,
+    ]);
+    fs.writeFileSync(path.join(checkout, 'sentinel.txt'), 'checkout stays intact\n');
+    fs.writeFileSync(path.join(outside, 'sentinel.txt'), 'metadata parent stays intact\n');
+    const identity = execFileSync(
+      'git',
+      [
+        '-C',
+        checkout,
+        'rev-parse',
+        '--absolute-git-dir',
+        '--path-format=absolute',
+        '--git-common-dir',
+      ],
+      { encoding: 'utf8' }
+    )
+      .trim()
+      .split('\n');
+    expect(identity[0]).toBe(identity[1]);
+    expect(path.dirname(identity[0])).not.toBe(checkout);
+    for (const plan of [true, false]) {
+      const before = snapshotTree(base);
+      const result = runInit({ cwd: checkout, home, plan, agentSurface: 'none' });
+      const after = snapshotTree(base);
+      retainCheckoutObservation({ checkout, outside, identity, plan, result, before, after });
+      expect(result.code).toBe(2);
+      expect(result.err).toContain('Git metadata does not identify the checkout root');
+      expect(after).toEqual(before);
+    }
   });
 
   test.each(['init', 'adopt'])(

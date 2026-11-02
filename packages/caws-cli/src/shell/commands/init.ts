@@ -90,6 +90,7 @@ import {
   type GitignorePlanResult,
 } from '../../init/gitignore-manage';
 import {
+  defaultGitRunner,
   initProject,
   planInitProject,
   readGitDirInfo,
@@ -128,6 +129,36 @@ function isInsideGitWorkingTree(cwd: string): boolean {
   } catch {
     return false;
   }
+}
+
+type InitCheckout =
+  | { readonly kind: 'canonical' | 'linked' }
+  | { readonly kind: 'unavailable'; readonly reason: string };
+
+function inspectInitCheckout(cwd: string): InitCheckout {
+  const override = ['GIT_DIR', 'GIT_COMMON_DIR', 'GIT_WORK_TREE'].find(
+    (name) => process.env[name] !== undefined
+  );
+  if (override !== undefined)
+    return {
+      kind: 'unavailable',
+      reason: `${override} overrides Git checkout identity; unset it and use the intended checkout`,
+    };
+  const checkout = readGitDirInfo(cwd);
+  if (checkout === null)
+    return { kind: 'unavailable', reason: 'Git checkout identity unavailable' };
+  if (checkout.git_dir !== checkout.git_common_dir) return { kind: 'linked' };
+  try {
+    const top = defaultGitRunner(['rev-parse', '--show-toplevel'], { cwd });
+    if (!path.isAbsolute(top)) throw new Error('Git checkout root must be absolute');
+    // The store maps canonical authority from the common directory's parent.
+    // Separate metadata must not make init write into a different directory.
+    if (fs.realpathSync(top) !== path.dirname(checkout.git_common_dir))
+      return { kind: 'unavailable', reason: 'Git metadata does not identify the checkout root' };
+  } catch {
+    return { kind: 'unavailable', reason: 'Git checkout identity unavailable' };
+  }
+  return { kind: 'canonical' };
 }
 
 export interface InitCommandOptions {
@@ -1218,12 +1249,12 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
           err('caws init adapters adopt: --agent-surface is required');
           return 2;
         }
-        const checkout = readGitDirInfo(cwd);
-        if (checkout === null) {
-          err('caws init adapters adopt: Git checkout identity unavailable; no files changed');
+        const checkout = inspectInitCheckout(cwd);
+        if (checkout.kind === 'unavailable') {
+          err(`caws init adapters adopt: ${checkout.reason}; no files changed`);
           return 2;
         }
-        if (checkout.git_dir !== checkout.git_common_dir) {
+        if (checkout.kind === 'linked') {
           err('caws init adapters adopt: run from the canonical project root');
           return 1;
         }
@@ -1276,12 +1307,12 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // A7 (CAWS-HOOKPACK-UPGRADE-RETROFIT-001): init targets canonical state.
   // Git identity distinguishes a linked checkout from an independent nested
   // repository; the directory name cannot establish either relationship.
-  const checkout = readGitDirInfo(cwd);
-  if (checkout === null) {
-    err('caws init: Git checkout identity unavailable; no files changed');
+  const checkout = inspectInitCheckout(cwd);
+  if (checkout.kind === 'unavailable') {
+    err(`caws init: ${checkout.reason}; no files changed`);
     return 2;
   }
-  if (checkout.git_dir !== checkout.git_common_dir) {
+  if (checkout.kind === 'linked') {
     err(`caws init: refusing to run from inside a CAWS worktree (${cwd}).`);
     err('  init installs hooks/settings for the canonical checkout; from inside');
     err('  a worktree it would silently mutate main-checkout state. Run it from');
