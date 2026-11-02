@@ -51,5 +51,9 @@ acceptance:
     given: 'a maintainer uses docs/README.md as the index'
     when: 'they follow it'
     then: 'docs/internal is described accurately and the omitted areas and files are listed'
+  - id: A7
+    given: 'a doc cites a test, script, release artefact or anchor as evidence'
+    when: 'the cited path is resolved at the landed revision'
+    then: 'the citation resolves, or the doc states the artefact is historical or unimplemented'
 non_functional: {}
 contracts: []
