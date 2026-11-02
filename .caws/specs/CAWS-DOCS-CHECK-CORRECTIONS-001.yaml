@@ -22,9 +22,9 @@ invariants:
   - 'Every command example left in a strict-set consumer doc succeeds as printed against the installed CLI.'
 acceptance:
   - id: A1
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'Given the doc-check audit at e0c192bfe, when corrections land, then validate-docs.mjs runs as part of docs:check and exits 0 on the strict set'
+    given: 'docs checks run in CI through release-qualification docs:check'
+    when: 'the corrections land'
+    then: 'validate-docs.mjs runs inside docs:check and exits 0 for the strict set'
   - id: A2
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
