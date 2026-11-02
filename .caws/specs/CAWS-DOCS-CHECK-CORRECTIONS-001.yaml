@@ -75,3 +75,8 @@ evidence:
     evidence_ref: "Commit 964190970: DOCUMENTATION_STANDARDS.md required-fields table adds audience, strict set described as STRICT_SET's five docs, CI path restated as docs:check; measured backlog from --all = 58 docs / 38 violations (25 no front-matter, 13 missing audience)"
     recorded_at: "2026-11-02T13:03:35.577Z"
     commit_sha: "964190970"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Commit 964190970: docs/api/README.md states the six service specs are never-implemented; each docs/api/*.yaml opens with an ARCHIVED DESIGN RECORD banner; source inspection shows no HTTP server constructs or openapi deps"
+    recorded_at: "2026-11-02T13:03:37.703Z"
+    commit_sha: "964190970"
