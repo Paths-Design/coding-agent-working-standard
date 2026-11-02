@@ -1,10 +1,11 @@
 id: CAWS-WORKTREE-REMOVE-SAFETY-001
 title: 'Preflight Git metadata before worktree removal and recover missing checkouts'
 mode: fix
-lifecycle_state: active
-worktree: worktree-remove-safety
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Directory-wide sandbox-denial preflight, targeted orphan Git cleanup, honest teardown diagnostics, and long-removal lock safety verified at a7c47e2ca; 202 targeted tests, strict compilation, scoped lint and all CAWS gates passed. Actual sandbox EPERM refused before checkout deletion. Per-entry ACL completeness, atomic Git deletion, full-suite and installed-runtime activation are not claimed.'
 created_at: '2026-11-02T16:39:03.085Z'
-updated_at: '2026-11-02T18:28:08.013Z'
+updated_at: '2026-11-02T19:07:48.399Z'
 created_by_session: '01a19d1c-1d90-7833-92d2-38c5735da9e2'
 blast_radius:
   modules:
