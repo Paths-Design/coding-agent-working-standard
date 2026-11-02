@@ -202,6 +202,7 @@
         "src/store/worktree-artifacts.ts",
         "src/store/worktree-divergence.ts",
         "src/store/worktree-reconciliation.ts",
+        "src/store/worktree-removal.ts",
         "src/store/worktrees-migration.ts",
         "src/store/worktrees-store.ts",
         "src/store/worktrees-writer.ts",

@@ -70,6 +70,7 @@ import type { SessionCandidates } from '../shell/session/types';
 import { resolveGitBinary } from './git-binary';
 import { repoRootFromCawsDir, runGit, storeDiagnostic, validateSpecId } from './repo-root';
 import { STORE_RULES } from './rules';
+import { preflightWorktreeRemoval, worktreeIsRegistered } from './worktree-removal';
 import { insertTopLevelScalarAfter, removeTopLevelScalar, setTopLevelScalar } from './yaml-patch';
 import { readYamlSourceBytes } from './yaml-store';
 
@@ -1324,6 +1325,7 @@ function splitStateRepair(s: {
   /** False when the worktree_merged append did not land. */
   readonly mergedEventAppended?: boolean;
   readonly worktreeDestroyed: boolean;
+  readonly checkoutPresent?: boolean;
 }): string {
   const specClosed = s.specClosed ?? false;
   const mergedEventAppended = s.mergedEventAppended ?? false;
@@ -1332,7 +1334,7 @@ function splitStateRepair(s: {
     `git: branch merged into ${s.baseBranch} at ${s.mergeCommit} (durable — the merge cannot be undone by retrying)`,
     `spec ${s.specId}: ${specClosed ? 'CLOSED' : 'still active'}`,
     `provenance ledger: worktree_merged ${mergedEventAppended ? 'appended' : 'NOT appended'}`,
-    `worktree "${s.name}": ${s.worktreeDestroyed ? 'destroyed' : 'still registered and on disk'}`,
+    `worktree "${s.name}": ${s.worktreeDestroyed ? 'destroyed' : s.checkoutPresent === false ? 'still registered; checkout directory absent' : 'still registered and on disk'}`,
   ];
 
   const steps: string[] = [];
@@ -2380,22 +2382,31 @@ export function destroyWorktree(
       plannedWrites,
       events,
       () => {
-        if (!fs.existsSync(wtPath)) return ok(false);
+        const preflight = preflightWorktreeRemoval(repoRoot, wtPath, input.name);
+        if (!preflight.ok) return preflight;
+        if (!preflight.value.registered) return ok(false);
         removeWorktreeArtifactLinks(repoRoot, wtPath);
         try {
           execFileSync(resolveGitBinary(), ['worktree', 'remove', wtPath], {
             cwd: repoRoot,
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'pipe'],
-            timeout: 10_000,
-            killSignal: 'SIGKILL',
+            // Recursive deletion can exceed a short command deadline for
+            // generated engine output. Killing Git leaves a damaged checkout.
           });
+          if (fs.existsSync(wtPath) || worktreeIsRegistered(repoRoot, wtPath))
+            throw new Error(
+              'Git reported success but the checkout or its Git registration remains'
+            );
         } catch (e) {
           return err(
             storeDiagnostic(
               STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-              `git worktree remove failed or timed out for ${wtPath}; physical effects may be incomplete (path exists: ${fs.existsSync(wtPath)}): ${String(e)}`,
-              { subject: input.name }
+              `git worktree remove failed for ${wtPath}; physical effects may be incomplete (path exists: ${fs.existsSync(wtPath)}): ${String(e)}`,
+              {
+                subject: input.name,
+                narrowRepair: `Retain the CAWS binding and inspect the checkout and git worktree list --porcelain. Resolve the reported Git error, then retry caws worktree destroy ${input.name} from outside the lane. A missing checkout's Git record is cleaned on retry. Preserve any remaining files; do not rerun merge or blindly restore a partially removed checkout.`,
+              }
             )
           );
         }
@@ -3783,7 +3794,7 @@ export function mergeWorktree(
       attachCheckoutState(
         storeDiagnostic(
           STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-          `Merge succeeded but post-merge worktree destroy failed. Run caws worktree destroy ${input.name} manually.`,
+          `Merge succeeded but post-merge worktree destroy failed: ${destroyResult.errors.map((d) => d.message).join('; ')}`,
           {
             subject: input.name,
             narrowRepair: splitStateRepair({
@@ -3794,6 +3805,7 @@ export function mergeWorktree(
               specClosed: !specLeftOpen,
               mergedEventAppended: true,
               worktreeDestroyed: false,
+              checkoutPresent: fs.existsSync(entry.path ?? worktreePathFor(cawsDir, input.name)),
             }),
             data: {
               merge_commit: mergeCommit,

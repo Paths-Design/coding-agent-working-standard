@@ -17,11 +17,13 @@
 // Implementation parity with events-store.ts:
 //   - existence-based lockfile (`openSync(path, 'wx')`)
 //   - bounded retry with stale-lock recovery
-//   - same constants: 30s stale threshold, 3 attempts, 50ms retry
+//   - 30s stale threshold, 3 attempts, 50ms retry
+//   - an aged lock is reclaimable only after its local owner is known dead
 //   - release in `finally` of caller's wrapper (transaction layer)
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 import { err, ok, type Result } from '../kernel';
 
@@ -52,19 +54,50 @@ export interface AcquireLifecycleLockOptions {
 }
 
 function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolean {
+  // Serialize recoverers across their check/unlink/acquire gap. Without this
+  // separate exclusive file, a second reaper can unlink a newly acquired lock
+  // after both reapers validated the same dead owner. An orphaned recovery file
+  // requires operator inspection; it never authorizes stealing a live lock.
+  let recovery: LifecycleLockHandle | undefined;
   try {
-    const stat = fs.statSync(lockPath);
+    const recoveryPath = `${lockPath}.reclaim`;
+    const fd = fs.openSync(recoveryPath, 'wx', 0o600);
+    recovery = { fd, lockPath: recoveryPath };
+    fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, hostname: os.hostname() }));
+    const stat = fs.lstatSync(lockPath);
     const ageMs = Date.now() - stat.mtimeMs;
-    if (ageMs > staleThresholdMs) {
-      fs.unlinkSync(lockPath);
-      return true;
+    if (!stat.isFile() || ageMs <= staleThresholdMs) return false;
+    const bytes = fs.readFileSync(lockPath);
+    const owner = JSON.parse(bytes.toString('utf8')) as { pid?: unknown; hostname?: unknown };
+    if (
+      !Number.isSafeInteger(owner.pid) ||
+      (owner.pid as number) <= 0 ||
+      (owner.hostname !== undefined && owner.hostname !== os.hostname())
+    )
+      return false;
+    try {
+      process.kill(owner.pid as number, 0);
+      return false;
+    } catch (error) {
+      // EPERM and unknown liveness are not evidence of a dead owner.
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') return false;
     }
-  } catch {
-    // Race: lock was released between EEXIST and statSync. Treat as
-    // recoverable so the next attempt can take it.
+    const current = fs.lstatSync(lockPath);
+    if (
+      current.dev !== stat.dev ||
+      current.ino !== stat.ino ||
+      current.mtimeMs !== stat.mtimeMs ||
+      !fs.readFileSync(lockPath).equals(bytes)
+    )
+      return false;
+    fs.unlinkSync(lockPath);
     return true;
+  } catch (error) {
+    // Only an observed disappearance permits another acquisition attempt.
+    return (error as NodeJS.ErrnoException).code === 'ENOENT';
+  } finally {
+    if (recovery !== undefined) releaseLifecycleLock(recovery);
   }
-  return false;
 }
 
 /**
@@ -73,7 +106,9 @@ function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolea
  *
  * The lock is held by the existence of `<cawsDir>/state.lock`. Concurrent
  * callers retry up to `maxAttempts` with `retryDelayMs` between attempts.
- * Stale locks (older than `staleThresholdMs`) are reclaimed.
+ * Aged locks with a demonstrably dead local owner are reclaimed. Live owners
+ * retain the lock during long recursive worktree removals. Unreadable or
+ * unidentifiable owners require inspection rather than age-based takeover.
  */
 export function acquireLifecycleLock(
   cawsDir: string,
@@ -94,6 +129,7 @@ export function acquireLifecycleLock(
           fd,
           JSON.stringify({
             pid: process.pid,
+            hostname: os.hostname(),
             at: new Date().toISOString(),
             purpose: 'lifecycle-mutation',
           })
@@ -135,13 +171,21 @@ export function acquireLifecycleLock(
  *  because lock-release is best-effort (the lockfile is the contract, not
  *  the fd state). */
 export function releaseLifecycleLock(handle: LifecycleLockHandle): void {
+  let held: fs.Stats | undefined;
+  try {
+    held = fs.fstatSync(handle.fd);
+  } catch {
+    /* Without descriptor identity we cannot safely remove the path. */
+  }
   try {
     fs.closeSync(handle.fd);
   } catch {
     /* ignore */
   }
   try {
-    fs.unlinkSync(handle.lockPath);
+    const current = fs.lstatSync(handle.lockPath);
+    if (held !== undefined && held.dev === current.dev && held.ino === current.ino)
+      fs.unlinkSync(handle.lockPath);
   } catch {
     /* ignore */
   }

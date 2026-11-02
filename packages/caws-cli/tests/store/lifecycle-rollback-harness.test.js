@@ -1259,7 +1259,7 @@ describe('retirement authority race and compensation', () => {
     }
   );
 
-  test('destroy timeout uses bounded SIGKILL and reports indeterminate physical effects without authority writes', () => {
+  test('destroy failure has no short kill deadline and reports indeterminate physical effects without authority writes', () => {
     const { caws, invoke } = fixture('destroy');
     const before = createAuthorityBytes(caws, 'WT-RETIRE-001');
     const child = require('child_process');
@@ -1268,16 +1268,16 @@ describe('retirement authority race and compensation', () => {
     jest.spyOn(child, 'execFileSync').mockImplementation((command, args, options) => {
       if (args[0] === 'worktree' && args[1] === 'remove') {
         observed = { command, args, options };
-        const failure = new Error('timed out');
-        failure.code = 'ETIMEDOUT';
+        const failure = new Error('removal denied');
+        failure.code = 'EPERM';
         throw failure;
       }
       return actual(command, args, options);
     });
     const result = invoke();
     expect(observed).toBeDefined();
-    expect(observed.options.timeout).toBe(10000);
-    expect(observed.options.killSignal).toBe('SIGKILL');
+    expect(observed.options.timeout).toBeUndefined();
+    expect(observed.options.killSignal).toBeUndefined();
     expect(result.ok).toBe(false);
     expect(result.errors.map((d) => d.message).join(' ')).toMatch(
       /physical effects may be incomplete/i
