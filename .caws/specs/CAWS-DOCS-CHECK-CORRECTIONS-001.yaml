@@ -90,3 +90,8 @@ evidence:
     evidence_ref: "Commit 964190970: caws --help = 20 groups; caws evidence record --help refuses --type ac; caws specs --help includes commit/verify-acs; release.yml:240-248 preserves script_ran=true tags; quality-gates-deprecation script clause retargeted; read-surface-authority gains a tui row; v11-surface-matrix statuses/test note corrected"
     recorded_at: "2026-11-02T13:03:46.294Z"
     commit_sha: "964190970"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Commit 964190970: docs/README.md now states docs/internal is one tracked cutover ledger plus gitignored scratch, lists audits/, architecture/adr/, architecture/design/, the six api design records, the full guides set, and the top-level operational docs; naming rule marked forward-looking"
+    recorded_at: "2026-11-02T13:03:47.686Z"
+    commit_sha: "964190970"
