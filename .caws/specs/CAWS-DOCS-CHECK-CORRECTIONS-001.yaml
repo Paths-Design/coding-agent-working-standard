@@ -55,5 +55,11 @@ acceptance:
     given: 'a doc cites a test, script, release artefact or anchor as evidence'
     when: 'the cited path is resolved at the landed revision'
     then: 'the citation resolves, or the doc states the artefact is historical or unimplemented'
+  - id: A8
+    given: 'hook and machine-runtime docs'
+    when: 'compared to the live dispatch chain and machine launcher'
+    then: >-
+      legacy project-pack layouts are labelled legacy and current system-runtime
+      install paths are documented
 non_functional: {}
 contracts: []
