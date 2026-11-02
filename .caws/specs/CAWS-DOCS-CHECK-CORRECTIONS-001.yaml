@@ -48,8 +48,8 @@ acceptance:
       stale group counts, evidence types, command leaves, tag handling, file
       citations and statuses are corrected
   - id: A6
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'Given docs/README.md, when a maintainer uses it as the index, then it describes docs/internal correctly and lists the omitted areas'
+    given: 'a maintainer uses docs/README.md as the index'
+    when: 'they follow it'
+    then: 'docs/internal is described accurately and the omitted areas and files are listed'
 non_functional: {}
 contracts: []
