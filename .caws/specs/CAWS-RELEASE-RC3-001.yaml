@@ -82,6 +82,19 @@ acceptance:
       governance before-after bytes, lifecycle rendering, corrupt-snapshot refusal,
       rollback and clean detached-consumer dependency audit retained for that
       artifact
+  - id: A7
+    given: >-
+      The exact qualified rc.3 package and selected runtime registered through
+      normal native trust on each supported harness
+    when: >-
+      Actual native sessions start, perform an admitted owned-lane operation,
+      attempt a protected write, stop and render the user and tool record
+    then: >-
+      Retained authentic payloads and host events join the package, runtime, host
+      and caller identities, distinguish session cwd from tool workdir, show a
+      delivered refusal within unchanged deadlines with protected bytes unchanged,
+      and preserve actual Start, Stop and semantic rendered output for each
+      supported harness
 observability:
   - 'Retain raw local check output and remote run URLs with exact candidate identities outside tracked source'
 rollback:
