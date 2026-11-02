@@ -95,3 +95,8 @@ evidence:
     evidence_ref: "Commit 964190970: docs/README.md now states docs/internal is one tracked cutover ledger plus gitignored scratch, lists audits/, architecture/adr/, architecture/design/, the six api design records, the full guides set, and the top-level operational docs; naming rule marked forward-looking"
     recorded_at: "2026-11-02T13:03:47.686Z"
     commit_sha: "964190970"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Commit 964190970: link/anchor/fence/doc_id scan over docs/ (excluding worktree-sparse docs/internal .caws/specs link) reports zero broken links or anchors; validator YAML/JSON parse checks pass for v11-surface-matrix and read-surface-authority; docs/api/schema.md JSON block parses with required=10 fields"
+    recorded_at: "2026-11-02T13:03:49.063Z"
+    commit_sha: "964190970"
