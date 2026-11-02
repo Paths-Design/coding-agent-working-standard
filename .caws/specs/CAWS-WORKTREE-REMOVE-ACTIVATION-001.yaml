@@ -1,0 +1,34 @@
+id: CAWS-WORKTREE-REMOVE-ACTIVATION-001
+title: 'Activate and qualify the landed worktree removal repair in the installed CLI'
+mode: chore
+lifecycle_state: draft
+created_at: '2026-11-02T19:31:29.750Z'
+updated_at: '2026-11-02T19:31:29.750Z'
+created_by_session: '01a19d1c-1d90-7833-92d2-38c5735da9e2'
+blast_radius:
+  modules:
+    - 'CAWS development package snapshot installation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/install-cli-snapshot.mjs'
+  out: []
+invariants:
+  - 'Install from committed source through atomic snapshot activation; retain the prior CLI snapshot'
+  - 'Preserve shared native registrations and runtime handlers unless the removal repair requires changing them'
+acceptance:
+  - id: A1
+    given: 'a package built from the landed removal repair'
+    when: 'snapshot installation completes'
+    then: 'the global caws command resolves to the retained package containing the repaired removal and lock modules'
+  - id: A2
+    given: 'the installed CLI in an isolated owned fixture'
+    when: 'metadata writes are denied and normal removal is allowed'
+    then: 'denied removal retains checkout bytes and registry authority while allowed removal removes only the intended worktree and Git record'
+observability:
+  - 'Retain source revision, tarball digest, prior and installed CLI targets, fixture output and before-after state under canonical .caws/state/worktree-remove-safety'
+rollback:
+  - 'Restore the retained prior CLI symlink through reviewed activation recovery if installed qualification fails'
+non_functional: {}
+contracts: []
