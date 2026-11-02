@@ -1,0 +1,41 @@
+id: CAWS-WORKTREE-REMOVE-SAFETY-001
+title: 'Preflight Git metadata before worktree removal and recover missing checkouts'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-02T16:39:03.085Z'
+updated_at: '2026-11-02T16:39:03.085Z'
+created_by_session: '01a19d1c-1d90-7833-92d2-38c5735da9e2'
+blast_radius:
+  modules:
+    - 'Worktree destroy and post-merge teardown'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/src/store/worktree-removal.ts'
+    - 'packages/caws-cli/tests/store/worktree-removal-safety.test.js'
+    - 'packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js'
+  out: []
+invariants:
+  - 'Ownership, dirty checkout, merged-branch and canonical authority checks remain enforced'
+  - 'No success or destroyed audit is emitted while target Git metadata remains registered'
+acceptance:
+  - id: A1
+    given: 'an owned clean merged worktree whose Git metadata writes are denied'
+    when: 'destroy runs'
+    then: 'removal is refused before checkout or artifact-link deletion and authority bytes remain unchanged'
+  - id: A2
+    given: 'a missing checkout with retained Git metadata or a removal failure'
+    when: 'destroy is retried or merge teardown fails'
+    then: 'retry removes only the matching Git worktree record and merge output preserves the underlying cause with accurate remaining state'
+  - id: A3
+    given: 'a valid owned merged checkout'
+    when: 'removal runs'
+    then: 'real Git removes the checkout and metadata without a short kill timeout and lifecycle safeguards continue to refuse dirty or foreign work'
+observability:
+  - 'Diagnostics report preflight or removal phase, checkout state and exact underlying Git error'
+rollback:
+  - 'Revert the logical source commit; retain all failed-removal checkouts and registry bindings for inspection'
+non_functional: {}
+contracts: []
