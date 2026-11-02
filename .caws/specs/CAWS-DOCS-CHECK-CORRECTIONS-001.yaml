@@ -7,7 +7,8 @@ updated_at: '2026-11-02T12:54:50.757Z'
 created_by_session: 'session-47e85a86-f324-4d1e-adf3-5a32262e53de'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'docs/ tracked documentation and index'
+    - 'packages/caws-cli/package.json docs:check wiring'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,7 +17,9 @@ scope:
     - 'packages/caws-cli/package.json'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Every corrected claim is re-derived from the installed CLI 12.2.0-rc.2, repo source, kernel schemas or workflow files at the landed revision; another doc repeating the claim is not confirmation.'
+  - 'Point-in-time records keep their dates and explicit non-claims; a historical entry is not rewritten as current procedure.'
+  - 'Every command example left in a strict-set consumer doc succeeds as printed against the installed CLI.'
 acceptance:
   - id: A1
     given: 'The spec implementation is complete.'
