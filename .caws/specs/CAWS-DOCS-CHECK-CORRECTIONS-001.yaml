@@ -1,9 +1,10 @@
 id: CAWS-DOCS-CHECK-CORRECTIONS-001
 title: 'Correct doc-check drift across docs/'
 mode: doc
-lifecycle_state: draft
+lifecycle_state: active
+worktree: docs-doc-check-corrections
 created_at: '2026-11-02T12:54:50.757Z'
-updated_at: '2026-11-02T12:54:50.757Z'
+updated_at: '2026-11-02T12:55:33.822Z'
 created_by_session: 'session-47e85a86-f324-4d1e-adf3-5a32262e53de'
 blast_radius:
   modules:
