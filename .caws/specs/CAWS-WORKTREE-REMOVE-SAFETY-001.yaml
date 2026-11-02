@@ -48,3 +48,11 @@ rollback:
   - 'Revert the logical source commit; retain all failed-removal checkouts and registry bindings for inspection'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected native-sandbox.json and committed-checks.json under canonical .caws/state/worktree-remove-safety: actual Codex sandbox EPERM at canonical .git/worktrees probe refused before deletion, source and registry bytes unchanged, dependency symlink retained. Real chmod admin/parent denial and probe-delete denial tests passed. Directory-wide denial only; existing-entry deletion ACLs and atomic recursive Git deletion unproven."
+    recorded_at: "2026-11-02T19:06:07.612Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --config /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/jest.config.js --runInBand --runTestsByPath /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/lifecycle-lock-owner.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/bridge-store.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/maintenance-authority-lock.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/shell/claim-bridge.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/worktree-removal-safety.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/shell/worktree-merge-split-state.test.js
+    exit_code: 0
+    commit_sha: a7c47e2ca75f657c6078ad729fed761811e51c94
