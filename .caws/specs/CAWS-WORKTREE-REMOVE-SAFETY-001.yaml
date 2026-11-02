@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: worktree-remove-safety
 created_at: '2026-11-02T16:39:03.085Z'
-updated_at: '2026-11-02T16:40:10.843Z'
+updated_at: '2026-11-02T18:28:08.013Z'
 created_by_session: '01a19d1c-1d90-7833-92d2-38c5735da9e2'
 blast_radius:
   modules:
@@ -17,6 +17,9 @@ scope:
     - 'packages/caws-cli/src/store/worktree-removal.ts'
     - 'packages/caws-cli/tests/store/worktree-removal-safety.test.js'
     - 'packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js'
+    - packages/caws-cli/src/store/lifecycle-lock.ts
+    - packages/caws-cli/tests/store/lifecycle-lock-owner.test.js
+    - packages/caws-cli/mutation-policy.json
   out: []
 invariants:
   - 'Ownership, dirty checkout, merged-branch and canonical authority checks remain enforced'
