@@ -102,3 +102,40 @@ test('a replaced lock observed during stale recovery is retained', () => {
     expect(JSON.parse(fs.readFileSync(f.file, 'utf8')).pid).toBe(process.pid);
   });
 });
+
+test('concurrent stale recoverers cannot unlink a replacement after validating the same dead owner', () => {
+  const f = fixture();
+  fs.writeFileSync(f.file, JSON.stringify({ pid: 123456789, hostname: os.hostname() }));
+  age(f.file);
+  jest.spyOn(process, 'kill').mockImplementation(() => {
+    throw Object.assign(new Error('owner exited'), { code: 'ESRCH' });
+  });
+  const unlink = fs.unlinkSync;
+  let competing;
+  jest.spyOn(fs, 'unlinkSync').mockImplementation((file) => {
+    if (file === f.file && competing === undefined) {
+      // Another caller enters exactly after the first has checked identity,
+      // before its unlink. The recovery file must keep this caller out.
+      competing = null;
+      competing = acquireLifecycleLock(f.directory, options);
+    }
+    return unlink(file);
+  });
+  const acquired = acquireLifecycleLock(f.directory, options);
+  expect(competing).toMatchObject({ ok: false });
+  expect(acquired.ok).toBe(true);
+  expect(JSON.parse(fs.readFileSync(f.file, 'utf8')).pid).toBe(process.pid);
+  expect(fs.existsSync(f.file + '.reclaim')).toBe(false);
+  releaseLifecycleLock(acquired.value);
+});
+
+test('an unreconciled recovery file refuses reclamation instead of stealing a lock', () => {
+  const f = fixture();
+  fs.writeFileSync(f.file, JSON.stringify({ pid: 123456789, hostname: os.hostname() }));
+  age(f.file);
+  fs.writeFileSync(f.file + '.reclaim', 'unreconciled recovery');
+  const before = fs.readFileSync(f.file);
+  expect(acquireLifecycleLock(f.directory, options)).toMatchObject({ ok: false });
+  expect(fs.readFileSync(f.file)).toEqual(before);
+  expect(fs.readFileSync(f.file + '.reclaim', 'utf8')).toBe('unreconciled recovery');
+});

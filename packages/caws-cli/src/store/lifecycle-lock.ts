@@ -54,7 +54,16 @@ export interface AcquireLifecycleLockOptions {
 }
 
 function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolean {
+  // Serialize recoverers across their check/unlink/acquire gap. Without this
+  // separate exclusive file, a second reaper can unlink a newly acquired lock
+  // after both reapers validated the same dead owner. An orphaned recovery file
+  // requires operator inspection; it never authorizes stealing a live lock.
+  let recovery: LifecycleLockHandle | undefined;
   try {
+    const recoveryPath = `${lockPath}.reclaim`;
+    const fd = fs.openSync(recoveryPath, 'wx', 0o600);
+    recovery = { fd, lockPath: recoveryPath };
+    fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, hostname: os.hostname() }));
     const stat = fs.lstatSync(lockPath);
     const ageMs = Date.now() - stat.mtimeMs;
     if (!stat.isFile() || ageMs <= staleThresholdMs) return false;
@@ -86,8 +95,9 @@ function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolea
   } catch (error) {
     // Only an observed disappearance permits another acquisition attempt.
     return (error as NodeJS.ErrnoException).code === 'ENOENT';
+  } finally {
+    if (recovery !== undefined) releaseLifecycleLock(recovery);
   }
-  return false;
 }
 
 /**

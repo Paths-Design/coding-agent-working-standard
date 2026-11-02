@@ -60,8 +60,9 @@ function probeDirectory(directory: string): void {
     throw new Error(`Git metadata write/delete probe failed at ${probe}: ${String(failure)}`);
 }
 
-/** Refuse known metadata write failures before deleting any checkout content.
- * Probes do not make recursive Git removal atomic or prevent later ACL changes.
+/** Refuse directory-wide metadata write failures before deleting checkout content.
+ * Probes do not establish delete access for every existing metadata entry, make
+ * recursive Git removal atomic, or prevent later ACL changes.
  * A missing checkout can still have a Git record requiring targeted removal.
  */
 export function preflightWorktreeRemoval(
