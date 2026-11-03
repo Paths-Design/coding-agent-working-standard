@@ -54,3 +54,10 @@ evidence:
     command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --runInBand --runTestsByPath tests/hooks/session-id-payload.test.js
     exit_code: 0
     commit_sha: "66fe295a6aaa1b56a452dff3ec28d74cd672b943"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/native-payload-identity/validation.json: normal immutable installation selects 7be8065a4c48620937351dc12b9b205ac870d1d1bd553b945e1adb99472aaf36; 113 members verified, only lib/session-id.sh differs. Native owner admission/restoration and foreign refusal retain matching runtime/session hook records; five registration/launcher hashes unchanged. Commit verification checks reachability only."
+    recorded_at: "2026-11-03T21:18:03.939Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/.caws/state/native-payload-identity/install-compat.cjs --activate
+    exit_code: 0
+    commit_sha: "66fe295a6aaa1b56a452dff3ec28d74cd672b943"
