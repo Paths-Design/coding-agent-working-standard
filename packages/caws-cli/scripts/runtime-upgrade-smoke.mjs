@@ -71,10 +71,10 @@ export function observedSpawn(command, args, options) {
       stdout: result.stdout ?? '',
       stderr: result.stderr ?? '',
     };
-    write(
-      path.join(dir, `command-${String(++receiptSequence).padStart(4, '0')}.json`),
-      JSON.stringify(receipt, null, 2) + '\n'
-    );
+    const name = `command-${String(++receiptSequence).padStart(4, '0')}.json`;
+    const bytes = JSON.stringify(receipt, null, 2) + '\n';
+    write(path.join(dir, name), bytes);
+    result.qualificationReceipt = { file: name, sha256: hash(bytes) };
   }
   return result;
 }
@@ -98,6 +98,151 @@ const json = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 function write(file, content) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, content);
+}
+
+// Retain the actual file, including missing or nonregular post-state on failure.
+export function captureQualificationFile(file, artifacts, name) {
+  const result = { path: path.resolve(file) };
+  try {
+    const stat = fs.lstatSync(file);
+    result.kind = stat.isFile() ? 'file' : stat.isSymbolicLink() ? 'symlink' : 'other';
+    result.mode = stat.mode & 0o7777;
+    if (result.kind === 'file') {
+      const bytes = fs.readFileSync(file);
+      result.file = path.join('raw', name);
+      result.sha256 = hash(bytes);
+      result.size = bytes.length;
+      write(path.join(artifacts, result.file), bytes);
+      fs.chmodSync(path.join(artifacts, result.file), result.mode);
+    }
+  } catch (error) {
+    result.kind = error.code === 'ENOENT' ? 'missing' : 'error';
+    if (result.kind === 'error') result.error = error.message;
+  }
+  return result;
+}
+
+const guardedProofIds = [
+  'migrated-codex-stock',
+  'migrated-codex-custom',
+  'migrated-claude-code-stock',
+  'migrated-claude-code-custom',
+  'linked-worktree',
+  'updated-codex-stock',
+  'updated-codex-custom',
+  'corrupt-runtime',
+  'rollback-recovered',
+];
+const rendererProofIds = ['codex-stock', 'codex-custom'];
+
+// Expectations are supplied by the executing scenario independently of its
+// retained manifest. This verifies custody, not native harness enforcement.
+export function verifyQualificationCustody(artifacts, expected) {
+  const proof = json(path.join(artifacts, 'custody.json'));
+  const usedReceipts = new Set();
+  const artifact = (relative) => {
+    assert.equal(typeof relative, 'string');
+    const file = path.resolve(artifacts, relative);
+    const rel = path.relative(path.resolve(artifacts), file);
+    assert.ok(rel && !path.isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${path.sep}`));
+    assert.ok(fs.lstatSync(file).isFile(), `Nonregular retained artifact: ${relative}`);
+    return file;
+  };
+  const bytes = (record, source) => {
+    assert.equal(record.path, source);
+    assert.equal(record.kind, 'file', `Missing/nonregular source: ${source}`);
+    const file = artifact(record.file);
+    const retained = fs.readFileSync(file);
+    assert.equal(hash(retained), record.sha256, `Corrupt retained bytes: ${record.file}`);
+    assert.equal(retained.length, record.size);
+    assert.equal(fs.lstatSync(file).mode & 0o7777, record.mode);
+    return retained;
+  };
+  const missing = (record, source) => {
+    assert.equal(record.path, source);
+    assert.equal(record.kind, 'missing', `Output existed before operation: ${source}`);
+  };
+  const receipt = (record, scenario, event, status) => {
+    assert.ok(record && !usedReceipts.has(record.file), 'Missing or reused command receipt');
+    usedReceipts.add(record.file);
+    const raw = fs.readFileSync(artifact(record.file));
+    assert.equal(hash(raw), record.sha256, 'Changed command receipt');
+    const command = JSON.parse(raw);
+    assert.equal(command.command, 'python3');
+    assert.deepEqual(command.args, [expected.launcher, scenario.surface, event, '--system']);
+    assert.equal(command.cwd, scenario.cwd);
+    assert.equal(command.exit_code, status);
+    assert.equal(command.error, null);
+    assert.equal(command.signal, null);
+    assert.equal(command.timeout_cleanup, null);
+    const payload = JSON.parse(command.input);
+    assert.equal(payload.cwd, scenario.cwd);
+    assert.equal(payload.session_id, scenario.sessionId);
+    return { command, payload };
+  };
+  const runtime = (record, digest) => {
+    assert.equal(JSON.parse(bytes(record, expected.pointer)).digest, digest);
+  };
+  for (const [records, ids, scenarios] of [
+    [proof.guards, guardedProofIds, expected.guards],
+    [proof.renderers, rendererProofIds, expected.renderers],
+  ]) {
+    assert.deepEqual(records.map((record) => record.id).sort(), [...ids].sort());
+    assert.deepEqual(scenarios.map((record) => record.id).sort(), [...ids].sort());
+  }
+  for (const record of proof.guards) {
+    const scenario = expected.guards.find(({ id }) => id === record.id);
+    const before = bytes(record.before, scenario.target);
+    const after = bytes(record.after, scenario.target);
+    assert.deepEqual(before, Buffer.from(scenario.sentinel));
+    assert.deepEqual(after, before, `Protected target changed: ${record.id}`);
+    assert.equal(record.before.mode, 0o640);
+    assert.equal(record.after.mode, record.before.mode);
+    runtime(record.runtimeBefore, scenario.digest);
+    runtime(record.runtimeAfter, scenario.digest);
+    const { command, payload } = receipt(record.receipt, scenario, 'pre_tool_use', 2);
+    assert.equal(payload.tool_name, 'Write');
+    assert.equal(payload.tool_input.file_path, scenario.target);
+    assert.equal(payload.tool_input.content, 'forbidden fixture write');
+    if (record.id === 'corrupt-runtime') assert.match(command.stderr, /Runtime modified/);
+    else if (record.id.startsWith('updated-'))
+      assert.match(command.stderr, /qualification-updated-guard/);
+    else {
+      assert.match(command.stdout + command.stderr, /protected|scope|governed/i);
+      assert.doesNotMatch(command.stderr, /qualification-updated-guard|Runtime modified/);
+    }
+  }
+  for (const record of proof.renderers) {
+    const scenario = expected.renderers.find(({ id }) => id === record.id);
+    missing(record.markerBefore, scenario.marker);
+    missing(record.turnBefore, scenario.turn);
+    assert.equal(bytes(record.marker, scenario.marker).toString('utf8'), 'updated-renderer');
+    runtime(record.runtimeBefore, scenario.digest);
+    runtime(record.runtimeAfter, scenario.digest);
+    const { payload } = receipt(record.receipt, scenario, 'stop', 0);
+    assert.equal(payload.transcript_path, scenario.transcript);
+    const transcript = bytes(record.transcript, scenario.transcript)
+      .toString('utf8')
+      .trim()
+      .split('\n')
+      .map(JSON.parse);
+    assert.equal(transcript[0].payload.content[0].text, scenario.prompt);
+    assert.equal(transcript[1].payload.call_id, scenario.callId);
+    assert.equal(transcript[2].payload.call_id, scenario.callId);
+    assert.equal(transcript[2].payload.output, scenario.output);
+    const turn = JSON.parse(bytes(record.turn, scenario.turn));
+    assert.equal(turn.context.session_id, scenario.sessionId);
+    assert.equal(turn.context.cwd, scenario.cwd);
+    assert.equal(turn.user, scenario.prompt);
+    const tool = turn.timeline.find(
+      (item) => item.kind === 'tool_call' && item.id === scenario.callId
+    );
+    assert.ok(tool, `Missing semantic tool record: ${record.id}`);
+    assert.equal(tool.name, 'Bash');
+    assert.equal(tool.command, 'pwd');
+    assert.equal(tool.output, scenario.output);
+  }
+  return true;
 }
 function snapshot(root, accept = () => true) {
   const result = {};
@@ -181,7 +326,8 @@ export function qualify({
     fs.mkdirSync(parent, { recursive: true });
     artifacts = fs.mkdtempSync(path.join(parent, 'run-'));
   }
-  if (artifacts) env.CAWS_QUALIFICATION_ARTIFACT_DIR = artifacts;
+  const evidenceRoot = artifacts ?? path.join(root, 'diagnostic-evidence');
+  env.CAWS_QUALIFICATION_ARTIFACT_DIR = evidenceRoot;
   fs.mkdirSync(env.HOME, { recursive: true });
   fs.mkdirSync(env.TMPDIR, { recursive: true });
   // Detached npm installation: no workspace dependencies or lifecycle repair.
@@ -204,7 +350,19 @@ export function qualify({
     node: process.version,
     cases: [],
     proof: 'installed-artifact subprocess fixtures; native harness activation is separate',
+    persistentCustodyVerified: false,
+    qualifierSha256: hash(fs.readFileSync(fileURLToPath(import.meta.url))),
   };
+  const custody = { guards: [], renderers: [] };
+  const expectations = {
+    pointer: path.join(env.CAWS_HOME, 'state/adapter-runtime.json'),
+    launcher: path.join(env.CAWS_HOME, 'bin/caws-hook'),
+    guards: [],
+    renderers: [],
+  };
+  const saveCustody = () =>
+    write(path.join(evidenceRoot, 'custody.json'), JSON.stringify(custody, null, 2) + '\n');
+  const capture = (file, name) => captureQualificationFile(file, evidenceRoot, name);
   try {
     step('install published baseline and materialize stock/custom projects');
     run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', baseline], consumer, env);
@@ -332,6 +490,13 @@ export function qualify({
       );
     }
     const blank = () => ({ disabled: {}, extensions: {}, handlers: {}, libraries: {} });
+    const protectedTarget = (f) =>
+      path.join(
+        f.repo,
+        f.surface === 'codex' ? '.codex' : '.claude',
+        'hooks/qualification-probe.sh'
+      );
+    const sentinel = (f) => `qualification-owned-sentinel:${f.name}\n`;
     // Mixed fleet: user transport defers while baseline native hooks remain.
     const hook = (f, event, extra = {}, runtimeEnv = {}) =>
       observedSpawn(
@@ -347,17 +512,40 @@ export function qualify({
             session_id: `qualification-${f.name}`,
             tool_name: 'Write',
             tool_input: {
-              file_path: path.join(
-                f.repo,
-                f.surface === 'codex' ? '.codex' : '.claude',
-                'hooks/qualification-probe.sh'
-              ),
+              file_path: protectedTarget(f),
               content: 'forbidden fixture write',
             },
             ...extra,
           }),
         }
       );
+    const guardedProof = (f, id, digest) => {
+      const scenario = {
+        id,
+        surface: f.surface,
+        cwd: f.cwd ?? f.repo,
+        sessionId: `qualification-${f.name}`,
+        target: protectedTarget(f),
+        sentinel: sentinel(f),
+        digest,
+      };
+      expectations.guards.push(scenario);
+      const before = capture(scenario.target, `${id}-before.bin`);
+      const runtimeBefore = capture(expectations.pointer, `${id}-runtime-before.json`);
+      const result = hook(f, 'pre_tool_use');
+      const after = capture(scenario.target, `${id}-after.bin`);
+      const runtimeAfter = capture(expectations.pointer, `${id}-runtime-after.json`);
+      custody.guards.push({
+        id,
+        before,
+        after,
+        runtimeBefore,
+        runtimeAfter,
+        receipt: result.qualificationReceipt,
+      });
+      saveCustody();
+      return result;
+    };
     const deferred = hook(fixtures[0], 'pre_tool_use');
     assert.equal(deferred.status, 0, deferred.stderr);
     assert.equal(deferred.stdout, '');
@@ -400,7 +588,9 @@ export function qualify({
           path.join(artifacts, `${f.name}-governance.json`),
           JSON.stringify({ before: f.before, after: governance(f.repo) }, null, 2) + '\n'
         );
-      const denial = hook(f, 'pre_tool_use');
+      write(protectedTarget(f), sentinel(f));
+      fs.chmodSync(protectedTarget(f), 0o640);
+      const denial = guardedProof(f, `migrated-${f.name}`, installed.digest);
       assert.equal(
         denial.status,
         2,
@@ -423,7 +613,11 @@ export function qualify({
     // A linked checkout uses canonical policy and session output.
     const linked = path.join(root, 'linked');
     git(fixtures[0].repo, 'worktree', 'add', '-qb', 'linked', linked);
-    const linkedDenial = hook({ ...fixtures[0], cwd: linked }, 'pre_tool_use');
+    const linkedDenial = guardedProof(
+      { ...fixtures[0], cwd: linked },
+      'linked-worktree',
+      installed.digest
+    );
     assert.equal(linkedDenial.status, 2, linkedDenial.stderr);
     report.cases.push({ name: 'linked-worktree', denied: true });
 
@@ -549,15 +743,59 @@ export function qualify({
     assert.notEqual(update.digest, installed.digest);
     for (const f of fixtures.filter((f) => f.surface === 'codex')) {
       const marker = path.join(root, `${f.name}-render-marker`);
-      const denial = hook(f, 'pre_tool_use');
+      const denial = guardedProof(f, `updated-${f.name}`, update.digest);
       assert.equal(denial.status, 2);
       assert.match(denial.stderr, /qualification-updated-guard/);
+      // SessionStart renders too. Fresh absent output ties this observation to Stop.
+      const sessionId = `qualification-update-${f.name}`;
+      const turnFile = path.join(f.repo, '.caws/sessions', sessionId, 'turn-001.json');
+      const updatedTranscript = path.join(root, `${f.name}-updated-transcript.jsonl`);
+      const callId = `q-${f.name}`;
+      const updatedPrompt = `${f.name}: ${prompt}`;
+      const output = `Process exited with code 0\nfixture-directory-${f.name}`;
+      const updatedRecords = JSON.parse(JSON.stringify(records));
+      updatedRecords[0].payload.content[0].text = updatedPrompt;
+      updatedRecords[1].payload.call_id = callId;
+      updatedRecords[2].payload.call_id = callId;
+      updatedRecords[2].payload.output = output;
+      write(
+        updatedTranscript,
+        updatedRecords.map((record) => JSON.stringify(record)).join('\n') + '\n'
+      );
+      expectations.renderers.push({
+        id: f.name,
+        surface: f.surface,
+        cwd: f.repo,
+        sessionId,
+        marker,
+        turn: turnFile,
+        transcript: updatedTranscript,
+        prompt: updatedPrompt,
+        callId,
+        output,
+        digest: update.digest,
+      });
+      const markerBefore = capture(marker, `${f.name}-marker-before.bin`);
+      const turnBefore = capture(turnFile, `${f.name}-turn-before.json`);
+      const runtimeBefore = capture(expectations.pointer, `${f.name}-stop-runtime-before.json`);
       const stop = hook(
         f,
         'stop',
-        { transcript_path: transcript },
+        { session_id: sessionId, transcript_path: updatedTranscript },
         { CAWS_QUALIFICATION_RENDER_MARKER: marker }
       );
+      custody.renderers.push({
+        id: f.name,
+        markerBefore,
+        turnBefore,
+        runtimeBefore,
+        runtimeAfter: capture(expectations.pointer, `${f.name}-stop-runtime-after.json`),
+        marker: capture(marker, `${f.name}-render-marker.bin`),
+        turn: capture(turnFile, `${f.name}-updated-turn-001.json`),
+        transcript: capture(updatedTranscript, `${f.name}-updated-transcript.jsonl`),
+        receipt: stop.qualificationReceipt,
+      });
+      saveCustody();
       assert.equal(stop.status, 0, stop.stderr);
       assert.equal(fs.readFileSync(marker, 'utf8'), 'updated-renderer');
       assert.deepEqual(governance(f.repo), f.before);
@@ -570,12 +808,12 @@ export function qualify({
       'protected-paths.sh'
     );
     fs.appendFileSync(activeFile, '\n# corruption control\n');
-    const corrupt = hook(fixtures[0], 'pre_tool_use');
+    const corrupt = guardedProof(fixtures[0], 'corrupt-runtime', update.digest);
     assert.equal(corrupt.status, 2);
     assert.match(corrupt.stderr, /Runtime modified/);
     const rollback = JSON.parse(cli(consumer, 'init', 'adapters', 'rollback', '--json'));
     assert.equal(rollback.digest, installed.digest);
-    const recovered = hook(fixtures[0], 'pre_tool_use');
+    const recovered = guardedProof(fixtures[0], 'rollback-recovered', installed.digest);
     assert.equal(recovered.status, 2);
     assert.doesNotMatch(recovered.stderr, /qualification-updated-guard|Runtime modified/);
     report.cases.push({
@@ -583,6 +821,10 @@ export function qualify({
       twoProjectGuardAndRendererUpdate: true,
       recovered: true,
     });
+    saveCustody();
+    verifyQualificationCustody(evidenceRoot, expectations);
+    report.custody = artifacts ? path.join(artifacts, 'custody.json') : null;
+    report.persistentCustodyVerified = Boolean(artifacts);
     report.ok = true;
     step(`PASS: ${report.cases.length} cases; candidate ${report.tarballSha256}`);
     return report;
