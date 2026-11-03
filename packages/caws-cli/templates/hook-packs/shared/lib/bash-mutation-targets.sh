@@ -1065,6 +1065,8 @@ def roots(node):
         return [node.id]
     if isinstance(node, (ast.Attribute, ast.Subscript)):
         return roots(node.value)
+    if isinstance(node, ast.Starred):
+        return roots(node.value)
     if isinstance(node, (ast.Tuple, ast.List)):
         return [name for item in node.elts for name in roots(item)]
     return []
@@ -1080,6 +1082,17 @@ for node in nodes:
     if isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
         for name in roots(node.target):
             bind(key(node.target, name), node.iter)
+    if isinstance(node, ast.withitem) and node.optional_vars is not None:
+        for name in roots(node.optional_vars):
+            bind(key(node.optional_vars, name), node.context_expr)
+    if isinstance(node, ast.ClassDef):
+        name = key(node, node.name)
+        declared.add(name)
+        uncertain_bindings.add(name)
+    if isinstance(node, ast.ExceptHandler) and node.name is not None:
+        name = key(node, node.name)
+        declared.add(name)
+        uncertain_bindings.add(name)
     if type(node).__name__ == "Match":
         raise ValueError("unmodeled pattern bindings")
     if isinstance(node, (ast.Global, ast.Nonlocal)):
@@ -1113,11 +1126,13 @@ for node in nodes:
                     bind((id(node), parameter.arg), value)
         for child in ast.walk(node):
             tick()
-            if isinstance(child, ast.Return) and child.value is not None and scope(child) is node:
+            if isinstance(child, (ast.Return, ast.Yield, ast.YieldFrom)) and child.value is not None and scope(child) is node:
                 bind(function, child.value)
     if isinstance(node, ast.Lambda):
-        for parameter in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
-            declared.add((id(node), parameter.arg))
+        for parameter in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs,
+                          node.args.vararg, node.args.kwarg]:
+            if parameter is not None:
+                declared.add((id(node), parameter.arg))
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
         if node.func.attr in ("append", "extend", "insert", "update", "setdefault", "__setitem__"):
             for name in roots(node.func.value):
@@ -1154,18 +1169,20 @@ for call in calls:
         pending.append(call.func.value)
     if (isinstance(call.func, ast.Name) and call.func.id == "open") or method == "open":
         receiver = isinstance(call.func, ast.Attribute) and not (
-            isinstance(call.func.value, ast.Name) and call.func.value.id in ("io", "builtins"))
+            isinstance(call.func.value, ast.Name) and call.func.value.id in ("io", "builtins", "os"))
         offset = 0 if receiver else 1
         mode = call.args[offset] if len(call.args) > offset else None
         mode = next((item.value for item in call.keywords if item.arg == "mode"), mode)
         writing = mode is not None and (not isinstance(mode, ast.Constant) or
-            not isinstance(mode.value, str) or any(flag in mode.value for flag in "wax+"))
+            not isinstance(mode.value, str) or not set(mode.value) <= set("rwax+bt") or
+            any(flag in mode.value for flag in "wax+"))
         if writing:
             if receiver:
                 pending.append(call.func.value)
+                pending.extend(call.args)
             elif call.args:
                 pending.append(call.args[0])
-            pending.extend(item.value for item in call.keywords if item.arg == "file")
+            pending.extend(item.value for item in call.keywords if item.arg in ("file", "path"))
 
 seen_nodes = set()
 seen_names = set()
@@ -1188,6 +1205,8 @@ while pending:
         for function, index, parameter in parameters.get(name, []):
             if index == "expanded" or function[1].startswith("__"):
                 raise ValueError("unmodeled parameter binding")
+            if any(definition.decorator_list for definition in functions[function]):
+                raise ValueError("decorated parameter binding")
             names = {name for name, origins in aliases.items() if function in origins}
             if any(isinstance(call.func, ast.Attribute) and call.func.attr == function[1] for call in calls):
                 raise ValueError("method parameter binding")

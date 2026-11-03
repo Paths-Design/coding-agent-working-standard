@@ -187,3 +187,63 @@ test('analysis budget exhaustion retains original literals', () => {
     extract('p.write_text("x")\n# docs/budget-fallback.md\n' + 'a = 1\n'.repeat(9000))
   ).toContain('docs/budget-fallback.md');
 });
+
+test.each([
+  [
+    'context binding',
+    'from contextlib import nullcontext\nwith nullcontext(Path("foreign/context.txt")) as p:\n p.write_text("x")',
+    'foreign/context.txt',
+  ],
+  [
+    'class attribute fallback',
+    'class C:\n p = Path("foreign/class.txt")\nC.p.write_text("x")',
+    'foreign/class.txt',
+  ],
+  [
+    'generator return',
+    'def target():\n yield Path("foreign/generator.txt")\nnext(target()).write_text("x")',
+    'foreign/generator.txt',
+  ],
+  [
+    'lambda expanded fallback',
+    'save = lambda *p: p[0].write_text("x")\nsave(Path("foreign/lambda-expanded.txt"))',
+    'foreign/lambda-expanded.txt',
+  ],
+])('%s retains a target previously visible to the legacy guard', (_, source, target) => {
+  expect(extract('from pathlib import Path\n' + source + '\n')).toContain(target);
+});
+
+test.each([
+  [
+    'expanded assignment',
+    '*p, = [Path("foreign/expanded.txt")]\np[0].write_text("x")',
+    'foreign/expanded.txt',
+  ],
+  [
+    'descriptor open',
+    'import os\nf = os.open("foreign/descriptor.txt", os.O_WRONLY)',
+    'foreign/descriptor.txt',
+  ],
+  [
+    'aliased descriptor open',
+    'import os as files\nf = files.open("foreign/descriptor-alias.txt", files.O_WRONLY)',
+    'foreign/descriptor-alias.txt',
+  ],
+  [
+    'unbound path open',
+    'Path.open(Path("foreign/unbound-open.txt"), "w")',
+    'foreign/unbound-open.txt',
+  ],
+  [
+    'exception binding fallback',
+    'try:\n raise ValueError("foreign/exception.txt")\nexcept ValueError as p:\n Path(p.args[0]).write_text("x")',
+    'foreign/exception.txt',
+  ],
+  [
+    'decorated binding fallback',
+    '@decorate("foreign/decorated.txt")\ndef save(p):\n p.write_text("x")\nsave()',
+    'foreign/decorated.txt',
+  ],
+])('%s retains a possible literal target', (_, source, target) => {
+  expect(extract('from pathlib import Path\n' + source + '\n')).toContain(target);
+});
