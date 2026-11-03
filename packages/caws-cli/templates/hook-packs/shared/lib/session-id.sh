@@ -68,12 +68,13 @@ _CAWS_SESSION_ID_SH_LOADED=1
 #
 # Precedence (CAWS-DEFECT-SESSION-IDENTITY-ENV-SHADOWING-01; mirrors the TS
 # resolver resolve-session.ts so shell + TS agree on identity by construction):
-#   1. the LIVE agent-PID record — the trust ANCHOR. When a start-time-guarded
-#      record for this process exists, it wins over any env/payload
-#      disagreement (it was written under this process; spoofing it requires
-#      owning the PID, and killing the PID kills the agent). A disagreement
-#      with env/payload is surfaced on stderr naming both ids.
-#   2. $1 payload id (harness-stamped stdin session_id)
+#   1. $1 payload id (harness-stamped stdin session_id). A desktop host may
+#      serve several chats under the SAME live process; liveness and process
+#      start time cannot establish which chat issued this native tool call.
+#   2. the LIVE agent-PID record when no payload id is available. It retains
+#      precedence over environment disagreement for callers using the process
+#      correlation bridge. This fallback does not establish per-chat identity
+#      for a shared host whose caller supplies no native identity.
 #   3. the surface-PINNED var: when CAWS_AGENT_SURFACE names the dispatching
 #      platform, that surface's own env var wins and foreign vars cannot
 #      shadow it (a stray CLAUDE_SESSION_ID in a dsh process no longer
@@ -158,12 +159,21 @@ _caws_env_or_payload_id() {
 }
 
 resolve_caws_session_id() {
+  # This argument comes from the native hook envelope, not an agent's shell
+  # environment. Resolve it before consulting process correlation so another
+  # chat sharing the host cannot replace this call's owner or reprieve scope.
+  local payload_id="${1:-}"
+  if [[ -n "$payload_id" && "$payload_id" != "unknown" ]]; then
+    printf '%s\n' "$payload_id"
+    return 0
+  fi
+
   local resolved=""
   resolved="$(_caws_env_or_payload_id "${1:-}")" || resolved=""
 
-  # The agent-PID record tier is the trust anchor: a LIVE, start-time-guarded
-  # record for this process outranks any env/payload disagreement. Kill the
-  # PID and the identity dies with it — that is the whole spoofing defense.
+  # Without a native payload, retain the process bridge and its existing
+  # environment-shadowing defense. A process record cannot override the
+  # per-call identity handled above.
   local _caws_sid_dir="${CAWS_PROJECT_DIR:-}"
   if [[ -z "$_caws_sid_dir" || "$_caws_sid_dir" == "." ]]; then
     local _caws_self="${BASH_SOURCE[0]:-}"
