@@ -539,6 +539,13 @@ describe('complete stock file-tool prewrite handlers', () => {
     });
     fs.mkdirSync(path.dirname(runtime), { recursive: true });
     fs.cpSync(path.join(templates, 'shared'), runtime, { recursive: true });
+    const reviewedGuard = fs.readFileSync(
+      path.join(__dirname, 'fixtures/reviewed-stock/block-dangerous.sh')
+    );
+    expect(crypto.createHash('sha256').update(reviewedGuard).digest('hex')).toBe(
+      '636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5'
+    );
+    fs.writeFileSync(path.join(runtime, 'block-dangerous.sh'), reviewedGuard);
     fs.cpSync(path.join(templates, 'codex/hooks/lib'), path.join(runtime, 'surfaces/codex/lib'), {
       recursive: true,
     });
@@ -992,6 +999,29 @@ describe('complete stock file-tool prewrite handlers', () => {
     expect(prepare()).toBeNull();
     expect(count()).toBe(0);
   });
+
+  test.each(['ten', 'eleven'])(
+    'current rehashed guard cannot inherit the %s-handler file-tool profile',
+    (profile) => {
+      if (profile === 'eleven') actualDefaultPatchProfile();
+      expect(prepare()).not.toBeNull();
+      const handler = selection.handlers.find((entry) => entry.name === 'block-dangerous.sh');
+      const original = fs.readFileSync(handler.path);
+      const originalHash = handler.sha256;
+      try {
+        fs.copyFileSync(path.join(templates, 'shared/block-dangerous.sh'), handler.path);
+        handler.sha256 = sha(handler.path);
+        expect(handler.sha256).not.toBe(originalHash);
+        expect(prepare()).toBeNull();
+        expect(count()).toBe(0);
+        expect(fs.existsSync(path.join(repo, '.caws/leases'))).toBe(false);
+      } finally {
+        fs.writeFileSync(handler.path, original);
+        handler.sha256 = originalHash;
+      }
+      expect(prepare()).not.toBeNull();
+    }
+  );
 
   test.each([
     ['handler order', () => selection.handlers.reverse()],

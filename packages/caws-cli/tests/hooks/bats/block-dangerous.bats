@@ -149,8 +149,9 @@ _cmd_envelope_sid() {
   local sid="opaque-a1-$$"
   run_guard block-dangerous.sh "$(_cmd_envelope_sid "$sid" 'python3 -c "import json; d=json.load(open(\"$ART\"))"')"
   assert_output --partial '"decision": "block"'
-  # the remediation names the sanctioned alternative (write to a file / Read tool)
-  assert_output --partial 'write the probe to a script file'
+  # The remediation offers inspection and review without promising admission.
+  assert_output --partial 'normal guard review'
+  refute_output --partial 'write the probe to a script file'
   assert_output --partial 'NOT armed'
   # the defining property: no session latch sentinel was written for this session
   refute _latch_exists_for "$sid"
@@ -1151,18 +1152,9 @@ _patch_env() {
   refute_output --partial 'on surfaces with kill escalation enabled'
 }
 
-# --- cross-repo remediation consistency ------------------------------------
-# CAWS-GUARD-REMEDIATION-CROSS-REPO-CONSISTENCY-01.
-#
-# The opaque-exec refusal above offers "write the probe to a script file ...
-# and run it by path". For a payload whose write target is inside a DIFFERENT
-# git repository that sentence names a route bash-write-guard refuses, and in
-# session 1aa3f0bd it is the sentence the agent followed: blocked from a direct
-# cross-repo Bash write, it wrote a script to /tmp and ran it by path.
-#
-# A remediation that names a route a sibling guard refuses is worse than no
-# remediation: it reads as authorization, from the guard itself, at the exact
-# moment the agent is looking for a way through.
+# --- opaque-execution remediation -----------------------------------------
+# A path literal is not a proven write operand. The capability refusal remains
+# enforced without inventing foreign writes or promising script-file admission.
 
 # Run the guard with the envelope delivered on stdin from a FILE.
 #
@@ -1196,75 +1188,78 @@ _sibling_repo() {
   printf '%s\n' "$dir"
 }
 
-@test "block-dangerous: an opaque payload WRITING into a sibling repo does not get the script-file route (B1)" {
+@test "block-dangerous: an opaque sibling write stays refused without a script-file route (B1)" {
   local sid="xrepo-b1-$$" sib
   sib="$(_sibling_repo)"
-  # Opaque ($VAR present) AND a python write verb against an absolute path
-  # inside another repository. write_text is used rather than open(...,'w')
-  # because run_guard round-trips the envelope through `bash -c`, which eats
-  # unescaped inner quotes — the open() arm of the write-verb predicate
-  # requires a quoted mode string, so that fixture would fail the predicate
-  # for a quoting reason rather than the behavior under test.
+  # The opaque value keeps this refused even though the path is literal.
   run_guard_stdin block-dangerous.sh \
     "$(_cmd_envelope_sid "$sid" "python3 -c 'import pathlib; pathlib.Path(\"$sib/src/patch.py\").write_text(\$BODY)'")"
   rm -rf "$sib"
   assert_output --partial '"decision": "block"'
-  # The route a sibling guard refuses must not be printed at all.
   refute_output --partial 'write the probe to a script file'
-  # And the refusal must say WHICH repository, so the agent is not left to
-  # guess why the usual remediation is missing — the repo path itself, not
-  # just the category.
-  assert_output --partial 'DIFFERENT git repository'
+  refute_output --partial 'names a write target inside a DIFFERENT git repository'
+  # Preserve the submitted command, without claiming a proven write operand.
   assert_output --partial "$sib"
-  # The replacement route must be the governed one, not a rephrasing hint.
-  assert_output --partial 'make the change from a session rooted in'
+  assert_output --partial 'normal guard review'
   refute _latch_exists_for "$sid"
 }
 
-@test "block-dangerous: an opaque payload writing only in-repo / to scratch KEEPS the script-file route (B2)" {
+@test "block-dangerous: an opaque scratch writer stays refused without a script-file route (B2)" {
   local sid="xrepo-b2-$$"
   run_guard_stdin block-dangerous.sh \
     "$(_cmd_envelope_sid "$sid" 'node -e "require(\"fs\").writeFileSync(\"/tmp/probe-out.txt\", $DATA)"')"
   assert_output --partial '"decision": "block"'
-  # The narrowing is targeted: an ordinary opaque payload still gets the full
-  # remediation. Without this, B1 would also pass if the option were deleted
-  # unconditionally.
-  assert_output --partial 'write the probe to a script file'
+  refute_output --partial 'write the probe to a script file'
+  assert_output --partial 'normal guard review'
   refute _latch_exists_for "$sid"
 }
 
-@test "block-dangerous: an opaque payload only READING a sibling repo keeps the script-file route (B3)" {
+@test "block-dangerous: an opaque sibling reader gets inspection guidance without a write claim (B3)" {
   local sid="xrepo-b3-$$" sib
   sib="$(_sibling_repo)"
-  # A cross-repo READ is not a route any guard refuses, so suppressing the
-  # remediation here would be over-blocking dressed as safety.
   run_guard_stdin block-dangerous.sh \
     "$(_cmd_envelope_sid "$sid" "python3 -c 'print(open(\"$sib/README.md\").read(), \$N)'")"
   rm -rf "$sib"
   assert_output --partial '"decision": "block"'
-  assert_output --partial 'write the probe to a script file'
+  refute_output --partial 'write the probe to a script file'
+  refute_output --partial 'names a write target inside a DIFFERENT git repository'
+  assert_output --partial 'read-only inspection'
   refute _latch_exists_for "$sid"
 }
 
-@test "block-dangerous: the general remediation states a script file's write targets are adjudicated identically (B4)" {
+@test "block-dangerous: the remediation requires normal review and an admitted script profile (B4)" {
   local sid="xrepo-b4-$$"
   run_guard_stdin block-dangerous.sh "$(_cmd_envelope_sid "$sid" 'python3 -c "print($X)"')"
   assert_output --partial '"decision": "block"'
-  # The detector cannot see a target computed at runtime, so the general text
-  # must be correct on its own: the script-file route is a way to make the
-  # payload INSPECTABLE, never a way to reach a target the direct write could
-  # not reach.
-  assert_output --partial 'adjudicated exactly as a direct write'
+  assert_output --partial 'normal guard review'
+  assert_output --partial 'script file also requires an admitted execution profile'
+  refute_output --partial 'write the probe to a script file'
+  refute _latch_exists_for "$sid"
 }
 
 @test "block-dangerous: with the shared target lib missing, the script-file route is NOT printed (B5)" {
   local sid="xrepo-b5-$$"
-  # Fail toward the conservative text. A guard that cannot run the cross-repo
-  # detector must not print the sentence the detector exists to suppress —
-  # otherwise removing a lib silently restores the defect.
+  # Refusal guidance does not depend on the legacy path-literal detector.
   run_guard_missing_lib block-dangerous.sh bash-mutation-targets.sh \
     "$(_cmd_envelope_sid "$sid" 'python3 -c "print($X)"')"
   # The block itself is unaffected; only the remediation narrows.
   assert_output --partial '"decision": "block"'
   refute_output --partial 'write the probe to a script file'
+  assert_output --partial 'normal guard review'
+  refute _latch_exists_for "$sid"
+}
+
+@test "block-dangerous: a foreign PATH literal beside an owned writer is not a proven foreign write (B6)" {
+  local sid="xrepo-b6-$$" sib receipt
+  sib="$(_sibling_repo)"
+  receipt="$CAWS_TEST_REPO/opaque-receipt.txt"
+  run_guard_stdin block-dangerous.sh \
+    "$(_cmd_envelope_sid "$sid" "node -e 'const fs = require(\"fs\"); const searchPath = \"$sib/bin\"; fs.writeFileSync(\"$receipt\", \$DATA)'")"
+  rm -rf "$sib"
+  assert_output --partial '"decision": "block"'
+  refute_output --partial 'names a write target inside a DIFFERENT git repository'
+  refute_output --partial 'write the probe to a script file'
+  assert_output --partial 'read-only inspection'
+  refute _latch_exists_for "$sid"
+  [[ ! -e "$receipt" ]]
 }

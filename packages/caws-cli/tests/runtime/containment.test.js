@@ -73,6 +73,13 @@ beforeEach(() => {
   // Preserve the reviewed source cohort before deriving its runtime identity.
   const fixtureTemplates = path.join(root, 'templates');
   fs.cpSync(templates, fixtureTemplates, { recursive: true });
+  const reviewedGuard = fs.readFileSync(
+    path.join(__dirname, 'fixtures/reviewed-stock/block-dangerous.sh')
+  );
+  expect(crypto.createHash('sha256').update(reviewedGuard).digest('hex')).toBe(
+    '636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5'
+  );
+  fs.writeFileSync(path.join(fixtureTemplates, 'shared/block-dangerous.sh'), reviewedGuard);
   const reviewed = fs.readFileSync(
     path.join(__dirname, 'fixtures/reviewed-stock/bash-mutation-targets-pre-linked-identity.sh')
   );
@@ -172,6 +179,36 @@ test('current rehashed mutation library cannot create a reviewed containment cap
   };
   expect(qualifiesForNativeContainment(owner.handler, changedOwner)).toBe(false);
   expect(createContainmentCapability(changedOwner, directory)).toBeNull();
+});
+
+test('current rehashed guard cannot create a reviewed containment capability', () => {
+  expect(qualifiesForNativeContainment(owner.handler, owner)).toBe(true);
+  const original = fs.readFileSync(owner.handler.path);
+  try {
+    fs.copyFileSync(path.join(templates, 'shared/block-dangerous.sh'), owner.handler.path);
+    const sha256 = crypto
+      .createHash('sha256')
+      .update(fs.readFileSync(owner.handler.path))
+      .digest('hex');
+    expect(sha256).not.toBe(owner.handler.sha256);
+    const changedHandler = { ...owner.handler, sha256 };
+    const changedOwner = {
+      ...owner,
+      handler: changedHandler,
+      selection: {
+        ...owner.selection,
+        handlers: owner.selection.handlers.map((entry) =>
+          entry === owner.handler ? changedHandler : entry
+        ),
+      },
+    };
+    expect(qualifiesForNativeContainment(changedHandler, changedOwner)).toBe(false);
+    expect(createContainmentCapability(changedOwner, directory)).toBeNull();
+  } finally {
+    fs.writeFileSync(owner.handler.path, original);
+  }
+  expect(qualifiesForNativeContainment(owner.handler, owner)).toBe(true);
+  expect(capability()).not.toBeNull();
 });
 
 test('producer latch limit covers successful argv admission and escaped state', () => {

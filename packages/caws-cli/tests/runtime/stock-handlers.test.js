@@ -19,6 +19,8 @@ const reviewedMutationTargets = path.join(
   'fixtures/reviewed-stock/bash-mutation-targets-pre-linked-identity.sh'
 );
 const reviewedMutationHash = 'd545511184b6513b2f40ca5b37d8bf2a45b0914626293f45884df50cc50ef3b5';
+const reviewedGuard = path.join(__dirname, 'fixtures/reviewed-stock/block-dangerous.sh');
+const reviewedGuardHash = '636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5';
 function useCurrentMutationTargets() {
   const library = selection.libraries['bash-mutation-targets.sh'];
   fs.copyFileSync(path.join(templates, 'shared/lib/bash-mutation-targets.sh'), library.path);
@@ -222,6 +224,27 @@ test('current rehashed mutation library does not inherit reviewed native trust',
   expect(qualifiesForNativeContainment(handler, context())).toBe(false);
 });
 
+test('current rehashed guard does not inherit reviewed stock or containment trust', () => {
+  command('echo safe');
+  const handler = select();
+  const original = fs.readFileSync(handler.path);
+  const originalHash = handler.sha256;
+  expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
+  expect(qualifiesForNativeContainment(handler, context())).toBe(true);
+  try {
+    fs.copyFileSync(path.join(templates, 'shared/block-dangerous.sh'), handler.path);
+    handler.sha256 = digest(handler.path);
+    expect(handler.sha256).not.toBe(reviewedGuardHash);
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+    expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+  } finally {
+    fs.writeFileSync(handler.path, original);
+    handler.sha256 = originalHash;
+  }
+  expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
+  expect(qualifiesForNativeContainment(handler, context())).toBe(true);
+});
+
 beforeEach(() => {
   directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-stock-handlers-')));
   runtime = path.join(directory, 'runtime');
@@ -229,6 +252,8 @@ beforeEach(() => {
   fs.mkdirSync(project);
   fs.cpSync(path.join(templates, 'shared'), runtime, { recursive: true });
   // This cohort exercises the existing reviewed native source identity.
+  expect(digest(reviewedGuard)).toBe(reviewedGuardHash);
+  fs.copyFileSync(reviewedGuard, path.join(runtime, 'block-dangerous.sh'));
   expect(digest(reviewedMutationTargets)).toBe(reviewedMutationHash);
   fs.copyFileSync(reviewedMutationTargets, path.join(runtime, 'lib/bash-mutation-targets.sh'));
   for (const name of ['dispatch.sh', 'handler-env.sh'])

@@ -655,7 +655,9 @@ import { isAdapterCoveredSurface } from './types';
 // while matching token expressions without per-line external processes.
 // v128 (CAWS-RELEASE-RC3-001): compare physical Git common directories for
 // external linked checkouts while retaining foreign-repository refusals.
-export const SHARED_PACK_VERSION = 128;
+// v129 (CAWS-RELEASE-RC3-001): opaque refusals do not infer write operands
+// from path mentions or recommend an unadmitted script execution route.
+export const SHARED_PACK_VERSION = 129;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
