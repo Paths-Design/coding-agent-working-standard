@@ -268,3 +268,13 @@ test('record construction used in a file name keeps source fields without unrela
     )
   ).toEqual(['/tmp/owned']);
 });
+
+test.each([
+  'p = Path("foreign/outer-default.txt")\ndef save(p=p):\n p.write_text("x")\nsave()',
+  'q = Path("foreign/outer-default.txt")\ndef save(p=q, q=None):\n p.write_text("x")\nsave()',
+  'def outer(p=Path("foreign/outer-default.txt")):\n def save(p=p):\n  p.write_text("x")\n save()\nouter()',
+])('default expressions resolve in the defining scope: %s', (source) => {
+  expect(extract('from pathlib import Path\n' + source + '\n')).toContain(
+    'foreign/outer-default.txt'
+  );
+});

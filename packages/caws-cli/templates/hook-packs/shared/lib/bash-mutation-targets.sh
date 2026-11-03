@@ -1039,10 +1039,18 @@ def tick():
         raise ValueError("work budget")
 
 def scope(node):
+    child = node
     parent = parents.get(id(node))
     while parent is not None:
-        if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.Module)):
+        if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)) and child in parent.body:
             return parent
+        if isinstance(parent, ast.Lambda) and child is parent.body:
+            return parent
+        if isinstance(parent, ast.Module):
+            return parent
+        # Defaults, annotations and decorators execute in the defining scope,
+        # rather than the new function scope that receives the arguments.
+        child = parent
         parent = parents.get(id(parent))
     return tree
 
