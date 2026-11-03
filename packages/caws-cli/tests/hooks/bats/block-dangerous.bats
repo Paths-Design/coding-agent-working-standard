@@ -1238,15 +1238,25 @@ _sibling_repo() {
 }
 
 @test "block-dangerous: with the shared target lib missing, the script-file route is NOT printed (B5)" {
-  local sid="xrepo-b5-$$"
+  local sid="xrepo-b5-$$" control_sid="xrepo-b5-control-$$"
+  # Seed inert latch data only in the disposable copy after guard execution.
+  # Looking at the original fixture or after cleanup cannot observe this control.
+  run_guard_missing_lib block-dangerous.sh bash-mutation-targets.sh \
+    "$(_cmd_envelope_sid "$control_sid" 'python3 -c "print($X)"')" \
+    "$control_sid" seed-observation-control
+  assert_output --partial '"decision": "block"'
+  [[ "$CAWS_MISSING_LIB_LATCH_OBSERVATION" == present ]]
+  printf 'copied fixture seeded latch: %s\n' "$CAWS_MISSING_LIB_LATCH_OBSERVATION"
+  refute _latch_exists_for "$control_sid"
   # Refusal guidance does not depend on the legacy path-literal detector.
   run_guard_missing_lib block-dangerous.sh bash-mutation-targets.sh \
-    "$(_cmd_envelope_sid "$sid" 'python3 -c "print($X)"')"
+    "$(_cmd_envelope_sid "$sid" 'python3 -c "print($X)"')" "$sid"
   # The block itself is unaffected; only the remediation narrows.
   assert_output --partial '"decision": "block"'
   refute_output --partial 'write the probe to a script file'
   assert_output --partial 'normal guard review'
-  refute _latch_exists_for "$sid"
+  [[ "$CAWS_MISSING_LIB_LATCH_OBSERVATION" == absent ]]
+  printf 'copied fixture opaque refusal latch: %s\n' "$CAWS_MISSING_LIB_LATCH_OBSERVATION"
 }
 
 @test "block-dangerous: a foreign PATH literal beside an owned writer is not a proven foreign write (B6)" {

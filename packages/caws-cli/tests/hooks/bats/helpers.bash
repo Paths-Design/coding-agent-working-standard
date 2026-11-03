@@ -157,14 +157,20 @@ run_guard() {
 # (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001 — a guard that sources a missing lib
 # under `set -euo pipefail` must NOT silently die / fail open).
 #
-# Usage: run_guard_missing_lib <guard-basename.sh> <lib-basename.sh> <envelope-json>
+# Usage: run_guard_missing_lib <guard-basename.sh> <lib-basename.sh> <envelope-json> [latch-session] [seed-observation-control]
+# An optional session captures latch presence inside the copy before cleanup.
+# The control seeds inert fixture data after guard execution to test observation.
 #
 # The copy is per-invocation and torn down by the next mktemp/teardown of the
 # OS temp dir; the shared per-file install (CAWS_TEST_HOOKS_DIR) is never
 # mutated, so other tests in the file see the complete pack.
 run_guard_missing_lib() {
   local guard="$1" missing_lib="$2" envelope="$3"
-  local broken_repo broken_hooks
+  local broken_repo broken_hooks latch_paths
+  CAWS_MISSING_LIB_LATCH_OBSERVATION="not-requested"
+  if [[ -n "${4:-}" ]]; then
+    case "$4" in *[!a-zA-Z0-9_-]*) return 1 ;; esac
+  fi
   broken_repo="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-broken-XXXXXX")"
   # Copy the whole installed .caws tree so vendor/state paths resolve, then
   # remove exactly the one lib under test.
@@ -177,6 +183,20 @@ run_guard_missing_lib() {
     HOOK_CWD="$broken_repo" \
     bash -c 'cd "$1" && printf "%s" "$2" | bash "$3"' _ \
     "$broken_repo" "$envelope" "$broken_hooks/$guard"
+  if [[ -n "${4:-}" ]]; then
+    CAWS_MISSING_LIB_LATCH_OBSERVATION="unobserved"
+    if [[ "${5:-}" == seed-observation-control ]]; then
+      mkdir -p "$broken_repo/.caws/observation-control"
+      printf '{}\n' > "$broken_repo/.caws/observation-control/danger-latch-${4}.json"
+    fi
+    if latch_paths="$(find "$broken_repo" -name "danger-latch-${4}.json" -print)"; then
+      if [[ -n "$latch_paths" ]]; then
+        CAWS_MISSING_LIB_LATCH_OBSERVATION="present"
+      else
+        CAWS_MISSING_LIB_LATCH_OBSERVATION="absent"
+      fi
+    fi
+  fi
   rm -rf "$broken_repo"
 }
 
