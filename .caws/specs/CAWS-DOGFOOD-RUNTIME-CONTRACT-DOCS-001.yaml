@@ -1,9 +1,11 @@
 id: CAWS-DOGFOOD-RUNTIME-CONTRACT-DOCS-001
 title: 'Document runtime invocation, qualification and evidence contracts learned from dogfood'
 mode: doc
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Documentation and repair strategy completed at 19895e956 on caws/dogfood-runtime-docs: six existing architecture, doctrine, philosophy and contributor documents updated; A1-A3 evidence recorded and read back with matching events. Source checks cover formatting, metadata, twelve local references, unchanged generated block, whitespace, normal commit hooks and six-path CAWS gate basis. Independent peer finding about whole-projected-spec verification was grounded and corrected in the guidance; pending-criterion execution scoping is proposed runtime work. Branch remains unmerged and unpushed; no runtime implementation or native adoption claim. Next runtime work is guarded caller/CLI parity reproduction, pending-criterion verification and citation feedback, plus isolated replay of existing AST profiles. Trusted producer fact delivery remains required for complete native qualification and does not block independent in-repo repairs.'
 created_at: '2026-11-02T14:11:31.913Z'
-updated_at: '2026-11-02T14:11:31.913Z'
+updated_at: '2026-11-02T14:51:21.516Z'
 created_by_session: '01a19c55-c310-7340-95ca-ecbaa3531b22'
 blast_radius:
   modules:
@@ -42,3 +44,19 @@ rollback:
   - 'Revert the isolated documentation commit; runtime behavior and machine settings are unchanged'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Source-inspected architecture and doctrine at 19895e956 distinguish trusted host facts, caller identity, installed versus source analysis, bounded interpreter profiles and citation semantics. Repair matrix includes owned admission plus hostile controls and keeps producer-unavailable work independent. Current source behavior is separated from proposed repairs; no native qualification or runtime implementation claim. This spec has no executable test citations; mechanical verification checks commit identity only."
+    recorded_at: "2026-11-02T14:48:17.189Z"
+    commit_sha: "19895e9565340952b292998b57553c5ff3ef2354"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected coding-rigor and both contributor guide examples against specs.ts verifyPendingEvidence, kernel rederivation planning and store artifact/test consumers. Manual recording omits --verify; generated logs stay ignored in narrative references; tracked artifact paths are repository-relative. Existing whole-spec test execution during --verify is explicitly disclosed and pending-criterion scoping is a planned repair. Peer finding grounded and corrected in a separate commit; citation verification is not criterion proof."
+    recorded_at: "2026-11-02T14:48:18.495Z"
+    commit_sha: "19895e9565340952b292998b57553c5ff3ef2354"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Scoped checks exited zero: formatting of five non-generator-owned docs; metadata of all six changed docs; twelve new local file/anchor references; one generator-owned integration-guide block preserved byte-identically; git diff --check. Final normal commit hook passed. CAWS gates evaluated six committed paths from base 12d9f572 with all five dispositions PASS at 19895e956. Raw commands/results retained in task transcript; headers unchanged by review correction. No runtime tests or native behavior are established by these doc checks."
+    recorded_at: "2026-11-02T14:48:20.027Z"
+    commit_sha: "19895e9565340952b292998b57553c5ff3ef2354"

@@ -21,6 +21,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 import { err, ok, type Result } from '../kernel';
 
@@ -100,8 +101,16 @@ function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolea
     const stat = fs.fstatSync(lockFd, { bigint: true });
     if (!stat.isFile() || stat.size > 4096n) return false;
     if (Date.now() - Number(stat.mtimeMs) <= staleThresholdMs) return false;
-    const metadata = JSON.parse(fs.readFileSync(lockFd, 'utf8')) as { pid?: unknown };
-    if (!Number.isSafeInteger(metadata.pid) || (metadata.pid as number) <= 0) return false;
+    const metadata = JSON.parse(fs.readFileSync(lockFd, 'utf8')) as {
+      pid?: unknown;
+      hostname?: unknown;
+    };
+    if (
+      !Number.isSafeInteger(metadata.pid) ||
+      (metadata.pid as number) <= 0 ||
+      (metadata.hostname !== undefined && metadata.hostname !== os.hostname())
+    )
+      return false;
     try {
       process.kill(metadata.pid as number, 0);
       return false;
@@ -128,7 +137,7 @@ function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolea
  *
  * The lock is held by the existence of `<cawsDir>/state.lock`. Concurrent
  * callers retry up to `maxAttempts` with `retryDelayMs` between attempts.
- * Aged locks are reclaimed only when their recorded PID is demonstrably dead.
+ * Aged locks are reclaimed only when their recorded local PID is demonstrably dead.
  * Unknown ownership and abandoned reclaimer files fail closed. This protocol
  * assumes no external replacement of the held lock or reclaimer pathname.
  */
@@ -151,6 +160,7 @@ export function acquireLifecycleLock(
           fd,
           JSON.stringify({
             pid: process.pid,
+            hostname: os.hostname(),
             at: new Date().toISOString(),
             purpose: 'lifecycle-mutation',
           })

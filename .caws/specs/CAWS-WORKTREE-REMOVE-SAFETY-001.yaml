@@ -1,0 +1,73 @@
+id: CAWS-WORKTREE-REMOVE-SAFETY-001
+title: 'Preflight Git metadata before worktree removal and recover missing checkouts'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Directory-wide sandbox-denial preflight, targeted orphan Git cleanup, honest teardown diagnostics, and long-removal lock safety verified at a7c47e2ca; 202 targeted tests, strict compilation, scoped lint and all CAWS gates passed. Actual sandbox EPERM refused before checkout deletion. Per-entry ACL completeness, atomic Git deletion, full-suite and installed-runtime activation are not claimed.'
+created_at: '2026-11-02T16:39:03.085Z'
+updated_at: '2026-11-02T19:07:48.399Z'
+created_by_session: '01a19d1c-1d90-7833-92d2-38c5735da9e2'
+blast_radius:
+  modules:
+    - 'Worktree destroy and post-merge teardown'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/src/store/worktree-removal.ts'
+    - 'packages/caws-cli/tests/store/worktree-removal-safety.test.js'
+    - 'packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js'
+    - packages/caws-cli/src/store/lifecycle-lock.ts
+    - packages/caws-cli/tests/store/lifecycle-lock-owner.test.js
+    - packages/caws-cli/mutation-policy.json
+  out: []
+invariants:
+  - 'Ownership, dirty checkout, merged-branch and canonical authority checks remain enforced'
+  - 'No success or destroyed audit is emitted while target Git metadata remains registered'
+acceptance:
+  - id: A1
+    given: >-
+      an owned clean merged worktree with directory-wide Git metadata write denial,
+      including the native sandbox restriction
+    when: 'destroy runs'
+    then: >-
+      real metadata write/delete probes refuse removal before checkout or
+      artifact-link deletion and authority bytes remain unchanged; per-entry
+      deletion ACLs and atomic recursive removal are outside this probe guarantee
+  - id: A2
+    given: 'a missing checkout with retained Git metadata or a removal failure'
+    when: 'destroy is retried or merge teardown fails'
+    then: 'retry removes only the matching Git worktree record and merge output preserves the underlying cause with accurate remaining state'
+  - id: A3
+    given: 'a valid owned merged checkout'
+    when: 'removal runs'
+    then: 'real Git removes the checkout and metadata without a short kill timeout and lifecycle safeguards continue to refuse dirty or foreign work'
+observability:
+  - 'Diagnostics report preflight or removal phase, checkout state and exact underlying Git error'
+rollback:
+  - 'Revert the logical source commit; retain all failed-removal checkouts and registry bindings for inspection'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected native-sandbox.json and committed-checks.json under canonical .caws/state/worktree-remove-safety: actual Codex sandbox EPERM at canonical .git/worktrees probe refused before deletion, source and registry bytes unchanged, dependency symlink retained. Real chmod admin/parent denial and probe-delete denial tests passed. Directory-wide denial only; existing-entry deletion ACLs and atomic recursive Git deletion unproven."
+    recorded_at: "2026-11-02T19:06:07.612Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --config /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/jest.config.js --runInBand --runTestsByPath /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/lifecycle-lock-owner.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/bridge-store.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/maintenance-authority-lock.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/shell/claim-bridge.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/worktree-removal-safety.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/shell/worktree-merge-split-state.test.js
+    exit_code: 0
+    commit_sha: a7c47e2ca75f657c6078ad729fed761811e51c94
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected committed-checks.json: missing-checkout retry removed its exact Git record despite a different admin basename and preserved another live worktree; denied retry retained authority; default merge output preserved Operation not permitted and observed absent checkout, with merged source retained. Underlying late Git errors remain possible and do not authorize blind restore."
+    recorded_at: "2026-11-02T19:06:08.573Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --config /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/jest.config.js --runInBand --runTestsByPath /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/lifecycle-lock-owner.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/bridge-store.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/maintenance-authority-lock.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/shell/claim-bridge.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/worktree-removal-safety.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/shell/worktree-merge-split-state.test.js
+    exit_code: 0
+    commit_sha: a7c47e2ca75f657c6078ad729fed761811e51c94
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Inspected committed-checks.json at clean a7c47e2ca: strict compilation and eight targeted suites passed202 cases including real removal without short kill deadline, dirty/foreign/locked refusal, rollback/archived-spec/split-state controls, live aged owner retention, dead-owner recovery, concurrent stale reclaimer refusal, and bridge/maintenance authority. Scoped package ESLint and all five CAWS gates passed. Full suite and machine activation not claimed."
+    recorded_at: "2026-11-02T19:06:09.617Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --config /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/jest.config.js --runInBand --runTestsByPath /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/lifecycle-lock-owner.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/bridge-store.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/maintenance-authority-lock.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/shell/claim-bridge.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/worktree-removal-safety.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js /Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/worktree-remove-safety/packages/caws-cli/tests/shell/worktree-merge-split-state.test.js
+    exit_code: 0
+    commit_sha: a7c47e2ca75f657c6078ad729fed761811e51c94

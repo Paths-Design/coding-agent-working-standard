@@ -1,0 +1,61 @@
+id: CAWS-CONTRIBUTOR-LEARNING-SKILL-001
+title: 'Carry contributor findings into bounded repairs and maintained agent guidance'
+mode: doc
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed the project contributor-learning source slice at39904099dbcfb8a5225788fbb316d04d0a6fa321 on clean caws/dogfood-runtime-docs; unmerged and unpushed. Seven owned files add the project skill and entrypoint routes, evidence-backed recursive maintenance procedure, and move17 command contracts from startup into the existing guide. Startup delivery qualified in one tool-free headless Terra observation; two explicitly guided native Sol/Terra cases and independent committed-candidate review inspected. AC A1-A3 manually assessed and dual-writes read back; no test-execution stamps or general performance claim. This slice extends CAWS-DOGFOOD-RUNTIME-CONTRACT-DOCS-001 and does not discharge runtime repair/native release obligations. Next independently executable runtime increment: scope verifyPendingEvidence to the selected criterion before runner planning; retain selected criterion declarations/pending evidence, reject unknown criteria before runner work, test sibling declared and recorded nodes remain idle, preserve whole-spec verify-acs and dual writer, then replay with packaged CLI. Other pending boundaries remain trusted producer workdir/launch facts, caller/generation consistency, effect-analysis replay and citation feedback. Managed-worktree shell refusal retained and shared with release owner via message2484da86-4a31-4f3e-9983-48a75d4462ad; source/global runtime unchanged. Doctor exit1 retains12 errors: unbound active backlog, installed Codex SessionEnd teardown-budget reconciliation, and10 other sessions rooted in removed directories. These do not invalidate direct source manifest/link/format/move checks or the successful scoped CLI gate/evidence transactions; they prevent a clean machine/native qualification claim and require their owning runtime/session work, not cleanup from this documentation slice. No new backlog specs or peer/global state edits. Retain current managed worktree for review and eventual governed integration.'
+created_at: '2026-11-02T16:35:53.302Z'
+updated_at: '2026-11-02T18:56:40.130Z'
+created_by_session: '01a19c55-c310-7340-95ca-ecbaa3531b22'
+blast_radius:
+  modules:
+    - 'Repository agent guidance and contributor workflow'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'AGENTS.md'
+    - 'CLAUDE.md'
+    - 'CONTRIBUTING.md'
+    - 'docs/guides/coding-rigor.md'
+    - '.agents/skills/caws-contributor-learning/**'
+    - docs/agents/full-guide.md
+  out: []
+invariants:
+  - 'Project policy and bound specs retain authority; instruction maintenance grants no exception or global configuration permission'
+  - 'Consequential findings remain attached to the requested consumer outcome without requiring unrelated cleanup or new progress ledgers'
+acceptance:
+  - id: A1
+    given: 'a contributor working in this repository'
+    when: 'the contributor reads the harness entrypoint or contribution guide'
+    then: 'the project skill is reachable and its manifest and references validate without requiring a global installation'
+  - id: A2
+    given: 'an encountered defect or misleading instruction'
+    when: 'the skill is followed'
+    then: 'source applicability, bounded repair, evidence-backed guidance maintenance and a finite stopping condition preserve parent acceptance and authority'
+  - id: A3
+    given: 'the completed skill and representative contributor tasks'
+    when: 'fresh agents use it with relevant raw source'
+    then: 'inspectable decisions distinguish consequential repair from unrelated cleanup and instruction changes from runtime fixes, with evaluation limits retained'
+observability:
+  - 'Keep raw validation and behavioral probe outputs in the current task context; generated logs remain outside source commits'
+rollback:
+  - 'Revert the isolated skill and entrypoint commit without changing installed machine guidance or runtime behavior'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed project skill is reached from AGENTS, CLAUDE and CONTRIBUTING. Real skill-creator validator passed with Python3.11/PyYAML; UI YAML and 13 new local references checked; source frontmatter validator passed for both guides with identical validator bytes. Fresh tool-free headless Terra startup01a19d8d-04a6-7f62-a6b3-f0133a1ef207 named caws-contributor-learning and quoted the actual final AGENTS rule from launch context. Startup source reduced58700 to28652 bytes; all17 moved command contracts and remaining startup prose preserved. This is a bounded discovery/input-delivery observation, not automatic selection or runtime qualification."
+    recorded_at: "2026-11-02T18:44:33.320Z"
+    commit_sha: "39904099dbcfb8a5225788fbb316d04d0a6fa321"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected committed skill and coding-rigor procedure preserve parent consumer acceptance, dependency-based applicability, supported ownership/scope operations, consequential repair obligations, accepted-but-unfinished handoffs and existing task records. Owning-surface table routes source, contracts, examples, skills and transient evidence without granting global configuration permission or exceptions. Recursive instruction improvement requires inspected evidence, affected-case checks and a finite return to the consumer step. Removed CONTRIBUTING demand for a fresh issue on every routine authorized repair. Two grounded dogfood cases distinguish runtime fixes from warnings; independent review reported no material findings. These are source/procedure claims, not enforced runtime guarantees."
+    recorded_at: "2026-11-02T18:44:42.671Z"
+    commit_sha: "39904099dbcfb8a5225788fbb316d04d0a6fa321"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Fresh explicitly guided Sol and Terra agents both read the completed skill and actual source. Sol traced sibling-runner execution before verdict selection and selected a bounded runtime repair retaining whole-spec verify-acs behavior. Terra retained ignored logs in narrative evidence, distinguished manual recording from execution/relevance and required exact doctor dependency evidence before cleanup. Root inspected their returned coordinates against maintained evidence and source. No new rule was supported by those cases. No state was mutated by probes; they are two interpretation observations without an unguided comparison or general model-performance claim. Normal commit hooks and all five CAWS gates passed for7 committed files at39904099; source manifest/format/link/move checks passed."
+    recorded_at: "2026-11-02T18:44:52.054Z"
+    commit_sha: "39904099dbcfb8a5225788fbb316d04d0a6fa321"
