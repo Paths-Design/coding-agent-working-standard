@@ -43,6 +43,7 @@ jobs:
       - run: npm run lint -w @paths.design/caws-cli
       - run: npm test -w @paths.design/caws-cli -- --coverage --maxWorkers=2
         env:
+          CAWS_TEST_EXECUTION_HOST_CENSUS: '1'
           CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
           CAWS_RELEASE_ARTIFACT_DIR: ${{ github.workspace }}/release-scenarios
       - name: Retain coverage evidence

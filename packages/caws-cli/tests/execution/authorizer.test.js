@@ -10,7 +10,7 @@ const {
   executionProfileArguments,
   isExecutionProfileBuiltin,
 } = require('../../dist/execution/authorizer');
-const { image } = require('./authority-fixture');
+const { image, systemImageMetadata } = require('./authority-fixture');
 const { snapshotNpmProject } = require('../../dist/execution/npm-project');
 afterAll(cleanupAll);
 const npmRoots = [];
@@ -1185,6 +1185,16 @@ describe('private authorizer component observations, without USER execution', ()
       const input = path.join(f.lane, 'src/input.txt');
       fs.writeFileSync(input, 'literal data\n');
       const result = await observe(f, command, [utility]);
+      if (process.env.CAWS_TEST_EXECUTION_HOST_CENSUS === '1' && result.decision !== 'allow')
+        console.error(
+          'CAWS system reader refusal: ' +
+            JSON.stringify({
+              command,
+              image: systemImageMetadata(utility),
+              decision: result.decision,
+              reasonCodes: result.reasonCodes,
+            })
+        );
       expect(result.decision).toBe('allow');
       expect(result.reasonCodes).toEqual([]);
       expect(fs.readFileSync(input, 'utf8')).toBe('literal data\n');

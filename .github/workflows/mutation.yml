@@ -62,6 +62,20 @@ jobs:
       - name: Prove tests and mutant discovery
         working-directory: packages/caws-cli
         run: npm run mutation:dry-run -- --surface "${{ matrix.surface }}"
+        env:
+          CAWS_TEST_EXECUTION_HOST_CENSUS: '1'
+
+      - name: Retain harness integrity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-harness-${{ matrix.surface }}-${{ github.sha }}
+          path: |
+            packages/caws-cli/reports/mutation-${{ matrix.surface }}/mutation-report.json
+            packages/caws-cli/reports/mutation-${{ matrix.surface }}/mutation-run.json
+            packages/caws-cli/reports/mutation-${{ matrix.surface }}/runs/
+          if-no-files-found: warn
+          retention-days: 30
 
   mutation:
     name: Mutation (${{ matrix.surface }}, per-file floor)
