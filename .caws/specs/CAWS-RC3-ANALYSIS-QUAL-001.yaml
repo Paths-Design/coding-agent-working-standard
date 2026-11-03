@@ -26,13 +26,17 @@ scope:
     - packages/caws-cli/tests/hooks/pytest/.venv
 invariants:
   - 'Authored source, mutation targets, policy floors and configuration remain unchanged; only root-selected source is qualified.'
-  - 'All dependency caches and generated outputs are physically isolated in the owned lane before provisioning; no parent or peer artifact writes are permitted.'
   - 'No tag, publication, global runtime installation, native identity fabrication or ownership takeover is authorized.'
+  - 'Every writable or consumed prerequisite and generated output is physically isolated in the owned lane before provisioning; no parent or peer artifact writes are permitted. The unused creation-generated Rust target link remains untouched and confers no Rust qualification.'
 acceptance:
   - id: A1
     given: 'a distinct native child session and root-selected source snapshot'
     when: 'the CAWS-owned lane is bound and prepared'
-    then: 'registry owner and source identity are read back and every dependency and output root has verified physical ancestry without shared parent writes'
+    then: >-
+      registry owner and source identity are read back and every writable or
+      consumed dependency and output root has verified physical ancestry without
+      shared parent writes; unused creation-generated artifact links are identified,
+      preserved untouched and excluded from qualification claims
   - id: A2
     given: 'unchanged declared command analysis mutation policy and root-selected snapshot'
     when: 'the full normal analysis campaign completes'
