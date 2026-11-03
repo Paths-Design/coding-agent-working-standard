@@ -349,23 +349,40 @@ test.each([
 
 test('CAS contention retries discovery and preserves the eventual linked checkout refresh', () => {
   const repo = mkRepo('caws-linked-retry-');
-  const { caws } = seedMerge(repo, 'wt-linked-retry', 'LINKED-RETRY-001');
+  const { caws, wt } = seedMerge(repo, 'wt-linked-retry', 'LINKED-RETRY-001');
   const parent = linkedBase(repo);
+  const laneRecord = `worktree ${fs.realpathSync(wt)}`;
   const original = repoRootStore.runGit;
   let attempts = 0;
-  let observations = 0;
+  const observations = [];
   jest.spyOn(repoRootStore, 'runGit').mockImplementation((args, cwd) => {
-    if (args[0] === 'worktree' && args[1] === 'list') observations++;
     if (args[0] === 'update-ref' && ++attempts === 1) {
       return { ok: false, reason: 'cannot lock ref: injected contention' };
     }
-    return original(args, cwd);
+    const result = original(args, cwd);
+    if (args[0] === 'worktree' && args[1] === 'list') {
+      expect(result.ok).toBe(true);
+      observations.push({
+        attempts,
+        records: result.stdout
+          .slice(0, -2)
+          .split('\0\0')
+          .map((record) => record.split('\0')[0]),
+      });
+    }
+    return result;
   });
 
   const data = successful(merge(caws, 'wt-linked-retry'));
 
   expect(attempts).toBe(2);
-  expect(observations).toBe(2);
+  // Discover before each CAS, then preflight and verify physical retirement.
+  expect(observations.map((observation) => observation.attempts)).toEqual([0, 1, 2, 2]);
+  for (const observation of observations.slice(0, 3)) {
+    expect(observation.records).toEqual(expect.arrayContaining([`worktree ${parent}`, laneRecord]));
+  }
+  expect(observations[3].records).toContain(`worktree ${parent}`);
+  expect(observations[3].records).not.toContain(laneRecord);
   expect(data.base_checkout_sync).toEqual([{ path: parent, state: 'in_sync' }]);
   expect(git(parent, ['show', ':payload.txt'])).toBe('lane');
   expect(fs.readFileSync(path.join(parent, 'payload.txt'), 'utf8')).toBe('lane\n');

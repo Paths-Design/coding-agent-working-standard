@@ -547,7 +547,7 @@ describe('mutation policy topology contract', () => {
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
     // The inventory includes execution and all shared inspection decisions.
-    expect(result.stdout).toMatch(/^PASS: 227 source files accounted for exactly once$/m);
+    expect(result.stdout).toMatch(/^PASS: 228 source files accounted for exactly once$/m);
     expect(result.stdout).toMatch(/^PASS: 47 mutation targets across 5 surfaces$/m);
   });
 
