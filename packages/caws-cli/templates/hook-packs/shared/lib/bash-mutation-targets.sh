@@ -992,9 +992,10 @@ caws_foreign_repo_root() {
 CAWS_PY_WRITE_VERBS="\.write_text\(|\.write_bytes\(|os\.(replace|rename|remove|unlink)\(|shutil\.(copyfile|copy|move)\(|open\([^)]*['\"][^'\"]*['\"][[:space:]]*,[[:space:]]*['\"][rwa+bt]*[wax+][rwa+bt]*['\"]"
 CAWS_NODE_WRITE_VERBS="(writeFileSync|appendFileSync|fs\.(writeFile|appendFile|copyFile)|createWriteStream)\(|fs\.(renameSync|unlinkSync|rmSync)\("
 
-# _caws_interp_payload_literals <payload> <verbs_regex>
-#   Emit slash-bearing path fragments from ONE interpreter payload, when and
-#   only when the payload also contains a write verb for that language.
+# _caws_interp_payload_literals <payload> <verbs_regex> [python-file]
+#   Python entry files contribute literals in possible write-path dependencies.
+#   Other payloads and unsupported Python provenance use the conservative
+#   write-verb/path co-occurrence observation.
 #
 #   Co-occurrence is what keeps reads legal: open("<sibling>/x").read() has no
 #   write verb and yields nothing.
@@ -1086,9 +1087,9 @@ for node in nodes:
         for name in roots(node.optional_vars):
             bind(key(node.optional_vars, name), node.context_expr)
     if isinstance(node, ast.ClassDef):
-        name = key(node, node.name)
-        declared.add(name)
-        uncertain_bindings.add(name)
+        # A class value may expose any class-body literal through attributes
+        # or construction. Keep the whole body as potential provenance.
+        bind(key(node, node.name), node)
     if isinstance(node, ast.ExceptHandler) and node.name is not None:
         name = key(node, node.name)
         declared.add(name)
@@ -1120,10 +1121,11 @@ for node in nodes:
                 name = (id(node), parameter.arg)
                 declared.add(name)
                 parameters.setdefault(name, []).append((function, "expanded", parameter.arg))
-        for value in [*node.args.defaults, *node.args.kw_defaults]:
+        defaults = [*zip(positional[len(positional) - len(node.args.defaults):], node.args.defaults),
+                    *zip(node.args.kwonlyargs, node.args.kw_defaults)]
+        for parameter, value in defaults:
             if value is not None:
-                for parameter in [*positional, *node.args.kwonlyargs]:
-                    bind((id(node), parameter.arg), value)
+                bind((id(node), parameter.arg), value)
         for child in ast.walk(node):
             tick()
             if isinstance(child, (ast.Return, ast.Yield, ast.YieldFrom)) and child.value is not None and scope(child) is node:
@@ -1199,7 +1201,7 @@ while pending:
     if isinstance(node, ast.Name) and resolve(node) not in seen_names:
         name = resolve(node)
         if name in uncertain_bindings:
-            raise ValueError("nonlocal target binding")
+            raise ValueError("unsupported target binding: " + name[1])
         seen_names.add(name)
         pending.extend(bindings.get(name, []))
         for function, index, parameter in parameters.get(name, []):

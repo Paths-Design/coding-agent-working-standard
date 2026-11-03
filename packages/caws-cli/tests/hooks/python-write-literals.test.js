@@ -247,3 +247,24 @@ test.each([
 ])('%s retains a possible literal target', (_, source, target) => {
   expect(extract('from pathlib import Path\n' + source + '\n')).toContain(target);
 });
+
+test('path defaults stay attached to their declared parameter', () => {
+  expect(
+    extract(
+      'from pathlib import Path\nclass Record:\n pid: int\ndef save(out, formatting=Record()):\n out.write_text("x")\nsave(Path("/tmp/owned"))\n'
+    )
+  ).toEqual(['/tmp/owned']);
+  expect(
+    extract(
+      'from pathlib import Path\ndef save(out=Path("foreign/default.txt")):\n out.write_text("x")\nsave()\n'
+    )
+  ).toContain('foreign/default.txt');
+});
+
+test('record construction used in a file name keeps source fields without unrelated prose', () => {
+  expect(
+    extract(
+      'from pathlib import Path\nclass Record:\n pid: int\ndef save(out):\n client = Record(123)\n target = out / f"result-{client.pid}.txt"\n target.write_text("x")\n print("See docs/output.md")\nsave(Path("/tmp/owned"))\n'
+    )
+  ).toEqual(['/tmp/owned']);
+});
