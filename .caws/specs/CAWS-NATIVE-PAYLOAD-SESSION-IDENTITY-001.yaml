@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-PAYLOAD-SESSION-IDENTITY-001
 title: 'Preserve native per-chat session identity across shared agent processes'
 mode: fix
-lifecycle_state: active
-worktree: native-payload-identity
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Preserved explicit native per-chat session identity ahead of shared PID correlation in committed 66fe295a6. Source and private installed-runtime suites exercise two chat identities under one live third-chat PID, owner/foreign refusal, reprieve isolation and unchanged fallback controls (9 cases each). All five scoped gates pass. Normal immutable compatibility install activated runtime 7be8065a4c48620937351dc12b9b205ac870d1d1bd553b945e1adb99472aaf36; 113 members verify and only lib/session-id.sh differs. Native owner edits admitted/restored and foreign marker refused with matching runtime/session records; registration hashes unchanged. A1-A3 recorded and dual-read. Retained raw evidence and explicit nonclaims in .caws/state/native-payload-identity/validation.json. No-payload shared-host correlation, separate reprieve CLI policy, full modern runtime contracts and unfinished RC consumer work remain outside this bounded repair.'
 created_at: '2026-11-03T20:54:39.016Z'
-updated_at: '2026-11-03T20:55:07.262Z'
+updated_at: '2026-11-03T21:18:44.374Z'
 created_by_session: '01a19d1c-1d90-7833-92d2-38c5735da9e2'
 blast_radius:
   modules:
