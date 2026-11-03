@@ -397,7 +397,7 @@ impl EngineOwner {
         let result = match self {
             #[cfg(target_os = "macos")]
             Self::Custodied(owner) => owner.pre_creation_failure_until(original, until),
-            Self::Direct(_) => Ok(None),
+            Self::Direct(_) => Ok::<Option<String>, String>(None),
         }?;
         check_until(original, until)?;
         Ok(result)
@@ -428,7 +428,7 @@ impl EngineOwner {
                         io::Error::last_os_error()
                     ));
                 }
-                Ok(unsafe { info.assume_init().si_pid() } != 0)
+                Ok::<bool, String>(unsafe { info.assume_init().si_pid() } != 0)
             }
         }?;
         check_until(original, until)?;
