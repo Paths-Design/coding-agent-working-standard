@@ -14,6 +14,16 @@ const { createHandlerExecutor } = require('../../dist/runtime/handler-executor')
 const classifier = require('../../dist/runtime/classifier');
 const templates = path.resolve(__dirname, '../../templates/hook-packs');
 const digest = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const reviewedMutationTargets = path.join(
+  __dirname,
+  'fixtures/reviewed-stock/bash-mutation-targets-pre-linked-identity.sh'
+);
+const reviewedMutationHash = 'd545511184b6513b2f40ca5b37d8bf2a45b0914626293f45884df50cc50ef3b5';
+function useCurrentMutationTargets() {
+  const library = selection.libraries['bash-mutation-targets.sh'];
+  fs.copyFileSync(path.join(templates, 'shared/lib/bash-mutation-targets.sh'), library.path);
+  library.sha256 = digest(library.path);
+}
 const legacyStartup = {
   'dispatch.sh': {
     sha256: '5f8a185f8b63e601aa29af3431d0ddafedb9a44f45d6a2d9279d32410fc2150f',
@@ -201,12 +211,26 @@ const git = (...args) => {
     maxBuffer: 1024 * 1024,
   });
 };
+test('current rehashed mutation library does not inherit reviewed native trust', () => {
+  command('echo safe');
+  const handler = select();
+  expect(tryExecuteStockHandler(handler, context())).not.toBeNull();
+  expect(qualifiesForNativeContainment(handler, context())).toBe(true);
+  useCurrentMutationTargets();
+  expect(selection.libraries['bash-mutation-targets.sh'].sha256).not.toBe(reviewedMutationHash);
+  expect(tryExecuteStockHandler(handler, context())).toBeNull();
+  expect(qualifiesForNativeContainment(handler, context())).toBe(false);
+});
+
 beforeEach(() => {
   directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-stock-handlers-')));
   runtime = path.join(directory, 'runtime');
   project = path.join(directory, 'project');
   fs.mkdirSync(project);
   fs.cpSync(path.join(templates, 'shared'), runtime, { recursive: true });
+  // This cohort exercises the existing reviewed native source identity.
+  expect(digest(reviewedMutationTargets)).toBe(reviewedMutationHash);
+  fs.copyFileSync(reviewedMutationTargets, path.join(runtime, 'lib/bash-mutation-targets.sh'));
   for (const name of ['dispatch.sh', 'handler-env.sh'])
     fs.copyFileSync(path.join(templates, 'runtime', name), path.join(runtime, name));
   const libraries = {};
@@ -596,7 +620,7 @@ describe('selected stock handler behavior', () => {
   });
 
   test.each(['quiet', 'staged deletion'])(
-    'current guard selected shell and native agree for %s without changing the index',
+    'reviewed guard selected shell and native agree for %s without changing the index',
     async (kind) => {
       fs.writeFileSync(path.join(project, 'owned.txt'), 'owned\n');
       git('add', 'owned.txt');
@@ -641,6 +665,7 @@ describe('selected stock handler behavior', () => {
   ])(
     'current utility %s preserves shell heredoc projection and unchanged files',
     async (_, body) => {
+      useCurrentMutationTargets();
       useBoundPrefixGeneration();
       const policy = path.join(project, 'utility-policy.json');
       fs.writeFileSync(policy, JSON.stringify({ version: 1, ignored_staging: true }));

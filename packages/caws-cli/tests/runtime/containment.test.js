@@ -70,7 +70,17 @@ beforeEach(() => {
   const home = path.join(root, 'home');
   put(path.join(repo, '.caws/policy.yaml'), 'version: 1\n');
   fs.mkdirSync(path.join(repo, '.caws/specs'));
-  const installed = installMachineRuntime({ home, templatesRoot: templates });
+  // Preserve the reviewed source cohort before deriving its runtime identity.
+  const fixtureTemplates = path.join(root, 'templates');
+  fs.cpSync(templates, fixtureTemplates, { recursive: true });
+  const reviewed = fs.readFileSync(
+    path.join(__dirname, 'fixtures/reviewed-stock/bash-mutation-targets-pre-linked-identity.sh')
+  );
+  expect(crypto.createHash('sha256').update(reviewed).digest('hex')).toBe(
+    'd545511184b6513b2f40ca5b37d8bf2a45b0914626293f45884df50cc50ef3b5'
+  );
+  fs.writeFileSync(path.join(fixtureTemplates, 'shared/lib/bash-mutation-targets.sh'), reviewed);
+  const installed = installMachineRuntime({ home, templatesRoot: fixtureTemplates });
   put(path.join(home, 'surfaces/codex/settings.json'), { version: 1, enabled: true });
   put(
     path.join(
@@ -143,6 +153,26 @@ beforeEach(() => {
   put(data.latchPath, latch);
 });
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+test('current rehashed mutation library cannot create a reviewed containment capability', () => {
+  expect(qualifiesForNativeContainment(owner.handler, owner)).toBe(true);
+  const library = owner.selection.libraries['bash-mutation-targets.sh'];
+  fs.copyFileSync(path.join(templates, 'shared/lib/bash-mutation-targets.sh'), library.path);
+  const sha256 = crypto.createHash('sha256').update(fs.readFileSync(library.path)).digest('hex');
+  expect(sha256).not.toBe('d545511184b6513b2f40ca5b37d8bf2a45b0914626293f45884df50cc50ef3b5');
+  const changedOwner = {
+    ...owner,
+    selection: {
+      ...owner.selection,
+      libraries: {
+        ...owner.selection.libraries,
+        'bash-mutation-targets.sh': { ...library, sha256 },
+      },
+    },
+  };
+  expect(qualifiesForNativeContainment(owner.handler, changedOwner)).toBe(false);
+  expect(createContainmentCapability(changedOwner, directory)).toBeNull();
+});
 
 test('producer latch limit covers successful argv admission and escaped state', () => {
   expect(producerLatchReadLimit('1048576\n')).toBe(6324224);
