@@ -539,13 +539,18 @@ describe('complete stock file-tool prewrite handlers', () => {
     });
     fs.mkdirSync(path.dirname(runtime), { recursive: true });
     fs.cpSync(path.join(templates, 'shared'), runtime, { recursive: true });
-    const reviewedGuard = fs.readFileSync(
-      path.join(__dirname, 'fixtures/reviewed-stock/block-dangerous.sh')
-    );
-    expect(crypto.createHash('sha256').update(reviewedGuard).digest('hex')).toBe(
-      '636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5'
-    );
-    fs.writeFileSync(path.join(runtime, 'block-dangerous.sh'), reviewedGuard);
+    // Typed substitution is limited to these reviewed semantics. Newer template
+    // bytes must decline admission until their behavior is qualified separately.
+    // The ownership fixture is the authentic source at 200edef2da345744c4603647858290ca22a2de7d.
+    const reviewedGuards = {
+      'block-dangerous.sh': '636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5',
+      'worktree-write-guard.sh': '737ef2a0b6b6a4b4a87ed65cb2a45e56e81b9c95f0b803d6c076dce6e93c41a9',
+    };
+    for (const [name, expectedSha256] of Object.entries(reviewedGuards)) {
+      const reviewedGuard = fs.readFileSync(path.join(__dirname, 'fixtures/reviewed-stock', name));
+      expect(crypto.createHash('sha256').update(reviewedGuard).digest('hex')).toBe(expectedSha256);
+      fs.writeFileSync(path.join(runtime, name), reviewedGuard);
+    }
     fs.cpSync(path.join(templates, 'codex/hooks/lib'), path.join(runtime, 'surfaces/codex/lib'), {
       recursive: true,
     });
@@ -1000,16 +1005,20 @@ describe('complete stock file-tool prewrite handlers', () => {
     expect(count()).toBe(0);
   });
 
-  test.each(['ten', 'eleven'])(
-    'current rehashed guard cannot inherit the %s-handler file-tool profile',
-    (profile) => {
+  test.each(
+    ['ten', 'eleven'].flatMap((profile) =>
+      ['block-dangerous.sh', 'worktree-write-guard.sh'].map((name) => [profile, name])
+    )
+  )(
+    'current rehashed guard cannot inherit the %s-handler file-tool profile: %s',
+    (profile, name) => {
       if (profile === 'eleven') actualDefaultPatchProfile();
       expect(prepare()).not.toBeNull();
-      const handler = selection.handlers.find((entry) => entry.name === 'block-dangerous.sh');
+      const handler = selection.handlers.find((entry) => entry.name === name);
       const original = fs.readFileSync(handler.path);
       const originalHash = handler.sha256;
       try {
-        fs.copyFileSync(path.join(templates, 'shared/block-dangerous.sh'), handler.path);
+        fs.copyFileSync(path.join(templates, 'shared', name), handler.path);
         handler.sha256 = sha(handler.path);
         expect(handler.sha256).not.toBe(originalHash);
         expect(prepare()).toBeNull();
