@@ -11,6 +11,19 @@ const image = (name) => {
 };
 const renamedRoots = [];
 let reportedHost = false;
+function executionHostDiagnostic(kind, detail) {
+  const line = JSON.stringify({ kind, ...detail }) + '\n';
+  process.stderr.write('CAWS execution host diagnostic: ' + line);
+  // Stryker captures worker stderr at trace level. Retain these opt-in records
+  // in its existing per-run artifact directory independently of that transport.
+  const context = process.env.CAWS_MUTATION_RUN_CONTEXT;
+  if (context)
+    fs.appendFileSync(
+      path.join(path.dirname(context), `execution-host-${process.pid}.jsonl`),
+      line,
+      { mode: 0o600 }
+    );
+}
 function systemImageMetadata(file) {
   try {
     const physical = fs.realpathSync.native(file);
@@ -88,29 +101,25 @@ function reportExecutionHost(root) {
       unparsed: fields.length % 3 !== 0,
     };
   });
-  process.stderr.write(
-    'CAWS execution host census (initial fixture; no configuration values): ' +
-      JSON.stringify({
-        platform: process.platform,
-        arch: process.arch,
-        root,
-        configurations,
-        images: [
-          '/usr/bin/git',
-          '/bin/bash',
-          '/bin/cat',
-          '/usr/bin/grep',
-          '/usr/bin/head',
-          '/usr/bin/tail',
-          '/usr/bin/wc',
-          '/bin/ls',
-          '/usr/bin/cut',
-          '/usr/bin/tr',
-          '/usr/bin/uniq',
-        ].map(systemImageMetadata),
-      }) +
-      '\n'
-  );
+  executionHostDiagnostic('initial-fixture-census-no-configuration-values', {
+    platform: process.platform,
+    arch: process.arch,
+    root,
+    configurations,
+    images: [
+      '/usr/bin/git',
+      '/bin/bash',
+      '/bin/cat',
+      '/usr/bin/grep',
+      '/usr/bin/head',
+      '/usr/bin/tail',
+      '/usr/bin/wc',
+      '/bin/ls',
+      '/usr/bin/cut',
+      '/usr/bin/tr',
+      '/usr/bin/uniq',
+    ].map(systemImageMetadata),
+  });
 }
 function cleanupAll() {
   cleanupRepos();
@@ -208,4 +217,12 @@ function source(fixture, command, utilities = []) {
   fixture.record.profile.utilities = utilities.map(image);
   return fixture.record;
 }
-module.exports = { authorityFixture, cleanupAll, source, hash, image, systemImageMetadata };
+module.exports = {
+  authorityFixture,
+  cleanupAll,
+  source,
+  hash,
+  image,
+  systemImageMetadata,
+  executionHostDiagnostic,
+};
