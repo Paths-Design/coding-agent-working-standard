@@ -1,0 +1,39 @@
+id: CAWS-RC3-EXECUTION-QUAL-001
+title: 'Qualify full execution mutation campaign for root-selected rc.3 candidate'
+mode: chore
+lifecycle_state: draft
+created_at: '2026-11-03T09:52:32.017Z'
+updated_at: '2026-11-03T09:52:32.017Z'
+created_by_session: '01a1a0ce-6ede-7382-86b2-a5a82d3858da'
+blast_radius:
+  modules:
+    - 'Execution mutation verification artifacts'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/reports/mutation-execution'
+  out: []
+invariants:
+  - 'Preserve authored source, tests, mutation policy and floors; execute only the root-selected candidate recorded at explicit campaign GO.'
+  - 'Keep parent Node dependencies, toolchain, caches, dist and license transport untouched; use physically isolated owned artifacts.'
+  - 'No tags, publication, global CLI/runtime installation, guard changes or direct source commits.'
+acceptance:
+  - id: A1
+    given: 'the root-selected candidate at explicit execution GO'
+    when: 'the child verification lane is prepared'
+    then: 'actual child registry ownership, source and dependency identity, and physical artifact ancestry are retained with no parent artifact writes.'
+  - id: A2
+    given: 'the root-approved candidate and required-check readiness'
+    when: 'the normal full execution mutation campaign completes'
+    then: 'every one of the 16 declared execution targets has nonzero mutants and satisfies its unchanged policy per-file floor, with raw logs and input/build/run identity retained.'
+  - id: A3
+    given: 'retained qualification artifacts'
+    when: 'the parent reviews the results'
+    then: 'parent acceptance and remaining nonclaims are established before the child lane or spec is disposed.'
+observability:
+  - 'Retain source/status, owner, artifact-link map, raw preparation and campaign logs, input/build/dependency identity and full per-file report under the child mutation-execution report directory.'
+rollback:
+  - 'Stop on authority or isolation refusal; preserve artifacts and request parent disposition without deleting evidence or altering parent outputs.'
+non_functional: {}
+contracts: []
