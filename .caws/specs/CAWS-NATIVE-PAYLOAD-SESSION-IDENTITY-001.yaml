@@ -1,0 +1,41 @@
+id: CAWS-NATIVE-PAYLOAD-SESSION-IDENTITY-001
+title: 'Preserve native per-chat session identity across shared agent processes'
+mode: fix
+lifecycle_state: active
+worktree: native-payload-identity
+created_at: '2026-11-03T20:54:39.016Z'
+updated_at: '2026-11-03T20:55:07.262Z'
+created_by_session: '01a19d1c-1d90-7833-92d2-38c5735da9e2'
+blast_radius:
+  modules:
+    - 'Native hook session identity and worktree enforcement'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/session-id.sh'
+    - 'packages/caws-cli/tests/hooks/session-id-payload.test.js'
+  out: []
+invariants:
+  - 'A native hook envelope identifies its own chat; a process correlation record must not replace that identity with another chat.'
+  - 'Foreign worktree writes and cross-session reprieve use remain refused; absent-payload PID and environment fallback behavior retains its existing boundary.'
+  - 'Deliver through a new immutable runtime using the normal installer, preserving all active runtime bytes outside the reviewed identity helper and preserving native registration.'
+acceptance:
+  - id: A1
+    given: 'two distinct native chat IDs sharing a live process record for a third chat'
+    when: 'the actual shell resolver and hook consumer run'
+    then: 'each resolves its envelope identity and no PID disagreement substitution occurs.'
+  - id: A2
+    given: 'owned and foreign worktrees plus session-scoped guard state'
+    when: 'hostile guard fixtures run with shared-PID collisions and absent or unknown envelope identity'
+    then: 'owned native calls pass, foreign native calls remain blocked, reprieves do not transfer, and existing fallback and environment-spoof defenses remain exercised.'
+  - id: A3
+    given: 'the qualified committed helper and retained prior runtime'
+    when: 'a normal immutable compatibility installation is activated'
+    then: 'manifest verification shows only the reviewed helper differs, native owner admission and foreign-write refusal identify the selected runtime, and registration hashes are unchanged.'
+observability:
+  - 'Retain source revision, raw baseline failures and checks, active and candidate member hashes, native canaries and lifecycle readback under ignored canonical .caws/state/native-payload-identity before lane teardown.'
+rollback:
+  - 'Use supported machine-runtime rollback to the retained previous immutable digest; preserve native registration and existing project claims.'
+non_functional: {}
+contracts: []

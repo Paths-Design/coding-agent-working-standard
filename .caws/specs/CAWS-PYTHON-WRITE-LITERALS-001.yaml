@@ -1,0 +1,57 @@
+id: CAWS-PYTHON-WRITE-LITERALS-001
+title: 'Separate Python write-path evidence from documentation and output strings'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed bounded legacy Python entry-file literal-path correction at f1291af13. 41 semantic regression tests, nine compatibility/guard qualifications, syntax, lint and all five scoped gates pass; peer counterexamples reproduced and repaired. Installed immutable compatibility runtime11019164 differs from retained43f2 in one helper only; native positive executes, genuine external literal write is refused with11019164 digest, registration hashes unchanged. A1-A3 evidence and ac_recorded events read back. Original Unity command was adjudicated without launching Unity; no rear-rebound physics or complete Python effect/custody claim.'
+created_at: '2026-11-03T18:21:30.637Z'
+updated_at: '2026-11-03T19:26:39.092Z'
+created_by_session: '01a19d1c-1d90-7833-92d2-38c5735da9e2'
+blast_radius:
+  modules:
+    - 'Legacy interpreter write-path evidence and compatible machine-runtime delivery'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh'
+    - 'packages/caws-cli/tests/hooks/python-write-literals.test.js'
+  out: []
+invariants:
+  - 'Real literal write paths retain cross-repository refusal and missing-directory handling; the mandatory modern execution contract is unchanged.'
+  - 'Installed runtime snapshots and native registration are never edited in place; compatibility delivery must retain all other active runtime bytes.'
+acceptance:
+  - id: A1
+    given: 'Python entry scripts containing documentation, read paths and output messages alongside writes'
+    when: 'legacy literal extraction runs'
+    then: 'only literals in possible write-path dependencies become candidates, including assignment and function-argument flows, while malformed or exhausted analysis keeps the conservative fallback.'
+  - id: A2
+    given: 'the active legacy runtime and an isolated candidate with only the reviewed extractor correction'
+    when: 'the original absolute Unity-runner command is adjudicated without launching Unity and hostile literal writes are checked'
+    then: 'the runner has no fabricated documentation-path refusal and actual foreign or unrooted literal mutation targets remain refused.'
+  - id: A3
+    given: 'the qualified compatibility artifact and retained previous runtime'
+    when: 'the normal machine-runtime installer selects the candidate'
+    then: 'selected files differ only in the corrected extractor and actual native admission and refusal observations identify the selected digest without changing native registration.'
+observability:
+  - 'Retain exact source, active and candidate manifest identities, raw extraction and guard checks, and activation before-after receipts outside tracked source.'
+rollback:
+  - 'Use the supported runtime rollback to the retained prior digest if native validation fails.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Source f1291af13 is clean and committed. Actual Python3.9.6 focused suite41 cases exits0, shell syntax and ESLint0; assertions preserve direct, assigned, function/default, context, class, generator, alias, container and fallback targets while excluding unrelated documentation/read/output/data strings. Peer questions were grounded and repaired with real regression controls, including defining-scope defaults. Raw receipts .caws/state/python-write-literals/final-validation.json and transcript. This is bounded legacy literal recognition, not complete Python effect or launch authority; mandatory modern consumer unchanged. Verify below establishes commit existence only; raw execution inspected manually."
+    recorded_at: "2026-11-03T19:18:55.371Z"
+    commit_sha: f1291af13976d61414ee50f62f8519076dcd73d5
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Qualified immutable compatibility runtime11019164b143bdc2201bae384119c4b2f84b457562ec9d4628c3c11dc73dd3c8 via retained normal machine installer. Baseline export reproduces exact active43f2 digest; all113 member hashes verify, exactly lib/bash-mutation-targets.sh differs. Source function and entry-call adapter match f129 exactly, all other helper bytes retained. Nine actual shared-guard checks pass: same complete Unity runner and original refused command under reduced Codex envelope baseline2/candidate0 WITHOUT launching payload; foreign direct/context/class/generator writes remain2; actual relative mutation remains unavailable-native-context2. Exact original runner SHA e351c046ca4e695242870a4afacd9ce7f0de12fa9385b2348799826f8d5f0d4f. Failed earlier87b9 candidate retained and repaired. Runtime fixtures are not actual native activation; A3 remains owed. Verify commit only; raw checks inspected."
+    recorded_at: "2026-11-03T19:18:56.368Z"
+    commit_sha: f1291af13976d61414ee50f62f8519076dcd73d5
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Normal retained machine installer selected immutable 11019164b143bdc2201bae384119c4b2f84b457562ec9d4628c3c11dc73dd3c8 with previous43f2 retained. All113 members verify; only legacy helper differs as qualified under A2. Actual native Python entry-file prose/default positive canary exit0 and marker readback. Corrected genuine external disposable Git-repository canary was blocked before launch by PreToolUse with selected11019164 digest and exit2; sentinel absent. Initial nested-project canary was invalid for foreign-boundary testing because existing predicate excludes project descendants; execution retained in raw receipt. Effective hooks/config/bootstrap/surface settings hashes unchanged. Global CLI symlink unchanged. Raw global installer, canaries and before-after hashes retained in .caws/state/python-write-literals/final-validation.json. No Unity launched; no complete Python effect/custody claim. Verify commit existence only; actual outputs and member hashes inspected manually."
+    recorded_at: "2026-11-03T19:26:02.986Z"
+    commit_sha: f1291af13976d61414ee50f62f8519076dcd73d5

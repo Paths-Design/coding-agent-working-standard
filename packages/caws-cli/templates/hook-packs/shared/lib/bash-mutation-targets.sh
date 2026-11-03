@@ -1015,9 +1015,10 @@ caws_foreign_repo_root() {
 CAWS_PY_WRITE_VERBS="\.write_text\(|\.write_bytes\(|os\.(replace|rename|remove|unlink)\(|shutil\.(copyfile|copy|move)\(|open\([^)]*['\"][^'\"]*['\"][[:space:]]*,[[:space:]]*['\"][rwa+bt]*[wax+][rwa+bt]*['\"]"
 CAWS_NODE_WRITE_VERBS="(writeFileSync|appendFileSync|fs\.(writeFile|appendFile|copyFile)|createWriteStream)\(|fs\.(renameSync|unlinkSync|rmSync)\("
 
-# _caws_interp_payload_literals <payload> <verbs_regex>
-#   Emit slash-bearing path fragments from ONE interpreter payload, when and
-#   only when the payload also contains a write verb for that language.
+# _caws_interp_payload_literals <payload> <verbs_regex> [python-file]
+#   Python entry files contribute literals in possible write-path dependencies.
+#   Other payloads and unsupported Python provenance use the conservative
+#   write-verb/path co-occurrence observation.
 #
 #   Co-occurrence is what keeps reads legal: open("<sibling>/x").read() has no
 #   write verb and yields nothing.
@@ -1027,7 +1028,253 @@ CAWS_NODE_WRITE_VERBS="(writeFileSync|appendFileSync|fs\.(writeFile|appendFile|c
 #   loses the real literal. A fragment reads the same in a script file, a
 #   heredoc body, and a nested inline quote.
 _caws_interp_payload_literals() {
-  local payload="$1" verbs_re="$2" frag
+  local payload="$1" verbs_re="$2" frag narrowed
+  # Only entry-file bytes are a complete Python program. Inline shell text
+  # retains the legacy conservative scan. This extracts diagnostic literals,
+  # not a readonly/effect proof or an execution grant: computed targets remain
+  # the legacy recognizer's explicit limitation. Modern admission uses the
+  # mandatory typed effect contract above, never this compatibility path.
+  if [[ "${3:-}" == python-file ]]; then
+    if narrowed="$(printf '%s' "$payload" | python3 -c '
+import ast
+import sys
+
+source = sys.stdin.read(524289)
+if len(source.encode("utf-8")) > 524288:
+    raise ValueError("source budget")
+tree = ast.parse(source)
+nodes = list(ast.walk(tree))
+if len(nodes) > 32768:
+    raise ValueError("node budget")
+parents = {id(child): node for node in nodes for child in ast.iter_child_nodes(node)}
+bindings = {}
+parameters = {}
+functions = {}
+calls = [node for node in nodes if isinstance(node, ast.Call)]
+declared = set()
+uncertain_bindings = set()
+steps = 0
+
+def tick():
+    global steps
+    steps += 1
+    if steps > 262144:
+        raise ValueError("work budget")
+
+def scope(node):
+    child = node
+    parent = parents.get(id(node))
+    while parent is not None:
+        if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)) and child in parent.body:
+            return parent
+        if isinstance(parent, ast.Lambda) and child is parent.body:
+            return parent
+        if isinstance(parent, ast.Module):
+            return parent
+        # Defaults, annotations and decorators execute in the defining scope,
+        # rather than the new function scope that receives the arguments.
+        child = parent
+        parent = parents.get(id(parent))
+    return tree
+
+def key(node, name):
+    return (id(scope(node)), name)
+
+def resolve(node):
+    owner = scope(node)
+    while True:
+        candidate = (id(owner), node.id)
+        if candidate in declared or owner is tree:
+            return candidate
+        owner = scope(owner)
+
+def bind(name, value):
+    declared.add(name)
+    bindings.setdefault(name, []).append(value)
+
+def roots(node):
+    if isinstance(node, ast.Name):
+        return [node.id]
+    if isinstance(node, (ast.Attribute, ast.Subscript)):
+        return roots(node.value)
+    if isinstance(node, ast.Starred):
+        return roots(node.value)
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return [name for item in node.elts for name in roots(item)]
+    return []
+
+for node in nodes:
+    tick()
+    if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if node.value is not None:
+            for target in targets:
+                for name in roots(target):
+                    bind(key(target, name), node.value)
+    if isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+        for name in roots(node.target):
+            bind(key(node.target, name), node.iter)
+    if isinstance(node, ast.withitem) and node.optional_vars is not None:
+        for name in roots(node.optional_vars):
+            bind(key(node.optional_vars, name), node.context_expr)
+    if isinstance(node, ast.ClassDef):
+        # A class value may expose any class-body literal through attributes
+        # or construction. Keep the whole body as potential provenance.
+        bind(key(node, node.name), node)
+    if isinstance(node, ast.ExceptHandler) and node.name is not None:
+        name = key(node, node.name)
+        declared.add(name)
+        uncertain_bindings.add(name)
+    if type(node).__name__ == "Match":
+        raise ValueError("unmodeled pattern bindings")
+    if isinstance(node, (ast.Global, ast.Nonlocal)):
+        for name in node.names:
+            declared.add(key(node, name))
+            uncertain_bindings.add(key(node, name))
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in (
+            "eval", "exec", "globals", "locals", "vars", "setattr", "__import__"):
+        raise ValueError("reflective bindings")
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        function = key(node, node.name)
+        functions.setdefault(function, []).append(node)
+        declared.add(function)
+        positional = [*node.args.posonlyargs, *node.args.args]
+        for index, parameter in enumerate(positional):
+            name = (id(node), parameter.arg)
+            declared.add(name)
+            parameters.setdefault(name, []).append((function, index, parameter.arg))
+        for parameter in node.args.kwonlyargs:
+            name = (id(node), parameter.arg)
+            declared.add(name)
+            parameters.setdefault(name, []).append((function, None, parameter.arg))
+        for parameter in (node.args.vararg, node.args.kwarg):
+            if parameter is not None:
+                name = (id(node), parameter.arg)
+                declared.add(name)
+                parameters.setdefault(name, []).append((function, "expanded", parameter.arg))
+        defaults = [*zip(positional[len(positional) - len(node.args.defaults):], node.args.defaults),
+                    *zip(node.args.kwonlyargs, node.args.kw_defaults)]
+        for parameter, value in defaults:
+            if value is not None:
+                bind((id(node), parameter.arg), value)
+        for child in ast.walk(node):
+            tick()
+            if isinstance(child, (ast.Return, ast.Yield, ast.YieldFrom)) and child.value is not None and scope(child) is node:
+                bind(function, child.value)
+    if isinstance(node, ast.Lambda):
+        for parameter in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs,
+                          node.args.vararg, node.args.kwarg]:
+            if parameter is not None:
+                declared.add((id(node), parameter.arg))
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        if node.func.attr in ("append", "extend", "insert", "update", "setdefault", "__setitem__"):
+            for name in roots(node.func.value):
+                for value in [*node.args, *(keyword.value for keyword in node.keywords)]:
+                    owner = next(item for item in ast.walk(node.func.value)
+                                 if isinstance(item, ast.Name) and item.id == name)
+                    bind(key(owner, name), value)
+
+# Direct callable aliases preserve parameter provenance. Any other escape of
+# a relevant local function falls back to the original over-approximation.
+aliases = {name: {name} for name in functions}
+for unused in range(len(bindings) + 1):
+    changed = False
+    for name, values in bindings.items():
+        tick()
+        for value in values:
+            if isinstance(value, ast.Name) and resolve(value) in aliases:
+                previous = aliases.setdefault(name, set())
+                size = len(previous)
+                previous.update(aliases[resolve(value)])
+                changed |= len(previous) != size
+    if not changed:
+        break
+
+pending = []
+for call in calls:
+    tick()
+    method = call.func.attr if isinstance(call.func, ast.Attribute) else None
+    if method in ("write_text", "write_bytes"):
+        pending.append(call.func.value)
+    if method in ("replace", "rename", "remove", "unlink", "copyfile", "copy", "move"):
+        pending.extend(call.args)
+        pending.extend(keyword.value for keyword in call.keywords)
+        pending.append(call.func.value)
+    if (isinstance(call.func, ast.Name) and call.func.id == "open") or method == "open":
+        receiver = isinstance(call.func, ast.Attribute) and not (
+            isinstance(call.func.value, ast.Name) and call.func.value.id in ("io", "builtins", "os"))
+        offset = 0 if receiver else 1
+        mode = call.args[offset] if len(call.args) > offset else None
+        mode = next((item.value for item in call.keywords if item.arg == "mode"), mode)
+        writing = mode is not None and (not isinstance(mode, ast.Constant) or
+            not isinstance(mode.value, str) or not set(mode.value) <= set("rwax+bt") or
+            any(flag in mode.value for flag in "wax+"))
+        if writing:
+            if receiver:
+                pending.append(call.func.value)
+                pending.extend(call.args)
+            elif call.args:
+                pending.append(call.args[0])
+            pending.extend(item.value for item in call.keywords if item.arg in ("file", "path"))
+
+seen_nodes = set()
+seen_names = set()
+strings = []
+while pending:
+    node = pending.pop()
+    if id(node) in seen_nodes:
+        continue
+    seen_nodes.add(id(node))
+    if len(seen_nodes) > 32768:
+        raise ValueError("dependency budget")
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        strings.append(node.value)
+    if isinstance(node, ast.Name) and resolve(node) not in seen_names:
+        name = resolve(node)
+        if name in uncertain_bindings:
+            raise ValueError("unsupported target binding: " + name[1])
+        seen_names.add(name)
+        pending.extend(bindings.get(name, []))
+        for function, index, parameter in parameters.get(name, []):
+            if index == "expanded" or function[1].startswith("__"):
+                raise ValueError("unmodeled parameter binding")
+            if any(definition.decorator_list for definition in functions[function]):
+                raise ValueError("decorated parameter binding")
+            names = {name for name, origins in aliases.items() if function in origins}
+            if any(isinstance(call.func, ast.Attribute) and call.func.attr == function[1] for call in calls):
+                raise ValueError("method parameter binding")
+            for reference in nodes:
+                tick()
+                if isinstance(reference, ast.Name) and resolve(reference) in names:
+                    parent = parents.get(id(reference))
+                    direct = isinstance(parent, ast.Call) and parent.func is reference
+                    alias = isinstance(parent, ast.Assign) and parent.value is reference
+                    if not direct and not alias:
+                        raise ValueError("function parameter escapes direct calls")
+            for call in calls:
+                tick()
+                if isinstance(call.func, ast.Name) and resolve(call.func) in names:
+                    if any(isinstance(arg, ast.Starred) for arg in call.args) or any(
+                            item.arg is None for item in call.keywords):
+                        raise ValueError("expanded call arguments")
+                    if index is not None and len(call.args) > index:
+                        pending.append(call.args[index])
+                    pending.extend(item.value for item in call.keywords if item.arg == parameter)
+        # Lambda parameters need an invocation model before their source
+        # literals can be narrowed. Unrelated read-only lambdas are harmless.
+        if isinstance(scope(node), ast.Lambda) and name[0] == id(scope(node)):
+            raise ValueError("lambda parameter binding")
+    pending.extend(ast.iter_child_nodes(node))
+sys.stdout.write("\n".join(strings))
+' 2>/dev/null)"; then
+      payload="$narrowed"
+      # Narrowed strings are path dependencies regardless of the spelling of
+      # the original write verb (including keyword open(file=..., mode=...)).
+      verbs_re='.'
+    fi
+    # Missing Python, malformed/truncated input, unsupported call provenance
+    # and exhausted budgets retain the original conservative observation.
+  fi
   grep -qE "$verbs_re" <<< "$payload" || return 0
   while IFS= read -r frag; do
     [[ -z "$frag" ]] && continue
@@ -1098,7 +1345,9 @@ caws_bash_interpreter_write_literals() {
     if [[ -n "$script" ]]; then
       local body=""
       body="$(head -c 524288 "$script" 2>/dev/null || true)"
-      _caws_interp_payload_literals "$body" "$verbs_re"
+      local source_kind=""
+      [[ "$verbs_re" == "$CAWS_PY_WRITE_VERBS" ]] && source_kind=python-file
+      _caws_interp_payload_literals "$body" "$verbs_re" "$source_kind"
     fi
   done
 }
