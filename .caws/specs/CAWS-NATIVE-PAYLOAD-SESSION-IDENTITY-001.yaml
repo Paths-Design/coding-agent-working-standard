@@ -39,3 +39,11 @@ rollback:
   - 'Use supported machine-runtime rollback to the retained previous immutable digest; preserve native registration and existing project claims.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/native-payload-identity/validation.json: source and private installed-runtime 9-case suites; inspected actual shared-PID fixture results. Commit verification checks reachability only, not test execution."
+    recorded_at: "2026-11-03T21:17:27.685Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --runInBand --runTestsByPath tests/hooks/session-id-payload.test.js
+    exit_code: 0
+    commit_sha: "66fe295a6aaa1b56a452dff3ec28d74cd672b943"
