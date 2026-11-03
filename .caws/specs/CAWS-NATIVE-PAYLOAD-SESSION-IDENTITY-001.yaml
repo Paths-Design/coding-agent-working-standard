@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-PAYLOAD-SESSION-IDENTITY-001
 title: 'Preserve native per-chat session identity across shared agent processes'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-payload-identity
 created_at: '2026-11-03T20:54:39.016Z'
-updated_at: '2026-11-03T20:54:39.016Z'
+updated_at: '2026-11-03T20:55:07.262Z'
 created_by_session: '01a19d1c-1d90-7833-92d2-38c5735da9e2'
 blast_radius:
   modules:
