@@ -1,10 +1,11 @@
 id: CAWS-PYTHON-WRITE-LITERALS-001
 title: 'Separate Python write-path evidence from documentation and output strings'
 mode: fix
-lifecycle_state: active
-worktree: python-write-literals
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Completed bounded legacy Python entry-file literal-path correction at f1291af13. 41 semantic regression tests, nine compatibility/guard qualifications, syntax, lint and all five scoped gates pass; peer counterexamples reproduced and repaired. Installed immutable compatibility runtime11019164 differs from retained43f2 in one helper only; native positive executes, genuine external literal write is refused with11019164 digest, registration hashes unchanged. A1-A3 evidence and ac_recorded events read back. Original Unity command was adjudicated without launching Unity; no rear-rebound physics or complete Python effect/custody claim.'
 created_at: '2026-11-03T18:21:30.637Z'
-updated_at: '2026-11-03T18:21:43.244Z'
+updated_at: '2026-11-03T19:26:39.092Z'
 created_by_session: '01a19d1c-1d90-7833-92d2-38c5735da9e2'
 blast_radius:
   modules:
