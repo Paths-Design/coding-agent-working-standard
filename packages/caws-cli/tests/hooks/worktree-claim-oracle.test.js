@@ -679,6 +679,7 @@ describe('scope matcher parity between caws-state.sh and the oracle', () => {
 
 describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directory', () => {
   const SESSION = 'my-session';
+  let guardInvocation = 0;
 
   function git(repo, home, args) {
     const result = spawnSync('git', ['-C', repo, ...args], {
@@ -716,7 +717,18 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
 
   // Mirrors the Bats guard harness: an isolated HOME and CAWS_HOME and a synthetic
   // session, so no real session state, registration or kill authority is borrowed.
-  function runGuard({ repo, home, cli }, command, { writePath, noAsk = false } = {}) {
+  function runGuard(
+    { repo, home, cli },
+    command,
+    {
+      writePath,
+      noAsk = false,
+      surface = 'claude-code',
+      permissionMode = 'default',
+      writeGuardPath = WORKTREE_WRITE_GUARD,
+      sharedLibDirectory = path.join(SHARED, 'lib'),
+    } = {}
+  ) {
     const envelope = JSON.stringify({
       tool_name: writePath ? 'Write' : 'Bash',
       tool_input: writePath
@@ -724,8 +736,9 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
         : { command },
       session_id: SESSION,
       cwd: repo,
+      permission_mode: permissionMode,
     });
-    const result = spawnSync('/bin/bash', [writePath ? WORKTREE_WRITE_GUARD : BASH_WRITE_GUARD], {
+    const result = spawnSync('/bin/bash', [writePath ? writeGuardPath : BASH_WRITE_GUARD], {
       cwd: repo,
       input: envelope,
       encoding: 'utf8',
@@ -735,7 +748,9 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
         CAWS_HOME: path.join(home, '.caws'),
         CAWS_BIN: cli,
         CAWS_PROJECT_DIR: repo,
-        CAWS_AGENT_SURFACE: 'claude-code',
+        CAWS_AGENT_SURFACE: surface,
+        CAWS_MACHINE_RUNTIME: '0',
+        CAWS_SHARED_LIB_DIR: sharedLibDirectory,
         HOOK_CWD: repo,
         HOOK_SESSION_ID: SESSION,
         CLAUDE_CODE_SESSION_ID: SESSION,
@@ -744,6 +759,28 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
       },
     });
     expect(result.error).toBeUndefined();
+    if (process.env.CAWS_CLAIM_ORACLE_ARTIFACT_ROOT) {
+      const root = path.resolve(process.env.CAWS_CLAIM_ORACLE_ARTIFACT_ROOT);
+      fs.mkdirSync(root, { recursive: true });
+      fs.writeFileSync(
+        path.join(root, `guard-${++guardInvocation}.json`),
+        JSON.stringify(
+          {
+            argv: ['/bin/bash', writePath ? writeGuardPath : BASH_WRITE_GUARD],
+            cwd: repo,
+            payload: JSON.parse(envelope),
+            surface,
+            noAsk,
+            status: result.status,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            boundary: 'guard preflight only; the proposed tool is not executed',
+          },
+          null,
+          2
+        ) + '\n'
+      );
+    }
     return result;
   }
 
@@ -795,9 +832,11 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
 
   test.each(
     ['Bash', 'Write'].flatMap((tool) =>
-      ['malformed', 'scalar', 'directory', 'dangling'].map((failure) => [tool, failure])
+      ['malformed', 'scalar', 'directory', 'dangling'].flatMap((failure) =>
+        [false, true].map((noAsk) => [tool, failure, noAsk])
+      )
     )
-  )('%s cannot allowlist a custom payload with %s registry', (tool, failure) => {
+  )('%s cannot allowlist a custom payload with %s registry (noAsk=%s)', (tool, failure, noAsk) => {
     const fixture = makeClaimedRepo();
     const custom = path.join(fixture.repo, 'docs/custom');
     fs.mkdirSync(custom, { recursive: true });
@@ -808,16 +847,126 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
     writeRegistry(fixture.repo, entries);
     damageRegistry(fixture.repo, failure);
     const result = runGuard(fixture, 'touch ' + "'" + target + "'", {
-      noAsk: true,
+      noAsk,
       ...(tool === 'Write' ? { writePath: target } : {}),
     });
-    expect({ status: result.status, stderr: result.stderr }).toEqual(
-      expect.objectContaining({ status: 2 })
-    );
-    expect(result.stderr).toContain('worktree-ownership-registry');
+    if (tool === 'Bash' && !noAsk) {
+      expect(result.status).toBe(0);
+      const decision = JSON.parse(result.stdout).hookSpecificOutput;
+      expect(decision.permissionDecision).toBe('ask');
+      expect(decision.permissionDecisionReason).toContain(
+        'TOOLCHAIN FAULT (worktree-ownership-registry)'
+      );
+    } else {
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('worktree-ownership-registry');
+      expect(result.stdout).toBe('');
+    }
     expect(fs.readFileSync(target, 'utf8')).toBe('foreign entry survives preflight\n');
   });
 
+  test.each([
+    ['claude-code', 'default', false, 'ask'],
+    ['qwen-code', 'default', false, 'ask'],
+    ['dsh', 'default', false, 'ask'],
+    ['zcode', 'default', false, 'ask'],
+    ['claude-code', 'bypassPermissions', false, 'block'],
+    ['claude-code', 'default', true, 'block'],
+    ['codex', 'default', false, 'block'],
+    ['kimi-code', 'default', false, 'block'],
+    ['opencode', 'default', false, 'block'],
+  ])(
+    'unknown registered Write owner on %s mode=%s noAsk=%s requires %s',
+    (surface, permissionMode, noAsk, expected) => {
+      const fixture = makeClaimedRepo();
+      const custom = path.join(fixture.repo, 'docs/custom');
+      fs.mkdirSync(custom, { recursive: true });
+      const target = path.join(custom, 'protected.txt');
+      fs.writeFileSync(target, 'unexecuted unknown-owner write\n');
+      const entries = registryEntry(fixture.repo, 'wt-custom', 'CUSTOM', null);
+      entries['wt-custom'].path = custom;
+      writeRegistry(fixture.repo, entries);
+      const result = runGuard(fixture, '', { writePath: target, surface, permissionMode, noAsk });
+      expect(result.status).toBe(expected === 'ask' ? 0 : 2);
+      if (expected === 'ask') {
+        const decision = JSON.parse(result.stdout).hookSpecificOutput;
+        expect(decision.hookEventName).toBe('PreToolUse');
+        expect(decision.permissionDecision).toBe('ask');
+        expect(decision.permissionDecisionReason).toContain(
+          'ask_uncertain:worktree-payload-no-owner:wt-custom'
+        );
+      } else {
+        expect(result.stdout).toBe('');
+        expect(result.stderr).toContain('ownership could not be confirmed');
+      }
+      expect(fs.readFileSync(target, 'utf8')).toBe('unexecuted unknown-owner write\n');
+    }
+  );
+
+  test('unknown registered Write owner blocks if the selected library has no approval emitter', () => {
+    const fixture = makeClaimedRepo();
+    const custom = path.join(fixture.repo, 'docs/custom');
+    fs.mkdirSync(custom, { recursive: true });
+    const target = path.join(custom, 'protected.txt');
+    fs.writeFileSync(target, 'no emitter cannot admit a write\n');
+    const entries = registryEntry(fixture.repo, 'wt-custom', 'CUSTOM', null);
+    entries['wt-custom'].path = custom;
+    writeRegistry(fixture.repo, entries);
+    const libraries = path.join(fixture.repo, '.claude/hooks/lib');
+    fs.mkdirSync(libraries, { recursive: true });
+    fs.writeFileSync(
+      path.join(libraries, 'emit.sh'),
+      '# no approval emitter in this selected library\n'
+    );
+    const result = runGuard(fixture, '', { writePath: target });
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('ownership could not be confirmed');
+    expect(fs.readFileSync(target, 'utf8')).toBe('no emitter cannot admit a write\n');
+  });
+
+  test.each([
+    'ask_uncertain:\n',
+    'ask_uncertain:reason\npass:owner-self:wt-custom\n',
+    'ask_uncertain:reason\tpoison\n',
+    'not-a-verdict\n',
+    'error_fail_closed:registry\n',
+  ])('malformed or failed ownership response %j cannot request approval', (output) => {
+    const fixture = makeClaimedRepo();
+    const copy = path.join(temporaryDirectory('caws-oracle-response-'), 'shared');
+    fs.cpSync(SHARED, copy, { recursive: true });
+    fs.writeFileSync(
+      path.join(copy, 'lib/worktree-claim-oracle.cjs'),
+      'process.stdout.write(' + JSON.stringify(output) + ');\n'
+    );
+    const target = path.join(fixture.repo, 'docs/protected.txt');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, 'malformed response cannot admit a write\n');
+    const result = runGuard(fixture, '', {
+      writePath: target,
+      writeGuardPath: path.join(copy, 'worktree-write-guard.sh'),
+      sharedLibDirectory: path.join(copy, 'lib'),
+    });
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('blocked');
+    expect(fs.readFileSync(target, 'utf8')).toBe('malformed response cannot admit a write\n');
+  });
+
+  test('registered Write owner is admitted without an approval decision', () => {
+    const fixture = makeClaimedRepo();
+    const custom = path.join(fixture.repo, 'docs/custom');
+    fs.mkdirSync(custom, { recursive: true });
+    const target = path.join(custom, 'protected.txt');
+    fs.writeFileSync(target, 'owned write is only preflighted\n');
+    const entries = registryEntry(fixture.repo, 'wt-custom', 'CUSTOM', SESSION);
+    entries['wt-custom'].path = custom;
+    writeRegistry(fixture.repo, entries);
+    const result = runGuard(fixture, '', { writePath: target });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('');
+    expect(fs.readFileSync(target, 'utf8')).toBe('owned write is only preflighted\n');
+  });
   test.each(['Bash', 'Write'])(
     '%s retains unavailable registered-root observations before canonical allowlists',
     (tool) => {

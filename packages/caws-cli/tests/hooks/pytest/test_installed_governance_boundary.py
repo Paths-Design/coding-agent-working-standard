@@ -56,18 +56,29 @@ class InstalledGovernanceBoundary(unittest.TestCase):
         before = self.foreign.read_bytes()
         for index, command in enumerate([
             f'touch "{self.foreign}"', f'echo "$(touch \'{self.foreign}\')"',
-            f'caws message poll; touch "{self.foreign}"', f'mv "{self.foreign}" owned.txt',
+            f'caws message poll; touch "{self.foreign}"',
+            f'mv "{self.foreign}" .caws/worktrees/mine/owned.txt',
         ]):
             result = self.call('foreign-' + str(index), command=command)
             self.assertEqual(result.returncode, 2, result.stderr)
             self.assertIn(b'DIFFERENT session', result.stderr)
         for index, command in enumerate([
-            f'echo touch "{self.foreign}"', f'cp "{self.foreign}" owned.txt',
+            f'echo touch "{self.foreign}"',
+            f'cp "{self.foreign}" .caws/worktrees/mine/owned.txt',
             'touch .caws/worktrees/mine/owned.txt',
         ]):
             result = self.call('preserved-' + str(index), command=command)
             self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, b'', 'admission must not be an approval request')
+        for operation in ['cp', 'mv']:
+            result = self.call('canonical-transfer-' + operation,
+                               command=f'{operation} "{self.foreign}" owned.txt')
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn(b'Copying files from a worktree to the main repo is forbidden', result.stderr)
+            self.assertEqual(result.stdout, b'')
         self.assertEqual(self.foreign.read_bytes(), before)
+        self.assertFalse((self.repo / 'owned.txt').exists())
+        self.assertFalse((self.repo / '.caws/worktrees/mine/owned.txt').exists())
         self.assertFalse((self.repo / '.caws/leases').exists())
 
     def test_permission_mode_preserves_real_ask_and_blocks_auto_approval(self):
@@ -96,10 +107,21 @@ class InstalledGovernanceBoundary(unittest.TestCase):
                 self.assertEqual(result.returncode, 2, result.stderr)
                 self.assertIn(b'DIFFERENT session', result.stderr)
         for index, command in enumerate(['touch < /dev/null .caws/worktrees/mine/new.txt',
-                                         f'cp "{self.foreign}" > owned.log owned.txt',
+                                         f'cp "{self.foreign}" < /dev/null .caws/worktrees/mine/owned.txt',
                                          f'echo /usr/bin/env touch "{self.foreign}"']):
             result = self.call('argv-preserved-' + str(index), command=command)
             self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, b'', 'admission must not be an approval request')
+        uncertain_copy = f'cp "{self.foreign}" > owned.log owned.txt'
+        prompt = self.call('argv-output-copy-ask', command=uncertain_copy)
+        self.assertEqual(prompt.returncode, 0, prompt.stderr)
+        decision = json.loads(prompt.stdout)['hookSpecificOutput']
+        self.assertEqual(decision['permissionDecision'], 'ask')
+        self.assertIn('copy operand roles are unresolved', decision['permissionDecisionReason'])
+        blocked = self.call('argv-output-copy-block', command=uncertain_copy,
+                            mode='bypassPermissions')
+        self.assertEqual(blocked.returncode, 2, blocked.stderr)
+        self.assertIn(b'copy operand roles are unresolved', blocked.stderr)
         self.assertEqual(self.foreign.read_bytes(), before)
         self.assertFalse((self.repo / 'owned.log').exists(), 'captured commands must remain inert')
 
@@ -127,11 +149,19 @@ class InstalledGovernanceBoundary(unittest.TestCase):
 
     def test_write_payload_uncertainty_and_canonical_claim_from_owned_lane(self):
         self.seed('worktree-write-guard.sh')
+        before = self.foreign.read_bytes()
+        foreign = self.call('known-foreign-payload', path=self.foreign)
+        self.assertEqual(foreign.returncode, 2, foreign.stderr)
+        self.assertIn(b'DIFFERENT session', foreign.stderr)
+        self.assertEqual(foreign.stdout, b'')
         self.registry['foreign'].pop('owner')
         self.registry_path.write_text(json.dumps(self.registry))
         prompt = self.call('unknown-owner-ask', path=self.foreign)
         self.assertEqual(prompt.returncode, 0, prompt.stderr)
-        self.assertIn(b'"ask"', prompt.stdout)
+        decision = json.loads(prompt.stdout)['hookSpecificOutput']
+        self.assertEqual(decision['permissionDecision'], 'ask')
+        self.assertIn('ask_uncertain:worktree-payload-no-owner:foreign',
+                      decision['permissionDecisionReason'])
         blocked = self.call('unknown-owner-block', path=self.foreign, mode='bypassPermissions')
         self.assertEqual(blocked.returncode, 2, blocked.stderr)
         self.assertIn(b'ownership could not be confirmed', blocked.stderr)
@@ -145,6 +175,7 @@ class InstalledGovernanceBoundary(unittest.TestCase):
                              cwd=mine, session='agent-c')
         self.assertEqual(impostor.returncode, 2, impostor.stderr)
         self.assertIn(b'claimed:mine:src/mine/', impostor.stderr)
+        self.assertEqual(self.foreign.read_bytes(), before)
 
     def test_worktree_operations_use_command_positions_including_nested_commands(self):
         self.seed('worktree-guard.sh')

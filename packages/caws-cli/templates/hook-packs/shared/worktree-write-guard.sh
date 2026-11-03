@@ -265,6 +265,21 @@ if [[ -n "$FILE_PATH" ]]; then
       _OWNERSHIP_NAME="${_OWNERSHIP_NAME%%:*}"
       echo "[worktree-write-guard] BLOCKED: this is a write into worktree '$_OWNERSHIP_NAME''s payload, which is owned by a DIFFERENT session." >&2
       exit 2 ;;
+    ask_uncertain:?*)
+      # A typed uncertainty can request a human decision. Failed, empty or
+      # multiline oracle responses cannot establish that approval boundary.
+      if [[ "$_OWNERSHIP_OUT" == *$'\n'* || "$_OWNERSHIP_OUT" == *$'\r'* || "$_OWNERSHIP_OUT" == *$'\t'* ]]; then
+        echo '[worktree-write-guard] invalid ownership oracle response; blocked' >&2
+        exit 2
+      fi
+      _WP_REASON="[worktree-write-guard] This write targets a registered worktree path and ownership could not be confirmed ($_OWNERSHIP_OUT). Approve only if you are the owning session; otherwise route the edit through the owning worktree's session."
+      if [[ "${CAWS_PERMISSION_VOCAB:-deny}" != ask ]] || caws_guard_cannot_ask; then
+        echo "$_WP_REASON" >&2
+        echo "  (approval unavailable or automatically satisfied (mode=${HOOK_PERMISSION_MODE:-default}); blocked)" >&2
+        exit 2
+      fi
+      emit_ask "$_WP_REASON"
+      exit 0 ;;
     *)
       echo "[worktree-write-guard] registered path ownership could not be established ($_OWNERSHIP_OUT); blocked" >&2
       exit 2 ;;

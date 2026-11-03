@@ -657,7 +657,9 @@ import { isAdapterCoveredSurface } from './types';
 // external linked checkouts while retaining foreign-repository refusals.
 // v129 (CAWS-RELEASE-RC3-001): opaque refusals do not infer write operands
 // from path mentions or recommend an unadmitted script execution route.
-export const SHARED_PACK_VERSION = 129;
+// v130: registered Write uncertainty retains configured human approval;
+// foreign ownership, failed observations and unavailable approval refuse.
+export const SHARED_PACK_VERSION = 130;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

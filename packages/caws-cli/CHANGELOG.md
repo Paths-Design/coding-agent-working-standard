@@ -51,6 +51,8 @@ channel.
   common directory when adjudicating Bash mutation targets.
 - Keep opaque-execution refusals without labeling path mentions as proven
   foreign writes or recommending unadmitted script-file execution.
+- Preserve configured approval for registered Write targets with uncertain
+  ownership; foreign owners, invalid responses and unavailable approval refuse.
 - Preserve hook invocation progress, execution context and interrupted-handler
   evidence; handle large audit payloads without broken-pipe noise.
 - Update the shared Python session renderer and accept nullable timestamps emitted
