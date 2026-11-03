@@ -38,3 +38,9 @@ rollback:
   - 'Use the supported runtime rollback to the retained prior digest if native validation fails.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Source f1291af13 is clean and committed. Actual Python3.9.6 focused suite41 cases exits0, shell syntax and ESLint0; assertions preserve direct, assigned, function/default, context, class, generator, alias, container and fallback targets while excluding unrelated documentation/read/output/data strings. Peer questions were grounded and repaired with real regression controls, including defining-scope defaults. Raw receipts .caws/state/python-write-literals/final-validation.json and transcript. This is bounded legacy literal recognition, not complete Python effect or launch authority; mandatory modern consumer unchanged. Verify below establishes commit existence only; raw execution inspected manually."
+    recorded_at: "2026-11-03T19:18:55.371Z"
+    commit_sha: f1291af13976d61414ee50f62f8519076dcd73d5
