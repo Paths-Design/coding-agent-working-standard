@@ -125,7 +125,7 @@ function cleanupAll() {
   cleanupRepos();
   for (const root of renamedRoots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 }
-function authorityFixture({ canonicalLF = false } = {}) {
+function authorityFixture({ canonicalLF = false, laneRelativePath = 'owned\nlane' } = {}) {
   let root = fs.realpathSync.native(makeTempRepo());
   if (canonicalLF) {
     const moved = root + '\n';
@@ -136,7 +136,7 @@ function authorityFixture({ canonicalLF = false } = {}) {
   const initialized = initProject(root);
   if (!initialized.ok) throw new Error('Fixture initialization failed');
   const caws = path.join(root, '.caws');
-  const lane = path.join(root, 'owned\nlane');
+  const lane = path.join(root, laneRelativePath);
   git(root, ['worktree', 'add', '-b', 'owned', lane]);
   fs.mkdirSync(path.join(lane, 'src'));
   fs.mkdirSync(path.join(lane, '.caws'));

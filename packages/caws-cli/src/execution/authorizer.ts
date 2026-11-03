@@ -669,6 +669,12 @@ function excludedEntryAliases(
       refuse('source_unresolved');
   }
 }
+function reservedWriteComponent(part: string): boolean {
+  return (
+    ['.caws', '.git', '.codex', '.claude', '.env'].includes(part.toLowerCase()) ||
+    part.toLowerCase().startsWith('.env.')
+  );
+}
 function writeAllowed(target: string, cwd: string, authority: ExecutionAuthority): void {
   const spelling = isAbsolute(target) ? target : `${cwd}/${target}`;
   const leaf = basename(spelling);
@@ -709,17 +715,20 @@ function writeAllowed(target: string, cwd: string, authority: ExecutionAuthority
   if (/[^\x00-\x7f]/.test(path)) refuse('source_unresolved');
   // Ordinary execution never borrows the kernel's infrastructure exemption to
   // edit its own authority, native registration, Git state, or secret controls.
+  if (path.split('/').some(reservedWriteComponent)) refuse('scope_refused');
+  const controls = fs.realpathSync.native(authority.cawsDir);
+  const worktrees = `${controls}/worktrees`;
+  // Registered checkout payloads live beneath the canonical control directory.
+  // Admit only the bound checkout there, never the namespace itself or a pin
+  // nested inside another checkout's reserved control directories.
   if (
-    path
-      .split('/')
-      .some(
-        (part) =>
-          ['.caws', '.git', '.codex', '.claude', '.env'].includes(part.toLowerCase()) ||
-          part.toLowerCase().startsWith('.env.')
-      )
+    inside(physical, controls) &&
+    (authority.binding.kind !== 'bound' ||
+      authority.pin === worktrees ||
+      !inside(authority.pin, worktrees) ||
+      relative(worktrees, authority.pin).split('/').some(reservedWriteComponent))
   )
     refuse('scope_refused');
-  if (inside(physical, fs.realpathSync.native(authority.cawsDir))) refuse('scope_refused');
   if (evaluatePath(path, authority.binding, authority.policy).kind !== 'admit')
     refuse('scope_refused');
   // Preserve the kernel's policy exemption before scope.out. This secondary

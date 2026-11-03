@@ -1242,6 +1242,84 @@ describe('private authorizer component observations, without USER execution', ()
     expect(fs.existsSync(path.join(f.lane, 'src/result.txt'))).toBe(false);
     expect(result.authorityRevision).toMatch(/^[a-f0-9]{64}$/);
   });
+  test.each([
+    ['relative', false],
+    ['absolute', false],
+    ['relative', true],
+    ['absolute', true],
+  ])(
+    'admits scoped writes in a default managed lane (%s, existing=%s)',
+    async (spelling, existing) => {
+      const f = authorityFixture({ laneRelativePath: '.caws/worktrees/owned' });
+      const target = path.join(f.lane, 'src/owned.txt');
+      if (existing) fs.writeFileSync(target, 'preserve');
+      const name = spelling === 'absolute' ? target : 'src/owned.txt';
+      const result = await observe(f, `printf changed > ${JSON.stringify(name)}`);
+      expect(result).toMatchObject({ decision: 'allow', reasonCodes: [] });
+      if (existing) expect(fs.readFileSync(target, 'utf8')).toBe('preserve');
+      else expect(fs.existsSync(target)).toBe(false);
+    }
+  );
+  test('preserves control, foreign-lane and excluded-path refusals in a default managed lane', async () => {
+    const { git } = require('../helpers/git-repo-factory');
+    const f = authorityFixture({ laneRelativePath: '.caws/worktrees/owned' });
+    f.spec.scope.in = ['**'];
+    f.spec.scope.out = ['src/excluded.txt'];
+    fs.writeFileSync(f.specPath, JSON.stringify(f.spec));
+    const foreign = path.join(f.caws, 'worktrees/foreign');
+    git(f.root, ['worktree', 'add', '-b', 'foreign', foreign]);
+    const foreignSpec = { ...f.spec, id: 'EXEC-FOREIGN-001', worktree: 'foreign' };
+    expect(
+      require('../../dist/kernel').parseAndValidateSpec(JSON.stringify(foreignSpec))
+    ).toMatchObject({ ok: true });
+    fs.writeFileSync(path.join(f.caws, 'specs/EXEC-FOREIGN-001.yaml'), JSON.stringify(foreignSpec));
+    f.registry.foreign = {
+      path: foreign,
+      specId: foreignSpec.id,
+      owner: { session_id: 'other-thread', platform: 'codex' },
+    };
+    fs.writeFileSync(f.registryPath, JSON.stringify(f.registry));
+    for (const target of [
+      path.join(f.caws, 'policy.yaml'),
+      f.registryPath,
+      path.join(f.lane, '.git'),
+      path.join(f.lane, '.caws/policy.yaml'),
+      path.join(f.lane, '.codex/settings.json'),
+      path.join(f.lane, '.claude/settings.json'),
+      path.join(f.lane, '.env'),
+      path.join(f.lane, 'src/excluded.txt'),
+      path.join(foreign, 'ordinary.txt'),
+    ]) {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      if (!fs.existsSync(target)) fs.writeFileSync(target, 'preserve');
+      const before = fs.readFileSync(target);
+      const result = await observe(f, `printf changed > ${JSON.stringify(target)}`);
+      // Git marker writes invalidate the analyzer's repository mapping and
+      // remain held before path admission.
+      const expected =
+        target === path.join(f.lane, '.git')
+          ? { decision: 'unresolved', reasonCodes: ['source_unresolved'] }
+          : { decision: 'deny', reasonCodes: ['scope_refused'] };
+      expect(result).toMatchObject(expected);
+      expect(fs.readFileSync(target)).toEqual(before);
+    }
+    expect((await observe(f, 'printf yes > src/ordinary.txt')).decision).toBe('allow');
+    expect(fs.existsSync(path.join(f.lane, 'src/ordinary.txt'))).toBe(false);
+  });
+  test.each(['.caws/hooks/ext', '.caws/worktrees', '.caws/worktrees/outer/.caws/hooks/ext'])(
+    'refuses a registered checkout overlapping control storage: %s',
+    async (laneRelativePath) => {
+      const f = authorityFixture({ laneRelativePath });
+      f.spec.scope.in = ['**'];
+      f.spec.scope.out = [];
+      fs.writeFileSync(f.specPath, JSON.stringify(f.spec));
+      const target = path.join(f.lane, 'qualification.sh');
+      fs.writeFileSync(target, 'preserve');
+      const result = await observe(f, 'printf changed > qualification.sh');
+      expect(result).toMatchObject({ decision: 'deny', reasonCodes: ['scope_refused'] });
+      expect(fs.readFileSync(target, 'utf8')).toBe('preserve');
+    }
+  );
   test('allows harmless JavaScript braces and finite owned fs writes on the pinned actual Node image', async () => {
     const f = authorityFixture();
     f.record.execution.environment.find((entry) => entry.name === 'PATH').value =
