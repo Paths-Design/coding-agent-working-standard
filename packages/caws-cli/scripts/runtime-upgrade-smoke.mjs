@@ -139,6 +139,7 @@ const rendererProofIds = ['codex-stock', 'codex-custom'];
 // retained manifest. This verifies custody, not native harness enforcement.
 export function verifyQualificationCustody(artifacts, expected) {
   const proof = json(path.join(artifacts, 'custody.json'));
+  const canonicalRoot = fs.realpathSync(artifacts);
   const usedReceipts = new Set();
   const artifact = (relative) => {
     assert.equal(typeof relative, 'string');
@@ -146,6 +147,14 @@ export function verifyQualificationCustody(artifacts, expected) {
     const rel = path.relative(path.resolve(artifacts), file);
     assert.ok(rel && !path.isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${path.sep}`));
     assert.ok(fs.lstatSync(file).isFile(), `Nonregular retained artifact: ${relative}`);
+    const canonicalRel = path.relative(canonicalRoot, fs.realpathSync(file));
+    assert.ok(
+      canonicalRel &&
+        !path.isAbsolute(canonicalRel) &&
+        canonicalRel !== '..' &&
+        !canonicalRel.startsWith(`..${path.sep}`),
+      `Artifact escapes retained root: ${relative}`
+    );
     return file;
   };
   const bytes = (record, source) => {
@@ -360,8 +369,17 @@ export function qualify({
     guards: [],
     renderers: [],
   };
-  const saveCustody = () =>
+  const saveCustody = () => {
     write(path.join(evidenceRoot, 'custody.json'), JSON.stringify(custody, null, 2) + '\n');
+    // Preserve producer expectations separately from observed custody records.
+    // The report hash binds post-cleanup readback to this scenario's inputs.
+    const expectedBytes = JSON.stringify(expectations, null, 2) + '\n';
+    const expectedFile = path.join(evidenceRoot, 'custody-expectations.json');
+    write(expectedFile, expectedBytes);
+    report.custodyExpectations = artifacts
+      ? { file: expectedFile, sha256: hash(expectedBytes) }
+      : null;
+  };
   const capture = (file, name) => captureQualificationFile(file, evidenceRoot, name);
   try {
     step('install published baseline and materialize stock/custom projects');

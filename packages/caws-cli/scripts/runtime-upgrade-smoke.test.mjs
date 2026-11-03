@@ -319,6 +319,22 @@ test('custody survives fixture teardown and retains arbitrary bytes exactly', ()
   }
 });
 
+test('custody rejects evidence reached through an escaping parent symlink', () => {
+  const f = custodyFixture();
+  try {
+    const raw = path.join(f.artifacts, 'raw');
+    const disposable = path.join(f.sources, 'retained-raw');
+    fs.renameSync(raw, disposable);
+    fs.symlinkSync(disposable, raw, 'dir');
+    assert.throws(
+      () => verifyQualificationCustody(f.artifacts, f.expected),
+      /Artifact escapes retained root/
+    );
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
 for (const [name, tamper] of [
   [
     'missing before bytes',
