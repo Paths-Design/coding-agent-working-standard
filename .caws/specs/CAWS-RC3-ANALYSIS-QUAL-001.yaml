@@ -1,10 +1,11 @@
 id: CAWS-RC3-ANALYSIS-QUAL-001
 title: 'Qualify rc.3 command analysis mutation in isolated owned lane'
 mode: chore
-lifecycle_state: active
-worktree: rc3-analysis-qual
+lifecycle_state: closed
+resolution: superseded
+closure_notes: 'Root accepted the unfinished full nine-file analysis mutation campaign, every effective per-file floor, exact final-source identity and raw input dependency build run evidence into active CAWS-RELEASE-RC3-001 A5. This child did not install dependencies, build, execute tests or run mutation; no source commits or acceptance passes exist. Installed hook parent-principal versus actual child CLI-owner refusal prevented Node provisioning. Existing read-only findings and root compile statistics are retained; the physical child directory, branch, report and cache directories and unused factory Rust target symlink remain preserved without qualification or unlink authorization. Supersession transfers the remaining obligation to the release root and does not assert completion.'
 created_at: '2026-11-03T10:00:36.802Z'
-updated_at: '2026-11-03T10:21:26.849Z'
+updated_at: '2026-11-03T11:43:16.638Z'
 created_by_session: '01a1a0d2-f6a9-7731-aa20-dc6e21e4d37f'
 blast_radius:
   modules:
