@@ -1,9 +1,10 @@
 id: CAWS-RC3-EXECUTION-QUAL-001
 title: 'Qualify full execution mutation campaign for root-selected rc.3 candidate'
 mode: chore
-lifecycle_state: draft
+lifecycle_state: active
+worktree: rc3-execution-qual
 created_at: '2026-11-03T09:52:32.017Z'
-updated_at: '2026-11-03T09:52:32.017Z'
+updated_at: '2026-11-03T09:54:37.510Z'
 created_by_session: '01a1a0ce-6ede-7382-86b2-a5a82d3858da'
 blast_radius:
   modules:
