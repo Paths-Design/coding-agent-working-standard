@@ -152,6 +152,7 @@ test('ordinary launcher binds real npm and env-node children despite conflicting
       KEEP_ME: 'preserved',
       npm_config_offline: 'true',
       npm_config_cache: path.join(root, 'cache'),
+      npm_config_update_notifier: 'false',
     };
     const run = () =>
       spawnSync(process.execPath, [runner], { cwd: root, env, encoding: 'utf8', timeout: 15000 });
