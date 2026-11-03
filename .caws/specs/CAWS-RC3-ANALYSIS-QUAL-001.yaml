@@ -1,0 +1,44 @@
+id: CAWS-RC3-ANALYSIS-QUAL-001
+title: 'Qualify rc.3 command analysis mutation in isolated owned lane'
+mode: chore
+lifecycle_state: draft
+created_at: '2026-11-03T10:00:36.802Z'
+updated_at: '2026-11-03T10:00:36.802Z'
+created_by_session: '01a1a0d2-f6a9-7731-aa20-dc6e21e4d37f'
+blast_radius:
+  modules:
+    - 'Command analysis mutation qualification and retained evidence'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/reports/mutation-analysis'
+  out: []
+invariants:
+  - 'Authored source, mutation targets, policy floors and configuration remain unchanged; only root-selected source is qualified.'
+  - 'All dependency caches and generated outputs are physically isolated in the owned lane before provisioning; no parent or peer artifact writes are permitted.'
+  - 'No tag, publication, global runtime installation, native identity fabrication or ownership takeover is authorized.'
+acceptance:
+  - id: A1
+    given: 'a distinct native child session and root-selected source snapshot'
+    when: 'the CAWS-owned lane is bound and prepared'
+    then: 'registry owner and source identity are read back and every dependency and output root has verified physical ancestry without shared parent writes'
+  - id: A2
+    given: 'unchanged declared command analysis mutation policy and root-selected snapshot'
+    when: 'the full normal analysis campaign completes'
+    then: 'all nine targets have nonempty mutant counts and each meets its effective declared per-file floor with no omitted target or dry-run substitution'
+  - id: A3
+    given: 'a completed campaign or a retained failing attempt'
+    when: 'evidence is delivered for root review'
+    then: 'raw logs and input dependency build and run identities are preserved and root acceptance precedes lane or spec disposition'
+observability:
+  - 'Retain normal mutation runner logs, report and run proof with candidate revision and isolation observations.'
+rollback:
+  - 'Preserve unique evidence and ask root for supported lane disposition; never remove physical or foreign directories.'
+non_functional:
+  security:
+    - 'Keep native session identity and CAWS binding authentic and preserve concurrent work.'
+contracts:
+  - name: 'analysis-mutation-policy'
+    type: behavior
+    path: 'packages/caws-cli/mutation-policy.json'
