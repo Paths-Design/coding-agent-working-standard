@@ -1186,14 +1186,15 @@ describe('private authorizer component observations, without USER execution', ()
       fs.writeFileSync(input, 'literal data\n');
       const result = await observe(f, command, [utility]);
       if (process.env.CAWS_TEST_EXECUTION_HOST_CENSUS === '1' && result.decision !== 'allow')
-        console.error(
+        process.stderr.write(
           'CAWS system reader refusal: ' +
             JSON.stringify({
               command,
               image: systemImageMetadata(utility),
               decision: result.decision,
               reasonCodes: result.reasonCodes,
-            })
+            }) +
+            '\n'
         );
       expect(result.decision).toBe('allow');
       expect(result.reasonCodes).toEqual([]);

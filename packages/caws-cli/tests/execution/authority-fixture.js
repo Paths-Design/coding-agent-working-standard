@@ -88,7 +88,7 @@ function reportExecutionHost(root) {
       unparsed: fields.length % 3 !== 0,
     };
   });
-  console.error(
+  process.stderr.write(
     'CAWS execution host census (initial fixture; no configuration values): ' +
       JSON.stringify({
         platform: process.platform,
@@ -108,7 +108,8 @@ function reportExecutionHost(root) {
           '/usr/bin/tr',
           '/usr/bin/uniq',
         ].map(systemImageMetadata),
-      })
+      }) +
+      '\n'
   );
 }
 function cleanupAll() {
