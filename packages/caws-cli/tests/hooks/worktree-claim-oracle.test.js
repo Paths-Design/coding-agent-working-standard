@@ -801,6 +801,60 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
     expect(result.stderr).not.toContain('BLOCKED');
   });
 
+  test('an unrelated unresolved registry root cannot make a claimed canonical Write approval-eligible', () => {
+    const fixture = makeClaimedRepo();
+    const registry = path.join(fixture.repo, '.caws/worktrees.json');
+    const entries = JSON.parse(fs.readFileSync(registry, 'utf8'));
+    // The CLI contention reader uses the current registry spelling; the
+    // ownership oracle also accepts the legacy spelling seeded above.
+    entries['wt-dir'].specId = 'DIR-001';
+    writeRegistry(fixture.repo, entries);
+    fs.writeFileSync(
+      path.join(fixture.repo, '.caws/specs/DIR-001.yaml'),
+      JSON.stringify({
+        id: 'DIR-001',
+        title: 'Canonical claim fixture',
+        mode: 'chore',
+        lifecycle_state: 'active',
+        worktree: 'wt-dir',
+        created_at: '2026-06-15T00:00:00.000Z',
+        updated_at: '2026-06-15T00:00:00.000Z',
+        blast_radius: { modules: ['tests'], data_migration: false },
+        operational_rollback_slo: '5m',
+        scope: { in: ['packages/dir'], out: [] },
+        invariants: ['Preserve the canonical claim'],
+        acceptance: [
+          {
+            id: 'A1',
+            given: 'a claimant',
+            when: 'a write is checked',
+            then: 'the claim refuses it',
+          },
+        ],
+        non_functional: {},
+        contracts: [],
+      })
+    );
+    const target = path.join(fixture.repo, 'packages/dir/protected.txt');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, 'the known canonical claimant remains protected\n');
+    const baseline = runGuard(fixture, '', { writePath: target });
+    expect(baseline.status).toBe(2);
+    expect(baseline.stderr).toContain('claimed:wt-dir:packages/dir');
+    expect(baseline.stdout).toBe('');
+    const dangling = path.join(fixture.repo, 'unrelated-root');
+    fs.symlinkSync(path.join(fixture.repo, 'absent-root'), dangling, 'dir');
+    const uncertain = registryEntry(fixture.repo, 'wt-unresolved', 'UNRESOLVED', null);
+    uncertain['wt-unresolved'].path = dangling;
+    writeRegistry(fixture.repo, { ...entries, ...uncertain });
+    const held = runGuard(fixture, '', { writePath: target });
+    expect(held.status).toBe(2);
+    expect(held.stdout).toBe('');
+    expect(fs.readFileSync(target, 'utf8')).toBe(
+      'the known canonical claimant remains protected\n'
+    );
+  });
+
   test.each(
     ['Bash', 'Write'].flatMap((tool) =>
       ['root', 'descendant', 'ancestor'].flatMap((form) =>
@@ -926,9 +980,9 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
   });
 
   test.each([
-    'ask_uncertain:\n',
-    'ask_uncertain:reason\npass:owner-self:wt-custom\n',
-    'ask_uncertain:reason\tpoison\n',
+    'ask_uncertain:worktree-payload-no-owner:\n',
+    'ask_uncertain:worktree-payload-no-owner:wt-custom\npass:owner-self:wt-custom\n',
+    'ask_uncertain:worktree-payload-no-owner:wt-custom\tpoison\n',
     'not-a-verdict\n',
     'error_fail_closed:registry\n',
   ])('malformed or failed ownership response %j cannot request approval', (output) => {

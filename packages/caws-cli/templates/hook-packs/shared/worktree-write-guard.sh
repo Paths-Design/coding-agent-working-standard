@@ -265,9 +265,10 @@ if [[ -n "$FILE_PATH" ]]; then
       _OWNERSHIP_NAME="${_OWNERSHIP_NAME%%:*}"
       echo "[worktree-write-guard] BLOCKED: this is a write into worktree '$_OWNERSHIP_NAME''s payload, which is owned by a DIFFERENT session." >&2
       exit 2 ;;
-    ask_uncertain:?*)
-      # A typed uncertainty can request a human decision. Failed, empty or
-      # multiline oracle responses cannot establish that approval boundary.
+    ask_uncertain:worktree-payload-no-owner:?*)
+      # Only missing ownership of this observed payload can request approval.
+      # Unresolved roots or overlaps cannot hide a canonical claim behind ask.
+      # Failed, empty or multiline responses cannot establish this boundary.
       if [[ "$_OWNERSHIP_OUT" == *$'\n'* || "$_OWNERSHIP_OUT" == *$'\r'* || "$_OWNERSHIP_OUT" == *$'\t'* ]]; then
         echo '[worktree-write-guard] invalid ownership oracle response; blocked' >&2
         exit 2

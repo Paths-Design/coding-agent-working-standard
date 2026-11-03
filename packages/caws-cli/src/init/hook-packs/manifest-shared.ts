@@ -659,7 +659,9 @@ import { isAdapterCoveredSurface } from './types';
 // from path mentions or recommend an unadmitted script execution route.
 // v130: registered Write uncertainty retains configured human approval;
 // foreign ownership, failed observations and unavailable approval refuse.
-export const SHARED_PACK_VERSION = 130;
+// v131: payload-owner approval cannot turn unrelated registry uncertainty
+// into approval for a canonical claim.
+export const SHARED_PACK_VERSION = 131;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
