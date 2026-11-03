@@ -138,3 +138,10 @@ evidence:
     exit_code: 0
     artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/release-12-2-rc3/packages/caws-cli/reports/release-rc3/pytest-pack131-external.xml"
     commit_sha: "4121d1b515740216b016c8aa103d9b617c4b1e6e"
+  - criterion_id: A6
+    status: unchecked
+    evidence_ref: "Exact source4121d1b515740216b016c8aa103d9b617c4b1e6e built tar SHA72c1fefa1a94bf52a87591d971b8161c8f32714841f205ff39566adb39670a78,1550entries14629972unpacked; candidate-4121d1b51/ retained. Full MacNode22 qualifier terminal0, ten cases, qualification-4121d1b51-node22-built.json/log includes complete rawcommand streams/statuses, installed version, all-zero detached consumer audit, runtime8cd7b0748d66e6771ca3c59ff39bdd60fe4029363320f33b8c53abe6c8b2e8b7. Supported built-directory driver internally packed tar; retained artifact hash exactlymatches selectedmanualtar72c1. Initial invalid tar-as-directory invocation failedbeforecases and isretained, notqualification. Independent qualification-4121d1b51-post-cleanup-readback.log0 rechecks actualqualifierhash, separatelyhashedexpectations ae610b48ec7c7f21138802aac3bb79b991abdbd742a2629d892b6a363d244b3c, deletedoriginalfixturepaths,9protected byte/modepairs,2semanticrenderers,launcher/cwd/session/target/status/digests. Thisonecomplete job passes; remaining5Mac/LinuxNode18/20/22matrixjobs UNCHECKED. Do notcombine partialruns orsubstitute syntheticinstalledfixtureproof forA7nativeharness."
+    recorded_at: "2026-11-03T12:22:45.434Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/worktrees/release-12-2-rc3/packages/caws-cli/reports/release-rc3/qualification-4121d1b51-node22-built.json"
+    commit_sha: "4121d1b515740216b016c8aa103d9b617c4b1e6e"
