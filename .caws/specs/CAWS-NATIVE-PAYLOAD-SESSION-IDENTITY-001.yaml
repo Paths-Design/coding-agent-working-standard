@@ -47,3 +47,10 @@ evidence:
     command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --runInBand --runTestsByPath tests/hooks/session-id-payload.test.js
     exit_code: 0
     commit_sha: "66fe295a6aaa1b56a452dff3ec28d74cd672b943"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/native-payload-identity/validation.json: inspected owner/foreign, third-chat reprieve, unknown/absent-payload and environment-spoof negative controls pass in source and private installed runtime. Commit verification checks reachability only."
+    recorded_at: "2026-11-03T21:17:46.193Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --runInBand --runTestsByPath tests/hooks/session-id-payload.test.js
+    exit_code: 0
+    commit_sha: "66fe295a6aaa1b56a452dff3ec28d74cd672b943"
