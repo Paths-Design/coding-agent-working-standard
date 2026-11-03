@@ -1,10 +1,11 @@
 id: CAWS-NATIVE-PAYLOAD-SESSION-IDENTITY-001
 title: 'Preserve native per-chat session identity across shared agent processes'
 mode: fix
-lifecycle_state: active
-worktree: native-payload-identity
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Preserved explicit native per-chat session identity ahead of shared PID correlation in committed 66fe295a6. Source and private installed-runtime suites exercise two chat identities under one live third-chat PID, owner/foreign refusal, reprieve isolation and unchanged fallback controls (9 cases each). All five scoped gates pass. Normal immutable compatibility install activated runtime 7be8065a4c48620937351dc12b9b205ac870d1d1bd553b945e1adb99472aaf36; 113 members verify and only lib/session-id.sh differs. Native owner edits admitted/restored and foreign marker refused with matching runtime/session records; registration hashes unchanged. A1-A3 recorded and dual-read. Retained raw evidence and explicit nonclaims in .caws/state/native-payload-identity/validation.json. No-payload shared-host correlation, separate reprieve CLI policy, full modern runtime contracts and unfinished RC consumer work remain outside this bounded repair.'
 created_at: '2026-11-03T20:54:39.016Z'
-updated_at: '2026-11-03T20:55:07.262Z'
+updated_at: '2026-11-03T21:18:44.374Z'
 created_by_session: '01a19d1c-1d90-7833-92d2-38c5735da9e2'
 blast_radius:
   modules:
@@ -39,3 +40,25 @@ rollback:
   - 'Use supported machine-runtime rollback to the retained previous immutable digest; preserve native registration and existing project claims.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/native-payload-identity/validation.json: source and private installed-runtime 9-case suites; inspected actual shared-PID fixture results. Commit verification checks reachability only, not test execution."
+    recorded_at: "2026-11-03T21:17:27.685Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --runInBand --runTestsByPath tests/hooks/session-id-payload.test.js
+    exit_code: 0
+    commit_sha: "66fe295a6aaa1b56a452dff3ec28d74cd672b943"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/native-payload-identity/validation.json: inspected owner/foreign, third-chat reprieve, unknown/absent-payload and environment-spoof negative controls pass in source and private installed runtime. Commit verification checks reachability only."
+    recorded_at: "2026-11-03T21:17:46.193Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/node_modules/jest/bin/jest.js --runInBand --runTestsByPath tests/hooks/session-id-payload.test.js
+    exit_code: 0
+    commit_sha: "66fe295a6aaa1b56a452dff3ec28d74cd672b943"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/native-payload-identity/validation.json: normal immutable installation selects 7be8065a4c48620937351dc12b9b205ac870d1d1bd553b945e1adb99472aaf36; 113 members verified, only lib/session-id.sh differs. Native owner admission/restoration and foreign refusal retain matching runtime/session hook records; five registration/launcher hashes unchanged. Commit verification checks reachability only."
+    recorded_at: "2026-11-03T21:18:03.939Z"
+    command: node /Users/darianrosebrook/Desktop/Projects/caws/.caws/state/native-payload-identity/install-compat.cjs --activate
+    exit_code: 0
+    commit_sha: "66fe295a6aaa1b56a452dff3ec28d74cd672b943"
