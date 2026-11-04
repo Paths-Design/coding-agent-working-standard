@@ -355,6 +355,33 @@ function protectedSystemImage(path: string): boolean {
     (stat.mode & 0o022) === 0
   );
 }
+/** Named Linux coreutils images retain argv[0] dispatch identity. Generic
+ * multicall images and non-reader names have no profile in this directory. */
+export function protectedSystemUtilityImage(path: string, command: string): boolean {
+  if (basename(path) !== command) return false;
+  if (dirname(path) !== '/usr/lib/cargo/bin/coreutils') return protectedSystemImage(path);
+  if (
+    process.platform !== 'linux' ||
+    !['cat', 'head', 'tail', 'wc', 'ls', 'cut', 'tr', 'sort', 'uniq'].includes(command)
+  )
+    return false;
+  const image = fs.lstatSync(path);
+  if (
+    !image.isFile() ||
+    image.uid !== 0 ||
+    (image.mode & 0o022) !== 0 ||
+    (image.mode & 0o111) === 0
+  )
+    return false;
+  let parent = dirname(path);
+  for (;;) {
+    const directory = fs.lstatSync(parent);
+    if (!directory.isDirectory() || directory.uid !== 0 || (directory.mode & 0o022) !== 0)
+      return false;
+    if (parent === '/') return true;
+    parent = dirname(parent);
+  }
+}
 function verifyImage(image: ProgramImage): void {
   if (fs.realpathSync.native(image.path) !== image.path) refuse('unsupported_profile');
   const fd = fs.openSync(
@@ -846,7 +873,7 @@ async function inspectSource(
     if (!image) refuse('unsupported_profile');
     if (basename(command) === 'node') {
       if (resolved !== fs.realpathSync.native(process.execPath)) refuse('unsupported_profile');
-    } else if (basename(resolved) !== basename(command) || !protectedSystemImage(resolved)) {
+    } else if (!protectedSystemUtilityImage(resolved, basename(command))) {
       // A root-owned image/hash does not establish which utility it implements.
       // The v1 system profiles admit only their named system executable; PATH
       // aliases to other utilities, shells or multicall images need a profile.

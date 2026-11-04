@@ -110,6 +110,21 @@ function runtimeHomes(f) {
   Object.assign(f.env, { HOME: home, CAWS_HOME: cawsHome, CODEX_HOME: codexHome });
   return { home, cawsHome, codexHome };
 }
+function protectedGitConfiguration(f, values) {
+  const homes = runtimeHomes(f);
+  for (const [name, value] of Object.entries({
+    HOME: homes.home,
+    CAWS_HOME: homes.cawsHome,
+    CODEX_HOME: homes.codexHome,
+  }))
+    f.record.execution.environment.push({ name, value });
+  const config = path.join(homes.home, '.gitconfig');
+  fs.writeFileSync(
+    config,
+    '[safe]\n' + values.map((value) => `directory = ${JSON.stringify(value)}\n`).join('')
+  );
+  return config;
+}
 
 test('event ledger keeps legacy absent-byte ordering and hashes a large tail completely', () => {
   const f = fixture();
@@ -801,6 +816,116 @@ function configureInactiveLocalMetadata(f, { sparse = true } = {}) {
   }
   return marker;
 }
+
+test.each(['', '*', '/reviewed/project', '/reviewed/*', '~/reviewed', '%(prefix)/reviewed'])(
+  'observes protected Git ownership selector %j without editing it',
+  (value) => {
+    const f = fixture();
+    const config = protectedGitConfiguration(f, [value]);
+    const before = fs.readFileSync(config);
+    const output = require('node:child_process').execFileSync(
+      '/usr/bin/git',
+      ['config', '--global', '--show-origin', '--get-all', 'safe.directory'],
+      {
+        cwd: f.root,
+        env: {
+          PATH: '/usr/bin:/bin',
+          HOME: path.dirname(config),
+          GIT_CONFIG_NOSYSTEM: '1',
+          LC_ALL: 'C',
+        },
+        encoding: 'utf8',
+      }
+    );
+    expect(output).toBe(`file:${config}\t${value}\n`);
+    const read = () =>
+      readExecutionLifecycleAuthority(f.record, { operation: 'git-head' }).revision;
+    expect(read()).toMatch(/^[a-f0-9]{64}$/);
+    expect(read()).toBe(read());
+    expect(fs.readFileSync(config)).toEqual(before);
+  }
+);
+test('ownership selector values, duplicates and ordering remain authority observations', () => {
+  const f = fixture();
+  const config = protectedGitConfiguration(f, ['*', '', '/reviewed/one']);
+  const read = () => readExecutionLifecycleAuthority(f.record, { operation: 'git-head' }).revision;
+  const initial = read();
+  for (const values of [
+    ['*', '', '/reviewed/two'],
+    ['*', '', '/reviewed/one', '/reviewed/one'],
+    ['', '*', '/reviewed/one'],
+  ]) {
+    fs.writeFileSync(
+      config,
+      '[safe]\n' + values.map((value) => `directory = ${JSON.stringify(value)}\n`).join('')
+    );
+    const changed = read();
+    expect(changed).not.toBe(initial);
+    expect(read()).toBe(changed);
+  }
+});
+test.each(['relative/project', 'true', '~other/reviewed', '%(other)/reviewed'])(
+  'refuses unprofiled protected ownership selector %j',
+  (value) => {
+    const f = fixture();
+    protectedGitConfiguration(f, [value]);
+    expect(() => readExecutionLifecycleAuthority(f.record, { operation: 'git-head' })).toThrow(
+      expect.objectContaining({ reason: 'unsupported_profile' })
+    );
+  }
+);
+test('administrator wildcard cannot confer CAWS thread, spec or path authority', () => {
+  const f = fixture();
+  protectedGitConfiguration(f, ['*']);
+  const excluded = path.join(f.lane, 'private/blocked.txt');
+  fs.mkdirSync(path.dirname(excluded));
+  fs.writeFileSync(excluded, 'excluded bytes remain unchanged\n');
+  const index = git(f.lane, [
+    'rev-parse',
+    '--path-format=absolute',
+    '--git-path',
+    'index',
+  ]).trimEnd();
+  const beforeIndex = fs.readFileSync(index);
+  const beforeSpec = fs.readFileSync(f.specPath);
+  success(execute(f, ['git-head']));
+  f.env.CAWS_EXECUTION_THREAD = 'foreign-thread';
+  expect(execute(f, ['git-head']).stderr).toContain('foreign_owner');
+  f.env.CAWS_EXECUTION_THREAD = 'thread-owned';
+  expect(execute(f, ['spec-commit', '--spec', 'OTHER-001']).stderr).toContain('scope_refused');
+  expect(execute(f, ['git-stage', '--', 'private/blocked.txt']).stderr).toContain('scope_refused');
+  expect(fs.readFileSync(index)).toEqual(beforeIndex);
+  expect(fs.readFileSync(f.specPath)).toEqual(beforeSpec);
+  expect(fs.readFileSync(excluded, 'utf8')).toBe('excluded bytes remain unchanged\n');
+  expect(fs.existsSync(path.join(f.caws, 'events.jsonl'))).toBe(false);
+});
+test.each([
+  'safe.directory.extra',
+  'safe.bareRepository',
+  'core.fsmonitor',
+  'alias.status',
+  'include.path',
+])('administrator wildcard leaves unmodeled or executable key %s refused', (key) => {
+  const f = fixture();
+  protectedGitConfiguration(f, ['*']);
+  const marker = path.join(f.root, 'config-must-not-execute');
+  git(f.root, ['config', key, `sh -c 'echo ran > "${marker}"'`]);
+  expect(() => readExecutionLifecycleAuthority(f.record, { operation: 'git-head' })).toThrow(
+    expect.objectContaining({ reason: 'unsupported_profile' })
+  );
+  expect(fs.existsSync(marker)).toBe(false);
+});
+
+test('administrator wildcard does not admit an active configured filter', () => {
+  const f = fixture();
+  const marker = configureInactiveLocalMetadata(f, { sparse: false });
+  protectedGitConfiguration(f, ['*']);
+  fs.writeFileSync(path.join(f.lane, '.gitattributes'), 'src/** filter=lfs\n');
+  expect(() => readExecutionLifecycleAuthority(f.record, { operation: 'git-head' })).toThrow(
+    expect.objectContaining({ reason: 'unsupported_profile' })
+  );
+  expect(fs.existsSync(marker)).toBe(false);
+});
 
 test('VS Code branch merge-base hints are opaque observed authority, while executable keys remain refused', () => {
   const f = fixture();

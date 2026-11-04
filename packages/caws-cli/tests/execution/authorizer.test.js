@@ -9,6 +9,7 @@ const {
   executionProfileBindings,
   executionProfileArguments,
   isExecutionProfileBuiltin,
+  protectedSystemUtilityImage,
 } = require('../../dist/execution/authorizer');
 const { image, systemImageMetadata, executionHostDiagnostic } = require('./authority-fixture');
 const { snapshotNpmProject } = require('../../dist/execution/npm-project');
@@ -569,6 +570,64 @@ describe('dedicated lifecycle consumer Source admission', () => {
       'allow'
     );
   });
+  test('protected ownership selector drift invalidates fenced lifecycle analysis', () => {
+    const f = lifecycleFixture();
+    const record = lifecycleRecord(f);
+    const home = path.join(f.root, 'private-git-home');
+    fs.mkdirSync(path.join(home, 'machine'), { recursive: true });
+    fs.mkdirSync(path.join(home, '.codex'));
+    record.execution.environment.push(
+      { name: 'HOME', value: home },
+      { name: 'CAWS_HOME', value: path.join(home, 'machine') },
+      { name: 'CODEX_HOME', value: path.join(home, '.codex') }
+    );
+    record.execution.environment.sort((a, b) =>
+      Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
+    );
+    const config = path.join(home, '.gitconfig');
+    fs.writeFileSync(config, '[safe]\n directory = *\n');
+    const beforeSpec = fs.readFileSync(f.specPath);
+    const analyzed = evaluatePreparedExecution(record, request(record), undefined, 30000);
+    expect(analyzed).toMatchObject({ decision: 'allow', reasonCodes: [] });
+    expect(analyzed.authorityRevision).toMatch(/^[a-f0-9]{64}$/);
+    const lock = path.join(f.caws, 'state.lock');
+    const fd = fs.openSync(lock, 'wx+', 0o600);
+    const nonce = 'ownership-selector-final';
+    fs.writeFileSync(
+      fd,
+      JSON.stringify({
+        pid: process.pid,
+        at: new Date().toISOString(),
+        purpose: 'execution-launch',
+        nonce,
+        protocol: 'caws.execution.fence.v1',
+      })
+    );
+    const stat = fs.fstatSync(fd, { bigint: true });
+    const fence = { dev: stat.dev.toString(), ino: stat.ino.toString(), nonce };
+    try {
+      const final = request(record, analyzed.authorityRevision, fence);
+      expect(evaluatePreparedExecution(record, final, fd, 30000)).toMatchObject({
+        decision: 'allow',
+        reasonCodes: [],
+      });
+      fs.writeFileSync(
+        config,
+        '[safe]\n directory = *\n directory = \n directory = /reviewed/project\n'
+      );
+      expect(evaluatePreparedExecution(record, final, fd, 30000)).toMatchObject({
+        decision: 'unresolved',
+        reasonCodes: ['authority_changed'],
+      });
+      expect(fs.fstatSync(fd, { bigint: true }).ino).toBe(stat.ino);
+      expect(fs.existsSync(lock)).toBe(true);
+      expect(fs.readFileSync(f.specPath)).toEqual(beforeSpec);
+    } finally {
+      fs.closeSync(fd);
+      fs.unlinkSync(lock);
+    }
+  });
+
   test.each(['worktree-merge', 'bridge-claim'])(
     'lifecycle %s uses operation authority in analyze and final validation without inventing an edit binding',
     (operation) => {
@@ -1147,6 +1206,88 @@ describe('execution profile primitives', () => {
     f.record.execution.environment.push({ name: 'LANG', value: 'C' });
     expect(executionProfileBindings(f.record).get('LANG')).toStrictEqual(['C']);
   });
+});
+
+describe('protected named Linux system-reader images', () => {
+  function inspect({
+    name = 'head',
+    command = name,
+    platform = 'linux',
+    leaf = {},
+    directories = {},
+    directory = '/usr/lib/cargo/bin/coreutils',
+  } = {}) {
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const image = { uid: 0, mode: 0o755, isFile: () => true, ...leaf };
+    const stat = jest.spyOn(fs, 'statSync').mockReturnValue(image);
+    const lstat = jest
+      .spyOn(fs, 'lstatSync')
+      .mockImplementation((file) =>
+        file === path.join(directory, name)
+          ? image
+          : { uid: 0, mode: 0o755, isDirectory: () => true, ...directories[file] }
+      );
+    Object.defineProperty(process, 'platform', { ...originalPlatform, value: platform });
+    try {
+      const admitted = protectedSystemUtilityImage(path.join(directory, name), command);
+      return { admitted, inspected: lstat.mock.calls.map(([file]) => file) };
+    } finally {
+      Object.defineProperty(process, 'platform', originalPlatform);
+      stat.mockRestore();
+      lstat.mockRestore();
+    }
+  }
+  test.each(['cat', 'head', 'tail', 'wc', 'ls', 'cut', 'tr', 'sort', 'uniq'])(
+    'admits protected physical %s and checks every ancestor',
+    (name) => {
+      expect(inspect({ name })).toEqual({
+        admitted: true,
+        inspected: [
+          `/usr/lib/cargo/bin/coreutils/${name}`,
+          '/usr/lib/cargo/bin/coreutils',
+          '/usr/lib/cargo/bin',
+          '/usr/lib/cargo',
+          '/usr/lib',
+          '/usr',
+          '/',
+        ],
+      });
+    }
+  );
+  test.each(['coreutils', 'touch', 'bash', 'git'])('refuses unprofiled dispatch name %s', (name) =>
+    expect(inspect({ name })).toEqual({ admitted: false, inspected: [] })
+  );
+  test('refuses a reader alias to a different physical utility', () => {
+    expect(inspect({ name: 'tail', command: 'head' })).toEqual({ admitted: false, inspected: [] });
+  });
+  test.each(['darwin', 'win32'])(
+    'does not extend the Linux physical-image profile to %s',
+    (platform) => expect(inspect({ platform })).toEqual({ admitted: false, inspected: [] })
+  );
+  test.each([
+    { uid: 501 },
+    { mode: 0o775 },
+    { mode: 0o757 },
+    { mode: 0o644 },
+    { isFile: () => false },
+  ])('refuses an unprotected or nonregular image %p', (leaf) => {
+    expect(inspect({ leaf }).admitted).toBe(false);
+  });
+  test.each([
+    '/usr/lib/cargo/bin/coreutils',
+    '/usr/lib/cargo/bin',
+    '/usr/lib/cargo',
+    '/usr/lib',
+    '/usr',
+    '/',
+  ])('refuses an unprotected or substituted ancestor %s', (parent) => {
+    for (const changed of [{ uid: 501 }, { mode: 0o777 }, { isDirectory: () => false }])
+      expect(inspect({ directories: { [parent]: changed } }).admitted).toBe(false);
+  });
+  test.each(['/usr/lib/cargo/bin/coreutils-extra', '/usr/lib/cargo/bin/coreutils/nested'])(
+    'does not admit a neighboring physical directory %s',
+    (directory) => expect(inspect({ directory }).admitted).toBe(false)
+  );
 });
 
 describe('private authorizer component observations, without USER execution', () => {

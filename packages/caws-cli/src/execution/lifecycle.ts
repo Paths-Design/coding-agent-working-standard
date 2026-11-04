@@ -565,6 +565,20 @@ function lifecycleGitConfiguration(
       hooksPath = value;
       continue;
     }
+    // Git's administrator-controlled repository ownership selectors select no
+    // callback. Preserve their exact values/order in the authority snapshot;
+    // CAWS binding, session and path authority remain independently required.
+    if (key === 'safe.directory') {
+      requireValue(
+        value === '' ||
+          value === '*' ||
+          isAbsolute(value) ||
+          value.startsWith('~/') ||
+          value.startsWith('%(prefix)/'),
+        'unsupported_profile'
+      );
+      continue;
+    }
     const boolean = /^(?:true|false|yes|no|on|off|0|1)$/i.test(value);
     if (
       /^(?:extensions\.worktreeconfig|core\.sparsecheckout|core\.sparsecheckoutcone|index\.sparse)$/.test(
