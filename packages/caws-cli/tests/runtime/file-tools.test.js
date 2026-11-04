@@ -542,14 +542,16 @@ describe('complete stock file-tool prewrite handlers', () => {
     // Typed substitution is limited to these reviewed semantics. Newer template
     // bytes must decline admission until their behavior is qualified separately.
     // The ownership fixture is the authentic source at 200edef2da345744c4603647858290ca22a2de7d.
-    const reviewedGuards = {
+    // The SID fixture is the authentic source at 79a8867fe8e12933d7e8c873352bb04b033093c5.
+    const reviewedSources = {
       'block-dangerous.sh': '636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5',
       'worktree-write-guard.sh': '737ef2a0b6b6a4b4a87ed65cb2a45e56e81b9c95f0b803d6c076dce6e93c41a9',
+      'lib/session-id.sh': 'cf662f10e6d3477cecbf5deabd8d2b63284f6f4ac14fa7070725ff8502515c53',
     };
-    for (const [name, expectedSha256] of Object.entries(reviewedGuards)) {
-      const reviewedGuard = fs.readFileSync(path.join(__dirname, 'fixtures/reviewed-stock', name));
-      expect(crypto.createHash('sha256').update(reviewedGuard).digest('hex')).toBe(expectedSha256);
-      fs.writeFileSync(path.join(runtime, name), reviewedGuard);
+    for (const [name, expectedSha256] of Object.entries(reviewedSources)) {
+      const reviewedSource = fs.readFileSync(path.join(__dirname, 'fixtures/reviewed-stock', name));
+      expect(crypto.createHash('sha256').update(reviewedSource).digest('hex')).toBe(expectedSha256);
+      fs.writeFileSync(path.join(runtime, name), reviewedSource);
     }
     fs.cpSync(path.join(templates, 'codex/hooks/lib'), path.join(runtime, 'surfaces/codex/lib'), {
       recursive: true,
@@ -1027,6 +1029,29 @@ describe('complete stock file-tool prewrite handlers', () => {
       } finally {
         fs.writeFileSync(handler.path, original);
         handler.sha256 = originalHash;
+      }
+      expect(prepare()).not.toBeNull();
+    }
+  );
+
+  test.each(['ten', 'eleven'])(
+    'current rehashed SID helper cannot inherit the %s-handler file-tool profile',
+    (profile) => {
+      if (profile === 'eleven') actualDefaultPatchProfile();
+      expect(prepare()).not.toBeNull();
+      const library = selection.libraries['session-id.sh'];
+      const original = fs.readFileSync(library.path);
+      const originalHash = library.sha256;
+      try {
+        fs.copyFileSync(path.join(templates, 'shared/lib/session-id.sh'), library.path);
+        library.sha256 = sha(library.path);
+        expect(library.sha256).not.toBe(originalHash);
+        expect(prepare()).toBeNull();
+        expect(count()).toBe(0);
+        expect(fs.existsSync(path.join(repo, '.caws/leases'))).toBe(false);
+      } finally {
+        fs.writeFileSync(library.path, original);
+        library.sha256 = originalHash;
       }
       expect(prepare()).not.toBeNull();
     }
