@@ -727,6 +727,7 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
       permissionMode = 'default',
       writeGuardPath = WORKTREE_WRITE_GUARD,
       sharedLibDirectory = path.join(SHARED, 'lib'),
+      environmentPath = process.env.PATH,
     } = {}
   ) {
     const envelope = JSON.stringify({
@@ -745,6 +746,7 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
       timeout: 60000,
       env: {
         ...hermeticGitEnvironment(home),
+        PATH: environmentPath,
         CAWS_HOME: path.join(home, '.caws'),
         CAWS_BIN: cli,
         CAWS_PROJECT_DIR: repo,
@@ -803,6 +805,25 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
 
   test('an unrelated unresolved registry root cannot make a claimed canonical Write approval-eligible', () => {
     const fixture = makeClaimedRepo();
+    // The selected candidate CLI is deliberately outside PATH. A personal or
+    // globally installed caws must not determine this canonical claim lookup.
+    const tools = path.join(fixture.home, 'tools');
+    fs.mkdirSync(tools);
+    fs.symlinkSync(process.execPath, path.join(tools, 'node'));
+    const jq = spawnSync('/bin/sh', ['-c', 'command -v jq'], {
+      encoding: 'utf8',
+      env: baseEnvironment(),
+    });
+    expect(jq.status).toBe(0);
+    expect(path.isAbsolute(jq.stdout.trim())).toBe(true);
+    fs.symlinkSync(fs.realpathSync(jq.stdout.trim()), path.join(tools, 'jq'));
+    const environmentPath = [tools, '/usr/bin', '/bin'].join(path.delimiter);
+    const lookup = spawnSync('/bin/sh', ['-c', 'command -v caws'], {
+      encoding: 'utf8',
+      env: { ...hermeticGitEnvironment(fixture.home), PATH: environmentPath },
+    });
+    expect(lookup.status).toBe(1);
+    expect(lookup.stdout).toBe('');
     const registry = path.join(fixture.repo, '.caws/worktrees.json');
     const entries = JSON.parse(fs.readFileSync(registry, 'utf8'));
     // The CLI contention reader uses the current registry spelling; the
@@ -838,7 +859,7 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
     const target = path.join(fixture.repo, 'packages/dir/protected.txt');
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, 'the known canonical claimant remains protected\n');
-    const baseline = runGuard(fixture, '', { writePath: target });
+    const baseline = runGuard(fixture, '', { writePath: target, environmentPath });
     expect(baseline.status).toBe(2);
     expect(baseline.stderr).toContain('claimed:wt-dir:packages/dir');
     expect(baseline.stdout).toBe('');
@@ -847,7 +868,7 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
     const uncertain = registryEntry(fixture.repo, 'wt-unresolved', 'UNRESOLVED', null);
     uncertain['wt-unresolved'].path = dangling;
     writeRegistry(fixture.repo, { ...entries, ...uncertain });
-    const held = runGuard(fixture, '', { writePath: target });
+    const held = runGuard(fixture, '', { writePath: target, environmentPath });
     expect(held.status).toBe(2);
     expect(held.stdout).toBe('');
     expect(fs.readFileSync(target, 'utf8')).toBe(

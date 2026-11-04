@@ -661,7 +661,7 @@ import { isAdapterCoveredSurface } from './types';
 // foreign ownership, failed observations and unavailable approval refuse.
 // v131: payload-owner approval cannot turn unrelated registry uncertainty
 // into approval for a canonical claim.
-export const SHARED_PACK_VERSION = 133;
+export const SHARED_PACK_VERSION = 134;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
