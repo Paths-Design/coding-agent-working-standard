@@ -12,6 +12,32 @@ class InstalledGovernanceBoundary(unittest.TestCase):
     setUp = Installation.setUp
     configure = Installation.configure
 
+    def test_selected_cli_ignores_path_decoy_and_missing_selection_fails_closed(self):
+        self.seed()
+        before = self.foreign.read_bytes()
+        tools = self.root / 'decoy-tools'
+        tools.mkdir()
+        marker = self.root / 'decoy-cli-ran'
+        decoy = tools / 'caws'
+        decoy.write_text('#!/bin/sh\nprintf decoy > "' + str(marker) + '"\nexit 99\n')
+        decoy.chmod(0o755)
+        self.env['PATH'] = str(tools) + ':' + self.env['PATH']
+        owned = self.call('selected-cli-owned', command='touch .caws/worktrees/mine/owned.txt')
+        self.assertEqual(owned.returncode, 0, owned.stderr)
+        self.assertEqual(owned.stdout, b'')
+        foreign = self.call('selected-cli-foreign', command=f'touch "{self.foreign}"')
+        self.assertEqual(foreign.returncode, 2, foreign.stderr)
+        self.assertIn(b'DIFFERENT session', foreign.stderr)
+        self.assertFalse(marker.exists())
+        self.env['CAWS_BIN'] = str(self.root / 'absent-selected-cli')
+        unavailable = self.call('selected-cli-missing', command='touch .caws/worktrees/mine/owned.txt',
+                                mode='bypassPermissions')
+        self.assertEqual(unavailable.returncode, 2, unavailable.stderr)
+        self.assertIn(b'command mutation analysis is unavailable', unavailable.stderr)
+        self.assertFalse(marker.exists())
+        self.assertEqual(self.foreign.read_bytes(), before)
+        self.assertFalse((self.repo / '.caws/worktrees/mine/owned.txt').exists())
+
     def seed(self, handler='bash-write-guard.sh'):
         self.surface = 'claude-code'
         settings = self.home / 'surfaces/claude-code/settings.json'

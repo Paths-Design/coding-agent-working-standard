@@ -728,6 +728,7 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
       writeGuardPath = WORKTREE_WRITE_GUARD,
       sharedLibDirectory = path.join(SHARED, 'lib'),
       environmentPath = process.env.PATH,
+      commandCwd = repo,
     } = {}
   ) {
     const envelope = JSON.stringify({
@@ -740,7 +741,7 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
       permission_mode: permissionMode,
     });
     const result = spawnSync('/bin/bash', [writePath ? writeGuardPath : BASH_WRITE_GUARD], {
-      cwd: repo,
+      cwd: commandCwd,
       input: envelope,
       encoding: 'utf8',
       timeout: 60000,
@@ -769,7 +770,8 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
         JSON.stringify(
           {
             argv: ['/bin/bash', writePath ? writeGuardPath : BASH_WRITE_GUARD],
-            cwd: repo,
+            cwd: commandCwd,
+            projectDir: repo,
             payload: JSON.parse(envelope),
             surface,
             noAsk,
@@ -863,6 +865,27 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
     expect(baseline.status).toBe(2);
     expect(baseline.stderr).toContain('claimed:wt-dir:packages/dir');
     expect(baseline.stdout).toBe('');
+    const ambient = makeClaimedRepo();
+    writeRegistry(ambient.repo, {});
+    const clearAmbient = spawnSync(
+      process.execPath,
+      [CLI, 'scope', 'contention', 'packages/dir/protected.txt', '--json'],
+      {
+        cwd: ambient.repo,
+        encoding: 'utf8',
+        env: hermeticGitEnvironment(ambient.home),
+      }
+    );
+    expect(clearAmbient.status).toBe(0);
+    expect(JSON.parse(clearAmbient.stdout).status).toBe('clear');
+    const elsewhere = runGuard(fixture, '', {
+      writePath: target,
+      environmentPath,
+      commandCwd: ambient.repo,
+    });
+    expect(elsewhere.status).toBe(2);
+    expect(elsewhere.stderr).toContain('claimed:wt-dir:packages/dir');
+    expect(elsewhere.stdout).toBe('');
     const dangling = path.join(fixture.repo, 'unrelated-root');
     fs.symlinkSync(path.join(fixture.repo, 'absent-root'), dangling, 'dir');
     const uncertain = registryEntry(fixture.repo, 'wt-unresolved', 'UNRESOLVED', null);

@@ -6,14 +6,18 @@ const { spawnSync } = require('node:child_process');
 // Bounded qualification fixtures retain raw observations, stop on first failure,
 // and never derive signal authority from a process listing.
 module.exports = function runtimeAssetFixture() {
-  const artifactRoot = process.env.CAWS_RUNTIME_ASSET_ARTIFACT_ROOT;
+  const artifactRoot =
+    process.env.CAWS_RUNTIME_ASSET_ARTIFACT_ROOT ||
+    (process.env.CAWS_TEST_ARTIFACT_DIR &&
+      path.join(process.env.CAWS_TEST_ARTIFACT_DIR, 'runtime-assets'));
   if (artifactRoot && !path.isAbsolute(artifactRoot))
     throw new Error('Artifact root must be absolute');
   const roots = new Set();
+  const directChildren = new Set();
   let firstFailure;
   let sequence = 0;
   const nonclaims = [
-    'A fixture-path process snapshot does not establish birth-pinned descendant cleanup.',
+    'A known-PID snapshot does not establish birth identity or descendant settlement.',
     'Timeout may terminate the directly spawned child; descendant settlement remains unproven.',
     'No process-scan-derived signals are sent.',
   ];
@@ -25,10 +29,38 @@ module.exports = function runtimeAssetFixture() {
     );
     if (artifactRoot) {
       fs.mkdirSync(artifactRoot, { recursive: true });
+      // Keep executed fixtures in their original temp location. Copy only their
+      // raw command receipts into CI's uploaded tree; moving fixtures beneath
+      // the checkout would change Git/CAWS ancestor discovery.
+      const copiedReceipts = [];
+      for (const [index, root] of [...roots].entries()) {
+        const source = path.join(root, 'receipts');
+        if (!fs.existsSync(source)) continue;
+        const destination = path.join(artifactRoot, 'command-receipts', `${process.pid}-${index}`);
+        try {
+          fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
+          fs.cpSync(source, destination, {
+            recursive: true,
+            dereference: false,
+            force: false,
+            errorOnExist: true,
+          });
+          copiedReceipts.push({ executedRoot: root, source, destination });
+        } catch (copyError) {
+          console.error('Raw command receipt retention failed:', source, copyError.message);
+          copiedReceipts.push({
+            executedRoot: root,
+            source,
+            destination,
+            error: copyError.message,
+          });
+        }
+      }
       fs.appendFileSync(
         path.join(artifactRoot, 'preserved-roots.jsonl'),
         JSON.stringify({
           executedRoots: [...roots],
+          copiedReceipts,
           reason: firstFailure,
           cleanup: 'not attempted',
           nonclaims,
@@ -80,6 +112,8 @@ module.exports = function runtimeAssetFixture() {
       killSignal: 'SIGTERM',
       maxBuffer: 8 * 1024 * 1024,
     });
+    if (Number.isInteger(result.pid) && result.pid > 0 && executable !== '/bin/ps')
+      directChildren.add(result.pid);
     fs.writeFileSync(path.join(receipt, 'stdout.bin'), result.stdout ?? Buffer.alloc(0));
     fs.writeFileSync(path.join(receipt, 'stderr.bin'), result.stderr ?? Buffer.alloc(0));
     fs.writeFileSync(
@@ -121,18 +155,22 @@ module.exports = function runtimeAssetFixture() {
     if (firstFailure || !roots.size) return;
     try {
       const liveRoots = [...roots];
-      const observation = invoke(liveRoots[0], '/bin/ps', ['-axo', 'pid=,ppid=,lstart=,args=']);
-      succeeds(observation);
+      const argv = ['-p', [...directChildren].join(','), '-o', 'pid=,ppid=,lstart=,comm='];
+      const observation = directChildren.size
+        ? invoke(liveRoots[0], '/bin/ps', argv)
+        : { status: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), receipt: null };
+      expect([0, 1]).toContain(observation.status);
+      expect(observation.stderr.toString()).toBe('');
       const matches = observation.stdout
         .toString()
         .split('\n')
-        .filter((line) => liveRoots.some((root) => line.includes(root + '/')));
+        .filter((line) => line.trim());
       for (const root of liveRoots)
         fs.writeFileSync(
           path.join(root, 'postcase-processes.json'),
           JSON.stringify(
             {
-              command: ['/bin/ps', '-axo', 'pid=,ppid=,lstart=,args='],
+              command: directChildren.size ? ['/bin/ps', ...argv] : null,
               status: observation.status,
               receipt: observation.receipt,
               executedRoots: liveRoots,
@@ -171,6 +209,7 @@ module.exports = function runtimeAssetFixture() {
         fs.rmSync(root, { recursive: true, force: true });
         roots.delete(root);
       }
+      directChildren.clear();
     } catch (error) {
       preserve(error);
       throw error;

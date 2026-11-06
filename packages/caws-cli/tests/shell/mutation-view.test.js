@@ -1981,7 +1981,9 @@ describe('copy operand role observations', () => {
         active,
       ],
       {
-        env: { ...process.env },
+        env: Object.fromEntries(
+          Object.entries(process.env).filter(([key]) => !/^(?:LD_|DYLD_)/.test(key))
+        ),
         input: JSON.stringify(requests),
         encoding: 'utf8',
         timeout: 30000,

@@ -311,7 +311,25 @@ describe('native preparation data-only build request composition', () => {
     capture('/fixture/base-request.json', f.base),
     f.source,
   ];
-  afterEach(() => jest.restoreAllMocks());
+  // These are metadata-only composition fixtures, not host execution proof.
+  let hostDescriptors;
+  beforeEach(() => {
+    hostDescriptors = {
+      platform: Object.getOwnPropertyDescriptor(process, 'platform'),
+      arch: Object.getOwnPropertyDescriptor(process, 'arch'),
+    };
+    Object.defineProperties(process, {
+      platform: { ...hostDescriptors.platform, value: 'darwin' },
+      arch: { ...hostDescriptors.arch, value: 'arm64' },
+    });
+  });
+  afterEach(() => {
+    try {
+      jest.restoreAllMocks();
+    } finally {
+      Object.defineProperties(process, hostDescriptors);
+    }
+  });
 
   test('replaces exact source descriptors, preserves reviewed dependencies and binds both input records', () => {
     const f = fixture();

@@ -287,6 +287,12 @@ const prepare = async ({ withReceipt = true } = {}) => {
   let receipt;
   if (withReceipt) {
     const compared = await compareCliIdentity({ reviewed, request, signal: controller.signal });
+    require('../helpers/cli-identity-diagnostics').retainUnexpectedCliIdentity({
+      suite: 'stop-dispatch-connection',
+      test: expect.getState().currentTestName,
+      reviewed,
+      result: compared,
+    });
     expect(compared).toMatchObject({ status: 'matched' });
     receipt = compared.receipt;
   }
@@ -458,6 +464,7 @@ test.each(['structural', 'copied', 'request', 'signal'])(
 // the stock source checks, comparator receipt, late consumer and lease store are real.
 test('real CLI owner connects prefix, logger and late agent-stop lease application', async () => {
   installRealStopSources();
+  installReviewedStopLibraries();
   const seeded = heartbeatAgentActivity({
     cawsDir: path.join(root, '.caws'),
     identity: { session_id: 'supplied', platform: 'opencode' },
@@ -561,6 +568,10 @@ function installRealStopSources() {
 
 function installReviewedStopLibraries() {
   const fixtures = {
+    'session-id.sh': [
+      'reviewed-stock/lib/session-id.sh',
+      'cf662f10e6d3477cecbf5deabd8d2b63284f6f4ac14fa7070725ff8502515c53',
+    ],
     'agent-surface.sh': [
       'agent-surface-json-lookup.sh',
       'f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a',
@@ -606,13 +617,13 @@ function seedStopLease() {
   return { file, before: fs.readFileSync(file) };
 }
 
-test.each(['changed current helper', 'changed ordered handler'])(
+test.each(['changed reviewed helper', 'changed ordered handler'])(
   'Stop preflight refuses %s before prefix or lease effects',
   async (kind) => {
     installRealStopSources();
+    installReviewedStopLibraries();
     stock.assertNativeStopAgentSelection.mockRestore();
     if (kind === 'changed ordered handler') {
-      installReviewedStopLibraries();
       fs.appendFileSync(selection.handlers[0].path, '# changed source\n');
     } else {
       fs.appendFileSync(selection.libraries['agent-surface.sh'].path, '# changed source\n');
@@ -678,6 +689,7 @@ test.each([
   async (_name, handlers, expires_at, reason) => {
     eligibility.handlerEligibility.mockRestore();
     installRealStopSources();
+    installReviewedStopLibraries();
     const seeded = heartbeatAgentActivity({
       cawsDir: path.join(root, '.caws'),
       identity: { session_id: 'supplied', platform: 'opencode' },

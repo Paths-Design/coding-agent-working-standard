@@ -51,8 +51,17 @@ beforeEach(() => {
   );
   fx = { root, project, sibling, hooks, foreign, cli };
 });
-afterEach(() => fs.rmSync(fx.root, { recursive: true, force: true }));
+afterEach(() => {
+  if (!fx.preserve) fs.rmSync(fx.root, { recursive: true, force: true });
+});
 function guard(command, extra = {}, transport = {}) {
+  const controlled = process.env.CAWS_GUARD_CONTROLLED_ENV === '1';
+  const traced = controlled && process.env.CAWS_GUARD_TRACE === '1';
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) =>
+      controlled ? ['PATH', 'LANG', 'LC_ALL', 'TMPDIR'].includes(key) : !/^(?:LD_|DYLD_)/.test(key)
+    )
+  );
   const nativeCwd = Object.hasOwn(extra, 'HOOK_CWD') ? extra.HOOK_CWD : fx.project;
   const envelope = transport.envelope ?? {
     tool_name: 'Bash',
@@ -63,13 +72,15 @@ function guard(command, extra = {}, transport = {}) {
     permission_mode: 'bypassPermissions',
     tool_input: { command },
   };
-  return spawnSync('/bin/bash', [path.join(fx.hooks, 'bash-write-guard.sh')], {
+  const argv = [...(traced ? ['-x'] : []), path.join(fx.hooks, 'bash-write-guard.sh')];
+  const input = transport.input ?? JSON.stringify(envelope);
+  const result = spawnSync('/bin/bash', argv, {
     cwd: fx.project,
-    encoding: 'utf8',
-    input: transport.input ?? JSON.stringify(envelope),
+    encoding: undefined,
+    input,
     timeout: 15000,
     env: {
-      ...process.env,
+      ...env,
       HOME: fx.root,
       NODE_PATH: YAML_MODULES,
       HOOK_TOOL_NAME: 'Bash',
@@ -85,6 +96,39 @@ function guard(command, extra = {}, transport = {}) {
       ...extra,
     },
   });
+  if (result.error || result.signal !== null || !Number.isInteger(result.status) || traced) {
+    fx.preserve = true;
+    const receipt = fs.mkdtempSync(path.join(fx.root, 'guard-outcome-'));
+    fs.writeFileSync(path.join(receipt, 'stdin.bin'), input);
+    fs.writeFileSync(path.join(receipt, 'stdout.bin'), result.stdout ?? '');
+    fs.writeFileSync(path.join(receipt, 'stderr.bin'), result.stderr ?? '');
+    fs.writeFileSync(
+      path.join(receipt, 'status.json'),
+      JSON.stringify(
+        {
+          argv: ['/bin/bash', ...argv],
+          cwd: fx.project,
+          timeoutMs: 15000,
+          controlled,
+          traced,
+          inheritedEnvironmentKeys: Object.keys(env).sort(),
+          status: result.status,
+          signal: result.signal,
+          error: result.error ? { code: result.error.code, message: result.error.message } : null,
+          nonclaim:
+            'Direct-child outcome only; descendant settlement is unproven. Fixture retained.',
+        },
+        null,
+        2
+      )
+    );
+    console.error('Preserved guard fixture: ' + fx.root);
+  }
+  return {
+    ...result,
+    stdout: (result.stdout ?? Buffer.alloc(0)).toString('utf8'),
+    stderr: (result.stderr ?? Buffer.alloc(0)).toString('utf8'),
+  };
 }
 function refused(command, message) {
   const result = guard(command);
@@ -95,6 +139,45 @@ function refused(command, message) {
   expect(result.stderr).toContain(message);
   return result;
 }
+test.each(
+  process.platform === 'darwin' ? ['LD_LIBRARY_PATH'] : ['LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH']
+)('explicit %s keeps copy roles unresolved after ordinary fixture isolation', (name) => {
+  const source = path.join(fx.project, 'source.txt');
+  const destination = path.join(fx.project, 'copy.txt');
+  fs.writeFileSync(source, 'source unchanged');
+  const command = 'cp ' + quote(source) + ' ' + quote(destination);
+  const ordinary = guard(command);
+  expect(ordinary.error).toBeUndefined();
+  expect(ordinary.status).toBe(0);
+  expect(ordinary.stdout).toBe('');
+  const hostile = guard(command, { [name]: '/fixture/unmodeled-loader' });
+  expect(hostile.error).toBeUndefined();
+  expect(hostile.status).toBe(2);
+  expect(hostile.stderr).toContain('copy operand roles are unresolved');
+  expect(fs.existsSync(destination)).toBe(false);
+  expect(fs.readFileSync(source, 'utf8')).toBe('source unchanged');
+});
+if (process.platform === 'darwin')
+  test('macOS system-shell transport strips DYLD_LIBRARY_PATH before the guard', () => {
+    const transport = spawnSync('/bin/bash', ['-c', '[[ -z "${DYLD_LIBRARY_PATH+x}" ]]'], {
+      env: { PATH: '/usr/bin:/bin', DYLD_LIBRARY_PATH: '/fixture/unmodeled-loader' },
+      encoding: 'utf8',
+      timeout: 15000,
+    });
+    expect(transport.error).toBeUndefined();
+    expect(transport.status).toBe(0);
+    const source = path.join(fx.project, 'source.txt');
+    const destination = path.join(fx.project, 'copy.txt');
+    fs.writeFileSync(source, 'source unchanged');
+    const observed = guard('cp ' + quote(source) + ' ' + quote(destination), {
+      DYLD_LIBRARY_PATH: '/fixture/unmodeled-loader',
+    });
+    expect(observed.error).toBeUndefined();
+    expect(observed.status).toBe(0);
+    expect(observed.stdout).toBe('');
+    expect(fs.existsSync(destination)).toBe(false);
+    expect(fs.readFileSync(source, 'utf8')).toBe('source unchanged');
+  });
 test('missing original input cannot borrow parsed scalar authority', () => {
   const missing = guard('printf safe', {}, { input: '' });
   expect(missing.status).toBe(2);

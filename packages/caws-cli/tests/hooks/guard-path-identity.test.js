@@ -73,7 +73,7 @@ function fixture(basename = 'project', governed = true, lane = 'linked', externa
 }
 
 afterEach(() => {
-  if (fx) fs.rmSync(fx.base, { recursive: true, force: true });
+  if (fx && !fx.preserve) fs.rmSync(fx.base, { recursive: true, force: true });
   fx = undefined;
 });
 
@@ -81,6 +81,7 @@ function invoke(script, cwd, command = 'git clean -fd', extra = {}) {
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
     if (
+      /^(?:LD_|DYLD_)/.test(key) ||
       key.startsWith('HOOK_') ||
       key.startsWith('_CAWS_') ||
       ['BASH_ENV', 'ENV', 'NODE_OPTIONS', 'NODE_PATH', 'CAWS_HOOKS_DIR'].includes(key)
@@ -93,10 +94,10 @@ function invoke(script, cwd, command = 'git clean -fd', extra = {}) {
     cwd,
     tool_input: { command },
   });
-  return spawnSync('/bin/bash', [path.join(fx.hooks, script)], {
+  const result = spawnSync('/bin/bash', [path.join(fx.hooks, script)], {
     cwd,
     input,
-    encoding: 'utf8',
+    encoding: undefined,
     timeout: 15000,
     env: {
       ...env,
@@ -120,6 +121,36 @@ function invoke(script, cwd, command = 'git clean -fd', extra = {}) {
       ...extra,
     },
   });
+  if (result.error || result.signal !== null || !Number.isInteger(result.status)) {
+    fx.preserve = true;
+    const receipt = fs.mkdtempSync(path.join(fx.base, 'guard-outcome-'));
+    fs.writeFileSync(path.join(receipt, 'stdin.bin'), input);
+    fs.writeFileSync(path.join(receipt, 'stdout.bin'), result.stdout ?? '');
+    fs.writeFileSync(path.join(receipt, 'stderr.bin'), result.stderr ?? '');
+    fs.writeFileSync(
+      path.join(receipt, 'status.json'),
+      JSON.stringify(
+        {
+          argv: ['/bin/bash', path.join(fx.hooks, script)],
+          cwd,
+          timeoutMs: 15000,
+          status: result.status,
+          signal: result.signal,
+          error: result.error ? { code: result.error.code, message: result.error.message } : null,
+          nonclaim:
+            'Direct-child outcome only; descendant settlement is unproven. Fixture retained.',
+        },
+        null,
+        2
+      )
+    );
+    console.error('Preserved guard fixture: ' + fx.base);
+  }
+  return {
+    ...result,
+    stdout: (result.stdout ?? Buffer.alloc(0)).toString('utf8'),
+    stderr: (result.stderr ?? Buffer.alloc(0)).toString('utf8'),
+  };
 }
 
 function check(result, status, reason) {

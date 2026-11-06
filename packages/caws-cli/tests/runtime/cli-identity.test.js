@@ -143,6 +143,12 @@ const decline = async () => {
 describe('component content and binding controls', () => {
   test('receipt owner is the exact original request and signal, not a copied shape', async () => {
     const result = await compareCliIdentity(input);
+    require('../helpers/cli-identity-diagnostics').retainUnexpectedCliIdentity({
+      suite: 'cli-identity',
+      test: expect.getState().currentTestName,
+      reviewed: input.reviewed,
+      result,
+    });
     expect(result.status).toBe('matched');
     expect(() =>
       assertMatchedCliIdentityReceipt(result.receipt, input.request, input.signal)

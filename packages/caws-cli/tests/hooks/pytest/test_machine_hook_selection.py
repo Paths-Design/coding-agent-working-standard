@@ -30,9 +30,25 @@ class MachineHookSelection(unittest.TestCase):
         self.home, self.repo = self.root / 'machine', self.root / 'repo'
         self.surface = 'codex'
         self.repo.mkdir()
+        cli = (PACKAGE / 'dist/index.js').resolve()
+        self.assertTrue(cli.is_file(), f'candidate CLI missing: {cli}; run build')
+        self.assertTrue(os.access(cli, os.X_OK), f'candidate CLI not executable: {cli}')
         self.env = {'PATH': os.environ['PATH'], 'HOME': str(self.root / 'user'),
                     'CAWS_HOME': str(self.home), 'CAWS_PROJECT_DIR': str(self.repo),
+                    'CAWS_BIN': str(cli),
                     'PYTHONDONTWRITEBYTECODE': '1'}
+        argv = ['/bin/bash', '-c', 'command -v jq && command -v "$CAWS_BIN"']
+        dependencies = subprocess.run(argv, cwd=self.repo, env=self.env,
+                                      capture_output=True, timeout=10)
+        (self.root / 'dependencies.stdout').write_bytes(dependencies.stdout)
+        (self.root / 'dependencies.stderr').write_bytes(dependencies.stderr)
+        (self.root / 'dependencies.json').write_text(json.dumps({
+            'argv': argv, 'cwd': str(self.repo), 'exit_code': dependencies.returncode,
+            'candidate_cli': str(cli), 'sha256': hashlib.sha256(cli.read_bytes()).hexdigest(),
+        }, indent=2))
+        self.assertEqual(dependencies.returncode, 0,
+                         dependencies.stdout.decode() + dependencies.stderr.decode())
+        self.assertEqual(dependencies.stdout.decode().splitlines()[-1], str(cli))
         init = subprocess.run(['git', 'init', '-q', '-b', 'main', str(self.repo)],
                               capture_output=True, env=self.env)
         self.assertEqual(init.returncode, 0, init.stderr)

@@ -514,8 +514,11 @@ describe('native SQLite coordinator pre-Cargo refusals and explicit loader bindi
     expect(fs.existsSync(request.outputRoot)).toBe(false);
   });
 
-  test('refuses unsupported actual host selection before filesystem mutation', async () => {
-    setHost('darwin', 'x64');
+  test.each([
+    ['darwin', 'x64'],
+    ['linux', 'x64'],
+  ])('refuses unsupported %s/%s host before filesystem mutation', async (platform, arch) => {
+    setHost(platform, arch);
     await refusal(/Requires arm64 macOS host/, 'request', 'NOT_STARTED');
     expect(fs.existsSync(request.outputRoot)).toBe(false);
   });
