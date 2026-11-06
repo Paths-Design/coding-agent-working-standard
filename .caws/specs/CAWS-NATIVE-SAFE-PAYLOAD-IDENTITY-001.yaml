@@ -1,0 +1,46 @@
+id: CAWS-NATIVE-SAFE-PAYLOAD-IDENTITY-001
+title: 'Admit current helper for safe native payload identities'
+mode: fix
+lifecycle_state: active
+created_at: '2026-11-06T22:30:59.225Z'
+updated_at: '2026-11-06T22:30:59.225Z'
+created_by_session: '01a1b296-8cac-7610-a8d5-c56358e4ac24'
+blast_radius:
+  modules:
+    - 'Native session helper source admission'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/session-cache-admission.ts'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/tests/runtime/session-cache-admission.test.js'
+    - 'packages/caws-cli/tests/runtime/stock-handlers.test.js'
+    - 'packages/caws-cli/tests/hooks/session-id-payload.test.js'
+    - 'packages/caws-native/src/stop_admission.rs'
+  out: []
+invariants:
+  - 'Current helper admission requires safe explicit original payload SID; historical absent SID behavior and other stock profiles remain unchanged.'
+acceptance:
+  - id: A1
+    given: 'exact historical and current helpers'
+    when: 'source admission executes'
+    then: 'current helper requires safe explicit native payload SID and historical absent SID behavior remains unchanged.'
+  - id: A2
+    given: 'two chats sharing a live PID record and foreign reprieve'
+    when: 'payload identities resolve'
+    then: 'each chat retains its owner and cannot inherit foreign reprieve.'
+  - id: A3
+    given: 'malformed or mismatched SID or changed, redirected or overridden helper bytes'
+    when: 'admission and execution occur'
+    then: 'eligibility declines before effects or invalidation refuses replay after effects.'
+observability:
+  - 'Exact source hashes and hostile admission outcomes.'
+rollback:
+  - 'Revert the owned source commit while retaining historical source profiles.'
+non_functional:
+  security:
+    - 'Unresolved identity cannot acquire current helper authority.'
+contracts:
+  - name: 'safe-native-session-identity'
+    type: behavior
