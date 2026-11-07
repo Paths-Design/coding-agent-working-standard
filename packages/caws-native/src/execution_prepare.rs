@@ -1426,16 +1426,21 @@ process.stdin.resume();
             assert!(!f.path("caws").join("state.lock").exists());
         }
         f.finish();
+        eprintln!("prepare consumer completed: {case}");
     }
-    fn case(name: &str) {
-        let output = Command::new(std::env::current_exe().unwrap())
-            .arg("--exact")
+    fn run_case(name: Option<&str>) -> std::process::Output {
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command.arg("--exact")
             .arg(FIXTURE)
             .arg("--nocapture")
             .arg("--test-threads=1")
-            .env("CAWS_PREPARE_CONSUMER_CASE", name)
-            .output()
-            .unwrap();
+            .env_remove("CAWS_PREPARE_CONSUMER_CASE");
+        if let Some(name) = name {
+            command.env("CAWS_PREPARE_CONSUMER_CASE", name);
+        }
+        command.output().unwrap()
+    }
+    fn assert_completed_case(name: &str, output: &std::process::Output) {
         assert!(
             output.status.success(),
             "case={name} stdout={} stderr={}",
@@ -1443,6 +1448,24 @@ process.stdin.resume();
             String::from_utf8_lossy(&output.stderr)
         );
         assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+        let marker = format!("prepare consumer completed: {name}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).lines().any(|line| line == marker),
+            "missing completed prepare case: {name}"
+        );
+    }
+    fn case(name: &str) {
+        let output = run_case(Some(name));
+        assert_completed_case(name, &output);
+        eprintln!("verified prepare consumer case: {name}");
+    }
+    #[test]
+    #[should_panic(expected = "missing completed prepare case")]
+    fn successful_noop_does_not_prove_a_consumer_case_ran() {
+        let output = run_case(None);
+        assert!(output.status.success());
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+        assert_completed_case("missing-selection", &output);
     }
     #[test]
     #[ignore = "requires explicit real Node, Source entries, fixture and isolated process"]
