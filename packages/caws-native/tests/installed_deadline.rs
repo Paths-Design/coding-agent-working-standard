@@ -783,15 +783,47 @@ fn installed_generation_path_and_timeout_binding_refuse_before_engine_for_all_ev
 #[test]
 fn optional_original_capture_reuses_mandatory_receipt_and_mutation_blocks_launch() {
     let f = PublishedFixture::new(Some(installed_entry()));
+    let git_probe = |args: &[&str]| {
+        Command::new("/usr/bin/git")
+            .args(args)
+            .current_dir(&f.fixture.root)
+            .env_clear()
+            .env("HOME", &f.fixture.root)
+            .env("PATH", "/usr/bin:/bin")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .output()
+            .unwrap()
+    };
+    let initialized = git_probe(&["init", "--bare", "--quiet", "."]);
+    assert!(
+        initialized.status.success(),
+        "{}",
+        String::from_utf8_lossy(&initialized.stderr)
+    );
+    let bare = git_probe(&["rev-parse", "--is-bare-repository"]);
+    assert!(bare.status.success());
+    assert_eq!(bare.stdout, b"true\n");
+    assert!(
+        !git_probe(&["rev-parse", "--show-toplevel"])
+            .status
+            .success()
+    );
+    assert!(!f.fixture.root.join(".caws").exists());
     let mut args = f.args("stop");
     args[6] = "opencode".into();
-    // With no project in this temporary directory, optional capture refuses.
-    // Its refusal must retain the supplied receipt and permit compatibility.
+    // A private bare repository prevents ancestor discovery and genuinely
+    // refuses original capture's --show-toplevel query. The supplied receipt
+    // must survive that refusal and permit compatibility without recapture.
     let output = f.run(&args, None);
     outcome(&output, "stop");
     assert_eq!(fs::read(&f.fixture.marker).unwrap(), b"started");
     let progress = invocation_progress(&output);
-    assert_eq!(progress["generationReceiptRevalidations"]["count"], 2);
+    assert_eq!(
+        progress["generationReceiptRevalidations"]["count"], 2,
+        "{progress}"
+    );
+    assert_eq!(progress["selectionAdvertised"], false);
     assert_eq!(progress["originalRenderCaptured"], false);
     assert!(
         progress["marks"]
