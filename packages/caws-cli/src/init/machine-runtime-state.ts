@@ -8,7 +8,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { assertMachinePath } from './machine-paths';
-import { parseInstalledInvocationCapability } from './native-hook-identification';
+import {
+  parseInstalledInvocationCapability,
+  installedEntryAdvertisesEventBudget,
+} from './native-hook-identification';
 
 export interface RuntimePointer {
   version: 1;
@@ -219,6 +222,28 @@ export function readRetainedNativeEntryIdentity(
   if (entry.sha256 !== files['native/caws-hook-native'])
     throw new Error('Retained native entry integrity failure');
   return { digest, sha256: entry.sha256, bytes: entry.bytes };
+}
+
+/** Bind a declared capability to captured installed bytes using one read set.
+ * Unselected generation payload is not a prerequisite for legacy rollback. */
+export function retainedNativeEntryAdvertisesEventBudget(
+  home: string,
+  digest: string,
+  actualStableSha256: string,
+  io: SelectionReadIo = liveSelectionReadIo
+): boolean {
+  const files = readManifest(home, digest, io);
+  if (!validDigest(actualStableSha256) || files['native/caws-hook-native'] !== actualStableSha256)
+    return false;
+  const root = path.join(home, 'lib/runtimes', digest);
+  const entry = parseNativeEntryMetadata(
+    readManifestMetadata(root, 'native-entry.json', files, io),
+    files
+  );
+  return (
+    entry.schema === 'caws.runtime.native-entry.v2' &&
+    installedEntryAdvertisesEventBudget(entry.installedInvocation)
+  );
 }
 
 /** Verification-only callers need no returned manifest. Legacy/custom IO keeps

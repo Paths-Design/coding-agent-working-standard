@@ -5,7 +5,12 @@ import {
 } from '../init/selection-read-io';
 import * as path from 'node:path';
 import { assertMachinePath } from '../init/machine-paths';
-import { sha, ensureRuntimeVerified, readManifest } from '../init/machine-runtime-state';
+import {
+  sha,
+  ensureRuntimeVerified,
+  readManifest,
+  retainedNativeEntryAdvertisesEventBudget,
+} from '../init/machine-runtime-state';
 import {
   isCawsNativeCommand,
   classifyCawsProducerHook,
@@ -14,6 +19,7 @@ import {
   universalEventMatcher,
   unconditionalCommandHook,
   qualifiedHookTimeout,
+  nativeEventTimeoutMs,
   MACHINE_EVENTS,
 } from '../init/native-hook-identification';
 import {
@@ -116,7 +122,11 @@ function emptyMachinePolicy(): SystemSurfacePolicy {
   return { disabled: {}, extensions: {}, handlers: {}, libraries: {} };
 }
 
-function verifiedProjectMachineEntry(command: string, options: SelectionOptions): void {
+function verifiedProjectMachineEntry(
+  command: string,
+  timeout: unknown,
+  options: SelectionOptions
+): void {
   const io = options.io ?? liveSelectionReadIo;
   const { confined, isFile } = selectionReads(io);
   const legacy = path.join(options.home, 'bin/caws-hook');
@@ -125,11 +135,22 @@ function verifiedProjectMachineEntry(command: string, options: SelectionOptions)
   // assignment syntax: a quoted CAWS_HOME word is a command, not an assignment.
   // Missing assignments, wrappers, --system and --describe establish no coverage.
   const interpreter = command === machineCommand(options.home, options.surface, options.event);
-  if (
-    !interpreter &&
-    command !== machineCommand(options.home, options.surface, options.event, 'native')
-  )
-    throw new Error('Project CAWS invocation requires native-harness reconciliation');
+  if (!interpreter) {
+    let expected: string;
+    try {
+      expected = machineCommand(
+        options.home,
+        options.surface,
+        options.event,
+        'native',
+        nativeEventTimeoutMs(options.surface, options.event, timeout)
+      );
+    } catch (cause) {
+      throw new Error('Project CAWS invocation requires native-harness reconciliation', { cause });
+    }
+    if (command !== expected)
+      throw new Error('Project CAWS invocation requires native-harness reconciliation');
+  }
   const entry = interpreter ? legacy : native;
   assertMachinePath(options.home, entry, io);
   if (!isFile(entry) || (!interpreter && (io.stat(entry).mode & 0o111) === 0))
@@ -137,11 +158,21 @@ function verifiedProjectMachineEntry(command: string, options: SelectionOptions)
   const identity = sha(io.readFile(entry));
   const member = entry === native ? 'native/caws-hook-native' : 'bootstrap.py';
   const runtimes = confined(options.home, 'lib/runtimes');
-  const known = io.readDirectory(runtimes).some((digest) => {
+  let candidates: readonly string[];
+  if (entry === native) {
+    const selected = readManifest(options.home, options.runtimeDigest, io);
+    if (selected['native-entry.json']) candidates = [options.runtimeDigest];
+    else if (selected['bootstrap.py'] && selected['launcher.py'])
+      candidates = io.readDirectory(runtimes);
+    else throw new Error('Selected runtime cannot qualify a native project entry');
+  } else candidates = io.readDirectory(runtimes);
+  const known = candidates.some((digest) => {
     try {
       const manifest = readManifest(options.home, digest, io);
       return (
-        manifest[member] === identity ||
+        (manifest[member] === identity &&
+          (entry === legacy ||
+            retainedNativeEntryAdvertisesEventBudget(options.home, digest, identity, io))) ||
         (entry === legacy && manifest['launcher.py'] === identity && !manifest['bootstrap.py'])
       );
     } catch (error) {
@@ -235,7 +266,7 @@ function legacyRegistered(options: SelectionOptions): boolean {
               'Restricted or additive project CAWS registration requires native-harness reconciliation'
             );
           // Only the exact producer command establishes understood event coverage.
-          verifiedProjectMachineEntry(hook.command, options);
+          verifiedProjectMachineEntry(hook.command, hook.timeout, options);
           selected++;
         }
       }

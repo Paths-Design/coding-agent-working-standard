@@ -8,12 +8,19 @@ const { configureSystemRuntime, systemSurfaceEnabled, migrateSystemProject } = r
   path.join(dist, 'init/system-runtime')
 );
 const { observeSystemRuntime } = require(path.join(dist, 'store/system-runtime-observation'));
-const { verifyRuntime } = require(path.join(dist, 'init/machine-runtime-state'));
+const { verifyRuntime, retainedNativeEntryAdvertisesEventBudget } = require(
+  path.join(dist, 'init/machine-runtime-state')
+);
+const { observeHookInspectionRoute } = require(path.join(dist, 'init/hook-inspection-route'));
+const { liveSelectionReadIo } = require(path.join(dist, 'init/selection-read-io'));
 const {
   machineCommand,
   systemCommand,
   isCawsNativeCommand,
   qualifiedHookTimeout,
+  nativeEventTimeoutMs,
+  nativeEventTimeoutAssignment,
+  NATIVE_EVENT_TIMEOUT_ENV,
   unconditionalCommandHook,
   MACHINE_EVENTS,
   isCawsProducerHookCandidate,
@@ -199,7 +206,7 @@ const precedingSyntaxCases = [
     () => 'sh ' + '\\' + "\n -c 'true && caws\\-hook-native claude-code pre_tool_use --system'",
   ],
 ];
-function nativeObservationFixture() {
+function nativeObservationFixture(capability = 'current') {
   // Inert assets exercise registration/layout verification only. No fixture
   // executable is invoked and this is not a native-image execution witness.
   const previous = path.join(home, 'lib/runtimes', options.runtimeDigest);
@@ -218,7 +225,18 @@ function nativeObservationFixture() {
     'native-prefix/engine-entry.js': '// observation fixture\n',
     'native-prefix/describe-entry.js': '// observation fixture\n',
     'native-entry.json': JSON.stringify({
-      schema: 'caws.runtime.native-entry.v1',
+      schema: capability === 'v1' ? 'caws.runtime.native-entry.v1' : 'caws.runtime.native-entry.v2',
+      ...(capability === 'v1'
+        ? {}
+        : {
+            installedInvocation: {
+              protocol: 'invoke-installed-v1',
+              maxOriginalTimeoutMs: 30000,
+              ...(capability === 'current'
+                ? { stableEntryEventBudget: 'env-original-start-ms-v1' }
+                : {}),
+            },
+          }),
       nativeExecutable: 'native/caws-native',
       nodeExecutable: 'native/node',
       engineEntry: 'native-prefix/engine-entry.js',
@@ -275,6 +293,135 @@ function fixtureBytes() {
   visit(root);
   return result;
 }
+
+function inspectCodex(event = 'pre_tool_use') {
+  return observeHookInspectionRoute({
+    home,
+    surface: 'codex',
+    event,
+    canonical,
+    checkout,
+    caller: { cwd: checkout, environment: { HOME: user, CODEX_HOME: path.join(user, '.codex') } },
+  });
+}
+
+test.each([
+  ['codex', 'session_end', 3, 3000],
+  ['codex', 'pre_tool_use', 45, 30000],
+  ['claude-code', 'pre_tool_use', 0.001, 1],
+  ['qwen-code', 'session_end', 10000, 10000],
+  ['qwen-code', 'pre_tool_use', 45000, 30000],
+])('converts the actual %s %s host budget %s to %s ms', (surface, event, timeout, expected) => {
+  expect(nativeEventTimeoutMs(surface, event, timeout)).toBe(expected);
+});
+test.each([undefined, null, 0, -1, 0.0001, 1.5, Infinity, NaN, Number.MAX_SAFE_INTEGER])(
+  'refuses unsafe converted milliseconds before clamping: %s',
+  (timeout) => {
+    expect(() => nativeEventTimeoutMs('codex', 'pre_tool_use', timeout)).toThrow();
+  }
+);
+test('native emission requires an explicit valid cap and legacy emission refuses one', () => {
+  expect(() => machineCommand(home, 'codex', 'pre_tool_use', 'native')).toThrow(/timeout/);
+  expect(() => machineCommand(home, 'codex', 'pre_tool_use', 'legacy', 30000)).toThrow(/Legacy/);
+  expect(machineCommand(home, 'codex', 'pre_tool_use', 'native', 30000)).toContain(
+    `${NATIVE_EVENT_TIMEOUT_ENV}=30000 `
+  );
+});
+test.each(['0', '01', '-1', '+1', '1.5', '1e3', '30001', '999999', ' 3', ''])(
+  'malformed private budget %j is never laundered by migration',
+  (value) => {
+    const assignment = `${NATIVE_EVENT_TIMEOUT_ENV}='${value}'`;
+    const command = `${assignment} '${home}/bin/caws-hook-native' codex pre_tool_use`;
+    expect(() =>
+      nativeEventTimeoutAssignment([{ value: `${NATIVE_EVENT_TIMEOUT_ENV}=${value}` }])
+    ).toThrow();
+    expect(classifyCawsProducerHook({ command }, 'codex', 'pre_tool_use')).toEqual({
+      kind: 'unresolved',
+    });
+    for (const entry of ['legacy', 'native'])
+      expect(() =>
+        migrateNativeCommand(
+          command,
+          canonical,
+          home,
+          'codex',
+          'pre_tool_use',
+          entry,
+          entry === 'native' ? 30000 : undefined
+        )
+      ).toThrow(/reconciliation/);
+  }
+);
+test('assignments on both sides of env are checked before native migration', () => {
+  const producer = `'${home}/bin/caws-hook-native' codex pre_tool_use`;
+  const duplicate = `${NATIVE_EVENT_TIMEOUT_ENV}=3000 env ${NATIVE_EVENT_TIMEOUT_ENV}=30000 ${producer}`;
+  expect(classifyCawsProducerHook({ command: duplicate }, 'codex', 'pre_tool_use')).toEqual({
+    kind: 'unresolved',
+  });
+  expect(() => migrateNativeCommand(duplicate, canonical, home, 'codex', 'pre_tool_use')).toThrow(
+    /Duplicate/
+  );
+  const command = `KEEP=value env ${NATIVE_EVENT_TIMEOUT_ENV}=3000 ${producer}`;
+  expect(migrateNativeCommand(command, canonical, home, 'codex', 'pre_tool_use')).toBe(
+    'KEEP=value ' + machineCommand(home, 'codex', 'pre_tool_use')
+  );
+  expect(
+    migrateNativeCommand(command, canonical, home, 'codex', 'pre_tool_use', 'native', 30000)
+  ).toBe('KEEP=value ' + machineCommand(home, 'codex', 'pre_tool_use', 'native', 30000));
+});
+test.each(['v1', 'historical'])(
+  'historical native metadata %s cannot advertise the new registration contract',
+  (capability) => {
+    const digest = nativeObservationFixture(capability);
+    expect(() => verifyRuntime(home, digest)).not.toThrow();
+    const before = fixtureBytes();
+    expect(() =>
+      configureSystemRuntime({ home, userHome: user, surface: 'codex', entry: 'native' })
+    ).toThrow(/native-image/);
+    expect(fixtureBytes()).toEqual(before);
+  }
+);
+test('capability uses supplied reads and the actual installed identity', () => {
+  const digest = nativeObservationFixture();
+  const identity = sha(fs.readFileSync(path.join(home, 'bin/caws-hook-native')));
+  const seen = [];
+  const io = {
+    ...liveSelectionReadIo,
+    readRuntimeFile(file, ...args) {
+      seen.push(file);
+      return liveSelectionReadIo.readRuntimeFile(file, ...args);
+    },
+  };
+  expect(retainedNativeEntryAdvertisesEventBudget(home, digest, identity, io)).toBe(true);
+  expect(seen).toEqual([
+    path.join(home, 'lib/runtimes', digest, 'manifest.json'),
+    path.join(home, 'lib/runtimes', digest, 'native-entry.json'),
+  ]);
+  expect(retainedNativeEntryAdvertisesEventBudget(home, digest, '0'.repeat(64), io)).toBe(false);
+  const failure = new Error('required snapshot metadata observation absent');
+  expect(() =>
+    retainedNativeEntryAdvertisesEventBudget(home, digest, identity, {
+      ...io,
+      readRuntimeFile(file, ...args) {
+        if (file.endsWith('/native-entry.json')) throw failure;
+        return io.readRuntimeFile(file, ...args);
+      },
+    })
+  ).toThrow(failure);
+});
+test('selected native metadata cannot borrow feature support from a different retained generation', () => {
+  nativeObservationFixture();
+  const selected = nativeObservationFixture('historical');
+  const command = machineCommand(home, 'codex', 'pre_tool_use', 'native', 30000);
+  registration(path.join(canonical, '.codex/hooks.json'), command, '.*', {}, { timeout: 45 });
+  expect(() => resolveInvocationSelection({ ...options, runtimeDigest: selected })).toThrow(
+    /reconciliation/
+  );
+  expect(() => inspectCodex()).toThrow(/capability/);
+  expect(() =>
+    configureSystemRuntime({ home, userHome: user, surface: 'codex', entry: 'native' })
+  ).toThrow(/native-image/);
+});
 function withObservationHome(run) {
   const previous = process.env.CAWS_HOME;
   process.env.CAWS_HOME = home;
@@ -389,7 +536,10 @@ test.each(['legacy', 'native'])(
               foreign,
               {
                 type: 'command',
-                command: systemCommand(home, 'codex', 'session_end', entry),
+                command:
+                  entry === 'native'
+                    ? `CAWS_HOME='${home}' '${home}/bin/caws-hook-native' codex session_end --system`
+                    : systemCommand(home, 'codex', 'session_end', entry),
                 timeout: 10,
               },
             ],
@@ -414,7 +564,7 @@ test('fresh native Codex SessionEnd uses the host budget without changing Stop',
   configureSystemRuntime({ home, userHome: user, surface: 'codex', entry: 'native' });
   const value = JSON.parse(fs.readFileSync(path.join(user, '.codex/hooks.json')));
   expect(value.hooks.SessionEnd[0].hooks[0]).toMatchObject({
-    command: systemCommand(home, 'codex', 'session_end', 'native'),
+    command: systemCommand(home, 'codex', 'session_end', 'native', 3000),
     timeout: 3,
   });
   expect(value.hooks.Stop[0].hooks[0].timeout).toBe(30);
@@ -706,7 +856,13 @@ test.each(['legacy', 'native'])(
     expect(value.hooks.PreToolUse[0]).toEqual({ matcher: 'Bash', hooks: [foreign] });
     expect(value.hooks.PreToolUse[1].hooks[0]).toEqual({
       type: 'command',
-      command: systemCommand(home, 'claude-code', 'pre_tool_use', entry),
+      command: systemCommand(
+        home,
+        'claude-code',
+        'pre_tool_use',
+        entry,
+        entry === 'native' ? 30000 : undefined
+      ),
       timeout: 45,
       onFailure: 'block',
     });
@@ -1188,7 +1344,13 @@ test.each([
   nativeObservationFixture();
   const surface = 'claude-code';
   const file = path.join(user, '.claude/settings.json');
-  registration(file, machineCommand(home, surface, 'pre_tool_use', entry), '.*', {}, { onFailure });
+  registration(
+    file,
+    machineCommand(home, surface, 'pre_tool_use', entry, entry === 'native' ? 30000 : undefined),
+    '.*',
+    {},
+    { onFailure }
+  );
   const before = fixtureBytes();
   for (const plan of [true, false])
     expect(() => configureSystemRuntime({ home, userHome: user, surface, entry, plan })).toThrow(
@@ -1202,15 +1364,21 @@ test.each(['legacy', 'native'])(
     nativeObservationFixture();
     const surface = 'claude-code';
     const file = path.join(canonical, '.claude/settings.json');
-    const command = machineCommand(home, surface, 'pre_tool_use', entry);
-    registration(file, command, '.*', {}, { onFailure: 'block' });
+    const command = machineCommand(
+      home,
+      surface,
+      'pre_tool_use',
+      entry,
+      entry === 'native' ? 30000 : undefined
+    );
+    registration(file, command, '.*', {}, { onFailure: 'block', timeout: 45 });
     expect(resolveInvocationSelection({ ...options, surface })).toEqual({
       status: 'inactive',
       reason: 'legacy native registration remains selected',
     });
-    registration(file, command, '.*', {}, { onFailure: 'continue' });
+    registration(file, command, '.*', {}, { onFailure: 'continue', timeout: 45 });
     expect(() => resolveInvocationSelection({ ...options, surface })).toThrow(/reconciliation/);
-    registration(file, command, '.*', {}, { onFailure: 'block', async: true });
+    registration(file, command, '.*', {}, { onFailure: 'block', async: true, timeout: 45 });
     expect(() => resolveInvocationSelection({ ...options, surface })).toThrow(/reconciliation/);
   }
 );
@@ -1262,11 +1430,22 @@ test.each(['legacy', 'native'])(
     const native = JSON.parse(fs.readFileSync(path.join(user, '.codex/hooks.json')));
     for (const [event, name] of Object.entries(MACHINE_EVENTS))
       expect(native.hooks[name][0].hooks[0].command).toBe(
-        systemCommand(home, 'codex', event, entry)
+        systemCommand(
+          home,
+          'codex',
+          event,
+          entry,
+          entry === 'native' ? (event === 'session_end' ? 3000 : 30000) : undefined
+        )
       );
     const before = fixtureBytes();
     withObservationHome(() => {
       expect(configureSystemRuntime({ home, surface: 'codex', plan: true }).changed).toBe(false);
+      expect(inspectCodex()).toEqual(
+        entry === 'native'
+          ? { transport: 'json-hooks', entry: 'native', system: true, eventTimeoutMs: 30000 }
+          : { transport: 'json-hooks', entry: 'legacy', system: true }
+      );
       expect(systemSurfaceEnabled('codex', home)).toBe(true);
       expect(observeSystemRuntime(canonical)).toEqual({
         surfaces: ['codex'],
@@ -1341,6 +1520,12 @@ test.each([false, true])(
     withObservationHome(() => {
       expect(configureSystemRuntime({ home, surface: 'codex', plan: true }).changed).toBe(false);
       expect(systemSurfaceEnabled('codex', home)).toBe(true);
+      expect(inspectCodex()).toEqual({
+        transport: 'json-hooks',
+        entry: 'native',
+        system: true,
+        eventTimeoutMs: 30000,
+      });
       expect(observeSystemRuntime(canonical)).toEqual({
         surfaces: ['codex'],
         legacySurfaces: [],
@@ -1460,6 +1645,12 @@ test.each(['unrelated payload bytes', 'unused Node mode'])(
     withObservationHome(() => {
       expect(() => verifyRuntime(home, nativeDigest)).toThrow(failure);
       expect(configureSystemRuntime({ home, surface: 'codex', plan: true }).changed).toBe(false);
+      expect(inspectCodex()).toEqual({
+        transport: 'json-hooks',
+        entry: 'native',
+        system: true,
+        eventTimeoutMs: 30000,
+      });
       expect(systemSurfaceEnabled('codex', home)).toBe(true);
       expect(observeSystemRuntime(canonical)).toEqual({
         surfaces: ['codex'],
@@ -1555,7 +1746,7 @@ test.each([
   }
 );
 test('recognizes only exact native entry filename and migrates understood transport without evaluating shell', () => {
-  const native = machineCommand(home, 'codex', 'pre_tool_use', 'native');
+  const native = machineCommand(home, 'codex', 'pre_tool_use', 'native', 30000);
   expect(native).not.toContain('python3');
   expect(isCawsNativeCommand(native)).toBe(true);
   expect(isCawsNativeCommand(native.replace('caws-hook-native', 'caws-hook-native-evil'))).toBe(
@@ -1571,7 +1762,8 @@ test('recognizes only exact native entry filename and migrates understood transp
       home,
       'codex',
       'pre_tool_use',
-      'native'
+      'native',
+      30000
     )
   ).toBe(native);
   expect(() =>

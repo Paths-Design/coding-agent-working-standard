@@ -24,6 +24,7 @@
 //     a named-surface block that a project-wired dispatcher cannot honor rather
 //     than letting it look effective.
 
+import { NATIVE_EVENT_TIMEOUT_ENV } from '../../init/native-hook-identification';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
@@ -673,13 +674,17 @@ function describeSelection(
     );
     if (!existsSync(launcher)) return { unavailable: `no selected machine entry at ${launcher}` };
     const args = [surface, event, ...(route.system ? ['--system'] : []), '--describe'];
+    const describeEnvironment: NodeJS.ProcessEnv = { ...process.env, CAWS_HOME: home };
+    delete describeEnvironment[NATIVE_EVENT_TIMEOUT_ENV];
+    if (route.transport === 'json-hooks' && route.entry === 'native')
+      describeEnvironment[NATIVE_EVENT_TIMEOUT_ENV] = String(route.eventTimeoutMs);
     const out = execFileSync(
       route.entry === 'native' ? launcher : 'python3',
       route.entry === 'native' ? args : [launcher, ...args],
       {
         cwd: callerCwd,
         encoding: 'utf8',
-        env: { ...process.env, CAWS_HOME: home },
+        env: describeEnvironment,
         stdio: ['pipe', 'pipe', 'pipe'],
       }
     );

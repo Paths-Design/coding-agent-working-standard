@@ -2,6 +2,8 @@ import {
   isCawsNativeCommand,
   machineCommand,
   nativeCommandWords,
+  NATIVE_EVENT_TIMEOUT_ENV,
+  nativeEventTimeoutAssignment,
   classifyCawsProducerHook,
   isCawsProducerHookCandidate,
   configHasCawsProducerHooks,
@@ -79,9 +81,10 @@ export function migrateNativeCommand(
   home: string,
   surface: string,
   event: Event,
-  entry: 'native' | 'legacy' = 'legacy'
+  entry: 'native' | 'legacy' = 'legacy',
+  eventTimeoutMs?: number
 ): string {
-  const next = machineCommand(home, surface, event, entry);
+  const next = machineCommand(home, surface, event, entry, eventTimeoutMs);
   // These are the shipped root-resolving transports, not arbitrary shell to
   // evaluate. The Qwen shim's conditional bootstrap is replaced by the runtime's
   // own outside-project handling. Unknown wrappers require reconciliation.
@@ -95,17 +98,23 @@ export function migrateNativeCommand(
   const prelude = command.startsWith(rootPrelude) ? rootPrelude : '';
   try {
     const words = nativeCommandWords(command.slice(prelude.length));
-    const assignments: string[] = [];
-    if (words[0]?.value === 'env') words.shift();
-    while (words[0] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0].raw)) {
-      const assignment = words.shift() as { raw: string; value: string };
-      if (!assignment.raw.startsWith('CAWS_HOME=')) assignments.push(assignment.raw);
+    const assignments: { raw: string; value: string }[] = [];
+    const takeAssignments = (): void => {
+      while (words[0] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0].raw))
+        assignments.push(words.shift()!);
+    };
+    takeAssignments();
+    if (words[0]?.value === 'env') {
+      words.shift();
+      takeAssignments();
     }
     const args = words.map((word) => word.value);
     if (args.at(-1) === '--system') args.pop();
     let recognized = false;
+    let nativeProducer = false;
     if (path.isAbsolute(args[0] ?? '') && args[0]?.endsWith('/bin/caws-hook-native')) {
       recognized = args.length === 3 && args[1] === surface && args[2] === event;
+      nativeProducer = recognized;
     } else if (['python3', '/usr/bin/python3'].includes(args[0] ?? '')) {
       recognized =
         args.length === 4 &&
@@ -143,7 +152,17 @@ export function migrateNativeCommand(
         );
     }
     if (!recognized) throw new Error('unrecognized dispatcher invocation');
-    return prelude + [...assignments, next].join(' ');
+    const previousTimeout = nativeEventTimeoutAssignment(assignments);
+    if (previousTimeout !== undefined && !nativeProducer)
+      throw new Error('Native event timeout on a legacy producer requires reconciliation');
+    const retainedAssignments = assignments
+      .filter(
+        (assignment) =>
+          !assignment.value.startsWith('CAWS_HOME=') &&
+          !(nativeProducer && assignment.value.startsWith(`${NATIVE_EVENT_TIMEOUT_ENV}=`))
+      )
+      .map((assignment) => assignment.raw);
+    return prelude + [...retainedAssignments, next].join(' ');
   } catch (error) {
     throw new Error(
       `Custom native command requires reconciliation (${MACHINE_EVENTS[event]}): ${(error as Error).message}`

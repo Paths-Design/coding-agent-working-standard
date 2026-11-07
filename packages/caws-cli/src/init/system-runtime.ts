@@ -4,6 +4,7 @@ import {
   universalEventMatcher,
   unconditionalCommandHook,
   qualifiedHookTimeout,
+  nativeEventTimeoutMs,
   configHasCawsProducerHooks,
   isCawsProducerHookCandidate,
 } from './native-hook-identification';
@@ -35,6 +36,7 @@ import { extractMachineHandlers } from './machine-handler-policy';
 import {
   readNativeEntryFileIdentity,
   readRetainedNativeEntryIdentity,
+  retainedNativeEntryAdvertisesEventBudget,
 } from './machine-runtime-state';
 import { SHARED_PACK } from './hook-packs/manifest-shared';
 import {
@@ -204,8 +206,33 @@ function requireRuntime(home: string): { files: string[]; defaults: Record<Event
   return { files: Object.keys(files), defaults: policy.events };
 }
 
+function defaultRegisteredHookTimeout(surface: string, event: string, name: string): number {
+  const defaults =
+    surface === 'qwen-code' ? CANONICAL_QWEN_HOOK_ENTRIES[name] : CANONICAL_HOOK_ENTRIES[name];
+  const hooks = defaults?.hooks as NativeHook[] | undefined;
+  const seconds =
+    event === 'session_end'
+      ? 10
+      : event === 'post_tool_use'
+        ? 60
+        : event === 'pre_tool_use'
+          ? 45
+          : 30;
+  const timeout =
+    surface === 'codex' && event === 'session_end'
+      ? 3
+      : (hooks?.[0]?.timeout ?? seconds * (surface === 'qwen-code' ? 1000 : 1));
+  if (typeof timeout !== 'number' || !Number.isFinite(timeout) || timeout <= 0)
+    throw new Error(`Unsupported canonical hook timeout: ${name}`);
+  return timeout;
+}
+
 /** Register one stable transport at the harness user layer. No project writes. */
-function requireNativeEntry(home: string, preserveLegacyTransport = false): void {
+function requireNativeEntry(
+  home: string,
+  preserveLegacyTransport = false,
+  requireEventBudget = false
+): void {
   const pointer = JSON.parse(before(home, path.join(home, 'state/adapter-runtime.json')) ?? 'null');
   const files = verifyRuntime(home, pointer.digest);
   const stable = path.join(home, 'bin/caws-hook-native');
@@ -224,8 +251,11 @@ function requireNativeEntry(home: string, preserveLegacyTransport = false): void
   } catch {
     return refuse();
   }
+  const advertisesRequiredBudget = (digest: string): boolean =>
+    !requireEventBudget || retainedNativeEntryAdvertisesEventBudget(home, digest, identity);
   if (files['native-entry.json']) {
-    if (files['native/caws-hook-native'] !== identity) return refuse();
+    if (files['native/caws-hook-native'] !== identity || !advertisesRequiredBudget(pointer.digest))
+      return refuse();
     return;
   }
   // A retained transport may follow rollback into a verified legacy generation.
@@ -243,7 +273,11 @@ function requireNativeEntry(home: string, preserveLegacyTransport = false): void
   for (const digest of candidates) {
     if (!/^[a-f0-9]{64}$/.test(digest)) continue;
     try {
-      if (readRetainedNativeEntryIdentity(home, digest).sha256 === identity) return;
+      if (
+        readRetainedNativeEntryIdentity(home, digest).sha256 === identity &&
+        advertisesRequiredBudget(digest)
+      )
+        return;
     } catch {
       // Invalid manifest-bound entry identity vouches for no compatibility.
     }
@@ -320,7 +354,7 @@ export function configureSystemRuntime(options: SystemOptions): {
     throw new Error('Mixed CAWS entry registrations require explicit --entry reconciliation');
   const entry = options.entry ?? [...transports][0] ?? 'legacy';
   if (entry !== 'native' && entry !== 'legacy') throw new Error('Entry must be native or legacy');
-  if (entry === 'native') requireNativeEntry(home, options.entry === undefined);
+  if (entry === 'native') requireNativeEntry(home, options.entry === undefined, true);
   const toml = before(user, path.join(user, vendor, 'config.toml'));
   if (toml && /\[hooks[.\[\]]/.test(toml) && isCawsNativeCommand(toml))
     throw new Error(
@@ -362,16 +396,23 @@ export function configureSystemRuntime(options: SystemOptions): {
           // Reconcile the recognized stock seconds-era Codex registration.
           // Other custom budgets need explicit reconciliation rather than the
           // host silently clamping them during its five-second teardown.
-          const timeout =
+          const reconciledTimeout =
             options.surface === 'codex' && event === 'session_end' && hook.timeout === 10
               ? 3
               : hook.timeout;
-          if (!qualifiedHookTimeout(options.surface, event, timeout))
+          if (!qualifiedHookTimeout(options.surface, event, reconciledTimeout))
             throw new Error(
               options.surface === 'qwen-code'
                 ? `Qwen CAWS timeout requires millisecond-budget reconciliation: ${name}`
                 : `Codex CAWS timeout requires teardown-budget reconciliation: ${name}`
             );
+          const timeout =
+            entry === 'native' && reconciledTimeout === undefined
+              ? defaultRegisteredHookTimeout(options.surface, event, name)
+              : reconciledTimeout;
+          const eventTimeoutMs =
+            entry === 'native' ? nativeEventTimeoutMs(options.surface, event, timeout) : undefined;
+          const command = systemCommand(home, options.surface, event, entry, eventTimeoutMs);
           if (
             ['pre_tool_use', 'post_tool_use'].includes(event) &&
             !universalEventMatcher(options.surface, event, group.matcher)
@@ -385,7 +426,7 @@ export function configureSystemRuntime(options: SystemOptions): {
             ...failurePolicy,
             ...(timeout === hook.timeout ? {} : { timeout }),
             command:
-              hook.command === systemCommand(home, options.surface, event, entry)
+              hook.command === command
                 ? hook.command
                 : migrateNativeCommand(
                     hook.command,
@@ -393,7 +434,8 @@ export function configureSystemRuntime(options: SystemOptions): {
                     home,
                     options.surface,
                     event as Event,
-                    entry
+                    entry,
+                    eventTimeoutMs
                   ) + ' --system',
           };
         }),
@@ -408,27 +450,15 @@ export function configureSystemRuntime(options: SystemOptions): {
         options.surface === 'qwen-code'
           ? CANONICAL_QWEN_HOOK_ENTRIES[name]
           : CANONICAL_HOOK_ENTRIES[name];
-      // Qwen consumes milliseconds; Claude and Codex consume seconds. Codex
-      // caps SessionEnd at three seconds to leave host-shutdown headroom.
-      const seconds =
-        name === 'SessionEnd'
-          ? 10
-          : event === 'post_tool_use'
-            ? 60
-            : event === 'pre_tool_use'
-              ? 45
-              : 30;
-      const defaultHooks = defaults?.hooks as NativeHook[] | undefined;
-      const timeout =
-        options.surface === 'codex' && event === 'session_end'
-          ? 3
-          : (defaultHooks?.[0]?.timeout ?? seconds * (options.surface === 'qwen-code' ? 1000 : 1));
+      const timeout = defaultRegisteredHookTimeout(options.surface, event, name);
+      const eventTimeoutMs =
+        entry === 'native' ? nativeEventTimeoutMs(options.surface, event, timeout) : undefined;
       const group = {
         ...defaults,
         hooks: [
           {
             type: 'command',
-            command: systemCommand(home, options.surface, event, entry),
+            command: systemCommand(home, options.surface, event, entry, eventTimeoutMs),
             timeout,
             ...failurePolicy,
           },

@@ -321,10 +321,15 @@ export function classifyCawsProducerCommand(
   try {
     const words = [...nativeCommandTokens(command.slice(hasPrelude ? prelude.length : 0), true)];
     let index = 0;
-    while (words[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index]!.raw)) index++;
+    const assignments: NativeCommandWord[] = [];
+    const takeAssignments = (): void => {
+      while (words[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index]!.raw))
+        assignments.push(words[index++]!);
+    };
+    takeAssignments();
     if (words[index]?.value === 'env') {
       index++;
-      while (words[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index]!.raw)) index++;
+      takeAssignments();
     }
     let program = words[index++];
     if (!program) return { kind: 'unresolved' };
@@ -367,8 +372,10 @@ export function classifyCawsProducerCommand(
       literalShellWord(program) &&
       path.posix.isAbsolute(program.value) &&
       program.value.endsWith('/bin/caws-hook-native')
-    )
+    ) {
+      nativeEventTimeoutAssignment(assignments);
       return invocation(args) ? { kind: 'owned', entry: 'native' } : { kind: 'unresolved' };
+    }
     if (['python3', '/usr/bin/python3'].includes(program.value)) {
       const entry = args[0];
       return entry &&
@@ -537,26 +544,76 @@ export function qualifiedHookTimeout(surface: string, event: string, timeout: un
   );
 }
 
+function checkedNativeEventTimeoutMs(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > 30000)
+    throw new Error('Expected native event timeout of 1..30000 milliseconds');
+  return value;
+}
+
+/** Convert the qualified host budget before clamping to the original interval. */
+export function nativeEventTimeoutMs(
+  surface: string,
+  event: string,
+  registeredTimeout: unknown
+): number {
+  if (
+    !['codex', 'claude-code', 'qwen-code'].includes(surface) ||
+    !Object.hasOwn(MACHINE_EVENTS, event) ||
+    typeof registeredTimeout !== 'number' ||
+    !Number.isFinite(registeredTimeout) ||
+    (surface === 'codex' && !Number.isSafeInteger(registeredTimeout)) ||
+    registeredTimeout <= 0 ||
+    !qualifiedHookTimeout(surface, event, registeredTimeout)
+  )
+    throw new Error('Unsupported registered native event timeout');
+  const milliseconds = registeredTimeout * (surface === 'qwen-code' ? 1 : 1000);
+  if (!Number.isSafeInteger(milliseconds) || milliseconds < 1)
+    throw new Error('Registered native event timeout is not safe integer milliseconds');
+  return checkedNativeEventTimeoutMs(Math.min(30000, milliseconds));
+}
+
+/** Only assignment words belong here, never arbitrary command operands. */
+export function nativeEventTimeoutAssignment(
+  assignments: readonly { readonly value: string }[]
+): number | undefined {
+  const prefix = `${NATIVE_EVENT_TIMEOUT_ENV}=`;
+  const selected = assignments.filter((word) => word.value.startsWith(prefix));
+  if (selected.length > 1) throw new Error('Duplicate native event timeout assignment');
+  if (selected.length === 0) return undefined;
+  const value = selected[0]!.value.slice(prefix.length);
+  if (value.length > 5 || !/^[1-9][0-9]*$/.test(value))
+    throw new Error('Malformed native event timeout assignment');
+  return checkedNativeEventTimeoutMs(Number(value));
+}
+
 export function machineCommand(
   home: string,
   surface: string,
   event: string,
-  entry: 'native' | 'legacy' = 'legacy'
+  entry: 'native' | 'legacy' = 'legacy',
+  eventTimeoutMs?: number
 ): string {
+  if (entry === 'legacy' && eventTimeoutMs !== undefined)
+    throw new Error('Legacy commands cannot carry a native event timeout');
+  const restriction =
+    entry === 'native'
+      ? `${NATIVE_EVENT_TIMEOUT_ENV}=${checkedNativeEventTimeoutMs(eventTimeoutMs)} `
+      : '';
   const launcher =
     entry === 'native'
       ? quote(path.join(home, 'bin/caws-hook-native'))
       : `python3 ${quote(path.join(home, 'bin/caws-hook'))}`;
-  return `CAWS_HOME=${quote(home)} ${launcher} ${surface} ${event}`;
+  return `CAWS_HOME=${quote(home)} ${restriction}${launcher} ${surface} ${event}`;
 }
 
 export function systemCommand(
   home: string,
   surface: string,
   event: string,
-  entry: 'native' | 'legacy' = 'legacy'
+  entry: 'native' | 'legacy' = 'legacy',
+  eventTimeoutMs?: number
 ): string {
-  return machineCommand(home, surface, event, entry) + ' --system';
+  return machineCommand(home, surface, event, entry, eventTimeoutMs) + ' --system';
 }
 
 export function configHasCawsHooks(config: unknown): boolean {

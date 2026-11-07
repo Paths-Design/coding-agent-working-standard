@@ -17,17 +17,33 @@ import {
   universalEventMatcher,
   unconditionalCommandHook,
   qualifiedHookTimeout,
+  nativeEventTimeoutMs,
 } from './native-hook-identification';
 import {
   OPENCODE_PROJECT_TRANSPORT,
   validateObservedOpenCodeNativeRegistration,
 } from './opencode-project-registration';
-import { readPointer } from './machine-runtime-state';
+import {
+  readPointer,
+  readManifest,
+  readNativeEntryFileIdentity,
+  readRetainedNativeEntryIdentity,
+  retainedNativeEntryAdvertisesEventBudget,
+} from './machine-runtime-state';
 
-export interface HookInspectionRoute {
-  readonly entry: 'native' | 'legacy';
-  readonly system: boolean;
-}
+export type HookInspectionRoute =
+  | { readonly transport: 'json-hooks'; readonly entry: 'legacy'; readonly system: boolean }
+  | {
+      readonly transport: 'json-hooks';
+      readonly entry: 'native';
+      readonly system: boolean;
+      readonly eventTimeoutMs: number;
+    }
+  | {
+      readonly transport: typeof OPENCODE_PROJECT_TRANSPORT;
+      readonly entry: 'native';
+      readonly system: true;
+    };
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null &&
   typeof value === 'object' &&
@@ -170,7 +186,7 @@ export function observeHookInspectionRoute(options: {
       home,
       runtimeDigest: pointer.digest,
     });
-    return { entry: 'native', system: true };
+    return { transport: OPENCODE_PROJECT_TRANSPORT, entry: 'native', system: true };
   }
   const vendor =
     surface === 'codex'
@@ -254,16 +270,27 @@ export function observeHookInspectionRoute(options: {
           )
             throw new Error('Restricted or unresolved CAWS registration requires reconciliation');
           const system = userLayer;
+          const eventTimeoutMs =
+            ownership.entry === 'native'
+              ? nativeEventTimeoutMs(surface, event, hook.timeout)
+              : undefined;
           const expected = system
-            ? systemCommand(home, surface, event, ownership.entry)
-            : machineCommand(home, surface, event, ownership.entry);
+            ? systemCommand(home, surface, event, ownership.entry, eventTimeoutMs)
+            : machineCommand(home, surface, event, ownership.entry, eventTimeoutMs);
           if (
             hook.command !== expected ||
             (!userLayer && root !== options.canonical) ||
             (system && !settings?.enabled)
           )
             throw new Error('CAWS registration and selected machine configuration disagree');
-          selected.push({ entry: ownership.entry, system });
+          if (ownership.entry === 'native')
+            selected.push({
+              transport: 'json-hooks',
+              entry: 'native',
+              system,
+              eventTimeoutMs: nativeEventTimeoutMs(surface, event, hook.timeout),
+            });
+          else selected.push({ transport: 'json-hooks', entry: 'legacy', system });
         }
       }
     }
@@ -274,5 +301,35 @@ export function observeHookInspectionRoute(options: {
         ? 'Additive CAWS registrations require reconciliation'
         : 'No effective CAWS registration observed'
     );
-  return selected[0]!;
+  const route = selected[0]!;
+  if (route.transport === 'json-hooks' && route.entry === 'native') {
+    const captured = readNativeEntryFileIdentity(home, path.join(home, 'bin/caws-hook-native'));
+    if (captured.mode !== 0o755)
+      throw new Error('Installed native entry mode requires reconciliation');
+    const pointer = readPointer(home);
+    if (!pointer) throw new Error('No selected machine runtime');
+    const files = readManifest(home, pointer.digest);
+    let qualified = false;
+    if (files['native-entry.json']) {
+      // A selected native image must vouch for its own installed component.
+      qualified = retainedNativeEntryAdvertisesEventBudget(home, pointer.digest, captured.sha256);
+    } else if (files['bootstrap.py'] && files['launcher.py']) {
+      const runtimes = path.join(home, 'lib/runtimes');
+      assertMachinePath(home, runtimes);
+      qualified = fs.readdirSync(runtimes).some((digest) => {
+        if (!/^[a-f0-9]{64}$/.test(digest)) return false;
+        try {
+          return (
+            readRetainedNativeEntryIdentity(home, digest).sha256 === captured.sha256 &&
+            retainedNativeEntryAdvertisesEventBudget(home, digest, captured.sha256)
+          );
+        } catch {
+          return false;
+        }
+      });
+    }
+    if (!qualified)
+      throw new Error('Installed native event budget capability requires reconciliation');
+  }
+  return route;
 }

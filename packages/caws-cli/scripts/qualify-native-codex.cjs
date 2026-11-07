@@ -455,6 +455,9 @@ function registrationContract(custody, settings) {
         'CAWS_HOME=' +
         quote(custody.env.CAWS_HOME) +
         ' ' +
+        (settings.runtime.entry === 'native'
+          ? 'CAWS_HOOK_EVENT_TIMEOUT_MS_V1=' + Math.min(30000, timeoutSec * 1000) + ' '
+          : '') +
         quote(launcher) +
         ' codex ' +
         event +

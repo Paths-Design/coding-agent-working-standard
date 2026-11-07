@@ -22,6 +22,7 @@ const { execFileSync, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 
 const CLI = path.resolve(__dirname, '..', '..', 'dist', 'index.js');
 const TEMPLATES = path.resolve(__dirname, '..', '..', 'templates/hook-packs/shared');
@@ -78,7 +79,7 @@ function makeMachineHome(handlers) {
   };
   fs.writeFileSync(
     path.join(home, 'bin', 'caws-hook'),
-    `import json,sys\nfrom pathlib import Path\nPath(${JSON.stringify(path.join(home, 'legacy-called'))}).write_text('called\\n')\nprint(json.dumps(${JSON.stringify(document)}))\n`
+    `import json,sys,os\nfrom pathlib import Path\nPath(${JSON.stringify(path.join(home, 'legacy-called'))}).write_text('called\\n')\nPath(${JSON.stringify(path.join(home, 'legacy-budget'))}).write_text(os.environ.get('CAWS_HOOK_EVENT_TIMEOUT_MS_V1','absent'))\nprint(json.dumps(${JSON.stringify(document)}))\n`
   );
   const user = path.join(home, 'user');
   for (const [surface, vendor, file] of [
@@ -183,6 +184,48 @@ describe('A5: the group is reachable through Commander on the built CLI', () => 
 });
 
 describe('effective native and legacy inspection routes', () => {
+  // Bind the test launcher as an inert transport fixture. Its output exercises
+  // the CLI observer, never native enforcement or production-image readiness.
+  function bindInspectionFixture(home, native) {
+    const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+    const files = {
+      'launcher.py': fs.readFileSync(path.join(home, 'bin/caws-hook')),
+      'native/caws-hook-native': fs.readFileSync(native),
+      'native/caws-native': Buffer.from('inert native payload fixture\n'),
+      'native/node': Buffer.from('inert Node payload fixture\n'),
+      'engine.js': Buffer.from('// inert engine fixture\n'),
+      'describe.js': Buffer.from('// inert describe fixture\n'),
+      'native-entry.json': Buffer.from(
+        JSON.stringify({
+          schema: 'caws.runtime.native-entry.v2',
+          nativeExecutable: 'native/caws-native',
+          nodeExecutable: 'native/node',
+          engineEntry: 'engine.js',
+          describeEntry: 'describe.js',
+          timeoutMs: 30000,
+          installedInvocation: {
+            protocol: 'invoke-installed-v1',
+            maxOriginalTimeoutMs: 30000,
+            stableEntryEventBudget: 'env-original-start-ms-v1',
+          },
+        })
+      ),
+    };
+    const manifest = JSON.stringify(
+      Object.fromEntries(Object.entries(files).map(([file, bytes]) => [file, sha(bytes)]))
+    );
+    const digest = sha(manifest);
+    for (const [relative, bytes] of Object.entries({ ...files, 'manifest.json': manifest })) {
+      const file = path.join(home, 'lib/runtimes', digest, relative);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, bytes, { mode: relative.startsWith('native/') ? 0o755 : 0o644 });
+    }
+    fs.mkdirSync(path.join(home, 'state'), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, 'state/adapter-runtime.json'),
+      JSON.stringify({ version: 1, digest, previous_digest: null })
+    );
+  }
   function registered(entry = 'native') {
     const repo = makeRepo();
     const home = makeMachineHome([['legacy-selected.sh', 'stock']]);
@@ -205,6 +248,8 @@ describe('effective native and legacy inspection routes', () => {
         quote(path.join(home, 'native-cwd')) +
         '\nprintf "%s\\n" "$CAWS_PROJECT_DIR" > ' +
         quote(path.join(home, 'native-project')) +
+        '\nprintf "%s\\n" "$CAWS_HOOK_EVENT_TIMEOUT_MS_V1" > ' +
+        quote(path.join(home, 'native-budget')) +
         '\nprintf "%s\\n" ' +
         quote(JSON.stringify(document)) +
         '\n',
@@ -216,13 +261,24 @@ describe('effective native and legacy inspection routes', () => {
           {
             matcher: '.*',
             hooks: [
-              { type: 'command', command: systemCommand(home, 'codex', 'pre_tool_use', entry) },
+              {
+                type: 'command',
+                command: systemCommand(
+                  home,
+                  'codex',
+                  'pre_tool_use',
+                  entry,
+                  entry === 'native' ? 30000 : undefined
+                ),
+                timeout: 45,
+              },
             ],
           },
         ],
       },
     };
     fs.writeFileSync(config, JSON.stringify(registration));
+    bindInspectionFixture(home, native);
     const tools = path.join(home, 'empty-path');
     fs.mkdirSync(tools);
     const list = (extra = {}) =>
@@ -253,6 +309,7 @@ describe('effective native and legacy inspection routes', () => {
           CAWS_HOME: f.home,
           CAWS_PROJECT_DIR: nested,
           CAWS_GIT_BINARY: '/usr/bin/git',
+          CAWS_HOOK_EVENT_TIMEOUT_MS_V1: '1',
           PATH: f.tools,
         },
       }
@@ -264,13 +321,17 @@ describe('effective native and legacy inspection routes', () => {
     expect(fs.readFileSync(f.trace, 'utf8')).toBe('codex pre_tool_use --system --describe\n');
     expect(fs.readFileSync(path.join(f.home, 'native-cwd'), 'utf8')).toBe(nested + '\n');
     expect(fs.readFileSync(path.join(f.home, 'native-project'), 'utf8')).toBe(nested + '\n');
+    expect(fs.readFileSync(path.join(f.home, 'native-budget'), 'utf8')).toBe('30000\n');
     expect(treeHash(f.repo)).toBe(beforeRepo);
     expect(treeHash(f.user)).toBe(beforeUser);
   });
 
   test('installed native launcher does not override observed legacy registration', () => {
     const f = registered('legacy');
-    expect(f.result().handlers[0].entry).toBe('legacy-selected.sh');
+    expect(f.result({ CAWS_HOOK_EVENT_TIMEOUT_MS_V1: '1' }).handlers[0].entry).toBe(
+      'legacy-selected.sh'
+    );
+    expect(fs.readFileSync(path.join(f.home, 'legacy-budget'), 'utf8')).toBe('absent');
     expect(fs.existsSync(f.trace)).toBe(false);
   });
 
@@ -327,7 +388,8 @@ describe('effective native and legacy inspection routes', () => {
           f.home,
           'codex',
           'pre_tool_use',
-          'native'
+          'native',
+          30000
         );
         fs.writeFileSync(path.join(config, 'hooks.json'), JSON.stringify(doc));
       } else {
@@ -412,7 +474,7 @@ describe('effective native and legacy inspection routes', () => {
         checkout: repo,
         caller: { cwd: repo, environment: { HOME: user } },
       })
-    ).toEqual({ entry: 'legacy', system: true });
+    ).toEqual({ transport: 'json-hooks', entry: 'legacy', system: true });
     expect(treeHash(home)).toBe(before);
   });
 
@@ -442,11 +504,25 @@ describe('effective native and legacy inspection routes', () => {
     expect(fs.readFileSync(f.trace, 'utf8')).toBe('codex pre_tool_use --system --describe\n');
   });
 
-  test.each([1, Number.MAX_SAFE_INTEGER])(
+  test('safe host seconds that overflow millisecond conversion are unavailable before launcher execution', () => {
+    const f = registered();
+    f.registration.hooks.PreToolUse[0].hooks[0].timeout = Number.MAX_SAFE_INTEGER;
+    fs.writeFileSync(f.config, JSON.stringify(f.registration));
+    expect(f.result().unavailable).toMatch(/safe integer milliseconds/);
+    expect(fs.existsSync(f.trace)).toBe(false);
+  });
+  test.each([1, Math.floor(Number.MAX_SAFE_INTEGER / 1000)])(
     'exact supported Codex timeout %s preserves native route admission',
     (timeout) => {
       const f = registered();
       f.registration.hooks.PreToolUse[0].hooks[0].timeout = timeout;
+      f.registration.hooks.PreToolUse[0].hooks[0].command = systemCommand(
+        f.home,
+        'codex',
+        'pre_tool_use',
+        'native',
+        Math.min(30000, timeout * 1000)
+      );
       fs.writeFileSync(f.config, JSON.stringify(f.registration));
       expect(f.result({ PATH: f.tools }).handlers[0].entry).toBe('native-selected.sh');
       expect(fs.readFileSync(f.trace, 'utf8')).toBe('codex pre_tool_use --system --describe\n');
@@ -685,7 +761,8 @@ describe('effective native and legacy inspection routes', () => {
           path.join(f.home, 'other'),
           'codex',
           'pre_tool_use',
-          'native'
+          'native',
+          30000
         );
       if (mode === 'disabled') f.registration.disableAllHooks = true;
       if (mode === 'exec-form')
@@ -730,6 +807,7 @@ describe('effective native and legacy inspection routes', () => {
           f.native,
           '#!/bin/sh\nprintf \'{"schema":"caws.hook_selection.v1","status":"inactive","reason":"project governance absent","handlers":[]}\\n\'\n'
         );
+      if (mode !== 'missing-entry') bindInspectionFixture(f.home, f.native);
       const row = f.result();
       expect(row.unavailable).toBeTruthy();
       expect(row.handlers).toBeUndefined();
@@ -746,7 +824,8 @@ describe('effective native and legacy inspection routes', () => {
       f.home,
       'codex',
       'pre_tool_use',
-      'native'
+      'native',
+      30000
     );
     fs.writeFileSync(path.join(f.repo, '.codex/hooks.json'), JSON.stringify(f.registration));
     expect(f.result({ PATH: f.tools }).handlers[0].entry).toBe('native-selected.sh');

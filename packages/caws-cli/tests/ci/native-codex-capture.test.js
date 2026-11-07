@@ -431,7 +431,7 @@ function fixtureHooks(entry = 'legacy') {
           key: sourcePath + ':' + event + ':0:0',
           eventName,
           handlerType: 'command',
-          command: `CAWS_HOME='${machine}' '${launcher}' codex ${event} --system`,
+          command: `CAWS_HOME='${machine}' ${entry === 'native' ? 'CAWS_HOOK_EVENT_TIMEOUT_MS_V1=' + Math.min(30000, timeoutSec * 1000) + ' ' : ''}'${launcher}' codex ${event} --system`,
           async: false,
           matcher,
           timeoutSec,
