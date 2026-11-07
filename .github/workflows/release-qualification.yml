@@ -19,9 +19,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
+        id: node
         with:
           node-version: '22'
           cache: npm
+      - name: Observe interpreter immediately after setup
+        run: node scripts/observe-test-interpreter.cjs after-setup-node hook-artifacts/interpreter/after-setup-node.json
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -43,11 +46,16 @@ jobs:
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
       - run: npm run typecheck -w @paths.design/caws-cli
       - run: npm run lint -w @paths.design/caws-cli
+      - name: Observe interpreter before tests
+        run: node scripts/observe-test-interpreter.cjs before-tests hook-artifacts/interpreter/before-tests.json
       - run: npm test -w @paths.design/caws-cli -- --coverage --maxWorkers=2
         env:
           CAWS_TEST_EXECUTION_HOST_CENSUS: '1'
           CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
           CAWS_RELEASE_ARTIFACT_DIR: ${{ github.workspace }}/release-scenarios
+      - name: Observe interpreter after tests including failure
+        if: ${{ always() && steps.node.outcome == 'success' }}
+        run: node scripts/observe-test-interpreter.cjs after-tests hook-artifacts/interpreter/after-tests.json
       - name: Retain coverage evidence
         if: always()
         uses: actions/upload-artifact@v4
