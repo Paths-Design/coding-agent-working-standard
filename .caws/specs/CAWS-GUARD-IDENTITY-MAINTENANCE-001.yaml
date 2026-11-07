@@ -8,6 +8,7 @@ created_by_session: '01a19baf-4b34-7a83-9cf8-f109a22c539e'
 blast_radius:
   modules:
     - 'Shared compatibility runtime distribution and repository identity guard'
+    - 'Qualified immutable snapshot publication through the shared installer lock'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -20,7 +21,7 @@ scope:
   out: []
 invariants:
   - 'Preserve every existing guard, native execution-contract rejection, acceptance gate, harness registration and session identity precedence'
-  - 'Publish new immutable runtime through the retained packaged installer; never edit an installed snapshot'
+  - 'Publish verified captured runtime bytes through the shared installer lock and atomic activation, with expected candidate and predecessor identities; never edit an installed snapshot'
 acceptance:
   - id: A1
     given: 'verified compatible runtime 7be and retained source export'
