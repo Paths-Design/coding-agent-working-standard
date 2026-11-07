@@ -13,6 +13,9 @@ const {
 } = require('../../dist/execution/authorizer');
 const { image, systemImageMetadata, executionHostDiagnostic } = require('./authority-fixture');
 const { snapshotNpmProject } = require('../../dist/execution/npm-project');
+const systemPath = [
+  ...new Set(['/usr/bin', '/bin'].map((dir) => fs.realpathSync.native(dir))),
+].join(':');
 afterAll(cleanupAll);
 const npmRoots = [];
 afterAll(() =>
@@ -206,7 +209,7 @@ function cargoRecord(f) {
     'CARGO_ENCODED_RUSTFLAGS',
     `--sysroot\x1f${root}\x1f-C\x1flinker=${runtime.linker.path}`
   );
-  bindings.set('PATH', `${root}/bin:/usr/bin:/bin`);
+  bindings.set('PATH', `${root}/bin:${systemPath}`);
   bindings.set('RUSTC', runtime.rustc.path);
   bindings.set('SDKROOT', sdkRoot);
   record.execution.environment = [...bindings]
@@ -535,7 +538,7 @@ function lifecycleRecord(f, args = ['git-head'], canonical = false) {
     CAWS_EXECUTION_THREAD: record.association.threadId,
     CAWS_EXECUTION_CALL: record.association.callId,
     LC_ALL: 'C',
-    PATH: '/usr/bin:/bin',
+    PATH: systemPath,
   })
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => Buffer.compare(Buffer.from(a.name), Buffer.from(b.name)));
@@ -800,6 +803,70 @@ function evidenceRecord(f, extra = []) {
   );
   return record;
 }
+
+test.each(['lifecycle', 'evidence'])(
+  '%s system PATH admits physical policy and refuses aliases or shadow paths in both phases',
+  (kind) => {
+    const f = lifecycleFixture();
+    const record = kind === 'lifecycle' ? lifecycleRecord(f) : evidenceRecord(f);
+    const entry = record.execution.environment.find((row) => row.name === 'PATH');
+    expect(entry.value).toBe(systemPath);
+    const alias = path.join(f.root, 'system-alias');
+    fs.symlinkSync('/usr/bin', alias);
+    const shadow = path.join(f.root, 'shadow-bin');
+    fs.mkdirSync(shadow);
+    fs.writeFileSync(path.join(shadow, 'git'), '#!/bin/sh\nexit 99\n', { mode: 0o755 });
+    const beforeSpec = fs.readFileSync(f.specPath);
+    const analyzed = evaluatePreparedExecution(record, request(record), undefined, 30000);
+    expect(analyzed).toMatchObject({ decision: 'allow', reasonCodes: [] });
+    const lock = path.join(f.caws, 'state.lock');
+    const fd = fs.openSync(lock, 'wx+', 0o600);
+    const nonce = 'fixed-system-path-fence';
+    fs.writeFileSync(
+      fd,
+      JSON.stringify({
+        pid: process.pid,
+        at: new Date().toISOString(),
+        purpose: 'execution-launch',
+        nonce,
+        protocol: 'caws.execution.fence.v1',
+      })
+    );
+    const stat = fs.fstatSync(fd, { bigint: true });
+    const fence = { dev: stat.dev.toString(), ino: stat.ino.toString(), nonce };
+    try {
+      expect(
+        evaluatePreparedExecution(
+          record,
+          request(record, analyzed.authorityRevision, fence),
+          fd,
+          30000
+        )
+      ).toMatchObject({ decision: 'allow', reasonCodes: [] });
+      for (const candidate of [alias, `${alias}:${systemPath}`, `${shadow}:${systemPath}`]) {
+        entry.value = candidate;
+        expect(evaluatePreparedExecution(record, request(record), undefined, 30000)).toMatchObject({
+          decision: 'unresolved',
+          reasonCodes: ['unsupported_profile'],
+        });
+        expect(
+          evaluatePreparedExecution(
+            record,
+            request(record, analyzed.authorityRevision, fence),
+            fd,
+            30000
+          )
+        ).toMatchObject({ decision: 'unresolved', reasonCodes: ['unsupported_profile'] });
+      }
+      expect(fs.readFileSync(f.specPath)).toEqual(beforeSpec);
+      expect(fs.existsSync(path.join(f.caws, 'events.jsonl'))).toBe(false);
+      expect(fs.fstatSync(fd, { bigint: true }).ino).toBe(stat.ino);
+    } finally {
+      fs.closeSync(fd);
+      fs.unlinkSync(lock);
+    }
+  }
+);
 
 describe('dedicated evidence consumer admission, before any writer execution', () => {
   test('preserves the complete typed operation and inert metadata values', () => {

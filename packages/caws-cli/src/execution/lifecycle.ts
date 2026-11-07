@@ -268,6 +268,18 @@ function requireValue(
 ): asserts value {
   if (!value) throw new ExecutionAuthorityUnavailable(reason);
 }
+// Resolve only producer-owned system roots; caller PATH remains physical-only.
+export function fixedSystemExecutionPath(): string {
+  const directories = ['/usr/bin', '/bin'].map((directory) => {
+    const physical = fs.realpathSync.native(directory);
+    requireValue(
+      isAbsolute(physical) && !physical.includes(':') && fs.statSync(physical).isDirectory(),
+      'unsupported_profile'
+    );
+    return physical;
+  });
+  return [...new Set(directories)].join(':');
+}
 function literal(value: string): boolean {
   return value.length > 0 && value.length <= 8192 && !/[\0\r\n]/.test(value);
 }
@@ -367,7 +379,12 @@ function lifecycleChildEnvironment(
   const project = environment.find((entry) => entry.name === 'CAWS_EXECUTION_PROJECT')?.value;
   requireValue((thread === undefined) === (project === undefined), 'unsupported_profile');
   return {
-    PATH: `${dirname(fs.realpathSync.native(process.execPath))}:/usr/bin:/bin`,
+    PATH: [
+      ...new Set([
+        dirname(fs.realpathSync.native(process.execPath)),
+        ...fixedSystemExecutionPath().split(':'),
+      ]),
+    ].join(':'),
     LC_ALL: 'C',
     GIT_OPTIONAL_LOCKS: '0',
     ...(homes ? { HOME: homes.home, CAWS_HOME: homes.cawsHome, CODEX_HOME: homes.codexHome } : {}),
@@ -1382,7 +1399,7 @@ function runExecutionLifecycleConsumerInner(
           !process.env[key]!.includes('\0')
       )
   );
-  requireValue(process.env.PATH === '/usr/bin:/bin' && process.env.LC_ALL === 'C');
+  requireValue(process.env.PATH === fixedSystemExecutionPath() && process.env.LC_ALL === 'C');
   const context: ExecutionLifecycleContext = {
     projectRoot: process.env.CAWS_EXECUTION_PROJECT!,
     association: {

@@ -233,17 +233,30 @@ fn protected_system(path: &str) -> bool {
     }
     fs::metadata(p).is_ok_and(|m| m.is_file() && m.uid() == 0 && m.mode() & 0o022 == 0)
 }
+fn fixed_system_directories() -> Result<Vec<String>, PrepareRefusal> {
+    let mut result = Vec::new();
+    for dir in ["/usr/bin", "/bin"] {
+        let dir = physical_dir(dir)?;
+        if dir.contains(':') {
+            return Err(PrepareRefusal::Context);
+        }
+        if !result.contains(&dir) {
+            result.push(dir);
+        }
+    }
+    Ok(result)
+}
 fn safe_path(node: &ProgramImage) -> Result<Vec<String>, PrepareRefusal> {
     let node_dir = Path::new(&node.path)
         .parent()
         .and_then(Path::to_str)
         .ok_or(PrepareRefusal::Context)?;
-    let mut result = Vec::new();
-    for dir in [node_dir, "/usr/bin", "/bin"] {
-        let dir = physical_dir(dir)?;
-        if dir.contains(':') {
-            return Err(PrepareRefusal::Context);
-        }
+    let node_dir = physical_dir(node_dir)?;
+    if node_dir.contains(':') {
+        return Err(PrepareRefusal::Context);
+    }
+    let mut result = vec![node_dir];
+    for dir in fixed_system_directories()? {
         if !result.contains(&dir) {
             result.push(dir);
         }
@@ -549,7 +562,14 @@ fn lower_cargo(
         ("CODEX_SANDBOX_NETWORK_DISABLED", "1".into()),
         ("HOME", text(&launch.invocation_root)?),
         ("LC_ALL", "C".into()),
-        ("PATH", format!("{}/bin:/usr/bin:/bin", runtime.root)),
+        (
+            "PATH",
+            format!(
+                "{}/bin:{}",
+                runtime.root,
+                fixed_system_directories()?.join(":")
+            ),
+        ),
         ("RUSTC", runtime.rustc.path.clone()),
         ("SDKROOT", runtime.sdk_root.clone()),
         ("TMPDIR", text(&launch.tmp_root)?),
@@ -700,6 +720,7 @@ pub(crate) fn prepare(
     let bash = program(&bash_path, &check).map_err(failure)?;
     let dirs = safe_path(&pins.node).map_err(failure)?;
     let path = dirs.join(":");
+    let system_path = fixed_system_directories().map_err(failure)?.join(":");
     let id = invocation_id(&check).map_err(failure)?;
     let state = call.sandbox_state_json.as_bytes();
     let unix_deadline = wall_deadline(deadline).map_err(failure)?;
@@ -734,7 +755,7 @@ pub(crate) fn prepare(
     command
         .arg(&discovery.path)
         .env_clear()
-        .env("PATH", "/usr/bin:/bin")
+        .env("PATH", &system_path)
         .env("LC_ALL", "C")
         .current_dir("/")
         .process_group(0)
@@ -906,7 +927,7 @@ pub(crate) fn prepare(
                 .unwrap()
             {
                 if env["name"] == "PATH" {
-                    env["value"] = json!("/usr/bin:/bin");
+                    env["value"] = json!(system_path);
                 }
             }
             if lifecycle {
@@ -993,6 +1014,26 @@ pub(crate) fn prepare(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fixed_system_path_is_physical_unique_and_shared_with_safe_path() {
+        let directories = fixed_system_directories().unwrap();
+        let mut expected = Vec::new();
+        for root in ["/usr/bin", "/bin"] {
+            let directory = fs::canonicalize(root).unwrap();
+            assert!(directory.is_absolute() && directory.is_dir());
+            let text = directory.to_str().unwrap().to_owned();
+            assert!(!text.contains(':'));
+            if !expected.contains(&text) {
+                expected.push(text);
+            }
+        }
+        assert_eq!(directories, expected);
+        let node = ProgramImage {
+            path: "/usr/bin/node".into(),
+            sha256: "0".repeat(64),
+        };
+        assert_eq!(safe_path(&node).unwrap(), expected);
+    }
     #[test]
     fn original_deadline_is_bounded_and_never_renewed() {
         let deadline = MonotonicDeadline::capture(Duration::from_millis(500)).unwrap();
@@ -1237,9 +1278,12 @@ process.stdin.resume();
         } else {
             HostContext::capture(&host_image, &deadline).unwrap()
         };
+        let source_dir = Path::new(&entry).parent().unwrap();
+        let writer = source_dir.join("writer-main.js");
+        let lifecycle = source_dir.join("lifecycle-main.js");
         let pins = PinnedAuthorizer {
-            writer: None,
-            lifecycle: None,
+            writer: Some(image(writer.to_str().unwrap())),
+            lifecycle: Some(image(lifecycle.to_str().unwrap())),
             lifecycle_context: None,
             git_hooks: None,
             git_runtime: None,
@@ -1251,7 +1295,13 @@ process.stdin.resume();
         } else {
             image(&discovery)
         };
+        let fixed_source = match case.as_str() {
+            "lifecycle" => format!("'{node}' '{}' git-head", lifecycle.display()),
+            "evidence" => format!("'{node}' '{}' specs evidence EXEC-001 --ac A1 --status unchecked --evidence-ref inert", writer.display()),
+            _ => String::new(),
+        };
         let source = match case.as_str() {
+            "lifecycle" | "evidence" => fixed_source.as_str(),
             "positive" => "cat src/data.txt > src/result.txt; head -n 1 src/data.txt; printf done",
             "unresolved" => "printf forbidden > src/unresolved.txt; \"$missing\" arg",
             "wrong_protocol" => "printf forbidden > src/wrong_protocol.txt",
@@ -1272,6 +1322,7 @@ process.stdin.resume();
                 Ok(())
             }
         };
+        let original_deadline = deadline.envelope();
         let result = prepare(
             &input,
             &host,
@@ -1285,7 +1336,25 @@ process.stdin.resume();
             &cancelled,
             &check,
         );
-        if case == "positive" {
+        assert_eq!(deadline.envelope(), original_deadline);
+        if case == "lifecycle" || case == "evidence" {
+            let prepared = match result {
+                Ok(x) => x,
+                Err(e) => panic!("prepare failed: {:?}", prep_failure(e)),
+            };
+            let record = prepared.record.value();
+            assert_eq!(record.profile.source, source);
+            assert_eq!(record.profile.kind, format!("caws-{case}-v1"));
+            assert_eq!(record.execution.cwd, f.text("lane"));
+            assert_eq!(record.association.call_id, input.call_id);
+            assert_eq!(record.association.session_id, input.session_id);
+            assert_eq!(record.association.thread_id, input.thread_id);
+            let path = record.execution.environment.iter().find(|e| e.name == "PATH").unwrap();
+            assert_eq!(path.value, fixed_system_directories().unwrap().join(":"));
+            assert_eq!(prepared.record.sandbox_state(), STATE.as_bytes());
+            assert!(!f.path("caws").join("events.jsonl").exists());
+            assert!(!f.path("caws").join("state.lock").exists());
+        } else if case == "positive" {
             let prepared = match result {
                 Ok(x) => x,
                 Err(e) => panic!("prepare failed: {:?}", prep_failure(e)),
@@ -1379,6 +1448,12 @@ process.stdin.resume();
     #[ignore = "requires explicit real Node, Source entries, fixture and isolated process"]
     fn actual_discovery_freezes_utilities_then_worker_authorizes_and_runs() {
         case("positive");
+    }
+    #[test]
+    #[ignore = "requires explicit real Node, Source entries, fixture and isolated process"]
+    fn actual_discovery_freezes_fixed_system_policy_without_running_consumers() {
+        case("lifecycle");
+        case("evidence");
     }
     #[test]
     #[ignore = "requires explicit real Node, Source entries, fixture and isolated process"]

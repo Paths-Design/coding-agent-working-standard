@@ -131,7 +131,11 @@ describe('private nonexecuting draft program discovery', () => {
       Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
     );
     f.record.execution.environment.find((row) => row.name === 'PATH').value = [
-      ...new Set([fs.realpathSync.native(path.dirname(process.execPath)), '/usr/bin', '/bin']),
+      ...new Set(
+        [path.dirname(process.execPath), '/usr/bin', '/bin'].map((dir) =>
+          fs.realpathSync.native(dir)
+        )
+      ),
     ].join(':');
     const authority = require('../../dist/execution/lifecycle').readExecutionLifecycleAuthority(
       {
@@ -258,7 +262,11 @@ describe('private nonexecuting draft program discovery', () => {
       Buffer.compare(Buffer.from(a.name), Buffer.from(b.name))
     );
     f.record.execution.environment.find((entry) => entry.name === 'PATH').value = [
-      ...new Set([fs.realpathSync.native(path.dirname(process.execPath)), '/usr/bin', '/bin']),
+      ...new Set(
+        [path.dirname(process.execPath), '/usr/bin', '/bin'].map((dir) =>
+          fs.realpathSync.native(dir)
+        )
+      ),
     ].join(':');
     const before = fs.readFileSync(f.registryPath);
     const result = observation(run(f.record, { timeout: 30000 }));
@@ -390,8 +398,13 @@ describe('private nonexecuting draft program discovery', () => {
   });
   test('a pinned Node candidate can be resolved into a different final record which is still analyzed', () => {
     const f = authorityFixture();
-    f.record.execution.environment.find((entry) => entry.name === 'PATH').value =
-      `${fs.realpathSync.native(path.dirname(process.execPath))}:/usr/bin:/bin`;
+    f.record.execution.environment.find((entry) => entry.name === 'PATH').value = [
+      ...new Set(
+        [path.dirname(process.execPath), '/usr/bin', '/bin'].map((dir) =>
+          fs.realpathSync.native(dir)
+        )
+      ),
+    ].join(':');
     const command = 'node -e \'console.log({kind:"data",values:[1,2]})\'';
     source(f, command);
     const draft = observation(run(f.record));

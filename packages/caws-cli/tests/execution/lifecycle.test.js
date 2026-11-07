@@ -6,6 +6,7 @@ const { spawnCoveredSync } = require('./child-coverage.cjs');
 const { authorityFixture, cleanupAll } = require('./authority-fixture');
 const { git } = require('../helpers/git-repo-factory');
 const {
+  fixedSystemExecutionPath,
   parseExecutionLifecycleArguments,
   inspectExecutionLifecycleGit,
   readExecutionLifecycleAuthority,
@@ -15,6 +16,38 @@ const {
 const { loadEvents } = require('../../dist/store/events-store');
 afterAll(cleanupAll);
 const entry = path.resolve(__dirname, '../../dist/execution/lifecycle-main.js');
+const systemPath = [
+  ...new Set(['/usr/bin', '/bin'].map((dir) => fs.realpathSync.native(dir))),
+].join(':');
+
+test('fixed system roots are physical and deduplicated on both host and merged-usr layouts', () => {
+  expect(fixedSystemExecutionPath()).toBe(systemPath);
+  const realpath = fs.realpathSync.native;
+  const merged = realpath('/usr/bin');
+  const probe = jest
+    .spyOn(fs.realpathSync, 'native')
+    .mockImplementation((name) => (name === '/bin' ? merged : realpath(name)));
+  try {
+    expect(fixedSystemExecutionPath()).toBe(merged);
+    expect(probe.mock.calls.map(([name]) => name)).toEqual(['/usr/bin', '/bin']);
+  } finally {
+    probe.mockRestore();
+  }
+});
+
+test.each(['relative', '/invalid:separator', __filename])(
+  'fixed system roots refuse invalid resolved directory %s',
+  (invalid) => {
+    const probe = jest.spyOn(fs.realpathSync, 'native').mockReturnValue(invalid);
+    try {
+      expect(() => fixedSystemExecutionPath()).toThrow(
+        expect.objectContaining({ reason: 'unsupported_profile' })
+      );
+    } finally {
+      probe.mockRestore();
+    }
+  }
+);
 
 function fixture() {
   const f = authorityFixture();
@@ -35,7 +68,7 @@ function fixture() {
   git(f.lane, ['add', '--', 'src/owned.txt', 'src/sentinel.txt']);
   git(f.lane, ['commit', '-m', 'fixture source']);
   f.env = {
-    PATH: '/usr/bin:/bin',
+    PATH: systemPath,
     LC_ALL: 'C',
     CAWS_EXECUTION_PROJECT: f.root,
     CAWS_EXECUTION_CALLER: f.lane,
@@ -829,7 +862,7 @@ test.each(['', '*', '/reviewed/project', '/reviewed/*', '~/reviewed', '%(prefix)
       {
         cwd: f.root,
         env: {
-          PATH: '/usr/bin:/bin',
+          PATH: systemPath,
           HOME: path.dirname(config),
           GIT_CONFIG_NOSYSTEM: '1',
           LC_ALL: 'C',
@@ -1217,8 +1250,14 @@ test.each(['bytes', 'remove', 'replace', 'chmod', 'insert', 'redirect'])(
     if (change === 'bytes') fs.writeFileSync(target, body);
     if (change === 'remove') fs.unlinkSync(target);
     if (change === 'replace') {
-      fs.unlinkSync(target);
+      const before = fs.statSync(target, { bigint: true });
+      const status = git(f.lane, ['status', '--porcelain']);
+      // Keep the old inode allocated so same-byte replacement is actual identity drift.
+      fs.renameSync(target, path.join(f.root, '.git', 'retained-original-hook'));
       fs.writeFileSync(target, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      const after = fs.statSync(target, { bigint: true });
+      expect([after.dev, after.ino]).not.toEqual([before.dev, before.ino]);
+      expect(git(f.lane, ['status', '--porcelain'])).toBe(status);
     }
     if (change === 'chmod') fs.chmodSync(target, 0o644);
     if (change === 'insert')

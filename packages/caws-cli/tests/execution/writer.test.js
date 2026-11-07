@@ -11,6 +11,9 @@ const { loadEvents } = require('../../dist/store/events-store');
 afterAll(cleanupAll);
 
 const entry = path.resolve(__dirname, '../../dist/execution/writer-main.js');
+const systemPath = [
+  ...new Set(['/usr/bin', '/bin'].map((dir) => fs.realpathSync.native(dir))),
+].join(':');
 function fixture() {
   const f = authorityFixture();
   fs.writeFileSync(f.specPath, yaml.dump(f.spec));
@@ -19,7 +22,7 @@ function fixture() {
   git(f.lane, ['commit', '-m', 'fixture artifact']);
   f.sha = git(f.lane, ['rev-parse', 'HEAD']).trim();
   f.env = {
-    PATH: '/usr/bin:/bin',
+    PATH: systemPath,
     LC_ALL: 'C',
     CAWS_EXECUTION_PROJECT: f.root,
     CAWS_EXECUTION_CALLER: f.lane,

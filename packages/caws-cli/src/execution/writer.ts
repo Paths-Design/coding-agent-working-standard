@@ -14,6 +14,7 @@ import {
   type ExecutionAuthorityContext,
 } from './authority';
 import { verifyInheritedFence } from './fence';
+import { fixedSystemExecutionPath } from './lifecycle';
 import type { FenceObservation } from './prepared';
 
 const ENVIRONMENT = [
@@ -294,7 +295,7 @@ export function runExecutionEvidenceWriter(argv: readonly string[]): ExecutionEv
         return typeof value === 'string' && value.length > 0 && !value.includes('\0');
       })
   );
-  requireValue(process.env.PATH === '/usr/bin:/bin' && process.env.LC_ALL === 'C');
+  requireValue(process.env.PATH === fixedSystemExecutionPath() && process.env.LC_ALL === 'C');
   const context: ExecutionAuthorityContext = {
     projectRoot: process.env.CAWS_EXECUTION_PROJECT!,
     association: {

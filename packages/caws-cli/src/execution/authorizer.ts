@@ -18,6 +18,7 @@ import {
 } from './authority';
 import { verifyInheritedFence } from './fence';
 import {
+  fixedSystemExecutionPath,
   parseExecutionLifecycleArguments,
   readExecutionLifecycleAuthority,
   readExecutionLifecycleRuntimeHomes,
@@ -264,7 +265,10 @@ export async function discoverLifecycleExecution(
     [...expected].some(([name, value]) => environment.get(name) !== value)
   )
     refuse('unsupported_profile');
-  if (record.profile.kind === 'caws-lifecycle-v1' && environment.get('PATH') !== '/usr/bin:/bin')
+  if (
+    record.profile.kind === 'caws-lifecycle-v1' &&
+    environment.get('PATH') !== fixedSystemExecutionPath()
+  )
     refuse('unsupported_profile');
   executionProfileBindings(record);
   if (record.execution.stdinBase64 !== '') refuse('unsupported_profile');
@@ -340,7 +344,10 @@ export async function discoverEvidenceExecution(
     [...expected].some(([name, value]) => environment.get(name) !== value)
   )
     refuse('unsupported_profile');
-  if (record.profile.kind === 'caws-evidence-v1' && environment.get('PATH') !== '/usr/bin:/bin')
+  if (
+    record.profile.kind === 'caws-evidence-v1' &&
+    environment.get('PATH') !== fixedSystemExecutionPath()
+  )
     refuse('unsupported_profile');
   executionProfileBindings(record);
   if (record.execution.stdinBase64 !== '') refuse('unsupported_profile');
@@ -548,7 +555,7 @@ function inspectCargoRun(record: PreparedExecutionV1, authority: ExecutionAuthor
     ['CODEX_SANDBOX_NETWORK_DISABLED', '1'],
     ['HOME', ceiling.invocationRoot],
     ['LC_ALL', 'C'],
-    ['PATH', `${runtime.root}/bin:/usr/bin:/bin`],
+    ['PATH', `${runtime.root}/bin:${fixedSystemExecutionPath()}`],
     ['RUSTC', runtime.rustc.path],
     ['SDKROOT', runtime.sdkRoot],
     ['TMPDIR', ceiling.tmpRoot],
