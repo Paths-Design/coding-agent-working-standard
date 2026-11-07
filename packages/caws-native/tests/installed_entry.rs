@@ -19,6 +19,66 @@ mod installed_generation;
 static SEQUENCE: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
+fn stable_capability_probe_observes_the_executable_without_home_or_stdin() {
+    let f = Fixture::new();
+    let args = ["--installed-entry-capability-v1"];
+    let mut child = Command::new(env!("CARGO_BIN_EXE_caws-hook-native"))
+        .args(args)
+        .env_clear()
+        .env("CAWS_HOOK_EVENT_TIMEOUT_MS_V1", "not-an-event")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let held_stdin = child.stdin.take().unwrap();
+    let output = child.wait_with_output().unwrap();
+    drop(held_stdin);
+    f.retain(&args, &output);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stderr.is_empty());
+    assert_eq!(output.stdout.last(), Some(&b'\n'));
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap(),
+        serde_json::json!({
+            "schema":"caws.native.installed-entry-capability.v1",
+            "installedInvocation":{"protocol":"invoke-installed-v1","maxOriginalTimeoutMs":30000,
+                "stableEntryEventBudget":"env-original-start-ms-v1"},
+        })
+    );
+    assert!(!f.0.join("state").exists());
+    let output = f.invoke(&["--installed-entry-capability-v1", "extra"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
+fn stable_capability_probe_closed_output_cannot_report_success() {
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
+    use std::os::unix::process::ExitStatusExt;
+    let f = Fixture::new();
+    let (writer, reader) = UnixStream::pair().unwrap();
+    drop(reader);
+    let writer: OwnedFd = writer.into();
+    let args = ["--installed-entry-capability-v1"];
+    let output = Command::new(env!("CARGO_BIN_EXE_caws-hook-native"))
+        .args(args)
+        .env_clear()
+        .stdout(Stdio::from(writer))
+        .output()
+        .unwrap();
+    f.retain(&args, &output);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.status.signal(), None);
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
 fn event_restriction_preserves_start_and_intersects_original_and_generation() {
     use caws_native::monotonic_deadline::MonotonicDeadline;
     use std::time::Duration;

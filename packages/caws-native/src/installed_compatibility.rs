@@ -361,6 +361,64 @@ fn poll(fds: &mut [libc::pollfd], deadline: Option<&CompatibilityBudget<'_>>) ->
     Ok(())
 }
 
+/// A diagnostic declaration is successful only after complete, live delivery.
+/// Refusal output below deliberately retains its separate best-effort contract.
+fn emit_complete(fd: RawFd, bytes: &[u8], budget: &CompatibilityBudget<'_>) -> io::Result<()> {
+    if bytes.is_empty() || bytes.len() > 4096 {
+        return Err(io::Error::other("invalid capability output size"));
+    }
+    let _flags = Flags::set(fd)?;
+    let mut offset = 0;
+    loop {
+        check(budget)?;
+        if SIGNAL.load(Ordering::Relaxed) != 0 {
+            return Err(io::Error::from(io::ErrorKind::Interrupted));
+        }
+        if offset == bytes.len() {
+            return Ok(());
+        }
+        let part = &bytes[offset..bytes.len().min(offset + CHUNK)];
+        let count = unsafe { libc::write(fd, part.as_ptr().cast(), part.len()) };
+        if count > 0 {
+            offset += count as usize;
+            continue;
+        }
+        if count == 0 {
+            return Err(io::Error::from(io::ErrorKind::WriteZero));
+        }
+        let error = io::Error::last_os_error();
+        if !transient(&error) {
+            return Err(error);
+        }
+        let mut fds = [libc::pollfd {
+            fd,
+            events: libc::POLLOUT,
+            revents: 0,
+        }];
+        poll(&mut fds, Some(budget))?;
+    }
+}
+
+pub(super) fn capability_response(original: &MonotonicDeadline, bytes: &[u8]) -> u8 {
+    let budget = match CompatibilityBudget::new(original, None) {
+        Ok(budget) if budget.foreground_allowed() => budget,
+        _ => return 2,
+    };
+    let Ok(_signals) = Signals::install() else {
+        return 2;
+    };
+    if emit_complete(1, bytes, &budget).is_ok() {
+        0
+    } else {
+        emit(
+            2,
+            b"[CAWS native installed entry: capability diagnostic delivery incomplete]\n",
+            Some(&budget),
+        );
+        2
+    }
+}
+
 fn emit(fd: RawFd, bytes: &[u8], deadline: Option<&CompatibilityBudget<'_>>) {
     let Ok(_flags) = Flags::set(fd) else {
         return;
@@ -1589,6 +1647,46 @@ mod budget_tests {
     use super::*;
     use caws_native::monotonic_deadline::DeadlineEnvelope;
     use std::io::{Read, Write};
+
+    #[test]
+    fn capability_delivery_requires_all_bytes_inside_the_retained_budget() {
+        let original = MonotonicDeadline::capture(Duration::from_secs(1)).unwrap();
+        let envelope = original.envelope();
+        let budget = CompatibilityBudget::new(&original, None).unwrap();
+        let (writer, mut reader) = UnixStream::pair().unwrap();
+        emit_complete(writer.as_raw_fd(), b"declaration\n", &budget).unwrap();
+        drop(writer);
+        let mut delivered = Vec::new();
+        reader.read_to_end(&mut delivered).unwrap();
+        assert_eq!(delivered, b"declaration\n");
+        assert_eq!(original.envelope(), envelope);
+
+        let (writer, mut reader) = full_socket();
+        let original = MonotonicDeadline::capture(Duration::from_millis(150)).unwrap();
+        let expected = original.envelope();
+        let budget = CompatibilityBudget::new(&original, None).unwrap();
+        // Release backpressure later so an implementation that ignores expiry
+        // fails rather than leaving this test permanently blocked.
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(400));
+            reader.set_nonblocking(true).unwrap();
+            let mut buffered = Vec::new();
+            let _ = reader.read_to_end(&mut buffered);
+            (reader, buffered)
+        });
+        let result = emit_complete(writer.as_raw_fd(), b"declaration\n", &budget);
+        drop(writer);
+        let (mut reader, mut buffered) = release.join().unwrap();
+        reader.set_nonblocking(false).unwrap();
+        reader.read_to_end(&mut buffered).unwrap();
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "compatibility foreground deadline invalid or expired"
+        );
+        assert!(!buffered.is_empty());
+        assert!(buffered.iter().all(|byte| *byte == b'x'));
+        assert_eq!(original.envelope(), expected);
+    }
 
     fn full_socket() -> (UnixStream, UnixStream) {
         let (mut writer, reader) = UnixStream::pair().unwrap();

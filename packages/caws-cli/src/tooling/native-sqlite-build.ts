@@ -5,6 +5,7 @@ import { runSqliteBuildStep, type ReviewedFile, type StepReceipt } from './sqlit
 import { inspectBsdAr, type ArMember } from './ar-archive';
 import {
   parseInstalledInvocationCapability,
+  installedEntryAdvertisesEventBudget,
   type InstalledInvocationCapability,
 } from '../init/native-hook-identification';
 export type { InstalledInvocationCapability } from '../init/native-hook-identification';
@@ -958,6 +959,129 @@ export function validateNativeSqliteBuildIdentity(
   return identity;
 }
 
+const STABLE_ENTRY_PROBE = 'stable-entry-capability';
+const STABLE_ENTRY_PROBE_ARG = '--installed-entry-capability-v1';
+
+function buildEnvironment(
+  request: NativeSqliteBuildRequest,
+  prefix: SqlitePrefixManifest,
+  prefixPin: ReviewedFile
+): Record<string, string> {
+  const root = request.outputRoot;
+  return {
+    PATH: '/usr/bin:/bin',
+    LANG: 'C',
+    LC_ALL: 'C',
+    TZ: 'UTC',
+    HOME: path.join(root, 'home'),
+    CARGO_HOME: path.join(root, 'cargo-home'),
+    CARGO_TARGET_DIR: path.join(root, 'target'),
+    TMPDIR: path.join(root, 'tmp'),
+    SDKROOT: request.sdk.root,
+    MACOSX_DEPLOYMENT_TARGET: '11.0',
+    RUSTC: request.tools.rustc.path,
+    CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER: request.tools.clang.path,
+    CC: request.tools.clang.path,
+    AR: request.tools.ar.path,
+    SQLITE3_LIB_DIR: path.dirname(prefix.archive.path),
+    SQLITE3_INCLUDE_DIR: path.dirname(prefix.header.path),
+    SQLITE3_STATIC: '1',
+    SQLITE3_NO_PKG_CONFIG: '1',
+    CAWS_SQLITE_PREFIX_MANIFEST: prefixPin.path,
+    CAWS_SQLITE_PREFIX_MANIFEST_SHA256: prefixPin.sha256,
+  };
+}
+
+/** Retained component observation, not publisher authentication or semantic proof. */
+export function verifyNativeStableEntryProbe(input: {
+  capability: InstalledInvocationCapability;
+  stableEntry: ReviewedFile | undefined;
+  outputRoot: string;
+  expectedEnvironment: Record<string, string>;
+  steps: readonly StepReceipt[];
+}): void {
+  if (!installedEntryAdvertisesEventBudget(input.capability)) return;
+  insist(input.stableEntry, 'Event budget requires a selected stable entry');
+  verifyFile(input.stableEntry);
+  absolute(input.outputRoot);
+  insist(Array.isArray(input.steps), 'Missing stable entry probe steps');
+  const probes = input.steps.filter((step) => step?.label === STABLE_ENTRY_PROBE);
+  insist(probes.length === 1, 'Expected exactly one stable entry capability probe');
+  const probe = probes[0]!;
+  shape(probe, [
+    'label',
+    'argv',
+    'cwd',
+    'env',
+    'startedAt',
+    'durationMs',
+    'stdoutPath',
+    'stderrPath',
+    'stdoutBytes',
+    'stderrBytes',
+    'stdoutRetainedBytes',
+    'stderrRetainedBytes',
+    'stdoutSha256',
+    'stderrSha256',
+    'stdoutBase64',
+    'stderrBase64',
+    'persistenceError',
+    'exitCode',
+    'signal',
+    'directChildReaped',
+    'stopReason',
+    'error',
+  ]);
+  insist(
+    canonical(probe.argv) === canonical([input.stableEntry.path, STABLE_ENTRY_PROBE_ARG]) &&
+      probe.cwd === input.outputRoot &&
+      canonical(probe.env) === canonical(input.expectedEnvironment),
+    'Stable entry probe invocation mismatch'
+  );
+  insist(
+    probe.exitCode === 0 &&
+      probe.signal === null &&
+      probe.directChildReaped === true &&
+      probe.stopReason === null &&
+      probe.persistenceError === null &&
+      probe.error === null,
+    'Stable entry capability probe did not complete'
+  );
+  insist(
+    typeof probe.startedAt === 'string' &&
+      Number.isFinite(Date.parse(probe.startedAt)) &&
+      new Date(probe.startedAt).toISOString() === probe.startedAt &&
+      Number.isSafeInteger(probe.durationMs) &&
+      probe.durationMs >= 0,
+    'Invalid stable entry probe observation time'
+  );
+  const channel = (name: 'stdout' | 'stderr'): Buffer => {
+    const file = path.join(input.outputRoot, `${STABLE_ENTRY_PROBE}.${name}`);
+    insist(probe[`${name}Path`] === file, 'Stable entry probe output path mismatch');
+    const bytes = readBounded(file, 4096);
+    insist(
+      bytes.length === probe[`${name}Bytes`] &&
+        bytes.length === probe[`${name}RetainedBytes`] &&
+        sha(bytes) === probe[`${name}Sha256`] &&
+        bytes.toString('base64') === probe[`${name}Base64`],
+      'Stable entry probe output custody mismatch'
+    );
+    return bytes;
+  };
+  const stdout = channel('stdout');
+  insist(channel('stderr').length === 0, 'Stable entry capability probe reported diagnostics');
+  insist(stdout.length > 0 && stdout.at(-1) === 10, 'Incomplete stable entry capability response');
+  const diagnostic = strictJson(stdout) as Record<string, unknown>;
+  shape(diagnostic, ['schema', 'installedInvocation']);
+  insist(
+    diagnostic.schema === 'caws.native.installed-entry-capability.v1',
+    'Unsupported stable entry capability response'
+  );
+  const observed = parseInstalledInvocationCapability(diagnostic.installedInvocation);
+  insist(canonical(observed) === canonical(input.capability), 'Stable entry capability mismatch');
+  verifyFile(input.stableEntry);
+}
+
 export async function buildNativeSqliteCandidate(
   input: NativeSqliteBuildRequest,
   optionsInput: { signal?: AbortSignal } = {}
@@ -1084,28 +1208,7 @@ export async function buildNativeSqliteCandidate(
         verifyFile(pin);
       tick();
     };
-    const env: Record<string, string> = {
-      PATH: '/usr/bin:/bin',
-      LANG: 'C',
-      LC_ALL: 'C',
-      TZ: 'UTC',
-      HOME: path.join(outputRoot, 'home'),
-      CARGO_HOME: path.join(outputRoot, 'cargo-home'),
-      CARGO_TARGET_DIR: path.join(outputRoot, 'target'),
-      TMPDIR: path.join(outputRoot, 'tmp'),
-      SDKROOT: request.sdk.root,
-      MACOSX_DEPLOYMENT_TARGET: '11.0',
-      RUSTC: request.tools.rustc.path,
-      CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER: request.tools.clang.path,
-      CC: request.tools.clang.path,
-      AR: request.tools.ar.path,
-      SQLITE3_LIB_DIR: path.dirname(prefix.archive.path),
-      SQLITE3_INCLUDE_DIR: path.dirname(prefix.header.path),
-      SQLITE3_STATIC: '1',
-      SQLITE3_NO_PKG_CONFIG: '1',
-      CAWS_SQLITE_PREFIX_MANIFEST: prefixFile,
-      CAWS_SQLITE_PREFIX_MANIFEST_SHA256: prefixPin.sha256,
-    };
+    const env = buildEnvironment(request, prefix, prefixPin);
     const execute = async (
       label: string,
       executable: string,
@@ -1190,6 +1293,22 @@ export async function buildNativeSqliteCandidate(
     );
     const identityPath = path.join(outputRoot, 'observed-sqlite-identity.json');
     exclusive(identityPath, identityBytes);
+
+    if (
+      observedIdentity.schema === 'caws.sqlite_build_identity.v2' &&
+      installedEntryAdvertisesEventBudget(observedIdentity.installedInvocation)
+    ) {
+      insist(stablePin, 'Event budget requires a selected stable entry');
+      verifyFile(stablePin);
+      await execute(STABLE_ENTRY_PROBE, stablePin.path, [STABLE_ENTRY_PROBE_ARG]);
+      verifyNativeStableEntryProbe({
+        capability: observedIdentity.installedInvocation,
+        stableEntry: stablePin,
+        outputRoot,
+        expectedEnvironment: env,
+        steps,
+      });
+    }
 
     for (const [label, binary] of [
       ['native', nativePin],
@@ -1401,6 +1520,17 @@ export function loadNativeSqliteBuild(requestFilePath: string): LoadedNativeSqli
     canonical(observed) === canonical(build.observedIdentity),
     'Observed identity record mismatch'
   );
+  if (observed.schema === 'caws.sqlite_build_identity.v2')
+    verifyNativeStableEntryProbe({
+      capability: observed.installedInvocation,
+      stableEntry:
+        build.schema === 'caws.native_sqlite_build_receipt.v2'
+          ? build.artifacts.stableEntry
+          : undefined,
+      outputRoot: root,
+      expectedEnvironment: buildEnvironment(request, expectedManifest, build.prefixManifest),
+      steps: build.steps,
+    });
   const inventory = inspectSysRlib(build.artifacts.sysRlib, verifyFile(expectedManifest.object));
   insist(
     canonical(inventory.inventory) === canonical(build.sysRlibInventory) &&

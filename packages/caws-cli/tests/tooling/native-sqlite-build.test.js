@@ -12,6 +12,7 @@ const {
   selectNativeSqliteCargoArtifacts,
   verifyNativeSqliteBuildArtifacts,
   validateNativeSqliteBuildIdentity,
+  verifyNativeStableEntryProbe,
 } = require('../../dist/tooling/native-sqlite-build');
 
 const HEADER_SHA = '919e7f2e8ed1d8f56ac17b412b8971c76aa5d1a879752cc6058f75e7d5910e1d';
@@ -742,6 +743,160 @@ describe('native SQLite coordinator pre-Cargo refusals and explicit loader bindi
     const file = path.join(root, 'invalid-request.json');
     fs.writeFileSync(file, Buffer.from([0xff]));
     expect(() => loadNativeSqliteBuild(file)).toThrow(/not valid for encoding utf-8/);
+  });
+});
+
+describe('stable entry probe receipt binding (synthetic records, no execution)', () => {
+  let root, stableEntry, capability, expectedEnvironment, steps, spawn;
+  function response() {
+    return { schema: 'caws.native.installed-entry-capability.v1', installedInvocation: capability };
+  }
+  function record(value = response(), stderr = Buffer.alloc(0)) {
+    const stdout = Buffer.isBuffer(value) ? value : Buffer.from(JSON.stringify(value) + '\n');
+    const stdoutPath = path.join(root, 'stable-entry-capability.stdout');
+    const stderrPath = path.join(root, 'stable-entry-capability.stderr');
+    fs.writeFileSync(stdoutPath, stdout);
+    fs.writeFileSync(stderrPath, stderr);
+    steps = [
+      {
+        label: 'stable-entry-capability',
+        argv: [stableEntry.path, '--installed-entry-capability-v1'],
+        cwd: root,
+        env: { ...expectedEnvironment },
+        startedAt: '2026-11-07T00:00:00.000Z',
+        durationMs: 1,
+        stdoutPath,
+        stderrPath,
+        stdoutBytes: stdout.length,
+        stderrBytes: stderr.length,
+        stdoutRetainedBytes: stdout.length,
+        stderrRetainedBytes: stderr.length,
+        stdoutSha256: sha(stdout),
+        stderrSha256: sha(stderr),
+        stdoutBase64: stdout.toString('base64'),
+        stderrBase64: stderr.toString('base64'),
+        persistenceError: null,
+        exitCode: 0,
+        signal: null,
+        directChildReaped: true,
+        stopReason: null,
+        error: null,
+      },
+    ];
+  }
+  function verify() {
+    return verifyNativeStableEntryProbe({
+      capability,
+      stableEntry,
+      outputRoot: root,
+      expectedEnvironment,
+      steps,
+    });
+  }
+  beforeEach(() => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-stable-probe-')));
+    const file = path.join(root, 'stable-fixture.bin');
+    fs.writeFileSync(file, 'fixture data; never executed\n', { mode: 0o700 });
+    stableEntry = identity(file);
+    capability = {
+      protocol: 'invoke-installed-v1',
+      maxOriginalTimeoutMs: 30000,
+      stableEntryEventBudget: 'env-original-start-ms-v1',
+    };
+    expectedEnvironment = { PATH: '/usr/bin:/bin', HOME: root };
+    record();
+    spawn = jest.spyOn(children, 'spawn').mockImplementation(() => {
+      throw new Error('receipt loading must not execute a child');
+    });
+  });
+  afterEach(() => {
+    try {
+      expect(spawn).not.toHaveBeenCalled();
+    } finally {
+      spawn.mockRestore();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+  test('accepts only the matching complete component observation', () => {
+    expect(verify).not.toThrow();
+  });
+  test('historical capability does not manufacture or require a stable probe', () => {
+    delete capability.stableEntryEventBudget;
+    stableEntry = undefined;
+    steps = [];
+    expect(verify).not.toThrow();
+  });
+  test.each([
+    'missing',
+    'duplicate',
+    'missing stable',
+    'wrong executable',
+    'wrong flag',
+    'wrong cwd',
+    'injected environment',
+    'exit',
+    'signal',
+    'unreaped',
+    'timeout',
+    'error',
+    'persistence',
+    'count',
+    'retained count',
+    'hash',
+    'base64',
+    'foreign output',
+    'stderr',
+    'schema',
+    'missing feature',
+    'unknown feature',
+    'truncated',
+    'no newline',
+    'extra response',
+    'extra receipt',
+    'changed binary',
+    'changed output',
+    'time',
+    'duration',
+  ])('rejects an inapplicable or incomplete probe: %s', (kind) => {
+    if (kind === 'missing') steps = [];
+    if (kind === 'duplicate') steps.push({ ...steps[0] });
+    if (kind === 'missing stable') stableEntry = undefined;
+    if (kind === 'wrong executable') steps[0].argv[0] = path.join(root, 'other.bin');
+    if (kind === 'wrong flag') steps[0].argv[1] = '--version';
+    if (kind === 'wrong cwd') steps[0].cwd = path.dirname(root);
+    if (kind === 'injected environment') steps[0].env.DYLD_INSERT_LIBRARIES = '/untrusted';
+    if (kind === 'exit') steps[0].exitCode = 2;
+    if (kind === 'signal') steps[0].signal = 'SIGTERM';
+    if (kind === 'unreaped') steps[0].directChildReaped = false;
+    if (kind === 'timeout') steps[0].stopReason = 'timeout';
+    if (kind === 'error') steps[0].error = 'spawn failed';
+    if (kind === 'persistence') steps[0].persistenceError = 'write failed';
+    if (kind === 'count') steps[0].stdoutBytes++;
+    if (kind === 'retained count') steps[0].stdoutRetainedBytes--;
+    if (kind === 'hash') steps[0].stdoutSha256 = '0'.repeat(64);
+    if (kind === 'base64') steps[0].stdoutBase64 += '!';
+    if (kind === 'foreign output') steps[0].stdoutPath = path.join(root, 'unrelated.stdout');
+    if (kind === 'stderr') record(response(), Buffer.from('not a clean declaration'));
+    if (kind === 'schema') record({ ...response(), schema: 'unknown' });
+    if (kind === 'missing feature')
+      record({
+        ...response(),
+        installedInvocation: { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 30000 },
+      });
+    if (kind === 'unknown feature')
+      record({
+        ...response(),
+        installedInvocation: { ...capability, stableEntryEventBudget: 'future' },
+      });
+    if (kind === 'truncated') record(Buffer.from('{"schema":\n'));
+    if (kind === 'no newline') record(Buffer.from(JSON.stringify(response())));
+    if (kind === 'extra response') record({ ...response(), renew: true });
+    if (kind === 'extra receipt') steps[0].renew = true;
+    if (kind === 'changed binary') fs.appendFileSync(stableEntry.path, 'changed');
+    if (kind === 'changed output') fs.appendFileSync(steps[0].stdoutPath, ' ');
+    if (kind === 'time') steps[0].startedAt = 'not a date';
+    if (kind === 'duration') steps[0].durationMs = -1;
+    expect(verify).toThrow();
   });
 });
 

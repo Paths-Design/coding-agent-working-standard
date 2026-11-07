@@ -487,6 +487,19 @@ fn configuration_failure(
 pub fn run() -> u8 {
     // Capture before argument decoding, machine-home or generation lookup.
     let original_deadline = MonotonicDeadline::capture(Duration::from_millis(ORIGINAL_TIMEOUT_MS));
+    let arguments = std::env::args_os()
+        .skip(1)
+        .map(|value| value.into_string())
+        .collect::<Result<Vec<_>, _>>();
+    // Build observation of this executable, not a hook invocation or machine
+    // selection. No HOME, payload, event environment or generation is consumed.
+    if matches!(&arguments, Ok(args) if args.as_slice() == ["--installed-entry-capability-v1"]) {
+        return match original_deadline {
+            Ok(original) => compatibility::capability_response(&original,
+                b"{\"schema\":\"caws.native.installed-entry-capability.v1\",\"installedInvocation\":{\"protocol\":\"invoke-installed-v1\",\"maxOriginalTimeoutMs\":30000,\"stableEntryEventBudget\":\"env-original-start-ms-v1\"}}\n"),
+            Err(_) => 2,
+        };
+    }
     let event_timeout_ms = parse_event_timeout(std::env::var_os(EVENT_TIMEOUT_ENV).as_deref());
     // A valid registered budget also governs argument/home failures. Construct
     // it once before those branches and retain it through selection.
@@ -494,10 +507,6 @@ pub fn run() -> u8 {
         (Ok(original), Ok(timeout)) => restrict_event_deadline(original, *timeout),
         _ => Ok(None),
     };
-    let arguments = std::env::args_os()
-        .skip(1)
-        .map(|value| value.into_string())
-        .collect::<Result<Vec<_>, _>>();
     let invocation = match arguments
         .map_err(|_| "Invocation arguments must be UTF-8".to_owned())
         .and_then(|args| Invocation::parse(&args))
