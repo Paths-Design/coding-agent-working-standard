@@ -6,8 +6,10 @@ const crypto = require('node:crypto');
 const packageRoot = path.resolve(__dirname, '../..');
 let fixture, previousExitCode;
 beforeEach(() => {
-  fixture = fs.mkdtempSync(path.join(packageRoot, 'reports/codex-capture-unit-'));
+  fixture = undefined;
   previousExitCode = process.exitCode;
+  fs.mkdirSync(path.join(packageRoot, 'reports'), { recursive: true });
+  fixture = fs.mkdtempSync(path.join(packageRoot, 'reports/codex-capture-unit-'));
 });
 afterEach(() => {
   jest.restoreAllMocks();
@@ -15,7 +17,7 @@ afterEach(() => {
   jest.dontMock('node:child_process');
   jest.resetModules();
   process.exitCode = previousExitCode;
-  fs.rmSync(fixture, { recursive: true, force: true });
+  if (fixture !== undefined) fs.rmSync(fixture, { recursive: true, force: true });
 });
 function config() {
   return require('../../scripts/qualify-native-codex.cjs');

@@ -61,7 +61,13 @@ scenario(
     succeeds(pack);
     const metadata = JSON.parse(pack.stdout.toString())[0];
     succeeds(
-      invoke(root, '/usr/bin/tar', ['-xzf', path.join(packed, metadata.filename), '-C', unpacked])
+      invoke(
+        root,
+        '/usr/bin/tar',
+        ['-xzf', path.join(packed, metadata.filename), '-C', unpacked],
+        undefined,
+        { env: { HOME: root, PATH: '/usr/bin:/bin' } }
+      )
     );
     const templates = path.join(unpacked, 'package/templates/hook-packs');
     expect(fs.existsSync(path.join(templates, 'shared/lib/guard-config.py'))).toBe(false);

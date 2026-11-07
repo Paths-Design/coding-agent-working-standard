@@ -824,7 +824,11 @@ describe('bash-write-guard.sh refuses mutations inside a foreign-claimed directo
       encoding: 'utf8',
       env: { ...hermeticGitEnvironment(fixture.home), PATH: environmentPath },
     });
-    expect(lookup.status).toBe(1);
+    // A missing command has shell-dependent nonzero status; spawn failures and
+    // signals do not establish that the command was absent from this PATH.
+    expect(lookup.error).toBeUndefined();
+    expect(lookup.signal).toBeNull();
+    expect(lookup.status).toBeGreaterThan(0);
     expect(lookup.stdout).toBe('');
     const registry = path.join(fixture.repo, '.caws/worktrees.json');
     const entries = JSON.parse(fs.readFileSync(registry, 'utf8'));
