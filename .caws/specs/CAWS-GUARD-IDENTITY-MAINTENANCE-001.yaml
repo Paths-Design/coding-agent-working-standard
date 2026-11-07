@@ -54,3 +54,10 @@ evidence:
     exit_code: 0
     artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/qualified/qualification-5uCGB2/observations.json"
     commit_sha: "5830b87da00b5312fef6c167953d1aa7c460d6be"
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Narrow maintenance activated through committed locked snapshot publisher: actual selected01f18965, previous7be; all113 installed hashes/modes verified, only scope-guard changed. Real host Bash succeeded; real apply_patch into owned release test admitted. Controlled actual foreign apply_patch was refused by active01f18965 scope-guard, protected SHA b5f7e7d285029324d9b3acae19cc05099271454ac98bfc059a92b0581625cd51 unchanged. Hook registration4e200c19 and bootstrap99bdbeec unchanged. Source commits ca437f58,357459f7,2f4d86eb,5830b87d on APP branch; main landing/push and release integration remain owed, so A3 not complete. No full native cutover or release claim. Artifacts retained in canonical .caws/state/guard-identity-maintenance; root retains ownership and next integrates these commits into release after its three fixture checks."
+    recorded_at: "2026-11-07T21:21:29.119Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/qualified/post-activation.json"
+    commit_sha: "5830b87da00b5312fef6c167953d1aa7c460d6be"
