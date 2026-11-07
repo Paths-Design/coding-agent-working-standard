@@ -1,0 +1,37 @@
+id: CAWS-GUARD-IDENTITY-MAINTENANCE-001
+title: 'Qualify and install a compatible linked-checkout identity guard repair'
+mode: fix
+lifecycle_state: active
+created_at: '2026-11-07T20:39:17.268Z'
+updated_at: '2026-11-07T20:39:17.268Z'
+created_by_session: '01a19baf-4b34-7a83-9cf8-f109a22c539e'
+blast_radius:
+  modules:
+    - 'Shared compatibility runtime distribution and repository identity guard'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/install-guard-identity-maintenance.cjs'
+    - 'scripts/install-guard-identity-maintenance.test.cjs'
+  out: []
+invariants:
+  - 'Preserve every existing guard, native execution-contract rejection, acceptance gate, harness registration and session identity precedence'
+  - 'Publish new immutable runtime through the retained packaged installer; never edit an installed snapshot'
+acceptance:
+  - id: A1
+    given: 'verified compatible runtime 7be and retained source export'
+    when: 'maintenance candidate is built privately'
+    then: 'baseline is reproduced and only reviewed identity-related members differ, with every other member byte-identical'
+  - id: A2
+    given: 'the privately installed maintenance candidate'
+    when: 'real Git-linked and foreign repository fixtures exercise the guard'
+    then: 'owned scoped writes are admitted, foreign and out-of-scope writes are refused before effect, and rollback restores baseline bytes'
+  - id: A3
+    given: 'qualified maintenance bytes and unchanged native registration'
+    when: 'normal installer activates the candidate'
+    then: 'actual shell commands and owned file edits work, negative guard checks remain enforced, and source plus evidence are retained and properly landed'
+rollback:
+  - 'Use normal caws init adapters rollback to restore the verified previous runtime; preserve both snapshots and registration'
+non_functional: {}
+contracts: []
