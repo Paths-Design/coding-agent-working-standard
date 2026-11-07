@@ -48,6 +48,56 @@ const open = () => {
   return openCustody(requestFile);
 };
 
+test('receipt reservation is exclusive before use and can commit only once', () => {
+  const custody = open();
+  const held = custody.reserveRecord('attempt');
+  expect(() => custody.reserveRecord('attempt')).toThrow(/EEXIST/);
+  const receipt = held.commit({ retained: 'current attempt' });
+  const bytes = fs.readFileSync(receipt.path);
+  expect(receipt.sha256).toBe(hash(bytes));
+  expect(JSON.parse(bytes).data).toEqual({ retained: 'current attempt' });
+  expect(() => held.commit({ retained: 'replacement' })).toThrow('already consumed');
+  expect(fs.readFileSync(receipt.path)).toEqual(bytes);
+});
+test('replacing a reserved pathname prevents writes to either inode', () => {
+  const custody = open();
+  const held = custody.reserveRecord('attempt');
+  const file = path.join(fixture, 'output/attempt.json');
+  const moved = file + '.held';
+  fs.renameSync(file, moved);
+  fs.writeFileSync(file, 'replacement', { mode: 0o600 });
+  expect(() => held.commit({ forbidden: true })).toThrow('Receipt reservation changed');
+  expect(fs.readFileSync(file, 'utf8')).toBe('replacement');
+  expect(fs.readFileSync(moved).length).toBe(0);
+});
+test('an existing final observation prevents native launch even without a start receipt', async () => {
+  request.adapter = { model: 'unit-fixture' };
+  request.scenario.ownedFile = relative(
+    path.join(fixture, 'project/.caws/worktrees/native-owned/allowed.txt')
+  );
+  request.scenario.protectedFile = relative(
+    path.join(fixture, 'project/.caws/hooks/qualification-probe.sh')
+  );
+  const custody = open();
+  const protectedFile = path.join(root, request.scenario.protectedFile);
+  fs.mkdirSync(path.dirname(protectedFile), { recursive: true });
+  fs.writeFileSync(protectedFile, 'inert sentinel\n');
+  // Protocol fixture only; no genuine preparation or native execution is claimed.
+  const prepared = custody.record('prepare', { runtime: { entry: 'legacy', nativeImage: null } });
+  const finalFile = path.join(fixture, 'output/observe-attempt-collision.json');
+  fs.writeFileSync(finalFile, 'prior retained observation\n', { mode: 0o600 });
+  const spawn = jest.spyOn(require('node:child_process'), 'spawn');
+  jest.resetModules();
+  const { observe } = require('../../scripts/qualify-native-codex.cjs');
+  await expect(observe(custody, prepared.sha256, 'collision')).rejects.toThrow(/EEXIST/);
+  expect(spawn).not.toHaveBeenCalled();
+  expect(fs.readFileSync(finalFile, 'utf8')).toBe('prior retained observation\n');
+  const start = JSON.parse(
+    fs.readFileSync(path.join(fixture, 'output/observe-attempt-collision.start.json'))
+  );
+  expect(start.data.phase).toBe('before-host-launch');
+});
+
 // Schema/pinning fixtures only; the installed CLI owns full v2 validation.
 function nativeDescriptor(schema = 'caws.runtime.native-image-input.v2') {
   const file = path.join(fixture, 'native-image.json');

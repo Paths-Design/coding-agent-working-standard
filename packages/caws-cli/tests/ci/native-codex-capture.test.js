@@ -285,6 +285,84 @@ test.each(['sent', 'wrong-thread', 'wrong-turn'])('command matching excludes %s 
   });
   expect(observed.ownedCommandExit).toBeNull();
 });
+test.each([
+  'fresh',
+  'prior-file',
+  'same-bytes',
+  'missing-write',
+  'failed-write',
+  'other-turn',
+  'other-cwd',
+  'missing-cwd',
+  'unknown-before',
+])('owned write effect requires a current correlated change: %s', (kind) => {
+  const snapshot = (value) => ({
+    path: '/fixture/lane/owned',
+    kind: 'file',
+    mode: 0o600,
+    bytesBase64: Buffer.from(value).toString('base64'),
+    sizeBytes: Buffer.byteLength(value),
+    sha256: crypto.createHash('sha256').update(value).digest('hex'),
+  });
+  const before =
+    kind === 'same-bytes'
+      ? snapshot('attempt-2\n')
+      : kind === 'prior-file'
+        ? snapshot('attempt-1\n')
+        : { path: '/fixture/lane/owned', kind: 'missing' };
+  const data = {
+    threadId: 'thread',
+    operationTurnId: 'turn',
+    requestedOperationSessionCwd: kind === 'missing-cwd' ? undefined : '/fixture/lane',
+    expectedOwnedPath: '/fixture/lane/owned',
+    expectedOwnedBase64: Buffer.from('attempt-2\n').toString('base64'),
+    ownedBefore: kind === 'unknown-before' ? undefined : before,
+    ownedAfter: snapshot('attempt-2\n'),
+    sources: { write: 'exact-write' },
+    stream:
+      kind === 'missing-write'
+        ? []
+        : [
+            {
+              direction: 'received',
+              message: {
+                method: 'item/completed',
+                params: {
+                  threadId: 'thread',
+                  turnId: kind === 'other-turn' ? 'old-turn' : 'turn',
+                  item: {
+                    type: 'commandExecution',
+                    commandActions: [{ command: 'exact-write' }],
+                    cwd:
+                      kind === 'missing-cwd'
+                        ? undefined
+                        : kind === 'other-cwd'
+                          ? '/another'
+                          : '/fixture/lane',
+                    exitCode: kind === 'failed-write' ? 1 : 0,
+                  },
+                },
+              },
+            },
+          ],
+  };
+  const result = config().inspectObservation(data);
+  expect(result.ownedContents).toBe(true);
+  expect(result.ownedWriteEffect).toBe(['fresh', 'prior-file'].includes(kind));
+});
+test('a synchronous host spawn failure consumes its reserved failure receipt', async () => {
+  const fx = captureFixture(undefined, true);
+  require('node:child_process').spawn.mockImplementationOnce(() => {
+    throw Error('spawn refused');
+  });
+  await fx.observe(fx.custody);
+  expect(fx.record.mock.calls.map(([label]) => label)).toEqual(['observe-start', 'observe']);
+  expect(fx.record.mock.calls[1][1]).toMatchObject({
+    error: 'spawn refused',
+    terminal: { status: null, signal: null, launched: false },
+  });
+  expect(process.exitCode).toBe(1);
+});
 test('configuration replacement preserves unrelated bytes and original mode', () => {
   const file = path.join(fixture, 'config.toml');
   fs.writeFileSync(file, 'unrelated = "preserved"\nowned = true\n', { mode: 0o600 });
@@ -437,6 +515,7 @@ function captureFixture(onSend, closesNormally, entry = 'legacy') {
     }),
     revalidateInputs: () => ({}),
     record,
+    reserveRecord: (label) => ({ commit: (data) => record(label, data) }),
   };
   jest.spyOn(console, 'log').mockImplementation(() => {});
   return {
@@ -456,6 +535,10 @@ test('named observation retains the preparation pin and separate attempt receipt
   expect(labels).toEqual(['observe-attempt-trusted-1.start', 'observe-attempt-trusted-1']);
   const observed = fx.record.mock.calls[1][1];
   expect(observed.attempt).toBe('trusted-1');
+  expect(Buffer.from(observed.expectedOwnedBase64, 'base64').toString()).toBe(
+    'native-owned-aaaaaaaaaaaaaaaa-trusted-1\n'
+  );
+  expect(observed.ownedBefore.kind).toBe('missing');
   expect(observed.preparation.sha256).toBe(fx.preparationSha256);
   expect(observed.terminal).toEqual({ status: 0, signal: null });
 });
@@ -508,11 +591,15 @@ function bootstrapProtocol(mode, entry = 'legacy') {
       id,
       method: 'item/commandExecution/requestApproval',
       params: {
+        kind: 'command',
         threadId: 'thread-1',
         ...(turnId === undefined ? {} : { turnId }),
+        itemId: 'bootstrap-command',
+        environmentId: 'local',
         cwd: path.join(fixture, 'project'),
-        command,
+        command: '/bin/zsh -c "' + command + '"',
         commandActions: [{ command }],
+        availableDecisions: ['accept', 'cancel'],
       },
     });
     if (mode === 'null' || mode === 'missing') {
@@ -522,18 +609,46 @@ function bootstrapProtocol(mode, entry = 'legacy') {
     emit({ id: message.id, result: { turn: { id: 'bootstrap-1' } } });
     // The real turn response is processed before these requests are delivered.
     globalThis.setImmediate(() => {
+      for (const eventName of ['sessionStart', 'preToolUse']) {
+        if (mode === 'missing-' + eventName) continue;
+        const sourcePath = path.join(fixture, 'home/.codex/hooks.json');
+        const failed = mode === 'failed-' + eventName;
+        emit({
+          method: 'hook/completed',
+          params: {
+            threadId: mode === 'foreign-hook-thread' ? 'other-thread' : 'thread-1',
+            turnId: mode === 'foreign-hook-turn' ? 'other-turn' : 'bootstrap-1',
+            run: {
+              eventName,
+              id:
+                eventName === 'sessionStart'
+                  ? 'session-start:3:' + sourcePath
+                  : 'pre-tool-use:0:' +
+                    sourcePath +
+                    ':' +
+                    (mode === 'foreign-hook-item' ? 'other-item' : 'bootstrap-command'),
+              handlerType: 'command',
+              executionMode: 'sync',
+              source: 'user',
+              sourcePath: mode === 'foreign-hook-source' ? '/other/hooks.json' : sourcePath,
+              status: failed ? 'failed' : mode === 'blocked-' + eventName ? 'blocked' : 'completed',
+            },
+          },
+        });
+      }
       if (mode === 'duplicate' || mode === 'reentrant') {
         reentrantReplay = approval('second', 'bootstrap-1');
         emit(approval('first', 'bootstrap-1'));
         if (mode === 'duplicate') emit(reentrantReplay);
-      } else if (
-        ['missing-command', 'different-command', 'stdin', 'remote', 'network'].includes(mode)
-      ) {
+      } else if (!['fatal', 'duplicate', 'reentrant'].includes(mode)) {
         const request = approval('invalid-command', 'bootstrap-1');
         if (mode === 'missing-command') delete request.params.command;
         if (mode === 'different-command') request.params.command += ' && unwanted-command';
         if (mode === 'stdin') request.params.kind = 'writeStdin';
         if (mode === 'remote') request.params.environmentId = 'another-environment';
+        if (mode === 'missing-environment') delete request.params.environmentId;
+        if (mode === 'no-one-call-decision') request.params.availableDecisions = ['cancel'];
+        if (mode === 'malformed-decisions') request.params.availableDecisions = 'accept';
         if (mode === 'network')
           request.params.networkApprovalContext = { host: 'example.com', protocol: 'https' };
         emit(request);
@@ -628,17 +743,56 @@ test.each([
   expect(observed.terminal).toEqual({ status: 0, signal: null });
   expect(process.exitCode).toBe(1);
 });
-test.each(['missing-command', 'different-command', 'stdin', 'remote', 'network'])(
-  'friendly command metadata cannot authorize %s',
-  async (mode) => {
-    const fx = captureFixture(bootstrapProtocol(mode), true);
+test.each([
+  'missing-command',
+  'different-command',
+  'stdin',
+  'remote',
+  'network',
+  'missing-environment',
+  'no-one-call-decision',
+  'malformed-decisions',
+  'missing-sessionStart',
+  'missing-preToolUse',
+  'foreign-hook-thread',
+  'foreign-hook-turn',
+  'foreign-hook-item',
+  'foreign-hook-source',
+])('friendly command metadata cannot authorize %s', async (mode) => {
+  const fx = captureFixture(bootstrapProtocol(mode), true);
+  await fx.observe(fx.custody);
+  expect(fx.sent.find((message) => message.id === 'invalid-command').result.decision).toBe(
+    'decline'
+  );
+  expect(fx.sent.some((message) => message.result?.decision === 'accept')).toBe(false);
+  expect(fx.record.mock.calls.find(([label]) => label === 'observe')[1].error).toBe(
+    'Unexpected native approval was declined'
+  );
+});
+test.each(['sessionStart', 'preToolUse'])(
+  'a failed required %s hook latches before a friendly approval',
+  async (eventName) => {
+    const fx = captureFixture(bootstrapProtocol('failed-' + eventName), true);
     await fx.observe(fx.custody);
     expect(fx.sent.find((message) => message.id === 'invalid-command').result.decision).toBe(
       'decline'
     );
     expect(fx.sent.some((message) => message.result?.decision === 'accept')).toBe(false);
     expect(fx.record.mock.calls.find(([label]) => label === 'observe')[1].error).toBe(
-      'Unexpected native approval was declined'
+      'Required native hook did not complete: ' + eventName
+    );
+  }
+);
+test.each(['sessionStart', 'preToolUse'])(
+  'a blocked bootstrap %s hook cannot acquire a native approval',
+  async (eventName) => {
+    const fx = captureFixture(bootstrapProtocol('blocked-' + eventName), true);
+    await fx.observe(fx.custody);
+    expect(fx.sent.find((message) => message.id === 'invalid-command').result.decision).toBe(
+      'decline'
+    );
+    expect(fx.record.mock.calls.find(([label]) => label === 'observe')[1].error).toBe(
+      'Required native hook did not complete: ' + eventName
     );
   }
 );

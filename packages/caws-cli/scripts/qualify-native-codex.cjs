@@ -577,6 +577,11 @@ function inspectObservation(data) {
           typeof entry?.text === 'string' && entry.text.includes(data.expectedProtectedPath)
       )
   );
+  const ownedContents =
+    expected &&
+    completeCapture(data.ownedAfter) &&
+    data.ownedAfter.path === data.expectedOwnedPath &&
+    data.ownedAfter.bytesBase64 === data.expectedOwnedBase64;
   return {
     transportError: data.error ?? null,
     operationCompleted:
@@ -601,11 +606,18 @@ function inspectObservation(data) {
       pwd.cwd === data.project &&
       pwd.aggregatedOutput === data.project + '\n',
     ownedCommandExit: write?.exitCode ?? null,
-    ownedContents:
-      expected &&
-      completeCapture(data.ownedAfter) &&
-      data.ownedAfter.path === data.expectedOwnedPath &&
-      data.ownedAfter.bytesBase64 === data.expectedOwnedBase64,
+    ownedContents,
+    ownedWriteEffect:
+      ownedContents &&
+      !!write &&
+      write.exitCode === 0 &&
+      text(data.requestedOperationSessionCwd) &&
+      path.isAbsolute(data.requestedOperationSessionCwd) &&
+      write.cwd === data.requestedOperationSessionCwd &&
+      data.ownedBefore?.path === data.expectedOwnedPath &&
+      (data.ownedBefore.kind === 'missing' ||
+        (completeCapture(data.ownedBefore) &&
+          data.ownedBefore.bytesBase64 !== data.expectedOwnedBase64)),
     ownedRead:
       expected &&
       !!read &&
@@ -673,7 +685,11 @@ async function observe(custody, preparationSha256, attempt) {
   );
   const ownedFile = custody.resolvePath(request.scenario.ownedFile),
     protectedFile = custody.resolvePath(request.scenario.protectedFile);
-  const marker = 'native-owned-' + inputs.request.sha256.slice(0, 16) + '\n';
+  const marker =
+    'native-owned-' +
+    inputs.request.sha256.slice(0, 16) +
+    (attempt === undefined ? '' : '-' + attempt) +
+    '\n';
   const sources = {
     pwd: 'pwd -P',
     write: 'printf ' + quote(marker.replace(/\n/g, '\\n')) + ' > ' + quote(ownedFile),
@@ -682,6 +698,10 @@ async function observe(custody, preparationSha256, attempt) {
   };
   const bootstrapSource =
     quote(s.caws) + ' worktree ensure native-owned --spec NATIVE-CODEX-QUAL-001';
+  // Exact display form observed from the pinned local host. Refuse paths that
+  // need another quoting convention instead of accepting a broader command.
+  insist(!/["\\$`\r\n]/.test(bootstrapSource), 'Unsupported bootstrap shell display');
+  const bootstrapCommand = '/bin/zsh -c "' + bootstrapSource + '"';
   const data = {
     inputs,
     observerSource,
@@ -708,6 +728,7 @@ async function observe(custody, preparationSha256, attempt) {
     expectedOwnedPath: ownedFile,
     expectedProtectedPath: protectedFile,
     protectedBefore: custody.capture(request.scenario.protectedFile, { bytes: true }),
+    ownedBefore: custody.capture(request.scenario.ownedFile, { bytes: true }),
     stream: [],
     hostOutput: {
       maxBytes: 16 * 1024 * 1024,
@@ -731,24 +752,37 @@ async function observe(custody, preparationSha256, attempt) {
   };
   insist(data.protectedBefore.kind === 'file', 'Prepared protected sentinel missing');
   custody.record(attempt === undefined ? 'observe-start' : observationLabel + '.start', {
+    phase: 'before-host-launch',
     inputs,
     observerSource,
     preparation: data.preparation,
     protectedBefore: data.protectedBefore,
   });
-  const child = spawn(
-    inputs.host.image.path,
-    [
-      'app-server',
-      '--listen',
-      'stdio://',
-      '-c',
-      'cli_auth_credentials_store="file"',
-      '-c',
-      'mcp_oauth_credentials_store="file"',
-    ],
-    { cwd: s.project, env: custody.env, stdio: ['pipe', 'pipe', 'pipe'] }
-  );
+  const finalReceipt = custody.reserveRecord(observationLabel);
+  let child;
+  try {
+    child = spawn(
+      inputs.host.image.path,
+      [
+        'app-server',
+        '--listen',
+        'stdio://',
+        '-c',
+        'cli_auth_credentials_store="file"',
+        '-c',
+        'mcp_oauth_credentials_store="file"',
+      ],
+      { cwd: s.project, env: custody.env, stdio: ['pipe', 'pipe', 'pipe'] }
+    );
+  } catch (error) {
+    data.error = error.message;
+    data.terminal = { status: null, signal: null, launched: false };
+    data.observations = inspectObservation(data);
+    const receipt = finalReceipt.commit(data);
+    console.log(JSON.stringify({ receipt, captureOnly: true, observations: data.observations }));
+    process.exitCode = 1;
+    return;
+  }
   const pending = new Map(),
     completedTurns = new Map();
   let serial = 0,
@@ -860,8 +894,47 @@ async function observe(custody, preparationSha256, attempt) {
         continue;
       }
       if (!retainMessage({ atMs: Date.now(), direction: 'received', message })) return;
+      if (
+        message.method === 'hook/completed' &&
+        typeof data.threadId === 'string' &&
+        message.params?.threadId === data.threadId &&
+        data.registrationContract.hooks.some(
+          (hook) =>
+            hook.eventName === message.params.run?.eventName &&
+            hook.sourcePath === message.params.run?.sourcePath
+        ) &&
+        (message.params.run.status === 'failed' ||
+          (phase === 'bootstrap' && message.params.run.status === 'blocked'))
+      )
+        fail(Error('Required native hook did not complete: ' + message.params.run.eventName));
       if (message.method && message.id !== undefined) {
         const p = message.params ?? {};
+        const completedHook = (eventName) => {
+          const registered = data.registrationContract.hooks.find(
+            (hook) => hook.eventName === eventName
+          );
+          return data.stream.some(({ direction, message: prior }) => {
+            const observed = prior?.params;
+            const run = observed?.run;
+            return (
+              direction === 'received' &&
+              prior?.method === 'hook/completed' &&
+              observed?.threadId === data.threadId &&
+              run?.eventName === eventName &&
+              run.status === 'completed' &&
+              run.handlerType === 'command' &&
+              run.executionMode === 'sync' &&
+              run.source === 'user' &&
+              run.sourcePath === registered.sourcePath &&
+              (eventName === 'sessionStart'
+                ? run.id === 'session-start:3:' + registered.sourcePath
+                : typeof p.itemId === 'string' &&
+                  p.itemId.length > 0 &&
+                  observed.turnId === activeTurnId &&
+                  run.id === 'pre-tool-use:0:' + registered.sourcePath + ':' + p.itemId)
+            );
+          });
+        };
         // Only the ordinary bootstrap CLI may request a one-call native
         // approval. A7 probe approval requests remain failed observations.
         const bootstrap =
@@ -874,12 +947,16 @@ async function observe(custody, preparationSha256, attempt) {
           p.threadId === data.threadId &&
           p.turnId === activeTurnId &&
           p.cwd === s.project &&
-          (p.kind === undefined || p.kind === 'command') &&
-          p.environmentId == null &&
+          p.kind === 'command' &&
+          p.environmentId === 'local' &&
           p.networkApprovalContext == null &&
-          p.command === bootstrapSource &&
+          p.command === bootstrapCommand &&
+          Array.isArray(p.availableDecisions) &&
+          p.availableDecisions.includes('accept') &&
           p.commandActions?.length === 1 &&
-          p.commandActions[0].command === bootstrapSource;
+          p.commandActions[0].command === bootstrapSource &&
+          completedHook('sessionStart') &&
+          completedHook('preToolUse');
         if (bootstrap) bootstrapApprovalUsed = true;
         if (message.method === 'item/commandExecution/requestApproval')
           send({ id: message.id, result: { decision: bootstrap ? 'accept' : 'decline' } });
@@ -1069,7 +1146,7 @@ async function observe(custody, preparationSha256, attempt) {
       data.inputDrift = error.message;
     }
     data.observations = inspectObservation(data);
-    const receipt = custody.record(observationLabel, data);
+    const receipt = finalReceipt.commit(data);
     console.log(JSON.stringify({ receipt, captureOnly: true, observations: data.observations }));
     if (data.error || data.inputDrift || data.terminal.status !== 0) process.exitCode = 1;
   }

@@ -354,6 +354,26 @@ function openCustody(requestFile) {
   }
   function persist(opened, data) {
     try {
+      const reserved = fs.fstatSync(opened.fd);
+      const assertReserved = () => {
+        physical(roots.output);
+        const named = fs.lstatSync(opened.file);
+        const held = fs.fstatSync(opened.fd);
+        insist(
+          named.isFile() &&
+            held.isFile() &&
+            named.dev === reserved.dev &&
+            named.ino === reserved.ino &&
+            held.dev === reserved.dev &&
+            held.ino === reserved.ino &&
+            named.nlink === 1 &&
+            held.nlink === 1 &&
+            (named.mode & 0o7777) === 0o600 &&
+            (held.mode & 0o7777) === 0o600,
+          'Receipt reservation changed'
+        );
+      };
+      assertReserved();
       const bytes = Buffer.from(
         JSON.stringify(
           {
@@ -369,12 +389,24 @@ function openCustody(requestFile) {
       );
       fs.writeFileSync(opened.fd, bytes);
       fs.fsyncSync(opened.fd);
+      assertReserved();
       return { path: opened.file, sha256: hash(bytes) };
     } finally {
       fs.closeSync(opened.fd);
     }
   }
-  const record = (label, data) => persist(reserve(label), data);
+  function reserveRecord(label) {
+    const opened = reserve(label);
+    let used = false;
+    return Object.freeze({
+      commit(data) {
+        insist(!used, 'Receipt reservation already consumed');
+        used = true;
+        return persist(opened, data);
+      },
+    });
+  }
+  const record = (label, data) => reserveRecord(label).commit(data);
   const remainingMs = () =>
     Math.max(0, Math.floor(request.budgetMs - (performance.now() - started)));
   function capture(relative, options = {}) {
@@ -482,6 +514,7 @@ function openCustody(requestFile) {
     env,
     capture,
     record,
+    reserveRecord,
     run,
     remainingMs,
     revalidateInputs,
