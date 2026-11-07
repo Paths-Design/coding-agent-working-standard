@@ -1389,44 +1389,56 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
   );
 });
 
-test.each([1, 2])('retained entry identity admits exact metadata v%s', (version) => {
+test.each([1, 2, 'event-budget'])('retained entry identity admits exact metadata %s', (version) => {
   const home = path.join(root, 'retained-metadata-home');
   let digest = install(home).digest;
-  if (version === 2)
+  if (version !== 1)
     digest = rewriteRetainedMetadata(home, digest, (metadata) => {
       metadata.schema = 'caws.runtime.native-entry.v2';
       metadata.installedInvocation = {
         protocol: 'invoke-installed-v1',
         maxOriginalTimeoutMs: 30000,
       };
+      if (version === 'event-budget')
+        metadata.installedInvocation.stableEntryEventBudget = 'env-original-start-ms-v1';
     });
   expect(verifyRuntime(home, digest)['native-entry.json']).toMatch(/^[a-f0-9]{64}$/);
   const retained = readRetainedNativeEntryIdentity(home, digest);
   expect(retained.digest).toBe(digest);
   expect(retained.sha256).toBe(sha(retained.bytes));
 });
-test.each(['missing', 'null', 'extra', 'protocol', 'maximum', 'timeout', 'v1 capability'])(
-  'retained metadata rejects a manifest-rebound invalid capability: %s',
-  (kind) => {
-    const home = path.join(root, 'hostile-retained-home');
-    const original = install(home).digest;
-    const digest = rewriteRetainedMetadata(home, original, (metadata) => {
-      metadata.schema = 'caws.runtime.native-entry.v2';
-      metadata.installedInvocation = {
-        protocol: 'invoke-installed-v1',
-        maxOriginalTimeoutMs: 30000,
-      };
-      if (kind === 'missing') delete metadata.installedInvocation;
-      if (kind === 'null') metadata.installedInvocation = null;
-      if (kind === 'extra') metadata.installedInvocation.renew = true;
-      if (kind === 'protocol') metadata.installedInvocation.protocol = 'invoke';
-      if (kind === 'maximum') metadata.installedInvocation.maxOriginalTimeoutMs = 120000;
-      if (kind === 'timeout') metadata.timeoutMs = 30001;
-      if (kind === 'v1 capability') metadata.schema = 'caws.runtime.native-entry.v1';
-    });
-    expect(() => verifyRuntime(home, digest)).toThrow(/metadata|schema|capability|timeout/);
-    expect(() => readRetainedNativeEntryIdentity(home, digest)).toThrow(
-      /metadata|schema|capability|timeout/
-    );
-  }
-);
+test.each([
+  'missing',
+  'null',
+  'extra',
+  'protocol',
+  'maximum',
+  'timeout',
+  'v1 capability',
+  'null event budget',
+  'unknown event budget',
+])('retained metadata rejects a manifest-rebound invalid capability: %s', (kind) => {
+  const home = path.join(root, 'hostile-retained-home');
+  const original = install(home).digest;
+  const digest = rewriteRetainedMetadata(home, original, (metadata) => {
+    metadata.schema = 'caws.runtime.native-entry.v2';
+    metadata.installedInvocation = {
+      protocol: 'invoke-installed-v1',
+      maxOriginalTimeoutMs: 30000,
+    };
+    if (kind === 'missing') delete metadata.installedInvocation;
+    if (kind === 'null') metadata.installedInvocation = null;
+    if (kind === 'extra') metadata.installedInvocation.renew = true;
+    if (kind === 'null event budget') metadata.installedInvocation.stableEntryEventBudget = null;
+    if (kind === 'unknown event budget')
+      metadata.installedInvocation.stableEntryEventBudget = 'future';
+    if (kind === 'protocol') metadata.installedInvocation.protocol = 'invoke';
+    if (kind === 'maximum') metadata.installedInvocation.maxOriginalTimeoutMs = 120000;
+    if (kind === 'timeout') metadata.timeoutMs = 30001;
+    if (kind === 'v1 capability') metadata.schema = 'caws.runtime.native-entry.v1';
+  });
+  expect(() => verifyRuntime(home, digest)).toThrow(/metadata|schema|capability|timeout/);
+  expect(() => readRetainedNativeEntryIdentity(home, digest)).toThrow(
+    /metadata|schema|capability|timeout/
+  );
+});

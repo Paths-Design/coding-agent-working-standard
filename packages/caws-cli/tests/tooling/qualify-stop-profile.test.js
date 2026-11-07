@@ -295,11 +295,15 @@ test('SQLite diagnostic projection validates capability without adding transport
     const projected=q.projectSqliteBuildIdentity(current);
     assert(!Object.hasOwn(projected,'installedInvocation'));
     assert.notEqual(projected.compileOptions,current.compileOptions);
-    for(const kind of ['missing','null','extra','protocol','maximum','schema','v1 capability']) {
+    const eventBudget={...current,installedInvocation:{...current.installedInvocation,stableEntryEventBudget:'env-original-start-ms-v1'}};
+    assert.deepEqual(q.projectSqliteBuildIdentity(eventBudget),projected);
+    for(const kind of ['missing','null','extra','protocol','maximum','schema','v1 capability','null event budget','unknown event budget']) {
       const value=structuredClone(current);
       if(kind==='missing') delete value.installedInvocation;
       if(kind==='null') value.installedInvocation=null;
       if(kind==='extra') value.installedInvocation.renew=true;
+      if(kind==='null event budget') value.installedInvocation.stableEntryEventBudget=null;
+      if(kind==='unknown event budget') value.installedInvocation.stableEntryEventBudget='future';
       if(kind==='protocol') value.installedInvocation.protocol='invoke';
       if(kind==='maximum') value.installedInvocation.maxOriginalTimeoutMs=120000;
       if(kind==='schema') value.schema='caws.sqlite_build_identity.v3';

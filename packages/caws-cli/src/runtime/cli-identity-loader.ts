@@ -14,6 +14,7 @@ import {
   type ReviewedCliIdentity,
 } from './cli-identity';
 import type { RuntimeRequest } from './protocol';
+import { parseInstalledInvocationCapability } from '../init/native-hook-identification';
 
 const ENGINE = 'native-prefix/node_modules/@paths.design/caws-cli/dist/runtime/engine-entry.js';
 const SOURCE = 'native-cli-identity.json',
@@ -226,12 +227,7 @@ export async function loadGenerationCliIdentity(
     ...(installed ? ['installedInvocation'] : []),
   ]);
   if (installed) {
-    exact(entry.installedInvocation, ['protocol', 'maxOriginalTimeoutMs']);
-    if (
-      entry.installedInvocation.protocol !== 'invoke-installed-v1' ||
-      entry.installedInvocation.maxOriginalTimeoutMs !== 30000
-    )
-      throw new Error('Unsupported generation installed invocation capability');
+    parseInstalledInvocationCapability(entry.installedInvocation);
   }
   if (
     !['caws.runtime.native-entry.v1', 'caws.runtime.native-entry.v2'].includes(

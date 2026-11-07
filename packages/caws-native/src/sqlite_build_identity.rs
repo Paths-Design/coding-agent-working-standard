@@ -247,6 +247,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         "installedInvocation": {
             "protocol": "invoke-installed-v1",
             "maxOriginalTimeoutMs": 30_000,
+            "stableEntryEventBudget": "env-original-start-ms-v1",
         },
     });
     let mut bytes = serde_json::to_vec(&diagnostic)?;

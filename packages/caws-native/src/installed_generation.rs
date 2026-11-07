@@ -36,10 +36,39 @@ pub(crate) struct NativeEntry {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct InstalledInvocation {
-    protocol: String,
-    max_original_timeout_ms: u64,
+#[serde(untagged, deny_unknown_fields, rename_all_fields = "camelCase")]
+enum InstalledInvocation {
+    EventBudget {
+        protocol: String,
+        max_original_timeout_ms: u64,
+        stable_entry_event_budget: String,
+    },
+    Historical {
+        protocol: String,
+        max_original_timeout_ms: u64,
+    },
+}
+impl InstalledInvocation {
+    fn valid(&self) -> bool {
+        match self {
+            Self::Historical {
+                protocol,
+                max_original_timeout_ms,
+            } => {
+                protocol == INSTALLED_INVOCATION_PROTOCOL
+                    && *max_original_timeout_ms == MAX_ORIGINAL_TIMEOUT_MS
+            }
+            Self::EventBudget {
+                protocol,
+                max_original_timeout_ms,
+                stable_entry_event_budget,
+            } => {
+                protocol == INSTALLED_INVOCATION_PROTOCOL
+                    && *max_original_timeout_ms == MAX_ORIGINAL_TIMEOUT_MS
+                    && stable_entry_event_budget == "env-original-start-ms-v1"
+            }
+        }
+    }
 }
 
 // Distinct exact wire shapes prevent null/optional capability fields from
@@ -107,9 +136,7 @@ impl NativeEntry {
         match (&*self.schema, &self.installed_invocation) {
             (SCHEMA_V1, None) => (1..=120_000).contains(&self.timeout_ms),
             (SCHEMA_V2, Some(capability)) => {
-                (1..=MAX_ORIGINAL_TIMEOUT_MS).contains(&self.timeout_ms)
-                    && capability.protocol == INSTALLED_INVOCATION_PROTOCOL
-                    && capability.max_original_timeout_ms == MAX_ORIGINAL_TIMEOUT_MS
+                (1..=MAX_ORIGINAL_TIMEOUT_MS).contains(&self.timeout_ms) && capability.valid()
             }
             _ => false,
         }

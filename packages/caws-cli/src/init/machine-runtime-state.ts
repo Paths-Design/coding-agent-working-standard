@@ -8,6 +8,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { assertMachinePath } from './machine-paths';
+import { parseInstalledInvocationCapability } from './native-hook-identification';
 
 export interface RuntimePointer {
   version: 1;
@@ -179,16 +180,7 @@ function parseNativeEntryMetadata(
   )
     throw new Error('Unsupported native entry schema or timeout');
   if (entry.schema === 'caws.runtime.native-entry.v2') {
-    const capability = entry.installedInvocation;
-    if (
-      !capability ||
-      typeof capability !== 'object' ||
-      Array.isArray(capability) ||
-      Object.keys(capability).sort().join(',') !== 'maxOriginalTimeoutMs,protocol' ||
-      (capability as Record<string, unknown>).protocol !== 'invoke-installed-v1' ||
-      (capability as Record<string, unknown>).maxOriginalTimeoutMs !== 30000
-    )
-      throw new Error('Unsupported installed invocation capability');
+    parseInstalledInvocationCapability(entry.installedInvocation);
   }
   for (const key of ['nativeExecutable', 'nodeExecutable', 'engineEntry', 'describeEntry']) {
     const relative = entry[key];

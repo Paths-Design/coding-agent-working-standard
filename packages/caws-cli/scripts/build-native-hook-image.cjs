@@ -574,10 +574,10 @@ async function image() {
   };
   const prepared = prepareNativeRuntimeEntryFromBuild(input);
   assert.equal(prepared.metadata.schema, 'caws.runtime.native-entry.v2');
-  assert.deepEqual(prepared.metadata.installedInvocation, {
-    protocol: 'invoke-installed-v1',
-    maxOriginalTimeoutMs: 30000,
-  });
+  assert.deepEqual(
+    prepared.metadata.installedInvocation,
+    loaded.build.observedIdentity.installedInvocation
+  );
   for (const [member, artifact] of [
     ['native/caws-native', loaded.build.artifacts.native],
     ['native/caws-hook-native', loaded.build.artifacts.stableEntry],

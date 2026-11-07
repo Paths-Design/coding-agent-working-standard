@@ -353,32 +353,45 @@ test('ordinary engine original signal survives delayed first comparison and back
   }
 });
 
-test('loads a manifest-bound v2 capability entry while retaining the v1 baseline', async () => {
-  const entry = JSON.parse(members['native-entry.json']);
-  entry.schema = 'caws.runtime.native-entry.v2';
-  entry.installedInvocation = { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 30000 };
-  add('native-entry.json', entry);
-  publish();
-  expect((await load()).node.sha256).toBe(source.node.sha256);
-});
-test.each(['missing', 'null', 'extra', 'protocol', 'maximum', 'timeout', 'v1 capability'])(
-  'rejects manifest-bound malformed installed entry: %s',
-  async (kind) => {
+test.each([false, true])(
+  'loads manifest-bound v2 capability with event budget %s',
+  async (eventBudget) => {
     const entry = JSON.parse(members['native-entry.json']);
     entry.schema = 'caws.runtime.native-entry.v2';
     entry.installedInvocation = { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 30000 };
-    if (kind === 'missing') delete entry.installedInvocation;
-    if (kind === 'null') entry.installedInvocation = null;
-    if (kind === 'extra') entry.installedInvocation.renew = true;
-    if (kind === 'protocol') entry.installedInvocation.protocol = 'invoke';
-    if (kind === 'maximum') entry.installedInvocation.maxOriginalTimeoutMs = 120000;
-    if (kind === 'timeout') entry.timeoutMs = 30001;
-    if (kind === 'v1 capability') entry.schema = 'caws.runtime.native-entry.v1';
+    if (eventBudget) entry.installedInvocation.stableEntryEventBudget = 'env-original-start-ms-v1';
     add('native-entry.json', entry);
     publish();
-    await expect(load()).rejects.toThrow(/fields|capability|running entry/);
+    expect((await load()).node.sha256).toBe(source.node.sha256);
   }
 );
+test.each([
+  'missing',
+  'null',
+  'extra',
+  'protocol',
+  'maximum',
+  'timeout',
+  'v1 capability',
+  'null event budget',
+  'unknown event budget',
+])('rejects manifest-bound malformed installed entry: %s', async (kind) => {
+  const entry = JSON.parse(members['native-entry.json']);
+  entry.schema = 'caws.runtime.native-entry.v2';
+  entry.installedInvocation = { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 30000 };
+  if (kind === 'missing') delete entry.installedInvocation;
+  if (kind === 'null') entry.installedInvocation = null;
+  if (kind === 'extra') entry.installedInvocation.renew = true;
+  if (kind === 'null event budget') entry.installedInvocation.stableEntryEventBudget = null;
+  if (kind === 'unknown event budget') entry.installedInvocation.stableEntryEventBudget = 'future';
+  if (kind === 'protocol') entry.installedInvocation.protocol = 'invoke';
+  if (kind === 'maximum') entry.installedInvocation.maxOriginalTimeoutMs = 120000;
+  if (kind === 'timeout') entry.timeoutMs = 30001;
+  if (kind === 'v1 capability') entry.schema = 'caws.runtime.native-entry.v1';
+  add('native-entry.json', entry);
+  publish();
+  await expect(load()).rejects.toThrow(/fields|capability|running entry/);
+});
 test('v2 capability cannot vouch for changed metadata bytes after admission', async () => {
   const entry = JSON.parse(members['native-entry.json']);
   entry.schema = 'caws.runtime.native-entry.v2';

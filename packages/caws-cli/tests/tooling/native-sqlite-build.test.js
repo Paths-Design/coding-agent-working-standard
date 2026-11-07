@@ -767,10 +767,23 @@ describe('versioned native diagnostic capability data (no native execution)', ()
     expect(Object.hasOwn(parsed, 'installedInvocation')).toBe(false);
     expect(validateNativeSqliteBuildIdentity(current(), prefix)).toEqual(current());
   });
+  test('retains the exact versioned stable-entry event budget without synthesizing it', () => {
+    const value = current();
+    value.installedInvocation.stableEntryEventBudget = 'env-original-start-ms-v1';
+    expect(validateNativeSqliteBuildIdentity(value, prefix)).toEqual(value);
+    expect(
+      Object.hasOwn(
+        validateNativeSqliteBuildIdentity(current(), prefix).installedInvocation,
+        'stableEntryEventBudget'
+      )
+    ).toBe(false);
+  });
   test.each([
     'missing',
     'null',
     'extra',
+    'null event budget',
+    'unknown event budget',
     'protocol',
     'max',
     'string max',
@@ -781,6 +794,9 @@ describe('versioned native diagnostic capability data (no native execution)', ()
     if (kind === 'missing') delete value.installedInvocation;
     if (kind === 'null') value.installedInvocation = null;
     if (kind === 'extra') value.installedInvocation.renew = true;
+    if (kind === 'null event budget') value.installedInvocation.stableEntryEventBudget = null;
+    if (kind === 'unknown event budget')
+      value.installedInvocation.stableEntryEventBudget = 'future';
     if (kind === 'protocol') value.installedInvocation.protocol = 'invoke';
     if (kind === 'max') value.installedInvocation.maxOriginalTimeoutMs = 30001;
     if (kind === 'string max') value.installedInvocation.maxOriginalTimeoutMs = '30000';

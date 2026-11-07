@@ -18,6 +18,53 @@ use std::time::{Duration, Instant};
 mod compatibility;
 
 const ORIGINAL_TIMEOUT_MS: u64 = installed_generation::MAX_ORIGINAL_TIMEOUT_MS;
+const EVENT_TIMEOUT_ENV: &str = "CAWS_HOOK_EVENT_TIMEOUT_MS_V1";
+
+fn parse_event_timeout(value: Option<&std::ffi::OsStr>) -> Result<Option<u64>, String> {
+    let Some(value) = value else { return Ok(None) };
+    if value.len() > 5 {
+        return Err("Event timeout exceeds five-byte decimal bound".into());
+    }
+    let value = value
+        .to_str()
+        .ok_or("Event timeout must be UTF-8 decimal milliseconds")?;
+    if value.is_empty()
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+        || value.starts_with('0')
+    {
+        return Err("Event timeout must be canonical decimal milliseconds in 1..=30000".into());
+    }
+    let timeout = value.parse::<u64>().map_err(|_| "Event timeout overflow")?;
+    if !(1..=ORIGINAL_TIMEOUT_MS).contains(&timeout) {
+        return Err("Event timeout must be canonical decimal milliseconds in 1..=30000".into());
+    }
+    Ok(Some(timeout))
+}
+
+fn restrict_event_deadline(
+    original_deadline: &MonotonicDeadline,
+    event_timeout_ms: Option<u64>,
+) -> Result<Option<Arc<MonotonicDeadline>>, String> {
+    event_timeout_ms
+        .map(|timeout| {
+            if !(1..=ORIGINAL_TIMEOUT_MS).contains(&timeout) {
+                return Err("Event timeout must be in 1..=30000ms".to_owned());
+            }
+            let original = original_deadline.envelope();
+            let expires_ns = original
+                .started_ns
+                .checked_add(timeout * 1_000_000)
+                .ok_or("Event timeout overflow")?
+                .min(original.expires_ns);
+            MonotonicDeadline::receive(DeadlineEnvelope {
+                started_ns: original.started_ns,
+                expires_ns,
+            })
+            .map(Arc::new)
+            .map_err(|error| error.to_string())
+        })
+        .transpose()
+}
 
 const SURFACES: &[&str] = &[
     "codex",
@@ -148,18 +195,32 @@ impl Selection {
         home: &Path,
         original_deadline: MonotonicDeadline,
     ) -> Result<Self, String> {
-        Self::read_with_shared_deadline(home, Arc::new(original_deadline))
+        Self::read_with_event_timeout(home, original_deadline, None)
+    }
+
+    pub(crate) fn read_with_event_timeout(
+        home: &Path,
+        original_deadline: MonotonicDeadline,
+        event_timeout_ms: Option<u64>,
+    ) -> Result<Self, String> {
+        let event_deadline = restrict_event_deadline(&original_deadline, event_timeout_ms)?;
+        Self::read_with_shared_deadline(home, Arc::new(original_deadline), event_deadline)
             .map_err(|failure| failure.message)
     }
 
     fn read_with_shared_deadline(
         home: &Path,
         original_deadline: Arc<MonotonicDeadline>,
+        event_deadline: Option<Arc<MonotonicDeadline>>,
     ) -> Result<Self, SelectionFailure> {
+        // Registration supplies only an earlier operational bound. Its start is
+        // the already captured original start, never a new clock or identity.
         let before_policy = |message: String| SelectionFailure {
             message,
             original_deadline: Arc::clone(&original_deadline),
-            delivery_deadline: Some(Arc::clone(&original_deadline)),
+            delivery_deadline: Some(Arc::clone(
+                event_deadline.as_ref().unwrap_or(&original_deadline),
+            )),
         };
         original_deadline
             .check()
@@ -171,8 +232,15 @@ impl Selection {
             ));
         }
         let generation = (|| -> Result<GenerationSelection, String> {
-            let mut cancel = || original_deadline.check().map_err(|e| e.to_string());
-            let preparation_end = compatibility::preparation_expires(&original_deadline, None)?;
+            let mut cancel = || {
+                original_deadline.check().map_err(|e| e.to_string())?;
+                if let Some(event) = &event_deadline {
+                    event.check().map_err(|e| e.to_string())?;
+                }
+                Ok(())
+            };
+            let preparation_end =
+                compatibility::preparation_expires(&original_deadline, event_deadline.as_deref())?;
             let mut verify = Verification::new(preparation_end, &mut cancel);
             verify.checkpoint()?;
             if !home.is_absolute() {
@@ -203,7 +271,11 @@ impl Selection {
                     original_deadline: Arc::clone(&original_deadline),
                     delivery_deadline: None,
                 })?
-                .min(original.expires_ns);
+                .min(
+                    event_deadline
+                        .as_ref()
+                        .map_or(original.expires_ns, |event| event.envelope().expires_ns),
+                );
             if expires_ns < original.expires_ns {
                 Some(Arc::new(
                     MonotonicDeadline::receive(DeadlineEnvelope {
@@ -220,7 +292,7 @@ impl Selection {
                 None
             }
         } else {
-            None
+            event_deadline
         };
         let selected = Self {
             inspected_digest: generation.inspected_digest.clone(),
@@ -291,6 +363,7 @@ impl Selection {
             None => {
                 let mut command = Command::new("python3");
                 command
+                    .env_remove(EVENT_TIMEOUT_ENV)
                     .arg(self.generation.member_path("bootstrap.py", &mut verify)?)
                     .args(&invocation.original);
                 // run retains the original clock while supervising compatibility.
@@ -316,6 +389,7 @@ impl Selection {
                     // Transport original context as inert data before removing loader inputs.
                     // The entry overwrites any caller-supplied value of this private channel.
                     let environment = std::env::vars_os()
+                        .filter(|(name, _)| name != std::ffi::OsStr::new(EVENT_TIMEOUT_ENV))
                         .map(|(name, value)| {
                             Ok((
                                 name.into_string()
@@ -385,6 +459,7 @@ impl Selection {
                     command
                 };
                 command
+                    .env_remove(EVENT_TIMEOUT_ENV)
                     .arg("--surface")
                     .arg(&invocation.surface)
                     .arg("--event")
@@ -412,6 +487,13 @@ fn configuration_failure(
 pub fn run() -> u8 {
     // Capture before argument decoding, machine-home or generation lookup.
     let original_deadline = MonotonicDeadline::capture(Duration::from_millis(ORIGINAL_TIMEOUT_MS));
+    let event_timeout_ms = parse_event_timeout(std::env::var_os(EVENT_TIMEOUT_ENV).as_deref());
+    // A valid registered budget also governs argument/home failures. Construct
+    // it once before those branches and retain it through selection.
+    let event_deadline = match (&original_deadline, &event_timeout_ms) {
+        (Ok(original), Ok(timeout)) => restrict_event_deadline(original, *timeout),
+        _ => Ok(None),
+    };
     let arguments = std::env::args_os()
         .skip(1)
         .map(|value| value.into_string())
@@ -422,17 +504,30 @@ pub fn run() -> u8 {
     {
         Ok(value) => value,
         Err(error) => {
+            if event_deadline.is_err() {
+                return compatibility::failure_status("invalid-invocation");
+            }
             return compatibility::refuse_before_dispatch(
                 "invalid-invocation",
                 &error,
                 original_deadline.as_ref().ok(),
-                None,
+                event_deadline
+                    .as_ref()
+                    .ok()
+                    .and_then(|deadline| deadline.as_deref()),
             );
         }
     };
     let original_deadline = match original_deadline {
         Ok(deadline) => Arc::new(deadline),
         Err(error) => return configuration_failure(&invocation, &error.to_string(), None, None),
+    };
+    if let Err(error) = event_timeout_ms {
+        return configuration_failure(&invocation, &error, Some(&original_deadline), None);
+    }
+    let event_deadline = match event_deadline {
+        Ok(deadline) => deadline,
+        Err(_) => return compatibility::failure_status(invocation.failure_event()),
     };
     let home = match std::env::var_os("CAWS_HOME")
         .map(PathBuf::from)
@@ -444,25 +539,26 @@ pub fn run() -> u8 {
                 &invocation,
                 "Machine home is unavailable",
                 Some(&original_deadline),
-                None,
+                event_deadline.as_deref(),
             );
         }
     };
-    let selected = match Selection::read_with_shared_deadline(&home, original_deadline) {
-        Ok(selected) => selected,
-        Err(failure) => {
-            return match failure.delivery_deadline {
-                Some(deadline) => configuration_failure(
-                    &invocation,
-                    &failure.message,
-                    Some(&failure.original_deadline),
-                    Some(&deadline),
-                ),
-                // An expired/invalid selected clock cannot authorize delivery.
-                None => compatibility::failure_status(invocation.failure_event()),
-            };
-        }
-    };
+    let selected =
+        match Selection::read_with_shared_deadline(&home, original_deadline, event_deadline) {
+            Ok(selected) => selected,
+            Err(failure) => {
+                return match failure.delivery_deadline {
+                    Some(deadline) => configuration_failure(
+                        &invocation,
+                        &failure.message,
+                        Some(&failure.original_deadline),
+                        Some(&deadline),
+                    ),
+                    // An expired/invalid selected clock cannot authorize delivery.
+                    None => compatibility::failure_status(invocation.failure_event()),
+                };
+            }
+        };
     let mut command = match selected.command(&invocation).and_then(|command| {
         selected.preparation_checkpoint()?;
         Ok(command)
@@ -500,6 +596,39 @@ pub fn run() -> u8 {
 #[cfg(test)]
 mod deadline_observation_tests {
     use super::*;
+
+    #[test]
+    fn event_budget_environment_is_optional_and_exact() {
+        use std::os::unix::ffi::OsStrExt;
+        assert_eq!(parse_event_timeout(None).unwrap(), None);
+        for (value, expected) in [("1", 1), ("3000", 3000), ("30000", 30000)] {
+            assert_eq!(
+                parse_event_timeout(Some(std::ffi::OsStr::new(value))).unwrap(),
+                Some(expected)
+            );
+        }
+        for value in [
+            "",
+            "0",
+            "01",
+            " 3",
+            "3 ",
+            "+3",
+            "-1",
+            "3.0",
+            "1e3",
+            "30001",
+            "18446744073709551616",
+        ] {
+            assert!(
+                parse_event_timeout(Some(std::ffi::OsStr::new(value))).is_err(),
+                "{value}"
+            );
+        }
+        assert!(parse_event_timeout(Some(std::ffi::OsStr::from_bytes(b"\xff"))).is_err());
+        assert!(parse_event_timeout(Some(std::ffi::OsStr::new(&"9".repeat(65536)))).is_err());
+        assert!(parse_event_timeout(Some(std::ffi::OsStr::new("ééé"))).is_err());
+    }
 
     #[test]
     fn observes_retained_original_and_restricted_selected_without_renewal() {

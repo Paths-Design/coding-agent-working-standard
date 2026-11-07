@@ -19,6 +19,72 @@ mod installed_generation;
 static SEQUENCE: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
+fn event_restriction_preserves_start_and_intersects_original_and_generation() {
+    use caws_native::monotonic_deadline::MonotonicDeadline;
+    use std::time::Duration;
+    for (original_ms, event_ms, policy_ms, expected_ms) in [
+        (30000, 3000, 30000, 3000),
+        (30000, 3000, 2000, 2000),
+        (2000, 30000, 30000, 2000),
+    ] {
+        let f = Fixture::new();
+        let mut metadata = installed_v2_metadata();
+        metadata["timeoutMs"] = policy_ms.into();
+        metadata["installedInvocation"]["stableEntryEventBudget"] =
+            "env-original-start-ms-v1".into();
+        f.generation_with_entry(Some(b"#!/bin/sh\nexit 0\n"), metadata);
+        let original = MonotonicDeadline::capture(Duration::from_millis(original_ms)).unwrap();
+        let expected_original = original.envelope();
+        std::thread::sleep(Duration::from_millis(20));
+        let selected = installed_entry::Selection::read_with_event_timeout(
+            &f.0,
+            original.clone(),
+            Some(event_ms),
+        )
+        .unwrap();
+        let invocation = installed_entry::Invocation::parse(&[
+            "codex".into(),
+            "session_end".into(),
+            "--system".into(),
+        ])
+        .unwrap();
+        let command = selected.command(&invocation).unwrap();
+        let carrier = deadline_carrier(&command);
+        assert_eq!(
+            carrier["startedNs"],
+            expected_original.started_ns.to_string()
+        );
+        assert_eq!(
+            carrier["expiresNs"],
+            (expected_original.started_ns + expected_ms * 1_000_000).to_string()
+        );
+        assert_eq!(original.envelope(), expected_original);
+        assert!(
+            command
+                .get_envs()
+                .any(|(key, value)| key == "CAWS_HOOK_EVENT_TIMEOUT_MS_V1" && value.is_none())
+        );
+    }
+}
+
+#[test]
+fn expired_event_restriction_refuses_before_pointer_lookup() {
+    use caws_native::monotonic_deadline::MonotonicDeadline;
+    use std::time::Duration;
+    let f = Fixture::new();
+    assert!(!f.0.join("state/adapter-runtime.json").exists());
+    let original = MonotonicDeadline::capture(Duration::from_secs(30)).unwrap();
+    let expected = original.envelope();
+    std::thread::sleep(Duration::from_millis(5));
+    let error =
+        installed_entry::Selection::read_with_event_timeout(&f.0, original.clone(), Some(1))
+            .unwrap_err();
+    assert_eq!(error, "Original monotonic deadline expired");
+    original.check().unwrap();
+    assert_eq!(original.envelope(), expected);
+}
+
+#[test]
 fn delayed_command_refuses_before_original_expiry_without_renewal() {
     use caws_native::monotonic_deadline::MonotonicDeadline;
     use std::time::{Duration, Instant};
@@ -80,6 +146,23 @@ impl Fixture {
         self.retain(args, &output);
         output
     }
+    fn invoke_with_event_timeout(&self, args: &[&str], timeout: &str) -> Output {
+        let output = Command::new(env!("CARGO_BIN_EXE_caws-hook-native"))
+            .args(args)
+            .env_clear()
+            .env("HOME", &self.0)
+            .env("CAWS_HOME", &self.0)
+            .env("PATH", "/usr/bin:/bin")
+            .env("CAWS_HOOK_EVENT_TIMEOUT_MS_V1", timeout)
+            .env("CAWS_EVENT_FIXTURE_SENTINEL", "kept")
+            .output()
+            .unwrap();
+        self.retain(args, &output);
+        if std::env::var_os("CAWS_NATIVE_ENTRY_ARTIFACT_DIR").is_some() {
+            fs::write(self.0.join("event-timeout-input.txt"), timeout).unwrap();
+        }
+        output
+    }
     fn retain(&self, args: &[&str], output: &Output) {
         if std::env::var_os("CAWS_NATIVE_ENTRY_ARTIFACT_DIR").is_none() {
             return;
@@ -107,17 +190,31 @@ impl Fixture {
         self.generation_with_entry(Some(native), metadata)
     }
     fn generation_with_entry(&self, native: Option<&[u8]>, metadata: serde_json::Value) -> String {
+        self.generation_with_bootstrap(native, metadata, b"print('LEGACY_EXECUTED')\n")
+    }
+    fn generation_with_bootstrap(
+        &self,
+        native: Option<&[u8]>,
+        metadata: serde_json::Value,
+        bootstrap: &[u8],
+    ) -> String {
+        self.generation_with_assets(native, metadata, bootstrap, b"#!/bin/sh\nexit 78\n")
+    }
+    fn generation_with_assets(
+        &self,
+        native: Option<&[u8]>,
+        metadata: serde_json::Value,
+        bootstrap: &[u8],
+        node: &[u8],
+    ) -> String {
         let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::from([
             ("launcher.py".into(), b"raise SystemExit(77)\n".to_vec()),
-            (
-                "bootstrap.py".into(),
-                b"print('LEGACY_EXECUTED')\n".to_vec(),
-            ),
+            ("bootstrap.py".into(), bootstrap.to_vec()),
         ]);
         if let Some(bytes) = native {
             files.insert("native/caws-native".into(), bytes.to_vec());
             files.insert("native/caws-hook-native".into(), b"identity only".to_vec());
-            files.insert("native/node".into(), b"#!/bin/sh\nexit 78\n".to_vec());
+            files.insert("native/node".into(), node.to_vec());
             files.insert(
                 "engine.js".into(),
                 b"throw Error('not a real engine fixture');".to_vec(),
@@ -181,6 +278,153 @@ impl Fixture {
         )
         .unwrap();
         digest
+    }
+}
+
+#[test]
+fn installed_event_environment_restricts_native_and_is_removed_from_children() {
+    let f = Fixture::new();
+    let mut metadata = installed_v2_metadata();
+    metadata["installedInvocation"]["stableEntryEventBudget"] = "env-original-start-ms-v1".into();
+    f.generation_with_entry(Some(b"#!/bin/sh\n[ \"${CAWS_HOOK_EVENT_TIMEOUT_MS_V1+x}\" != x ] || exit 93\n[ \"$CAWS_EVENT_FIXTURE_SENTINEL\" = kept ] || exit 94\nprintf '%s\\n' \"$@\"\n"), metadata);
+    let output = f.invoke_with_event_timeout(&["codex", "session_end", "--system"], "3000");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let args: Vec<_> = stdout.lines().collect();
+    assert_eq!(args[0], "invoke-installed-v1");
+    let position = args
+        .iter()
+        .position(|arg| *arg == "--original-deadline")
+        .unwrap();
+    let carrier: serde_json::Value = serde_json::from_str(args[position + 1]).unwrap();
+    let started: u64 = carrier["startedNs"].as_str().unwrap().parse().unwrap();
+    let expires: u64 = carrier["expiresNs"].as_str().unwrap().parse().unwrap();
+    assert_eq!(expires - started, 3_000_000_000);
+
+    let legacy = Fixture::new();
+    legacy.generation_with_bootstrap(None, serde_json::Value::Null,
+        b"import os\nprint(str(os.environ.get('CAWS_HOOK_EVENT_TIMEOUT_MS_V1')) + '|' + os.environ['CAWS_EVENT_FIXTURE_SENTINEL'])\n");
+    let output = legacy.invoke_with_event_timeout(&["codex", "pre_tool_use", "--system"], "3000");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"None|kept\n");
+}
+
+#[test]
+fn installed_malformed_event_environment_refuses_before_generation() {
+    let f = Fixture::new();
+    let output = f.invoke_with_event_timeout(&["codex", "pre_tool_use"], "30001");
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("Event timeout must be canonical decimal milliseconds in 1..=30000")
+    );
+    assert!(!f.0.join("state/adapter-runtime.json").exists());
+}
+
+#[test]
+fn installed_event_environment_is_private_in_describe_context() {
+    let f = Fixture::new();
+    let mut metadata = installed_v2_metadata();
+    metadata["installedInvocation"]["stableEntryEventBudget"] = "env-original-start-ms-v1".into();
+    let node = b"#!/usr/bin/python3\nimport os, json\nc = json.loads(os.environ['CAWS_NATIVE_DESCRIBE_CONTEXT'])\nassert 'CAWS_HOOK_EVENT_TIMEOUT_MS_V1' not in os.environ\nassert 'CAWS_HOOK_EVENT_TIMEOUT_MS_V1' not in c['environment']\nassert os.environ['CAWS_EVENT_FIXTURE_SENTINEL'] == 'kept'\nassert c['environment']['CAWS_EVENT_FIXTURE_SENTINEL'] == 'kept'\nprint(json.dumps(c['deadlineObservation']))\n";
+    f.generation_with_assets(
+        Some(b"#!/bin/sh\nexit 91\n"),
+        metadata,
+        b"raise SystemExit(92)\n",
+        node,
+    );
+    let output = f.invoke_with_event_timeout(&["codex", "session_end", "--describe"], "3000");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let observation: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let original_start: u64 = observation["original"]["startedNs"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let original_end: u64 = observation["original"]["expiresNs"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let selected_start: u64 = observation["selected"]["startedNs"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let selected_end: u64 = observation["selected"]["expiresNs"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(selected_start, original_start);
+    assert_eq!(original_end - original_start, 30_000_000_000);
+    assert_eq!(selected_end - original_start, 3_000_000_000);
+}
+
+#[test]
+fn installed_event_budget_bounds_early_failure_with_blocked_output() {
+    use std::io::{Read, Write};
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
+    use std::time::{Duration, Instant};
+    for args in [vec!["invalid"], vec!["codex", "pre_tool_use"]] {
+        let (mut sink, mut output) = UnixStream::pair().unwrap();
+        output.set_nonblocking(true).unwrap();
+        let mut filled = 0;
+        loop {
+            match output.write(&[b'x'; 4096]) {
+                Ok(count) => filled += count,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(error) => panic!("fill output: {error}"),
+            }
+        }
+        assert!(filled > 0);
+        output.set_nonblocking(false).unwrap();
+        let stdout: OwnedFd = output.try_clone().unwrap().into();
+        let stderr: OwnedFd = output.into();
+        let started = Instant::now();
+        let mut child = Command::new(env!("CARGO_BIN_EXE_caws-hook-native"))
+            .args(&args)
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("CAWS_HOOK_EVENT_TIMEOUT_MS_V1", "100")
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr))
+            .spawn()
+            .unwrap();
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            if started.elapsed() >= Duration::from_secs(2) {
+                // The still-owned, unreaped foreground child is the only target.
+                child.kill().unwrap();
+                child.wait().unwrap();
+                panic!("event bound was not applied to early failure: {args:?}");
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        assert_eq!(status.code(), Some(2), "{args:?}");
+        let mut bytes = Vec::new();
+        sink.read_to_end(&mut bytes).unwrap();
+        assert_eq!(
+            bytes,
+            vec![b'x'; filled],
+            "expired full output accepted unexpected bytes"
+        );
     }
 }
 impl Drop for Fixture {
@@ -450,6 +694,8 @@ fn generation_capability_wire_shape_and_policy_are_exact() {
         "null",
         "extra",
         "extra-capability",
+        "null-event-budget",
+        "unknown-event-budget",
         "protocol",
         "max-short",
         "max-long",
@@ -468,6 +714,12 @@ fn generation_capability_wire_shape_and_policy_are_exact() {
             "null" => metadata["installedInvocation"] = serde_json::Value::Null,
             "extra" => metadata["callerCapability"] = true.into(),
             "extra-capability" => metadata["installedInvocation"]["fallback"] = true.into(),
+            "null-event-budget" => {
+                metadata["installedInvocation"]["stableEntryEventBudget"] = serde_json::Value::Null
+            }
+            "unknown-event-budget" => {
+                metadata["installedInvocation"]["stableEntryEventBudget"] = "future".into()
+            }
             "protocol" => metadata["installedInvocation"]["protocol"] = "invoke".into(),
             "max-short" => metadata["installedInvocation"]["maxOriginalTimeoutMs"] = 29999.into(),
             "max-long" => metadata["installedInvocation"]["maxOriginalTimeoutMs"] = 30001.into(),

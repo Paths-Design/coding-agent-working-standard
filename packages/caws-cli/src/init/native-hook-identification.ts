@@ -1,5 +1,38 @@
 import * as path from 'node:path';
 
+export const NATIVE_EVENT_TIMEOUT_ENV = 'CAWS_HOOK_EVENT_TIMEOUT_MS_V1';
+export const STABLE_EVENT_BUDGET_FEATURE = 'env-original-start-ms-v1';
+export type InstalledInvocationCapability =
+  | { readonly protocol: 'invoke-installed-v1'; readonly maxOriginalTimeoutMs: 30000 }
+  | {
+      readonly protocol: 'invoke-installed-v1';
+      readonly maxOriginalTimeoutMs: 30000;
+      readonly stableEntryEventBudget: typeof STABLE_EVENT_BUDGET_FEATURE;
+    };
+
+/** Exact historical/current shapes; metadata alone does not prove enforcement. */
+export function parseInstalledInvocationCapability(value: unknown): InstalledInvocationCapability {
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('Unsupported installed invocation capability');
+  const capability = value as Record<string, unknown>;
+  const feature = Object.hasOwn(capability, 'stableEntryEventBudget');
+  const keys = feature
+    ? 'maxOriginalTimeoutMs,protocol,stableEntryEventBudget'
+    : 'maxOriginalTimeoutMs,protocol';
+  if (
+    Object.keys(capability).sort().join(',') !== keys ||
+    capability.protocol !== 'invoke-installed-v1' ||
+    capability.maxOriginalTimeoutMs !== 30000 ||
+    (feature && capability.stableEntryEventBudget !== STABLE_EVENT_BUDGET_FEATURE)
+  )
+    throw new Error('Unsupported installed invocation capability');
+  return capability as InstalledInvocationCapability;
+}
+
+export function installedEntryAdvertisesEventBudget(value: unknown): boolean {
+  return Object.hasOwn(parseInstalledInvocationCapability(value), 'stableEntryEventBudget');
+}
+
 export interface NativeHook {
   command?: string;
   enabled?: boolean;

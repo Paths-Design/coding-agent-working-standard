@@ -114,9 +114,16 @@ export function projectSqliteBuildIdentity(value) {
     'unsupported SQLite diagnostic schema'
   );
   if (v2) {
-    exactKeys(value.installedInvocation, ['protocol', 'maxOriginalTimeoutMs']);
+    const eventBudget = Object.hasOwn(value.installedInvocation ?? {}, 'stableEntryEventBudget');
+    exactKeys(value.installedInvocation, [
+      'protocol',
+      'maxOriginalTimeoutMs',
+      ...(eventBudget ? ['stableEntryEventBudget'] : []),
+    ]);
     assert.equal(value.installedInvocation.protocol, 'invoke-installed-v1');
     assert.equal(value.installedInvocation.maxOriginalTimeoutMs, 30000);
+    if (eventBudget)
+      assert.equal(value.installedInvocation.stableEntryEventBudget, 'env-original-start-ms-v1');
   }
   assert(typeof value.version === 'string' && value.version.length > 0);
   assert(typeof value.sourceId === 'string' && value.sourceId.length > 0);

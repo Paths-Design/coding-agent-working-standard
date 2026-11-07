@@ -3,6 +3,11 @@ import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { runSqliteBuildStep, type ReviewedFile, type StepReceipt } from './sqlite-static-build';
 import { inspectBsdAr, type ArMember } from './ar-archive';
+import {
+  parseInstalledInvocationCapability,
+  type InstalledInvocationCapability,
+} from '../init/native-hook-identification';
+export type { InstalledInvocationCapability } from '../init/native-hook-identification';
 
 export interface ReviewedTreeFile {
   relativePath: string;
@@ -51,10 +56,6 @@ export interface SqlitePrefixManifest {
   header: ReviewedFile;
   object: ReviewedFile;
   bindings: ReviewedFile;
-}
-export interface InstalledInvocationCapability {
-  readonly protocol: 'invoke-installed-v1';
-  readonly maxOriginalTimeoutMs: 30000;
 }
 export interface SqliteBuildIdentityV1 {
   schema: 'caws.sqlite_build_identity.v1';
@@ -952,12 +953,7 @@ export function validateNativeSqliteBuildIdentity(
     'Required observed SQLite compile options missing'
   );
   if (identity.schema === 'caws.sqlite_build_identity.v2') {
-    shape(identity.installedInvocation, ['protocol', 'maxOriginalTimeoutMs']);
-    insist(
-      identity.installedInvocation.protocol === 'invoke-installed-v1' &&
-        identity.installedInvocation.maxOriginalTimeoutMs === 30000,
-      'Unsupported installed invocation capability'
-    );
+    parseInstalledInvocationCapability(identity.installedInvocation);
   }
   return identity;
 }
