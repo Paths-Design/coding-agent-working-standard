@@ -986,16 +986,65 @@ describe('complete stock file-tool prewrite handlers', () => {
     expect(result.exitCode).toBe(2);
     expect(decoded(result).reason).toContain("worktree 'foreign'");
   });
-  test('canonical claim survives an unrelated unresolved root', async () => {
+  test('absent legacy path retains corroborated conventional ownership', async () => {
     installCurrentFileToolMembers();
-    registry.unresolved = { path: path.join(root, 'absent-worktree') };
+    delete registry.own.path;
     persist();
-    selection.checkout = repo;
-    payload('Write', { file_path: path.join(repo, 'src/allowed/a') });
+    expect(fs.existsSync(lane)).toBe(true);
+    payload('Write', { file_path: 'docs/allowed.md' });
     const result = await execute('worktree-write-guard.sh');
-    expect(result.exitCode).toBe(2);
-    expect(decoded(result).reason).toContain('claimed by worktree');
+    expect(result.exitCode).toBe(0);
+    expect(Buffer.from(result.stdout).toString()).toBe('');
   });
+  test.each(['', 42, null, false, [], {}, 'relative/missing'])(
+    'explicit malformed root cannot inherit conventional ownership: %p',
+    async (value) => {
+      installCurrentFileToolMembers();
+      registry.own.path = value;
+      persist();
+      expect(fs.existsSync(lane)).toBe(true);
+      expect(registry.own.owner.session_id).toBe('file-tools-fixture');
+      environment.CAWS_PERMISSION_VOCAB = 'ask';
+      payload('Write', { file_path: 'docs/allowed.md' });
+      expect((await execute('scope-guard.sh')).exitCode).toBe(2);
+      expect(count()).toBe(0);
+      const result = await execute('worktree-write-guard.sh');
+      expect(result.exitCode).toBe(2);
+      expect(decoded(result).reason).toContain('unresolved ownership census');
+      expect(decoded(result)).not.toHaveProperty('hookSpecificOutput');
+    }
+  );
+  test.each(['', 42])(
+    'malformed root does not conceal later established foreign ownership: %p',
+    async (value) => {
+      installCurrentFileToolMembers();
+      registry.own.path = value;
+      const foreign = path.join(repo, '.caws/worktrees/foreign');
+      fs.mkdirSync(foreign);
+      registry.foreign = { path: foreign, owner: { session_id: 'another-owner' } };
+      persist();
+      patch('docs/allowed.md', path.join(foreign, 'docs/foreign.md'));
+      const result = await execute('worktree-write-guard.sh');
+      expect(result.exitCode).toBe(2);
+      expect(decoded(result).reason).toContain("worktree 'foreign'");
+      expect(decoded(result).reason).toContain('different session');
+    }
+  );
+  test.each(['missing-directory', 'malformed-path'])(
+    'canonical claim survives an unrelated unresolved root: %s',
+    async (kind) => {
+      installCurrentFileToolMembers();
+      registry.unresolved = {
+        path: kind === 'malformed-path' ? 42 : path.join(root, 'absent-worktree'),
+      };
+      persist();
+      selection.checkout = repo;
+      payload('Write', { file_path: path.join(repo, 'src/allowed/a') });
+      const result = await execute('worktree-write-guard.sh');
+      expect(result.exitCode).toBe(2);
+      expect(decoded(result).reason).toContain('claimed by worktree');
+    }
+  );
 
   test('the actual default eleven-handler apply_patch profile admits without effects', () => {
     const defaults = actualDefaultPatchProfile();

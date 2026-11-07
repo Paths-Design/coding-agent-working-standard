@@ -218,12 +218,17 @@ function roots(context: StockHandlerContext, state: Authority): { name: string; 
   for (const [name, entry] of Object.entries(state.registry)) {
     if (!object(entry)) throw new Error('malformed worktree row');
     if (entry.status === 'destroyed' || entry.status === 'missing') continue;
-    const spelling =
-      typeof entry.path === 'string' && entry.path
-        ? entry.path
-        : join(context.selection.canonical, '.caws/worktrees', name);
+    let spelling: string;
+    if (Object.hasOwn(entry, 'path')) {
+      if (typeof entry.path !== 'string' || entry.path.length === 0)
+        throw new Error('worktree root has a malformed explicit path');
+      spelling = entry.path;
+    } else {
+      spelling = join(context.selection.canonical, '.caws/worktrees', name);
+    }
+    if (!isAbsolute(spelling)) throw new Error('worktree root is not an absolute path');
     if (!present(spelling)) continue;
-    if (!isAbsolute(spelling) || fs.lstatSync(spelling).isSymbolicLink())
+    if (fs.lstatSync(spelling).isSymbolicLink())
       throw new Error('worktree root is not a physical absolute directory');
     const root = fs.realpathSync.native(spelling);
     if (!fs.statSync(root).isDirectory() || inside(root, context.selection.canonical))
