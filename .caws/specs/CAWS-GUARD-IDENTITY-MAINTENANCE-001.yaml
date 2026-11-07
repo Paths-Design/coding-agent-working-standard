@@ -47,9 +47,9 @@ evidence:
     artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/test-attempt-2.txt"
     commit_sha: ca437f58c40101ed7e9353b41a54fa7fc1d25572
   - criterion_id: A2
-    status: pass
-    evidence_ref: "node:test at ca437f58 exercised retained baseline and private candidate with real Git-linked managed checkout, owned CAWS lane and independent foreign Git repository. Baseline wrongly refused owned scoped write; candidate admitted it. Scope-out, foreign repository, foreign session and missing canonical governance returned2 with exact protected before/after bytes equal. Tampered inputs refused before private publication; normal private activation and rollback verified all member bytes. Raw commands and observations in qualification-G8gxq0; actual host acceptance remains A3."
-    recorded_at: "2026-11-07T20:54:24.583Z"
-    exit_code: 0
-    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/qualification-G8gxq0/observations.json"
+    status: fail
+    evidence_ref: "Reopened after independent review and direct falsifier. test-attempt-4: e736candidate returns0 for a protected write from a conventional Git-linked leaf when Git fails and legacy project invocation omits CAWS_MACHINE_POLICY_ROOT; registered system-route control returned2. Previous valid positive/refusal cases retained in attempt3, but hybrid candidate must not activate. Additional installer review established plan/install reread gap: expectedDigest currently asserted only after publication. Root owns guard fail-closed repair plus exact-snapshot installer under normal lock before activation. Global remains7be; no weakened gate or bypass."
+    recorded_at: "2026-11-07T21:01:56.385Z"
+    exit_code: 1
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/test-attempt-4.txt"
     commit_sha: ca437f58c40101ed7e9353b41a54fa7fc1d25572
