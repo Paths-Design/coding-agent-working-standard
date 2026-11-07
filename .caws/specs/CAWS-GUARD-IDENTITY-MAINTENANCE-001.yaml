@@ -47,9 +47,9 @@ evidence:
     artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/qualified/test-attempt-1.txt"
     commit_sha: "5830b87da00b5312fef6c167953d1aa7c460d6be"
   - criterion_id: A2
-    status: fail
-    evidence_ref: "Reopened after independent review and direct falsifier. test-attempt-4: e736candidate returns0 for a protected write from a conventional Git-linked leaf when Git fails and legacy project invocation omits CAWS_MACHINE_POLICY_ROOT; registered system-route control returned2. Previous valid positive/refusal cases retained in attempt3, but hybrid candidate must not activate. Additional installer review established plan/install reread gap: expectedDigest currently asserted only after publication. Root owns guard fail-closed repair plus exact-snapshot installer under normal lock before activation. Global remains7be; no weakened gate or bypass."
-    recorded_at: "2026-11-07T21:01:56.385Z"
-    exit_code: 1
-    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/test-attempt-4.txt"
-    commit_sha: ca437f58c40101ed7e9353b41a54fa7fc1d25572
+    status: pass
+    evidence_ref: "Candidate01f18965 passed real Git-linked owned admission, scope-out, foreign repo, foreign owner, missing governance, missing CLI, malformed CLI response, one-sided binding, and failed-Git controls with and without machine policy-root field. Every refusal exit2 and protected bytes unchanged. Exact private publication and normal rollback verified113 member bytes/modes. The earlier e736 fail-open attempt remains retained in test-attempt-4 and was never activated. Raw qualified/qualification-5uCGB2/commands.json and observations.json inspected. Four qualification tests and73 installer tests passed; independent feedback grounded in these coordinates. Actual host activation and main landing are A3."
+    recorded_at: "2026-11-07T21:17:31.948Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/qualified/qualification-5uCGB2/observations.json"
+    commit_sha: "5830b87da00b5312fef6c167953d1aa7c460d6be"
