@@ -895,6 +895,108 @@ describe('complete stock file-tool prewrite handlers', () => {
     return defaults;
   };
 
+  const installCurrentFileToolMembers = (mask = 7) => {
+    for (const [bit, name, expected] of [
+      [1, 'block-dangerous.sh', '9e8a238b619632744edf0960d44b6c0d98bac546a36f0092147e8566955084f5'],
+      [
+        2,
+        'worktree-write-guard.sh',
+        '9c71094f1b7d9eba7803163ebf7f20cff4f6fa4f2cf3b84817ca2b5882791aa7',
+      ],
+      [4, 'lib/session-id.sh', 'dac4866c1576b65732ab3eb5b350fd978b3b746c6bce02b484210a1ce3676c8c'],
+    ]) {
+      if (!(mask & bit)) continue;
+      const file = path.join(runtime, name);
+      fs.copyFileSync(path.join(templates, 'shared', name), file);
+      expect(sha(file)).toBe(expected);
+      if (bit === 4) selection.libraries['session-id.sh'].sha256 = expected;
+      else selection.handlers.find((handler) => handler.name === name).sha256 = expected;
+    }
+  };
+  test.each(
+    ['ten', 'eleven'].flatMap((profile) => Array.from({ length: 8 }, (_, mask) => [profile, mask]))
+  )('only complete %s source cohorts admit, mask=%s', (profile, mask) => {
+    if (profile === 'eleven') actualDefaultPatchProfile();
+    installCurrentFileToolMembers(mask);
+    expect(prepare() !== null).toBe(mask === 0 || mask === 7);
+    expect(count()).toBe(0);
+    expect(fs.existsSync(path.join(repo, '.caws/leases'))).toBe(false);
+  });
+  test.each(['historical-to-current', 'current-to-historical'])(
+    'complete source cohort changes after admission cannot replay compatibility: %s',
+    async (direction) => {
+      const old = ['block-dangerous.sh', 'worktree-write-guard.sh', 'lib/session-id.sh'].map(
+        (name) => [name, fs.readFileSync(path.join(runtime, name))]
+      );
+      if (direction === 'current-to-historical') installCurrentFileToolMembers();
+      const plan = prepare();
+      expect(plan).not.toBeNull();
+      if (direction === 'historical-to-current') installCurrentFileToolMembers();
+      else
+        for (const [name, bytes] of old) {
+          const file = path.join(runtime, name);
+          fs.writeFileSync(file, bytes);
+          if (name.startsWith('lib/')) selection.libraries['session-id.sh'].sha256 = sha(file);
+          else selection.handlers.find((handler) => handler.name === name).sha256 = sha(file);
+        }
+      await expect(plan.execute(selection.handlers[1])).rejects.toThrow(
+        'compatibility replay refused'
+      );
+      expect(count()).toBe(0);
+    }
+  );
+  test.each([{}, [], false, 1, 'owner', { session_id: 1 }, { session_id: '../other' }])(
+    'current ownership retains malformed presence %p',
+    async (owner) => {
+      installCurrentFileToolMembers();
+      registry.own.owner = owner;
+      persist();
+      payload('Write', { file_path: 'docs/allowed.md' });
+      const result = await execute('worktree-write-guard.sh');
+      expect(result.exitCode).toBe(2);
+      expect(decoded(result).reason).toContain('unresolved ownership census');
+    }
+  );
+  test.each([null, { session_id: null }, { session_id: '' }, { session_id: 'unknown' }])(
+    'current unconfirmed ownership cannot acquire ask capability %p',
+    async (owner) => {
+      installCurrentFileToolMembers();
+      registry.own.owner = owner;
+      persist();
+      environment.CAWS_PERMISSION_VOCAB = 'ask';
+      payload('Write', { file_path: 'docs/allowed.md' });
+      const result = await execute('worktree-write-guard.sh');
+      expect(result.exitCode).toBe(2);
+      expect(decoded(result).reason).toContain('no confirmed owner');
+      expect(decoded(result).reason).toContain('cannot request approval');
+    }
+  );
+  test('current census finds a foreign owner after unresolved entries and targets', async () => {
+    installCurrentFileToolMembers();
+    delete registry.own.owner;
+    const foreign = path.join(repo, '.caws/worktrees/foreign');
+    fs.mkdirSync(foreign);
+    registry.unresolved = { path: path.join(root, 'absent-worktree') };
+    registry.foreign = { path: foreign, owner: { session_id: 'another-owner' } };
+    persist();
+    const dangling = path.join(lane, 'dangling');
+    fs.symlinkSync(path.join(root, 'absent-target'), dangling);
+    patch(dangling, path.join(foreign, 'docs/foreign.md'));
+    const result = await execute('worktree-write-guard.sh');
+    expect(result.exitCode).toBe(2);
+    expect(decoded(result).reason).toContain("worktree 'foreign'");
+  });
+  test('canonical claim survives an unrelated unresolved root', async () => {
+    installCurrentFileToolMembers();
+    registry.unresolved = { path: path.join(root, 'absent-worktree') };
+    persist();
+    selection.checkout = repo;
+    payload('Write', { file_path: path.join(repo, 'src/allowed/a') });
+    const result = await execute('worktree-write-guard.sh');
+    expect(result.exitCode).toBe(2);
+    expect(decoded(result).reason).toContain('claimed by worktree');
+  });
+
   test('the actual default eleven-handler apply_patch profile admits without effects', () => {
     const defaults = actualDefaultPatchProfile();
     expect(selection.handlers.map((handler) => handler.entry)).toEqual(defaults);
@@ -1310,16 +1412,20 @@ describe('complete stock file-tool prewrite handlers', () => {
     expect(decoded(result).reason).toContain('unresolved strike identity');
     expect(count()).toBe(1);
   });
-  test('own canonical scope claim is admitted only for the owning operating worktree', async () => {
-    payload('Write', { file_path: path.join(repo, 'src/allowed/a') });
-    expect((await execute('worktree-write-guard.sh')).exitCode).toBe(0);
-    selection.checkout = repo;
-    request.payload.cwd = repo;
-    request.inputJson = JSON.stringify(request.payload);
-    const result = await execute('worktree-write-guard.sh');
-    expect(result.exitCode).toBe(2);
-    expect(decoded(result).reason).toContain('claimed by worktree');
-  });
+  test.each(['historical', 'current'])(
+    'own canonical scope claim requires its owning operating worktree: %s',
+    async (profile) => {
+      if (profile === 'current') installCurrentFileToolMembers();
+      payload('Write', { file_path: path.join(repo, 'src/allowed/a') });
+      expect((await execute('worktree-write-guard.sh')).exitCode).toBe(0);
+      selection.checkout = repo;
+      request.payload.cwd = repo;
+      request.inputJson = JSON.stringify(request.payload);
+      const result = await execute('worktree-write-guard.sh');
+      expect(result.exitCode).toBe(2);
+      expect(decoded(result).reason).toContain('claimed by worktree');
+    }
+  );
   test('secret advisory keeps token values out of output and never blocks', async () => {
     const token = 'AKIA' + 'A'.repeat(16);
     payload('Write', { file_path: 'src/allowed/config', content: token });
@@ -1444,115 +1550,119 @@ describe('complete stock file-tool prewrite handlers', () => {
     }
   );
 
-  test('engine consumes one strike after prefix acknowledgement and before fresh ownership', async () => {
-    // Routing proof with a receipt fixture; filesystem serialization is the real-core probe above.
-    const { prepareRuntimeInvocation } = require('../../dist/runtime/engine');
-    payload('Write', { file_path: 'src/outside/ordered.js', content: 'never applied' });
-    request.sessionCache = 'caws.runtime.session-cache.v1';
-    const observed = [];
-    jest
-      .spyOn(require('../../dist/runtime/agent-heartbeat'), 'executeAgentHeartbeat')
-      .mockImplementation(async () => {
-        observed.push('heartbeat');
-        return { exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
-      });
-    let release;
-    const cache = {
-      capture: jest.fn(() => {
-        observed.push('cache-request');
-        return new Promise((resolve) => {
-          release = resolve;
-        }).then((receipt) => {
-          observed.push('cache-ack');
-          return receipt;
+  test.each(['historical', 'current'])(
+    'engine consumes one strike after prefix acknowledgement and before fresh ownership: %s',
+    async (profile) => {
+      if (profile === 'current') installCurrentFileToolMembers();
+      // Routing proof with a receipt fixture; filesystem serialization is the real-core probe above.
+      const { prepareRuntimeInvocation } = require('../../dist/runtime/engine');
+      payload('Write', { file_path: 'src/outside/ordered.js', content: 'never applied' });
+      request.sessionCache = 'caws.runtime.session-cache.v1';
+      const observed = [];
+      jest
+        .spyOn(require('../../dist/runtime/agent-heartbeat'), 'executeAgentHeartbeat')
+        .mockImplementation(async () => {
+          observed.push('heartbeat');
+          return { exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
         });
-      }),
-    };
-    const fileContext = {
-      capture: jest.fn(async () => {
-        observed.push('capture1');
-        return observation();
-      }),
-      revalidate: jest.fn(async () => {
-        observed.push('capture2');
-        return observation();
-      }),
-    };
-    const strike = {
-      incrementScopeGuard: jest.fn(async () => {
-        observed.push('strike');
-        return { count: 1, stateSha256: 'b'.repeat(64) };
-      }),
-    };
-    const compatibility = jest.spyOn(
-      require('../../dist/runtime/handler-executor'),
-      'executeCompatibilityDispatch'
-    );
-    const git = {
-      run: jest.fn(async (args) =>
-        args.includes('--show-toplevel') ? lane : path.join(repo, '.git')
-      ),
-    };
-    const invocation = await prepareRuntimeInvocation(
-      request,
-      context.signal,
-      cache,
-      git,
-      undefined,
-      undefined,
-      async () => selection,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      fileContext,
-      strike
-    );
-    expect(observed).toEqual(['capture1']);
-    const pending = invocation.dispatch();
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(observed).toEqual(['capture1', 'cache-request']);
-    expect(strike.incrementScopeGuard).not.toHaveBeenCalled();
-    release({ status: 'captured', envelopePublished: true, diagnostic: null });
-    const result = await pending;
-    expect(observed).toEqual([
-      'capture1',
-      'cache-request',
-      'cache-ack',
-      'heartbeat',
-      'strike',
-      'capture2',
-    ]);
-    expect(strike.incrementScopeGuard).toHaveBeenCalledTimes(1);
-    expect(result.nativeResult.exitCode).toBe(0);
-    expect(Buffer.from(result.nativeResult.stdout).toString()).toContain('strike 1 of 3');
-    expect(compatibility).not.toHaveBeenCalled();
-    const rows = fs
-      .readFileSync(
-        path.join(
-          repo,
-          '.caws/sessions/file-tools-fixture/hook-invocations',
-          request.id + '.jsonl'
+      let release;
+      const cache = {
+        capture: jest.fn(() => {
+          observed.push('cache-request');
+          return new Promise((resolve) => {
+            release = resolve;
+          }).then((receipt) => {
+            observed.push('cache-ack');
+            return receipt;
+          });
+        }),
+      };
+      const fileContext = {
+        capture: jest.fn(async () => {
+          observed.push('capture1');
+          return observation();
+        }),
+        revalidate: jest.fn(async () => {
+          observed.push('capture2');
+          return observation();
+        }),
+      };
+      const strike = {
+        incrementScopeGuard: jest.fn(async () => {
+          observed.push('strike');
+          return { count: 1, stateSha256: 'b'.repeat(64) };
+        }),
+      };
+      const compatibility = jest.spyOn(
+        require('../../dist/runtime/handler-executor'),
+        'executeCompatibilityDispatch'
+      );
+      const git = {
+        run: jest.fn(async (args) =>
+          args.includes('--show-toplevel') ? lane : path.join(repo, '.git')
         ),
-        'utf8'
-      )
-      .trim()
-      .split('\n')
-      .map(JSON.parse);
-    expect(
-      rows
-        .filter((row) => row.stage === 'scope_strike_result')
-        .map((row) => ({
-          count: row.count,
-          digest: row.state_sha256,
-          boundary: row.observation_boundary,
-        }))
-    ).toEqual([{ count: 1, digest: 'b'.repeat(64), boundary: 'native_guard_strikes_result' }]);
-    expect(count()).toBe(0);
-    expect(qualificationChildren).toHaveLength(0);
-    expect(fs.existsSync(path.join(lane, 'src/outside/ordered.js'))).toBe(false);
-    await invocation.acknowledgeHandoff(true);
-  });
+      };
+      const invocation = await prepareRuntimeInvocation(
+        request,
+        context.signal,
+        cache,
+        git,
+        undefined,
+        undefined,
+        async () => selection,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        fileContext,
+        strike
+      );
+      expect(observed).toEqual(['capture1']);
+      const pending = invocation.dispatch();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(observed).toEqual(['capture1', 'cache-request']);
+      expect(strike.incrementScopeGuard).not.toHaveBeenCalled();
+      release({ status: 'captured', envelopePublished: true, diagnostic: null });
+      const result = await pending;
+      expect(observed).toEqual([
+        'capture1',
+        'cache-request',
+        'cache-ack',
+        'heartbeat',
+        'strike',
+        'capture2',
+      ]);
+      expect(strike.incrementScopeGuard).toHaveBeenCalledTimes(1);
+      expect(result.nativeResult.exitCode).toBe(0);
+      expect(Buffer.from(result.nativeResult.stdout).toString()).toContain('strike 1 of 3');
+      expect(compatibility).not.toHaveBeenCalled();
+      const rows = fs
+        .readFileSync(
+          path.join(
+            repo,
+            '.caws/sessions/file-tools-fixture/hook-invocations',
+            request.id + '.jsonl'
+          ),
+          'utf8'
+        )
+        .trim()
+        .split('\n')
+        .map(JSON.parse);
+      expect(
+        rows
+          .filter((row) => row.stage === 'scope_strike_result')
+          .map((row) => ({
+            count: row.count,
+            digest: row.state_sha256,
+            boundary: row.observation_boundary,
+          }))
+      ).toEqual([{ count: 1, digest: 'b'.repeat(64), boundary: 'native_guard_strikes_result' }]);
+      expect(count()).toBe(0);
+      expect(qualificationChildren).toHaveLength(0);
+      expect(fs.existsSync(path.join(lane, 'src/outside/ordered.js'))).toBe(false);
+      await invocation.acknowledgeHandoff(true);
+    }
+  );
 
   test('bare primary linked checkout retains native heartbeat provenance and owned payload admission', async () => {
     const bare = path.join(repo, '.bare');

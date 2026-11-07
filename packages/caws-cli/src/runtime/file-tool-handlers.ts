@@ -24,6 +24,11 @@ import { FILE_TOOL_CONTEXT_CAPABILITY, GUARD_STRIKES_CAPABILITY } from './protoc
 import { readOperationalFile } from './operational-files';
 import { qualifiesForNativeSessionCache } from './session-cache-admission';
 import { qualifiesForFileToolHeartbeat } from './stock-handlers';
+import {
+  observeWorktreeOwner,
+  observeWorktreeOwnership,
+  type WorktreeOwnershipRoot,
+} from './worktree-ownership';
 import type { HandlerResult } from './composer';
 import type { SelectedHandler } from './selection';
 import type { StockHandlerContext } from './stock-handlers';
@@ -54,16 +59,42 @@ const PATCH_HANDLERS: Readonly<Record<string, string>> = Object.freeze(
     ...Object.entries(HANDLERS).slice(8),
   ])
 );
-function selectedHandlerProfile(
-  context: StockHandlerContext
-): Readonly<Record<string, string>> | undefined {
-  if (context.selection.handlers.length === Object.keys(HANDLERS).length) return HANDLERS;
-  if (
-    context.request.payload.tool_name === 'apply_patch' &&
-    context.selection.handlers.length === Object.keys(PATCH_HANDLERS).length
+interface HandlerSourceProfile {
+  readonly handlers: Readonly<Record<string, string>>;
+  readonly sessionId: string;
+}
+const HISTORICAL_SESSION_ID = 'cf662f10e6d3477cecbf5deabd8d2b63284f6f4ac14fa7070725ff8502515c53';
+const CURRENT_SESSION_ID = 'dac4866c1576b65732ab3eb5b350fd978b3b746c6bce02b484210a1ce3676c8c';
+const CURRENT_HANDLERS: Readonly<Record<string, string>> = Object.freeze({
+  ...HANDLERS,
+  'block-dangerous.sh': '9e8a238b619632744edf0960d44b6c0d98bac546a36f0092147e8566955084f5',
+  'worktree-write-guard.sh': '9c71094f1b7d9eba7803163ebf7f20cff4f6fa4f2cf3b84817ca2b5882791aa7',
+});
+const CURRENT_PATCH_HANDLERS: Readonly<Record<string, string>> = Object.freeze(
+  Object.fromEntries(
+    Object.entries(PATCH_HANDLERS).map(([name, digest]) => [name, CURRENT_HANDLERS[name] ?? digest])
   )
-    return PATCH_HANDLERS;
-  return undefined;
+);
+const SOURCE_PROFILES: readonly HandlerSourceProfile[] = Object.freeze([
+  Object.freeze({ handlers: HANDLERS, sessionId: HISTORICAL_SESSION_ID }),
+  Object.freeze({ handlers: PATCH_HANDLERS, sessionId: HISTORICAL_SESSION_ID }),
+  Object.freeze({ handlers: CURRENT_HANDLERS, sessionId: CURRENT_SESSION_ID }),
+  Object.freeze({ handlers: CURRENT_PATCH_HANDLERS, sessionId: CURRENT_SESSION_ID }),
+]);
+function selectedHandlerProfile(context: StockHandlerContext): HandlerSourceProfile | undefined {
+  return SOURCE_PROFILES.find((profile) => {
+    const names = Object.keys(profile.handlers);
+    return (
+      (!Object.hasOwn(profile.handlers, SHORTCUT_HANDLER) ||
+        context.request.payload.tool_name === 'apply_patch') &&
+      context.selection.libraries['session-id.sh']?.sha256 === profile.sessionId &&
+      context.selection.handlers.length === names.length &&
+      context.selection.handlers.every(
+        (handler, index) =>
+          handler.name === names[index] && handler.sha256 === profile.handlers[handler.name]
+      )
+    );
+  });
 }
 const SOURCES: Readonly<Record<string, string>> = {
   ...HANDLERS,
@@ -130,8 +161,7 @@ function sourceValid(context: StockHandlerContext): boolean {
   const { selection } = context;
   const profile = selectedHandlerProfile(context);
   if (!profile) return false;
-  const sources =
-    profile === PATCH_HANDLERS ? { ...SOURCES, [SHORTCUT_HANDLER]: SHORTCUT_SOURCE_SHA } : SOURCES;
+  const sources = { ...SOURCES, ...profile.handlers, 'lib/session-id.sh': profile.sessionId };
   try {
     for (const [name, expected] of Object.entries(sources)) {
       const file = join(selection.runtimeDirectory, name);
@@ -338,59 +368,98 @@ function ownership(
   tool: CodexFileTool,
   observed: FileToolContextSnapshot
 ): HandlerResult {
-  // The caller obtained this observation immediately before this authority read.
   assertFileToolContextRoots(observed, context.selection.checkout, context.selection.canonical);
   const state = authority(context);
-  const registered = roots(context, state);
   const sid = environmentHookIdentity(context.request.payload, context.environment, 'codex');
+  const census: WorktreeOwnershipRoot[] = [];
+  for (const [name, record] of Object.entries(state.registry)) {
+    if (object(record) && ['destroyed', 'missing'].includes(String(record.status))) continue;
+    const raw: Record<string, unknown> = object(record) ? record : {};
+    const ownerPresent = Object.hasOwn(raw, 'owner');
+    let root: string | null = null;
+    try {
+      root = roots(context, { ...state, registry: { [name]: record } })[0]?.root ?? null;
+    } catch {
+      // An unresolved active row cannot establish absence of ownership.
+    }
+    census.push({ name, root, ownerPresent, owner: ownerPresent ? raw.owner : undefined });
+  }
+  const files = tool.targets.map((target): string | null => {
+    try {
+      return targets(context, { ...tool, targets: [target] })[0] ?? null;
+    } catch {
+      return null;
+    }
+  });
+  const observations = observeWorktreeOwnership({
+    canonical: context.selection.canonical,
+    sessionId: sid,
+    roots: census,
+    targets: files,
+  });
+  const foreign = observations.find((entry) => entry.kind === 'foreign_owner');
+  if (foreign?.kind === 'foreign_owner')
+    return block(
+      `CAWS worktree-write-guard: worktree '${foreign.worktree}' is owned by a different session.`
+    );
+  const registered = census.flatMap(({ name, root }) => (root === null ? [] : [{ name, root }]));
   const acting = registered
     .filter(({ root }) => inside(root, observed.checkout))
     .sort((left, right) => right.root.length - left.root.length)[0];
-  let approval = '';
-  for (const file of targets(context, tool)) {
+  const ownerSelf = (name: string): boolean => {
+    const row = census.find((entry) => entry.name === name);
+    if (!row) return false;
+    const owner = observeWorktreeOwner(row);
+    return owner.kind === 'confirmed' && owner.sessionId === sid;
+  };
+  // Canonical claims survive an unresolved physical root. Inspect every active row.
+  const claimed = new Set<string>();
+  for (const file of files) {
     if (
-      context.selection.checkout !== context.selection.canonical &&
-      inside(join(context.selection.checkout, '.caws/specs'), file)
+      file === null ||
+      !inside(context.selection.canonical, file) ||
+      registered.some(({ root }) => inside(root, file))
     )
-      return block('CAWS worktree-write-guard: linked-worktree spec materialization is refused.');
-    const relevant = registered.filter(({ root }) => inside(root, file) || inside(file, root));
-    for (const { name } of relevant) {
-      const owner = state.registry[name]?.owner;
-      if (!owner || !sid || owner.session_id !== sid)
+      continue;
+    const logical = relative(context.selection.canonical, file);
+    for (const row of census) {
+      const record = state.registry[row.name];
+      if (!object(record)) continue;
+      const spec = state.specs.find(
+        (entry) => entry.id === record.specId && entry.lifecycle_state === 'active'
+      );
+      if (spec?.worktree !== row.name || matchGlob(logical, spec.scope.in) === null) continue;
+      if (acting?.name !== row.name || !ownerSelf(row.name))
         return block(
-          `CAWS worktree-write-guard: worktree '${name}' is foreign or has no confirmed owner.`
+          `CAWS worktree-write-guard: canonical path '${logical}' is claimed by worktree '${row.name}'.`
         );
+      claimed.add(file);
     }
-    if (
-      relevant.some((left, index) =>
-        relevant.some(
-          (right, other) =>
-            index !== other && (inside(left.root, right.root) || inside(right.root, left.root))
-        )
-      )
+  }
+  if (
+    context.selection.checkout !== context.selection.canonical &&
+    files.some(
+      (file) => file !== null && inside(join(context.selection.checkout, '.caws/specs'), file)
     )
-      return block('CAWS worktree-write-guard: overlapping worktree ownership is unresolved.');
-    if (relevant.some(({ root }) => inside(root, file))) continue;
+  )
+    return block('CAWS worktree-write-guard: linked-worktree spec materialization is refused.');
+  if (observations.some((entry) => entry.kind === 'unresolved'))
+    return block('CAWS worktree-write-guard: unresolved ownership census; edit refused.');
+  const unowned = observations.find((entry) => entry.kind === 'payload_without_owner');
+  if (unowned?.kind === 'payload_without_owner')
+    return block(
+      `CAWS worktree-write-guard: worktree '${unowned.worktree}' has no confirmed owner. This harness cannot request approval.`
+    );
+  let approval = '';
+  for (const [index, file] of files.entries()) {
+    if (file === null) return block('CAWS worktree-write-guard: unresolved target; edit refused.');
+    if (observations[index]?.kind === 'owner_self') continue;
     if (inside(context.selection.canonical + '/.caws/worktrees', file))
       return block('CAWS worktree-write-guard: unregistered worktree payload has no owner.');
     if (!inside(context.selection.canonical, file)) continue;
     const logical = relative(context.selection.canonical, file);
-    const claimants = registered.filter(({ name }) => {
-      const record = state.registry[name]!;
-      const spec = state.specs.find(
-        (entry) => entry.id === record.specId && entry.lifecycle_state === 'active'
-      );
-      return spec?.worktree === name && matchGlob(logical, spec.scope.in) !== null;
-    });
-    for (const { name } of claimants) {
-      if (acting?.name !== name || !sid || state.registry[name]?.owner?.session_id !== sid)
-        return block(
-          `CAWS worktree-write-guard: canonical path '${logical}' is claimed by worktree '${name}'.`
-        );
-    }
-    if (claimants.length) continue;
-    // A branch-name match never substitutes for the actual owning operating path.
-    if (acting && sid && state.registry[acting.name]?.owner?.session_id === sid) continue;
+    if (claimed.has(file)) continue;
+    if (acting && ownerSelf(acting.name)) continue;
     if (writeAllowlisted(context, file, logical)) continue;
     const registeredForBase =
       observed.branch === null
@@ -490,7 +559,8 @@ export interface FileToolHandlerPlan {
 /** Read-only complete-source admission, independent of native context transport. */
 export function qualifiesForFileToolHandlers(context: StockHandlerContext): boolean {
   const { request, selection, environment } = context;
-  const handlers = selectedHandlerProfile(context);
+  const profile = selectedHandlerProfile(context);
+  const handlers = profile?.handlers;
   if (
     !handlers ||
     request.surface !== 'codex' ||
@@ -545,7 +615,9 @@ export function prepareFileToolHandlers(
 ): FileToolHandlerPlan | null {
   const { request, selection } = context;
   const native = context.nativeFileToolContext;
+  const sourceProfile = selectedHandlerProfile(context);
   if (
+    !sourceProfile ||
     request.fileToolContext !== FILE_TOOL_CONTEXT_CAPABILITY ||
     request.guardStrikes !== GUARD_STRIKES_CAPABILITY ||
     !native ||
@@ -557,7 +629,7 @@ export function prepareFileToolHandlers(
   const assertCurrent = (): void => {
     if (context.signal.aborted || Date.now() >= request.deadlineEpochMs)
       throw new Error('File-tool invocation cancelled or expired');
-    if (!qualifiesForFileToolHandlers(context))
+    if (selectedHandlerProfile(context) !== sourceProfile || !qualifiesForFileToolHandlers(context))
       throw new Error(
         'File-tool selected source or latch changed after prefix; compatibility replay refused'
       );
