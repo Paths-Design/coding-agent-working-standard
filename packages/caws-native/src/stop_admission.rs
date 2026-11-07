@@ -9,9 +9,9 @@ use crate::{
     cli::Config,
     selection_observation::{GenerationValidationScope, SelectionObservationReceipt},
 };
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use caws_native::{monotonic_deadline::MonotonicDeadline, session_cache_wire::OriginalStopCapture};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -26,6 +26,36 @@ const CHAIN: [&str; 4] = [
 ];
 const LOGGER_INDEX: usize = 2;
 const PRODUCER: &str = "surfaces/opencode/native-plugin.ts";
+const CURRENT_SESSION_ID_SOURCE: &str =
+    "dac4866c1576b65732ab3eb5b350fd978b3b746c6bce02b484210a1ce3676c8c";
+
+// Ordinary Stop's original SID profile. EligibleStop independently checks
+// original/Ready equality before any prefix effects.
+fn current_session_id_source_supported(payload: &serde_json::value::RawValue) -> bool {
+    let Ok(Some(sid)) = caws_native::invocation_project::payload_string(payload, "session_id")
+    else {
+        return false;
+    };
+    !sid.is_empty()
+        && !matches!(sid.as_str(), "unknown" | "." | "..")
+        && sid.len() <= 128
+        && sid
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+}
+
+fn stock_source_matches(
+    relative: &str,
+    actual: &str,
+    allow_current_session_id_source: bool,
+) -> bool {
+    STOCK
+        .iter()
+        .any(|(path, expected)| *path == relative && *expected == actual)
+        || (allow_current_session_id_source
+            && relative == "lib/session-id.sh"
+            && actual == CURRENT_SESSION_ID_SOURCE)
+}
 
 // Reviewed local source identities from component-comparison controlled-05's
 // reference.sharedFiles and baseline2188b06e runtime templates, with the
@@ -282,14 +312,21 @@ impl<'original, 'native> StockStopSelection<'original, 'native> {
                 canonical: &project.canonical_root,
                 caller: Path::new(original.caller_cwd()),
                 environment: original.caller_environment(),
+                allow_current_session_id_source: current_session_id_source_supported(
+                    original.original_payload(),
+                ),
             };
             validate_selection(&view, &context)?;
-            for &(relative, expected) in STOCK {
+            for &(relative, _) in STOCK {
                 checkpoint(original.deadline(), cancel)?;
                 let current = readset
                     .runtime_member(relative, &mut *cancel)
                     .map_err(Refusal::Invalidated)?;
-                if current.sha256 != expected {
+                if !stock_source_matches(
+                    relative,
+                    &current.sha256,
+                    context.allow_current_session_id_source,
+                ) {
                     return Err(unsupported(format!("Unreviewed stock source: {relative}")));
                 }
             }
@@ -349,6 +386,7 @@ struct Context<'a> {
     canonical: &'a Path,
     caller: &'a Path,
     environment: &'a BTreeMap<String, String>,
+    allow_current_session_id_source: bool,
 }
 struct Readset<'a> {
     rows: BTreeMap<(String, String, bool), &'a Value>,
@@ -671,12 +709,11 @@ fn validate_libraries(view: &Readset<'_>, context: &Context<'_>) -> Result<(), R
         let path = shared.join(name);
         view.confined(context.root, &path)?;
         view.info_kind(&path, "file")?;
-        let expected = STOCK
-            .iter()
-            .find(|(relative, _)| *relative == format!("lib/{name}"))
-            .unwrap()
-            .1;
-        if hash(&view.bytes(&path, false, false)?) != expected {
+        if !stock_source_matches(
+            &format!("lib/{name}"),
+            &hash(&view.bytes(&path, false, false)?),
+            context.allow_current_session_id_source,
+        ) {
             return Err(unsupported(format!(
                 "Selected stock library differs: {name}"
             )));
@@ -1216,6 +1253,110 @@ mod tests {
             }
         }
     }
+    #[test]
+    fn current_session_identity_source_requires_safe_original_stop_sid() {
+        use serde_json::value::RawValue;
+        for sid in [String::from("s"), String::from("s-._1"), "x".repeat(128)] {
+            let raw = RawValue::from_string(json!({"session_id":sid}).to_string()).unwrap();
+            assert!(current_session_id_source_supported(&raw));
+            assert!(stock_source_matches(
+                "lib/session-id.sh",
+                CURRENT_SESSION_ID_SOURCE,
+                true
+            ));
+        }
+        for sid in [
+            Value::Null,
+            json!(""),
+            json!("unknown"),
+            json!("."),
+            json!(".."),
+            json!("../escape"),
+            json!("a/b"),
+            json!("a\\b"),
+            json!("a@host"),
+            json!("a:b"),
+            json!("é"),
+            json!("a\n"),
+            json!("x".repeat(129)),
+            json!(1),
+            json!(false),
+            json!({}),
+            json!([]),
+        ] {
+            let raw = RawValue::from_string(json!({"session_id":sid}).to_string()).unwrap();
+            assert!(!current_session_id_source_supported(&raw), "{}", raw.get());
+        }
+        let missing = RawValue::from_string("{}".into()).unwrap();
+        assert!(!current_session_id_source_supported(&missing));
+    }
+    #[test]
+    fn current_session_identity_profile_cannot_bless_other_or_modified_sources() {
+        let historical = STOCK
+            .iter()
+            .find(|(name, _)| *name == "lib/session-id.sh")
+            .unwrap()
+            .1;
+        assert!(stock_source_matches("lib/session-id.sh", historical, false));
+        assert!(stock_source_matches("lib/session-id.sh", historical, true));
+        assert!(!stock_source_matches(
+            "lib/session-id.sh",
+            CURRENT_SESSION_ID_SOURCE,
+            false
+        ));
+        assert!(stock_source_matches(
+            "lib/session-id.sh",
+            CURRENT_SESSION_ID_SOURCE,
+            true
+        ));
+        assert!(!stock_source_matches(
+            "lib/emit.sh",
+            CURRENT_SESSION_ID_SOURCE,
+            true
+        ));
+        assert!(!stock_source_matches(
+            "lib/session-id.sh",
+            &hash(b"changed source"),
+            true
+        ));
+        let actual = fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../caws-cli/templates/hook-packs/shared/lib/session-id.sh"),
+        )
+        .unwrap();
+        assert_eq!(hash(&actual), CURRENT_SESSION_ID_SOURCE);
+    }
+    #[test]
+    fn current_session_identity_source_drift_invalidates_sealed_observation() {
+        fixture(|generation, home, _| {
+            let clock = clock();
+            let file = home.join("current-session-id.sh");
+            let bytes = fs::read(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../caws-cli/templates/hook-packs/shared/lib/session-id.sh"),
+            )
+            .unwrap();
+            fs::write(&file, &bytes).unwrap();
+            let mut recorder = Recorder::new(generation, &clock, home);
+            recorder.read(OperationKind::Read, &file);
+            let receipt = recorder.owner.seal(|| Ok(())).unwrap();
+            receipt.revalidate(|| Ok(())).unwrap();
+            let observed = Readset::new(&receipt)
+                .unwrap()
+                .bytes(&file, false, false)
+                .unwrap();
+            assert!(stock_source_matches(
+                "lib/session-id.sh",
+                &hash(&observed),
+                true
+            ));
+            fs::write(&file, b"changed after admission").unwrap();
+            assert_eq!(
+                receipt.revalidate(|| Ok(())).unwrap_err(),
+                format!("Selection dependency changed: read {}", file.display())
+            );
+        });
+    }
     fn clock() -> MonotonicDeadline {
         MonotonicDeadline::capture(Duration::from_secs(30)).unwrap()
     }
@@ -1231,6 +1372,7 @@ mod tests {
             canonical: home,
             caller: home,
             environment,
+            allow_current_session_id_source: false,
         }
     }
     fn environment(home: &Path) -> BTreeMap<String, String> {
@@ -1264,7 +1406,12 @@ mod tests {
             if entry.file_name() == "session-render-service-client.sh" {
                 continue;
             }
-            assert!(entry.file_type().unwrap().is_file());
+            let file_type = entry.file_type().unwrap();
+            // Interpreter caches are ignored and are not installed pack members.
+            if entry.file_name() == "__pycache__" && file_type.is_dir() {
+                continue;
+            }
+            assert!(file_type.is_file());
             fs::copy(entry.path(), target.join("lib").join(entry.file_name())).unwrap();
         }
     }

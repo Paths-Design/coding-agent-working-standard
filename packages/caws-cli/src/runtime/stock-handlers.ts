@@ -24,6 +24,7 @@ import type { ActiveInvocationSelection, SelectedHandler } from './selection';
 import {
   qualifiesForNativeSessionEndPrefix,
   qualifiesForNativeStartupProfile,
+  sessionIdSourceIdentities,
 } from './session-cache-admission';
 
 /** Compatibility identities, not trust inferred from a filename or the current template bytes. */
@@ -150,6 +151,7 @@ function heartbeatCliCompatible(environment: Readonly<Record<string, string>>): 
 
 function compatible(handler: SelectedHandler, context: StockHandlerContext): boolean {
   const { selection, environment } = context;
+  const sessionIdSources = sessionIdSourceIdentities(context.request);
   if (
     selection.configuration !== 'system' ||
     handler.kind !== 'stock' ||
@@ -199,7 +201,9 @@ function compatible(handler: SelectedHandler, context: StockHandlerContext): boo
         ) ||
         !(library.kind === 'surface'
           ? library.sha256 === CODEX_LIBRARIES[name]
-          : LIBRARIES[name]!.includes(library.sha256) && library.sha256 !== CODEX_LIBRARIES[name])
+          : (name === 'session-id.sh' ? sessionIdSources : LIBRARIES[name]!).includes(
+              library.sha256
+            ) && library.sha256 !== CODEX_LIBRARIES[name])
       )
         return false;
       const expected =
@@ -240,6 +244,7 @@ function compatible(handler: SelectedHandler, context: StockHandlerContext): boo
     }
     if (!qualifiesForNativeStartupProfile(context)) return false;
     const direct: Record<string, readonly string[]> = { ...STARTUP_SOURCES };
+    direct['lib/session-id.sh'] = sessionIdSources;
     for (const name of extra) direct['lib/' + name] = LIBRARIES[name]!;
     for (const [name, expected] of Object.entries(direct)) {
       const dependency = join(selection.runtimeDirectory, name);

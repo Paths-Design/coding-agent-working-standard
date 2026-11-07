@@ -7,6 +7,12 @@ const { spawnSync } = require('node:child_process');
 
 const SHARED = path.resolve(__dirname, '../../templates/hook-packs/shared');
 const A = '01a19f1c-5c86-7a71-a7a5-2970c0067bb4';
+const { environmentHookIdentity } = require('../../dist/runtime/identity');
+const {
+  supportedOriginalSessionId,
+  sessionIdSourceIdentities,
+} = require('../../dist/runtime/session-cache-admission');
+const { handlerEligibility } = require('../../dist/runtime/eligibility');
 const B = '01a19ee1-c1bc-7981-bf56-9f3b08b6b591';
 const OTHER = '01a1a23f-8c8c-7d93-bb8f-bbd0c50fad87';
 const NAMES = 'Python python3 python3.9 python3.11 python3.12 python3.13 python3.14';
@@ -200,4 +206,33 @@ test('a third chat reprieve cannot transfer through the shared PID record', () =
     }))
   );
   expect(results).toEqual(['no', 'no', 'yes'].map((stdout) => ({ status: 0, stdout, stderr: '' })));
+  // Join the actual shell PID fixture to the typed identity and reprieve reader.
+  for (const [id, expected] of [
+    [A, 'run'],
+    [B, 'run'],
+    [OTHER, 'reprieved'],
+  ]) {
+    const payload = { session_id: id };
+    const request = { payload, inputJson: JSON.stringify(payload) };
+    const environment = { CAWS_SESSION_ID: OTHER, CODEX_THREAD_ID: OTHER };
+    expect(supportedOriginalSessionId(request)).toBe(id);
+    expect(sessionIdSourceIdentities(request)).toContain(
+      'dac4866c1576b65732ab3eb5b350fd978b3b746c6bce02b484210a1ce3676c8c'
+    );
+    const sessionId = environmentHookIdentity(payload, environment, 'codex');
+    expect(sessionId).toBe(id);
+    expect(
+      handlerEligibility(
+        { name: 'worktree-write-guard.sh' },
+        {
+          home: path.join(home, '.caws'),
+          canonical: root,
+          vendorDirectory: '.codex',
+          sessionId,
+          event: 'pre_tool_use',
+          environment,
+        }
+      ).status
+    ).toBe(expected);
+  }
 });

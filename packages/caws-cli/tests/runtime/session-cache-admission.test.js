@@ -9,6 +9,7 @@ const childProcess = require('node:child_process');
 const {
   qualifiesForNativeSessionCache,
   qualifiesForNativeSessionEndPrefix,
+  supportedOriginalSessionId,
 } = require('../../dist/runtime/session-cache-admission');
 const templates = path.resolve(__dirname, '../../templates/hook-packs');
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -128,6 +129,116 @@ function snapshot(directory) {
   walk(directory, '');
   return rows;
 }
+function useCurrentSessionId() {
+  const file = selectedFile('session-id.sh');
+  fs.copyFileSync(path.join(templates, 'shared/lib/session-id.sh'), file);
+  selection.libraries['session-id.sh'].sha256 = sha(fs.readFileSync(file));
+  expect(selection.libraries['session-id.sh'].sha256).toBe(
+    'dac4866c1576b65732ab3eb5b350fd978b3b746c6bce02b484210a1ce3676c8c'
+  );
+  return file;
+}
+test.each(['native-1', 'native@host:1', 'x'.repeat(128)])(
+  'current helper admits supported original cache SID %s',
+  (sid) => {
+    payload({ ...request.payload, session_id: sid });
+    request.caller.environment.CAWS_SESSION_ID = 'foreign';
+    environment.CAWS_SESSION_ID = 'foreign';
+    useCurrentSessionId();
+    expect(supportedOriginalSessionId(request)).toBe(sid);
+    expect(qualify()).toBe(true);
+  }
+);
+test.each([
+  undefined,
+  null,
+  '',
+  'unknown',
+  '.',
+  '..',
+  '../escape',
+  'a/b',
+  'a\\b',
+  'x'.repeat(129),
+  'é',
+  '\ud800',
+  'a\n',
+  1,
+  false,
+  {},
+  [],
+])('current helper refuses unsupported original SID %p', (sid) => {
+  payload({ ...request.payload, session_id: sid });
+  request.caller.environment.CAWS_SESSION_ID = 'environment-only';
+  environment.CAWS_SESSION_ID = 'ready-only';
+  useCurrentSessionId();
+  expect(supportedOriginalSessionId(request)).toBeNull();
+  expect(qualify()).toBe(false);
+});
+test('current helper cannot acquire identity from the decoded projection alone', () => {
+  payload({ ...request.payload, session_id: 'original' });
+  useCurrentSessionId();
+  expect(qualify()).toBe(true);
+  request.inputJson = JSON.stringify({ ...request.payload, session_id: 'foreign' });
+  expect(supportedOriginalSessionId(request)).toBeNull();
+  expect(qualify()).toBe(false);
+  request.inputJson = '{';
+  expect(qualify()).toBe(false);
+});
+test.each(['codex', 'claude-code'])(
+  'current SessionEnd helper preserves original/independent identity agreement for %s',
+  (surface) => {
+    sessionEnd(surface);
+    useCurrentSessionId();
+    expect(qualifyEnd()).toBe(true);
+    for (const sid of ['foreign', null, '', 'unknown']) expect(qualifyEnd(sid)).toBe(false);
+  }
+);
+test('current helper bytes cannot be blessed by updated selection metadata', () => {
+  payload({ ...request.payload, session_id: 'original' });
+  const file = useCurrentSessionId();
+  expect(qualify()).toBe(true);
+  fs.appendFileSync(file, '\n# changed after source admission\n');
+  selection.libraries['session-id.sh'].sha256 = sha(fs.readFileSync(file));
+  expect(qualify()).toBe(false);
+});
+test('last original SID member determines current helper eligibility', () => {
+  payload({ ...request.payload, session_id: 'original' });
+  useCurrentSessionId();
+  const raw = JSON.stringify(request.payload);
+  request.inputJson = raw.replace(
+    '"session_id":"original"',
+    '"session_id":"unknown","session_\\u0069d":"original"'
+  );
+  expect(supportedOriginalSessionId(request)).toBe('original');
+  expect(qualify()).toBe(true);
+  request.inputJson = raw.replace(
+    '"session_id":"original"',
+    '"session_id":"original","session_id":"unknown"'
+  );
+  request.payload.session_id = 'unknown';
+  expect(supportedOriginalSessionId(request)).toBeNull();
+  expect(qualify()).toBe(false);
+});
+test.each(['symlink', 'machine-override', 'surface-override'])(
+  'current helper refuses %s even with identical bytes',
+  (change) => {
+    payload({ ...request.payload, session_id: 'original' });
+    const file = useCurrentSessionId();
+    expect(qualify()).toBe(true);
+    if (change === 'symlink') {
+      const retained = file + '.fixture-original';
+      fs.renameSync(file, retained);
+      fs.symlinkSync(retained, file);
+    } else {
+      const base = change === 'machine-override' ? home : runtime;
+      const override = path.join(base, 'surfaces/codex/lib/session-id.sh');
+      fs.mkdirSync(path.dirname(override), { recursive: true });
+      fs.copyFileSync(file, override);
+    }
+    expect(qualify()).toBe(false);
+  }
+);
 beforeEach(() => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-cache-admission-')));
   home = path.join(root, 'effective-home');
@@ -138,6 +249,10 @@ beforeEach(() => {
   fs.mkdirSync(path.join(checkout, '.caws/hooks'), { recursive: true });
   fs.mkdirSync(path.dirname(runtime), { recursive: true });
   fs.cpSync(path.join(templates, 'shared'), runtime, { recursive: true });
+  fs.copyFileSync(
+    path.join(__dirname, 'fixtures/reviewed-stock/lib/session-id.sh'),
+    path.join(runtime, 'lib/session-id.sh')
+  );
   for (const name of ['dispatch.sh', 'handler-env.sh'])
     fs.copyFileSync(path.join(templates, 'runtime', name), path.join(runtime, name));
   fs.cpSync(path.join(templates, 'codex/hooks/lib'), path.join(runtime, 'surfaces/codex/lib'), {

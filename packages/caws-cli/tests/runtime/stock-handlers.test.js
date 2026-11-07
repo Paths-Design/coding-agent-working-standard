@@ -26,6 +26,55 @@ function useCurrentMutationTargets() {
   fs.copyFileSync(path.join(templates, 'shared/lib/bash-mutation-targets.sh'), library.path);
   library.sha256 = digest(library.path);
 }
+function useCurrentSessionId() {
+  const library = selection.libraries['session-id.sh'];
+  fs.copyFileSync(path.join(templates, 'shared/lib/session-id.sh'), library.path);
+  library.sha256 = digest(library.path);
+  expect(library.sha256).toBe('dac4866c1576b65732ab3eb5b350fd978b3b746c6bce02b484210a1ce3676c8c');
+  return library;
+}
+test('current helper preserves the typed allow result for its original SID', async () => {
+  command('echo safe');
+  const handler = select();
+  useCurrentSessionId();
+  const result = await tryExecuteStockHandler(handler, context());
+  expect(result).not.toBeNull();
+  expect(result.exitCode).toBe(0);
+  expect(Buffer.from(result.stdout).toString()).toBe('');
+  expect(Buffer.from(result.stderr).toString()).toBe('');
+});
+test.each([undefined, null, '', 'unknown', '.', '..', '../escape', 'x'.repeat(129), 'é', 1, {}])(
+  'current handler helper does not infer unsupported SID %p',
+  (sid) => {
+    command('echo safe');
+    const handler = select();
+    useCurrentSessionId();
+    request.payload.session_id = sid;
+    request.inputJson = JSON.stringify(request.payload);
+    environment.CAWS_SESSION_ID = 'environment-only';
+    expect(tryExecuteStockHandler(handler, context())).toBeNull();
+  }
+);
+test('current Stop helper source drift refuses lease execution without shell replay', () => {
+  command('echo safe');
+  selection.surface = request.surface = 'opencode';
+  selection.event = request.event = 'stop';
+  selection.handlers = [
+    'goal-ac-gate.sh',
+    'plan-transcript-finalize.sh',
+    'session-log.sh',
+    'agent-stop.sh',
+  ].map((name) => select(name));
+  const handler = selection.handlers[3];
+  const library = useCurrentSessionId();
+  const { assertNativeStopAgentSelection } = require('../../dist/runtime/stock-handlers');
+  expect(() => assertNativeStopAgentSelection(handler, context(), 'preflight')).not.toThrow();
+  fs.appendFileSync(library.path, '\n# changed after prefix\n');
+  library.sha256 = digest(library.path);
+  expect(() => assertNativeStopAgentSelection(handler, context(), 'lease')).toThrow(
+    'Native Stop agent consumer changed after prefix; shell replay refused'
+  );
+});
 const legacyStartup = {
   'dispatch.sh': {
     sha256: '5f8a185f8b63e601aa29af3431d0ddafedb9a44f45d6a2d9279d32410fc2150f',
@@ -251,6 +300,10 @@ beforeEach(() => {
   project = path.join(directory, 'project');
   fs.mkdirSync(project);
   fs.cpSync(path.join(templates, 'shared'), runtime, { recursive: true });
+  fs.copyFileSync(
+    path.join(__dirname, 'fixtures/reviewed-stock/lib/session-id.sh'),
+    path.join(runtime, 'lib/session-id.sh')
+  );
   // This cohort exercises the existing reviewed native source identity.
   expect(digest(reviewedGuard)).toBe(reviewedGuardHash);
   fs.copyFileSync(reviewedGuard, path.join(runtime, 'block-dangerous.sh'));

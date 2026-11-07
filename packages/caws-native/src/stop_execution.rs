@@ -48,6 +48,16 @@ fn supported_session_id(sid: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
 
+fn original_session_matches_ready(
+    payload: &serde_json::value::RawValue,
+    ready_session_id: Option<&str>,
+) -> Result<bool, String> {
+    let sid = caws_native::invocation_project::payload_string(payload, "session_id")?;
+    Ok(sid
+        .as_deref()
+        .is_some_and(|sid| supported_session_id(sid) && ready_session_id == Some(sid)))
+}
+
 impl<'owners, 'native: 'owners> PregrantStop<'owners, 'native> {
     /// No eligible result escapes before the fresh generation bracket closes.
     /// Unsupported selection stays available for post-offer validation.
@@ -139,15 +149,14 @@ impl<'owners, 'native: 'owners> EligibleStop<'owners, 'native> {
                     original.original_payload(),
                     "cwd",
                 )?;
-                let sid = caws_native::invocation_project::payload_string(
+                let session_matches_ready = original_session_matches_ready(
                     original.original_payload(),
-                    "session_id",
+                    ready.session_id.as_deref(),
                 )?;
                 if !cwd.as_deref().is_some_and(|cwd| {
                     Path::new(cwd).is_absolute() && Path::new(cwd) == original.query_cwds()[0]
-                }) || !sid.as_deref().is_some_and(|sid| {
-                    supported_session_id(sid) && ready.session_id.as_deref() == Some(sid)
-                }) {
+                }) || !session_matches_ready
+                {
                     return Ok(None);
                 }
                 use sha2::{Digest, Sha256};
@@ -259,6 +268,28 @@ impl<'owners, 'native: 'owners> EligibleStop<'owners, 'native> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn original_session_identity_must_match_ready_before_prefix() {
+        use serde_json::value::RawValue;
+        let raw = RawValue::from_string(
+            serde_json::json!({"session_id":"original-A","cwd":"/repo"}).to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            original_session_matches_ready(&raw, Some("original-A")),
+            Ok(true)
+        );
+        assert_eq!(
+            original_session_matches_ready(&raw, Some("other-B")),
+            Ok(false)
+        );
+        assert_eq!(original_session_matches_ready(&raw, None), Ok(false));
+        let missing = RawValue::from_string(r#"{"cwd":"/repo"}"#.into()).unwrap();
+        assert_eq!(
+            original_session_matches_ready(&missing, Some("original-A")),
+            Ok(false)
+        );
+    }
     #[test]
     fn skipped_or_unsafe_session_ids_remain_unsupported_before_prefix_effects() {
         for sid in [

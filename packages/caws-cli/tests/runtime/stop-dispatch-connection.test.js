@@ -462,58 +462,61 @@ test.each(['structural', 'copied', 'request', 'signal'])(
 
 // Unit-domain connection: the prefix and native publication are boundary doubles;
 // the stock source checks, comparator receipt, late consumer and lease store are real.
-test('real CLI owner connects prefix, logger and late agent-stop lease application', async () => {
-  installRealStopSources();
-  installReviewedStopLibraries();
-  const seeded = heartbeatAgentActivity({
-    cawsDir: path.join(root, '.caws'),
-    identity: { session_id: 'supplied', platform: 'opencode' },
-    now: () => new Date(),
-    reason: 'manual_register',
-    context: {
-      repo_root: root,
-      cwd: root,
-      git_common_dir: path.join(root, '.git'),
-      git_dir: path.join(root, '.git'),
-      hook_pid: process.pid,
-      hostname: 'unit-domain',
-    },
-  });
-  expect(seeded.ok).toBe(true);
-  const lease = path.join(root, '.caws/leases/supplied.json');
-  const before = fs.readFileSync(lease);
-  lateGit.observe.mockImplementation(async () => {
-    trace.push('late-git');
-    expect(trace).toEqual([
-      'prefix',
-      'goal-ac-gate.sh',
-      'plan-transcript-finalize.sh',
-      'publication',
-      'agent-stop.sh',
-      'late-git',
-    ]);
-    expect(fs.readFileSync(lease)).toEqual(before);
-    return { status: 'resolved', commonDir: path.join(root, '.git') };
-  });
-  stock.tryExecuteStockHandler.mockImplementation(async (handler, options) => {
-    trace.push(handler.name);
-    if (handler.name !== 'agent-stop.sh') return completedHandler;
-    expect(options.request).toBe(request);
-    expect(options.signal).toBe(controller.signal);
-    expect(options.nativeStopLeaseContext).toBe(lateGit);
-    return realExecuteStockHandler(handler, options);
-  });
-  const prepared = await prepare();
-  const result = await prepared.dispatch(undefined, decode());
-  expect(result.nativeResult.exitCode).toBe(0);
-  expect(Buffer.from(result.nativeResult.stdout).toString()).toContain('native logger');
-  expect(lateGit.observe).toHaveBeenCalledTimes(1);
-  const stopped = JSON.parse(fs.readFileSync(lease));
-  expect(stopped.status).toBe('stopped');
-  expect(stopped.last_seen_reason).toBe('session_stop');
-  expect(stopped.stopped_at).toEqual(expect.any(String));
-  expect(compatibility).not.toHaveBeenCalled();
-});
+test.each(['reviewed', 'current'])(
+  'real CLI owner connects %s sources, prefix, logger and late agent-stop lease application',
+  async (profile) => {
+    installRealStopSources();
+    if (profile === 'reviewed') installReviewedStopLibraries();
+    const seeded = heartbeatAgentActivity({
+      cawsDir: path.join(root, '.caws'),
+      identity: { session_id: 'supplied', platform: 'opencode' },
+      now: () => new Date(),
+      reason: 'manual_register',
+      context: {
+        repo_root: root,
+        cwd: root,
+        git_common_dir: path.join(root, '.git'),
+        git_dir: path.join(root, '.git'),
+        hook_pid: process.pid,
+        hostname: 'unit-domain',
+      },
+    });
+    expect(seeded.ok).toBe(true);
+    const lease = path.join(root, '.caws/leases/supplied.json');
+    const before = fs.readFileSync(lease);
+    lateGit.observe.mockImplementation(async () => {
+      trace.push('late-git');
+      expect(trace).toEqual([
+        'prefix',
+        'goal-ac-gate.sh',
+        'plan-transcript-finalize.sh',
+        'publication',
+        'agent-stop.sh',
+        'late-git',
+      ]);
+      expect(fs.readFileSync(lease)).toEqual(before);
+      return { status: 'resolved', commonDir: path.join(root, '.git') };
+    });
+    stock.tryExecuteStockHandler.mockImplementation(async (handler, options) => {
+      trace.push(handler.name);
+      if (handler.name !== 'agent-stop.sh') return completedHandler;
+      expect(options.request).toBe(request);
+      expect(options.signal).toBe(controller.signal);
+      expect(options.nativeStopLeaseContext).toBe(lateGit);
+      return realExecuteStockHandler(handler, options);
+    });
+    const prepared = await prepare();
+    const result = await prepared.dispatch(undefined, decode());
+    expect(result.nativeResult.exitCode).toBe(0);
+    expect(Buffer.from(result.nativeResult.stdout).toString()).toContain('native logger');
+    expect(lateGit.observe).toHaveBeenCalledTimes(1);
+    const stopped = JSON.parse(fs.readFileSync(lease));
+    expect(stopped.status).toBe('stopped');
+    expect(stopped.last_seen_reason).toBe('session_stop');
+    expect(stopped.stopped_at).toEqual(expect.any(String));
+    expect(compatibility).not.toHaveBeenCalled();
+  }
+);
 
 function installRealStopSources() {
   const templates = path.join(__dirname, '../../templates/hook-packs');

@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { assertMachinePath } from '../init/machine-paths';
 import { resolveExecutionWorkdir } from './execution-workdir';
+import { parseJsonSource } from './json-custody';
 import type { RuntimeRequest } from './protocol';
 import type { ActiveInvocationSelection } from './selection';
 
@@ -35,8 +36,45 @@ const agentSurfaceProfiles = [
   'f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a',
   PREFIX['lib/agent-surface.sh']!,
 ];
-const identities = (relative: string): readonly string[] =>
-  relative === 'lib/agent-surface.sh' ? agentSurfaceProfiles : [PREFIX[relative]!];
+const CURRENT_SESSION_ID_SOURCE =
+  'dac4866c1576b65732ab3eb5b350fd978b3b746c6bce02b484210a1ce3676c8c';
+
+/** Cache/prefix identity domain. Ordinary Stop also checks its narrower
+ * native profile and original/Ready equality before prefix effects. */
+export function supportedOriginalSessionId(request: RuntimeRequest): string | null {
+  try {
+    const { root } = parseJsonSource(request.inputJson);
+    const node = root.kind === 'object' ? root.entries.get('session_id') : undefined;
+    if (node?.kind !== 'scalar' || typeof node.value !== 'string') return null;
+    const sid = node.value;
+    return sid === request.payload.session_id &&
+      sid !== '' &&
+      sid !== 'unknown' &&
+      sid !== '.' &&
+      sid !== '..' &&
+      Buffer.byteLength(sid, 'utf8') <= 128 &&
+      /^[A-Za-z0-9_.@:-]+$/.test(sid)
+      ? sid
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Source identity only; never a capability or session authority grant. */
+export function sessionIdSourceIdentities(request: RuntimeRequest): readonly string[] {
+  const historical = PREFIX['lib/session-id.sh']!;
+  return supportedOriginalSessionId(request) === null
+    ? [historical]
+    : [historical, CURRENT_SESSION_ID_SOURCE];
+}
+
+const identities = (relative: string, request?: RuntimeRequest): readonly string[] =>
+  relative === 'lib/session-id.sh' && request
+    ? sessionIdSourceIdentities(request)
+    : relative === 'lib/agent-surface.sh'
+      ? agentSurfaceProfiles
+      : [PREFIX[relative]!];
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const nativePath = (value: string): boolean =>
@@ -110,9 +148,10 @@ const SESSION_END_SOURCES: Readonly<Record<string, string>> = {
 
 // SessionEnd keeps its independent body/library identities and exact-path root
 // fallback. The two startup sources are checked together by the paired profile.
-function sessionEndIdentities(relative: string): readonly string[] {
+function sessionEndIdentities(relative: string, request: RuntimeRequest): readonly string[] {
   const expected = SESSION_END_SOURCES[relative];
   if (!expected) return [];
+  if (relative === 'lib/session-id.sh') return sessionIdSourceIdentities(request);
   return relative === 'lib/agent-surface.sh' ? [expected, exactPathAgentSurface] : [expected];
 }
 
@@ -239,7 +278,7 @@ export function qualifiesForNativeSessionEndPrefix(context: {
         !library ||
         library.kind !== kind ||
         library.path !== path.join(selection.runtimeDirectory, relative) ||
-        !sessionEndIdentities(relative).includes(library.sha256) ||
+        !sessionEndIdentities(relative, request).includes(library.sha256) ||
         !absent(home, path.join(home, 'surfaces', request.surface, 'lib', name)) ||
         (kind === 'shared' &&
           !absent(
@@ -251,7 +290,7 @@ export function qualifiesForNativeSessionEndPrefix(context: {
       required.add(relative);
     }
     for (const relative of required) {
-      const expected = sessionEndIdentities(relative);
+      const expected = sessionEndIdentities(relative, request);
       if (!expected.length || !pinned(selection.runtimeDirectory, relative, expected)) return false;
     }
     return true;
@@ -416,7 +455,7 @@ export function qualifiesForNativeSessionCache(context: {
         !library ||
         library.kind !== kind ||
         library.path !== path.join(selection.runtimeDirectory, relative) ||
-        !identities(relative).includes(library.sha256)
+        !identities(relative, request).includes(library.sha256)
       )
         return false;
       // Recheck higher-priority paths: selection is a prior observation and a
@@ -433,7 +472,8 @@ export function qualifiesForNativeSessionCache(context: {
     }
     for (const relative of Object.keys(PREFIX)) {
       if (relative === 'dispatch.sh' || relative === 'handler-env.sh') continue;
-      if (!pinned(selection.runtimeDirectory, relative)) return false;
+      if (!pinned(selection.runtimeDirectory, relative, identities(relative, request)))
+        return false;
     }
     return true;
   } catch {
