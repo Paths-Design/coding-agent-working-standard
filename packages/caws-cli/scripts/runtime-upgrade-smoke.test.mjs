@@ -241,7 +241,9 @@ test(
   'timeout stops an owned descendant before fixture cleanup',
   { skip: process.platform === 'win32' },
   async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'upgrade-timeout-'));
+    const parentRoot = process.env.CAWS_RELEASE_ARTIFACT_DIR ?? os.tmpdir();
+    fs.mkdirSync(parentRoot, { recursive: true });
+    const root = fs.mkdtempSync(path.join(parentRoot, 'upgrade-timeout-'));
     try {
       const ready = path.join(root, 'child-ready');
       const lateWrite = path.join(root, 'child-ran-after-timeout');
@@ -280,7 +282,9 @@ test(
       }
       assert.equal(childLateWrite, false);
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      // Failure may leave an owned custodian settling the original child.
+      // Preserve its root even when an assertion above fails.
+      console.log(`Retained timeout fixture: ${root}`);
     }
   }
 );

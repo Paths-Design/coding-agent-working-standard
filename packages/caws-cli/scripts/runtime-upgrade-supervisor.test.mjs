@@ -169,6 +169,39 @@ test('a target-written success artifact cannot replace live custodian completion
   assert.equal(result.qualificationCustody.uncertain, true);
 });
 
+for (const replacement of ['file', 'same-inode', 'symlink', 'fifo']) {
+  test(`custodian output pin refuses target ${replacement} substitution without blocking`, () => {
+    const { run } = fixture(`output-${replacement}`);
+    const replace =
+      replacement === 'file'
+        ? 'fs.writeFileSync(output,"forged-output")'
+        : replacement === 'same-inode'
+          ? 'fs.writeFileSync(output,"forged-output")'
+          : replacement === 'symlink'
+            ? 'fs.writeFileSync("outside-output","forged-output"); fs.symlinkSync(process.cwd()+"/outside-output",output)'
+            : 'require("child_process").execFileSync("mkfifo",[output])';
+    const move = replacement === 'same-inode' ? '' : 'fs.renameSync(output,output+"-held");';
+    const mutate =
+      replacement === 'same-inode'
+        ? `process.stdout.write('actual-output'); const t=setInterval(()=>{if(fs.statSync(output).size===13){clearInterval(t); ${replace}; process.exit(0)}},5);`
+        : `${move} ${replace};`;
+    const started = Date.now();
+    const result = run(
+      `const fs=require('fs'); const p=fs.readdirSync('.').find(x=>x.startsWith('command-custody-')); const output=p+'/stdout'; ${mutate}`
+    );
+    assert.equal(result.status, 0);
+    assert.equal(result.error?.code, 'ECUSTODY');
+    assert.equal(result.stdout, '');
+    assert.equal(result.qualificationCustody.output_verified, false);
+    assert.equal(result.qualificationCustody.uncertain, true);
+    assert.match(
+      result.qualificationCustody.output_errors.join(';'),
+      replacement === 'same-inode' ? /digest differs/ : /identity differs/
+    );
+    assert.ok(Date.now() - started < 3000, 'replacement cannot block a raw-file read');
+  });
+}
+
 test('slow request delivery cannot start a target after the original clock expires', async () => {
   const { root } = fixture('expired-launch');
   const supervisor = requireQualificationSupervisor(process.env.CAWS_QUALIFICATION_SUPERVISOR);

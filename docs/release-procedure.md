@@ -125,7 +125,11 @@ for cleanup observation; this does not extend the command's execution budget. If
 settlement remains unproven, the frontend returns uncertainty while the
 custodian retains the child. Command receipts identify the supervisor executable
 and retained exchange directory. A private pipe carries live completion; a
-target-written artifact cannot substitute for that observation.
+target-written artifact cannot substitute for that observation. The same private
+receipt binds output byte counts, hashes computed while draining the command
+pipes, and the custodian's held file identities. The adapter verifies those pins
+with bounded reads that refuse symlinks and nonregular files before using
+command output. Missing live pins leave the output unverified and retained.
 
 Linux uses a dedicated child subreaper and requires `ECHILD` after reaping the
 leader and adopted descendants. macOS observes only the original process group;

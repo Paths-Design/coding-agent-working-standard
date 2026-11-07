@@ -16,6 +16,57 @@ export function requireQualificationSupervisor(file) {
   return physical;
 }
 
+function readPinnedOutput(file, pin, limit) {
+  if (
+    !pin ||
+    !Number.isSafeInteger(pin.sizeBytes) ||
+    pin.sizeBytes < 0 ||
+    pin.sizeBytes > limit ||
+    limit > 16 * 1024 * 1024 ||
+    !/^[a-f0-9]{64}$/.test(pin.sha256 ?? '') ||
+    !/^[0-9]+$/.test(pin.device ?? '') ||
+    !/^[0-9]+$/.test(pin.inode ?? '')
+  )
+    throw new Error('missing or invalid live output pin');
+  const before = fs.lstatSync(file, { bigint: true });
+  const matches = (stat) =>
+    stat.isFile() &&
+    stat.dev.toString() === pin.device &&
+    stat.ino.toString() === pin.inode &&
+    stat.size === BigInt(pin.sizeBytes);
+  const same = (a, b) =>
+    ['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs'].every((key) => a[key] === b[key]);
+  if (!matches(before)) throw new Error('output identity differs from live custody receipt');
+  const fd = fs.openSync(
+    file,
+    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK
+  );
+  try {
+    const opened = fs.fstatSync(fd, { bigint: true });
+    if (!matches(opened) || !same(before, opened))
+      throw new Error('output changed before bounded read');
+    const bytes = Buffer.alloc(pin.sizeBytes);
+    let count = 0;
+    while (count < bytes.length) {
+      const read = fs.readSync(fd, bytes, count, bytes.length - count, count);
+      if (read === 0) throw new Error('output truncated during bounded read');
+      count += read;
+    }
+    const extra = Buffer.alloc(1);
+    if (fs.readSync(fd, extra, 0, 1, count) !== 0)
+      throw new Error('output exceeds live byte count');
+    const after = fs.fstatSync(fd, { bigint: true });
+    const named = fs.lstatSync(file, { bigint: true });
+    if (!matches(after) || !matches(named) || !same(opened, after) || !same(after, named))
+      throw new Error('output changed during bounded read');
+    if (crypto.createHash('sha256').update(bytes).digest('hex') !== pin.sha256)
+      throw new Error('output digest differs from live custody receipt');
+    return bytes;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 export function supervisedSpawn(supervisor, command, args, options) {
   supervisor = requireQualificationSupervisor(supervisor);
   const parent = options.env?.CAWS_QUALIFICATION_ARTIFACT_DIR;
@@ -82,7 +133,11 @@ export function supervisedSpawn(supervisor, command, args, options) {
   const readErrors = [];
   const read = (name) => {
     try {
-      const bytes = fs.readFileSync(path.join(root, name));
+      const bytes = readPinnedOutput(
+        path.join(root, name),
+        outcome?.[`${name}Pin`],
+        request.maxBuffer
+      );
       return options.encoding ? bytes.toString(options.encoding) : bytes;
     } catch (error) {
       readErrors.push(`${name}: ${error.message}`);
@@ -130,6 +185,8 @@ export function supervisedSpawn(supervisor, command, args, options) {
       retained_root: root,
       custodian_pid: reply?.custodianPid ?? null,
       supervisor: supervisorIdentity,
+      output_verified: valid && readErrors.length === 0,
+      output_errors: readErrors,
     },
   };
 }

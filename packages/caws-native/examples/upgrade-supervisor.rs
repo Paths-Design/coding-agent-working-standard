@@ -5,13 +5,14 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use caws_native::owned_group::{self, GroupSettlement, GroupStop};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     os::{
         fd::AsRawFd,
         unix::{
-            fs::OpenOptionsExt,
+            fs::{MetadataExt, OpenOptionsExt},
             process::{CommandExt, ExitStatusExt},
         },
     },
@@ -267,14 +268,27 @@ fn leader_exited(child: &Child) -> io::Result<bool> {
     Err(io::Error::other("unexpected child ownership observation"))
 }
 
+fn output_pin(file: &File, digest: &Sha256, captured: usize) -> io::Result<serde_json::Value> {
+    let metadata = file.metadata()?;
+    Ok(
+        serde_json::json!({"sha256": format!("{:x}", digest.clone().finalize()),
+        "sizeBytes": captured, "device": metadata.dev().to_string(),
+        "inode": metadata.ino().to_string()}),
+    )
+}
+
 struct Output {
     pipe: Option<Box<dyn Read>>,
     file: File,
     captured: usize,
     observed: u64,
     eof: bool,
+    digest: Sha256,
 }
 impl Output {
+    fn pin(&self) -> io::Result<serde_json::Value> {
+        output_pin(&self.file, &self.digest, self.captured)
+    }
     fn drain(&mut self, limit: usize) -> io::Result<bool> {
         let Some(pipe) = self.pipe.as_mut() else {
             return Ok(false);
@@ -292,6 +306,7 @@ impl Output {
                     self.observed = self.observed.saturating_add(count as u64);
                     let keep = count.min(limit.saturating_sub(self.captured));
                     self.file.write_all(&buffer[..keep])?;
+                    self.digest.update(&buffer[..keep]);
                     self.captured += keep;
                 }
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
@@ -357,6 +372,8 @@ fn custodian(request_path: &Path, started: u64, expires: u64) -> io::Result<()> 
                     "pid": 0, "status": null, "signal": null, "error": error.to_string(),
                     "errorCode": if error.raw_os_error() == Some(libc::ENOENT) { "ENOENT" } else { "ESPAWN" },
                     "durationMs": now()?.saturating_sub(started) / 1_000_000,
+                    "stdoutPin": output_pin(&stdout, &Sha256::new(), 0)?,
+                    "stderrPin": output_pin(&stderr, &Sha256::new(), 0)?,
                     "timeoutCleanup": null, "custody": {"directChildReaped": true,
                         "groupSettlement": "not_started", "descendantSettlement": "not_started",
                         "stdoutEof": true, "stderrEof": true, "uncertain": true}
@@ -388,6 +405,7 @@ fn custodian(request_path: &Path, started: u64, expires: u64) -> io::Result<()> 
         captured: 0,
         observed: 0,
         eof: false,
+        digest: Sha256::new(),
     };
     let mut err = Output {
         pipe: Some(Box::new(stderr_pipe)),
@@ -395,6 +413,7 @@ fn custodian(request_path: &Path, started: u64, expires: u64) -> io::Result<()> 
         captured: 0,
         observed: 0,
         eof: false,
+        digest: Sha256::new(),
     };
     let pipes_abandoned = error_code == Some("EPIPESETUP");
     if pipes_abandoned {
@@ -519,6 +538,7 @@ fn custodian(request_path: &Path, started: u64, expires: u64) -> io::Result<()> 
                 "durationMs": now().unwrap_or(expires).saturating_sub(started) / 1_000_000,
                 "timeoutCleanup": timeout_cleanup,
                 "stdoutBytes": out.captured, "stderrBytes": err.captured,
+                "stdoutPin": out.pin()?, "stderrPin": err.pin()?,
                 "stdoutObservedBytes": out.observed, "stderrObservedBytes": err.observed,
                 "custody": {"directChildReaped": true, "groupSettlement": "settled",
                     "descendantSettlement": if cfg!(target_os = "linux") { "subreaper_echild" } else { "escaped_descendants_unproven" },
