@@ -9,6 +9,7 @@ const { decodeDispatchGrant } = require('../../dist/runtime/live-protocol');
 const { RuntimeProtocolError } = require('../../dist/runtime/protocol');
 const { createNativeStopPrefixPort } = require('../../dist/runtime/session-cache-client');
 const context = require('../../dist/runtime/context');
+const realInvocationEnvironment = context.invocationEnvironment;
 const { compareCliIdentity } = require('../../dist/runtime/cli-identity');
 const { createCliIdentityUnitDomain } = require('../helpers/cli-identity-unit-domain');
 const { heartbeatAgentActivity } = require('../../dist/application/agent-heartbeat');
@@ -57,6 +58,18 @@ const completedPrefix = {
   diagnostic: null,
 };
 const completedHandler = { exitCode: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
+function installStartupPair(runtime, dispatch = 'current', preload = dispatch) {
+  for (const [name, cohort] of [
+    ['dispatch.sh', dispatch],
+    ['handler-env.sh', preload],
+  ]) {
+    const source =
+      cohort === 'current'
+        ? path.join(__dirname, '../../templates/hook-packs/runtime', name)
+        : path.join(__dirname, 'fixtures/reviewed-stock', name);
+    fs.copyFileSync(source, path.join(runtime, name));
+  }
+}
 
 test('Stop selectors require exact fields, identity, matching numeric profiles and invocation capabilities', () => {
   expect(decode()).toEqual(selector);
@@ -177,6 +190,7 @@ beforeEach(() => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-stop-connection-')));
   const runtime = path.join(root, 'runtime');
   fs.mkdirSync(runtime);
+  installStartupPair(runtime);
   fs.mkdirSync(path.join(root, '.caws'));
   trace = [];
   selection = {
@@ -398,13 +412,68 @@ test.each([{ BASH_ENV: '/foreign/startup' }, { CAWS_PRIOR_BASH_ENV: '/prior/star
   }
 );
 
-test.each([{}, { BASH_ENV: '' }, { CAWS_PRIOR_BASH_ENV: '' }])(
-  'absent and empty ambient startup remain inert: %j',
+test.each([{}, { BASH_ENV: '' }, { CAWS_PRIOR_BASH_ENV: '' }, { CAWS_PRIOR_BASH_ENV_SET: '' }])(
+  'historical startup pair preserves empty inherited controls: %j',
   async (environment) => {
+    installStartupPair(selection.runtimeDirectory, 'historical');
     Object.assign(request.caller.environment, environment);
     const prepared = await prepare();
     await prepared.dispatch(undefined, decode());
     expect(prefix.capture).toHaveBeenCalledTimes(1);
+  }
+);
+
+test.each(['BASH_ENV', 'CAWS_PRIOR_BASH_ENV', 'CAWS_PRIOR_BASH_ENV_SET'])(
+  'current startup pair rejects original presence of %s even when empty',
+  async (key) => {
+    request.caller.environment[key] = '';
+    const prepared = await prepare();
+    await expect(prepared.dispatch(undefined, decode())).rejects.toThrow(
+      'Native Stop grant disagrees with active invocation selection'
+    );
+    expect(prefix.capture).not.toHaveBeenCalled();
+    expect(nativePublication).not.toHaveBeenCalled();
+    expect(lateGit.observe).not.toHaveBeenCalled();
+    expect(stock.tryExecuteStockHandler).not.toHaveBeenCalled();
+    expect(compatibility).not.toHaveBeenCalled();
+  }
+);
+
+test.each(
+  ['BASH_ENV', 'CAWS_PRIOR_BASH_ENV', 'CAWS_PRIOR_BASH_ENV_SET'].flatMap((key) =>
+    ['', 'x'].map((value) => ({ key, value }))
+  )
+)('current startup pair checks the actual effective map: %j', async ({ key, value }) => {
+  expect(Object.hasOwn(request.caller.environment, key)).toBe(false);
+  jest.spyOn(context, 'invocationEnvironment').mockImplementation((caller) => ({
+    ...realInvocationEnvironment(caller),
+    [key]: value,
+  }));
+  const prepared = await prepare();
+  await expect(prepared.dispatch(undefined, decode())).rejects.toThrow(
+    'Native Stop grant disagrees with active invocation selection'
+  );
+  expect(prefix.capture).not.toHaveBeenCalled();
+  expect(nativePublication).not.toHaveBeenCalled();
+  expect(lateGit.observe).not.toHaveBeenCalled();
+  expect(stock.tryExecuteStockHandler).not.toHaveBeenCalled();
+  expect(compatibility).not.toHaveBeenCalled();
+});
+
+test.each(['dispatch.sh', 'handler-env.sh'])(
+  'a mixed startup pair refuses before effects when only %s is historical',
+  async (member) => {
+    fs.copyFileSync(
+      path.join(__dirname, 'fixtures/reviewed-stock', member),
+      path.join(selection.runtimeDirectory, member)
+    );
+    const prepared = await prepare();
+    await expect(prepared.dispatch(undefined, decode())).rejects.toThrow(
+      'Native Stop grant disagrees with active invocation selection'
+    );
+    expect(prefix.capture).not.toHaveBeenCalled();
+    expect(nativePublication).not.toHaveBeenCalled();
+    expect(compatibility).not.toHaveBeenCalled();
   }
 );
 

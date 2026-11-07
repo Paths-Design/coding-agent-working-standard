@@ -44,19 +44,6 @@ fn current_session_id_source_supported(payload: &serde_json::value::RawValue) ->
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
 
-fn stock_source_matches(
-    relative: &str,
-    actual: &str,
-    allow_current_session_id_source: bool,
-) -> bool {
-    STOCK
-        .iter()
-        .any(|(path, expected)| *path == relative && *expected == actual)
-        || (allow_current_session_id_source
-            && relative == "lib/session-id.sh"
-            && actual == CURRENT_SESSION_ID_SOURCE)
-}
-
 // Reviewed local source identities from component-comparison controlled-05's
 // reference.sharedFiles and baseline2188b06e runtime templates, with the
 // reviewed R06 guard-config and R19 reprieve shell/CJS cohorts. These pins prove stock source
@@ -229,6 +216,84 @@ const STOCK: &[(&str, &str)] = &[
     ),
 ];
 
+// Current guard helpers are inventory dependencies, not new Stop handlers.
+// The four selected handlers retain their historical identities. Admission
+// selects this entire source set; these identities confer no semantic profile.
+const CURRENT_SOURCE_DELTA: &[(&str, &str)] = &[
+    (
+        "dispatch.sh",
+        "ae1b3b5bae0028da2f5a87a41f55fe1a5a8b60eb63169361c50de2a44cf5cdd5",
+    ),
+    (
+        "handler-env.sh",
+        "04c7cb5485bfb1b5f3f64ab6ef0a17981db795dc5454134cdc257e7752b0ebdb",
+    ),
+    (
+        "lib/agent-surface.sh",
+        "455dbfc2bfcf3a5ca891449e1a5f51ce7d9a9a1203ff680bc5fa90fe933e5a8f",
+    ),
+    (
+        "lib/bash-mutation-targets.sh",
+        "07c69f9e0723ca6fdff0683f2f11e7cbeef83d153e44946569c190f226a43879",
+    ),
+    (
+        "lib/caws-state.sh",
+        "8a3484f121b0751e566cb7173406c1eb296154af3c1fa08ca09927acd7fdf837",
+    ),
+    (
+        "lib/heredoc.sh",
+        "dbb2382397ba26846021f10d8c7dddd721f15efe6de5c5f4efd4ce53403a41b0",
+    ),
+    (
+        "lib/worktree-claim-oracle.cjs",
+        "b16a51b7f721e7787c889374d59a33aec662e7bf2636305bda8eaaade73184e7",
+    ),
+    ("lib/session-id.sh", CURRENT_SESSION_ID_SOURCE),
+    (
+        "lib/bash-mutation-analysis.sh",
+        "434d7e7ef251b90e505a35318e8890ed7a17baf00c9150788a1945e81450b5ab",
+    ),
+    (
+        "lib/copy-roles.sh",
+        "676cfd51bdbdb86eba5e690f32cc903e9d53ca3de3d971d011e86a4a0cafb5b2",
+    ),
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StockCohort {
+    Historical,
+    HistoricalCurrentSid,
+    Current,
+}
+impl StockCohort {
+    fn original_startup_supported(self, environment: &BTreeMap<String, String>) -> bool {
+        self != Self::Current
+            || ["BASH_ENV", "CAWS_PRIOR_BASH_ENV", "CAWS_PRIOR_BASH_ENV_SET"]
+                .iter()
+                .all(|key| !environment.contains_key(*key))
+    }
+    fn sources(self) -> BTreeMap<&'static str, &'static str> {
+        let mut sources: BTreeMap<_, _> = STOCK.iter().copied().collect();
+        match self {
+            Self::Historical => {}
+            Self::HistoricalCurrentSid => {
+                sources.insert("lib/session-id.sh", CURRENT_SESSION_ID_SOURCE);
+            }
+            Self::Current => sources.extend(CURRENT_SOURCE_DELTA.iter().copied()),
+        }
+        sources
+    }
+    fn libraries(self) -> BTreeMap<String, &'static str> {
+        self.sources()
+            .into_iter()
+            .filter_map(|(name, digest)| {
+                name.strip_prefix("lib/")
+                    .map(|name| (name.to_owned(), digest))
+            })
+            .collect()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Refusal {
     /// Unsupported/custom/incomplete readset. Compatibility is an enclosing
@@ -316,17 +381,13 @@ impl<'original, 'native> StockStopSelection<'original, 'native> {
                     original.original_payload(),
                 ),
             };
-            validate_selection(&view, &context)?;
-            for &(relative, _) in STOCK {
+            let cohort = validate_selection(&view, &context)?;
+            for (relative, expected) in cohort.sources() {
                 checkpoint(original.deadline(), cancel)?;
                 let current = readset
                     .runtime_member(relative, &mut *cancel)
                     .map_err(Refusal::Invalidated)?;
-                if !stock_source_matches(
-                    relative,
-                    &current.sha256,
-                    context.allow_current_session_id_source,
-                ) {
+                if current.sha256 != expected {
                     return Err(unsupported(format!("Unreviewed stock source: {relative}")));
                 }
             }
@@ -577,7 +638,7 @@ fn empty_surface(value: &Value) -> bool {
             .values()
             .all(|value| value.as_object().is_some_and(|object| object.is_empty()))
 }
-fn validate_selection(view: &Readset<'_>, context: &Context<'_>) -> Result<(), Refusal> {
+fn validate_selection(view: &Readset<'_>, context: &Context<'_>) -> Result<StockCohort, Refusal> {
     // The reviewed shell defaults to its pinned CJS sibling. An explicit
     // Python parser selects executable bytes outside this stock source cohort.
     if context
@@ -690,36 +751,67 @@ fn validate_selection(view: &Readset<'_>, context: &Context<'_>) -> Result<(), R
             )));
         }
     }
-    validate_libraries(view, context)?;
+    let cohort = validate_libraries(view, context)?;
     validate_local_registration(view, context)?;
-    Ok(())
+    Ok(cohort)
 }
-fn validate_libraries(view: &Readset<'_>, context: &Context<'_>) -> Result<(), Refusal> {
+fn validate_libraries(view: &Readset<'_>, context: &Context<'_>) -> Result<StockCohort, Refusal> {
     let shared = context.root.join("lib");
-    let names: BTreeSet<String> = STOCK
-        .iter()
-        .filter_map(|(relative, _)| relative.strip_prefix("lib/").map(String::from))
-        .collect();
     view.confined(context.root, &shared)?;
-    if !view.exists(&shared)? || view.listing(&shared)? != names {
+    if !view.exists(&shared)? {
+        return Err(unsupported("Stock shared-library inventory differs"));
+    }
+    let names = view.listing(&shared)?;
+    let candidates: Vec<_> = [
+        StockCohort::Historical,
+        StockCohort::HistoricalCurrentSid,
+        StockCohort::Current,
+    ]
+    .into_iter()
+    .filter(|cohort| *cohort == StockCohort::Historical || context.allow_current_session_id_source)
+    .map(|cohort| (cohort, cohort.libraries()))
+    .filter(|(_, libraries)| libraries.keys().cloned().collect::<BTreeSet<_>>() == names)
+    .collect();
+    if candidates.is_empty() {
         return Err(unsupported("Stock shared-library inventory differs"));
     }
     validate_adapter_absence(view, context, &names)?;
+    let mut observed = BTreeMap::new();
     for name in &names {
         let path = shared.join(name);
         view.confined(context.root, &path)?;
         view.info_kind(&path, "file")?;
-        if !stock_source_matches(
-            &format!("lib/{name}"),
-            &hash(&view.bytes(&path, false, false)?),
-            context.allow_current_session_id_source,
-        ) {
+        let digest = hash(&view.bytes(&path, false, false)?);
+        if candidates
+            .iter()
+            .all(|(_, libraries)| libraries.get(name).copied() != Some(digest.as_str()))
+        {
             return Err(unsupported(format!(
                 "Selected stock library differs: {name}"
             )));
         }
+        observed.insert(name.clone(), digest);
     }
-    Ok(())
+    let matches: Vec<_> = candidates
+        .into_iter()
+        .filter(|(_, libraries)| {
+            libraries
+                .iter()
+                .all(|(name, digest)| observed.get(name).map(String::as_str) == Some(*digest))
+        })
+        .map(|(cohort, _)| cohort)
+        .collect();
+    if matches.len() != 1 {
+        return Err(unsupported("Selected stock source cohort differs"));
+    }
+    // Native owns the original snapshot only. The engine independently checks
+    // both original and actual effective maps before requesting prefix effects.
+    if !matches[0].original_startup_supported(context.environment) {
+        return Err(unsupported(
+            "Current stock startup requires original control absence",
+        ));
+    }
+    Ok(matches[0])
 }
 fn validate_adapter_absence(
     view: &Readset<'_>,
@@ -1259,11 +1351,6 @@ mod tests {
         for sid in [String::from("s"), String::from("s-._1"), "x".repeat(128)] {
             let raw = RawValue::from_string(json!({"session_id":sid}).to_string()).unwrap();
             assert!(current_session_id_source_supported(&raw));
-            assert!(stock_source_matches(
-                "lib/session-id.sh",
-                CURRENT_SESSION_ID_SOURCE,
-                true
-            ));
         }
         for sid in [
             Value::Null,
@@ -1291,34 +1378,24 @@ mod tests {
         assert!(!current_session_id_source_supported(&missing));
     }
     #[test]
-    fn current_session_identity_profile_cannot_bless_other_or_modified_sources() {
+    fn current_session_identity_source_is_the_exact_reviewed_cohort_member() {
         let historical = STOCK
             .iter()
             .find(|(name, _)| *name == "lib/session-id.sh")
             .unwrap()
             .1;
-        assert!(stock_source_matches("lib/session-id.sh", historical, false));
-        assert!(stock_source_matches("lib/session-id.sh", historical, true));
-        assert!(!stock_source_matches(
-            "lib/session-id.sh",
-            CURRENT_SESSION_ID_SOURCE,
-            false
-        ));
-        assert!(stock_source_matches(
-            "lib/session-id.sh",
-            CURRENT_SESSION_ID_SOURCE,
-            true
-        ));
-        assert!(!stock_source_matches(
-            "lib/emit.sh",
-            CURRENT_SESSION_ID_SOURCE,
-            true
-        ));
-        assert!(!stock_source_matches(
-            "lib/session-id.sh",
-            &hash(b"changed source"),
-            true
-        ));
+        assert_ne!(historical, CURRENT_SESSION_ID_SOURCE);
+        for cohort in [StockCohort::HistoricalCurrentSid, StockCohort::Current] {
+            assert_eq!(
+                cohort.sources()["lib/session-id.sh"],
+                CURRENT_SESSION_ID_SOURCE
+            );
+            assert_ne!(cohort.sources()["lib/emit.sh"], CURRENT_SESSION_ID_SOURCE);
+            assert_ne!(
+                cohort.sources()["lib/session-id.sh"],
+                hash(b"changed source")
+            );
+        }
         let actual = fs::read(
             Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../caws-cli/templates/hook-packs/shared/lib/session-id.sh"),
@@ -1345,11 +1422,10 @@ mod tests {
                 .unwrap()
                 .bytes(&file, false, false)
                 .unwrap();
-            assert!(stock_source_matches(
-                "lib/session-id.sh",
-                &hash(&observed),
-                true
-            ));
+            assert_eq!(
+                hash(&observed),
+                StockCohort::Current.sources()["lib/session-id.sh"]
+            );
             fs::write(&file, b"changed after admission").unwrap();
             assert_eq!(
                 receipt.revalidate(|| Ok(())).unwrap_err(),
@@ -1419,18 +1495,36 @@ mod tests {
         generation: &GenerationReceipt,
         home: &Path,
         root: &Path,
-    ) -> Result<(), Refusal> {
+    ) -> Result<StockCohort, Refusal> {
+        library_admission_with_sid(generation, home, root, true)
+    }
+    fn library_admission_with_sid(
+        generation: &GenerationReceipt,
+        home: &Path,
+        root: &Path,
+        allow_current_sid: bool,
+    ) -> Result<StockCohort, Refusal> {
+        library_admission_with_change(generation, home, root, allow_current_sid, || {})
+    }
+    fn library_admission_with_change(
+        generation: &GenerationReceipt,
+        home: &Path,
+        root: &Path,
+        allow_current_sid: bool,
+        after_seal: impl FnOnce(),
+    ) -> Result<StockCohort, Refusal> {
         let clock = clock();
         let env = environment(home);
-        let context = context(home, root, &env);
+        let mut context = context(home, root, &env);
+        context.allow_current_session_id_source = allow_current_sid;
         let mut recorder = Recorder::new(generation, &clock, home);
         let directory = root.join("lib");
         recorder.confined(root, &directory);
         recorder.read(OperationKind::Exists, &directory);
         recorder.read(OperationKind::List, &directory);
-        let names = STOCK
-            .iter()
-            .filter_map(|(name, _)| name.strip_prefix("lib/").map(String::from))
+        let names = fs::read_dir(&directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
             .collect();
         recorder.adapter_dependencies(home, root, &names, None);
         for entry in fs::read_dir(&directory).unwrap() {
@@ -1442,6 +1536,7 @@ mod tests {
             }
         }
         let receipt = recorder.owner.seal(|| Ok(())).unwrap();
+        after_seal();
         receipt
             .revalidate(|| Ok(()))
             .map_err(Refusal::Invalidated)?;
@@ -1455,8 +1550,202 @@ mod tests {
             assert!(!root.join("lib/guard-config.py").exists());
             assert!(root.join("lib/guard-config.cjs").is_file());
             assert!(root.join("lib/reprieve-reader.cjs").is_file());
-            library_admission(generation, home, &root).unwrap();
+            assert_eq!(
+                library_admission(generation, home, &root).unwrap(),
+                StockCohort::Current
+            );
+            assert!(matches!(
+                library_admission_with_sid(generation, home, &root, false),
+                Err(Refusal::Unsupported(_))
+            ));
         });
+    }
+
+    // These are actual previously reviewed source bytes, retained in repository
+    // fixtures so shallow CI checkouts need no access to historical Git objects.
+    const HISTORICAL_LIBRARY_FIXTURES: &[(&str, &str)] = &[
+        ("agent-surface.sh", "agent-surface-empty-lookup.sh"),
+        (
+            "bash-mutation-targets.sh",
+            "reviewed-stock/bash-mutation-targets.sh",
+        ),
+        ("caws-state.sh", "reviewed-stock/caws-state.sh"),
+        ("heredoc.sh", "reviewed-stock/heredoc.sh"),
+        ("session-id.sh", "reviewed-stock/lib/session-id.sh"),
+        (
+            "worktree-claim-oracle.cjs",
+            "reviewed-stock/worktree-claim-oracle.cjs",
+        ),
+    ];
+    fn historical_library(name: &str) -> Vec<u8> {
+        let fixture = HISTORICAL_LIBRARY_FIXTURES
+            .iter()
+            .find(|(member, _)| *member == name)
+            .unwrap()
+            .1;
+        let bytes = fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../caws-cli/tests/runtime/fixtures")
+                .join(fixture),
+        )
+        .unwrap();
+        let relative = format!("lib/{name}");
+        assert_eq!(
+            hash(&bytes),
+            StockCohort::Historical.sources()[relative.as_str()]
+        );
+        bytes
+    }
+    fn historical_libraries(root: &Path) {
+        repository_libraries(root);
+        for (name, _) in HISTORICAL_LIBRARY_FIXTURES {
+            fs::write(root.join("lib").join(name), historical_library(name)).unwrap();
+        }
+        for name in ["bash-mutation-analysis.sh", "copy-roles.sh"] {
+            fs::remove_file(root.join("lib").join(name)).unwrap();
+        }
+    }
+    #[test]
+    fn complete_historical_and_reviewed_sid_cohorts_remain_distinct() {
+        fixture(|generation, home, _| {
+            let root = home.join("historical-stock");
+            historical_libraries(&root);
+            assert_eq!(
+                library_admission_with_sid(generation, home, &root, false).unwrap(),
+                StockCohort::Historical
+            );
+            assert_eq!(
+                library_admission(generation, home, &root).unwrap(),
+                StockCohort::Historical
+            );
+            let current_sid = fs::read(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../caws-cli/templates/hook-packs/shared/lib/session-id.sh"),
+            )
+            .unwrap();
+            fs::write(root.join("lib/session-id.sh"), current_sid).unwrap();
+            assert_eq!(
+                library_admission(generation, home, &root).unwrap(),
+                StockCohort::HistoricalCurrentSid
+            );
+            assert!(matches!(
+                library_admission_with_sid(generation, home, &root, false),
+                Err(Refusal::Unsupported(_))
+            ));
+        });
+    }
+    #[test]
+    fn mixing_current_and_historical_members_refuses_as_a_complete_set() {
+        fixture(|generation, home, _| {
+            let root = home.join("current-mixed");
+            repository_libraries(&root);
+            for (name, _) in HISTORICAL_LIBRARY_FIXTURES {
+                let file = root.join("lib").join(name);
+                let current = fs::read(&file).unwrap();
+                fs::write(&file, historical_library(name)).unwrap();
+                assert!(
+                    matches!(
+                        library_admission(generation, home, &root),
+                        Err(Refusal::Unsupported(_))
+                    ),
+                    "mixed current member {name}"
+                );
+                fs::write(&file, &current).unwrap();
+                assert_eq!(
+                    library_admission(generation, home, &root).unwrap(),
+                    StockCohort::Current
+                );
+            }
+            for name in ["bash-mutation-analysis.sh", "copy-roles.sh"] {
+                let file = root.join("lib").join(name);
+                let current = fs::read(&file).unwrap();
+                fs::remove_file(&file).unwrap();
+                assert!(
+                    matches!(
+                        library_admission(generation, home, &root),
+                        Err(Refusal::Unsupported(_))
+                    ),
+                    "missing current member {name}"
+                );
+                fs::write(&file, current).unwrap();
+            }
+            let old = home.join("historical-mixed");
+            historical_libraries(&old);
+            for (name, _) in HISTORICAL_LIBRARY_FIXTURES
+                .iter()
+                .filter(|(name, _)| *name != "session-id.sh")
+            {
+                let file = old.join("lib").join(name);
+                fs::copy(root.join("lib").join(name), &file).unwrap();
+                assert!(
+                    matches!(
+                        library_admission(generation, home, &old),
+                        Err(Refusal::Unsupported(_))
+                    ),
+                    "mixed historical member {name}"
+                );
+                fs::write(file, historical_library(name)).unwrap();
+            }
+            for name in ["bash-mutation-analysis.sh", "copy-roles.sh"] {
+                let file = old.join("lib").join(name);
+                fs::copy(root.join("lib").join(name), &file).unwrap();
+                assert!(
+                    matches!(
+                        library_admission(generation, home, &old),
+                        Err(Refusal::Unsupported(_))
+                    ),
+                    "extra historical member {name}"
+                );
+                fs::remove_file(file).unwrap();
+            }
+        });
+    }
+    #[test]
+    fn changing_to_another_complete_cohort_invalidates_the_original_readset() {
+        fixture(|generation, home, _| {
+            let root = home.join("changing-cohort");
+            repository_libraries(&root);
+            let result = library_admission_with_change(generation, home, &root, true, || {
+                historical_libraries(&root);
+            });
+            assert!(matches!(result, Err(Refusal::Invalidated(message))
+                if message.contains("Selection dependency changed")));
+            // The replacement is independently admissible on a fresh capture;
+            // that cannot rescue the invalidated original observation.
+            assert_eq!(
+                library_admission_with_sid(generation, home, &root, false).unwrap(),
+                StockCohort::Historical
+            );
+        });
+    }
+    #[test]
+    fn current_cohort_requires_original_startup_absence_including_empty_values() {
+        let absent = BTreeMap::new();
+        assert!(StockCohort::Current.original_startup_supported(&absent));
+        for name in ["BASH_ENV", "CAWS_PRIOR_BASH_ENV", "CAWS_PRIOR_BASH_ENV_SET"] {
+            for value in ["", "x", "/custom/startup"] {
+                let environment = BTreeMap::from([(name.to_owned(), value.to_owned())]);
+                assert!(
+                    !StockCohort::Current.original_startup_supported(&environment),
+                    "{name}={value}"
+                );
+                assert!(StockCohort::Historical.original_startup_supported(&environment));
+                assert!(StockCohort::HistoricalCurrentSid.original_startup_supported(&environment));
+            }
+        }
+        for name in ["dispatch.sh", "handler-env.sh"] {
+            let actual = fs::read(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../caws-cli/templates/hook-packs/runtime")
+                    .join(name),
+            )
+            .unwrap();
+            assert_eq!(hash(&actual), StockCohort::Current.sources()[name]);
+            assert_ne!(
+                StockCohort::Current.sources()[name],
+                StockCohort::Historical.sources()[name]
+            );
+        }
     }
     #[test]
     fn guard_config_and_reprieve_dependencies_and_unknown_inventory_refuse_before_effects() {

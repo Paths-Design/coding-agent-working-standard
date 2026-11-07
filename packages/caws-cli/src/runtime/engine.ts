@@ -57,6 +57,7 @@ import {
 import {
   qualifiesForNativeSessionCache,
   qualifiesForNativeSessionEndPrefix,
+  qualifiesForNativeStartupProfile,
 } from './session-cache-admission';
 import {
   sessionCacheInputSupported,
@@ -587,6 +588,7 @@ export async function prepareRuntimeInvocation(
             request.stopPrefix !== STOP_PREFIX_CAPABILITY ||
             request.sessionStore !== TRANSCRIPT_STORE_CAPABILITY ||
             request.sessionPublication !== SESSION_PUBLICATION_CAPABILITY ||
+            !qualifiesForNativeStartupProfile({ request, selection, environment }) ||
             Boolean(priorBashEnvironment(selection, environment)) ||
             typeof sid !== 'string' ||
             sid !== identity.sessionId ||
