@@ -172,7 +172,8 @@ impl Selection {
         }
         let generation = (|| -> Result<GenerationSelection, String> {
             let mut cancel = || original_deadline.check().map_err(|e| e.to_string());
-            let mut verify = Verification::new(original_deadline.expires(), &mut cancel);
+            let preparation_end = compatibility::preparation_expires(&original_deadline, None)?;
+            let mut verify = Verification::new(preparation_end, &mut cancel);
             verify.checkpoint()?;
             if !home.is_absolute() {
                 return Err("CAWS_HOME must be absolute".into());
@@ -227,11 +228,13 @@ impl Selection {
             original_deadline,
             policy_deadline,
         };
-        selected.checkpoint().map_err(|message| SelectionFailure {
-            message,
-            original_deadline: Arc::clone(&selected.original_deadline),
-            delivery_deadline: Some(Arc::clone(selected.delivery_deadline())),
-        })?;
+        selected
+            .preparation_checkpoint()
+            .map_err(|message| SelectionFailure {
+                message,
+                original_deadline: Arc::clone(&selected.original_deadline),
+                delivery_deadline: Some(Arc::clone(selected.delivery_deadline())),
+            })?;
         Ok(selected)
     }
 
@@ -249,12 +252,16 @@ impl Selection {
         Ok(())
     }
 
-    fn expires(&self) -> Instant {
-        self.policy_deadline
-            .as_ref()
-            .map_or(self.original_deadline.expires(), |policy| {
-                policy.expires().min(self.original_deadline.expires())
-            })
+    fn preparation_checkpoint(&self) -> Result<(), String> {
+        self.checkpoint()?;
+        let end = compatibility::preparation_expires(
+            &self.original_deadline,
+            self.policy_deadline.as_deref(),
+        )?;
+        if Instant::now() >= end {
+            return Err("Installed preparation deadline expired".into());
+        }
+        Ok(())
     }
 
     fn forwarded_deadline(&self) -> DeadlineEnvelope {
@@ -267,9 +274,15 @@ impl Selection {
     pub(crate) fn command(&self, invocation: &Invocation) -> Result<Command, String> {
         // Recheck the selected generation, never the pointer. This detects changes
         // before this launch attempt; it does not claim custody of future imports.
-        self.checkpoint()?;
-        let mut cancel = || self.checkpoint();
-        let mut verify = Verification::new(self.expires(), &mut cancel);
+        self.preparation_checkpoint()?;
+        let mut cancel = || self.preparation_checkpoint();
+        let mut verify = Verification::new(
+            compatibility::preparation_expires(
+                &self.original_deadline,
+                self.policy_deadline.as_deref(),
+            )?,
+            &mut cancel,
+        );
         self.generation.revalidate(&mut verify)?;
         if self.inspected_digest != self.generation.inspected_digest {
             return Err("Selected manifest changed before launch".into());
@@ -281,7 +294,7 @@ impl Selection {
                     .arg(self.generation.member_path("bootstrap.py", &mut verify)?)
                     .args(&invocation.original);
                 // run retains the original clock while supervising compatibility.
-                self.checkpoint()?;
+                self.preparation_checkpoint()?;
                 Ok(command)
             }
             Some(entry) => {
@@ -380,7 +393,7 @@ impl Selection {
                     .arg(&self.inspected_digest)
                     .arg("--configuration")
                     .arg(configuration);
-                self.checkpoint()?;
+                self.preparation_checkpoint()?;
                 Ok(command)
             }
         }
@@ -451,7 +464,7 @@ pub fn run() -> u8 {
         }
     };
     let mut command = match selected.command(&invocation).and_then(|command| {
-        selected.checkpoint()?;
+        selected.preparation_checkpoint()?;
         Ok(command)
     }) {
         Ok(command) => command,

@@ -17,6 +17,46 @@ mod installed_entry;
 mod installed_generation;
 
 static SEQUENCE: AtomicUsize = AtomicUsize::new(0);
+
+#[test]
+fn delayed_command_refuses_before_original_expiry_without_renewal() {
+    use caws_native::monotonic_deadline::MonotonicDeadline;
+    use std::time::{Duration, Instant};
+
+    let fixture = Fixture::new();
+    fixture.generation_with_entry(
+        Some(b"#!/bin/sh\n: > \"$CAWS_HOME/frontend-witness\"\nexit 0\n"),
+        installed_v2_metadata(),
+    );
+    let original = MonotonicDeadline::capture(Duration::from_millis(2000)).unwrap();
+    let expected = original.envelope();
+    let selected =
+        installed_entry::Selection::read_with_deadline(&fixture.0, original.clone()).unwrap();
+    let invocation =
+        installed_entry::Invocation::parse(&["codex".into(), "stop".into(), "--system".into()])
+            .unwrap();
+    let command = selected.command(&invocation).unwrap();
+    let carrier = deadline_carrier(&command);
+    assert_eq!(carrier["startedNs"], expected.started_ns.to_string());
+    assert_eq!(carrier["expiresNs"], expected.expires_ns.to_string());
+
+    // Preparation ends 600ms before the original two-second expiry. The
+    // observation is inside that reserve, not after deadline authority expires.
+    let observation = original.expires() - Duration::from_millis(500);
+    std::thread::sleep(observation.saturating_duration_since(Instant::now()));
+    original.check().expect("reject before original expiry");
+    let error = selected.command(&invocation).unwrap_err();
+    assert!(
+        error.contains("Installed preparation deadline expired"),
+        "{error}"
+    );
+    original
+        .check()
+        .expect("refusal retains original delivery time");
+    assert_eq!(original.envelope(), expected);
+    assert!(!fixture.0.join("frontend-witness").exists());
+}
+
 struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {

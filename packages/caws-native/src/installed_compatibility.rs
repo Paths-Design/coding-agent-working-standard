@@ -301,6 +301,18 @@ impl<'a> CompatibilityBudget<'a> {
         self.clocks_live() && Instant::now() < self.foreground_end
     }
 }
+/// Preparation uses the existing execution cutoff, leaving the same bounded
+/// refusal-delivery interval. This does not construct or forward a new clock.
+pub(super) fn preparation_expires(
+    original: &MonotonicDeadline,
+    policy: Option<&MonotonicDeadline>,
+) -> Result<Instant, String> {
+    CompatibilityBudget::new(original, policy)
+        .map_err(|error| error.to_string())?
+        .execution_end
+        .ok_or_else(|| "installed preparation interval unavailable".to_owned())
+}
+
 fn allowed(budget: &CompatibilityBudget<'_>) -> bool {
     budget.foreground_allowed()
 }
@@ -404,19 +416,31 @@ pub(crate) fn refuse_before_dispatch(
     let Ok(_signals) = Signals::install() else {
         return policy(event);
     };
+    emit_refusal(event, error, deadline, 1, 2);
+    policy(event)
+}
+
+fn emit_refusal(
+    event: &str,
+    error: &str,
+    deadline: Option<&CompatibilityBudget<'_>>,
+    stdout: RawFd,
+    stderr: RawFd,
+) {
     let message = format!(
         "CAWS native installed entry: {}",
         error.chars().take(512).collect::<String>()
     );
+    // Codex requires the blocking reason on stderr. Optional JSON on a full
+    // stdout pipe must not consume that reason's remaining delivery interval.
+    emit(stderr, format!("[{message}]\n").as_bytes(), deadline);
     if event == "pre_tool_use" {
         let mut json =
             serde_json::to_vec(&serde_json::json!({"decision":"block", "reason":message}))
                 .unwrap_or_default();
         json.push(b'\n');
-        emit(1, &json, deadline);
+        emit(stdout, &json, deadline);
     }
-    emit(2, format!("[{message}]\n").as_bytes(), deadline);
-    policy(event)
 }
 fn incomplete(deadline: &CompatibilityBudget<'_>, reason: &str) {
     let bytes = format!("[CAWS native installed entry: delivery incomplete; {reason}]\n");
@@ -1564,6 +1588,66 @@ fn pump_child(custody: &mut Custody, deadline: &CompatibilityBudget<'_>) -> ! {
 mod budget_tests {
     use super::*;
     use caws_native::monotonic_deadline::DeadlineEnvelope;
+    use std::io::{Read, Write};
+
+    fn full_socket() -> (UnixStream, UnixStream) {
+        let (mut writer, reader) = UnixStream::pair().unwrap();
+        writer.set_nonblocking(true).unwrap();
+        loop {
+            match writer.write(&[b'x'; 8192]) {
+                Ok(0) => panic!("socket unexpectedly closed"),
+                Ok(_) => (),
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
+                Err(error) => panic!("socket fill failed: {error}"),
+            }
+        }
+        (writer, reader)
+    }
+
+    #[test]
+    fn refusal_reason_precedes_blocked_optional_stdout() {
+        let (out, _out_reader) = full_socket();
+        let (err, mut err_reader) = UnixStream::pair().unwrap();
+        err_reader.set_nonblocking(true).unwrap();
+        let original = MonotonicDeadline::capture(Duration::from_millis(200)).unwrap();
+        let envelope = original.envelope();
+        let budget = CompatibilityBudget::new(&original, None).unwrap();
+        emit_refusal(
+            "pre_tool_use",
+            "preparation exhausted",
+            Some(&budget),
+            out.as_raw_fd(),
+            err.as_raw_fd(),
+        );
+        let mut bytes = [0; 512];
+        let count = err_reader.read(&mut bytes).unwrap();
+        assert_eq!(
+            &bytes[..count],
+            b"[CAWS native installed entry: preparation exhausted]\n"
+        );
+        assert!(!budget.foreground_allowed());
+        assert_eq!(original.envelope(), envelope);
+    }
+
+    #[test]
+    fn full_output_channels_cannot_renew_the_refusal_budget() {
+        let (out, _out_reader) = full_socket();
+        let (err, _err_reader) = full_socket();
+        let original = MonotonicDeadline::capture(Duration::from_millis(200)).unwrap();
+        let envelope = original.envelope();
+        let budget = CompatibilityBudget::new(&original, None).unwrap();
+        let started = Instant::now();
+        emit_refusal(
+            "pre_tool_use",
+            "bounded failure",
+            Some(&budget),
+            out.as_raw_fd(),
+            err.as_raw_fd(),
+        );
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(!budget.foreground_allowed());
+        assert_eq!(original.envelope(), envelope);
+    }
 
     #[test]
     #[cfg(target_os = "macos")]
@@ -1606,6 +1690,11 @@ mod budget_tests {
         let budget = CompatibilityBudget::new(&original, None).unwrap();
 
         assert_eq!(
+            preparation_expires(&original, None).unwrap(),
+            budget.execution_end.unwrap()
+        );
+
+        assert_eq!(
             original
                 .expires()
                 .checked_duration_since(budget.execution_end.unwrap()),
@@ -1633,6 +1722,11 @@ mod budget_tests {
         let selected = MonotonicDeadline::receive(selected_envelope).unwrap();
         let budget = CompatibilityBudget::new(&original, Some(&selected)).unwrap();
         let retained_end = original.expires().min(selected.expires());
+
+        assert_eq!(
+            preparation_expires(&original, Some(&selected)).unwrap(),
+            budget.execution_end.unwrap()
+        );
 
         assert_eq!(
             retained_end.checked_duration_since(budget.execution_end.unwrap()),
@@ -1672,6 +1766,10 @@ mod budget_tests {
         for milliseconds in [1, 2] {
             let original = MonotonicDeadline::capture(Duration::from_millis(milliseconds)).unwrap();
             let budget = CompatibilityBudget::new(&original, None).unwrap();
+            assert_eq!(
+                preparation_expires(&original, None).unwrap_err(),
+                "installed preparation interval unavailable"
+            );
             assert!(
                 budget.execution_end.is_none(),
                 "{milliseconds}ms must not create a dispatch phase"
