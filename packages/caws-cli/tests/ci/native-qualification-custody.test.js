@@ -214,6 +214,19 @@ test('growing input is bounded and rejected before command launch', () => {
   expect(fs.existsSync(marker)).toBe(false);
 });
 
+test.each(['symlink', 'hardlink', 'oversize'])('public receipt reader rejects %s', (kind) => {
+  const custody = open();
+  const original = path.join(fixture, 'receipt-original.json');
+  const selected = path.join(fixture, 'receipt-selected.json');
+  fs.writeFileSync(original, 'original');
+  if (kind === 'symlink') fs.symlinkSync(original, selected);
+  else if (kind === 'hardlink') fs.linkSync(original, selected);
+  else fs.writeFileSync(selected, 'x'.repeat(129));
+  const opened = jest.spyOn(fs, 'openSync');
+  expect(() => custody.readPublic(relative(selected), 128)).toThrow();
+  expect(opened.mock.calls.some(([file]) => file === selected)).toBe(false);
+});
+
 test('preserves the first receipt and refuses replacement', () => {
   const custody = open();
   const first = custody.record('observation', { observed: 'original' });

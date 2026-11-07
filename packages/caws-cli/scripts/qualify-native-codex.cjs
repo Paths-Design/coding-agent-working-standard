@@ -12,6 +12,23 @@ const insist = (value, message) => {
   if (!value) throw Error(message);
 };
 const quote = (value) => "'" + value.replace(/'/g, "'\\''") + "'";
+function observerIdentity(custody) {
+  const observed = custody.readPublic('scripts/qualify-native-codex.cjs', 1024 * 1024);
+  return {
+    path: observed.path,
+    sha256: observed.sha256,
+    sizeBytes: observed.sizeBytes,
+    mode: observed.mode,
+  };
+}
+function revalidateObserver(custody, before) {
+  const after = observerIdentity(custody);
+  insist(
+    ['path', 'sha256', 'sizeBytes', 'mode'].every((key) => after[key] === before[key]),
+    'Observer source changed during operation'
+  );
+  return after;
+}
 
 function settings(custody) {
   const { request, inputs } = custody,
@@ -229,6 +246,7 @@ function retireOwnedMcp(custody, selection) {
 function prepare(custody) {
   const { request, inputs } = custody;
   const inputReadbackBefore = custody.revalidateInputs();
+  const observerSource = observerIdentity(custody);
   const s = settings(custody);
   const imageArgs =
     s.runtime.entry === 'native' ? ['--native-image', s.runtime.nativeImage.path] : [];
@@ -388,6 +406,8 @@ function prepare(custody) {
     );
   return custody.record('prepare', {
     inputs,
+    observerSource,
+    observerReadback: revalidateObserver(custody, observerSource),
     runtime: {
       entry: s.runtime.entry,
       nativeImage: s.runtime.nativeImage ?? null,
@@ -547,12 +567,22 @@ function inspectObservation(data) {
   };
 }
 
-async function observe(custody) {
+async function observe(custody, preparationSha256) {
+  insist(
+    typeof preparationSha256 === 'string' && /^[0-9a-f]{64}$/.test(preparationSha256),
+    'Supply the completed preparation receipt SHA256'
+  );
   const { request, inputs } = custody;
   const inputReadbackBefore = custody.revalidateInputs();
+  const observerSource = observerIdentity(custody);
   const s = settings(custody);
-  const preparedFile = path.join(custody.resolvePath(request.paths.output), 'prepare.json');
-  const prepared = JSON.parse(fs.readFileSync(preparedFile));
+  const preparation = custody.readPublic(request.paths.output + '/prepare.json', 16 * 1024 * 1024);
+  insist(preparation.sha256 === preparationSha256, 'Preparation receipt hash mismatch');
+  const prepared = JSON.parse(preparation.bytes.toString('utf8'));
+  insist(
+    prepared.schema === 'caws.native-session.receipt.v1' && prepared.surface === 'codex',
+    'Unknown preparation receipt'
+  );
   insist(
     prepared.requestSha256 === inputs.request.sha256,
     'Preparation belongs to another request'
@@ -579,6 +609,14 @@ async function observe(custody) {
     quote(s.caws) + ' worktree ensure native-owned --spec NATIVE-CODEX-QUAL-001';
   const data = {
     inputs,
+    observerSource,
+    preparation: {
+      path: preparation.path,
+      sha256: preparation.sha256,
+      sizeBytes: preparation.sizeBytes,
+      mode: preparation.mode,
+      producer: prepared.data?.observerSource ?? null,
+    },
     runtime: {
       selected: s.runtime,
       prepared: preparedRuntime,
@@ -594,6 +632,16 @@ async function observe(custody) {
     expectedProtectedPath: protectedFile,
     protectedBefore: custody.capture(request.scenario.protectedFile, { bytes: true }),
     stream: [],
+    hostOutput: {
+      maxBytes: 16 * 1024 * 1024,
+      maxChunks: 10000,
+      maxMessages: 10000,
+      stdoutBytes: 0,
+      stderrBytes: 0,
+      retainedBytes: 0,
+      truncated: false,
+      chunks: [],
+    },
     stderr: '',
     error: null,
     nonclaims: [
@@ -605,7 +653,12 @@ async function observe(custody) {
     ],
   };
   insist(data.protectedBefore.kind === 'file', 'Prepared protected sentinel missing');
-  custody.record('observe-start', { inputs, protectedBefore: data.protectedBefore });
+  custody.record('observe-start', {
+    inputs,
+    observerSource,
+    preparation: data.preparation,
+    protectedBefore: data.protectedBefore,
+  });
   const child = spawn(
     inputs.host.image.path,
     [
@@ -631,6 +684,7 @@ async function observe(custody) {
     activeTurnId,
     fatalError,
     rejectFatal,
+    bootstrapApprovalUsed = false,
     closingNormally = false;
   const cleanupReserveMs = Math.min(15000, Math.max(1, Math.floor(request.budgetMs / 10)));
   const workRemainingMs = () => Math.max(0, custody.remainingMs() - cleanupReserveMs);
@@ -659,8 +713,37 @@ async function observe(custody) {
     turn.catch(() => {});
   };
   resetTurn();
+  function retainMessage(row) {
+    if (data.stream.length >= data.hostOutput.maxMessages) {
+      data.hostOutput.truncated = true;
+      buffer = '';
+      fail(Error('Native host message limit exceeded'));
+      return false;
+    }
+    data.stream.push(row);
+    return true;
+  }
+  function retainChunk(channel, value) {
+    const bytes = Buffer.from(value);
+    const capture = data.hostOutput;
+    capture[channel + 'Bytes'] += bytes.length;
+    const room =
+      capture.chunks.length < capture.maxChunks
+        ? Math.max(0, capture.maxBytes - capture.retainedBytes)
+        : 0;
+    const kept = bytes.subarray(0, room);
+    if (kept.length) {
+      capture.chunks.push({ channel, bytesBase64: kept.toString('base64') });
+      capture.retainedBytes += kept.length;
+    }
+    if (kept.length !== bytes.length) {
+      capture.truncated = true;
+      fail(Error('Native host output limit exceeded'));
+    }
+    return kept;
+  }
   function send(message) {
-    data.stream.push({ atMs: Date.now(), direction: 'sent', message });
+    if (!retainMessage({ atMs: Date.now(), direction: 'sent', message })) return;
     child.stdin.write(JSON.stringify(message) + '\n');
   }
   function rpc(method, params) {
@@ -683,10 +766,10 @@ async function observe(custody) {
     ]);
   }
   child.stderr.on('data', (bytes) => {
-    data.stderr += bytes;
+    data.stderr += retainChunk('stderr', bytes).toString('utf8');
   });
   child.stdout.on('data', (bytes) => {
-    buffer += bytes;
+    buffer += retainChunk('stdout', bytes).toString('utf8');
     let at;
     while ((at = buffer.indexOf('\n')) >= 0) {
       const line = buffer.slice(0, at);
@@ -696,22 +779,27 @@ async function observe(custody) {
       try {
         message = JSON.parse(line);
       } catch {
-        data.stream.push({ atMs: Date.now(), direction: 'unparsed', line });
+        if (!retainMessage({ atMs: Date.now(), direction: 'unparsed', line })) return;
         continue;
       }
-      data.stream.push({ atMs: Date.now(), direction: 'received', message });
+      if (!retainMessage({ atMs: Date.now(), direction: 'received', message })) return;
       if (message.method && message.id !== undefined) {
         const p = message.params ?? {};
         // Only the ordinary bootstrap CLI may request a one-call native
         // approval. A7 probe approval requests remain failed observations.
         const bootstrap =
+          !fatalError &&
+          !bootstrapApprovalUsed &&
           phase === 'bootstrap' &&
+          typeof activeTurnId === 'string' &&
+          activeTurnId.length > 0 &&
           message.method === 'item/commandExecution/requestApproval' &&
           p.threadId === data.threadId &&
           p.turnId === activeTurnId &&
           p.cwd === s.project &&
           p.commandActions?.length === 1 &&
           p.commandActions[0].command === bootstrapSource;
+        if (bootstrap) bootstrapApprovalUsed = true;
         if (message.method === 'item/commandExecution/requestApproval')
           send({ id: message.id, result: { decision: bootstrap ? 'accept' : 'decline' } });
         else if (message.method === 'mcpServer/elicitation/request')
@@ -894,6 +982,7 @@ async function observe(custody) {
     data.ownedAfter = custody.capture(request.scenario.ownedFile, { bytes: true });
     try {
       data.inputReadback = custody.revalidateInputs();
+      data.observerReadback = revalidateObserver(custody, observerSource);
     } catch (error) {
       data.inputDrift = error.message;
     }
@@ -927,16 +1016,21 @@ function inspectFile(file) {
 }
 
 async function main() {
-  const [phase, file, ...extra] = process.argv.slice(2);
+  const [phase, file, preparationSha256, ...extra] = process.argv.slice(2);
   insist(
-    extra.length === 0 && file && ['prepare', 'observe', 'inspect'].includes(phase),
-    'Usage: node scripts/qualify-native-codex.cjs prepare|observe REQUEST.json; inspect OBSERVE.json'
+    extra.length === 0 &&
+      file &&
+      ['prepare', 'observe', 'inspect'].includes(phase) &&
+      (phase === 'observe'
+        ? typeof preparationSha256 === 'string' && /^[0-9a-f]{64}$/.test(preparationSha256)
+        : preparationSha256 === undefined),
+    'Usage: node scripts/qualify-native-codex.cjs prepare REQUEST.json; observe REQUEST.json PREPARE_SHA256; inspect OBSERVE.json'
   );
   if (phase === 'inspect') return console.log(JSON.stringify(inspectFile(file), null, 2));
   const custody = openCustody(file);
   if (phase === 'prepare')
     console.log(JSON.stringify({ receipt: prepare(custody), captureOnly: true }));
-  else await observe(custody);
+  else await observe(custody, preparationSha256);
 }
 module.exports = { inspectObservation, inspectFile, observe, prepare, openConfig, retireOwnedMcp };
 if (require.main === module)

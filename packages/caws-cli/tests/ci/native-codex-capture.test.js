@@ -20,6 +20,19 @@ afterEach(() => {
 function config() {
   return require('../../scripts/qualify-native-codex.cjs');
 }
+// Command/protocol fixtures; real nofollow/bounded reading is covered by custody tests.
+function fixturePublicRead(relative, maximum) {
+  const file = path.join(relative.startsWith('scripts/') ? packageRoot : fixture, relative);
+  const bytes = fs.readFileSync(file);
+  if (bytes.length > maximum) throw new Error('Public fixture exceeds bound');
+  return {
+    path: file,
+    bytes,
+    sizeBytes: bytes.length,
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+    mode: fs.statSync(file).mode & 0o7777,
+  };
+}
 function prepareFixture(entry) {
   const nodeRoot = path.join(fixture, 'retained-node');
   const npm = path.join(nodeRoot, 'lib/node_modules/npm/bin/npm-cli.js');
@@ -76,6 +89,7 @@ function prepareFixture(entry) {
     },
     env: { HOME: path.join(fixture, 'home') },
     resolvePath: (relative) => path.join(fixture, relative),
+    readPublic: fixturePublicRead,
     revalidateInputs: jest.fn(() => ({})),
     run,
     record,
@@ -355,11 +369,14 @@ function captureFixture(onSend, closesNormally) {
   fs.writeFileSync(
     path.join(fixture, 'output/prepare.json'),
     JSON.stringify({
+      schema: 'caws.native-session.receipt.v1',
+      surface: 'codex',
       requestSha256: inputs.request.sha256,
       data: { runtime: { entry: 'legacy', nativeImage: null, reports: [] } },
     })
   );
   const started = Date.now();
+  const preparationSha256 = fixturePublicRead('output/prepare.json', 16 * 1024 * 1024).sha256;
   const record = jest.fn(() => ({
     path: path.join(fixture, 'output/observe.json'),
     sha256: 'b'.repeat(64),
@@ -369,6 +386,7 @@ function captureFixture(onSend, closesNormally) {
     inputs,
     env: { HOME: path.join(fixture, 'home') },
     resolvePath: (value) => path.join(fixture, value),
+    readPublic: fixturePublicRead,
     remainingMs: () => Math.max(0, 1000 - (Date.now() - started)),
     capture: (value) => ({
       path: path.join(fixture, value),
@@ -378,8 +396,186 @@ function captureFixture(onSend, closesNormally) {
     record,
   };
   jest.spyOn(console, 'log').mockImplementation(() => {});
-  return { child, sent, record, custody, observe: config().observe };
+  return {
+    child,
+    sent,
+    record,
+    custody,
+    preparationSha256,
+    observe: (selected, pin = preparationSha256) => config().observe(selected, pin),
+  };
 }
+test('missing preparation pin prevents host spawn', async () => {
+  const fx = captureFixture(undefined, true);
+  await expect(config().observe(fx.custody)).rejects.toThrow('preparation receipt SHA256');
+  expect(require('node:child_process').spawn).not.toHaveBeenCalled();
+});
+test('replaced same-request preparation metadata prevents host spawn', async () => {
+  const fx = captureFixture(undefined, true);
+  const file = path.join(fixture, 'output/prepare.json');
+  const replaced = JSON.parse(fs.readFileSync(file));
+  replaced.data.runtime.reports = [{ invented: true }];
+  fs.writeFileSync(file, JSON.stringify(replaced));
+  await expect(fx.observe(fx.custody)).rejects.toThrow('Preparation receipt hash mismatch');
+  expect(require('node:child_process').spawn).not.toHaveBeenCalled();
+});
+function bootstrapProtocol(mode) {
+  let reentrantReplay;
+  return (child, message) => {
+    if (mode === 'reentrant' && message.id === 'first' && message.result?.decision === 'accept') {
+      child.stdout.emit('data', Buffer.from(JSON.stringify(reentrantReplay) + '\n'));
+      return;
+    }
+    const emit = (value) => child.stdout.emit('data', Buffer.from(JSON.stringify(value) + '\n'));
+    if (message.method === 'initialize' || message.method === 'hooks/list')
+      globalThis.queueMicrotask(() => emit({ id: message.id, result: {} }));
+    if (message.method === 'thread/start')
+      globalThis.queueMicrotask(() =>
+        emit({ id: message.id, result: { thread: { id: 'thread-1' }, model: 'unit-fixture' } })
+      );
+    if (message.method !== 'turn/start') return;
+    const command = JSON.parse(
+      message.params.input[0].text.match(/exact cmd (".*?"), workdir /)[1]
+    );
+    const approval = (id, turnId) => ({
+      id,
+      method: 'item/commandExecution/requestApproval',
+      params: {
+        threadId: 'thread-1',
+        ...(turnId === undefined ? {} : { turnId }),
+        cwd: path.join(fixture, 'project'),
+        commandActions: [{ command }],
+      },
+    });
+    if (mode === 'null' || mode === 'missing') {
+      globalThis.queueMicrotask(() => emit(approval('early', mode === 'null' ? null : undefined)));
+      return;
+    }
+    emit({ id: message.id, result: { turn: { id: 'bootstrap-1' } } });
+    // The real turn response is processed before these requests are delivered.
+    globalThis.setImmediate(() => {
+      if (mode === 'duplicate' || mode === 'reentrant') {
+        reentrantReplay = approval('second', 'bootstrap-1');
+        emit(approval('first', 'bootstrap-1'));
+        if (mode === 'duplicate') emit(reentrantReplay);
+      } else {
+        const first = approval('foreign', 'other-turn');
+        const second = approval('after-fatal', 'bootstrap-1');
+        child.stdout.emit(
+          'data',
+          Buffer.from(JSON.stringify(first) + '\n' + JSON.stringify(second) + '\n')
+        );
+      }
+    });
+  };
+}
+test.each(['null', 'missing'])(
+  'declines bootstrap approval with %s turn before response',
+  async (mode) => {
+    const fx = captureFixture(bootstrapProtocol(mode), true);
+    await fx.observe(fx.custody);
+    expect(fx.sent.find((message) => message.id === 'early').result.decision).toBe('decline');
+    expect(fx.sent.filter((message) => message.method === 'turn/start')).toHaveLength(1);
+    expect(fx.record.mock.calls.find(([label]) => label === 'observe')[1].error).toBe(
+      'Unexpected native approval was declined'
+    );
+  }
+);
+test.each(['duplicate', 'reentrant'])(
+  'accepts one correlated bootstrap approval and declines %s replay',
+  async (mode) => {
+    const fx = captureFixture(bootstrapProtocol(mode), true);
+    await fx.observe(fx.custody);
+    expect(fx.sent.find((message) => message.id === 'first').result.decision).toBe('accept');
+    expect(fx.sent.find((message) => message.id === 'second').result.decision).toBe('decline');
+    expect(fx.record.mock.calls.find(([label]) => label === 'observe')[1].error).toBe(
+      'Unexpected native approval was declined'
+    );
+  }
+);
+function changedObserverReadback() {
+  let sourceReads = 0;
+  return (relative, maximum) => {
+    const result = fixturePublicRead(relative, maximum);
+    if (relative === 'scripts/qualify-native-codex.cjs' && sourceReads++ > 0)
+      return { ...result, sha256: '0'.repeat(64) };
+    return result;
+  };
+}
+test('prepare refuses producer drift after the recorded setup operations', () => {
+  const fx = prepareFixture('native');
+  fx.custody.readPublic = changedObserverReadback();
+  expect(() => config().prepare(fx.custody)).toThrow('Observer source changed');
+  expect(fx.run.mock.calls.some(([label]) => label === 'prepare-registration-replan')).toBe(true);
+  expect(fx.record.mock.calls.some(([label]) => label === 'prepare')).toBe(false);
+});
+test('observe retains producer drift alongside the original protocol failure', async () => {
+  const fx = captureFixture((child, message) => {
+    if (message.method === 'initialize')
+      child.stdout.emit(
+        'data',
+        Buffer.from(
+          JSON.stringify({
+            id: 'foreign',
+            method: 'item/commandExecution/requestApproval',
+            params: {},
+          }) + '\n'
+        )
+      );
+  }, true);
+  fx.custody.readPublic = changedObserverReadback();
+  await fx.observe(fx.custody);
+  const data = fx.record.mock.calls.find(([label]) => label === 'observe')[1];
+  expect(data.inputDrift).toBe('Observer source changed during operation');
+  expect(data.error).toBe('Unexpected native approval was declined');
+  expect(data.observerSource.sha256).not.toBe('0'.repeat(64));
+  expect(data.preparation.sha256).toBe(fx.preparationSha256);
+});
+test('fatal request and matching bootstrap in one chunk both decline', async () => {
+  const fx = captureFixture(bootstrapProtocol('fatal'), true);
+  await fx.observe(fx.custody);
+  for (const id of ['foreign', 'after-fatal'])
+    expect(fx.sent.find((message) => message.id === id).result.decision).toBe('decline');
+  expect(fx.record.mock.calls.find(([label]) => label === 'observe')[1].error).toBe(
+    'Unexpected native approval was declined'
+  );
+});
+test.each(['stdout', 'stderr'])(
+  'bounds excessive %s and preserves explicit truncation failure',
+  async (channel) => {
+    const fx = captureFixture((child, message) => {
+      if (message.method === 'initialize')
+        child[channel].emit('data', Buffer.alloc(16 * 1024 * 1024 + 1, 120));
+    }, true);
+    await fx.observe(fx.custody);
+    const data = fx.record.mock.calls.find(([label]) => label === 'observe')[1];
+    expect(data.error).toBe('Native host output limit exceeded');
+    expect(data.hostOutput.truncated).toBe(true);
+    expect(data.hostOutput.retainedBytes).toBe(16 * 1024 * 1024);
+    expect(data.hostOutput[channel + 'Bytes']).toBe(16 * 1024 * 1024 + 1);
+    expect(data.hostOutput.chunks).toHaveLength(1);
+    expect(Buffer.from(data.hostOutput.chunks[0].bytesBase64, 'base64').length).toBe(
+      16 * 1024 * 1024
+    );
+    expect(fx.sent.some((message) => message.method === 'hooks/list')).toBe(false);
+    expect(process.exitCode).toBe(1);
+  }
+);
+test('bounds parsed-message accumulation from one host chunk', async () => {
+  const fx = captureFixture((child, message) => {
+    if (message.method === 'initialize')
+      child.stdout.emit(
+        'data',
+        Buffer.from((JSON.stringify({ id: 'unmatched' }) + '\n').repeat(10001))
+      );
+  }, true);
+  await fx.observe(fx.custody);
+  const data = fx.record.mock.calls.find(([label]) => label === 'observe')[1];
+  expect(data.error).toBe('Native host message limit exceeded');
+  expect(data.stream).toHaveLength(10000);
+  expect(data.hostOutput.truncated).toBe(true);
+  expect(process.exitCode).toBe(1);
+});
 test('unexpected approval during initialize is latched and declines before later RPCs', async () => {
   const fx = captureFixture((child, message) => {
     if (message.method === 'initialize')
