@@ -357,6 +357,12 @@ function npmEnvironment(root = base, nodePath = driver.node.path) {
   };
 }
 async function npmStep(label, args) {
+  const prefixIndex = args.indexOf('--prefix');
+  assert(
+    prefixIndex >= 0 && args.indexOf('--prefix', prefixIndex + 1) === -1,
+    'npm step requires one explicit project prefix'
+  );
+  assertNoNpmProjectConfig(args[prefixIndex + 1]);
   const tools = npmInputs();
   const { runSqliteBuildStep } = require('../dist/tooling/sqlite-static-build');
   const receipt = await runSqliteBuildStep({
@@ -370,6 +376,7 @@ async function npmStep(label, args) {
     signal: controller.signal,
   });
   save(label + '.json', { tools, receipt });
+  assertNoNpmProjectConfig(args[prefixIndex + 1]);
   driverCustody.verifyFile(tools.node);
   driverCustody.verifyFile(tools.npm);
   assert(
@@ -383,6 +390,17 @@ async function npmStep(label, args) {
   );
   return { tools, receipt };
 }
+function assertNoNpmProjectConfig(prefix) {
+  absoluteName(prefix, 'npm project prefix');
+  driverCustody.realDirectories(prefix);
+  try {
+    fs.lstatSync(path.join(prefix, '.npmrc'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  throw new Error('Project npm configuration requires explicit qualification');
+}
 async function cli() {
   const before = committedBuildInputs();
   fs.mkdirSync(path.join(base, 'npm-home'), { mode: 0o700 });
@@ -394,6 +412,8 @@ async function cli() {
   await npmStep('cli-build', ['--prefix', driverPackage, '--workspaces=false', 'run', 'build']);
   driverCustody.verifyFile(compiler);
   const packed = await npmStep('cli-pack', [
+    '--prefix',
+    driverPackage,
     'pack',
     driverPackage,
     '--json',
@@ -482,6 +502,8 @@ function loadCliPack() {
       label === 'cli-build'
         ? ['--prefix', driverPackage, '--workspaces=false', 'run', 'build']
         : [
+            '--prefix',
+            driverPackage,
             'pack',
             driverPackage,
             '--json',
@@ -1202,7 +1224,12 @@ async function main() {
       'Usage: retained-node scripts/build-native-hook-image.cjs cli|sqlite|prepare-native|native|image --request ABS --request-sha256 SHA [--native-request-sha256 SHA]'
     );
 }
-module.exports = { parseDriverArguments, observeCommittedSource, npmEnvironment };
+module.exports = {
+  parseDriverArguments,
+  observeCommittedSource,
+  npmEnvironment,
+  assertNoNpmProjectConfig,
+};
 if (require.main === module) {
   process.once('SIGINT', abort);
   process.once('SIGTERM', abort);

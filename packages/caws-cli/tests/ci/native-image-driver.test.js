@@ -8,6 +8,7 @@ const {
   parseDriverArguments,
   observeCommittedSource,
   npmEnvironment,
+  assertNoNpmProjectConfig,
 } = require('../../scripts/build-native-hook-image.cjs');
 
 describe('native image driver explicit request arguments', () => {
@@ -80,6 +81,12 @@ describe('committed build input observation in an actual private Git repository'
     commit = git('rev-parse', 'HEAD');
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+  test('refuses a project npm override without reading its content', () => {
+    expect(() => assertNoNpmProjectConfig(root)).not.toThrow();
+    fs.appendFileSync(path.join(root, '.gitignore'), '.npmrc\n');
+    fs.writeFileSync(path.join(root, '.npmrc'), 'ignore-scripts=true\n');
+    expect(() => assertNoNpmProjectConfig(root)).toThrow(/Project npm configuration/);
+  });
   test('isolated npm configuration uses distinct empty layers and rejects changed contents', () => {
     fs.mkdirSync(path.join(root, 'npm-home'));
     fs.writeFileSync(path.join(root, 'npm-userconfig'), '');
