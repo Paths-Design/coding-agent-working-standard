@@ -636,7 +636,13 @@ function inspectObservation(data) {
   };
 }
 
-async function observe(custody, preparationSha256) {
+async function observe(custody, preparationSha256, attempt) {
+  insist(
+    attempt === undefined ||
+      (typeof attempt === 'string' && /^[a-z0-9][a-z0-9-]{0,31}$/.test(attempt)),
+    'Invalid observation attempt name'
+  );
+  const observationLabel = attempt === undefined ? 'observe' : 'observe-attempt-' + attempt;
   insist(
     typeof preparationSha256 === 'string' && /^[0-9a-f]{64}$/.test(preparationSha256),
     'Supply the completed preparation receipt SHA256'
@@ -679,6 +685,7 @@ async function observe(custody, preparationSha256) {
   const data = {
     inputs,
     observerSource,
+    attempt: attempt ?? null,
     registrationContract: registrationContract(custody, s),
     preparation: {
       path: preparation.path,
@@ -723,7 +730,7 @@ async function observe(custody, preparationSha256) {
     ],
   };
   insist(data.protectedBefore.kind === 'file', 'Prepared protected sentinel missing');
-  custody.record('observe-start', {
+  custody.record(attempt === undefined ? 'observe-start' : observationLabel + '.start', {
     inputs,
     observerSource,
     preparation: data.preparation,
@@ -1062,7 +1069,7 @@ async function observe(custody, preparationSha256) {
       data.inputDrift = error.message;
     }
     data.observations = inspectObservation(data);
-    const receipt = custody.record('observe', data);
+    const receipt = custody.record(observationLabel, data);
     console.log(JSON.stringify({ receipt, captureOnly: true, observations: data.observations }));
     if (data.error || data.inputDrift || data.terminal.status !== 0) process.exitCode = 1;
   }
@@ -1073,7 +1080,7 @@ function inspectFile(file) {
   const selected = path.resolve(root, file);
   insist(
     selected.startsWith(path.join(root, 'reports') + path.sep) &&
-      path.basename(selected) === 'observe.json' &&
+      /^(?:observe|observe-attempt-[a-z0-9][a-z0-9-]{0,31})\.json$/.test(path.basename(selected)) &&
       !selected.split(path.sep).some((part) => ['.codex', '.claude'].includes(part)),
     'Select a public observe.json receipt under reports/'
   );
@@ -1091,21 +1098,23 @@ function inspectFile(file) {
 }
 
 async function main() {
-  const [phase, file, preparationSha256, ...extra] = process.argv.slice(2);
+  const [phase, file, preparationSha256, attempt, ...extra] = process.argv.slice(2);
   insist(
     extra.length === 0 &&
       file &&
       ['prepare', 'observe', 'inspect'].includes(phase) &&
       (phase === 'observe'
-        ? typeof preparationSha256 === 'string' && /^[0-9a-f]{64}$/.test(preparationSha256)
-        : preparationSha256 === undefined),
-    'Usage: node scripts/qualify-native-codex.cjs prepare REQUEST.json; observe REQUEST.json PREPARE_SHA256; inspect OBSERVE.json'
+        ? typeof preparationSha256 === 'string' &&
+          /^[0-9a-f]{64}$/.test(preparationSha256) &&
+          (attempt === undefined || /^[a-z0-9][a-z0-9-]{0,31}$/.test(attempt))
+        : preparationSha256 === undefined && attempt === undefined),
+    'Usage: node scripts/qualify-native-codex.cjs prepare REQUEST.json; observe REQUEST.json PREPARE_SHA256 [ATTEMPT]; inspect OBSERVE.json'
   );
   if (phase === 'inspect') return console.log(JSON.stringify(inspectFile(file), null, 2));
   const custody = openCustody(file);
   if (phase === 'prepare')
     console.log(JSON.stringify({ receipt: prepare(custody), captureOnly: true }));
-  else await observe(custody, preparationSha256);
+  else await observe(custody, preparationSha256, attempt);
 }
 module.exports = { inspectObservation, inspectFile, observe, prepare, openConfig, retireOwnedMcp };
 if (require.main === module)

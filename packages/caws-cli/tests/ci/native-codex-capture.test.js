@@ -445,9 +445,31 @@ function captureFixture(onSend, closesNormally, entry = 'legacy') {
     record,
     custody,
     preparationSha256,
-    observe: (selected, pin = preparationSha256) => config().observe(selected, pin),
+    observe: (selected, pin = preparationSha256, attempt) =>
+      config().observe(selected, pin, attempt),
   };
 }
+test('named observation retains the preparation pin and separate attempt receipts', async () => {
+  const fx = captureFixture(bootstrapProtocol('duplicate'), true);
+  await fx.observe(fx.custody, fx.preparationSha256, 'trusted-1');
+  const labels = fx.record.mock.calls.map(([label]) => label);
+  expect(labels).toEqual(['observe-attempt-trusted-1.start', 'observe-attempt-trusted-1']);
+  const observed = fx.record.mock.calls[1][1];
+  expect(observed.attempt).toBe('trusted-1');
+  expect(observed.preparation.sha256).toBe(fx.preparationSha256);
+  expect(observed.terminal).toEqual({ status: 0, signal: null });
+});
+test.each(['', '../escape', 'attempt.start', 'UPPER', 'a'.repeat(33), null, 12])(
+  'invalid observation attempt %p cannot launch the host',
+  async (attempt) => {
+    const fx = captureFixture(undefined, true);
+    await expect(fx.observe(fx.custody, fx.preparationSha256, attempt)).rejects.toThrow(
+      'Invalid observation attempt'
+    );
+    expect(require('node:child_process').spawn).not.toHaveBeenCalled();
+    expect(fx.record).not.toHaveBeenCalled();
+  }
+);
 test('missing preparation pin prevents host spawn', async () => {
   const fx = captureFixture(undefined, true);
   await expect(config().observe(fx.custody)).rejects.toThrow('preparation receipt SHA256');
