@@ -338,7 +338,12 @@ fi
 # path as well. Keep PROJECT_DIR, HOOK_CWD and WORK_DIR in the leaf checkout;
 # only specification discovery and repository containment use this root.
 if declare -F resolve_canonical_dir >/dev/null 2>&1; then
-  SESSION_REPO_ROOT="$(resolve_canonical_dir "$PROJECT_DIR")"
+  RESOLVED_REPO_ROOT="$(resolve_canonical_dir "$PROJECT_DIR")"
+  if [[ "$RESOLVED_REPO_ROOT" == "$PROJECT_DIR" && "$SESSION_REPO_ROOT" != "$PROJECT_DIR" ]]; then
+    _scope_env_block "cannot resolve canonical governance for linked checkout '$PROJECT_DIR'. Restore Git repository discovery before editing."
+    exit 2
+  fi
+  SESSION_REPO_ROOT="$RESOLVED_REPO_ROOT"
 fi
 
 # A worktree root inferred from the target path or the hook cwd confers

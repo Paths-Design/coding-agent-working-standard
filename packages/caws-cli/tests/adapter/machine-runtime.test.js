@@ -6,6 +6,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const {
   installMachineRuntime,
+  installQualifiedCompatibilityRuntime,
   rollbackMachineRuntime,
 } = require('../../dist/init/machine-adapters');
 const { getMessageDeliveryState } = require('../../dist/store/messages-store');
@@ -17,7 +18,157 @@ beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws machine runtime '));
 });
 afterEach(() => {
+  jest.restoreAllMocks();
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+describe('qualified compatibility publication', () => {
+  function fixture() {
+    const home = path.join(root, 'target');
+    const sourceHome = path.join(root, 'source');
+    const sources = generationSources('qualified-templates');
+    const baseline = installMachineRuntime({ home, templatesRoot: sources });
+    fs.cpSync(home, sourceHome, { recursive: true });
+    fs.appendFileSync(path.join(sources, 'shared/scope-guard.sh'), '\n# qualified fixture\n');
+    const candidate = installMachineRuntime({ home: sourceHome, templatesRoot: sources });
+    const options = {
+      home,
+      sourceHome,
+      expectedDigest: candidate.digest,
+      expectedPreviousDigest: baseline.digest,
+    };
+    const pointer = path.join(home, 'state/adapter-runtime.json');
+    const launcher = path.join(home, 'bin/caws-hook');
+    const source = path.join(sourceHome, 'lib/runtimes', candidate.digest);
+    const snapshot = path.join(home, 'lib/runtimes', candidate.digest);
+    return {
+      home,
+      sourceHome,
+      sources,
+      baseline,
+      candidate,
+      options,
+      pointer,
+      launcher,
+      source,
+      snapshot,
+    };
+  }
+  function unchanged(f, action, message) {
+    const pointer = fs.readFileSync(f.pointer);
+    const launcher = fs.readFileSync(f.launcher);
+    expect(() => action()).toThrow(message);
+    expect(fs.readFileSync(f.pointer)).toEqual(pointer);
+    expect(fs.readFileSync(f.launcher)).toEqual(launcher);
+    expect(fs.existsSync(f.snapshot)).toBe(false);
+    expect(fs.existsSync(path.join(f.home, 'state/adapter-install.lock'))).toBe(false);
+  }
+  test('publishes exact captured members and modes and retains normal rollback', () => {
+    const f = fixture();
+    const launcher = fs.readFileSync(f.launcher);
+    const sourceManifest = fs.readFileSync(path.join(f.source, 'manifest.json'));
+    const preview = installQualifiedCompatibilityRuntime({ ...f.options, plan: true });
+    expect(preview.digest).toBe(f.candidate.digest);
+    expect(fs.existsSync(f.snapshot)).toBe(false);
+    expect(installQualifiedCompatibilityRuntime(f.options).digest).toBe(f.candidate.digest);
+    expect(JSON.parse(fs.readFileSync(f.pointer))).toEqual({
+      version: 1,
+      digest: f.candidate.digest,
+      previous_digest: f.baseline.digest,
+    });
+    expect(fs.readFileSync(f.launcher)).toEqual(launcher);
+    expect(fs.readFileSync(path.join(f.snapshot, 'manifest.json'))).toEqual(sourceManifest);
+    for (const relative of Object.keys(JSON.parse(sourceManifest))) {
+      expect(fs.readFileSync(path.join(f.snapshot, relative))).toEqual(
+        fs.readFileSync(path.join(f.source, relative))
+      );
+      expect(fs.statSync(path.join(f.snapshot, relative)).mode & 0o7777).toBe(
+        fs.statSync(path.join(f.source, relative)).mode & 0o7777
+      );
+    }
+    expect(rollbackMachineRuntime({ home: f.home, templatesRoot: f.sources }).digest).toBe(
+      f.baseline.digest
+    );
+    expect(JSON.parse(fs.readFileSync(f.pointer)).digest).toBe(f.baseline.digest);
+  });
+  test.each(['bytes', 'mode', 'symlink', 'manifest'])(
+    'refuses source %s drift before publication',
+    (kind) => {
+      const f = fixture();
+      const file = path.join(f.source, kind === 'manifest' ? 'manifest.json' : 'scope-guard.sh');
+      if (kind === 'mode') fs.chmodSync(file, 0o777);
+      else if (kind === 'symlink') {
+        fs.unlinkSync(file);
+        fs.symlinkSync(f.launcher, file);
+      } else fs.appendFileSync(file, '\nchanged\n');
+      unchanged(
+        f,
+        () => installQualifiedCompatibilityRuntime(f.options),
+        /identity|mode|[Ss]ymlink|[Uu]nsafe/
+      );
+    }
+  );
+  test('refuses the wrong predecessor and unsupported native entry before publication', () => {
+    const f = fixture();
+    unchanged(
+      f,
+      () =>
+        installQualifiedCompatibilityRuntime({
+          ...f.options,
+          expectedPreviousDigest: '0'.repeat(64),
+        }),
+      /predecessor/
+    );
+    fs.writeFileSync(path.join(f.home, 'bin/caws-hook-native'), 'native fixture');
+    unchanged(f, () => installQualifiedCompatibilityRuntime(f.options), /native entry/);
+  });
+  test('compares the predecessor after acquiring the normal installer lock', () => {
+    const f = fixture();
+    const mkdir = fs.mkdirSync;
+    const other = { version: 1, digest: '0'.repeat(64), previous_digest: null };
+    jest.spyOn(fs, 'mkdirSync').mockImplementation((file, options) => {
+      const result = mkdir(file, options);
+      if (file === path.join(f.home, 'state/adapter-install.lock'))
+        fs.writeFileSync(f.pointer, JSON.stringify(other));
+      return result;
+    });
+    expect(() => installQualifiedCompatibilityRuntime(f.options)).toThrow(/predecessor/);
+    expect(JSON.parse(fs.readFileSync(f.pointer))).toEqual(other);
+    expect(fs.existsSync(f.snapshot)).toBe(false);
+  });
+  test('source changes after capture cannot publish different bytes', () => {
+    const f = fixture();
+    const original = fs.readFileSync(path.join(f.source, 'scope-guard.sh'));
+    const write = fs.writeFileSync;
+    let changed = false;
+    jest.spyOn(fs, 'writeFileSync').mockImplementation((file, bytes, options) => {
+      if (!changed && String(file).startsWith(f.snapshot + '.pending.')) {
+        changed = true;
+        write(path.join(f.source, 'scope-guard.sh'), 'concurrent source replacement');
+      }
+      return write(file, bytes, options);
+    });
+    expect(installQualifiedCompatibilityRuntime(f.options).digest).toBe(f.candidate.digest);
+    expect(changed).toBe(true);
+    expect(fs.readFileSync(path.join(f.snapshot, 'scope-guard.sh'))).toEqual(original);
+    expect(JSON.parse(fs.readFileSync(f.pointer)).digest).toBe(f.candidate.digest);
+  });
+  test('predecessor drift during staging refuses the final pointer swap', () => {
+    const f = fixture();
+    const write = fs.writeFileSync;
+    const other = { version: 1, digest: '0'.repeat(64), previous_digest: null };
+    let changed = false;
+    jest.spyOn(fs, 'writeFileSync').mockImplementation((file, bytes, options) => {
+      if (!changed && String(file).startsWith(f.snapshot + '.pending.')) {
+        changed = true;
+        write(f.pointer, JSON.stringify(other));
+      }
+      return write(file, bytes, options);
+    });
+    expect(() => installQualifiedCompatibilityRuntime(f.options)).toThrow(/predecessor/);
+    expect(changed).toBe(true);
+    expect(JSON.parse(fs.readFileSync(f.pointer))).toEqual(other);
+  });
 });
 
 function repository(name, handlers) {
