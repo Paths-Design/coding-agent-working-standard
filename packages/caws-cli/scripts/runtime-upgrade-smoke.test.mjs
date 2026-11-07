@@ -74,6 +74,49 @@ test('direct child timeout makes no descendant cleanup claim', () => {
   }
 });
 
+test('uncertain command preserves actual output when receipt persistence fails', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'upgrade-output-retained-'));
+  try {
+    const obstruction = path.join(root, 'not-a-directory');
+    fs.writeFileSync(obstruction, 'preserved');
+    const outcomes = [];
+    assert.throws(
+      () =>
+        observedSpawn(
+          process.execPath,
+          [
+            '-e',
+            'process.stdout.write("actual-out"); process.stderr.write("actual-err"); setInterval(()=>{},1000);',
+          ],
+          {
+            cwd: root,
+            env: { ...process.env, CAWS_QUALIFICATION_ARTIFACT_DIR: obstruction },
+            input: 'actual-input',
+            encoding: 'utf8',
+            timeout: 1000,
+          },
+          (outcome) => outcomes.push(outcome)
+        ),
+      /EEXIST|ENOTDIR/
+    );
+    assert.equal(outcomes.length, 1);
+    assert.match(outcomes[0].error, /ETIMEDOUT/);
+    assert.equal(outcomes[0].cwd, root);
+    assert.equal(outcomes[0].input, 'actual-input');
+    assert.equal(outcomes[0].stdout, 'actual-out');
+    assert.equal(outcomes[0].stderr, 'actual-err');
+    const report = { ok: true };
+    retainQualificationFixture(root, report, outcomes);
+    const retained = JSON.parse(JSON.stringify(report));
+    assert.equal(retained.ok, false);
+    assert.equal(retained.uncertainOutcomes[0].stdout, 'actual-out');
+    assert.equal(retained.uncertainOutcomes[0].stderr, 'actual-err');
+  } finally {
+    // The single direct child above never creates a descendant.
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 for (const uncertain of [false, true]) {
   test(`fixture retention preserves bytes after ${uncertain ? 'uncertain' : 'natural'} child outcome`, () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'upgrade-retained-'));
@@ -133,6 +176,64 @@ test('qualifier refuses spawn failure and persists its retained fixture', () => 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+for (const failedReport of [false, true]) {
+  test(`qualifier exposes retained evidence with ${failedReport ? 'failed' : 'no'} report persistence`, () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'upgrade-report-refused-'));
+    const inheritedPath = process.env.PATH;
+    let retained;
+    try {
+      const candidate = path.join(root, 'candidate');
+      fs.mkdirSync(path.join(candidate, 'dist'), { recursive: true });
+      fs.writeFileSync(path.join(candidate, 'dist/index.js'), '');
+      fs.writeFileSync(
+        path.join(candidate, 'package.json'),
+        JSON.stringify({
+          name: '@paths.design/caws-cli',
+          version: '0.0.0-fixture',
+        })
+      );
+      const reportPath = failedReport ? path.join(root, 'report-directory') : undefined;
+      if (reportPath) fs.mkdirSync(reportPath);
+      process.env.PATH = '';
+      let failure;
+      try {
+        qualify({ candidate, reportPath });
+      } catch (error) {
+        failure = error;
+      }
+      assert.ok(failure instanceof Error);
+      const report = failure.qualificationReport;
+      assert.equal(report.ok, false);
+      assert.match(report.error.message, /ENOENT/);
+      assert.equal(report.uncertainOutcomes.length, 1);
+      assert.equal(report.uncertainOutcomes[0].pid, 0);
+      retained = report.retainedFixture;
+      assert.equal(
+        fs.readFileSync(path.join(retained, 'consumer/package.json'), 'utf8'),
+        '{"private":true}'
+      );
+      if (failedReport) {
+        assert.ok(failure instanceof AggregateError);
+        assert.equal(failure.errors.length, 2);
+        assert.match(failure.errors[0].message, /ENOENT/);
+        assert.match(failure.errors[1].message, /EISDIR/);
+        assert.equal(failure.cause, failure.errors[0]);
+        assert.match(report.reportPersistenceError, /EISDIR/);
+        assert.ok(failure.message.includes(retained));
+      } else {
+        assert.match(failure.message, /ENOENT/);
+        assert.equal(report.reportPersistenceError, undefined);
+      }
+    } finally {
+      if (inheritedPath === undefined) delete process.env.PATH;
+      else process.env.PATH = inheritedPath;
+      // Only a confirmed spawn failure with pid0 is cleaned by this fixture.
+      if (retained) fs.rmSync(retained, { recursive: true, force: true });
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
 
 test(
   'timeout stops an owned descendant before fixture cleanup',

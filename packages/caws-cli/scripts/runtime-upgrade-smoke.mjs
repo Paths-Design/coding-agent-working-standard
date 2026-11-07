@@ -57,10 +57,15 @@ export function observedSpawn(command, args, options, onUncertainOutcome = () =>
     onUncertainOutcome({
       command,
       args,
+      cwd: options.cwd,
+      input: options.input ?? null,
       pid: result.pid ?? null,
       status: result.status ?? null,
       signal: result.signal ?? null,
       error: result.error?.message ?? null,
+      duration_ms: Date.now() - started,
+      stdout: result.stdout ?? '',
+      stderr: result.stderr ?? '',
     });
   const dir = options.env?.CAWS_QUALIFICATION_ARTIFACT_DIR;
   if (dir) {
@@ -412,6 +417,7 @@ export function qualify({
       : null;
   };
   const capture = (file, name) => captureQualificationFile(file, evidenceRoot, name);
+  let failure = null;
   try {
     step('install published baseline and materialize stock/custom projects');
     run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', baseline], consumer, env);
@@ -877,10 +883,10 @@ export function qualify({
     assert.equal(uncertainOutcomes.length, 0, 'Uncertain subprocess custody');
     report.ok = true;
     step(`PASS: ${report.cases.length} cases; candidate ${report.tarballSha256}`);
-    return report;
   } catch (error) {
+    failure = error instanceof Error ? error : new Error(String(error));
     report.ok = false;
-    report.error = { name: error.name, message: error.message };
+    report.error = { name: failure.name, message: failure.message };
     if (artifacts) {
       try {
         report.failureTraces = retainFixtureDiagnostics(root, artifacts);
@@ -888,11 +894,26 @@ export function qualify({
         report.failureTraceError = retentionError.message;
       }
     }
-    throw error;
-  } finally {
-    retainQualificationFixture(root, report, uncertainOutcomes);
-    if (reportPath) write(path.resolve(reportPath), JSON.stringify(report, null, 2) + '\n');
   }
+  retainQualificationFixture(root, report, uncertainOutcomes);
+  if (failure) failure.qualificationReport = report;
+  if (reportPath) {
+    try {
+      write(path.resolve(reportPath), JSON.stringify(report, null, 2) + '\n');
+    } catch (persistenceError) {
+      const error = new AggregateError(
+        failure ? [failure, persistenceError] : [persistenceError],
+        `Could not retain qualification report; fixture preserved at ${root}`,
+        { cause: failure ?? persistenceError }
+      );
+      report.ok = false;
+      report.reportPersistenceError = persistenceError.message;
+      error.qualificationReport = report;
+      throw error;
+    }
+  }
+  if (failure) throw failure;
+  return report;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -910,9 +931,15 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         );
       options[key] = value;
     }
-    qualify(options);
+    const report = qualify(options);
+    if (!options.reportPath)
+      console.log(`[runtime-upgrade] Retained fixture: ${report.retainedFixture}`);
   } catch (error) {
     console.error(`[runtime-upgrade] FAIL: ${error.stack}`);
+    if (error.qualificationReport?.retainedFixture)
+      console.error(
+        `[runtime-upgrade] Retained fixture: ${error.qualificationReport.retainedFixture}`
+      );
     process.exitCode = 1;
   }
 }
