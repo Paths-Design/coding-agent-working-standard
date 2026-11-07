@@ -13,11 +13,12 @@ module.exports = function runtimeAssetFixture() {
   if (artifactRoot && !path.isAbsolute(artifactRoot))
     throw new Error('Artifact root must be absolute');
   const roots = new Set();
-  const directChildren = new Set();
+  const processGroups = new Set();
   let firstFailure;
   let sequence = 0;
   const nonclaims = [
-    'A known-PID snapshot does not establish birth identity or descendant settlement.',
+    'Group absence does not establish escaped-session descendant settlement.',
+    'Observed group IDs are not birth-pinned; reuse can conservatively retain fixtures.',
     'Timeout may terminate the directly spawned child; descendant settlement remains unproven.',
     'No process-scan-derived signals are sent.',
   ];
@@ -85,6 +86,11 @@ module.exports = function runtimeAssetFixture() {
     return root;
   };
   const invoke = (root, executable, args, input = Buffer.alloc(0), options = {}) => {
+    if (!['darwin', 'linux'].includes(process.platform)) {
+      const error = new Error('Fixture process-group observation is unsupported on this host');
+      preserve(error);
+      throw error;
+    }
     const receipt = path.join(root, 'receipts', String(++sequence).padStart(4, '0'));
     fs.mkdirSync(receipt, { recursive: true });
     const timeout = options.timeoutMs ?? 10000;
@@ -111,9 +117,9 @@ module.exports = function runtimeAssetFixture() {
       timeout,
       killSignal: 'SIGTERM',
       maxBuffer: 8 * 1024 * 1024,
+      detached: true,
     });
-    if (Number.isInteger(result.pid) && result.pid > 0 && executable !== '/bin/ps')
-      directChildren.add(result.pid);
+    if (Number.isSafeInteger(result.pid) && result.pid > 0) processGroups.add(result.pid);
     fs.writeFileSync(path.join(receipt, 'stdout.bin'), result.stdout ?? Buffer.alloc(0));
     fs.writeFileSync(path.join(receipt, 'stderr.bin'), result.stderr ?? Buffer.alloc(0));
     fs.writeFileSync(
@@ -129,7 +135,13 @@ module.exports = function runtimeAssetFixture() {
         2
       )
     );
-    if (result.error || result.signal !== null || !Number.isInteger(result.status)) {
+    if (
+      result.error ||
+      result.signal !== null ||
+      !Number.isInteger(result.status) ||
+      !Number.isSafeInteger(result.pid) ||
+      result.pid <= 0
+    ) {
       const error = new Error('Unknown subprocess outcome; inspect ' + receipt);
       preserve(error);
       throw error;
@@ -151,28 +163,43 @@ module.exports = function runtimeAssetFixture() {
     const stat = fs.statSync(file, { bigint: true });
     return { bytes: fs.readFileSync(file), mode: stat.mode, mtimeNs: stat.mtimeNs };
   };
-  afterEach(() => {
+  const cleanup = () => {
     if (firstFailure || !roots.size) return;
     try {
       const liveRoots = [...roots];
-      const argv = ['-p', [...directChildren].join(','), '-o', 'pid=,ppid=,lstart=,comm='];
-      const observation = directChildren.size
-        ? invoke(liveRoots[0], '/bin/ps', argv)
-        : { status: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), receipt: null };
-      expect([0, 1]).toContain(observation.status);
-      expect(observation.stderr.toString()).toBe('');
-      const matches = observation.stdout
-        .toString()
-        .split('\n')
-        .filter((line) => line.trim());
+      // Do not use invoke: its raw receipt would retain unrelated processes.
+      // Only numeric identity columns are inspected, never process arguments.
+      const argv = ['-axo', 'pid=,ppid=,pgid='];
+      const observation = spawnSync('/bin/ps', argv, {
+        encoding: 'utf8',
+        timeout: 10000,
+        maxBuffer: 8 * 1024 * 1024,
+        env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' },
+      });
+      if (
+        observation.error ||
+        observation.signal !== null ||
+        observation.status !== 0 ||
+        observation.stderr !== ''
+      )
+        throw new Error('Fixture process-group observation failed');
+      const matches = [];
+      for (const line of observation.stdout.split('\n')) {
+        if (!line.trim()) continue;
+        const columns = line.match(/^\s*(\d+)\s+(\d+)\s+(\d+)\s*$/);
+        if (!columns) throw new Error('Unparseable fixture process-group observation');
+        const pgid = Number(columns[3]);
+        if (processGroups.has(pgid))
+          matches.push({ pid: Number(columns[1]), ppid: Number(columns[2]), pgid });
+      }
       for (const root of liveRoots)
         fs.writeFileSync(
           path.join(root, 'postcase-processes.json'),
           JSON.stringify(
             {
-              command: directChildren.size ? ['/bin/ps', ...argv] : null,
+              command: ['/bin/ps', ...argv],
               status: observation.status,
-              receipt: observation.receipt,
+              groupIds: [...processGroups],
               executedRoots: liveRoots,
               matches,
               nonclaims,
@@ -181,7 +208,8 @@ module.exports = function runtimeAssetFixture() {
             2
           )
         );
-      expect(matches).toEqual([]);
+      if (matches.length)
+        throw new Error('Fixture process group still has members; roots retained');
       if (artifactRoot) {
         fs.mkdirSync(artifactRoot, { recursive: true });
         for (const root of liveRoots) {
@@ -209,11 +237,12 @@ module.exports = function runtimeAssetFixture() {
         fs.rmSync(root, { recursive: true, force: true });
         roots.delete(root);
       }
-      directChildren.clear();
+      processGroups.clear();
     } catch (error) {
       preserve(error);
       throw error;
     }
-  });
-  return { scenario, temporaryRoot, invoke, succeeds, refuses, snapshot };
+  };
+  afterEach(cleanup);
+  return { scenario, temporaryRoot, invoke, succeeds, refuses, snapshot, cleanup };
 };
