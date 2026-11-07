@@ -139,6 +139,9 @@ beforeEach(() => {
       },
     },
   };
+  // Current session-id source admission compares the original transport bytes
+  // with the decoded payload; a payload-only object is not that transport.
+  owner.request.inputJson = JSON.stringify(owner.request.payload);
   directory = path.join(root, 'capabilities');
   fs.mkdirSync(directory);
   data = {
@@ -160,6 +163,22 @@ beforeEach(() => {
   put(data.latchPath, latch);
 });
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+test.each(['missing', 'divergent'])(
+  'current session source refuses %s original identity without side effects',
+  (kind) => {
+    expect(qualifiesForNativeContainment(owner.handler, owner)).toBe(true);
+    const before = fs.readFileSync(data.latchPath);
+    const request = { ...owner.request };
+    if (kind === 'missing') delete request.inputJson;
+    else request.inputJson = JSON.stringify({ ...request.payload, session_id: 'other-session' });
+    const changedOwner = { ...owner, request };
+    expect(qualifiesForNativeContainment(owner.handler, changedOwner)).toBe(false);
+    expect(createContainmentCapability(changedOwner, directory)).toBeNull();
+    expect(fs.readdirSync(directory)).toEqual([]);
+    expect(fs.readFileSync(data.latchPath)).toEqual(before);
+  }
+);
 
 test('current rehashed mutation library cannot create a reviewed containment capability', () => {
   expect(qualifiesForNativeContainment(owner.handler, owner)).toBe(true);
@@ -483,9 +502,36 @@ test('effect receipts and lost acknowledgements are separate from output accepta
   expect(events).toHaveLength(count);
 });
 
-test('non-ASCII session filenames match the selected bytewise shell sanitizer', () => {
+test('historical non-ASCII session filenames match the selected bytewise shell sanitizer', () => {
   const sid = 'session-雪-😀';
-  owner = { ...owner, environment: { ...owner.environment, CAWS_SESSION_ID: sid } };
+  const environment = { ...owner.environment, CAWS_SESSION_ID: sid };
+  const payload = { ...owner.request.payload, session_id: sid };
+  owner = {
+    ...owner,
+    environment,
+    request: {
+      ...owner.request,
+      payload,
+      inputJson: JSON.stringify(payload),
+      caller: { ...owner.request.caller, environment: { ...environment } },
+    },
+  };
+  // The current source's qualified domain excludes this identity. Preserve the
+  // historical sanitizer check using its actual reviewed source bytes.
+  expect(qualifiesForNativeContainment(owner.handler, owner)).toBe(false);
+  expect(createContainmentCapability(owner, directory)).toBeNull();
+  expect(fs.readdirSync(directory)).toEqual([]);
+  const library = owner.selection.libraries['session-id.sh'];
+  const historical = fs.readFileSync(
+    path.join(__dirname, 'fixtures/reviewed-stock/lib/session-id.sh')
+  );
+  const sha256 = crypto.createHash('sha256').update(historical).digest('hex');
+  expect(sha256).toBe('cf662f10e6d3477cecbf5deabd8d2b63284f6f4ac14fa7070725ff8502515c53');
+  fs.writeFileSync(library.path, historical);
+  owner.selection = {
+    ...owner.selection,
+    libraries: { ...owner.selection.libraries, 'session-id.sh': { ...library, sha256 } },
+  };
   data = {
     ...data,
     sessionId: sid,

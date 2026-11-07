@@ -149,7 +149,20 @@ test.each(['changed payload', 'missing payload', 'unused Node mode'])(
     fs.mkdirSync(path.join(repo, '.caws/specs'), { recursive: true });
     fs.writeFileSync(path.join(repo, '.caws/policy.yaml'), 'version: 1\n');
     const legacy = install(home, false);
-    const native = install(home);
+    const installedNative = install(home);
+    // This inert executable fixture models retained installation metadata, not
+    // execution of the advertised capability (covered by native entry tests).
+    const native = {
+      ...installedNative,
+      digest: rewriteRetainedMetadata(home, installedNative.digest, (metadata) => {
+        metadata.schema = 'caws.runtime.native-entry.v2';
+        metadata.installedInvocation = {
+          protocol: 'invoke-installed-v1',
+          maxOriginalTimeoutMs: 30000,
+          stableEntryEventBudget: 'env-original-start-ms-v1',
+        };
+      }),
+    };
     configureSystemRuntime({ home, userHome: user, surface: 'codex', entry: 'native' });
     const entry = path.join(home, 'bin/caws-hook-native');
     const stable = fs.readFileSync(entry);
@@ -1388,6 +1401,31 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     }
   );
 });
+
+test.each([1, 2])(
+  'fresh native registration refuses metadata without event budget v%s',
+  (version) => {
+    const home = path.join(root, 'no-event-budget-home');
+    const user = path.join(root, 'user');
+    fs.mkdirSync(user);
+    const installed = install(home);
+    if (version === 2)
+      rewriteRetainedMetadata(home, installed.digest, (metadata) => {
+        metadata.schema = 'caws.runtime.native-entry.v2';
+        metadata.installedInvocation = {
+          protocol: 'invoke-installed-v1',
+          maxOriginalTimeoutMs: 30000,
+        };
+      });
+    const before = fixtureState();
+    for (const plan of [true, false]) {
+      expect(() =>
+        configureSystemRuntime({ home, userHome: user, surface: 'codex', entry: 'native', plan })
+      ).toThrow(/native-image/);
+      expect(fixtureState()).toEqual(before);
+    }
+  }
+);
 
 test.each([1, 2, 'event-budget'])('retained entry identity admits exact metadata %s', (version) => {
   const home = path.join(root, 'retained-metadata-home');
