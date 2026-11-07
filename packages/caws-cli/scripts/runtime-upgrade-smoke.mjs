@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Qualify installed artifacts in disposable machine homes. Never consult the
+// Qualify installed artifacts in isolated machine homes. Never consult the
 // developer's CAWS registration, npm config, Git hooks, or agent identity.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,22 +40,28 @@ export function isolatedEnvironment(root, inherited = process.env) {
 }
 
 let receiptSequence = 0;
-export function observedSpawn(command, args, options) {
+export function observedSpawn(command, args, options, onUncertainOutcome = () => {}) {
   const started = Date.now();
-  // The qualifier owns this process group. Killing only the adapter on timeout
-  // leaves its Bash handlers running while finally removes their repository.
-  const isolatedGroup = process.platform !== 'win32';
-  const result = spawnSync(command, args, { ...options, detached: isolatedGroup });
-  let timeoutCleanup = null;
-  if (result.error?.code === 'ETIMEDOUT' && isolatedGroup && result.pid) {
-    timeoutCleanup = { process_group: result.pid, signal: 'SIGKILL', result: 'signaled' };
-    try {
-      process.kill(-result.pid, 'SIGKILL');
-    } catch (error) {
-      timeoutCleanup.result = error.code === 'ESRCH' ? 'already_exited' : 'failed';
-      timeoutCleanup.error = error.message;
-    }
-  }
+  // spawnSync has already reaped its direct child. Its numeric pid no longer
+  // grants signal authority over a group, and its result says nothing about
+  // descendants. Mark uncertainty before receipt IO can fail.
+  const result = spawnSync(command, args, options);
+  const uncertain =
+    Boolean(result.error) || result.signal != null || !Number.isInteger(result.status);
+  result.qualificationCustody = {
+    direct_child_timeout_only: true,
+    descendant_settlement: 'unproven',
+    uncertain,
+  };
+  if (uncertain)
+    onUncertainOutcome({
+      command,
+      args,
+      pid: result.pid ?? null,
+      status: result.status ?? null,
+      signal: result.signal ?? null,
+      error: result.error?.message ?? null,
+    });
   const dir = options.env?.CAWS_QUALIFICATION_ARTIFACT_DIR;
   if (dir) {
     const receipt = {
@@ -67,7 +73,8 @@ export function observedSpawn(command, args, options) {
       signal: result.signal,
       error: result.error?.message ?? null,
       duration_ms: Date.now() - started,
-      timeout_cleanup: timeoutCleanup,
+      timeout_cleanup: null,
+      custody: result.qualificationCustody,
       stdout: result.stdout ?? '',
       stderr: result.stderr ?? '',
     };
@@ -79,20 +86,35 @@ export function observedSpawn(command, args, options) {
   return result;
 }
 
-function run(command, args, cwd, env, options = {}) {
-  const result = observedSpawn(command, args, {
-    cwd,
-    env,
-    encoding: 'utf8',
-    timeout: 300000,
-    maxBuffer: 8 * 1024 * 1024,
-    ...options,
-  });
-  if (result.status !== 0)
+function runChecked(command, args, cwd, env, options = {}, onUncertainOutcome) {
+  const result = observedSpawn(
+    command,
+    args,
+    {
+      cwd,
+      env,
+      encoding: 'utf8',
+      timeout: 300000,
+      maxBuffer: 8 * 1024 * 1024,
+      ...options,
+    },
+    onUncertainOutcome
+  );
+  if (result.status !== 0 || result.qualificationCustody.uncertain)
     throw new Error(
       `${command} ${args.join(' ')}: exit ${result.status}\n${result.error?.message ?? ''}\n${result.stdout}\n${result.stderr}`
     );
   return result.stdout;
+}
+
+export function retainQualificationFixture(root, report, uncertainOutcomes) {
+  // Even a natural direct-child exit cannot prove that a detached descendant
+  // has stopped using this fixture. Only a future supervisor settlement proof
+  // can authorize automatic deletion; do not infer it from command exit codes.
+  report.retainedFixture = root;
+  report.cleanup = 'not attempted: descendant settlement unproven';
+  report.uncertainOutcomes = uncertainOutcomes;
+  if (uncertainOutcomes.length) report.ok = false;
 }
 const json = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 function write(file, content) {
@@ -313,6 +335,15 @@ export function qualify({
   baseline = `${packageName}@12.1.0`,
   reportPath,
 } = {}) {
+  const uncertainOutcomes = [];
+  const onUncertainOutcome = (outcome) => uncertainOutcomes.push(outcome);
+  const run = (command, args, cwd, env, options) =>
+    runChecked(command, args, cwd, env, options, onUncertainOutcome);
+  const observe = (command, args, options) => {
+    const result = observedSpawn(command, args, options, onUncertainOutcome);
+    assert.equal(uncertainOutcomes.length, 0, 'Uncertain subprocess custody');
+    return result;
+  };
   candidate = fs.realpathSync(candidate);
   if (!fs.existsSync(path.join(candidate, 'dist/index.js')))
     throw new Error('Built candidate dist/index.js is required');
@@ -462,7 +493,7 @@ export function qualify({
       ['stop', 0],
       ['pre_tool_use', 2],
     ]) {
-      const result = observedSpawn(
+      const result = observe(
         'python3',
         [path.join(env.CAWS_HOME, 'bin/caws-hook'), 'codex', event, '--system'],
         {
@@ -517,7 +548,7 @@ export function qualify({
     const sentinel = (f) => `qualification-owned-sentinel:${f.name}\n`;
     // Mixed fleet: user transport defers while baseline native hooks remain.
     const hook = (f, event, extra = {}, runtimeEnv = {}) =>
-      observedSpawn(
+      observe(
         'python3',
         [path.join(env.CAWS_HOME, 'bin/caws-hook'), f.surface, event, '--system'],
         {
@@ -843,6 +874,7 @@ export function qualify({
     verifyQualificationCustody(evidenceRoot, expectations);
     report.custody = artifacts ? path.join(artifacts, 'custody.json') : null;
     report.persistentCustodyVerified = Boolean(artifacts);
+    assert.equal(uncertainOutcomes.length, 0, 'Uncertain subprocess custody');
     report.ok = true;
     step(`PASS: ${report.cases.length} cases; candidate ${report.tarballSha256}`);
     return report;
@@ -858,8 +890,8 @@ export function qualify({
     }
     throw error;
   } finally {
+    retainQualificationFixture(root, report, uncertainOutcomes);
     if (reportPath) write(path.resolve(reportPath), JSON.stringify(report, null, 2) + '\n');
-    fs.rmSync(root, { recursive: true, force: true });
   }
 }
 

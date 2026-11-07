@@ -7,10 +7,132 @@ import crypto from 'node:crypto';
 import { setTimeout } from 'node:timers';
 import {
   observedSpawn,
+  qualify,
+  retainQualificationFixture,
   retainFixtureDiagnostics,
   captureQualificationFile,
   verifyQualificationCustody,
 } from './runtime-upgrade-smoke.mjs';
+
+test('uncertain command records custody before receipt persistence can fail', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'upgrade-uncertain-'));
+  try {
+    const obstruction = path.join(root, 'not-a-directory');
+    fs.writeFileSync(obstruction, 'preserved');
+    const outcomes = [];
+    assert.throws(
+      () =>
+        observedSpawn(
+          path.join(root, 'absent-command'),
+          [],
+          {
+            cwd: root,
+            env: { CAWS_QUALIFICATION_ARTIFACT_DIR: obstruction },
+            encoding: 'utf8',
+          },
+          (outcome) => outcomes.push(outcome)
+        ),
+      /EEXIST|ENOTDIR/
+    );
+    assert.equal(outcomes.length, 1);
+    assert.equal(outcomes[0].status, null);
+    assert.match(outcomes[0].error, /ENOENT/);
+    assert.equal(fs.readFileSync(obstruction, 'utf8'), 'preserved');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('direct child timeout makes no descendant cleanup claim', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'upgrade-direct-timeout-'));
+  try {
+    const outcomes = [];
+    const result = observedSpawn(
+      process.execPath,
+      ['-e', 'setInterval(()=>{},1000)'],
+      {
+        cwd: root,
+        env: { ...process.env, CAWS_QUALIFICATION_ARTIFACT_DIR: root },
+        encoding: 'utf8',
+        timeout: 250,
+      },
+      (outcome) => outcomes.push(outcome)
+    );
+    assert.equal(result.error?.code, 'ETIMEDOUT');
+    assert.equal(outcomes.length, 1);
+    assert.equal(result.qualificationCustody.uncertain, true);
+    const receipt = JSON.parse(
+      fs.readFileSync(path.join(root, result.qualificationReceipt.file), 'utf8')
+    );
+    assert.equal(receipt.timeout_cleanup, null);
+    assert.equal(receipt.custody.descendant_settlement, 'unproven');
+    assert.equal(receipt.custody.direct_child_timeout_only, true);
+    assert.equal(receipt.custody.uncertain, true);
+  } finally {
+    // This fixture starts only the single direct child; it creates no descendant.
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+for (const uncertain of [false, true]) {
+  test(`fixture retention preserves bytes after ${uncertain ? 'uncertain' : 'natural'} child outcome`, () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'upgrade-retained-'));
+    try {
+      const file = path.join(root, 'consumer-input');
+      fs.writeFileSync(file, 'must survive');
+      const report = { ok: true };
+      const outcomes = uncertain ? [{ error: 'timeout' }] : [];
+      retainQualificationFixture(root, report, outcomes);
+      assert.equal(report.ok, !uncertain);
+      assert.equal(report.retainedFixture, root);
+      assert.equal(report.cleanup, 'not attempted: descendant settlement unproven');
+      assert.deepEqual(report.uncertainOutcomes, outcomes);
+      assert.equal(fs.readFileSync(file, 'utf8'), 'must survive');
+    } finally {
+      // No process is launched by this retention fixture.
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('qualifier refuses spawn failure and persists its retained fixture', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'upgrade-refused-'));
+  const inheritedPath = process.env.PATH;
+  let retained;
+  try {
+    const candidate = path.join(root, 'candidate');
+    fs.mkdirSync(path.join(candidate, 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(candidate, 'dist/index.js'), '');
+    fs.writeFileSync(
+      path.join(candidate, 'package.json'),
+      JSON.stringify({
+        name: '@paths.design/caws-cli',
+        version: '0.0.0-fixture',
+      })
+    );
+    const reportPath = path.join(root, 'report.json');
+    process.env.PATH = '';
+    assert.throws(() => qualify({ candidate, reportPath }), /ENOENT/);
+    const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+    retained = report.retainedFixture;
+    assert.equal(report.ok, false);
+    assert.deepEqual(report.cases, []);
+    assert.equal(report.uncertainOutcomes.length, 1);
+    assert.match(report.uncertainOutcomes[0].error, /ENOENT/);
+    assert.equal(report.uncertainOutcomes[0].pid, 0);
+    assert.equal(report.cleanup, 'not attempted: descendant settlement unproven');
+    assert.equal(
+      fs.readFileSync(path.join(retained, 'consumer/package.json'), 'utf8'),
+      '{"private":true}'
+    );
+  } finally {
+    if (inheritedPath === undefined) delete process.env.PATH;
+    else process.env.PATH = inheritedPath;
+    // ENOENT/pid0 above establishes that this fixture launched no child.
+    if (retained) fs.rmSync(retained, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test(
   'timeout stops an owned descendant before fixture cleanup',
@@ -136,6 +258,9 @@ for (const missing of [false, true]) {
         assert.equal(receipt.error, null);
       }
       assert.equal('env' in receipt, false);
+      assert.equal(receipt.timeout_cleanup, null);
+      assert.equal(receipt.custody.descendant_settlement, 'unproven');
+      assert.equal(receipt.custody.uncertain, missing);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
