@@ -89,7 +89,11 @@ Run the installed-artifact upgrade check locally after building:
 
 ```bash
 npm run build -w @paths.design/caws-cli
-node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report /tmp/caws-upgrade-report.json
+rustup toolchain install 1.90.0 --profile minimal
+cargo +1.90.0 fetch --locked --manifest-path packages/caws-native/Cargo.toml
+CARGO_TARGET_DIR="$PWD/packages/caws-cli/reports/upgrade-cargo" cargo +1.90.0 build --locked --offline --release --manifest-path packages/caws-native/Cargo.toml --no-default-features --example upgrade-supervisor
+export CAWS_QUALIFICATION_SUPERVISOR="$PWD/packages/caws-cli/reports/upgrade-cargo/release/examples/upgrade-supervisor"
+node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report packages/caws-cli/reports/upgrade-report.json
 ```
 
 The runner installs the actual npm `12.1.0` baseline, creates stock and custom
@@ -112,6 +116,26 @@ stdout/stderr, before/after governance hashes, the source transcript and
 rendered turn. Failed runs retain their report and command receipts too. Inspect
 these artifacts before accepting preservation or rollback claims; the report's
 boolean case summaries alone are insufficient.
+
+The repo-built supervisor owns each command's child and private process group.
+It carries one monotonic deadline from its frontend to its custodian, stops the
+group before reaping its leader, and keeps child settlement separate from pipe
+EOF and command success. The frontend allows two seconds after command expiry
+for cleanup observation; this does not extend the command's execution budget. If
+settlement remains unproven, the frontend returns uncertainty while the
+custodian retains the child. Command receipts identify the supervisor executable
+and retained exchange directory. A private pipe carries live completion; a
+target-written artifact cannot substitute for that observation.
+
+Linux uses a dedicated child subreaper and requires `ECHILD` after reaping the
+leader and adopted descendants. macOS observes only the original process group;
+a child that creates another session can escape it. Neither a successful command
+nor macOS group settlement authorizes fixture deletion. Reports name the
+retained fixture, and the qualifier performs no automatic fixture cleanup. The
+three-second timeout test checks a child that remains in its original group; a
+separate escaped session test demonstrates the narrower macOS guarantee. These
+checks do not prove general process containment or native harness event
+deadlines.
 
 These are subprocess fixtures. Before a runtime release, retain separate fresh
 native traces from the intended harnesses proving trust, SessionStart, an

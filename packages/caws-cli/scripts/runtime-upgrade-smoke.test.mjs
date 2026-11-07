@@ -55,6 +55,7 @@ test('direct child timeout makes no descendant cleanup claim', () => {
         env: { ...process.env, CAWS_QUALIFICATION_ARTIFACT_DIR: root },
         encoding: 'utf8',
         timeout: 250,
+        qualificationSupervisor: null,
       },
       (outcome) => outcomes.push(outcome)
     );
@@ -94,6 +95,7 @@ test('uncertain command preserves actual output when receipt persistence fails',
             input: 'actual-input',
             encoding: 'utf8',
             timeout: 1000,
+            qualificationSupervisor: null,
           },
           (outcome) => outcomes.push(outcome)
         ),
@@ -335,7 +337,14 @@ for (const missing of [false, true]) {
               '-e',
               'process.stdout.write("observed-output"); process.stderr.write("observed-error"); process.exitCode=7;',
             ],
-        { cwd: root, env, encoding: 'utf8', input: 'observed-input', timeout: 5000 }
+        {
+          cwd: root,
+          env,
+          encoding: 'utf8',
+          input: 'observed-input',
+          timeout: 5000,
+          qualificationSupervisor: null,
+        }
       );
       const files = fs.readdirSync(root);
       assert.equal(files.length, 1);

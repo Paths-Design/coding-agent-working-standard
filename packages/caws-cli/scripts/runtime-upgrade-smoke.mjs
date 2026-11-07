@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { requireQualificationSupervisor, supervisedSpawn } from './runtime-upgrade-supervisor.mjs';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packageName = '@paths.design/caws-cli';
@@ -45,14 +46,23 @@ export function observedSpawn(command, args, options, onUncertainOutcome = () =>
   // spawnSync has already reaped its direct child. Its numeric pid no longer
   // grants signal authority over a group, and its result says nothing about
   // descendants. Mark uncertainty before receipt IO can fail.
-  const result = spawnSync(command, args, options);
+  const supervisor = Object.hasOwn(options, 'qualificationSupervisor')
+    ? options.qualificationSupervisor
+    : process.env.CAWS_QUALIFICATION_SUPERVISOR;
+  const result = supervisor
+    ? supervisedSpawn(supervisor, command, args, options)
+    : spawnSync(command, args, options);
   const uncertain =
-    Boolean(result.error) || result.signal != null || !Number.isInteger(result.status);
-  result.qualificationCustody = {
+    Boolean(result.error) ||
+    result.signal != null ||
+    !Number.isInteger(result.status) ||
+    Boolean(result.qualificationCustody?.uncertain);
+  result.qualificationCustody ??= {
     direct_child_timeout_only: true,
     descendant_settlement: 'unproven',
     uncertain,
   };
+  result.qualificationCustody.uncertain = uncertain;
   if (uncertain)
     onUncertainOutcome({
       command,
@@ -66,6 +76,8 @@ export function observedSpawn(command, args, options, onUncertainOutcome = () =>
       duration_ms: Date.now() - started,
       stdout: result.stdout ?? '',
       stderr: result.stderr ?? '',
+      custody: result.qualificationCustody,
+      frontend: result.qualificationFrontend,
     });
   const dir = options.env?.CAWS_QUALIFICATION_ARTIFACT_DIR;
   if (dir) {
@@ -78,7 +90,7 @@ export function observedSpawn(command, args, options, onUncertainOutcome = () =>
       signal: result.signal,
       error: result.error?.message ?? null,
       duration_ms: Date.now() - started,
-      timeout_cleanup: null,
+      timeout_cleanup: result.qualificationTimeoutCleanup ?? null,
       custody: result.qualificationCustody,
       stdout: result.stdout ?? '',
       stderr: result.stderr ?? '',
@@ -339,13 +351,27 @@ export function qualify({
   candidate = packageRoot,
   baseline = `${packageName}@12.1.0`,
   reportPath,
+  supervisor = process.env.CAWS_QUALIFICATION_SUPERVISOR,
 } = {}) {
+  supervisor = requireQualificationSupervisor(supervisor);
   const uncertainOutcomes = [];
   const onUncertainOutcome = (outcome) => uncertainOutcomes.push(outcome);
   const run = (command, args, cwd, env, options) =>
-    runChecked(command, args, cwd, env, options, onUncertainOutcome);
+    runChecked(
+      command,
+      args,
+      cwd,
+      env,
+      { ...options, qualificationSupervisor: supervisor },
+      onUncertainOutcome
+    );
   const observe = (command, args, options) => {
-    const result = observedSpawn(command, args, options, onUncertainOutcome);
+    const result = observedSpawn(
+      command,
+      args,
+      { ...options, qualificationSupervisor: supervisor },
+      onUncertainOutcome
+    );
     assert.equal(uncertainOutcomes.length, 0, 'Uncertain subprocess custody');
     return result;
   };
@@ -397,6 +423,9 @@ export function qualify({
     proof: 'installed-artifact subprocess fixtures; native harness activation is separate',
     persistentCustodyVerified: false,
     qualifierSha256: hash(fs.readFileSync(fileURLToPath(import.meta.url))),
+    qualifierSupervisorAdapterSha256: hash(
+      fs.readFileSync(new URL('./runtime-upgrade-supervisor.mjs', import.meta.url))
+    ),
   };
   const custody = { guards: [], renderers: [] };
   const expectations = {

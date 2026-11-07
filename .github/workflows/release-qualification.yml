@@ -31,6 +31,8 @@ jobs:
         run: |
           rustup toolchain install 1.90.0 --profile minimal
           cargo +1.90.0 fetch --locked --manifest-path packages/caws-native/Cargo.toml
+      - name: Build qualification process custodian
+        run: cargo +1.90.0 build --locked --offline --release --manifest-path packages/caws-native/Cargo.toml --no-default-features --example upgrade-supervisor --jobs 2
       - name: Exercise Native guard strike transactions and process contention
         run: 'cargo +1.90.0 test --locked --offline --manifest-path packages/caws-native/Cargo.toml --no-default-features --lib guard_strikes::tests:: --jobs 1 -- --test-threads=1'
       - name: Exercise native image admission on Linux system paths
@@ -56,7 +58,10 @@ jobs:
             packages/caws-cli/coverage/coverage-summary.json
             packages/caws-cli/coverage/lcov.info
           if-no-files-found: error
-      - run: node --test scripts/release-tag-publish.test.mjs scripts/ci-governance-artifacts.test.mjs scripts/ci-matrix-version.test.mjs packages/caws-cli/scripts/runtime-upgrade-smoke.test.mjs
+      - run: node --test scripts/release-tag-publish.test.mjs scripts/ci-governance-artifacts.test.mjs scripts/ci-matrix-version.test.mjs packages/caws-cli/scripts/runtime-upgrade-smoke.test.mjs packages/caws-cli/scripts/runtime-upgrade-supervisor.test.mjs
+        env:
+          CAWS_QUALIFICATION_SUPERVISOR: ${{ github.workspace }}/packages/caws-native/target/release/examples/upgrade-supervisor
+          CAWS_RELEASE_ARTIFACT_DIR: ${{ github.workspace }}/release-scenarios
       - run: npm run docs:check -w @paths.design/caws-cli
       - run: npm run test:bats -w @paths.design/caws-cli
         env:
@@ -129,6 +134,11 @@ jobs:
           python-version: '3.12'
       - run: npm ci --no-audit --no-fund
       - run: npm run build -w @paths.design/caws-cli
+      - name: Build qualification process custodian
+        run: |
+          rustup toolchain install 1.90.0 --profile minimal
+          cargo +1.90.0 fetch --locked --manifest-path packages/caws-native/Cargo.toml
+          cargo +1.90.0 build --locked --offline --release --manifest-path packages/caws-native/Cargo.toml --no-default-features --example upgrade-supervisor --jobs 2
       - name: Verify required native runtime tools
         run: |
           /bin/bash --version
@@ -136,6 +146,8 @@ jobs:
           jq --version
       - name: Install and upgrade the actual candidate package
         run: node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report qualification-report.json
+        env:
+          CAWS_QUALIFICATION_SUPERVISOR: ${{ github.workspace }}/packages/caws-native/target/release/examples/upgrade-supervisor
       - name: Bash 3.2 dispatch regression
         if: runner.os == 'macOS' && matrix.node == '22'
         run: npm run test:bats:macos -w @paths.design/caws-cli
