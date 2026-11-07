@@ -431,6 +431,76 @@ function prepare(custody) {
   });
 }
 
+function registrationContract(custody, settings) {
+  const sourcePath = path.join(custody.env.CODEX_HOME, 'hooks.json');
+  const launcher = path.join(
+    custody.env.CAWS_HOME,
+    'bin',
+    settings.runtime.entry === 'native' ? 'caws-hook-native' : 'caws-hook'
+  );
+  return {
+    cwd: settings.project,
+    hooks: [
+      ['preToolUse', 'pre_tool_use', 45, '.*'],
+      ['postToolUse', 'post_tool_use', 60, '.*'],
+      ['preCompact', 'pre_compact', 30, null],
+      ['sessionStart', 'session_start', 30, null],
+      ['sessionEnd', 'session_end', 3, null],
+      ['stop', 'stop', 30, null],
+    ].map(([eventName, event, timeoutSec, matcher]) => ({
+      key: sourcePath + ':' + event + ':0:0',
+      eventName,
+      handlerType: 'command',
+      command:
+        'CAWS_HOME=' +
+        quote(custody.env.CAWS_HOME) +
+        ' ' +
+        quote(launcher) +
+        ' codex ' +
+        event +
+        ' --system',
+      async: false,
+      matcher,
+      timeoutSec,
+      statusMessage: null,
+      additionalContextLimit: null,
+      sourcePath,
+      source: 'user',
+      pluginId: null,
+      isManaged: false,
+      enabled: true,
+      trustStatus: 'trusted',
+    })),
+  };
+}
+
+function verifyRegistration(list, expected) {
+  insist(
+    expected?.hooks?.length === 6 && Array.isArray(list?.data) && list.data.length === 1,
+    'Native hook registration is incomplete'
+  );
+  const row = list.data[0];
+  insist(
+    row?.cwd === expected.cwd &&
+      Array.isArray(row.errors) &&
+      row.errors.length === 0 &&
+      Array.isArray(row.warnings) &&
+      row.warnings.length === 0 &&
+      Array.isArray(row.hooks) &&
+      row.hooks.length === expected.hooks.length,
+    'Native hook discovery differs from the isolated registration'
+  );
+  for (const hook of expected.hooks) {
+    const matches = row.hooks.filter((value) => value?.key === hook.key);
+    insist(
+      matches.length === 1 &&
+        Object.entries(hook).every(([key, value]) => matches[0][key] === value) &&
+        /^sha256:[0-9a-f]{64}$/.test(matches[0].currentHash ?? ''),
+      'Native hook requires review or differs from the selected entry: ' + hook.eventName
+    );
+  }
+}
+
 function inspectObservation(data) {
   const text = (value) => typeof value === 'string' && value.length > 0;
   const base64 = (value) =>
@@ -484,9 +554,13 @@ function inspectObservation(data) {
     );
     return matching.length === 1 ? matching[0] : undefined;
   };
-  const registrations = (Array.isArray(data.hooks?.data) ? data.hooks.data : []).flatMap((row) =>
-    Array.isArray(row?.hooks) ? row.hooks.filter((hook) => hook && typeof hook === 'object') : []
-  );
+  let trustedRegistration = false;
+  try {
+    verifyRegistration(data.hooks, data.registrationContract);
+    trustedRegistration = true;
+  } catch {
+    // A partial or historical receipt cannot establish this registration contract.
+  }
   const pwd = command(data.sources?.pwd),
     write = command(data.sources?.write),
     read = command(data.sources?.read);
@@ -510,12 +584,7 @@ function inspectObservation(data) {
       data.completed?.threadId === data.threadId &&
       data.completed?.turn?.id === data.operationTurnId &&
       data.completed.turn.status === 'completed',
-    trustedRegistration:
-      registrations.length > 0 &&
-      registrations.every((hook) => hook.enabled === true && hook.trustStatus === 'trusted') &&
-      ['sessionStart', 'preToolUse', 'postToolUse', 'stop'].every((name) =>
-        registrations.some((hook) => hook.eventName === name)
-      ),
+    trustedRegistration,
     sessionStart: hooks.some(
       (row) => row.run?.eventName === 'sessionStart' && row.run.status === 'completed'
     ),
@@ -610,6 +679,7 @@ async function observe(custody, preparationSha256) {
   const data = {
     inputs,
     observerSource,
+    registrationContract: registrationContract(custody, s),
     preparation: {
       path: preparation.path,
       sha256: preparation.sha256,
@@ -797,6 +867,10 @@ async function observe(custody, preparationSha256) {
           p.threadId === data.threadId &&
           p.turnId === activeTurnId &&
           p.cwd === s.project &&
+          (p.kind === undefined || p.kind === 'command') &&
+          p.environmentId == null &&
+          p.networkApprovalContext == null &&
+          p.command === bootstrapSource &&
           p.commandActions?.length === 1 &&
           p.commandActions[0].command === bootstrapSource;
         if (bootstrap) bootstrapApprovalUsed = true;
@@ -862,6 +936,7 @@ async function observe(custody, preparationSha256) {
     });
     send({ method: 'initialized' });
     data.hooks = await rpc('hooks/list', { cwds: [s.project] });
+    verifyRegistration(data.hooks, data.registrationContract);
     const thread = await rpc(request.scenario.resumeThread ? 'thread/resume' : 'thread/start', {
       ...(request.scenario.resumeThread ? { threadId: request.scenario.resumeThread } : {}),
       cwd: s.project,
@@ -890,7 +965,7 @@ async function observe(custody, preparationSha256) {
             JSON.stringify(bootstrapSource) +
             ', workdir ' +
             JSON.stringify(s.project) +
-            ', login false. This normal CLI binds the existing draft through your actual session. Never set or invent session/owner identifiers. Do not edit hooks, seek guard exceptions, record evidence, merge or clean. Then report ready.',
+            ', login false. Request the normal one-call native approval before executing this exact command, because creating its worktree writes Git metadata. Do not request a persistent rule or session-wide permission. This normal CLI binds the existing draft through your actual session. Never set or invent session/owner identifiers. Do not edit hooks, seek guard exceptions, record evidence, merge or clean. Then report ready.',
           text_elements: [],
         },
       ],

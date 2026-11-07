@@ -324,7 +324,46 @@ test('configuration pathname replacement is refused without writing either file'
     opened.close();
   }
 });
-function captureFixture(onSend, closesNormally) {
+function fixtureHooks(entry = 'legacy') {
+  const sourcePath = path.join(fixture, 'home/.codex/hooks.json');
+  const machine = path.join(fixture, 'machine');
+  const launcher = path.join(machine, 'bin', entry === 'native' ? 'caws-hook-native' : 'caws-hook');
+  return {
+    data: [
+      {
+        cwd: path.join(fixture, 'project'),
+        warnings: [],
+        errors: [],
+        hooks: [
+          ['preToolUse', 'pre_tool_use', 45, '.*'],
+          ['postToolUse', 'post_tool_use', 60, '.*'],
+          ['preCompact', 'pre_compact', 30, null],
+          ['sessionStart', 'session_start', 30, null],
+          ['sessionEnd', 'session_end', 3, null],
+          ['stop', 'stop', 30, null],
+        ].map(([eventName, event, timeoutSec, matcher]) => ({
+          key: sourcePath + ':' + event + ':0:0',
+          eventName,
+          handlerType: 'command',
+          command: `CAWS_HOME='${machine}' '${launcher}' codex ${event} --system`,
+          async: false,
+          matcher,
+          timeoutSec,
+          statusMessage: null,
+          additionalContextLimit: null,
+          sourcePath,
+          source: 'user',
+          pluginId: null,
+          enabled: true,
+          isManaged: false,
+          currentHash: 'sha256:' + 'c'.repeat(64),
+          trustStatus: 'trusted',
+        })),
+      },
+    ],
+  };
+}
+function captureFixture(onSend, closesNormally, entry = 'legacy') {
   jest.resetModules();
   const child = new EventEmitter();
   for (const name of ['stdin', 'stdout', 'stderr']) {
@@ -348,10 +387,14 @@ function captureFixture(onSend, closesNormally) {
     ...jest.requireActual('node:child_process'),
     spawn: jest.fn(() => child),
   }));
+  const runtime =
+    entry === 'native'
+      ? { entry, nativeImage: { path: path.join(fixture, 'image.json'), sha256: 'c'.repeat(64) } }
+      : { entry };
   const request = {
     surface: 'codex',
     budgetMs: 1000,
-    runtime: { entry: 'legacy' },
+    runtime,
     paths: { project: 'project', consumer: 'consumer', output: 'output' },
     scenario: {
       ownedFile: 'project/.caws/worktrees/native-owned/allowed.txt',
@@ -364,7 +407,7 @@ function captureFixture(onSend, closesNormally) {
   const inputs = {
     request: { sha256: 'a'.repeat(64) },
     host: { image: { path: path.join(fixture, 'fake-host') } },
-    runtime: { entry: 'legacy' },
+    runtime,
   };
   fs.writeFileSync(
     path.join(fixture, 'output/prepare.json'),
@@ -372,7 +415,7 @@ function captureFixture(onSend, closesNormally) {
       schema: 'caws.native-session.receipt.v1',
       surface: 'codex',
       requestSha256: inputs.request.sha256,
-      data: { runtime: { entry: 'legacy', nativeImage: null, reports: [] } },
+      data: { runtime: { ...runtime, nativeImage: runtime.nativeImage ?? null, reports: [] } },
     })
   );
   const started = Date.now();
@@ -384,7 +427,7 @@ function captureFixture(onSend, closesNormally) {
   const custody = {
     request,
     inputs,
-    env: { HOME: path.join(fixture, 'home') },
+    env: { HOME: path.join(fixture, 'home'), CAWS_HOME: path.join(fixture, 'machine') },
     resolvePath: (value) => path.join(fixture, value),
     readPublic: fixturePublicRead,
     remainingMs: () => Math.max(0, 1000 - (Date.now() - started)),
@@ -419,7 +462,7 @@ test('replaced same-request preparation metadata prevents host spawn', async () 
   await expect(fx.observe(fx.custody)).rejects.toThrow('Preparation receipt hash mismatch');
   expect(require('node:child_process').spawn).not.toHaveBeenCalled();
 });
-function bootstrapProtocol(mode) {
+function bootstrapProtocol(mode, entry = 'legacy') {
   let reentrantReplay;
   return (child, message) => {
     if (mode === 'reentrant' && message.id === 'first' && message.result?.decision === 'accept') {
@@ -427,8 +470,10 @@ function bootstrapProtocol(mode) {
       return;
     }
     const emit = (value) => child.stdout.emit('data', Buffer.from(JSON.stringify(value) + '\n'));
-    if (message.method === 'initialize' || message.method === 'hooks/list')
+    if (message.method === 'initialize')
       globalThis.queueMicrotask(() => emit({ id: message.id, result: {} }));
+    if (message.method === 'hooks/list')
+      globalThis.queueMicrotask(() => emit({ id: message.id, result: fixtureHooks(entry) }));
     if (message.method === 'thread/start')
       globalThis.queueMicrotask(() =>
         emit({ id: message.id, result: { thread: { id: 'thread-1' }, model: 'unit-fixture' } })
@@ -444,6 +489,7 @@ function bootstrapProtocol(mode) {
         threadId: 'thread-1',
         ...(turnId === undefined ? {} : { turnId }),
         cwd: path.join(fixture, 'project'),
+        command,
         commandActions: [{ command }],
       },
     });
@@ -458,6 +504,17 @@ function bootstrapProtocol(mode) {
         reentrantReplay = approval('second', 'bootstrap-1');
         emit(approval('first', 'bootstrap-1'));
         if (mode === 'duplicate') emit(reentrantReplay);
+      } else if (
+        ['missing-command', 'different-command', 'stdin', 'remote', 'network'].includes(mode)
+      ) {
+        const request = approval('invalid-command', 'bootstrap-1');
+        if (mode === 'missing-command') delete request.params.command;
+        if (mode === 'different-command') request.params.command += ' && unwanted-command';
+        if (mode === 'stdin') request.params.kind = 'writeStdin';
+        if (mode === 'remote') request.params.environmentId = 'another-environment';
+        if (mode === 'network')
+          request.params.networkApprovalContext = { host: 'example.com', protocol: 'https' };
+        emit(request);
       } else {
         const first = approval('foreign', 'other-turn');
         const second = approval('after-fatal', 'bootstrap-1');
@@ -469,6 +526,100 @@ function bootstrapProtocol(mode) {
     });
   };
 }
+test.each(['legacy', 'native'])(
+  'trusted exact %s registration reaches the one-call bootstrap',
+  async (entry) => {
+    const fx = captureFixture(bootstrapProtocol('duplicate', entry), true, entry);
+    await fx.observe(fx.custody);
+    expect(fx.sent.find((message) => message.id === 'first').result.decision).toBe('accept');
+    const turn = fx.sent.find((message) => message.method === 'turn/start');
+    expect(turn.params.input[0].text).toContain('one-call native approval before executing');
+    expect(turn.params.input[0].text).toContain(
+      'Do not request a persistent rule or session-wide permission'
+    );
+    expect(
+      fx.record.mock.calls.find(([label]) => label === 'observe')[1].observations
+        .trustedRegistration
+    ).toBe(true);
+  }
+);
+test.each([
+  'modified',
+  'disabled',
+  'missing',
+  'duplicate',
+  'wrong-entry',
+  'wrong-source',
+  'wrong-timeout',
+  'async',
+  'matcher',
+  'missing-hash',
+  'warning',
+  'error',
+  'wrong-cwd',
+])('unqualified registration (%s) stops before native session creation', async (kind) => {
+  const fx = captureFixture(
+    (child, message) => {
+      if (!['initialize', 'hooks/list'].includes(message.method)) return;
+      const list = fixtureHooks('native');
+      const row = list.data[0],
+        hook = row.hooks[0];
+      if (kind === 'modified') hook.trustStatus = 'modified';
+      if (kind === 'disabled') hook.enabled = false;
+      if (kind === 'missing') row.hooks.pop();
+      if (kind === 'duplicate') row.hooks[1] = { ...hook };
+      if (kind === 'wrong-entry')
+        hook.command = hook.command.replace('caws-hook-native', 'caws-hook');
+      if (kind === 'wrong-source') hook.sourcePath = '/another/hooks.json';
+      if (kind === 'wrong-timeout') hook.timeoutSec = 300;
+      if (kind === 'async') hook.async = true;
+      if (kind === 'matcher') hook.matcher = 'unmatched-tool';
+      if (kind === 'missing-hash') delete hook.currentHash;
+      if (kind === 'warning') row.warnings.push('source conflict');
+      if (kind === 'error') row.errors.push('source failure');
+      if (kind === 'wrong-cwd') row.cwd = '/another-project';
+      globalThis.queueMicrotask(() =>
+        child.stdout.emit(
+          'data',
+          Buffer.from(
+            JSON.stringify({
+              id: message.id,
+              result: message.method === 'initialize' ? {} : list,
+            }) + '\n'
+          )
+        )
+      );
+    },
+    true,
+    'native'
+  );
+  await fx.observe(fx.custody);
+  expect(
+    fx.sent.some((message) =>
+      ['thread/start', 'thread/resume', 'turn/start'].includes(message.method)
+    )
+  ).toBe(false);
+  expect(fx.sent.some((message) => message.result?.decision === 'accept')).toBe(false);
+  const observed = fx.record.mock.calls.find(([label]) => label === 'observe')[1];
+  expect(observed.error).toMatch(/Native hook/);
+  expect(observed.observations.trustedRegistration).toBe(false);
+  expect(observed.terminal).toEqual({ status: 0, signal: null });
+  expect(process.exitCode).toBe(1);
+});
+test.each(['missing-command', 'different-command', 'stdin', 'remote', 'network'])(
+  'friendly command metadata cannot authorize %s',
+  async (mode) => {
+    const fx = captureFixture(bootstrapProtocol(mode), true);
+    await fx.observe(fx.custody);
+    expect(fx.sent.find((message) => message.id === 'invalid-command').result.decision).toBe(
+      'decline'
+    );
+    expect(fx.sent.some((message) => message.result?.decision === 'accept')).toBe(false);
+    expect(fx.record.mock.calls.find(([label]) => label === 'observe')[1].error).toBe(
+      'Unexpected native approval was declined'
+    );
+  }
+);
 test.each(['null', 'missing'])(
   'declines bootstrap approval with %s turn before response',
   async (mode) => {
