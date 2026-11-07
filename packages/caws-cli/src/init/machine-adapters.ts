@@ -333,6 +333,107 @@ export function installMachineRuntime(options: MachineRuntimeOptions = {}): Mach
   );
 }
 
+export interface QualifiedCompatibilityRuntimeOptions {
+  readonly home: string;
+  readonly sourceHome: string;
+  readonly expectedDigest: string;
+  readonly expectedPreviousDigest: string;
+  readonly plan?: boolean;
+}
+
+/** Publish a qualified compatibility snapshot without rebuilding it from a
+ * newer package's templates. Both identities are checked under the ordinary
+ * installer lock; only captured, digest-verified bytes reach publication.
+ * Bootstrap changes and native-entry transitions use the ordinary installer.
+ */
+export function installQualifiedCompatibilityRuntime(
+  options: QualifiedCompatibilityRuntimeOptions
+): MachineRuntimeResult {
+  const { home, sourceHome, expectedDigest, expectedPreviousDigest } = options;
+  if (
+    !path.isAbsolute(home) ||
+    !path.isAbsolute(sourceHome) ||
+    !/^[a-f0-9]{64}$/.test(expectedDigest) ||
+    !/^[a-f0-9]{64}$/.test(expectedPreviousDigest)
+  )
+    throw new Error('Qualified runtime requires absolute homes and explicit digest identities');
+  const install = (): MachineRuntimeResult => {
+    const prior = readPointer(home);
+    if (prior?.digest !== expectedPreviousDigest)
+      throw new Error('Qualified runtime predecessor changed');
+    verifyRuntime(home, prior.digest);
+    assertMachinePath(home, path.join(home, 'bin/caws-hook-native'));
+    if (fs.existsSync(path.join(home, 'bin/caws-hook-native')))
+      throw new Error('Qualified compatibility publication cannot transition a native entry');
+    const source = path.join(sourceHome, 'lib/runtimes', expectedDigest);
+    const manifestFile = readNativeEntryFileIdentity(
+      sourceHome,
+      path.join(source, 'manifest.json')
+    );
+    if (manifestFile.sha256 !== expectedDigest || manifestFile.mode !== 0o600)
+      throw new Error('Qualified runtime manifest identity or mode mismatch');
+    const manifest = readManifest(sourceHome, expectedDigest);
+    if (manifest['native-entry.json'] || manifest['native-modes.json'])
+      throw new Error('Qualified compatibility publication rejects native metadata');
+    const captured = new Map<string, { bytes: Buffer; mode: number }>();
+    for (const [relative, expected] of Object.entries(manifest)) {
+      const file = path.join(source, relative);
+      assertMachinePath(source, file);
+      const identity = readNativeEntryFileIdentity(sourceHome, file);
+      const mode = relative.endsWith('.sh') ? 0o755 : 0o600;
+      if (identity.sha256 !== expected || identity.mode !== mode)
+        throw new Error('Qualified runtime member identity or mode mismatch: ' + relative);
+      captured.set(relative, { bytes: identity.bytes, mode });
+    }
+    const bootstrap = captured.get('bootstrap.py')?.bytes;
+    if (!bootstrap || needsBootstrap(home, prior, bootstrap))
+      throw new Error('Qualified runtime must preserve the installed bootstrap');
+    const snapshot = path.join(home, 'lib/runtimes', expectedDigest);
+    assertMachinePath(home, snapshot);
+    const result: MachineRuntimeResult = {
+      home,
+      digest: expectedDigest,
+      previousDigest: prior.digest,
+      changed: prior.digest !== expectedDigest,
+      launcher: path.join(home, 'bin/caws-hook'),
+      files: [...captured.keys()],
+    };
+    if (options.plan || !result.changed) return result;
+    if (!fs.existsSync(snapshot)) {
+      const temporary = `${snapshot}.pending.${randomUUID()}`;
+      assertMachinePath(home, temporary);
+      try {
+        for (const [relative, identity] of captured)
+          atomicMachineWrite(home, path.join(temporary, relative), identity.bytes, identity.mode);
+        atomicMachineWrite(home, path.join(temporary, 'manifest.json'), manifestFile.bytes);
+        fs.renameSync(temporary, snapshot);
+      } finally {
+        if (fs.existsSync(temporary)) fs.rmSync(temporary, { recursive: true });
+      }
+    }
+    verifyRuntime(home, expectedDigest);
+    for (const [relative, identity] of captured) {
+      const installed = readNativeEntryFileIdentity(home, path.join(snapshot, relative));
+      if (installed.mode !== identity.mode || installed.sha256 !== sha(identity.bytes))
+        throw new Error('Qualified runtime installed member mismatch: ' + relative);
+    }
+    if (
+      readPointer(home)?.digest !== expectedPreviousDigest ||
+      needsBootstrap(home, prior, bootstrap)
+    )
+      throw new Error('Qualified runtime predecessor or bootstrap changed before publication');
+    activateRuntime(
+      home,
+      { version: 1, digest: expectedDigest, previous_digest: prior.digest },
+      bootstrap,
+      false,
+      undefined
+    );
+    return result;
+  };
+  return options.plan ? install() : withRuntimeLock(home, install);
+}
+
 function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   const home = path.resolve(options.home ?? machineHome());
   const templatesRoot =
