@@ -5,6 +5,11 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const childProcess = require('node:child_process');
 const { performance } = require('node:perf_hooks');
+const {
+  assertPredecessorSettled,
+  runCaseLifetime,
+  closeCaseLifetime,
+} = require('../helpers/fixture-case-lifetime');
 const { execFileSync } = childProcess;
 const { resolveGitBinaryForEnvironment } = require('../../dist/store/git-binary');
 const {
@@ -149,13 +154,7 @@ async function observeCaseLifetime(body) {
     }
   };
   owner.stage = stage;
-  stage('body-start');
-  try {
-    return await body(stage);
-  } finally {
-    owner.pending = false;
-    stage('body-settled');
-  }
+  return runCaseLifetime(owner, stage, body);
 }
 const artifactRoot = process.env.CAWS_TEST_ARTIFACT_DIR;
 if (artifactRoot && !path.isAbsolute(artifactRoot))
@@ -334,10 +333,7 @@ test('current rehashed guard does not inherit reviewed stock or containment trus
 });
 
 beforeEach(() => {
-  if (unsettledCase)
-    throw new Error(
-      'Earlier fixture lifetime is unproven; no new fixture admitted: ' + unsettledCase.root
-    );
+  assertPredecessorSettled(unsettledCase);
   activeCase = undefined;
   directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-stock-handlers-')));
   runtime = path.join(directory, 'runtime');
@@ -416,12 +412,9 @@ afterEach(() => {
   if (unsettledCase)
     throw new Error('Fixture retained after unknown lifetime: ' + unsettledCase.root);
   if (activeCase) {
-    activeCase.closed = true;
-    activeCase.stage('teardown');
-    if (activeCase.pending) {
-      unsettledCase = activeCase;
-      throw new Error('Async case is unfinished; fixture retained in place: ' + activeCase.root);
-    }
+    closeCaseLifetime(activeCase, (owner) => {
+      unsettledCase = owner;
+    });
   }
   jest.restoreAllMocks();
   if (artifactRoot && directory) {
@@ -799,17 +792,21 @@ describe('selected stock handler behavior', () => {
       fs.writeFileSync(path.join(project, 'tracked.txt'), 'tracked\n');
       git('add', 'tracked.txt');
       before = fs.readFileSync(path.join(project, '.git/index'));
+      const elapsedMs = performance.now() - started;
       fs.writeFileSync(
         path.join(directory, 'utility-setup.json'),
         JSON.stringify(
           {
-            elapsedMs: performance.now() - started,
+            elapsedMs,
             deadlineEpochMs: request.deadlineEpochMs,
           },
           null,
           2
         )
       );
+      // Jest cannot interrupt synchronous setup; reject an over-budget result
+      // explicitly rather than treating the timer's absence as timing proof.
+      expect(performance.now() - started).toBeLessThan(5000);
     });
     test.each([
       [
