@@ -51,7 +51,20 @@ test('activation isolates its target, refuses mismatches and preserves normal ro
     assert.throws(() => maintenance.activate(fixture, build.digest, machine), /inputs changed/);
     assert.deepEqual(maintenance.pointer(machine), selected);
   } finally { fs.writeFileSync(guard, original); }
-  assert.equal(maintenance.activate(fixture, build.digest, machine).digest, build.digest);
+  // Mutation after the advisory plan must not change the published generation.
+  const install = api.installMachineRuntime;
+  let changedAfterPlan = false;
+  api.installMachineRuntime = (options) => {
+    const result = install(options);
+    if (options.plan) {
+      fs.appendFileSync(guard, '\n# changed after plan\n');
+      changedAfterPlan = true;
+    }
+    return result;
+  };
+  try { assert.equal(maintenance.activate(fixture, build.digest, machine).digest, build.digest); }
+  finally { api.installMachineRuntime = install; fs.writeFileSync(guard, original); }
+  assert.equal(changedAfterPlan, true);
   assert.deepEqual(maintenance.snapshot(machine, build.digest), after);
   assert.equal(api.rollbackMachineRuntime({ home: machine }).digest, maintenance.BASE);
   assert.deepEqual(maintenance.snapshot(machine, maintenance.BASE), before);
@@ -112,18 +125,22 @@ test('installed guard preserves scope, foreign containment and rollback on real 
   const foreignFile = path.join(foreign, 'protected.txt');
   for (const file of [allowed, protectedFile, foreignFile]) fs.writeFileSync(file, 'sentinel\n');
   const observations = [];
-  function guard(digest, target, expectedStatus, expectedText, name = 'scope-guard.sh', caller = sid) {
+  function guard(digest, target, expectedStatus, expectedText, name = 'scope-guard.sh', caller = sid, extraEnv = {}) {
     const original = fs.readFileSync(target);
-    const payload = { tool_name: 'Write', session_id: caller, cwd: managed, tool_input: { file_path: target } };
+    const callerCwd = extraEnv.CAWS_PROJECT_DIR ?? managed;
+    const payload = { tool_name: 'Write', session_id: caller, cwd: callerCwd, tool_input: { file_path: target } };
     const result = run('/bin/bash', [path.join(build.privateHome, 'lib/runtimes', digest, name)], {
-      cwd: managed, input: JSON.stringify(payload),
+      cwd: callerCwd, input: JSON.stringify(payload),
       env: { ...env, CODEX_THREAD_ID: caller, CAWS_PROJECT_DIR: managed, HOOK_CWD: managed,
-        CAWS_MACHINE_POLICY_ROOT: repo },
+        CAWS_MACHINE_POLICY_ROOT: repo, ...extraEnv },
     });
     if (result.status === 0) fs.writeFileSync(target, 'effect\n');
     const final = fs.readFileSync(target);
     observations.push({ name, digest, target, caller, payload, status: result.status,
       before: original.toString('base64'), after: final.toString('base64') });
+    fs.writeFileSync(path.join(root, 'observations.json'), JSON.stringify({
+      candidate: build.digest, observations, rollbackVerified: false,
+    }, null, 2) + '\n');
     assert.equal(result.status, expectedStatus, result.stdout + result.stderr);
     if (expectedText) assert.match(result.stdout + result.stderr, expectedText);
     if (expectedStatus !== 0) assert.deepEqual(final, original, 'Refused write changed bytes');
@@ -135,11 +152,32 @@ test('installed guard preserves scope, foreign containment and rollback on real 
   guard(build.digest, protectedFile, 2, /out-of-scope/);
   guard(build.digest, foreignFile, 2, /DIFFERENT repository/);
   guard(build.digest, allowed, 2, /owned|owner|another|different|foreign/i, 'worktree-write-guard.sh', crypto.randomUUID());
+  guard(build.digest, allowed, 2, /CLI is not on PATH/, 'scope-guard.sh', sid,
+    { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' });
+  // Deliberately malformed CLI protocol fixture, scoped to this one child.
+  const brokenCli = path.join(root, 'malformed-cli');
+  fs.mkdirSync(brokenCli);
+  fs.writeFileSync(path.join(brokenCli, 'caws'),
+    '#!/bin/bash\nif [[ "$2" == check ]]; then exit 1; fi\nprintf "not-json\\n"\n', { mode: 0o755 });
+  guard(build.digest, protectedFile, 2, /could not render the structured diagnostic/,
+    'scope-guard.sh', sid, { PATH: brokenCli + ':' + env.PATH });
   const specs = path.join(repo, '.caws/specs');
+  const boundSpec = path.join(specs, 'GUARD-FIXTURE-001.yaml');
+  const savedSpec = path.join(root, 'saved-spec.yaml');
+  fs.renameSync(boundSpec, savedSpec);
+  try { guard(build.digest, protectedFile, 2, /bound spec did not load/); }
+  finally { fs.renameSync(savedSpec, boundSpec); }
   const saved = path.join(root, 'saved-specs');
   fs.renameSync(specs, saved);
   try { guard(build.digest, protectedFile, 2, /canonical governance/); }
   finally { fs.renameSync(saved, specs); }
+  const failedGit = path.join(root, 'failed-git');
+  fs.mkdirSync(failedGit);
+  fs.writeFileSync(path.join(failedGit, 'git'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  guard(build.digest, protectedFile, 2, /canonical governance/, 'scope-guard.sh', sid,
+    { PATH: failedGit + ':' + env.PATH, CAWS_PROJECT_DIR: lane });
+  guard(build.digest, protectedFile, 2, /scope|governance/i, 'scope-guard.sh', sid,
+    { PATH: failedGit + ':' + env.PATH, CAWS_PROJECT_DIR: lane, CAWS_MACHINE_POLICY_ROOT: '' });
   const bashPayload = { tool_name: 'Bash', session_id: sid, cwd: managed,
     tool_input: { command: 'pwd', execution_workdir: managed } };
   succeeds(run('/bin/bash', [path.join(build.privateHome, 'lib/runtimes', build.digest, 'bash-write-guard.sh')], {
