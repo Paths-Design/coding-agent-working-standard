@@ -35,3 +35,11 @@ rollback:
   - 'Use normal caws init adapters rollback to restore the verified previous runtime; preserve both snapshots and registration'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Candidate e736c96780fe9539664ee4436571a141b750ca0e60da7126ade5422bc5c899da reproduces baseline7be then changes only scope-guard.sh to exact existing repair199b65af bytes. All113 manifest members verified; other112 bytes and all113 modes unchanged; session-id helper preserved. Prepared under canonical retained state. Tests exercised member removal/unrelated delta/wrong repair and altered publication inputs; source is ca437f58. This is bounded compatibility maintenance, not full native cutover."
+    recorded_at: "2026-11-07T20:53:58.255Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/test-attempt-2.txt"
+    commit_sha: ca437f58c40101ed7e9353b41a54fa7fc1d25572
