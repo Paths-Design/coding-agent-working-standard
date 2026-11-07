@@ -1,0 +1,55 @@
+id: CAWS-NATIVE-CLAUDE-FILE-PROFILE-001
+title: 'Native Claude file-tool admission and compiled stock enforcement'
+mode: feature
+lifecycle_state: active
+created_at: '2026-11-07T23:06:58.475Z'
+updated_at: '2026-11-07T23:06:58.475Z'
+created_by_session: '01a19baf-4b34-7a83-9cf8-f109a22c539e'
+blast_radius:
+  modules:
+    - 'Claude native file-tool producer, compiled stock profile, and real consumer observation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/'
+    - 'packages/caws-native/src/protocol.rs'
+    - 'packages/caws-native/src/context_git/'
+    - 'packages/caws-native/src/context_git.rs'
+    - 'packages/caws-cli/tests/runtime/'
+    - 'packages/caws-native/tests/'
+    - 'packages/caws-cli/tests/execution/'
+    - 'packages/caws-cli/scripts/qualify-native-claude.cjs'
+    - 'packages/caws-cli/tests/ci/native-claude-capture.test.js'
+  out: []
+invariants:
+  - 'Keep ownership, scope, protected-path, exact-source admission, original deadlines and all existing acceptance floors intact.'
+  - 'A declared default Claude file-tool profile must not silently execute whole compatibility dispatch or first-party handler subprocesses.'
+  - 'Preserve supported custom extensions and preserve unrelated source and unfinished qualification work.'
+acceptance:
+  - id: A1
+    given: 'a default system Claude Write or Edit callback'
+    when: 'the native producer and runtime normalize and admit it'
+    then: 'the exact operation, cwd, caller and strike context, and original deadline remain bound without converting the surface to Codex.'
+  - id: A2
+    given: 'the complete unchanged first-party handler set for the Claude file callback'
+    when: 'the admitted profile is composed'
+    then: 'every active stock guard preserves baseline decisions and effects through compiled implementations with no whole compatibility dispatch or first-party handler subprocess.'
+  - id: A3
+    given: 'missing malformed stale or mismatched context, invalid source identity, or unsupported controls'
+    when: 'a declared default Claude file profile is requested'
+    then: 'it refuses before effects without borrowing compatibility enforcement, while supported explicit extensions retain their declared behavior.'
+  - id: A4
+    given: 'a genuine trusted public Claude session resumed in its owned lane'
+    when: 'it performs an owned write and read followed by a protected write'
+    then: 'correlated observations prove the compiled file route, same actual owner, timely refusal, unchanged protected bytes and mode, and joined lifecycle and semantic rendering; other callbacks and the full seven-harness cutover remain parent obligations.'
+observability:
+  - 'Retain profile and selected handler identity, fallback falsifiers, unchanged protected bytes, original deadline, failure receipts and actual execution identity.'
+rollback:
+  - 'Use normal source reversions and retain failed artifacts; this slice performs no global runtime activation.'
+non_functional:
+  security:
+    - 'Bind native context to the actual call; never relabel Claude as Codex, manufacture session environment, modify trust storage, or bypass guards.'
+contracts:
+  - name: 'claude-native-file-tool'
+    type: behavior
