@@ -43,3 +43,10 @@ evidence:
     exit_code: 0
     artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/test-attempt-2.txt"
     commit_sha: ca437f58c40101ed7e9353b41a54fa7fc1d25572
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "node:test at ca437f58 exercised retained baseline and private candidate with real Git-linked managed checkout, owned CAWS lane and independent foreign Git repository. Baseline wrongly refused owned scoped write; candidate admitted it. Scope-out, foreign repository, foreign session and missing canonical governance returned2 with exact protected before/after bytes equal. Tampered inputs refused before private publication; normal private activation and rollback verified all member bytes. Raw commands and observations in qualification-G8gxq0; actual host acceptance remains A3."
+    recorded_at: "2026-11-07T20:54:24.583Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/qualification-G8gxq0/observations.json"
+    commit_sha: ca437f58c40101ed7e9353b41a54fa7fc1d25572
