@@ -5,7 +5,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const api = require('../../scripts/lib/native-test-prerequisite-receipt.cjs');
 const setup = require('../helpers/load-native-test-prerequisites');
-let root, pkg, native, binary, observed;
+let root, pkg, native, binary, observed, artifactRoot;
 const toolchain = api.toolchainObservation(
   'rustc 1.90.0 (fixture)\nrelease: 1.90.0\nhost: fixture\n',
   'cargo 1.90.0 (fixture)\n'
@@ -59,11 +59,14 @@ beforeEach(() => {
   );
   fs.chmodSync(binary, 0o755);
   observed = process.env[api.ENV];
+  artifactRoot = process.env.CAWS_TEST_ARTIFACT_DIR;
 });
 afterEach(() => {
   jest.restoreAllMocks();
   if (observed === undefined) delete process.env[api.ENV];
   else process.env[api.ENV] = observed;
+  if (artifactRoot === undefined) delete process.env.CAWS_TEST_ARTIFACT_DIR;
+  else process.env.CAWS_TEST_ARTIFACT_DIR = artifactRoot;
   fs.rmSync(root, { recursive: true, force: true });
 });
 test('Cargo JSON selects exactly the physical current libtest artifact, not an older filename', () => {
@@ -147,6 +150,58 @@ test('added/deleted inputs and artifact byte replacement invalidate receipts', (
   publish();
   fs.appendFileSync(binary, 'replaced');
   expect(() => api.readReceipt(pkg)).toThrow('compiled libtest bytes changed');
+});
+test('source observations identify equal-size edits and count-preserving add/delete without admitting them', () => {
+  const directory = path.join(root, 'artifacts');
+  process.env.CAWS_TEST_ARTIFACT_DIR = directory;
+  const before = api.sourceObservation(pkg);
+  expect(api.sourceFingerprint(pkg)).toEqual(before.fingerprint);
+  expect(Object.keys(before.fingerprint)).toEqual(['sha256', 'fileCount']);
+  api.retainSourceObservation(pkg, 'prepare-before', before);
+  publish();
+  const changed = 'packages/caws-native/tests/input.txt';
+  const removed = 'packages/caws-native/examples/input.c';
+  const added = 'packages/caws-native/src/added.rs';
+  put(changed, 'changed');
+  fs.unlinkSync(path.join(root, removed));
+  put(added, '// example');
+  expect(() => api.readReceipt(pkg)).toThrow('source fingerprint changed');
+  const observations = fs
+    .readdirSync(path.join(directory, 'native-prerequisite-inputs'))
+    .map((name) => ({ file: path.join(directory, 'native-prerequisite-inputs', name) }))
+    .map(({ file }) => ({ file, row: JSON.parse(fs.readFileSync(file, 'utf8')) }));
+  const observed = observations.find(({ row }) => row.phase === 'read-receipt');
+  expect(observed.row.expected).toEqual(before.fingerprint);
+  expect(observed.row.fingerprint.fileCount).toBe(before.fingerprint.fileCount);
+  expect(observed.row.fingerprint.sha256).not.toBe(before.fingerprint.sha256);
+  const previous = new Map(before.files.map((row) => [row.path, row]));
+  const current = new Map(observed.row.inputs.map((row) => [row.path, row]));
+  expect(current.get(changed).sizeBytes).toBe(previous.get(changed).sizeBytes);
+  expect(current.get(changed).sha256).not.toBe(previous.get(changed).sha256);
+  expect(current.has(removed)).toBe(false);
+  expect(current.get(added).sha256).toBe(previous.get(removed).sha256);
+  expect(previous.has(added)).toBe(false);
+  expect(observed.row.receipt.path).toBe(api.locations(pkg).receipt);
+  fs.writeFileSync(observed.file, JSON.stringify({ fingerprint: before.fingerprint }));
+  expect(() => api.readReceipt(pkg)).toThrow('source fingerprint changed');
+});
+test('unwritable diagnostic destination preserves the original source refusal', () => {
+  publish();
+  process.env.CAWS_TEST_ARTIFACT_DIR = put('blocked-artifact-directory', 'file');
+  const stderr = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
+  put('packages/caws-native/tests/input.txt', 'changed');
+  expect(() => api.readReceipt(pkg)).toThrow('source fingerprint changed');
+  expect(stderr).toHaveBeenCalledWith(expect.stringContaining('diagnostic unavailable'));
+});
+test('diagnostic destination inside observed sources cannot contaminate the inventory', () => {
+  publish();
+  process.env.CAWS_TEST_ARTIFACT_DIR = path.join(native, 'src');
+  const stderr = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
+  const before = api.sourceObservation(pkg);
+  api.retainSourceObservation(pkg, 'prepare-before', before);
+  expect(api.sourceObservation(pkg)).toEqual(before);
+  expect(api.readReceipt(pkg).source).toEqual(before.fingerprint);
+  expect(stderr).toHaveBeenCalledWith(expect.stringContaining('outside source inventory'));
 });
 test('malformed, duplicate and foreign receipt declarations refuse', () => {
   publish();

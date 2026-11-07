@@ -78,7 +78,7 @@ function stableFile(file, limit = 16 * 1024 * 1024) {
     fs.closeSync(fd);
   }
 }
-function sourceFingerprint(packageRoot) {
+function sourceObservation(packageRoot) {
   const { repo, native } = locations(packageRoot);
   const files = [];
   let total = 0;
@@ -114,7 +114,57 @@ function sourceFingerprint(packageRoot) {
   for (const name of ['service-client.ts', 'service-protocol.ts'])
     add(path.join(repo, 'packages/caws-cli/src/runtime', name));
   files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  return { sha256: hash(JSON.stringify(files)), fileCount: files.length };
+  return { fingerprint: { sha256: hash(JSON.stringify(files)), fileCount: files.length }, files };
+}
+function sourceFingerprint(packageRoot) {
+  return sourceObservation(packageRoot).fingerprint;
+}
+// Diagnostic output never participates in receipt admission or replaces a refusal.
+function retainSourceObservation(packageRoot, phase, observation, details = {}) {
+  const artifactRoot = process.env.CAWS_TEST_ARTIFACT_DIR;
+  if (!artifactRoot) return;
+  try {
+    const { repo, native, pkg } = locations(packageRoot);
+    if (!path.isAbsolute(artifactRoot) || path.resolve(artifactRoot) !== artifactRoot)
+      fail('diagnostic root must be absolute and canonical');
+    for (const root of [
+      ...['src', 'tests', 'examples'].map((name) => path.join(native, name)),
+      path.join(repo, 'packages/caws-cli/templates/hook-packs'),
+    ]) {
+      if (artifactRoot === root || artifactRoot.startsWith(root + path.sep))
+        fail('diagnostics must be outside source inventory');
+    }
+    if (!fs.existsSync(artifactRoot)) {
+      physical(path.dirname(artifactRoot));
+      fs.mkdirSync(artifactRoot, { mode: 0o700 });
+    }
+    physical(artifactRoot);
+    if (!['prepare-before', 'prepare-after', 'read-receipt'].includes(phase))
+      fail('unknown diagnostic phase');
+    const directory = path.join(artifactRoot, 'native-prerequisite-inputs');
+    if (!fs.existsSync(directory)) fs.mkdirSync(directory, { mode: 0o700 });
+    physical(directory);
+    const file = path.join(directory, `${phase}-${process.pid}-${crypto.randomUUID()}.json`);
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        schema: 'caws.native-test-source-observation.v1',
+        phase,
+        packageRoot: pkg,
+        candidate: process.env.GITHUB_SHA || null,
+        pid: process.pid,
+        at: new Date().toISOString(),
+        ...details,
+        fingerprint: observation.fingerprint,
+        inputs: observation.files,
+      }) + '\n',
+      { flag: 'wx', mode: 0o600 }
+    );
+  } catch (error) {
+    process.stderr.write(
+      `Native test prerequisite diagnostic unavailable: ${error.code || error.message}\n`
+    );
+  }
 }
 function toolchainObservation(rustc, cargo) {
   if (
@@ -312,7 +362,12 @@ function readReceipt(packageRoot) {
   const observed = toolchainObservation(row.toolchain.rustc, row.toolchain.cargo);
   if (JSON.stringify(observed) !== JSON.stringify(row.toolchain))
     fail('receipt toolchain/platform mismatch');
-  if (JSON.stringify(sourceFingerprint(packageRoot)) !== JSON.stringify(row.source))
+  const source = sourceObservation(packageRoot);
+  retainSourceObservation(packageRoot, 'read-receipt', source, {
+    receipt: pin,
+    expected: row.source,
+  });
+  if (JSON.stringify(source.fingerprint) !== JSON.stringify(row.source))
     fail('source fingerprint changed; run npm run test:prepare');
   if (
     JSON.stringify(pinExecutable(packageRoot, row.coreTest.path)) !== JSON.stringify(row.coreTest)
@@ -336,7 +391,9 @@ function preparedEnvironment(packageRoot, environment = process.env) {
 module.exports = {
   ENV,
   locations,
+  sourceObservation,
   sourceFingerprint,
+  retainSourceObservation,
   toolchainObservation,
   selectCoreTestArtifact,
   removeReceipt,

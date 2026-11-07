@@ -53,7 +53,9 @@ function main(options = {}) {
       if (error.code !== 'ENOENT') throw error;
     }
     receipt.removeReceipt(packageRoot);
-    const before = receipt.sourceFingerprint(packageRoot),
+    const beforeObservation = receipt.sourceObservation(packageRoot);
+    receipt.retainSourceObservation(packageRoot, 'prepare-before', beforeObservation);
+    const before = beforeObservation.fingerprint,
       toolchain = observeToolchain();
     let status = verdict(
       execute(process.execPath, [
@@ -110,7 +112,11 @@ function main(options = {}) {
     const coreTest = receipt.selectCoreTestArtifact(packageRoot, compiled.stdout);
     if (JSON.stringify(toolchain) !== JSON.stringify(observeToolchain()))
       throw new Error('Rust toolchain changed during preparation');
-    if (JSON.stringify(before) !== JSON.stringify(receipt.sourceFingerprint(packageRoot)))
+    const afterObservation = receipt.sourceObservation(packageRoot);
+    receipt.retainSourceObservation(packageRoot, 'prepare-after', afterObservation, {
+      expected: before,
+    });
+    if (JSON.stringify(before) !== JSON.stringify(afterObservation.fingerprint))
       throw new Error('Native source inputs changed during preparation');
     receipt.publishReceipt(packageRoot, before, toolchain, coreTest);
     receipt.readReceipt(packageRoot);
