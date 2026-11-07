@@ -13,6 +13,9 @@ mod cancellation;
 #[path = "../src/cli.rs"]
 mod cli;
 #[allow(dead_code)]
+#[path = "../src/guard_strikes_wire.rs"]
+mod guard_strikes_wire;
+#[allow(dead_code)]
 #[path = "../src/installed_generation.rs"]
 mod installed_generation;
 #[allow(dead_code)]
