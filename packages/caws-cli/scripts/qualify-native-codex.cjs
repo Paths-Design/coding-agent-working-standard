@@ -548,6 +548,7 @@ function inspectObservation(data) {
     if (!text(source)) return undefined;
     const matching = calls.filter(
       (item) =>
+        item.command === '/bin/zsh -c ' + JSON.stringify(source) &&
         Array.isArray(item.commandActions) &&
         item.commandActions.length === 1 &&
         item.commandActions[0]?.command === source
@@ -815,6 +816,16 @@ async function observe(custody, preparationSha256, attempt) {
     }
     pending.clear();
   }
+  function rejectFailedHook(message) {
+    if (
+      message.method === 'hook/completed' &&
+      typeof data.threadId === 'string' &&
+      message.params?.threadId === data.threadId &&
+      (message.params.run?.status === 'failed' ||
+        (phase === 'bootstrap' && message.params.run?.status === 'blocked'))
+    )
+      fail(Error('Required native hook did not complete: ' + message.params.run.eventName));
+  }
   const resetTurn = () => {
     activeTurnId = null;
     turn = new Promise((resolve, reject) => {
@@ -894,19 +905,7 @@ async function observe(custody, preparationSha256, attempt) {
         continue;
       }
       if (!retainMessage({ atMs: Date.now(), direction: 'received', message })) return;
-      if (
-        message.method === 'hook/completed' &&
-        typeof data.threadId === 'string' &&
-        message.params?.threadId === data.threadId &&
-        data.registrationContract.hooks.some(
-          (hook) =>
-            hook.eventName === message.params.run?.eventName &&
-            hook.sourcePath === message.params.run?.sourcePath
-        ) &&
-        (message.params.run.status === 'failed' ||
-          (phase === 'bootstrap' && message.params.run.status === 'blocked'))
-      )
-        fail(Error('Required native hook did not complete: ' + message.params.run.eventName));
+      rejectFailedHook(message);
       if (message.method && message.id !== undefined) {
         const p = message.params ?? {};
         const completedHook = (eventName) => {
@@ -1039,6 +1038,10 @@ async function observe(custody, preparationSha256, attempt) {
       'Host-reported model differs from explicit selection'
     );
     phase = 'bootstrap';
+    // A callback may arrive before the thread response supplies its identity.
+    // Reconcile those retained events before allowing any bootstrap turn.
+    for (const row of data.stream) if (row.direction === 'received') rejectFailedHook(row.message);
+    if (fatalError) throw fatalError;
     data.bootstrap = await rpc('turn/start', {
       threadId: data.threadId,
       input: [

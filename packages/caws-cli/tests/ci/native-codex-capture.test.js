@@ -295,6 +295,8 @@ test.each([
   'other-cwd',
   'missing-cwd',
   'unknown-before',
+  'different-command',
+  'missing-command',
 ])('owned write effect requires a current correlated change: %s', (kind) => {
   const snapshot = (value) => ({
     path: '/fixture/lane/owned',
@@ -332,6 +334,12 @@ test.each([
                   turnId: kind === 'other-turn' ? 'old-turn' : 'turn',
                   item: {
                     type: 'commandExecution',
+                    command:
+                      kind === 'missing-command'
+                        ? undefined
+                        : kind === 'different-command'
+                          ? '/bin/zsh -c "unrelated-command"'
+                          : '/bin/zsh -c "exact-write"',
                     commandActions: [{ command: 'exact-write' }],
                     cwd:
                       kind === 'missing-cwd'
@@ -580,9 +588,17 @@ function bootstrapProtocol(mode, entry = 'legacy') {
     if (message.method === 'hooks/list')
       globalThis.queueMicrotask(() => emit({ id: message.id, result: fixtureHooks(entry) }));
     if (message.method === 'thread/start')
-      globalThis.queueMicrotask(() =>
-        emit({ id: message.id, result: { thread: { id: 'thread-1' }, model: 'unit-fixture' } })
-      );
+      globalThis.queueMicrotask(() => {
+        if (mode === 'early-failed-hook')
+          emit({
+            method: 'hook/completed',
+            params: {
+              threadId: 'thread-1',
+              run: { eventName: 'sessionStart', status: 'failed' },
+            },
+          });
+        emit({ id: message.id, result: { thread: { id: 'thread-1' }, model: 'unit-fixture' } });
+      });
     if (message.method !== 'turn/start') return;
     const command = JSON.parse(
       message.params.input[0].text.match(/exact cmd (".*?"), workdir /)[1]
@@ -636,6 +652,19 @@ function bootstrapProtocol(mode, entry = 'legacy') {
           },
         });
       }
+      if (mode === 'unknown-failed-hook' || mode === 'missing-source-failed-hook')
+        emit({
+          method: 'hook/completed',
+          params: {
+            threadId: 'thread-1',
+            turnId: 'bootstrap-1',
+            run: {
+              eventName: 'preToolUse',
+              status: 'failed',
+              ...(mode === 'unknown-failed-hook' ? { sourcePath: '/other/hooks.json' } : {}),
+            },
+          },
+        });
       if (mode === 'duplicate' || mode === 'reentrant') {
         reentrantReplay = approval('second', 'bootstrap-1');
         emit(approval('first', 'bootstrap-1'));
@@ -796,6 +825,29 @@ test.each(['sessionStart', 'preToolUse'])(
     );
   }
 );
+test.each(['unknown-failed-hook', 'missing-source-failed-hook'])(
+  'a same-thread %s cannot be concealed by preceding successful callbacks',
+  async (mode) => {
+    const fx = captureFixture(bootstrapProtocol(mode), true);
+    await fx.observe(fx.custody);
+    expect(fx.sent.find((message) => message.id === 'invalid-command').result.decision).toBe(
+      'decline'
+    );
+    expect(fx.sent.some((message) => message.result?.decision === 'accept')).toBe(false);
+    expect(fx.record.mock.calls.find(([label]) => label === 'observe')[1].error).toBe(
+      'Required native hook did not complete: preToolUse'
+    );
+  }
+);
+test('a failed hook arriving before the thread response prevents the first turn', async () => {
+  const fx = captureFixture(bootstrapProtocol('early-failed-hook'), true);
+  await fx.observe(fx.custody);
+  expect(fx.sent.some((message) => message.method === 'turn/start')).toBe(false);
+  expect(fx.sent.some((message) => message.result?.decision === 'accept')).toBe(false);
+  expect(fx.record.mock.calls.find(([label]) => label === 'observe')[1].error).toBe(
+    'Required native hook did not complete: sessionStart'
+  );
+});
 test.each(['null', 'missing'])(
   'declines bootstrap approval with %s turn before response',
   async (mode) => {
