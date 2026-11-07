@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const childProcess = require('node:child_process');
+const { performance } = require('node:perf_hooks');
 const { execFileSync } = childProcess;
 const { resolveGitBinaryForEnvironment } = require('../../dist/store/git-binary');
 const {
@@ -118,6 +119,44 @@ function assertReviewedStartupPairs(check) {
   check(true);
 }
 let directory, runtime, project, selection, request, environment, controller;
+let activeCase, unsettledCase;
+async function observeCaseLifetime(body) {
+  const owner = {
+    root: directory,
+    test: expect.getState().currentTestName,
+    started: performance.now(),
+    deadlineEpochMs: request.deadlineEpochMs,
+    pending: true,
+    closed: false,
+    stages: [],
+    nonclaims: ['Case-promise settlement does not establish descendant process settlement.'],
+  };
+  activeCase = owner;
+  const stage = (phase) => {
+    owner.stages.push({
+      phase,
+      elapsedMs: performance.now() - owner.started,
+      remainingRequestMs: owner.deadlineEpochMs - Date.now(),
+    });
+    const bytes = JSON.stringify(owner, null, 2);
+    fs.writeFileSync(path.join(owner.root, 'case-lifetime.json'), bytes);
+    if (artifactRoot) {
+      fs.mkdirSync(artifactRoot, { recursive: true });
+      fs.writeFileSync(
+        path.join(artifactRoot, path.basename(owner.root) + '-lifetime.json'),
+        bytes
+      );
+    }
+  };
+  owner.stage = stage;
+  stage('body-start');
+  try {
+    return await body(stage);
+  } finally {
+    owner.pending = false;
+    stage('body-settled');
+  }
+}
 const artifactRoot = process.env.CAWS_TEST_ARTIFACT_DIR;
 if (artifactRoot && !path.isAbsolute(artifactRoot))
   throw new Error('Artifact root must be absolute');
@@ -295,6 +334,11 @@ test('current rehashed guard does not inherit reviewed stock or containment trus
 });
 
 beforeEach(() => {
+  if (unsettledCase)
+    throw new Error(
+      'Earlier fixture lifetime is unproven; no new fixture admitted: ' + unsettledCase.root
+    );
+  activeCase = undefined;
   directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-stock-handlers-')));
   runtime = path.join(directory, 'runtime');
   project = path.join(directory, 'project');
@@ -369,6 +413,16 @@ beforeEach(() => {
   controller = new AbortController();
 });
 afterEach(() => {
+  if (unsettledCase)
+    throw new Error('Fixture retained after unknown lifetime: ' + unsettledCase.root);
+  if (activeCase) {
+    activeCase.closed = true;
+    activeCase.stage('teardown');
+    if (activeCase.pending) {
+      unsettledCase = activeCase;
+      throw new Error('Async case is unfinished; fixture retained in place: ' + activeCase.root);
+    }
+  }
   jest.restoreAllMocks();
   if (artifactRoot && directory) {
     fs.writeFileSync(path.join(directory, 'input.bin'), request.inputJson);
@@ -731,18 +785,10 @@ describe('selected stock handler behavior', () => {
     }
   );
 
-  test.each([
-    [
-      'quoted Node',
-      "node <<'NODE'\n/*\ngit add -f private.generated\n*/\nconst fs = require('fs'); fs.readFileSync('tracked.txt','utf8');\nNODE",
-    ],
-    [
-      'read prefix',
-      "git status --short\nnode <<'NODE'\n/*\ngit add -f private.generated\n*/\nconst fs = require('fs'); fs.readFileSync('tracked.txt','utf8');\nNODE",
-    ],
-  ])(
-    'current utility %s preserves shell heredoc projection and unchanged files',
-    async (_, body) => {
+  describe('heredoc utility parity', () => {
+    let before;
+    beforeEach(() => {
+      const started = performance.now();
       useCurrentMutationTargets();
       useBoundPrefixGeneration();
       const policy = path.join(project, 'utility-policy.json');
@@ -752,21 +798,52 @@ describe('selected stock handler behavior', () => {
       fs.writeFileSync(path.join(project, 'private.generated'), 'sentinel\n');
       fs.writeFileSync(path.join(project, 'tracked.txt'), 'tracked\n');
       git('add', 'tracked.txt');
-      const before = fs.readFileSync(path.join(project, '.git/index'));
-      command(body);
-      const handler = select('hook-utilities.sh');
-      expect(tryExecuteStockHandler(handler, context())).toBeNull();
-      const spawn = jest.spyOn(require('node:child_process'), 'spawn');
-      const result = await createHandlerExecutor(context())(handler, 0);
-      captureResult('utility-heredoc', result);
-      expect(spawn).toHaveBeenCalledTimes(1);
-      expect(result.exitCode).toBe(0);
-      expect(Buffer.from(result.stdout).toString()).toBe('');
-      expect(Buffer.from(result.stderr).toString()).toBe('');
-      expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(before);
-      expect(fs.readFileSync(path.join(project, 'private.generated'), 'utf8')).toBe('sentinel\n');
-    }
-  );
+      before = fs.readFileSync(path.join(project, '.git/index'));
+      fs.writeFileSync(
+        path.join(directory, 'utility-setup.json'),
+        JSON.stringify(
+          {
+            elapsedMs: performance.now() - started,
+            deadlineEpochMs: request.deadlineEpochMs,
+          },
+          null,
+          2
+        )
+      );
+    });
+    test.each([
+      [
+        'quoted Node',
+        "node <<'NODE'\n/*\ngit add -f private.generated\n*/\nconst fs = require('fs'); fs.readFileSync('tracked.txt','utf8');\nNODE",
+      ],
+      [
+        'read prefix',
+        "git status --short\nnode <<'NODE'\n/*\ngit add -f private.generated\n*/\nconst fs = require('fs'); fs.readFileSync('tracked.txt','utf8');\nNODE",
+      ],
+    ])(
+      'current utility %s preserves shell heredoc projection and unchanged files',
+      async (_, body) => {
+        return observeCaseLifetime(async (stage) => {
+          command(body);
+          const handler = select('hook-utilities.sh');
+          stage('consumer-start');
+          expect(tryExecuteStockHandler(handler, context())).toBeNull();
+          const spawn = jest.spyOn(require('node:child_process'), 'spawn');
+          const result = await createHandlerExecutor(context())(handler, 0);
+          stage('consumer-finished');
+          captureResult('utility-heredoc', result);
+          expect(spawn).toHaveBeenCalledTimes(1);
+          expect(result.exitCode).toBe(0);
+          expect(Buffer.from(result.stdout).toString()).toBe('');
+          expect(Buffer.from(result.stderr).toString()).toBe('');
+          expect(fs.readFileSync(path.join(project, '.git/index'))).toEqual(before);
+          expect(fs.readFileSync(path.join(project, 'private.generated'), 'utf8')).toBe(
+            'sentinel\n'
+          );
+        });
+      }
+    );
+  });
 
   test.each([
     ['heartbeat', 'canonical'],
@@ -776,141 +853,148 @@ describe('selected stock handler behavior', () => {
   ])(
     'current %s shell and native update the same %s lease and preserve its peer',
     async (consumer, kind) => {
-      const canonical = project;
-      fs.mkdirSync(path.join(canonical, '.caws/specs'), { recursive: true });
-      fs.writeFileSync(path.join(canonical, '.caws/policy.yaml'), 'version: 1\n');
-      fs.writeFileSync(path.join(canonical, 'owned.txt'), 'owned\n');
-      git('add', 'owned.txt');
-      git(
-        '-c',
-        'user.name=Fixture',
-        '-c',
-        'user.email=fixture@example.invalid',
-        'commit',
-        '-qm',
-        'seed'
-      );
-      if (kind === 'linked') {
-        const linked = path.join(directory, 'linked');
-        git('worktree', 'add', '-q', '-b', 'paired', linked);
-        project = linked;
-        selection.checkout = linked;
-      }
-      useHeartbeatCli();
-      request.caller.cwd = project;
-      request.caller.processId = process.pid;
-      command('echo safe');
-      const platform = consumer === 'Stop' ? 'opencode' : 'codex';
-      if (consumer === 'Stop') {
-        selection.surface = request.surface = platform;
-        selection.event = request.event = 'stop';
-      }
-      const { heartbeatAgentActivity } = require('../../dist/application/agent-heartbeat');
-      const gitDir = git('rev-parse', '--path-format=absolute', '--git-dir').trim();
-      const common = git('rev-parse', '--path-format=absolute', '--git-common-dir').trim();
-      const seed = (session) =>
-        heartbeatAgentActivity({
-          cawsDir: path.join(canonical, '.caws'),
-          identity: { session_id: session, platform },
-          now: () => new Date('2000-01-01T00:00:00Z'),
-          reason: 'manual_register',
-          context: {
-            repo_root: canonical,
-            cwd: project,
-            git_common_dir: common,
-            git_dir: gitDir,
-            hook_pid: process.pid,
-          },
-        });
-      expect(seed('fixture').ok).toBe(true);
-      expect(seed('untouched-peer').ok).toBe(true);
-      const file = path.join(canonical, '.caws/leases/fixture.json');
-      const peerFile = path.join(canonical, '.caws/leases/untouched-peer.json');
-      const before = fs.readFileSync(file);
-      const peer = fs.readFileSync(peerFile);
-      let handler, native;
-      if (consumer === 'Stop') {
-        selection.handlers = [
-          'goal-ac-gate.sh',
-          'plan-transcript-finalize.sh',
-          'session-log.sh',
-          'agent-stop.sh',
-        ].map((name) => select(name));
-        handler = selection.handlers[3];
-        const { assertNativeStopAgentSelection } = require('../../dist/runtime/stock-handlers');
-        const { executeAgentStop } = require('../../dist/runtime/agent-stop');
-        assertNativeStopAgentSelection(handler, context(), 'preflight');
-        assertReviewedStartupPairs((expected) => {
-          for (const phase of ['preflight', 'lease']) {
-            const check = () => assertNativeStopAgentSelection(handler, context(), phase);
-            if (expected) expect(check).not.toThrow();
-            else
-              expect(check).toThrow(
-                phase === 'preflight'
-                  ? 'Native Stop agent consumer is ineligible before prefix'
-                  : 'Native Stop agent consumer changed after prefix; shell replay refused'
-              );
-          }
-          expect(fs.readFileSync(file)).toEqual(before);
-          expect(fs.readFileSync(peerFile)).toEqual(peer);
-        });
-        // Component parity with real Git and store effects. Native owner/permit
-        // custody is exercised separately by the Stop dispatch connection suite.
-        native = await executeAgentStop(
-          context(),
-          {
-            observe: async () => ({
-              status: 'resolved',
-              commonDir: git('rev-parse', '--path-format=absolute', '--git-common-dir').trim(),
-            }),
-          },
-          () => assertNativeStopAgentSelection(handler, context())
+      return observeCaseLifetime(async (stage) => {
+        const canonical = project;
+        fs.mkdirSync(path.join(canonical, '.caws/specs'), { recursive: true });
+        fs.writeFileSync(path.join(canonical, '.caws/policy.yaml'), 'version: 1\n');
+        fs.writeFileSync(path.join(canonical, 'owned.txt'), 'owned\n');
+        git('add', 'owned.txt');
+        git(
+          '-c',
+          'user.name=Fixture',
+          '-c',
+          'user.email=fixture@example.invalid',
+          'commit',
+          '-qm',
+          'seed'
         );
-      } else {
-        handler = select('agent-heartbeat.sh');
-        native = await tryExecuteStockHandler(handler, context());
-      }
-      expect(native).not.toBeNull();
-      const nativeLease = JSON.parse(fs.readFileSync(file));
-      const changedField = consumer === 'Stop' ? 'stopped_at' : 'last_active';
-      expect(nativeLease[changedField]).not.toBe(JSON.parse(before)[changedField]);
-      expect(Number.isFinite(Date.parse(nativeLease[changedField]))).toBe(true);
-      expect(nativeLease).toMatchObject({
-        session_id: 'fixture',
-        platform,
-        status: consumer === 'Stop' ? 'stopped' : 'active',
-        repo_root: canonical,
-        cwd: project,
-        git_common_dir: common,
-        git_dir: gitDir,
+        if (kind === 'linked') {
+          const linked = path.join(directory, 'linked');
+          git('worktree', 'add', '-q', '-b', 'paired', linked);
+          project = linked;
+          selection.checkout = linked;
+        }
+        useHeartbeatCli();
+        request.caller.cwd = project;
+        request.caller.processId = process.pid;
+        command('echo safe');
+        const platform = consumer === 'Stop' ? 'opencode' : 'codex';
+        if (consumer === 'Stop') {
+          selection.surface = request.surface = platform;
+          selection.event = request.event = 'stop';
+        }
+        const { heartbeatAgentActivity } = require('../../dist/application/agent-heartbeat');
+        const gitDir = git('rev-parse', '--path-format=absolute', '--git-dir').trim();
+        const common = git('rev-parse', '--path-format=absolute', '--git-common-dir').trim();
+        const seed = (session) =>
+          heartbeatAgentActivity({
+            cawsDir: path.join(canonical, '.caws'),
+            identity: { session_id: session, platform },
+            now: () => new Date('2000-01-01T00:00:00Z'),
+            reason: 'manual_register',
+            context: {
+              repo_root: canonical,
+              cwd: project,
+              git_common_dir: common,
+              git_dir: gitDir,
+              hook_pid: process.pid,
+            },
+          });
+        expect(seed('fixture').ok).toBe(true);
+        expect(seed('untouched-peer').ok).toBe(true);
+        const file = path.join(canonical, '.caws/leases/fixture.json');
+        const peerFile = path.join(canonical, '.caws/leases/untouched-peer.json');
+        const before = fs.readFileSync(file);
+        const peer = fs.readFileSync(peerFile);
+        stage('fixture-ready');
+        let handler, native;
+        stage('native-start');
+        if (consumer === 'Stop') {
+          selection.handlers = [
+            'goal-ac-gate.sh',
+            'plan-transcript-finalize.sh',
+            'session-log.sh',
+            'agent-stop.sh',
+          ].map((name) => select(name));
+          handler = selection.handlers[3];
+          const { assertNativeStopAgentSelection } = require('../../dist/runtime/stock-handlers');
+          const { executeAgentStop } = require('../../dist/runtime/agent-stop');
+          assertNativeStopAgentSelection(handler, context(), 'preflight');
+          assertReviewedStartupPairs((expected) => {
+            for (const phase of ['preflight', 'lease']) {
+              const check = () => assertNativeStopAgentSelection(handler, context(), phase);
+              if (expected) expect(check).not.toThrow();
+              else
+                expect(check).toThrow(
+                  phase === 'preflight'
+                    ? 'Native Stop agent consumer is ineligible before prefix'
+                    : 'Native Stop agent consumer changed after prefix; shell replay refused'
+                );
+            }
+            expect(fs.readFileSync(file)).toEqual(before);
+            expect(fs.readFileSync(peerFile)).toEqual(peer);
+          });
+          // Component parity with real Git and store effects. Native owner/permit
+          // custody is exercised separately by the Stop dispatch connection suite.
+          native = await executeAgentStop(
+            context(),
+            {
+              observe: async () => ({
+                status: 'resolved',
+                commonDir: git('rev-parse', '--path-format=absolute', '--git-common-dir').trim(),
+              }),
+            },
+            () => assertNativeStopAgentSelection(handler, context())
+          );
+        } else {
+          handler = select('agent-heartbeat.sh');
+          native = await tryExecuteStockHandler(handler, context());
+        }
+        stage('native-finished');
+        expect(native).not.toBeNull();
+        const nativeLease = JSON.parse(fs.readFileSync(file));
+        const changedField = consumer === 'Stop' ? 'stopped_at' : 'last_active';
+        expect(nativeLease[changedField]).not.toBe(JSON.parse(before)[changedField]);
+        expect(Number.isFinite(Date.parse(nativeLease[changedField]))).toBe(true);
+        expect(nativeLease).toMatchObject({
+          session_id: 'fixture',
+          platform,
+          status: consumer === 'Stop' ? 'stopped' : 'active',
+          repo_root: canonical,
+          cwd: project,
+          git_common_dir: common,
+          git_dir: gitDir,
+        });
+        expect(fs.readFileSync(peerFile)).toEqual(peer);
+        fs.writeFileSync(file, before);
+        stage('shell-start');
+        const shell = await selectedShell(handler);
+        stage('shell-finished');
+        const shellLease = JSON.parse(fs.readFileSync(file));
+        expect(shellLease[changedField]).not.toBe(JSON.parse(before)[changedField]);
+        expect(Number.isFinite(Date.parse(shellLease[changedField]))).toBe(true);
+        for (const key of [
+          'session_id',
+          'platform',
+          'status',
+          'repo_root',
+          'cwd',
+          'git_common_dir',
+          'git_dir',
+          'branch',
+        ])
+          expect(shellLease[key]).toEqual(nativeLease[key]);
+        expect(shell.exitCode).toBe(native.exitCode);
+        expect(Buffer.from(shell.stdout)).toEqual(Buffer.from(native.stdout));
+        expect(Buffer.from(shell.stderr)).toEqual(Buffer.from(native.stderr));
+        expect(fs.readFileSync(peerFile)).toEqual(peer);
+        captureResult('lease-native', native);
+        captureResult('lease-shell', shell);
+        fs.writeFileSync(
+          path.join(directory, 'paired-leases.json'),
+          JSON.stringify({ before: JSON.parse(before), nativeLease, shellLease }, null, 2)
+        );
       });
-      expect(fs.readFileSync(peerFile)).toEqual(peer);
-      fs.writeFileSync(file, before);
-      const shell = await selectedShell(handler);
-      const shellLease = JSON.parse(fs.readFileSync(file));
-      expect(shellLease[changedField]).not.toBe(JSON.parse(before)[changedField]);
-      expect(Number.isFinite(Date.parse(shellLease[changedField]))).toBe(true);
-      for (const key of [
-        'session_id',
-        'platform',
-        'status',
-        'repo_root',
-        'cwd',
-        'git_common_dir',
-        'git_dir',
-        'branch',
-      ])
-        expect(shellLease[key]).toEqual(nativeLease[key]);
-      expect(shell.exitCode).toBe(native.exitCode);
-      expect(Buffer.from(shell.stdout)).toEqual(Buffer.from(native.stdout));
-      expect(Buffer.from(shell.stderr)).toEqual(Buffer.from(native.stderr));
-      expect(fs.readFileSync(peerFile)).toEqual(peer);
-      captureResult('lease-native', native);
-      captureResult('lease-shell', shell);
-      fs.writeFileSync(
-        path.join(directory, 'paired-leases.json'),
-        JSON.stringify({ before: JSON.parse(before), nativeLease, shellLease }, null, 2)
-      );
     }
   );
 
