@@ -3,7 +3,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const cp = require('node:child_process');
-const shared = path.resolve(__dirname, '../../templates/hook-packs/shared');
+const shared =
+  process.env.CAWS_TEST_SHARED_HOOKS ||
+  path.resolve(__dirname, '../../templates/hook-packs/shared');
 const cli = path.resolve(__dirname, '../../dist/index.js');
 let root, repo, external, sibling;
 function env() {
