@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: caws-external-rooting
 created_at: '2026-11-08T03:36:35.651Z'
-updated_at: '2026-11-08T04:17:11.016Z'
+updated_at: '2026-11-08T04:41:03.100Z'
 created_by_session: '01a1b932-77c5-7503-8f5d-a419fa70b710'
 blast_radius:
   modules:
@@ -52,7 +52,24 @@ rollback:
 non_functional: {}
 contracts: []
 evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Candidate 2f5a0a6a3: real app-created detached checkout was adopted under this session, named branch attached, canonical registry/spec agree, and claim reports OWNED. Focused native Git fixtures preserve HEAD plus exact staged/unstaged diffs and untracked binary bytes; hidden authority edits and failed publication paths are covered. Final five-suite run executed 142 cases with exit 0. Actual source tree is clean after restored admission probes."
+    recorded_at: "2026-11-08T05:18:22.952Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/final-tests.log"
+    commit_sha: "2f5a0a6a31d45f97891196fae90f8c4bd5b2fb3f"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected adoption tests refuse canonical/subdirectory/foreign/detached-without-branch identities, hidden authority dirt, overlapping registrations and foreign bridge ownership. Event failure restores unchanged source/index; concurrent staging is retained with explicit compensation refusal. Staged exact-runtime Codex controls refuse foreign owner, unregistered payload, unrelated repository and nested unregistered payload, with reason assertions. No hostile payload command is executed."
+    recorded_at: "2026-11-08T05:18:24.253Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/compatible-runtime/native-replay.jsonl"
+    commit_sha: "2f5a0a6a31d45f97891196fae90f8c4bd5b2fb3f"
   - criterion_id: A3
-    status: unchecked
-    evidence_ref: "Bootstrap blocked by actual installed runtime 01f1896529f252d7070f5b6133b9173842e0324b112ef7a53de3db29236ad6d5: worktree-write-guard refused the scoped canonical source patch on caws/external-worktree-bootstrap; worktree-guard also refused switching canonical back to main while worktrees are active. No source edits landed. Source/helper and installed predicate both misclassify RC external linked roots despite matching Git common directories. Source oracle separately admits an unregistered external root as unclaimed; repair must hold missing registration. Root session 01a1b932-77c5-7503-8f5d-a419fa70b710 retains implementation, test-environment repair, review, installation, preservation verification and actual guard acceptance. Only owned governance changes and untracked foreign .caws/messages.jsonl.archive are present. RC checkouts remain untouched. Initial focused source tests exited 1 before intended adjudication because smol-toml and current analyzer prerequisites are unavailable; no behavioral pass inferred. Next step is one human-terminal repo-scoped reprieve for worktree-guard.sh and worktree-write-guard.sh to apply the concrete bootstrap repair and restore canonical main, then install, revoke reprieve and exercise actual guard positive/negative controls."
-    recorded_at: "2026-11-08T03:43:38.294Z"
+    status: pass
+    evidence_ref: "Installed runtime 0c338b108be9ae3ba94d90f5938409259e6cbbe6b9e6b883da6a7be5f4d9fccf was built through retained installer 14d8ae10f76f154b-MYcxEk after an exact isolated reconstruction of working 01f189 runtime. Same 113 manifest keys; only root predicate, ownership oracle and legacy allowlist uncertainty handling changed. Native shell and Edit callbacks succeeded in the actually adopted external checkout with reprieve revoked; temporary bytes were restored to original SHA256. Active handler journal rows and tool-level writes retained. All 3 K and 13 RVGL dirty paths and both HEADs are unchanged. Original RC lanes remain for their owners to adopt; no RC writes, gameplay acceptance or full default-runtime qualification inferred. Failed 41fc/fca cutovers were rolled back and are retained in proof."
+    recorded_at: "2026-11-08T05:18:25.414Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/native-proof.json"
+    commit_sha: "2f5a0a6a31d45f97891196fae90f8c4bd5b2fb3f"
