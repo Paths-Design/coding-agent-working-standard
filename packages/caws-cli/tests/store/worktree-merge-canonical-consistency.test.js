@@ -19,6 +19,11 @@ const { createSpec } = require('../../dist/store/specs-writer');
 const { createWorktree, mergeWorktree } = require('../../dist/store/worktrees-writer');
 const repoRootStore = require('../../dist/store/repo-root');
 const { validateEventBody } = require('../../dist/kernel/evidence/validate');
+const {
+  acquireLifecycleLock,
+  releaseLifecycleLock,
+  verifyLifecycleLock,
+} = require('../../dist/store/lifecycle-lock');
 
 const SESSION_ID = 'sess-canonical-consistency';
 const SESSION = { session_id: SESSION_ID, platform: 'jest' };
@@ -178,6 +183,183 @@ function eventBody(event) {
 }
 
 afterEach(() => jest.restoreAllMocks());
+
+const refuseExistingLock = { maxAttempts: 1, retryDelayMs: 0, recoverStale: false };
+
+function optionalBytes(file) {
+  try {
+    return fs.readFileSync(file);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+function publicationState(repo, caws, checkout = repo) {
+  const index = git(checkout, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
+  const specs = path.join(caws, 'specs');
+  return {
+    base: git(repo, ['rev-parse', 'refs/heads/main']),
+    head: git(checkout, ['rev-parse', 'HEAD']),
+    index: fs.readFileSync(index),
+    payload: fs.readFileSync(path.join(checkout, 'payload.txt')),
+    policy: optionalBytes(path.join(caws, 'policy.yaml')),
+    registry: optionalBytes(path.join(caws, 'worktrees.json')),
+    bridge: optionalBytes(path.join(caws, 'claims/bridge.json')),
+    events: optionalBytes(path.join(caws, 'events.jsonl')),
+    specs: fs
+      .readdirSync(specs)
+      .filter((name) => fs.lstatSync(path.join(specs, name)).isFile())
+      .sort()
+      .map((name) => [name, fs.readFileSync(path.join(specs, name))]),
+  };
+}
+
+test.each(['live', 'aged recoverable-shaped'])(
+  'ordinary merge refuses a %s foreign fence without publication or reclamation',
+  (kind) => {
+    const repo = mkRepo('caws-merge-fenced-');
+    const { caws, wt } = seedMerge(repo, 'wt-fenced', 'MERGE-FENCED-001');
+    const checkout = linkedBase(repo);
+    expect(merge(caws, 'wt-fenced', { dryRun: true })).toMatchObject({
+      ok: true,
+      value: { kind: 'dry_run', canProceed: true },
+    });
+    const file = path.join(caws, 'state.lock');
+    let held;
+    if (kind === 'live') {
+      const acquired = acquireLifecycleLock(caws, refuseExistingLock);
+      expect(acquired.ok).toBe(true);
+      held = acquired.value;
+    } else {
+      fs.writeFileSync(file, JSON.stringify({ pid: 123456789, hostname: os.hostname() }));
+      fs.utimesSync(file, new Date(0), new Date(0));
+    }
+    const before = publicationState(repo, caws, checkout);
+    const canonicalBefore = publicationState(repo, caws);
+    const lockBytes = fs.readFileSync(file);
+    const lockIdentity = fs.lstatSync(file, { bigint: true });
+    const kill = jest.spyOn(process, 'kill').mockImplementation(() => {
+      throw Object.assign(new Error('no such process'), { code: 'ESRCH' });
+    });
+    const original = repoRootStore.runGit;
+    const publications = [];
+    jest.spyOn(repoRootStore, 'runGit').mockImplementation((args, cwd) => {
+      if (args[0] === 'update-ref' || args[0] === 'read-tree') publications.push([...args]);
+      return original(args, cwd);
+    });
+    try {
+      const result = merge(caws, 'wt-fenced');
+      expect(result.ok).toBe(false);
+      expect(result.errors[0].rule).toBe('store.lifecycle.lock_contention');
+      expect(publications).toEqual([]);
+      expect(publicationState(repo, caws, checkout)).toEqual(before);
+      expect(publicationState(repo, caws)).toEqual(canonicalBefore);
+      expect(fs.existsSync(wt)).toBe(true);
+      expect(fs.readFileSync(file)).toEqual(lockBytes);
+      const after = fs.lstatSync(file, { bigint: true });
+      expect([after.dev, after.ino]).toEqual([lockIdentity.dev, lockIdentity.ino]);
+      expect(fs.existsSync(file + '.reclaim')).toBe(false);
+      expect(kill).not.toHaveBeenCalled();
+    } finally {
+      if (held) releaseLifecycleLock(held);
+    }
+  }
+);
+
+test('ordinary merge retains one fence through ref and checkout publication, then releases it', () => {
+  const repo = mkRepo('caws-merge-owned-fence-');
+  const { caws } = seedMerge(repo, 'wt-owned-fence', 'MERGE-OWNED-FENCE-001');
+  const checkout = linkedBase(repo);
+  const original = repoRootStore.runGit;
+  const observations = [];
+  jest.spyOn(repoRootStore, 'runGit').mockImplementation((args, cwd) => {
+    if (args[0] === 'update-ref' || args[0] === 'read-tree') {
+      const stat = fs.lstatSync(path.join(caws, 'state.lock'), { bigint: true });
+      const competing = acquireLifecycleLock(caws, refuseExistingLock);
+      observations.push({
+        operation: args[0],
+        dev: stat.dev,
+        ino: stat.ino,
+        blocked: !competing.ok,
+      });
+      if (competing.ok) releaseLifecycleLock(competing.value);
+    }
+    return original(args, cwd);
+  });
+  const data = successful(merge(caws, 'wt-owned-fence'));
+  expect(observations.map((row) => row.operation)).toEqual(['update-ref', 'read-tree']);
+  expect(observations.every((row) => row.blocked)).toBe(true);
+  expect(observations.map((row) => [row.dev, row.ino])).toEqual([
+    [observations[0].dev, observations[0].ino],
+    [observations[0].dev, observations[0].ino],
+  ]);
+  expect(git(repo, ['rev-parse', 'main'])).toBe(data.merge_commit);
+  expect(fs.readFileSync(path.join(checkout, 'payload.txt'), 'utf8')).toBe('lane\n');
+  expect(mergedEvent(caws).data.merge_commit).toBe(data.merge_commit);
+  expect(fs.existsSync(path.join(caws, 'state.lock'))).toBe(false);
+});
+
+test('ordinary merge refuses a displaced owned fence before updating the base', () => {
+  const repo = mkRepo('caws-merge-displaced-fence-');
+  const { caws, wt } = seedMerge(repo, 'wt-displaced', 'MERGE-DISPLACED-001');
+  const checkout = linkedBase(repo);
+  expect(merge(caws, 'wt-displaced', { dryRun: true })).toMatchObject({
+    ok: true,
+    value: { kind: 'dry_run', canProceed: true },
+  });
+  const before = publicationState(repo, caws, checkout);
+  const canonicalBefore = publicationState(repo, caws);
+  const file = path.join(caws, 'state.lock');
+  const replacement = Buffer.from(JSON.stringify({ pid: process.pid, hostname: os.hostname() }));
+  const original = repoRootStore.runGit;
+  let objectWritten = false;
+  let displaced = false;
+  const publications = [];
+  jest.spyOn(repoRootStore, 'runGit').mockImplementation((args, cwd) => {
+    if (args[0] === 'update-ref' || args[0] === 'read-tree') publications.push([...args]);
+    const result = original(args, cwd);
+    if (args[0] === 'commit-tree' && result.ok) objectWritten = true;
+    if (objectWritten && !displaced && args[0] === 'worktree' && args[1] === 'list') {
+      fs.renameSync(file, file + '.owned');
+      fs.writeFileSync(file, replacement);
+      displaced = true;
+    }
+    return result;
+  });
+  const result = merge(caws, 'wt-displaced');
+  expect(displaced).toBe(true);
+  expect(result.ok).toBe(false);
+  expect(result.errors[0].message).toContain('publication fence unavailable');
+  expect(publications).toEqual([]);
+  expect(publicationState(repo, caws, checkout)).toEqual(before);
+  expect(publicationState(repo, caws)).toEqual(canonicalBefore);
+  expect(fs.existsSync(wt)).toBe(true);
+  expect(fs.readFileSync(file)).toEqual(replacement);
+});
+
+test('owned fence verification rejects structural copies, displaced paths and released handles', () => {
+  const repo = mkRepo('caws-merge-lock-identity-');
+  expect(initProject(repo).ok).toBe(true);
+  const caws = path.join(repo, '.caws');
+  const acquired = acquireLifecycleLock(caws, refuseExistingLock);
+  expect(acquired.ok).toBe(true);
+  const handle = acquired.value;
+  try {
+    expect(verifyLifecycleLock(handle)).toBe(true);
+    expect(verifyLifecycleLock(Object.freeze({ fd: handle.fd, lockPath: handle.lockPath }))).toBe(
+      false
+    );
+    fs.renameSync(handle.lockPath, handle.lockPath + '.owned');
+    fs.writeFileSync(handle.lockPath, 'replacement owner');
+    expect(verifyLifecycleLock(handle)).toBe(false);
+    releaseLifecycleLock(handle);
+    expect(verifyLifecycleLock(handle)).toBe(false);
+    expect(fs.readFileSync(handle.lockPath, 'utf8')).toBe('replacement owner');
+  } finally {
+    releaseLifecycleLock(handle);
+  }
+});
 
 test('A1: an unregistered linked base checkout refreshes while the canonical branch stays untouched', () => {
   const repo = mkRepo('caws-linked-clean-');

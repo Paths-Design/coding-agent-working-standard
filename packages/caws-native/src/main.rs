@@ -443,6 +443,11 @@ fn execute_observed<'deadline>(
                         )?;
                     }
                     protocol::EngineFrame::ContextGitRequest(frame) => {
+                        if request.native_file_backend() {
+                            return Err(
+                                "native file callbacks refuse generic context Git execution".into(),
+                            );
+                        }
                         if let Some(replay) = captured_context.as_mut() {
                             session.replay_context_git(replay, &frame, deadline)?;
                         } else {
@@ -1203,6 +1208,15 @@ fn execute_observed<'deadline>(
     })();
     match outcome {
         Ok(code) => {
+            if let Some(owner) = file_tool_context.as_mut()
+                && let Err(error) = owner.release_native_fence()
+            {
+                runner::write_diagnostic(
+                    format!("CAWS native file authority retains fence cleanup custody after terminal delivery: {error}; no replay.\n").as_bytes(),
+                    original_deadline,
+                    original_deadline.expires(),
+                );
+            }
             if let Err(error) = original_stop.retry_cleanup_until(original_deadline, bounds.cleanup)
             {
                 runner::write_diagnostic(format!("CAWS optional original Stop discovery retains native cleanup custody: {error}; no native retry or publication.\n").as_bytes(), original_deadline, original_deadline.expires());

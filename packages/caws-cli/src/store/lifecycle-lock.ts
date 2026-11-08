@@ -68,6 +68,8 @@ function unlinkOwnedPath(lockPath: string, identity: LockIdentity): void {
 }
 
 export interface AcquireLifecycleLockOptions {
+  /** Refuse existing locks without inspecting or reclaiming their owner. */
+  readonly recoverStale?: boolean;
   /** Override the global lock path. Used by tests; production callers
    *  pass cawsDir and get the canonical `<cawsDir>/state.lock`. */
   readonly lockPath?: string;
@@ -185,7 +187,8 @@ export function acquireLifecycleLock(
           )
         );
       }
-      const recovered = tryRecoverStaleLock(lockPath, staleThresholdMs);
+      const recovered =
+        options.recoverStale !== false && tryRecoverStaleLock(lockPath, staleThresholdMs);
       if (!recovered && attempt + 1 < maxAttempts) {
         sleepSyncMs(retryDelayMs);
       }
@@ -199,6 +202,26 @@ export function acquireLifecycleLock(
       { subject: lockPath }
     )
   );
+}
+
+/** Check a genuine live acquisition, refusing structural fd/path copies. */
+export function verifyLifecycleLock(handle: LifecycleLockHandle): boolean {
+  const identity = heldLocks.get(handle);
+  if (identity === undefined) return false;
+  try {
+    const held = fs.fstatSync(handle.fd, { bigint: true });
+    const named = fs.lstatSync(handle.lockPath, { bigint: true });
+    return (
+      held.isFile() &&
+      named.isFile() &&
+      held.nlink === 1n &&
+      named.nlink === 1n &&
+      sameFile(identity, held) &&
+      sameFile(identity, named)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Release only this acquisition, once. A reused descriptor or successor
@@ -265,6 +288,41 @@ export function withLifecycleMutationFence<T>(
       storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, 'Execution fence unavailable.')
     );
   return body();
+}
+
+/** Hold one fail-fast publication fence; never reclaim or release another owner. */
+export function withLifecyclePublicationFence<T>(
+  cawsDir: string,
+  body: (current: () => boolean) => Result<T>,
+  borrowed?: BorrowedExecutionLifecycleFence
+): Result<T> {
+  if (borrowed !== undefined) {
+    const current = (): boolean => verifyBorrowedExecutionLifecycleFence(cawsDir, borrowed);
+    if (!current())
+      return err(
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, 'Execution fence unavailable.')
+      );
+    return body(current);
+  }
+  const acquired = acquireLifecycleLock(cawsDir, {
+    maxAttempts: 1,
+    retryDelayMs: 0,
+    recoverStale: false,
+  });
+  if (!acquired.ok) return acquired;
+  try {
+    const current = (): boolean => verifyLifecycleLock(acquired.value);
+    if (!current())
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          'Lifecycle publication fence unavailable.'
+        )
+      );
+    return body(current);
+  } finally {
+    releaseLifecycleLock(acquired.value);
+  }
 }
 
 export function verifyBorrowedExecutionLifecycleFence(

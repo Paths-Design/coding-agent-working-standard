@@ -66,6 +66,7 @@ import { loadSpecs } from './specs-store';
 import { loadWorktrees } from './worktrees-store';
 import { runLifecycleTransaction } from './lifecycle-transaction';
 import {
+  withLifecyclePublicationFence,
   withLifecycleLock,
   withLifecycleMutationFence,
   verifyBorrowedExecutionLifecycleFence,
@@ -2998,7 +2999,8 @@ function refreshBaseCheckouts(
   paths: readonly string[],
   ref: string,
   baseBefore: string,
-  mergeCommit: string
+  mergeCommit: string,
+  fenceValid: () => boolean
 ): readonly BaseCheckoutSync[] {
   const syncArgs = ['read-tree', '-u', '-m', baseBefore, mergeCommit];
   return paths.map((checkoutPath): BaseCheckoutSync => {
@@ -3025,6 +3027,8 @@ function refreshBaseCheckouts(
     }
     // Both trees are explicit because HEAD already resolves to the new ref.
     // Git preserves unrelated edits and refuses overlapping edits atomically.
+    if (!fenceValid())
+      return stale('Lifecycle publication fence unavailable before checkout refresh.');
     const refreshed = runGit(syncArgs, checkoutPath);
     return refreshed.ok ? { path: checkoutPath, state: 'in_sync' } : stale(refreshed.reason);
   });
@@ -3049,16 +3053,17 @@ type MergeCasOutcome =
       attempts?: number;
       repairSuffix?: string;
       checkoutDiscoveryFailed?: true;
+      lifecycleLockUnavailable?: true;
     };
 
 /**
  * Merge `branch` into `baseBranch` without checking either one out.
  *
- * The three-step sequence — merge-tree, commit-tree, update-ref with an
- * expected-old SHA — is the whole concurrency story. Steps 1 and 2 write only
- * unreferenced objects, so they are invisible to every other process and safe
- * to abandon. Step 3 is the single atomic instant at which the merge becomes
- * real, and git refuses it outright if the base moved underneath us.
+ * The lifecycle fence excludes cooperating authority writers through ref
+ * publication and checkout refresh. CAS also refuses a base ref changed by
+ * another Git writer. Preparation creates unreferenced objects; update-ref
+ * publishes with its expected-old SHA. The ordinary fence ends before later
+ * independently locked lifecycle transactions.
  *
  * Losing that race is NORMAL under multi-agent load, not an error: we re-read
  * the base and recompute. Only exhausting the retry budget, or hitting a real
@@ -3072,12 +3077,38 @@ function mergeViaCompareAndSwap(
   message: string,
   execution?: BorrowedExecutionLifecycleFence
 ): MergeCasOutcome {
+  const cawsDir = path.join(repoRoot, '.caws');
+  const fenced = withLifecyclePublicationFence(
+    cawsDir,
+    (current) => ok(mergeUnderPublicationFence(repoRoot, baseBranch, branch, message, current)),
+    execution
+  );
+  if (!fenced.ok)
+    return {
+      ok: false,
+      message: fenced.errors.map((error) => error.message).join('; '),
+      contention: false,
+      lifecycleLockUnavailable: true,
+    };
+  return fenced.value;
+}
+
+function mergeUnderPublicationFence(
+  repoRoot: string,
+  baseBranch: string,
+  branch: string,
+  message: string,
+  fenceValid: () => boolean
+): MergeCasOutcome {
   const ref = `refs/heads/${baseBranch}`;
-  const fenceValid = (): boolean =>
-    execution === undefined ||
-    verifyBorrowedExecutionLifecycleFence(path.join(repoRoot, '.caws'), execution);
 
   for (let attempt = 1; attempt <= MERGE_CAS_MAX_ATTEMPTS; attempt++) {
+    if (!fenceValid())
+      return {
+        ok: false,
+        message: 'Lifecycle publication fence unavailable before merge computation.',
+        contention: false,
+      };
     // Read the base ref immediately before computing the merge. This value is
     // the CAS witness; it must never come from a cache or from the caller,
     // or a stale witness could overwrite a concurrent merge.
@@ -3097,7 +3128,7 @@ function mergeViaCompareAndSwap(
     if (!fenceValid())
       return {
         ok: false,
-        message: 'Execution fence unavailable before merge computation.',
+        message: 'Lifecycle publication fence unavailable before merge computation.',
         contention: false,
       };
     const treeResult = classifyMergeTree(baseBefore, branch, repoRoot);
@@ -3132,7 +3163,7 @@ function mergeViaCompareAndSwap(
     if (!fenceValid())
       return {
         ok: false,
-        message: 'Execution fence unavailable before merge object creation.',
+        message: 'Lifecycle publication fence unavailable before merge object creation.',
         contention: false,
       };
     const commitResult = runGit(
@@ -3168,12 +3199,18 @@ function mergeViaCompareAndSwap(
     if (!fenceValid())
       return {
         ok: false,
-        message: 'Execution fence unavailable before merge publication.',
+        message: 'Lifecycle publication fence unavailable before merge publication.',
         contention: false,
       };
     const casResult = runGit(['update-ref', ref, mergeCommit, baseBefore], repoRoot);
     if (casResult.ok) {
-      const baseCheckoutSync = refreshBaseCheckouts(checkouts.paths, ref, baseBefore, mergeCommit);
+      const baseCheckoutSync = refreshBaseCheckouts(
+        checkouts.paths,
+        ref,
+        baseBefore,
+        mergeCommit,
+        fenceValid
+      );
       const canonical = baseCheckoutSync.find(
         (checkout) => checkout.path === realpathOrLiteral(repoRoot)
       );
@@ -3451,14 +3488,10 @@ export function mergeWorktree(
   //   git commit-tree <tree> -p <base> -p <branch>  -> merge commit object
   //   git update-ref <ref> <new> <expected-old>     -> ATOMIC CAS
   //
-  // If a concurrent agent advanced the base in between, git itself refuses
-  // the ref update ("is at X but expected Y") and nothing is written — we
-  // simply recompute against the new base and retry. This is strictly
-  // stronger than a lock: no blocking, no deadlock, no stale-lock recovery,
-  // and correct even when a human or CI advances the ref. It is also
-  // crash-safe by construction, since the objects written before the CAS are
-  // unreferenced (and therefore invisible) until the CAS makes them
-  // reachable.
+  // CAS retries if another Git writer advances the base. The lifecycle fence
+  // additionally spans ref publication and checkout refresh so cooperating
+  // authority readers and writers cannot overlap those changes. Objects
+  // written during preparation remain unreferenced until CAS succeeds.
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const baseBranch = entry.baseBranch as string;
   const branch = entry.branch as string;
@@ -3474,20 +3507,28 @@ export function mergeWorktree(
   const casOutcome = mergeViaCompareAndSwap(repoRoot, baseBranch, branch, message, execution);
   if (!casOutcome.ok) {
     return err(
-      storeDiagnostic(STORE_RULES.LIFECYCLE_WRITE_FAILED, casOutcome.message, {
-        subject: input.name,
-        narrowRepair: casOutcome.contention
-          ? `Another agent is merging into ${baseBranch}. Re-run: caws worktree merge ${input.name}`
-          : `${mergeRepairHint(input.name, entry)} ${casOutcome.repairSuffix ?? ''}`.trim(),
-        data: {
-          base_branch: baseBranch,
-          ...(casOutcome.checkoutDiscoveryFailed === true
-            ? { checkout_discovery_failed: true }
-            : {}),
-          ...(casOutcome.contention ? { contention: true } : {}),
-          ...(casOutcome.attempts !== undefined ? { attempts: casOutcome.attempts } : {}),
-        },
-      })
+      storeDiagnostic(
+        casOutcome.lifecycleLockUnavailable
+          ? STORE_RULES.LIFECYCLE_LOCK_CONTENTION
+          : STORE_RULES.LIFECYCLE_WRITE_FAILED,
+        casOutcome.message,
+        {
+          subject: input.name,
+          narrowRepair: casOutcome.lifecycleLockUnavailable
+            ? `Inspect the canonical lifecycle lock owner before retrying caws worktree merge ${input.name}.`
+            : casOutcome.contention
+              ? `Another agent is merging into ${baseBranch}. Re-run: caws worktree merge ${input.name}`
+              : `${mergeRepairHint(input.name, entry)} ${casOutcome.repairSuffix ?? ''}`.trim(),
+          data: {
+            base_branch: baseBranch,
+            ...(casOutcome.checkoutDiscoveryFailed === true
+              ? { checkout_discovery_failed: true }
+              : {}),
+            ...(casOutcome.contention ? { contention: true } : {}),
+            ...(casOutcome.attempts !== undefined ? { attempts: casOutcome.attempts } : {}),
+          },
+        }
+      )
     );
   }
   const mergeCommit = casOutcome.mergeCommit;

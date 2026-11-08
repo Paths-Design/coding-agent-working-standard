@@ -2,7 +2,10 @@
 //! Capture and late Git custody stay with this original invocation on failure.
 use super::original_project::{self, CapturedProject, Input, RemoteFailure};
 use super::{ContextGitOwner, Invocation, Operation, PendingGit, Request, ResultFrame, STANDARD};
-use crate::{invocation_project as project, monotonic_deadline::MonotonicDeadline};
+use crate::{
+    execution_fence::ExecutionFence, invocation_project as project,
+    monotonic_deadline::MonotonicDeadline,
+};
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
@@ -516,6 +519,9 @@ struct Owner {
     directories: Option<[RootPin; 2]>,
     pending: Option<PendingGit>,
     query_ordinal: u8,
+    // Cooperative canonical writers cannot revoke authority during the
+    // checked capture/proposal window. V1 observations acquire no fence.
+    fence: Option<ExecutionFence>,
 }
 impl Owner {
     fn verify(
@@ -541,6 +547,11 @@ impl Owner {
         .map_err(|error| error.to_string())?;
         self.checkout.verify(checkpoint)?;
         self.canonical.verify(checkpoint)?;
+        if let Some(fence) = &self.fence {
+            fence
+                .validate()
+                .map_err(|error| format!("native file authority fence: {error}"))?;
+        }
         if let Some(directories) = &self.directories {
             for root in directories {
                 root.verify(checkpoint)?;
@@ -1106,6 +1117,15 @@ impl Preparation {
         };
         let checkout = RootPin::capture(&captured.project().checkout, &mut checkpoint)?;
         let canonical = RootPin::capture(&captured.project().canonical_root, &mut checkpoint)?;
+        let fence = if self.native_state.is_some() {
+            checkpoint()?;
+            let fence = ExecutionFence::acquire(&canonical.path.join(".caws"))
+                .map_err(|error| format!("native file authority fence unavailable: {error}"))?;
+            checkpoint()?;
+            Some(fence)
+        } else {
+            None
+        };
         let git = ContextGitOwner::new(Invocation {
             id: self.input.id.clone(),
             runtime_digest: self.input.runtime_digest.clone(),
@@ -1127,6 +1147,7 @@ impl Preparation {
             directories: None,
             pending: None,
             query_ordinal: 0,
+            fence,
         });
         Ok(())
     }
@@ -1221,11 +1242,29 @@ impl Preparation {
                 }
             }
         }
+        if let Err(error) = self.release_native_fence() {
+            errors.push(error);
+        }
         if errors.is_empty() {
             Ok(())
         } else {
             Err(errors.join("; "))
         }
+    }
+
+    /// Terminal-only cleanup. The successful caller retains this owner through
+    /// actual native output and engine settlement; refusal paths may release
+    /// sooner because no permission is delivered. Never unlink a successor.
+    pub fn release_native_fence(&mut self) -> Result<(), String> {
+        if let Some(owner) = self.owner.as_mut()
+            && let Some(fence) = owner.fence.as_mut()
+        {
+            fence
+                .try_release()
+                .map_err(|error| format!("native file authority fence cleanup: {error}"))?;
+            owner.fence.take();
+        }
+        Ok(())
     }
 }
 

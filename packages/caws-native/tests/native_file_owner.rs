@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::{
     fs,
     io::Write,
-    os::unix::fs::{PermissionsExt, symlink},
+    os::unix::fs::{MetadataExt, PermissionsExt, symlink},
     path::PathBuf,
     process::{Command, Output, Stdio},
     sync::atomic::{AtomicU64, Ordering},
@@ -69,6 +69,16 @@ exec /usr/bin/git "$@"
         fs::set_permissions(
             root.join("configured-git"),
             fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        fs::write(
+            root.join("unadmitted-git"),
+            b"#!/bin/sh\n: > \"$NATIVE_FILE_ROOT/engine-git-executed\"\nexec /usr/bin/git \"$@\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(
+            root.join("unadmitted-git"),
+            fs::Permissions::from_mode(0o700),
         )
         .unwrap();
         let project = root.join("project");
@@ -293,6 +303,24 @@ const send = value => sendText(JSON.stringify(value) + '\n');
     schema:'caws.runtime.file-tool-context.request.v2', ...identity,
     token, ordinal, snapshotToken:snapshot
   });
+  const fencePath = process.env.NATIVE_FILE_PROJECT + '/.caws/state.lock';
+  let fenceIdentity = null;
+  function assertFence() {
+    const stat = fs.lstatSync(fencePath, {bigint:true});
+    assert.ok(stat.isFile());
+    assert.equal(stat.mode & 0o777n, 0o600n);
+    const identity = `${stat.dev}:${stat.ino}`;
+    if (fenceIdentity !== null) assert.equal(identity, fenceIdentity);
+    fenceIdentity = identity;
+    const record = JSON.parse(fs.readFileSync(fencePath, 'utf8'));
+    assert.equal(record.protocol, 'caws.execution.fence.v1');
+    assert.match(record.nonce, /^[a-f0-9]{64}$/);
+    assert.throws(() => fs.openSync(fencePath, 'wx'), {code:'EEXIST'});
+  }
+  function displaceFence() {
+    fs.renameSync(fencePath, fencePath + '.original');
+    fs.writeFileSync(fencePath, 'preserve successor fence');
+  }
   async function context(ordinal) {
     send(contextFrame(ordinal));
     const result = await receive();
@@ -310,6 +338,7 @@ const send = value => sendText(JSON.stringify(value) + '\n');
     assert.equal(result.context.branch, 'owned');
     assert.equal(result.context.mergeInProgress, false);
     assert.equal(result.stockScopeResolver, undefined);
+    assertFence();
     return result;
   }
   const actions = {
@@ -334,6 +363,13 @@ const send = value => sendText(JSON.stringify(value) + '\n');
     assert.equal(result.count, Number(process.env.NATIVE_FILE_EXPECTED_COUNT));
     assert.match(result.stateSha256, /^[a-f0-9]{64}$/);
   }
+  if (mode === 'generic-git-before-context') {
+    send({schema:'caws.runtime.context-git.request.v1', ...identity,
+      token:'b'.repeat(64), ordinal:1, operation:'checkout',
+      executable:root + '/unadmitted-git', cwd:process.env.NATIVE_FILE_LANE});
+    await receive();
+    throw Error('engine-chosen generic Git admitted');
+  }
   if (mode === 'decline' || mode === 'zero-effect-refusal') {
     send(ready(false));
     assert.equal((await receive()).schema, 'caws.runtime.dispatch.v1');
@@ -346,6 +382,11 @@ const send = value => sendText(JSON.stringify(value) + '\n');
   await context(1);
   send(ready(true));
   assert.equal((await receive()).schema, 'caws.runtime.dispatch.v1');
+  if (mode === 'replace-fence') {
+    displaceFence();
+    await context(2);
+    throw Error('displaced fence admitted');
+  }
   if (mode === 'context-overlap-strike') {
     sendText(JSON.stringify(strikeFrame('scope_guard')) + '\n'
       + JSON.stringify(contextFrame(2)) + '\n');
@@ -415,6 +456,7 @@ const send = value => sendText(JSON.stringify(value) + '\n');
   }
   if (mode === 'terminal-refusal') return finish(2, 'native refusal\n');
   await context(3);
+  if (mode === 'replace-fence-after-final') displaceFence();
   if (mode === 'late-unused-scope' || mode === 'late-unused-shortcut') {
     await strike(mode === 'late-unused-scope' ? 'scope_guard' : 'shortcut_language');
     throw Error('unused operation after final observation admitted');
@@ -507,6 +549,7 @@ fn one_session_keeps_its_standing_across_repositories_and_machine_homes() {
             String::from_utf8_lossy(&output.stderr)
         );
         assert_eq!(output.stdout, b"native-owner-ok\n");
+        assert!(!fixture.project.join(".caws/state.lock").exists());
         let state = fixture.state().unwrap();
         assert_eq!(state["scope_guard"], expected);
         assert_eq!(state["shortcut_language"], expected);
@@ -516,6 +559,77 @@ fn one_session_keeps_its_standing_across_repositories_and_machine_homes() {
                 .join("machine/state/sessions/native-file-owner/strikes.json")
                 .exists()
         );
+    }
+}
+
+#[test]
+fn existing_canonical_fence_refuses_context_without_reclamation_or_publication() {
+    let fixture = Fixture::new();
+    let path = fixture.project.join(".caws/state.lock");
+    let bytes = b"{\"pid\":123456789,\"at\":\"1970-01-01T00:00:00.000Z\",\"purpose\":\"foreign\"}";
+    fs::write(&path, bytes).unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    let before = fs::symlink_metadata(&path).unwrap();
+    let output = fixture.invoke("complete", "Write");
+    assert_eq!(output.status.code(), Some(2));
+    assert!(fixture.context_results().is_empty());
+    assert!(fixture.state().is_none());
+    assert_eq!(fs::read(&path).unwrap(), bytes);
+    let after = fs::symlink_metadata(&path).unwrap();
+    assert_eq!((after.dev(), after.ino()), (before.dev(), before.ino()));
+    assert!(!fixture.project.join(".caws/state.lock.reclaim").exists());
+    let diagnostic = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        diagnostic.contains("native file authority fence unavailable"),
+        "{diagnostic}"
+    );
+}
+
+#[test]
+fn native_file_callback_rejects_engine_chosen_generic_git_before_launch() {
+    let fixture = Fixture::new();
+    let output = fixture.invoke("generic-git-before-context", "Write");
+    assert_eq!(output.status.code(), Some(2));
+    assert!(!fixture.root.join("engine-git-executed").exists());
+    assert!(!fixture.root.join("git-queries.log").exists());
+    assert!(fixture.context_results().is_empty());
+    assert!(fixture.state().is_none());
+    assert!(!fixture.project.join(".caws/state.lock").exists());
+    let diagnostic = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        diagnostic.contains("native file callbacks refuse generic context Git execution"),
+        "{diagnostic}"
+    );
+}
+
+#[test]
+fn displaced_fence_cannot_authorize_the_next_context_or_final_proposal() {
+    for (mode, delivered) in [("replace-fence", 1), ("replace-fence-after-final", 3)] {
+        let fixture = Fixture::new();
+        let output = fixture.invoke(mode, "Write");
+        assert_eq!(output.status.code(), Some(2), "{mode}");
+        assert_ne!(output.stdout, b"native-owner-ok\n", "{mode}");
+        assert_eq!(fixture.context_results().len(), delivered, "{mode}");
+        assert_eq!(
+            fs::read(fixture.project.join(".caws/state.lock")).unwrap(),
+            b"preserve successor fence",
+            "{mode}"
+        );
+        if delivered == 1 {
+            assert!(fixture.state().is_none(), "{mode}");
+        } else {
+            let state = fixture.state().unwrap();
+            assert_eq!(state["scope_guard"], 1);
+            assert_eq!(state["shortcut_language"], 1);
+        }
     }
 }
 
