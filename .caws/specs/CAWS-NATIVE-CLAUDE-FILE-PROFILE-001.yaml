@@ -32,9 +32,17 @@ acceptance:
     when: 'the native producer and runtime normalize and admit it'
     then: 'the exact operation, cwd, caller and strike context, and original deadline remain bound without converting the surface to Codex.'
   - id: A2
-    given: 'the complete unchanged first-party handler set for the Claude file callback'
+    given: >-
+      the complete unchanged first-party Claude file callback handler set, with
+      literal original PATH node resolving to the selected installed Node and exact
+      supported startup controls
     when: 'the admitted profile is composed'
-    then: 'every active stock guard preserves baseline decisions and effects through compiled implementations with no whole compatibility dispatch or first-party handler subprocess.'
+    then: >-
+      every active stock guard preserves baseline decisions and effects through
+      compiled implementations with no whole compatibility dispatch or first-party
+      handler subprocess; the proven node selection makes runtime-paths startup
+      normalization a no-op, while full startup PATH construction outside this
+      domain remains an unresolved parent release obligation
   - id: A3
     given: 'missing malformed stale or mismatched context, invalid source identity, or unsupported controls'
     when: 'a declared default Claude file profile is requested'
