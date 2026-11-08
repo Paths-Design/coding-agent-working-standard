@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-session-id-admission
 created_at: '2026-11-08T14:30:26.699Z'
-updated_at: '2026-11-08T14:31:13.683Z'
+updated_at: '2026-11-08T14:36:00.747Z'
 created_by_session: '01a19baf-4b34-7a83-9cf8-f109a22c539e'
 blast_radius:
   modules:
@@ -21,6 +21,7 @@ scope:
     - 'packages/caws-cli/tests/ci/release-path-integrity.test.js'
     - '.github/workflows/release-qualification.yml'
     - 'docs/release-procedure.md'
+    - packages/caws-cli/scripts/runtime-upgrade-smoke.test.mjs
   out: []
 invariants:
   - 'Qualification never repacks a supplied selected artifact or accepts a platform image without pinned bytes and normal production admission.'
