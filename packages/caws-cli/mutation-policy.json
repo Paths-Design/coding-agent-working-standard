@@ -44,6 +44,7 @@
         "src/runtime/file-tools/metadata.ts",
         "src/runtime/file-tools/shortcut-language.ts",
         "src/runtime/file-tools/strikes-port.ts",
+        "src/runtime/file-tools/target-image.ts",
         "src/shell/analysis/analyze.ts",
         "src/shell/analysis/caws-read-metadata.ts",
         "src/shell/analysis/git-context.ts",
@@ -302,6 +303,7 @@
         { "source": "src/runtime/file-tools/metadata.ts" },
         { "source": "src/runtime/file-tools/shortcut-language.ts" },
         { "source": "src/runtime/file-tools/strikes-port.ts" },
+        { "source": "src/runtime/file-tools/target-image.ts" },
         { "source": "src/store/git-runtime.ts", "threshold": 80 },
         { "source": "src/store/lifecycle-lock.ts" }
       ],
@@ -326,6 +328,7 @@
         "tests/runtime/file-tool-context.test.js",
         "tests/runtime/guard-strikes.test.js",
         "tests/runtime/native-file-authority.test.js",
+        "tests/runtime/native-file-target-image.test.js",
         "tests/runtime/native-shortcut-language.test.js",
         "tests/runtime/protocol.test.js",
         "tests/store/git-runtime.test.js",

@@ -540,15 +540,15 @@ function executableWorkflowText(parsed) {
 }
 
 describe('mutation policy topology contract', () => {
-  test('the live policy accounts for every kernel/store/shell/transcript source exactly once', () => {
+  test('the live policy accounts for every inventoried source exactly once', () => {
     const result = runNode(VALIDATOR, ['--policy', POLICY, '--root', PACKAGE_ROOT]);
 
     expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
     // The inventory includes execution and all shared inspection decisions.
-    expect(result.stdout).toMatch(/^PASS: 228 source files accounted for exactly once$/m);
-    expect(result.stdout).toMatch(/^PASS: 47 mutation targets across 5 surfaces$/m);
+    expect(result.stdout).toMatch(/^PASS: 234 source files accounted for exactly once$/m);
+    expect(result.stdout).toMatch(/^PASS: 53 mutation targets across 5 surfaces$/m);
   });
 
   test.each([
@@ -795,7 +795,15 @@ describe('mutation policy topology contract', () => {
       '<rootDir>/tests/execution/program-discovery.test.js',
       '<rootDir>/tests/execution/protocol.test.js',
       '<rootDir>/tests/execution/writer.test.js',
+      '<rootDir>/tests/runtime/engine-core.test.js',
+      '<rootDir>/tests/runtime/file-tool-context.test.js',
+      '<rootDir>/tests/runtime/guard-strikes.test.js',
+      '<rootDir>/tests/runtime/native-file-authority.test.js',
+      '<rootDir>/tests/runtime/native-file-target-image.test.js',
+      '<rootDir>/tests/runtime/native-shortcut-language.test.js',
+      '<rootDir>/tests/runtime/protocol.test.js',
       '<rootDir>/tests/store/git-runtime.test.js',
+      '<rootDir>/tests/store/worktree-merge-canonical-consistency.test.js',
     ]);
     expect(config.mutate).toEqual([
       'src/execution/authority.ts',
@@ -812,6 +820,12 @@ describe('mutation policy topology contract', () => {
       'src/execution/prepared-schema.ts',
       'src/execution/protocol.ts',
       'src/execution/writer.ts',
+      'src/runtime/file-tools/authority.ts',
+      'src/runtime/file-tools/context-port.ts',
+      'src/runtime/file-tools/metadata.ts',
+      'src/runtime/file-tools/shortcut-language.ts',
+      'src/runtime/file-tools/strikes-port.ts',
+      'src/runtime/file-tools/target-image.ts',
       'src/store/git-runtime.ts',
       'src/store/lifecycle-lock.ts',
     ]);
