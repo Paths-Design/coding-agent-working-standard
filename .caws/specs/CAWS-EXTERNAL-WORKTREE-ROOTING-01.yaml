@@ -55,11 +55,10 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Candidate 2f5a0a6a3: real app-created detached checkout was adopted under this session, named branch attached, canonical registry/spec agree, and claim reports OWNED. Focused native Git fixtures preserve HEAD plus exact staged/unstaged diffs and untracked binary bytes; hidden authority edits and failed publication paths are covered. Final five-suite run executed 142 cases with exit 0. Actual source tree is clean after restored admission probes."
-    recorded_at: "2026-11-08T05:18:22.952Z"
-    exit_code: 0
-    artifact_path: "/Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/final-tests.log"
-    commit_sha: "2f5a0a6a31d45f97891196fae90f8c4bd5b2fb3f"
+    evidence_ref: "Inspected committed source preservation matrix and real app-checkout adoption. Native Git fixtures preserve HEAD, staged/unstaged diffs and binary untracked bytes. Actual adopted checkout claim was OWNED; native probes were restored. Runtime and raw external evidence are retained at /Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/. Generated evidence is intentionally ignored; test execution is the mechanically checked citation."
+    recorded_at: "2026-11-08T05:26:47.861Z"
+    test_nodeid: packages/caws-cli/tests/store/worktree-adoption.test.js
+    test_verified_at: c97dcb17a61f2e6cd8149d66e13027ffa63cefa1
   - criterion_id: A2
     status: pass
     evidence_ref: "Inspected adoption tests refuse canonical/subdirectory/foreign/detached-without-branch identities, hidden authority dirt, overlapping registrations and foreign bridge ownership. Event failure restores unchanged source/index; concurrent staging is retained with explicit compensation refusal. Staged exact-runtime Codex controls refuse foreign owner, unregistered payload, unrelated repository and nested unregistered payload, with reason assertions. No hostile payload command is executed."
