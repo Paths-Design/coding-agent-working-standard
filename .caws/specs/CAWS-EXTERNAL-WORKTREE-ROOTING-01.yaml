@@ -51,3 +51,11 @@ rollback:
   - 'Restore the prior installed CLI and shared runtime through supported installation and rollback commands; preserve all pre-existing checkouts.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Candidate 2f5a0a6a3: real app-created detached checkout was adopted under this session, named branch attached, canonical registry/spec agree, and claim reports OWNED. Focused native Git fixtures preserve HEAD plus exact staged/unstaged diffs and untracked binary bytes; hidden authority edits and failed publication paths are covered. Final five-suite run executed 142 cases with exit 0. Actual source tree is clean after restored admission probes."
+    recorded_at: "2026-11-08T05:18:22.952Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/final-tests.log"
+    commit_sha: "2f5a0a6a31d45f97891196fae90f8c4bd5b2fb3f"
