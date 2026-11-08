@@ -662,7 +662,7 @@ import { isAdapterCoveredSurface } from './types';
 // v131: payload-owner approval cannot turn unrelated registry uncertainty
 // into approval for a canonical claim.
 // v135: linked checkouts refuse when canonical Git discovery falls back to the leaf.
-export const SHARED_PACK_VERSION = 135;
+export const SHARED_PACK_VERSION = 136;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
