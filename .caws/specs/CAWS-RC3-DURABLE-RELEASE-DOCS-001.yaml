@@ -44,9 +44,8 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Source-inspected documentation635130eca: existing repair criteria preserved; installed production trust/Start/owned shell and file reads-writes/check/governed commit/protected refusal/Stop/semantic rendering is first integration milestone; all seven harnesses, 13 sessions/4 repos, six ten-case upgrade cells, all current mutation targets/floors and separate publication authorization remain final obligations. Current policy inventory governs beyond original16 execution/9 analysis targets. Durable evidence and isolated adoption ordering explicit. Source/document acceptance only; no runtime qualification verdict."
-    recorded_at: "2026-11-08T10:27:01.853Z"
-    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/release-docs/01a1ba85-9c82-7b01-8943-610e88a44364/final-gates.log"
+    evidence_ref: "Source-inspected documentation635130eca landed as a8ac15e7c. Complete first-installed workflow and full current final bar preserved with isolated adoption, durable custody and separate publication authorization. Mechanical verification covers the cited source commit. Supporting generated raw gate/format/metadata logs were directly inspected under canonical .caws/state/release-docs/01a1ba85-9c82-7b01-8943-610e88a44364/; they remain ignored per repository policy and are external observations, not tracked artifacts at635. The prior absolute/then ignored-artifact typed citations were rejected and are replaced with the applicable source citation; no runtime acceptance is inferred."
+    recorded_at: "2026-11-08T10:33:27.066Z"
     commit_sha: "635130ecaa9bb69fba350b8cfbeb1945964de357"
   - criterion_id: A2
     status: pass
