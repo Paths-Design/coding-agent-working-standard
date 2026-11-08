@@ -61,11 +61,10 @@ evidence:
     test_verified_at: c97dcb17a61f2e6cd8149d66e13027ffa63cefa1
   - criterion_id: A2
     status: pass
-    evidence_ref: "Inspected adoption tests refuse canonical/subdirectory/foreign/detached-without-branch identities, hidden authority dirt, overlapping registrations and foreign bridge ownership. Event failure restores unchanged source/index; concurrent staging is retained with explicit compensation refusal. Staged exact-runtime Codex controls refuse foreign owner, unregistered payload, unrelated repository and nested unregistered payload, with reason assertions. No hostile payload command is executed."
-    recorded_at: "2026-11-08T05:18:24.253Z"
-    exit_code: 0
-    artifact_path: "/Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/compatible-runtime/native-replay.jsonl"
-    commit_sha: "2f5a0a6a31d45f97891196fae90f8c4bd5b2fb3f"
+    evidence_ref: "The committed matrix executes positive preservation, foreign repository/bridge, invalid identity, hidden authority, overlap, partial-publication and concurrent staging controls. Inspected staged native replay additionally refuses foreign owner, missing registration, unrelated repository and nested missing registration for the expected reasons. Raw replay remains in tmp/external-worktree-rooting/native-replay.jsonl and the persistent external evidence directory; it is manually inspected runtime evidence, not a tracked artifact citation."
+    recorded_at: "2026-11-08T05:27:23.911Z"
+    test_nodeid: packages/caws-cli/tests/store/worktree-adoption.test.js
+    test_verified_at: "6de36f7b3a5522fb7591563807100ed9f52beacf"
   - criterion_id: A3
     status: pass
     evidence_ref: "Installed runtime 0c338b108be9ae3ba94d90f5938409259e6cbbe6b9e6b883da6a7be5f4d9fccf was built through retained installer 14d8ae10f76f154b-MYcxEk after an exact isolated reconstruction of working 01f189 runtime. Same 113 manifest keys; only root predicate, ownership oracle and legacy allowlist uncertainty handling changed. Native shell and Edit callbacks succeeded in the actually adopted external checkout with reprieve revoked; temporary bytes were restored to original SHA256. Active handler journal rows and tool-level writes retained. All 3 K and 13 RVGL dirty paths and both HEADs are unchanged. Original RC lanes remain for their owners to adopt; no RC writes, gameplay acceptance or full default-runtime qualification inferred. Failed 41fc/fca cutovers were rolled back and are retained in proof."
