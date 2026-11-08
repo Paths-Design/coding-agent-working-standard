@@ -33,6 +33,90 @@ const request = (changes = {}) => ({
 const decode = (changes) => decodeRuntimeRequest(JSON.stringify(request(changes)), now);
 
 describe('native runtime protocol', () => {
+  const claudeBackend = (tool = 'Write') => {
+    const payload = {
+      tool_name: tool,
+      tool_input: { file_path: '/project/owned.txt', content: 'owned content' },
+    };
+    return {
+      surface: 'claude-code',
+      fileToolContext: 'caws.runtime.file-tool-context.v2',
+      guardStrikes: 'caws.runtime.guard-strikes.v2',
+      stockScopeResolver: 'caws.runtime.stock-scope-resolver.v1',
+      inputJson: JSON.stringify(payload),
+      payload,
+    };
+  };
+  test.each(['Write', 'Edit'])(
+    'preserves paired Claude %s backend capabilities without relabeling its input',
+    (tool) => {
+      const original = claudeBackend(tool);
+      const decoded = decode(original);
+      expect(decoded).toMatchObject(original);
+      expect(decoded.surface).toBe('claude-code');
+      expect(decoded.payload.tool_name).toBe(tool);
+      expect(decoded.inputJson).toBe(original.inputJson);
+      expect(decoded.caller).toEqual(request().caller);
+      expect(decoded.deadlineEpochMs).toBe(request().deadlineEpochMs);
+    }
+  );
+  test('a partial or mixed-version Claude backend cannot borrow the other operations', () => {
+    for (const field of ['fileToolContext', 'guardStrikes', 'stockScopeResolver']) {
+      const missing = claudeBackend();
+      delete missing[field];
+      expect(() => decode(missing)).toThrow(/Claude file backend capabilities/);
+      const only = claudeBackend();
+      for (const other of ['fileToolContext', 'guardStrikes', 'stockScopeResolver']) {
+        if (other !== field) delete only[other];
+      }
+      expect(() => decode(only)).toThrow(/Claude file backend capabilities/);
+    }
+    for (const changes of [
+      { fileToolContext: 'caws.runtime.file-tool-context.v1' },
+      { guardStrikes: 'caws.runtime.guard-strikes.v1' },
+      { surface: 'codex' },
+      { event: 'post_tool_use' },
+      { configuration: 'project' },
+    ]) {
+      expect(() => decode({ ...claudeBackend(), ...changes })).toThrow(
+        /Claude file backend capabilities/
+      );
+    }
+    for (const tool of ['apply_patch', 'Bash', ['Write'], null, {}, false, 1]) {
+      expect(() => decode(claudeBackend(tool))).toThrow(/Claude file backend capabilities/);
+    }
+  });
+  test('stock resolver capability is exact and duplicate control fields cannot be hidden', () => {
+    for (const stockScopeResolver of [
+      null,
+      false,
+      '',
+      [],
+      {},
+      'caws.runtime.stock-scope-resolver.v2',
+    ]) {
+      expect(() => decode({ ...claudeBackend(), stockScopeResolver })).toThrow(
+        /stock scope resolver capability/
+      );
+    }
+    const frame = JSON.stringify(request(claudeBackend()));
+    const duplicate = String.raw`"\u0073tockScopeResolver":"caws.runtime.stock-scope-resolver.v1",`;
+    expect(() => decodeRuntimeRequest(frame.replace('{', '{' + duplicate), now)).toThrow(
+      /Duplicate/
+    );
+  });
+  test('V1 transports keep their original capabilities without a stock resolver offer', () => {
+    const payload = { tool_name: 'apply_patch', tool_input: {} };
+    const decoded = decode({
+      fileToolContext: 'caws.runtime.file-tool-context.v1',
+      guardStrikes: 'caws.runtime.guard-strikes.v1',
+      inputJson: JSON.stringify(payload),
+      payload,
+    });
+    expect(decoded.fileToolContext).toBe('caws.runtime.file-tool-context.v1');
+    expect(decoded.guardStrikes).toBe('caws.runtime.guard-strikes.v1');
+    expect(Object.hasOwn(decoded, 'stockScopeResolver')).toBe(false);
+  });
   test('full SessionEnd prefix capability is distinct from cache and publication authority', () => {
     expect(decode().sessionEndPrefix).toBeUndefined();
     const result = decode({ sessionEndPrefix: 'caws.runtime.session-end-prefix.v1' });
