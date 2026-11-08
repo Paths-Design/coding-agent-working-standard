@@ -66,3 +66,10 @@ evidence:
     exit_code: 0
     artifact_path: "/Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/compatible-runtime/native-replay.jsonl"
     commit_sha: "2f5a0a6a31d45f97891196fae90f8c4bd5b2fb3f"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Installed runtime 0c338b108be9ae3ba94d90f5938409259e6cbbe6b9e6b883da6a7be5f4d9fccf was built through retained installer 14d8ae10f76f154b-MYcxEk after an exact isolated reconstruction of working 01f189 runtime. Same 113 manifest keys; only root predicate, ownership oracle and legacy allowlist uncertainty handling changed. Native shell and Edit callbacks succeeded in the actually adopted external checkout with reprieve revoked; temporary bytes were restored to original SHA256. Active handler journal rows and tool-level writes retained. All 3 K and 13 RVGL dirty paths and both HEADs are unchanged. Original RC lanes remain for their owners to adopt; no RC writes, gameplay acceptance or full default-runtime qualification inferred. Failed 41fc/fca cutovers were rolled back and are retained in proof."
+    recorded_at: "2026-11-08T05:18:25.414Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/native-proof.json"
+    commit_sha: "2f5a0a6a31d45f97891196fae90f8c4bd5b2fb3f"
