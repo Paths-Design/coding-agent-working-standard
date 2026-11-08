@@ -1262,22 +1262,8 @@ process.stdin.resume();
         let f = Fixture::create(&node, &fixture);
         let self_path = fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
         let host_image = image(self_path.to_str().unwrap());
-        let deadline = MonotonicDeadline::capture(if case == "expired" {
-            Duration::from_millis(2)
-        } else {
-            Duration::from_secs(30)
-        })
-        .unwrap();
-        // This child is launched directly by the same test binary, so the
-        // actual parent process/image is measured by HostContext.
-        let host = if case == "expired" {
-            // Capture before expiry using a separate live context deadline;
-            // the invocation deadline below remains the original expired one.
-            let startup = MonotonicDeadline::capture(Duration::from_secs(30)).unwrap();
-            HostContext::capture(&host_image, &startup).unwrap()
-        } else {
-            HostContext::capture(&host_image, &deadline).unwrap()
-        };
+        // Expected image digests model trusted configuration loaded before a call.
+        // Fresh host capture and all preparation validation use the original budget.
         let source_dir = Path::new(&entry).parent().unwrap();
         let writer = source_dir.join("writer-main.js");
         let lifecycle = source_dir.join("lifecycle-main.js");
@@ -1294,6 +1280,23 @@ process.stdin.resume();
             image(&entry)
         } else {
             image(&discovery)
+        };
+        let deadline = MonotonicDeadline::capture(if case == "expired" {
+            Duration::from_millis(2)
+        } else {
+            Duration::from_secs(30)
+        })
+        .unwrap();
+        let original_deadline = deadline.envelope();
+        // This child is launched directly by the same test binary, so the
+        // actual parent process/image is measured by HostContext.
+        let host = if case == "expired" {
+            // Capture before expiry using a separate live context deadline;
+            // the invocation deadline below remains the original expired one.
+            let startup = MonotonicDeadline::capture(Duration::from_secs(30)).unwrap();
+            HostContext::capture(&host_image, &startup).unwrap()
+        } else {
+            HostContext::capture(&host_image, &deadline).unwrap()
         };
         let fixed_source = match case.as_str() {
             "lifecycle" => format!("'{node}' '{}' git-head", lifecycle.display()),
@@ -1322,7 +1325,6 @@ process.stdin.resume();
                 Ok(())
             }
         };
-        let original_deadline = deadline.envelope();
         let result = prepare(
             &input,
             &host,
@@ -1349,7 +1351,12 @@ process.stdin.resume();
             assert_eq!(record.association.call_id, input.call_id);
             assert_eq!(record.association.session_id, input.session_id);
             assert_eq!(record.association.thread_id, input.thread_id);
-            let path = record.execution.environment.iter().find(|e| e.name == "PATH").unwrap();
+            let path = record
+                .execution
+                .environment
+                .iter()
+                .find(|e| e.name == "PATH")
+                .unwrap();
             assert_eq!(path.value, fixed_system_directories().unwrap().join(":"));
             assert_eq!(prepared.record.sandbox_state(), STATE.as_bytes());
             assert!(!f.path("caws").join("events.jsonl").exists());
@@ -1430,7 +1437,8 @@ process.stdin.resume();
     }
     fn run_case(name: Option<&str>) -> std::process::Output {
         let mut command = Command::new(std::env::current_exe().unwrap());
-        command.arg("--exact")
+        command
+            .arg("--exact")
             .arg(FIXTURE)
             .arg("--nocapture")
             .arg("--test-threads=1")
@@ -1450,7 +1458,9 @@ process.stdin.resume();
         assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
         let marker = format!("prepare consumer completed: {name}");
         assert!(
-            String::from_utf8_lossy(&output.stderr).lines().any(|line| line == marker),
+            String::from_utf8_lossy(&output.stderr)
+                .lines()
+                .any(|line| line == marker),
             "missing completed prepare case: {name}"
         );
     }
