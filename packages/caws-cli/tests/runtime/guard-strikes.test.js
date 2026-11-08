@@ -3,6 +3,8 @@ const {
   createNativeGuardStrikesPort,
   GUARD_STRIKES_REQUEST,
   GUARD_STRIKES_RESULT,
+  GUARD_STRIKES_V2_REQUEST,
+  GUARD_STRIKES_V2_RESULT,
   MAX_GUARD_STRIKES_RESULT_BYTES,
 } = require('../../dist/runtime/guard-strikes');
 const { GUARD_STRIKES_CAPABILITY, decodeRuntimeRequest } = require('../../dist/runtime/protocol');
@@ -27,10 +29,17 @@ function request() {
     payload,
   };
 }
-function fixture({ count = 1, mutate, transform } = {}) {
+function fixture({ count = 1, mutate, transform, native = false, tool = 'Write' } = {}) {
   const req = request(),
     controller = new AbortController(),
     frames = [];
+  if (native)
+    Object.assign(req, {
+      surface: 'claude-code',
+      guardStrikes: 'caws.runtime.guard-strikes.v2',
+      fileToolContext: 'caws.runtime.file-tool-context.v2',
+      payload: { ...req.payload, tool_name: tool },
+    });
   const transport = {
     write: jest.fn(async (frame) => {
       frames.push(frame);
@@ -38,12 +47,15 @@ function fixture({ count = 1, mutate, transform } = {}) {
     read: jest.fn(async () => {
       const frame = frames.at(-1);
       const reply = {
-        schema: GUARD_STRIKES_RESULT,
+        schema: native ? GUARD_STRIKES_V2_RESULT : GUARD_STRIKES_RESULT,
         id: frame.id,
         runtimeDigest: frame.runtimeDigest,
         token: frame.token,
         count,
         stateSha256: 'b'.repeat(64),
+        ...(native
+          ? { operation: frame.operation, contextSnapshotToken: frame.contextSnapshotToken }
+          : {}),
       };
       if (mutate) mutate(reply);
       const text = JSON.stringify(reply);
@@ -55,12 +67,97 @@ function fixture({ count = 1, mutate, transform } = {}) {
     controller,
     frames,
     transport,
-    port: createNativeGuardStrikesPort(req, transport, controller.signal),
+    port: createNativeGuardStrikesPort(
+      req,
+      transport,
+      controller.signal,
+      native
+        ? { association: () => ({ token: 'd'.repeat(64), snapshotToken: 'e'.repeat(64) }) }
+        : undefined
+    ),
   };
 }
 afterEach(() => {
   jest.restoreAllMocks();
   jest.useRealTimers();
+});
+test('native publications are distinct one-shot operations with action-correlated receipts', async () => {
+  const f = fixture({ native: true, count: 2 });
+  expect(await f.port.incrementScopeGuard()).toEqual({ count: 2, stateSha256: 'b'.repeat(64) });
+  expect(await f.port.incrementShortcutLanguage()).toEqual({
+    count: 2,
+    stateSha256: 'b'.repeat(64),
+  });
+  expect(f.frames.map(({ schema, operation }) => ({ schema, operation }))).toEqual([
+    { schema: GUARD_STRIKES_V2_REQUEST, operation: 'increment_scope_guard' },
+    { schema: GUARD_STRIKES_V2_REQUEST, operation: 'increment_shortcut_language' },
+  ]);
+  expect(f.frames[0].token).toBe('d'.repeat(64));
+  expect(f.frames[1].token).toBe('d'.repeat(64));
+  expect(f.frames.map(({ contextSnapshotToken }) => contextSnapshotToken)).toEqual([
+    'e'.repeat(64),
+    'e'.repeat(64),
+  ]);
+  await expect(f.port.incrementScopeGuard()).rejects.toThrow('consumed');
+  expect(f.transport.write).toHaveBeenCalledTimes(2);
+  expect(fixture({ native: true, tool: 'Edit' }).port.incrementShortcutLanguage).toBeUndefined();
+  expect(fixture().port.incrementShortcutLanguage).toBeUndefined();
+});
+test.each([
+  (r) => {
+    r.operation = 'increment_shortcut_language';
+  },
+  (r) => {
+    delete r.operation;
+  },
+  (r) => {
+    r.contextSnapshotToken = 'f'.repeat(64);
+  },
+  (r) => {
+    r.schema = GUARD_STRIKES_RESULT;
+  },
+])('native receipt substitution poisons both operations and cannot replay', async (mutate) => {
+  const f = fixture({ native: true, mutate });
+  await expect(f.port.incrementScopeGuard()).rejects.toThrow('correlation mismatch');
+  await expect(f.port.incrementShortcutLanguage()).rejects.toThrow('consumed');
+  expect(f.transport.write).toHaveBeenCalledTimes(1);
+});
+test('overlapping distinct publications poison the outstanding operation without a second write', async () => {
+  const f = fixture({ native: true });
+  let complete;
+  let reading;
+  const started = new Promise((resolve) => {
+    reading = resolve;
+  });
+  f.transport.read.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+        reading();
+      })
+  );
+  const scope = f.port.incrementScopeGuard();
+  const settled = expect(scope).rejects.toThrow('consumed');
+  await started;
+  await expect(f.port.incrementShortcutLanguage()).rejects.toThrow('consumed');
+  await settled;
+  complete(Buffer.from('{}'));
+  await expect(f.port.incrementScopeGuard()).rejects.toThrow('consumed');
+  expect(f.transport.write).toHaveBeenCalledTimes(1);
+});
+test('native publications require their original context association before any write', async () => {
+  const f = fixture({ native: true });
+  expect(() => createNativeGuardStrikesPort(f.req, f.transport, f.controller.signal)).toThrow(
+    'capability unavailable'
+  );
+  const port = createNativeGuardStrikesPort(f.req, f.transport, f.controller.signal, {
+    association() {
+      throw new Error('original observation not delivered');
+    },
+  });
+  await expect(port.incrementScopeGuard()).rejects.toThrow('original observation not delivered');
+  await expect(port.incrementShortcutLanguage()).rejects.toThrow('consumed');
+  expect(f.transport.write).not.toHaveBeenCalled();
 });
 test('optional capability roundtrips and unknown or duplicate declarations refuse', () => {
   const req = request();

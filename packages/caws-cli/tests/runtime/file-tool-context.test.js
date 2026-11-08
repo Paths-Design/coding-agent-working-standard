@@ -3,6 +3,8 @@ const {
   createNativeFileToolContextPort,
   FILE_TOOL_CONTEXT_REQUEST,
   FILE_TOOL_CONTEXT_RESULT,
+  FILE_TOOL_CONTEXT_V2_REQUEST,
+  FILE_TOOL_CONTEXT_V2_RESULT,
   MAX_FILE_TOOL_CONTEXT_RESULT,
 } = require('../../dist/runtime/file-tool-context');
 const {
@@ -58,8 +60,19 @@ function snapshot(overrides = {}) {
     ...overrides,
   };
 }
-function fixture({ mutate, transform, contexts = [snapshot(), snapshot()] } = {}) {
+function fixture({
+  mutate,
+  transform,
+  native = false,
+  contexts = [snapshot(), snapshot(), snapshot()],
+} = {}) {
   const req = request();
+  if (native)
+    Object.assign(req, {
+      surface: 'claude-code',
+      fileToolContext: 'caws.runtime.file-tool-context.v2',
+      guardStrikes: 'caws.runtime.guard-strikes.v2',
+    });
   const controller = new AbortController();
   const frames = [];
   const transport = {
@@ -69,7 +82,7 @@ function fixture({ mutate, transform, contexts = [snapshot(), snapshot()] } = {}
     read: jest.fn(async () => {
       const frame = frames.at(-1);
       const result = {
-        schema: FILE_TOOL_CONTEXT_RESULT,
+        schema: native ? FILE_TOOL_CONTEXT_V2_RESULT : FILE_TOOL_CONTEXT_RESULT,
         id: frame.id,
         runtimeDigest: frame.runtimeDigest,
         token: frame.token,
@@ -93,6 +106,72 @@ function fixture({ mutate, transform, contexts = [snapshot(), snapshot()] } = {}
 afterEach(() => {
   jest.restoreAllMocks();
   jest.useRealTimers();
+});
+
+test('native authority requires three ordered observations with original roots and fresh final facts', async () => {
+  const fresh = snapshot({ mergeInProgress: true });
+  const f = fixture({ native: true, contexts: [snapshot(), snapshot(), fresh] });
+  expect(typeof f.port.finalize).toBe('function');
+  expect(() => f.port.association()).toThrow('completed observation');
+  expect(await f.port.capture()).toEqual(snapshot());
+  const association = f.port.association();
+  expect(association).toEqual({ token: f.frames[0].token, snapshotToken: 'b'.repeat(64) });
+  expect(Object.isFrozen(association)).toBe(true);
+  expect(await f.port.revalidate()).toEqual(snapshot());
+  expect(await f.port.finalize()).toEqual(fresh);
+  expect(
+    f.frames.map(({ schema, ordinal, snapshotToken }) => ({ schema, ordinal, snapshotToken }))
+  ).toEqual([
+    { schema: FILE_TOOL_CONTEXT_V2_REQUEST, ordinal: 1, snapshotToken: null },
+    { schema: FILE_TOOL_CONTEXT_V2_REQUEST, ordinal: 2, snapshotToken: 'b'.repeat(64) },
+    { schema: FILE_TOOL_CONTEXT_V2_REQUEST, ordinal: 3, snapshotToken: 'b'.repeat(64) },
+  ]);
+  await expect(f.port.finalize()).rejects.toThrow('replay');
+  expect(() => f.port.association()).toThrow('invalidated');
+  expect(f.transport.write).toHaveBeenCalledTimes(3);
+});
+test('native final observation cannot skip an earlier observation or recover after failure', async () => {
+  const f = fixture({ native: true });
+  await f.port.capture();
+  await expect(f.port.finalize()).rejects.toThrow('order mismatch');
+  await expect(f.port.revalidate()).rejects.toThrow('replay');
+  expect(f.transport.write).toHaveBeenCalledTimes(1);
+});
+test('native final observation refuses replaced roots and old-version replies without replay', async () => {
+  const roots = fixture({
+    native: true,
+    contexts: [snapshot(), snapshot(), snapshot({ canonical: '/other' })],
+  });
+  await roots.port.capture();
+  await roots.port.revalidate();
+  await expect(roots.port.finalize()).rejects.toThrow('original roots replaced');
+  await expect(roots.port.finalize()).rejects.toThrow('replay');
+  expect(roots.transport.write).toHaveBeenCalledTimes(3);
+  const old = fixture({
+    native: true,
+    mutate: (reply) => {
+      reply.schema = FILE_TOOL_CONTEXT_RESULT;
+    },
+  });
+  await expect(old.port.capture()).rejects.toThrow('correlation mismatch');
+  await expect(old.port.revalidate()).rejects.toThrow('replay');
+  expect(old.transport.write).toHaveBeenCalledTimes(1);
+  expect(fixture().port.finalize).toBeUndefined();
+  expect(fixture().port.association).toBeUndefined();
+});
+test('native context port cannot borrow another surface or an unpaired strike backend', () => {
+  const f = fixture({ native: true });
+  for (const overrides of [
+    { surface: 'codex' },
+    { guardStrikes: undefined },
+    { guardStrikes: 'caws.runtime.guard-strikes.v1' },
+    { payload: { tool_name: 'apply_patch' } },
+  ]) {
+    expect(() =>
+      createNativeFileToolContextPort({ ...f.req, ...overrides }, f.transport, f.controller.signal)
+    ).toThrow('capability unavailable');
+  }
+  expect(f.transport.write).not.toHaveBeenCalled();
 });
 
 test('optional capability roundtrips while unknown and duplicate values refuse', () => {
