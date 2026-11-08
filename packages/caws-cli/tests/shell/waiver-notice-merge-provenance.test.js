@@ -468,8 +468,8 @@ describe('hook guards: reprieve is live, scope.support is not consulted', () => 
 
 function sentences(text) {
   return text
-    .replace(/\s+/g, ' ')
-    .split(/(?<=[.!?])\s+(?=[A-Z`(])/)
+    .split(/\r?\n[\t ]*\r?\n/)
+    .flatMap((paragraph) => paragraph.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+(?=[A-Z`(])/))
     .map((s) => s.trim())
     .filter(Boolean);
 }
@@ -477,6 +477,22 @@ function sentences(text) {
 const PROVENANCE = /lane[- ]provenance|outside the spec(?:'s)? scope|outside spec scope/i;
 
 describe('A5: operator copy routes a lane-provenance merge refusal to --add-support', () => {
+  test('paragraph boundaries keep unrelated command headings separate from a scope remedy', () => {
+    const remedy =
+      'A lane-provenance merge refusal uses `caws specs amend-scope <spec> --add-support <path>`.';
+    const chunks = sentences(remedy + '\n\n### `caws reprieve grant`\n\nGrant a hook reprieve.');
+    expect(chunks.filter((sentence) => PROVENANCE.test(sentence))).toEqual([remedy]);
+    expect(chunks.some((sentence) => sentence.includes('reprieve grant'))).toBe(true);
+  });
+
+  test('line wrapping cannot hide an incorrect grant remedy inside the same paragraph', () => {
+    const bad = 'For a lane-provenance merge refusal,\nrun `caws reprieve grant`.';
+    const chunks = sentences(bad).filter((sentence) => PROVENANCE.test(sentence));
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toMatch(/reprieve grant/i);
+    expect(chunks[0]).toBe(bad.replace(/\s+/g, ' '));
+  });
+
   const run = (...args) =>
     spawnSync(process.execPath, [CLI, ...args], {
       cwd: tmp('wnmp-a5-'),

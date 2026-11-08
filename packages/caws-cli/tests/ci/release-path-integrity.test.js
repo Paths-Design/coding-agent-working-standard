@@ -186,10 +186,59 @@ describe('mutation floor gates the release', () => {
     expect(callable.inputs.required.type).toBe('boolean');
     // Default false keeps mutation off the per-PR critical path.
     expect(callable.inputs.required.default).toBe(false);
-    // The full-floor job must consult the input; without this the release
-    // caller would fall through to the label/event condition.
-    expect(mutation.jobs.mutation.if).toContain('inputs.required');
-    expect(mutation.jobs.mutation.needs).toBe('harness_integrity');
+    // Required callers schedule every target and the always-run completion
+    // guard; the shard matrix itself requires successful planning.
+    const plan = mutation.jobs.mutation_plan;
+    expect(plan.if).toContain('inputs.required');
+    expect(plan.needs).toBe('harness_integrity');
+    expect(mutation.jobs.mutation.needs).toEqual(['harness_integrity', 'mutation_plan']);
+    expect(mutation.jobs.mutation.if).toBe("${{ needs.mutation_plan.result == 'success' }}");
+    const complete = mutation.jobs.mutation_complete;
+    expect(complete.needs).toEqual(['harness_integrity', 'mutation_plan', 'mutation']);
+    expect(complete.if).toContain('always()');
+    expect(complete.if).toContain('inputs.required');
+    const guard = step(mutation, 'mutation_complete', 'Require every full shard');
+    expect(guard.env.CAWS_MUTATION_NEEDS).toBe('${{ toJSON(needs) }}');
+    expect(guard.run).toBe('node scripts/mutation-selection.cjs --assert-complete');
+  });
+
+  test.each([
+    ['all successful', null, null],
+    ...['harness_integrity', 'mutation_plan', 'mutation'].flatMap((job) =>
+      ['failure', 'cancelled', 'skipped', 'missing'].map((result) => [
+        job + ':' + result,
+        job,
+        result,
+      ])
+    ),
+  ])('the actual wired completion step enforces %s', (_name, job, result) => {
+    const guard = step(workflow('mutation.yml'), 'mutation_complete', 'Require every full shard');
+    const needs = {
+      harness_integrity: { result: 'success' },
+      mutation_plan: { result: 'success' },
+      mutation: { result: 'success' },
+    };
+    if (job) {
+      if (result === 'missing') delete needs[job];
+      else needs[job] = { result };
+    }
+    const environment = { PATH: path.dirname(process.execPath) + path.delimiter + '/usr/bin:/bin' };
+    for (const [key, value] of Object.entries(guard.env || {}))
+      environment[key] = value === '${{ toJSON(needs) }}' ? JSON.stringify(needs) : value;
+    const child = spawnSync('/bin/bash', ['-e', '-c', guard.run], {
+      cwd: path.resolve(repoRoot, guard['working-directory']),
+      env: environment,
+      encoding: 'utf8',
+      timeout: 15000,
+    });
+    expect(child.error).toBeUndefined();
+    expect(child.signal).toBeNull();
+    expect(child.status).toBe(job ? 1 : 0);
+    expect(job ? child.stderr : child.stdout).toContain(
+      job
+        ? job + ' did not complete successfully'
+        : 'All planned full mutation shards completed successfully.'
+    );
   });
 });
 
