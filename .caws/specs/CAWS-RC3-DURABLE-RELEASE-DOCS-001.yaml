@@ -1,10 +1,11 @@
 id: CAWS-RC3-DURABLE-RELEASE-DOCS-001
 title: 'Define installed-workflow-first release acceptance and durable evidence guidance'
 mode: doc
-lifecycle_state: active
-worktree: rc3-durable-release-docs
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed source-grounded installed-workflow-first release and native-authority guidance in three existing docs. All documentation ACs recorded/read back; independent review findings grounded and corrected; normal scoped checks pass. This closes only the documentation slice. Full runtime release/native/concurrency/upgrade acceptance remains with the release owner, and tagging/npm publication stay withheld.'
 created_at: '2026-11-08T09:57:50.594Z'
-updated_at: '2026-11-08T10:10:09.151Z'
+updated_at: '2026-11-08T10:28:43.440Z'
 created_by_session: '01a1ba85-9c82-7b01-8943-610e88a44364'
 blast_radius:
   modules:
