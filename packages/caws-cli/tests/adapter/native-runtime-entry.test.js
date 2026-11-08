@@ -868,7 +868,8 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     loaded.requestFile = requestFile;
     loaded.build.requestDigest = sha(Buffer.from(JSON.stringify(request)));
     loaded.build.sourceTreeDigest = sha(Buffer.from(JSON.stringify(request.source)));
-    const completion = reviewedFile('portable-completion.json', JSON.stringify(loaded.build));
+    const completion = reviewedFile('native-completed.json', JSON.stringify(loaded.build));
+    fs.linkSync(completion.path, path.join(root, 'native-completed.pending.json'));
     loaded.completionReceipt = completion;
     descriptor.completionReceipt = completion;
     const commit = 'd'.repeat(40);
@@ -935,8 +936,17 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       expectedSha256: sha(bytes),
       expectedCliTarball: { sha256: tar.sha256, sizeBytes: tar.sizeBytes },
     };
-    return { bytes, selection, tar };
+    return { bytes, selection, tar, records, commit };
   }
+  test('portable export refuses a substituted completion marker pair', () => {
+    const { tar, records, commit } = portableFixture();
+    const pending = path.join(root, 'native-completed.pending.json');
+    fs.unlinkSync(pending);
+    fs.writeFileSync(pending, fs.readFileSync(descriptor.completionReceipt.path));
+    expect(() => sealPortableNativeImage(descriptor, commit, tar, records)).toThrow(
+      /marker pair mismatch/
+    );
+  });
   test('retains and verifies the original historical pack receipt', () => {
     const { bytes, selection } = portableFixture(true);
     expect(readPortableNativeImage(bytes, selection).stableEntry).toEqual(stableBytes);

@@ -117,11 +117,26 @@ function same(a: fs.Stats, b: fs.Stats): boolean {
   );
 }
 /** Capture regular bytes; receipt-bound artifacts repeat canonical-path observation. */
-function capture(file: string, expected?: ReviewedFile): { bytes: Buffer; stat: fs.Stats } {
+function capture(
+  file: string,
+  expected?: ReviewedFile,
+  completionPair = false
+): { bytes: Buffer; stat: fs.Stats } {
   if (!path.isAbsolute(file) || path.resolve(file) !== file || fs.realpathSync(file) !== file)
     throw new Error(`Native image input must be canonical and contain no symlink: ${file}`);
   const before = fs.lstatSync(file);
-  if (!before.isFile() || before.nlink !== 1 || (before.mode & 0o7022) !== 0)
+  const pending = completionPair
+    ? path.join(path.dirname(file), 'native-completed.pending.json')
+    : undefined;
+  if (
+    completionPair &&
+    (path.basename(file) !== 'native-completed.json' ||
+      fs.realpathSync(pending!) !== pending ||
+      !same(before, fs.lstatSync(pending!)))
+  )
+    throw new Error('Native completion marker pair mismatch');
+  const expectedLinks = completionPair ? 2 : 1;
+  if (!before.isFile() || before.nlink !== expectedLinks || (before.mode & 0o7022) !== 0)
     throw new Error(`Unsafe native image file or permissions: ${file}`);
   if (expected && before.size !== expected.sizeBytes)
     throw new Error(`Native build artifact size mismatch: ${file}`);
@@ -150,9 +165,10 @@ function capture(file: string, expected?: ReviewedFile): { bytes: Buffer; stat: 
       !same(opened, afterPath) ||
       bytes.length !== opened.size ||
       (expected &&
-        (opened.nlink !== 1 ||
-          afterDescriptor.nlink !== 1 ||
-          afterPath.nlink !== 1 ||
+        (opened.nlink !== expectedLinks ||
+          afterDescriptor.nlink !== expectedLinks ||
+          afterPath.nlink !== expectedLinks ||
+          (completionPair && !same(opened, fs.lstatSync(pending!))) ||
           fs.realpathSync(file) !== file))
     )
       throw new Error(`Changed native image input: ${file}`);
@@ -1007,9 +1023,9 @@ function portableCanonical(value: unknown): string {
   return encoded;
 }
 
-function capturedPin(pin: ReviewedFile): Buffer {
+function capturedPin(pin: ReviewedFile, completionPair = false): Buffer {
   reviewedFile(pin, 'portable producer input');
-  const bytes = capture(pin.path, pin).bytes;
+  const bytes = capture(pin.path, pin, completionPair).bytes;
   if (sha(bytes) !== pin.sha256) throw new Error('Portable producer input changed');
   return bytes;
 }
@@ -1047,7 +1063,7 @@ export function sealPortableNativeImage(
     throw new Error('Portable CLI lock does not bind selected tar');
   const evidence = new Map<string, Buffer>([
     ['evidence/request.json', capturedPin(input.requestFile)],
-    ['evidence/completion.json', capturedPin(input.completionReceipt)],
+    ['evidence/completion.json', capturedPin(input.completionReceipt, true)],
     ['evidence/identity.json', capturedPin(loaded.build.artifacts.runtimeIdentity)],
     ['evidence/selection.json', capturedPin(records.selection)],
     ['evidence/cli-build.json', capturedPin(records.build)],
