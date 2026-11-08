@@ -515,9 +515,9 @@ impl Request {
             Some(caws_native::context_git::file_tools::CAPABILITY)
         } else if cfg!(target_os = "macos")
             && config.configuration == "system"
-            && config.surface == "claude-code"
+            && matches!(config.surface.as_str(), "claude-code" | "qwen-code")
             && config.event == "pre_tool_use"
-            && caws_native::context_git::file_tools::eligible_native_payload(&payload)?
+            && caws_native::context_git::file_tools::operation::eligible(&config.surface, &payload)?
         {
             Some(caws_native::context_git::file_tools::NATIVE_CAPABILITY)
         } else {

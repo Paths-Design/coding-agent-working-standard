@@ -148,6 +148,16 @@ impl Fixture {
         self.invoke_with_count(mode, tool, timeout_ms, 1)
     }
     fn invoke_with_count(&self, mode: &str, tool: &str, timeout_ms: u32, count: u64) -> Output {
+        self.invoke_surface("claude-code", mode, tool, timeout_ms, count)
+    }
+    fn invoke_surface(
+        &self,
+        surface: &str,
+        mode: &str,
+        tool: &str,
+        timeout_ms: u32,
+        count: u64,
+    ) -> Output {
         let timeout = timeout_ms.to_string();
         let mut child = Command::new(env!("CARGO_BIN_EXE_caws-native"))
             .arg("invoke")
@@ -157,7 +167,7 @@ impl Fixture {
             .arg(self.root.join("configured-node"))
             .args([
                 "--surface",
-                "claude-code",
+                surface,
                 "--event",
                 "pre_tool_use",
                 "--runtime-digest",
@@ -178,6 +188,7 @@ impl Fixture {
             .env("NATIVE_FILE_PROJECT", &self.project)
             .env("NATIVE_FILE_LANE", &self.lane)
             .env("NATIVE_FILE_MODE", mode)
+            .env("NATIVE_FILE_EXPECTED_SURFACE", surface)
             .envs(
                 (mode == "developer-override")
                     .then(|| ("DEVELOPER_DIR", self.root.join("unadmitted-developer"))),
@@ -194,7 +205,9 @@ impl Fixture {
             "tool_name":tool,
             "tool_use_id":"original-native-file-tool",
             "permission_mode":"default",
-            "tool_input":{"file_path":"owned.rs","content":"owned content"}
+            "tool_input":{"file_path":if surface == "qwen-code" {
+                self.lane.join("owned.rs").to_string_lossy().into_owned()
+            } else { "owned.rs".into() },"content":"owned content"}
         })
         .to_string();
         let payload = match mode {
@@ -213,15 +226,13 @@ impl Fixture {
                 "\"session_id\":\"\"",
                 1,
             ),
-            "duplicate-tool" => payload.replacen(
-                "\"tool_name\":\"Write\"",
-                "\"tool_name\":\"Edit\",\"tool_name\":\"Write\"",
-                1,
-            ),
+            "duplicate-tool" => {
+                payload.replacen("\"tool_name\":", "\"tool_name\":\"Edit\",\"tool_name\":", 1)
+            }
             "duplicate-cwd" => payload.replacen("\"cwd\":", "\"cwd\":null,\"cwd\":", 1),
             "duplicate-file-path" => payload.replacen(
-                "\"file_path\":\"owned.rs\"",
-                "\"file_path\":\"foreign.rs\",\"file_path\":\"owned.rs\"",
+                "\"file_path\":",
+                "\"file_path\":\"/foreign\",\"file_path\":",
                 1,
             ),
             "lossy-session" => payload.replacen(
@@ -292,10 +303,12 @@ const send = value => sendText(JSON.stringify(value) + '\n');
 (async () => {
   const request = await receive();
   const original = JSON.parse(request.inputJson);
-  assert.equal(request.surface, 'claude-code');
+  assert.equal(request.surface, process.env.NATIVE_FILE_EXPECTED_SURFACE || 'claude-code');
   assert.equal(request.caller.cwd, process.env.NATIVE_FILE_LANE);
-  assert.equal(request.fileToolContext, 'caws.runtime.file-tool-context.v2');
-  assert.equal(request.guardStrikes, 'caws.runtime.guard-strikes.v2');
+  if (mode !== 'force-v2') {
+    assert.equal(request.fileToolContext, 'caws.runtime.file-tool-context.v2');
+    assert.equal(request.guardStrikes, 'caws.runtime.guard-strikes.v2');
+  }
   assert.equal(request.stockScopeResolver, undefined);
   const identity = {id:request.id, runtimeDigest:request.runtimeDigest};
   const token = 'b'.repeat(64);
@@ -401,6 +414,10 @@ const send = value => sendText(JSON.stringify(value) + '\n');
   if (mode === 'hold-before-capture') {
     await new Promise(resolve => setTimeout(resolve, 10000));
   }
+  if (mode === 'force-v2') {
+    await context(1);
+    throw Error('unadvertised original operation acquired V2 context');
+  }
   await context(1);
   send(ready(true));
   assert.equal((await receive()).schema, 'caws.runtime.dispatch.v1');
@@ -456,7 +473,7 @@ const send = value => sendText(JSON.stringify(value) + '\n');
     await strike('scope_guard');
     throw Error('unused late scope admitted');
   }
-  if ((original.tool_name === 'Write' && mode !== 'late-unused-shortcut')
+  if ((['Write','write_file'].includes(original.tool_name) && mode !== 'late-unused-shortcut')
       || mode === 'edit-shortcut') {
     await strike('shortcut_language');
   }
@@ -554,6 +571,102 @@ fn first_publication_initializes_original_home_and_does_not_follow_machine_home(
             .join("machine/state/sessions/native-file-owner/strikes.json")
             .exists()
     );
+}
+
+#[test]
+fn qwen_original_write_owns_three_delivered_observations_and_distinct_ledgers() {
+    let fixture = Fixture::new();
+    let output = fixture.invoke_surface("qwen-code", "complete", "write_file", 30_000, 1);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"native-owner-ok\n");
+    assert_eq!(fixture.context_results().len(), 3);
+    let state = fixture.state().unwrap();
+    assert_eq!(state["scope_guard"], 1);
+    assert_eq!(state["shortcut_language"], 1);
+    let original = &fixture.rows()[0];
+    assert_eq!(original["surface"], "qwen-code");
+    assert_eq!(original["payload"]["tool_name"], "write_file");
+    assert_eq!(original["payload"]["session_id"], "native-file-owner");
+    assert_eq!(original["caller"]["cwd"], fixture.lane.to_str().unwrap());
+    assert!(!fixture.root.join("path-tool-executed").exists());
+    assert!(!fixture.root.join("git-queries.log").exists());
+    assert!(!fixture.root.join("engine-git-executed").exists());
+}
+
+#[test]
+fn qwen_raw_aliases_and_duplicate_identity_cannot_acquire_v2_or_strikes() {
+    for tool in ["Write", "Edit", "edit", "apply_patch"] {
+        let fixture = Fixture::new();
+        let output = fixture.invoke_surface("qwen-code", "force-v2", tool, 30_000, 1);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "{tool}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(fixture.state().is_none());
+        assert!(!fixture.root.join("git-queries.log").exists());
+        assert!(!fixture.root.join("path-tool-executed").exists());
+    }
+    for mode in [
+        "duplicate-session",
+        "escaped-duplicate-session",
+        "duplicate-tool",
+        "duplicate-cwd",
+        "duplicate-file-path",
+    ] {
+        let fixture = Fixture::new();
+        let output = fixture.invoke_surface("qwen-code", mode, "write_file", 30_000, 1);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "{mode}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(fixture.state().is_none());
+        assert!(!fixture.root.join("git-queries.log").exists());
+    }
+}
+
+#[test]
+fn qwen_wrong_token_missing_finality_and_late_unused_operations_never_upgrade() {
+    for mode in [
+        "wrong-token",
+        "missing-ask",
+        "late-unused-shortcut",
+        "scope-after-capture2",
+    ] {
+        let fixture = Fixture::new();
+        let output = fixture.invoke_surface("qwen-code", mode, "write_file", 30_000, 1);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "{mode}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("must-not-deliver"));
+        let state = fixture.state();
+        if mode == "wrong-token" {
+            assert!(state.is_none());
+        } else if mode == "scope-after-capture2" {
+            assert!(state.is_none());
+        } else {
+            assert_eq!(state.as_ref().unwrap()["scope_guard"], 1);
+            assert_eq!(
+                state
+                    .as_ref()
+                    .unwrap()
+                    .get("shortcut_language")
+                    .and_then(Value::as_u64),
+                (mode != "late-unused-shortcut").then_some(1)
+            );
+        }
+    }
 }
 
 #[test]
