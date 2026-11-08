@@ -3,7 +3,7 @@ title: 'Adopt existing linked worktrees and preserve guard repository identity'
 mode: fix
 lifecycle_state: active
 created_at: '2026-11-08T03:36:35.651Z'
-updated_at: '2026-11-08T05:22:57.747Z'
+updated_at: '2026-11-08T05:22:59.424Z'
 created_by_session: '01a1b932-77c5-7503-8f5d-a419fa70b710'
 blast_radius:
   modules:
@@ -28,6 +28,8 @@ scope:
     - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
     - docs/command-reference.md
   out: []
+  support:
+    - tmp/external-worktree-rooting
 invariants:
   - 'Git common-directory identity establishes repository membership only; active spec scope and owner admission remain required.'
   - 'Adoption preserves existing commits and source edits and never removes an existing checkout on failure.'
