@@ -1,0 +1,595 @@
+#!/usr/bin/env node
+/*
+# CAWS-MANAGED-HOOK
+# hook_pack: shared
+# hook_pack_version: 1
+# caws_min_major: 11
+# lineage_refs: 4,8,13,20,32
+# edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
+#   to your repo: tune thresholds, add checks, remove what does not fit. Your edits
+#   are preserved: caws init treats a changed hook as intended growth and will not
+#   clobber it — it shows a diff and asks (--adopt keeps yours; --overwrite --force
+#   takes the upstream template). The CAWS-MANAGED-HOOK marker above is only how caws
+#   init finds hooks it can offer updates for; it is NOT a keep-out sign. CAWS owns the
+#   failure-class invariant (the why/what a guard protects); you own the how. The one
+#   edit to avoid: gutting a guard to dodge a block instead of fixing the cause. Grow
+#   everything else freely.
+
+ * worktree-claim-oracle.cjs  (WORKTREE-ISOLATION-HARDENING-001)
+ *
+ * THE shared ownership oracle. Invoked by BOTH worktree-write-guard.sh
+ * (Write/Edit) and bash-write-guard.sh (Bash mutation target). Given a
+ * candidate path + the operating session, it decides whether the mutation
+ * is admissible under worktree ownership.
+ *
+ * WHY A STANDALONE .js FILE (not an inline node -e heredoc): the inline
+ * node blocks in scope-guard.sh / worktree-write-guard.sh are bash
+ * double-quoted strings; a backtick or double-quote in a JS comment
+ * corrupts the script (set -e silent exit 1; bash -n does not catch it).
+ * A real .js file is node --check-able and fixture-testable, so the
+ * ownership logic lives here once and both guards shell out to it.
+ *
+ * WHY PLAIN JS (no TypeScript, no imports beyond node builtins + js-yaml):
+ * the installed hook pack must not depend on TypeScript build artifacts or
+ * repo-local package resolution. The CLI side keeps its TypeScript
+ * admitsOwner/resolveSessionCandidates; this helper and that code are kept
+ * in agreement by GOLDEN FIXTURES, not by code sharing (contract
+ * worktree-claim-oracle-shared-answer-v1).
+ *
+ * INPUTS (env vars, mirroring the existing PROJECT_DIR/CURRENT_BRANCH/
+ * REL_PATH node -e convention):
+ *   CAWS_ORACLE_PROJECT_DIR  canonical repo root (realpath-normalized)
+ *   CAWS_ORACLE_CURRENT_BRANCH  current git branch at the base checkout
+ *   CAWS_ORACLE_REL_PATH  candidate path. May be canonical-absolute, a
+ *                         .caws/worktrees/<name>/<rest> path, or already
+ *                         repo-relative; this helper normalizes all three.
+ *   CAWS_ORACLE_CWD_UNRESOLVED  non-empty when the caller could not resolve
+ *                         the operating cwd. A non-absolute candidate then
+ *                         yields ask_uncertain:cwd-unresolved:<path>.
+ *   CAWS_ORACLE_SESSION_ID  operating session id (HOOK_SESSION_ID). Compared
+ *                           by DIRECT STRING MATCH to the worktree owner.
+ *
+ * OUTPUT (single line to stdout): "<outcome>:<detail>" where outcome is one
+ * of the CLOSED set:
+ *   pass                  no claim / owner == operating session / read-only
+ *   block_claimed         canonical-root write to a claimed scope.in path
+ *                         (session-INDEPENDENT; preserves the pre-existing
+ *                         worktree-write-guard behavior)
+ *   block_foreign_worktree  a write into .caws/worktrees/<name>/<rest> whose
+ *                           owner does NOT match the operating session
+ *   ask_uncertain         a claimed path is involved but the decision is not
+ *                         a clean allow/block (caller decides ask vs warn)
+ *   error_fail_closed     could not read/parse authority; FAIL CLOSED
+ *
+ * Exit code is always 0 (the caller reads stdout); the oracle never turns
+ * its own internal error into a tool-call block on its own — it emits
+ * error_fail_closed and lets the calling guard decide. (The guards treat
+ * error_fail_closed conservatively: ask, never silent-allow.)
+ */
+
+'use strict';
+
+var fs = require('fs');
+var path = require('path');
+
+function emit(outcome, detail) {
+  var namespace = process.env.CAWS_ORACLE_OPERATION === 'git-metadata' ? 'git_metadata:' : '';
+  process.stdout.write(namespace + outcome + ':' + (detail || '') + '\n');
+  process.exit(0);
+}
+
+// js-yaml is required LAZILY (loadYaml below), NOT at module top. The
+// worktree-payload ownership decision (block_foreign_worktree / owner-self)
+// reads ONLY worktrees.json (plain JSON) + the owner.session_id field — it
+// needs no YAML parser. Only the canonical-root scope.in claim check reads
+// spec YAML. Deferring the require means a foreign-worktree write still blocks
+// correctly even in an installed .caws/hooks/lib/ where js-yaml is not
+// resolvable (the common case the maintainer flagged) — yaml absence only
+// degrades the canonical-claim check, not the payload-ownership check.
+var _yaml = null;
+var _yamlTried = false;
+function loadYaml() {
+  if (_yamlTried) return _yaml;
+  _yamlTried = true;
+  try {
+    _yaml = require('js-yaml');
+  } catch (_) {
+    _yaml = null;
+  }
+  return _yaml;
+}
+
+// ---------------------------------------------------------------------------
+// Canonical helpers — byte-equivalent to the shared CAWS_NODE_* definitions in
+// lib/caws-state.sh (entriesOf / entrySpecId / lifecycle / globToRegExp). They
+// are duplicated here as real JS so this file is self-contained and node
+// --check-able; the glob algorithm MUST stay identical to caws-state.sh so the
+// oracle and the inline guard return the same answer (no glob divergence).
+// ---------------------------------------------------------------------------
+
+function entriesOf(r) {
+  if (!r || typeof r !== 'object') return [];
+  function isEntry(v) {
+    return v && typeof v === 'object' && !Array.isArray(v) && (
+      typeof v.status === 'string' || typeof v.spec_id === 'string' ||
+      typeof v.specId === 'string' || typeof v.path === 'string' ||
+      typeof v.branch === 'string' || typeof v.name === 'string'
+    );
+  }
+  if (r.worktrees && typeof r.worktrees === 'object' && !isEntry(r.worktrees)) {
+    var src = r.worktrees;
+    var out0 = [];
+    for (var k in src) if (Object.prototype.hasOwnProperty.call(src, k)) {
+      var v = src[k];
+      if (v && typeof v === 'object') {
+        if (!v.name) v = Object.assign({}, v, { name: k });
+        out0.push(v);
+      }
+    }
+    return out0;
+  }
+  var out = [];
+  for (var k2 in r) if (Object.prototype.hasOwnProperty.call(r, k2)) {
+    var v2 = r[k2];
+    if (isEntry(v2)) {
+      if (!v2.name) v2 = Object.assign({}, v2, { name: k2 });
+      out.push(v2);
+    }
+  }
+  return out;
+}
+
+function entrySpecId(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  return entry.spec_id || entry.specId || null;
+}
+
+function lifecycle(s) {
+  if (!s || typeof s !== 'object') return undefined;
+  return s.lifecycle_state || s.status;
+}
+
+function globToRegExp(pattern) {
+  // ** -> .+ (cross-segment); * -> [^/]* (single-segment); ? -> . ; anchored.
+  //
+  // CLAIM-ORACLE-DIRECTORY-CONTAINMENT-001 (ported from consumer hardening
+  // STERLING-CLAIM-ORACLE-DIRECTORY-CONTAINMENT-01): a scope entry denotes a
+  // path AND everything beneath it. Previously this anchored '^...$' with no
+  // containment suffix, so the common directory-shaped entry 'pkg/dir/'
+  // compiled to /^pkg\/dir\/$/ and matched ONLY that literal string — a real
+  // file under it ('pkg/dir/file.py') returned pass:unclaimed and every
+  // file-level mutation inside an actively-claimed directory was admitted.
+  // Directory entries carry no glob, so nothing expanded and the exactness was
+  // invisible. Trailing slashes are stripped first so 'dir/' and 'dir' agree.
+  //
+  // The '(?:/.*)?' suffix requires a '/' boundary: 'pkg/dir' matches
+  // 'pkg/dir' and 'pkg/dir/x', but NOT 'pkg/directory'. An exact file entry
+  // keeps matching that file (a suffix under a file path cannot exist), so
+  // file-shaped scope.in entries are unaffected.
+  var p = String(pattern).replace(/\/+$/, '');
+  // An empty pattern would otherwise compile to a regex matching the empty
+  // path; derive no claim from it rather than claiming anything.
+  if (p === '') return /(?!)/;
+  var escaped = p.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  var body = escaped.replace(/\*\*/g, '.+').replace(/\*/g, '[^/]*').replace(/\?/g, '.');
+  return new RegExp('^' + body + '(?:/.*)?$');
+}
+
+// owner session id of a registry entry, or null.
+function ownerSessionId(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  if (entry.owner && typeof entry.owner === 'object' &&
+      typeof entry.owner.session_id === 'string') {
+    return entry.owner.session_id;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Path normalization. Produces:
+//   { kind: 'worktree', worktreeName, logical }  — the path is physically
+//       inside .caws/worktrees/<name>/<rest>; logical = <rest>.
+//   { kind: 'canonical', logical }               — a repo-root-relative path.
+// All inputs (absolute under projectDir, .caws/worktrees/... , or already
+// relative) collapse to a repo-relative form first.
+// ---------------------------------------------------------------------------
+
+function toRepoRelative(projectDir, candidate) {
+  var p = String(candidate || '');
+  if (p === projectDir) return '';
+  // Strip an absolute projectDir prefix if present.
+  if (projectDir && p.indexOf(projectDir + path.sep) === 0) {
+    p = p.slice(projectDir.length + 1);
+  } else if (projectDir && p === projectDir) {
+    p = '';
+  }
+  // Normalize separators / leading "./".
+  p = p.replace(/^\.\//, '');
+  return p;
+}
+
+function classifyPath(projectDir, candidate) {
+  var rel = toRepoRelative(projectDir, candidate);
+  // The root entry belongs to its worktree just as its descendants do.
+  var m = rel.match(/^\.caws\/worktrees\/([^/]+)(?:\/(.*))?$/);
+  if (m) {
+    return { kind: 'worktree', worktreeName: m[1], logical: m[2] || '', rel: rel };
+  }
+  return { kind: 'canonical', logical: rel, rel: rel };
+}
+
+// ---------------------------------------------------------------------------
+// Claim resolution. Returns ALL active-bound worktrees whose scope.in matches
+// the logical path (CLASH-GUARD-CLAIMANT-LABELING-001 — a contested path may be
+// claimed by more than one spec; the block must name every owner, not just the
+// first match). scope.in ONLY (never scope.out, never scope.support —
+// WORKTREE-SUPPORT-SCOPE-001). Only active-bound specs on the current branch
+// confer a claim. The DECISION is unchanged (any claimant => block); only the
+// reported claimant set widens from first-match to all-matches.
+// ---------------------------------------------------------------------------
+
+function loadSpecScopeIn(projectDir, specId) {
+  var yaml = loadYaml();
+  if (!yaml) return { noYaml: true };
+  var specPath = path.join(projectDir, '.caws', 'specs', specId + '.yaml');
+  if (!fs.existsSync(specPath)) {
+    specPath = path.join(projectDir, '.caws', 'specs', specId + '.yml');
+  }
+  if (!fs.existsSync(specPath)) return { missing: true };
+  var spec = yaml.load(fs.readFileSync(specPath, 'utf8')) || {};
+  if (lifecycle(spec) !== 'active') return { notActive: true };
+  var scope = spec.scope || {};
+  var patterns = Array.isArray(scope.in) ? scope.in : [];
+  return { patterns: patterns };
+}
+
+// Returns { noYaml: true } if any candidate spec's YAML is unreadable (fail
+// closed, same posture as before), else { claimants: [{ wt, pattern }, ...] }
+// listing every active-bound worktree that claims logicalPath via scope.in.
+// An empty claimants array means "no claim" (the caller treats it as pass).
+function findClaimants(projectDir, currentBranch, logicalPath, worktrees, removeTree) {
+  var claimants = [], removeTreeUncertain = false;
+  for (var wi = 0; wi < worktrees.length; wi++) {
+    var wt = worktrees[wi];
+    if (wt.status === 'destroyed' || wt.status === 'missing') continue;
+    if (wt.baseBranch !== undefined && currentBranch !== undefined &&
+        currentBranch !== '' && wt.baseBranch !== currentBranch) {
+      continue;
+    }
+    var specId = entrySpecId(wt);
+    if (!specId) continue;
+    var scope = loadSpecScopeIn(projectDir, specId);
+    // yaml absent: cannot read scope.in to prove/deny a canonical claim. The
+    // caller fails closed (ask) rather than silently passing.
+    if (scope.noYaml) return { noYaml: true };
+    if (scope.missing || scope.notActive) continue;
+    if (!scope.patterns || scope.patterns.length === 0) continue;
+    for (var pi = 0; pi < scope.patterns.length; pi++) {
+      var pattern = String(scope.patterns[pi]).replace(/^\.\//, '').replace(/\/+$/, '');
+      var literal = pattern && !/[*?]/.test(pattern);
+      if (removeTree && pattern && !literal) removeTreeUncertain = true;
+      if (globToRegExp(scope.patterns[pi]).test(logicalPath) ||
+          (removeTree && literal && (logicalPath === '' || containsPath(logicalPath, pattern)))) {
+        // First matching pattern per worktree; a worktree is named once even
+        // if several of its scope.in patterns would match.
+        claimants.push({ wt: wt, pattern: scope.patterns[pi] });
+        break;
+      }
+    }
+  }
+  return { claimants: claimants, removeTreeUncertain: removeTreeUncertain };
+}
+
+// ---------------------------------------------------------------------------
+// Main decision.
+// ---------------------------------------------------------------------------
+
+function metadataPhysicalDirectory(value) {
+  if (typeof value !== 'string' || !path.isAbsolute(value) || /[\r\n\t]/.test(value)) {
+    throw new Error('invalid-directory');
+  }
+  var physical = fs.realpathSync(value);
+  if (/[\r\n\t]/.test(physical) || !fs.statSync(physical).isDirectory()) {
+    throw new Error('invalid-physical-directory');
+  }
+  return physical;
+}
+
+function containsPath(root, candidate) {
+  return root === candidate || candidate.indexOf(root === path.sep ? root : root + path.sep) === 0;
+}
+
+// File ownership coordinates arrive through environment values, which preserve
+// pathname bytes. Git-metadata transport has a separate separator restriction;
+// reusing its directory reader here would reject legitimate LF roots.
+function filePhysicalDirectory(value) {
+  if (typeof value !== 'string' || !path.isAbsolute(value)) {
+    throw new Error('invalid-directory');
+  }
+  var physical = fs.realpathSync(value);
+  if (!fs.statSync(physical).isDirectory()) throw new Error('invalid-physical-directory');
+  return physical;
+}
+
+// Callers may deliberately preserve the final symlink for an unlink. Resolve
+// only physical parents, including the existing prefix of a not-yet-created
+// path, so ownership is never silently changed to the final referent.
+function physicalEntryPath(project, candidate) {
+  var absolute = path.resolve(project, candidate);
+  if (absolute === path.parse(absolute).root) return absolute;
+  var parent = path.dirname(absolute), suffix = [path.basename(absolute)];
+  while (true) {
+    try {
+      return path.join(filePhysicalDirectory(parent), ...suffix);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      var next = path.dirname(parent);
+      if (next === parent) throw error;
+      suffix.unshift(path.basename(parent));
+      parent = next;
+    }
+  }
+}
+
+function metadataPointer(file) {
+  var stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.nlink !== 1 || stat.size > 16384) throw new Error('invalid-pointer');
+  var value = fs.readFileSync(file, 'utf8').replace(/\n$/, '');
+  if (!value || value.indexOf('\0') !== -1 || /[\r\n\t]/.test(value)) throw new Error('invalid-pointer-value');
+  return value;
+}
+
+function metadataWorktree(project, directory, common) {
+  var canonical = metadataPhysicalDirectory(path.join(project, '.git'));
+  if (common !== canonical) throw new Error('foreign-common-directory');
+  if (directory === canonical) return project;
+  var registry = metadataPhysicalDirectory(path.join(canonical, 'worktrees'));
+  if (path.dirname(directory) !== registry) throw new Error('unrecognized-metadata-directory');
+  var backlink = metadataPointer(path.join(directory, 'gitdir'));
+  var location = path.isAbsolute(backlink) ? backlink : path.join(directory, backlink);
+  if (path.basename(location) !== '.git') throw new Error('invalid-backlink');
+  var worktree = metadataPhysicalDirectory(path.dirname(location));
+  var forward = metadataPointer(path.join(worktree, '.git'));
+  if (forward.slice(0, 8) !== 'gitdir: ') throw new Error('invalid-forward-pointer');
+  var destination = forward.slice(8);
+  if (metadataPhysicalDirectory(path.isAbsolute(destination) ? destination : path.join(worktree, destination)) !== directory) {
+    throw new Error('nonreciprocal-metadata');
+  }
+  var commonPointer = metadataPointer(path.join(directory, 'commondir'));
+  if (metadataPhysicalDirectory(path.isAbsolute(commonPointer) ? commonPointer : path.join(directory, commonPointer)) !== common) {
+    throw new Error('nonreciprocal-common');
+  }
+  return worktree;
+}
+
+// Git --work-tree changes the reported working tree independently of --git-dir.
+// Ownership follows reciprocal metadata, never that independently routed value.
+function decideGitMetadata() {
+  var project, reportedWorktree, worktree, directory, common;
+  try {
+    project = metadataPhysicalDirectory(process.env.CAWS_ORACLE_PROJECT_DIR);
+    reportedWorktree = metadataPhysicalDirectory(process.env.CAWS_ORACLE_GIT_WORKTREE);
+    directory = metadataPhysicalDirectory(process.env.CAWS_ORACLE_GIT_DIRECTORY);
+    common = metadataPhysicalDirectory(process.env.CAWS_ORACLE_GIT_COMMON);
+    worktree = metadataWorktree(project, directory, common);
+  } catch (_) {
+    emit('error_fail_closed', 'git-metadata-mapping');
+  }
+  if (worktree === project) {
+    if (reportedWorktree !== worktree) emit('ask_uncertain', 'git-metadata-worktree-mismatch');
+    emit('pass', 'git-canonical-metadata');
+  }
+  var registry;
+  try {
+    registry = JSON.parse(fs.readFileSync(path.join(project, '.caws', 'worktrees.json'), 'utf8'));
+  } catch (_) {
+    emit('error_fail_closed', 'git-metadata-registry-unreadable');
+  }
+  var entries = entriesOf(registry), matches = [];
+  for (var i = 0; i < entries.length; i++) {
+    var entry = entries[i];
+    if (entry.status === 'destroyed' || entry.status === 'missing') continue;
+    var stored = typeof entry.path === 'string' && entry.path ? entry.path : null;
+    if (!stored) {
+      if (typeof entry.name !== 'string' || !entry.name || entry.name === '.' || entry.name === '..' || /[\\/\r\n\t]/.test(entry.name)) {
+        emit('ask_uncertain', 'git-metadata-registry-path');
+      }
+      stored = path.join(project, '.caws', 'worktrees', entry.name);
+    }
+    var physical;
+    try { physical = metadataPhysicalDirectory(stored); }
+    catch (error) {
+      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') continue;
+      emit('error_fail_closed', 'git-metadata-registry-path');
+    }
+    if (physical === worktree) matches.push(entry);
+  }
+  if (matches.length !== 1) emit('ask_uncertain', matches.length ? 'git-metadata-duplicate-owner' : 'git-metadata-unregistered');
+  var named = matches[0];
+  var name = named.name;
+  var owner = ownerSessionId(named);
+  var session = process.env.CAWS_ORACLE_SESSION_ID;
+  if (typeof name !== 'string' || !name || /[:\r\n\t]/.test(name)) emit('ask_uncertain', 'git-metadata-name');
+  if (typeof owner !== 'string' || !owner || owner === 'unknown' || /[\r\n\t]/.test(owner)) emit('ask_uncertain', 'git-metadata-owner');
+  if (typeof session !== 'string' || !session || session === 'unknown' || /[\r\n\t]/.test(session)) emit('ask_uncertain', 'git-metadata-session');
+  if (owner === session) {
+    if (reportedWorktree !== worktree) emit('ask_uncertain', 'git-metadata-worktree-mismatch');
+    emit('pass', 'owner-self:' + name);
+  }
+  emit('block_foreign_worktree', name + ':' + owner);
+}
+
+function main() {
+  var operation = process.env.CAWS_ORACLE_OPERATION || 'file';
+  if (operation === 'git-metadata') return decideGitMetadata();
+  if (operation !== 'file' && operation !== 'file-ownership') emit('error_fail_closed', 'unsupported-operation');
+  var projectDir = process.env.CAWS_ORACLE_PROJECT_DIR || '';
+  var currentBranch = process.env.CAWS_ORACLE_CURRENT_BRANCH;
+  var candidate = process.env.CAWS_ORACLE_REL_PATH || '';
+  var sessionId = process.env.CAWS_ORACLE_SESSION_ID || '';
+
+  if (!projectDir || !candidate) {
+    emit('error_fail_closed', 'missing-input');
+  }
+
+  var registryPath = path.join(projectDir, '.caws', 'worktrees.json');
+  var registry, registryObserved = false;
+  try {
+    var registryStat = fs.lstatSync(registryPath);
+    registryObserved = true;
+    if (!registryStat.isFile()) throw new Error('invalid-registry-entry');
+    registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    if (!registry || typeof registry !== 'object') throw new Error('invalid-registry-shape');
+  } catch (e) {
+    // Only a genuinely absent registry is uninitialized governance. Existing
+    // unreadable, malformed or redirected authority cannot establish no owner.
+    if (!registryObserved && e.code === 'ENOENT') emit('pass', 'no-registry');
+    emit('error_fail_closed', 'worktree-ownership-registry');
+  }
+
+  var worktrees;
+  try {
+    worktrees = entriesOf(registry).filter(function (w) {
+      if (w.status === 'destroyed' || w.status === 'missing') return false;
+      var wtPath = (typeof w.path === 'string' && w.path)
+        ? w.path
+        : path.join(projectDir, '.caws', 'worktrees', String(w.name || ''));
+      // WORKTREE-GUARD-RISK-SURFACE-001: only observed absence makes a ghost.
+      // Retain inaccessible or otherwise unobserved roots so the physical-root
+      // check below preserves ownership uncertainty instead of an empty census.
+      try {
+        fs.lstatSync(path.resolve(projectDir, wtPath));
+        return true;
+      } catch (error) {
+        return error.code !== 'ENOENT';
+      }
+    });
+  } catch (e) {
+    emit('error_fail_closed', 'registry-parse:' + e.message);
+  }
+
+  if (worktrees.length === 0) {
+    emit('pass', 'no-active-worktrees');
+  }
+
+  // A relative candidate means something only against the operating cwd. The
+  // caller sets CWD_UNRESOLVED when it could not establish that cwd; treating
+  // the path as repo-relative then would classify a file that may belong to
+  // another worktree as an unclaimed canonical one (fail OPEN). Ask instead.
+  if (process.env.CAWS_ORACLE_CWD_UNRESOLVED && !path.isAbsolute(candidate)) {
+    emit('ask_uncertain', 'cwd-unresolved:' + candidate);
+  }
+
+  var cls, absoluteCandidate;
+  try {
+    absoluteCandidate = physicalEntryPath(projectDir, candidate);
+    cls = classifyPath(projectDir, absoluteCandidate);
+  } catch (e) {
+    emit('error_fail_closed', 'classify:' + e.message);
+  }
+
+  // Registered paths, not conventional directory names, supply ownership.
+  // Observe every relevant root before allowing an owner: an owned outer root
+  // must not conceal a foreign nested root or ambiguous registration.
+  var roots = [], ownershipUncertain = null, containing = [];
+  var uncertainContainer = null;
+  for (var coveredIndex = 0; coveredIndex < worktrees.length; coveredIndex++) {
+    var covered = worktrees[coveredIndex];
+    var storedRoot = typeof covered.path === 'string' && covered.path
+      ? path.resolve(projectDir, covered.path)
+      : path.join(projectDir, '.caws', 'worktrees', String(covered.name || ''));
+    var physicalRoot;
+    try { physicalRoot = filePhysicalDirectory(storedRoot); }
+    catch (_) { ownershipUncertain = 'worktree-ownership-path'; continue; }
+    var relevant = containsPath(physicalRoot, absoluteCandidate) || containsPath(absoluteCandidate, physicalRoot);
+    roots.push({ entry: covered, root: physicalRoot, relevant: relevant });
+    if (!relevant) continue;
+    if (fs.lstatSync(storedRoot).isSymbolicLink() || containsPath(physicalRoot, projectDir)) {
+      ownershipUncertain = 'worktree-ownership-path';
+    }
+    if (typeof covered.name !== 'string' || !covered.name || /[:,\r\n\t]/.test(covered.name)) {
+      ownershipUncertain = 'worktree-ownership-identity';
+      continue;
+    }
+    if (containsPath(physicalRoot, absoluteCandidate)) containing.push(covered);
+    var coveredOwner = ownerSessionId(covered);
+    if (typeof coveredOwner !== 'string' || !coveredOwner || coveredOwner === 'unknown' || /[\r\n\t]/.test(coveredOwner)) {
+      if (uncertainContainer === null) uncertainContainer = String(covered.name);
+    } else if (!sessionId || coveredOwner !== sessionId) {
+      emit('block_foreign_worktree', covered.name + ':' + coveredOwner);
+    }
+  }
+  for (var left = 0; left < roots.length; left++) {
+    for (var right = left + 1; right < roots.length; right++) {
+      if ((roots[left].relevant || roots[right].relevant) &&
+          (containsPath(roots[left].root, roots[right].root) || containsPath(roots[right].root, roots[left].root))) {
+        ownershipUncertain = 'worktree-ownership-overlap';
+      }
+    }
+  }
+  if (ownershipUncertain !== null) emit('ask_uncertain', ownershipUncertain);
+  if (containing.length > 0) {
+    if (uncertainContainer !== null) emit('ask_uncertain', 'worktree-payload-no-owner:' + uncertainContainer);
+    emit('pass', 'owner-self:' + containing[0].name);
+  }
+  if (cls.kind === 'worktree') {
+    emit('ask_uncertain', 'worktree-payload-no-entry:' + cls.worktreeName);
+  }
+  if (operation === 'file-ownership') {
+    if (uncertainContainer !== null) emit('ask_uncertain', 'worktree-container-no-owner:' + uncertainContainer);
+    emit('pass', 'no-payload-ownership');
+  }
+
+  // Canonical-root path. Session-INDEPENDENT claim check (preserve existing
+  // worktree-write-guard behavior): if any active-bound worktree claims the
+  // logical path via scope.in, this is a claimed write at the canonical root
+  // and must block regardless of which session is operating.
+  var removeTree = process.env.CAWS_ORACLE_REMOVE_TREE === '1';
+  var claim = findClaimants(projectDir, currentBranch, cls.logical, worktrees, removeTree);
+  if (claim.noYaml) {
+    if (uncertainContainer !== null) {
+      emit('ask_uncertain', 'worktree-container-no-owner:' + uncertainContainer);
+    }
+    if (removeTree) emit('ask_uncertain', 'remove-tree-claims-unresolved');
+    // The canonical cross-worktree claim check needs spec YAML, and js-yaml is
+    // unresolvable here. This is a TOOLCHAIN FAULT, not a danger signal — and
+    // crucially we are PAST the worktree-payload ownership check above (lines
+    // ~305-324), which is yaml-free and already hard-blocked a foreign-payload
+    // write. So at this point the path is a canonical (non-payload) path whose
+    // ONLY remaining check — "does another active worktree's scope.in claim
+    // this path?" — cannot run. We DEGRADE rather than fail closed: emit a
+    // distinct `degraded_no_yaml` verdict that the guards map to allow-with-
+    // advisory (the cross-worktree claim check was skipped), NOT ask-on-every-
+    // mutation. Failing closed here (the old behavior) turned every canonical
+    // mutation into an approval prompt whenever js-yaml was absent — the #1
+    // friction the maintainer flagged (CAWS-HOOKPACK-ORACLE-JSYAML-DEGRADE-001).
+    // The isolation-critical block (foreign worktree payload) is unaffected: it
+    // ran earlier and is yaml-free.
+    emit('degraded_no_yaml', 'no-js-yaml');
+  }
+  if (claim.claimants.length > 0) {
+    // block_claimed detail is a COMMA-separated list of `name:pattern` pairs —
+    // one per claiming worktree (CLASH-GUARD-CLAIMANT-LABELING-001). Comma is
+    // safe: worktree names and scope.in patterns do not contain it. A single
+    // claimant yields exactly `name:pattern` (no comma), byte-identical to the
+    // pre-change single-claimant detail so the guards' lead-name parse is
+    // unchanged for that common case.
+    var detail = claim.claimants.map(function (c) {
+      return (c.wt.name || entrySpecId(c.wt)) + ':' + c.pattern;
+    }).join(',');
+    emit('block_claimed', detail);
+  }
+
+  if (uncertainContainer !== null) {
+    emit('ask_uncertain', 'worktree-container-no-owner:' + uncertainContainer);
+  }
+  if (claim.removeTreeUncertain) emit('ask_uncertain', 'remove-tree-claims-unresolved');
+
+  emit('pass', 'unclaimed');
+}
+
+try {
+  main();
+} catch (e) {
+  emit('error_fail_closed', 'uncaught:' + (e && e.message ? e.message : 'unknown'));
+}

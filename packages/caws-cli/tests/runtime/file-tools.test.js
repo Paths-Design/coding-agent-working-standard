@@ -555,6 +555,15 @@ describe('complete stock file-tool prewrite handlers', () => {
       expect(crypto.createHash('sha256').update(reviewedSource).digest('hex')).toBe(expectedSha256);
       fs.writeFileSync(path.join(runtime, name), reviewedSource);
     }
+    // File-tool cohort at d0e79a82019b7d95acb1e0b3b8a23ab16f8f907d.
+    // Shipping ownership semantics and the separate Stop cohort are different.
+    const oracle = fs.readFileSync(
+      path.join(__dirname, 'fixtures/reviewed-file-tools/worktree-claim-oracle.cjs')
+    );
+    expect(crypto.createHash('sha256').update(oracle).digest('hex')).toBe(
+      'b16a51b7f721e7787c889374d59a33aec662e7bf2636305bda8eaaade73184e7'
+    );
+    fs.writeFileSync(path.join(runtime, 'lib/worktree-claim-oracle.cjs'), oracle);
     fs.cpSync(path.join(templates, 'codex/hooks/lib'), path.join(runtime, 'surfaces/codex/lib'), {
       recursive: true,
     });
@@ -701,6 +710,21 @@ describe('complete stock file-tool prewrite handlers', () => {
       path: expect.any(String),
       sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
+  });
+  test('shipping ownership changes cannot inherit the reviewed file-tool cohort admission', () => {
+    seedStrikes({ scope_guard: 7, another_guard: 3 });
+    const beforeStrikes = fs.readFileSync(strikes());
+    expect(prepare()).not.toBeNull();
+    const shipping = fs.readFileSync(path.join(templates, 'shared/lib/worktree-claim-oracle.cjs'));
+    expect(crypto.createHash('sha256').update(shipping).digest('hex')).not.toBe(
+      'b16a51b7f721e7787c889374d59a33aec662e7bf2636305bda8eaaade73184e7'
+    );
+    fs.writeFileSync(path.join(runtime, 'lib/worktree-claim-oracle.cjs'), shipping);
+    const spawn = jest.spyOn(require('node:child_process'), 'spawn');
+    expect(prepare()).toBeNull();
+    expect(spawn).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(lane, 'src/allowed/new.js'))).toBe(false);
+    expect(fs.readFileSync(strikes())).toEqual(beforeStrikes);
   });
   test('concurrent scope strikes preserve one warning and one deny across independent Rust core test processes', async () => {
     // Two actual cfg(test) Rust OS processes mutate the same private fixture store.
