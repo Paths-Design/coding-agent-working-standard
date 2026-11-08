@@ -49,3 +49,8 @@ rollback:
   - 'Restore the prior installed CLI and shared runtime through supported installation and rollback commands; preserve all pre-existing checkouts.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Bootstrap blocked by actual installed runtime 01f1896529f252d7070f5b6133b9173842e0324b112ef7a53de3db29236ad6d5: worktree-write-guard refused the scoped canonical source patch on caws/external-worktree-bootstrap; worktree-guard also refused switching canonical back to main while worktrees are active. No source edits landed. Source/helper and installed predicate both misclassify RC external linked roots despite matching Git common directories. Source oracle separately admits an unregistered external root as unclaimed; repair must hold missing registration. Root session 01a1b932-77c5-7503-8f5d-a419fa70b710 retains implementation, test-environment repair, review, installation, preservation verification and actual guard acceptance. Only owned governance changes and untracked foreign .caws/messages.jsonl.archive are present. RC checkouts remain untouched. Initial focused source tests exited 1 before intended adjudication because smol-toml and current analyzer prerequisites are unavailable; no behavioral pass inferred. Next step is one human-terminal repo-scoped reprieve for worktree-guard.sh and worktree-write-guard.sh to apply the concrete bootstrap repair and restore canonical main, then install, revoke reprieve and exercise actual guard positive/negative controls."
+    recorded_at: "2026-11-08T03:43:38.294Z"
