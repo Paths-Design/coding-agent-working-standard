@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-RELEASE-ARTIFACTS-001
 title: 'Qualify selected native release artifacts across installed upgrade paths'
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-session-id-admission
 created_at: '2026-11-08T14:30:26.699Z'
-updated_at: '2026-11-08T14:30:26.699Z'
+updated_at: '2026-11-08T14:31:13.683Z'
 created_by_session: '01a19baf-4b34-7a83-9cf8-f109a22c539e'
 blast_radius:
   modules:
