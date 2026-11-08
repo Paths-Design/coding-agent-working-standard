@@ -26,6 +26,7 @@ let sequence = 0;
 let calls = 0;
 let initialized = false;
 let closed = false;
+let settled = false;
 let pending = Buffer.alloc(0);
 
 function record(value) {
@@ -64,24 +65,42 @@ function descriptor(fd) {
     mode: s.mode.toString(),
   };
 }
-function stop(code, reason) {
-  if (closed) return;
-  try {
-    record({ kind: 'terminal', code, reason });
-  } catch {
-    code = 2;
-  }
-  closed = true;
+function settle(reason) {
+  if (settled) return;
+  settled = true;
   clearTimeout(timer);
+  try {
+    record({ kind: 'terminal', code: process.exitCode, reason });
+  } catch {
+    process.exitCode = 2;
+  }
   try {
     fs.closeSync(journal);
   } catch {
-    code = 2;
+    process.exitCode = 2;
   }
+}
+function abort(reason) {
+  process.exitCode = 2;
+  closed = true;
+  process.stdin.destroy();
+  process.stdout.destroy();
+  settle(reason);
+}
+function stop(code, reason) {
+  if (closed) {
+    if (code !== 0) abort(reason);
+    return;
+  }
+  closed = true;
   process.exitCode = code;
   process.stdin.destroy();
-  // Normal exit follows the drain of all queued response bytes.
-  process.stdout.end();
+  // A queued response is an attempt. Drain failure must remain a failure even
+  // when it arrives after stdin EOF; only then retain the terminal observation.
+  process.stdout.end((error) => {
+    if (error) process.exitCode = 2;
+    settle(reason);
+  });
 }
 function reply(id, result) {
   const bytes = Buffer.from(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n');
@@ -176,7 +195,7 @@ function frame(bytes) {
   throw Error('Unsupported request');
 }
 
-const timer = setTimeout(() => stop(2, 'observation deadline'), 180000);
+const timer = setTimeout(() => abort('observation deadline'), 180000);
 record({
   kind: 'started',
   pid: process.pid,
@@ -186,8 +205,8 @@ record({
   cwd: process.cwd(),
   descriptors: [descriptor(0), descriptor(1)],
 });
-process.stdout.on('error', () => stop(2, 'stdout failed'));
-process.stdin.on('error', () => stop(2, 'stdin failed'));
+process.stdout.on('error', () => abort('stdout failed'));
+process.stdin.on('error', () => abort('stdin failed'));
 process.stdin.on('data', (chunk) => {
   try {
     pending = Buffer.concat([pending, chunk]);
@@ -226,5 +245,5 @@ process.stdin.on('end', () => {
   }
   stop(pending.length === 0 && calls === 1 ? 0 : 2, 'stdin ended');
 });
-process.once('SIGTERM', () => stop(2, 'terminated'));
-process.once('SIGINT', () => stop(2, 'interrupted'));
+process.once('SIGTERM', () => abort('terminated'));
+process.once('SIGINT', () => abort('interrupted'));

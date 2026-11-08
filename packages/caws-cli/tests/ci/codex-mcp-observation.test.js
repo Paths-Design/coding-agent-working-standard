@@ -57,7 +57,7 @@ test('real process records original request and actual process/descriptor facts 
   const f = fixture();
   const sentinel = path.join(f.project, 'must-not-exist');
   const observation = call();
-  observation._meta = { private: 'private-host-value', command: 'touch ' + sentinel };
+  observation.params._meta = { private: 'private-host-value', command: 'touch ' + sentinel };
   const raw = Buffer.from(
     '  ' + JSON.stringify(observation).replace('"id":3', '"id":2,"id":3') + '\r\n'
   );
@@ -176,7 +176,7 @@ test.each(['existing', 'symlink'])('refuses %s journal without changing original
   expect(fs.readFileSync(f.file, 'utf8')).toBe('do not replace');
 });
 
-function isolated(f, injected = {}) {
+function isolated(f, injected = {}, timers = { setTimeout: () => 1, clearTimeout: () => {} }) {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
   let written = '';
@@ -200,7 +200,7 @@ function isolated(f, injected = {}) {
     'node:fs': { ...fs, ...injected },
     'node:path': path,
     'node:util': require('node:util'),
-    'node:timers': { setTimeout: () => 1, clearTimeout: () => {} },
+    'node:timers': timers,
   };
   vm.runInNewContext(
     source,
@@ -246,6 +246,49 @@ test('coalesced individually bounded frames and fragmented frames have identical
       .map(JSON.parse)
       .map((row) => row.id)
   ).toEqual([0, 1, 2, 3]);
+});
+
+test('stdout failure after successful stdin EOF remains a failed capture', () => {
+  const engine = isolated(fixture());
+  engine.stdin.emit('data', input(initialize, call()));
+  engine.stdin.emit('end');
+  expect(engine.processView.exitCode).toBe(0);
+  engine.processView.stdout.emit('error', Error('injected late output failure'));
+  expect(engine.processView.exitCode).toBe(2);
+});
+
+test('the original observation deadline cancels a blocked stdout drain', () => {
+  const f = fixture();
+  let expire;
+  let cleared = false;
+  const engine = isolated(
+    f,
+    {},
+    {
+      setTimeout(callback, milliseconds) {
+        expect(milliseconds).toBe(180000);
+        expire = callback;
+        return 1;
+      },
+      clearTimeout() {
+        cleared = true;
+      },
+    }
+  );
+  engine.processView.stdout.end = () => engine.processView.stdout;
+  engine.stdin.emit('data', input(initialize, call()));
+  engine.stdin.emit('end');
+  expect(cleared).toBe(false);
+  expect(records(f.file).some((row) => row.kind === 'terminal')).toBe(false);
+  expire();
+  expect(engine.processView.exitCode).toBe(2);
+  expect(cleared).toBe(true);
+  expect(engine.processView.stdout.destroyed).toBe(true);
+  expect(records(f.file).at(-1)).toMatchObject({
+    kind: 'terminal',
+    code: 2,
+    reason: 'observation deadline',
+  });
 });
 
 test.each(['writeSync', 'fsyncSync'])(
