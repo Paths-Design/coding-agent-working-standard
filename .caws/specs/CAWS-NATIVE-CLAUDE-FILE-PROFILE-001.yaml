@@ -48,9 +48,15 @@ acceptance:
       shell-environment emulation, compatibility dispatch or first-party handler
       interpreters; missing or ambiguous authority refuses
   - id: A3
-    given: 'missing malformed stale or mismatched context, invalid source identity, or unsupported controls'
-    when: 'a declared default Claude file profile is requested'
-    then: 'it refuses before effects without borrowing compatibility enforcement, while supported explicit extensions retain their declared behavior.'
+    given: >-
+      missing malformed stale or mismatched native context, invalid implementation
+      identity, ambiguous canonical authority or an unsupported native extension
+      contract
+    when: 'the default native file-tool profile is requested'
+    then: >-
+      it refuses before authorization or payload effects and never borrows legacy
+      enforcement or silently selects another authority; completed operational
+      effects and uncertain publications remain retained without replay
   - id: A4
     given: 'a genuine trusted public Claude session resumed in its owned lane'
     when: 'it performs an owned write and read followed by a protected write'
