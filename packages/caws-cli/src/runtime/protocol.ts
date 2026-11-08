@@ -14,6 +14,21 @@ import {
   sameJsonSource,
   type JsonSource,
 } from './json-custody';
+import {
+  FILE_TOOL_CONTEXT_CAPABILITY,
+  GUARD_STRIKES_CAPABILITY,
+  FILE_TOOL_CONTEXT_V2_CAPABILITY,
+  GUARD_STRIKES_V2_CAPABILITY,
+  readFileToolBackendAdvertisements,
+  assertFileToolBackendSelection,
+} from './file-tools/metadata';
+
+export {
+  FILE_TOOL_CONTEXT_CAPABILITY,
+  GUARD_STRIKES_CAPABILITY,
+  FILE_TOOL_CONTEXT_V2_CAPABILITY,
+  GUARD_STRIKES_V2_CAPABILITY,
+};
 
 export const REQUEST_SCHEMA = 'caws.runtime.request.v1';
 export const RESPONSE_SCHEMA = 'caws.runtime.response.v1';
@@ -21,11 +36,6 @@ export const SESSION_CACHE_CAPABILITY = 'caws.runtime.session-cache.v1';
 export const SESSION_END_PREFIX_CAPABILITY = 'caws.runtime.session-end-prefix.v1';
 export const STOP_PREFIX_CAPABILITY = 'caws.runtime.stop-prefix.v1';
 export const STOP_LEASE_CONTEXT_CAPABILITY = 'caws.runtime.stop-lease-context.v1';
-export const FILE_TOOL_CONTEXT_CAPABILITY = 'caws.runtime.file-tool-context.v1';
-export const GUARD_STRIKES_CAPABILITY = 'caws.runtime.guard-strikes.v1';
-export const FILE_TOOL_CONTEXT_V2_CAPABILITY = 'caws.runtime.file-tool-context.v2';
-export const GUARD_STRIKES_V2_CAPABILITY = 'caws.runtime.guard-strikes.v2';
-export const STOCK_SCOPE_RESOLVER_CAPABILITY = 'caws.runtime.stock-scope-resolver.v1';
 export const TRANSCRIPT_STORE_CAPABILITY = 'caws.runtime.transcript-store.v1';
 export const SESSION_PUBLICATION_CAPABILITY = 'caws.runtime.session-publication.v1';
 export const SELECTION_OBSERVATION_CAPABILITY = 'caws.runtime.selection-observation.v1';
@@ -120,8 +130,6 @@ export interface RuntimeRequest {
     | typeof FILE_TOOL_CONTEXT_V2_CAPABILITY;
   /** V1 has one scope operation; V2 separates scope and shortcut publications. */
   readonly guardStrikes?: typeof GUARD_STRIKES_CAPABILITY | typeof GUARD_STRIKES_V2_CAPABILITY;
-  /** Native-owned stock PATH Git observation, paired with the complete V2 backend. */
-  readonly stockScopeResolver?: typeof STOCK_SCOPE_RESOLVER_CAPABILITY;
   /** Optional finite native query profile; this does not select a stock consumer. */
   readonly sessionStore?: typeof TRANSCRIPT_STORE_CAPABILITY;
   /** Native-owned publication exchange; prepared bytes confer no path authority. */
@@ -241,7 +249,6 @@ export function decodeRuntimeRequest(
       ...(Object.hasOwn(value, 'stopLeaseContext') ? ['stopLeaseContext'] : []),
       ...(Object.hasOwn(value, 'fileToolContext') ? ['fileToolContext'] : []),
       ...(Object.hasOwn(value, 'guardStrikes') ? ['guardStrikes'] : []),
-      ...(Object.hasOwn(value, 'stockScopeResolver') ? ['stockScopeResolver'] : []),
       ...(Object.hasOwn(value, 'sessionStore') ? ['sessionStore'] : []),
       ...(Object.hasOwn(value, 'sessionPublication') ? ['sessionPublication'] : []),
       ...(Object.hasOwn(value, 'selectionObservation') ? ['selectionObservation'] : []),
@@ -273,23 +280,10 @@ export function decodeRuntimeRequest(
     value.stopLeaseContext !== STOP_LEASE_CONTEXT_CAPABILITY
   )
     throw new RuntimeProtocolError('Unsupported Stop lease context capability');
-  if (
-    Object.hasOwn(value, 'fileToolContext') &&
-    value.fileToolContext !== FILE_TOOL_CONTEXT_CAPABILITY &&
-    value.fileToolContext !== FILE_TOOL_CONTEXT_V2_CAPABILITY
-  )
-    throw new RuntimeProtocolError('Unsupported file-tool context capability');
-  if (
-    Object.hasOwn(value, 'guardStrikes') &&
-    value.guardStrikes !== GUARD_STRIKES_CAPABILITY &&
-    value.guardStrikes !== GUARD_STRIKES_V2_CAPABILITY
-  )
-    throw new RuntimeProtocolError('Unsupported guard-strikes capability');
-  if (
-    Object.hasOwn(value, 'stockScopeResolver') &&
-    value.stockScopeResolver !== STOCK_SCOPE_RESOLVER_CAPABILITY
-  )
-    throw new RuntimeProtocolError('Unsupported stock scope resolver capability');
+  const refuseFileToolBackend = (message: string): never => {
+    throw new RuntimeProtocolError(message);
+  };
+  const fileToolBackend = readFileToolBackendAdvertisements(value, refuseFileToolBackend);
   if (Object.hasOwn(value, 'sessionStore') && value.sessionStore !== TRANSCRIPT_STORE_CAPABILITY)
     throw new RuntimeProtocolError('Unsupported transcript store capability');
   if (
@@ -368,23 +362,7 @@ export function decodeRuntimeRequest(
   const wire = objectMemberSource(wireSource, 'payload');
   if (!wire || !sameJsonSource(source, wire))
     throw new RuntimeProtocolError('Hook payload does not match original native input');
-  if (
-    value.fileToolContext === FILE_TOOL_CONTEXT_V2_CAPABILITY ||
-    value.guardStrikes === GUARD_STRIKES_V2_CAPABILITY ||
-    Object.hasOwn(value, 'stockScopeResolver')
-  ) {
-    if (
-      value.fileToolContext !== FILE_TOOL_CONTEXT_V2_CAPABILITY ||
-      value.guardStrikes !== GUARD_STRIKES_V2_CAPABILITY ||
-      value.stockScopeResolver !== STOCK_SCOPE_RESOLVER_CAPABILITY ||
-      value.surface !== 'claude-code' ||
-      value.event !== 'pre_tool_use' ||
-      value.configuration !== 'system' ||
-      typeof payload.tool_name !== 'string' ||
-      !['Write', 'Edit'].includes(payload.tool_name)
-    )
-      throw new RuntimeProtocolError('Unpaired or ineligible Claude file backend capabilities');
-  }
+  assertFileToolBackendSelection(fileToolBackend, value, payload, source, refuseFileToolBackend);
   return Object.freeze({
     schema: REQUEST_SCHEMA,
     id: value.id,
@@ -407,17 +385,7 @@ export function decodeRuntimeRequest(
     ...(value.stopLeaseContext === STOP_LEASE_CONTEXT_CAPABILITY
       ? { stopLeaseContext: STOP_LEASE_CONTEXT_CAPABILITY }
       : {}),
-    ...(value.fileToolContext === FILE_TOOL_CONTEXT_CAPABILITY ||
-    value.fileToolContext === FILE_TOOL_CONTEXT_V2_CAPABILITY
-      ? { fileToolContext: value.fileToolContext }
-      : {}),
-    ...(value.guardStrikes === GUARD_STRIKES_CAPABILITY ||
-    value.guardStrikes === GUARD_STRIKES_V2_CAPABILITY
-      ? { guardStrikes: value.guardStrikes }
-      : {}),
-    ...(value.stockScopeResolver === STOCK_SCOPE_RESOLVER_CAPABILITY
-      ? { stockScopeResolver: STOCK_SCOPE_RESOLVER_CAPABILITY }
-      : {}),
+    ...fileToolBackend,
     ...(value.sessionStore === TRANSCRIPT_STORE_CAPABILITY
       ? { sessionStore: TRANSCRIPT_STORE_CAPABILITY }
       : {}),

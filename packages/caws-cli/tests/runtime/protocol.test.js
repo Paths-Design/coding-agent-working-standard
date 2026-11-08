@@ -42,7 +42,6 @@ describe('native runtime protocol', () => {
       surface: 'claude-code',
       fileToolContext: 'caws.runtime.file-tool-context.v2',
       guardStrikes: 'caws.runtime.guard-strikes.v2',
-      stockScopeResolver: 'caws.runtime.stock-scope-resolver.v1',
       inputJson: JSON.stringify(payload),
       payload,
     };
@@ -61,12 +60,12 @@ describe('native runtime protocol', () => {
     }
   );
   test('a partial or mixed-version Claude backend cannot borrow the other operations', () => {
-    for (const field of ['fileToolContext', 'guardStrikes', 'stockScopeResolver']) {
+    for (const field of ['fileToolContext', 'guardStrikes']) {
       const missing = claudeBackend();
       delete missing[field];
       expect(() => decode(missing)).toThrow(/Claude file backend capabilities/);
       const only = claudeBackend();
-      for (const other of ['fileToolContext', 'guardStrikes', 'stockScopeResolver']) {
+      for (const other of ['fileToolContext', 'guardStrikes']) {
         if (other !== field) delete only[other];
       }
       expect(() => decode(only)).toThrow(/Claude file backend capabilities/);
@@ -86,26 +85,27 @@ describe('native runtime protocol', () => {
       expect(() => decode(claudeBackend(tool))).toThrow(/Claude file backend capabilities/);
     }
   });
-  test('stock resolver capability is exact and duplicate control fields cannot be hidden', () => {
+  test('withdrawn legacy lookup capabilities confer no native authority', () => {
     for (const stockScopeResolver of [
       null,
       false,
       '',
       [],
       {},
+      'caws.runtime.stock-scope-resolver.v1',
       'caws.runtime.stock-scope-resolver.v2',
     ]) {
-      expect(() => decode({ ...claudeBackend(), stockScopeResolver })).toThrow(
-        /stock scope resolver capability/
-      );
+      expect(() => decode({ ...claudeBackend(), stockScopeResolver })).toThrow(/request envelope/);
     }
+  });
+  test('escaped native backend control duplicates cannot be hidden', () => {
     const frame = JSON.stringify(request(claudeBackend()));
-    const duplicate = String.raw`"\u0073tockScopeResolver":"caws.runtime.stock-scope-resolver.v1",`;
+    const duplicate = String.raw`"\u0066ileToolContext":"caws.runtime.file-tool-context.v2",`;
     expect(() => decodeRuntimeRequest(frame.replace('{', '{' + duplicate), now)).toThrow(
       /Duplicate/
     );
   });
-  test('V1 transports keep their original capabilities without a stock resolver offer', () => {
+  test('V1 metadata does not acquire native V2 authority', () => {
     const payload = { tool_name: 'apply_patch', tool_input: {} };
     const decoded = decode({
       fileToolContext: 'caws.runtime.file-tool-context.v1',
@@ -116,6 +116,44 @@ describe('native runtime protocol', () => {
     expect(decoded.fileToolContext).toBe('caws.runtime.file-tool-context.v1');
     expect(decoded.guardStrikes).toBe('caws.runtime.guard-strikes.v1');
     expect(Object.hasOwn(decoded, 'stockScopeResolver')).toBe(false);
+  });
+  test('V2 original tool selection rejects ordinary and escaped duplicate selectors', () => {
+    for (const inputJson of [
+      '{"tool_name":"Bash","tool_name":"Write","tool_input":{}}',
+      String.raw`{"tool_name":"Bash","\u0074ool_name":"Write","tool_input":{}}`,
+      '{"tool_name":"Write","tool_name":"Write","tool_input":{}}',
+    ]) {
+      expect(() =>
+        decode({ ...claudeBackend(), inputJson, payload: JSON.parse(inputJson) })
+      ).toThrow(/Duplicate/);
+    }
+  });
+  test('V2 preserves unrelated root and nested duplicate extension bytes', () => {
+    const inputJson =
+      '{"tool_name":"Write","unused":9007199254740993,"unused":18446744073709551617,"extension":{"tool_name":"Bash","tool_name":"Write"},"tool_input":{"file_path":"/project/owned.txt","content":"original"}}';
+    const frame = JSON.stringify(request({ ...claudeBackend(), inputJson, payload: {} })).replace(
+      '"payload":{}',
+      '"payload":' + inputJson
+    );
+    const decoded = decodeRuntimeRequest(frame, now);
+    expect(decoded.inputJson).toBe(inputJson);
+    expect(decoded.payload).toEqual(JSON.parse(inputJson));
+    expect(decoded.payload.tool_name).toBe('Write');
+  });
+  test('quoted selector-shaped content and array members cannot create root selectors', () => {
+    const payload = {
+      tool_input: {
+        file_path: '/project/owned.txt',
+        content: String.raw`{"tool_name":"Bash","tool_name":"Write","escape":"\\\""}`,
+        extension: [{ tool_name: 'Bash' }, { tool_name: 'Write' }],
+      },
+      tool_name: 'Write',
+      extension: { tool_name: 'Bash' },
+    };
+    const inputJson = JSON.stringify(payload);
+    const decoded = decode({ ...claudeBackend(), inputJson, payload });
+    expect(decoded.inputJson).toBe(inputJson);
+    expect(decoded.payload).toEqual(payload);
   });
   test('full SessionEnd prefix capability is distinct from cache and publication authority', () => {
     expect(decode().sessionEndPrefix).toBeUndefined();

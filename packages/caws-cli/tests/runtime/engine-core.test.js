@@ -8,7 +8,7 @@ const {
   writeRuntimeFrame,
   decodeHandoff,
 } = require('../../dist/runtime/live-protocol');
-const { capturedRefusal } = require('../../dist/runtime/engine');
+const { capturedRefusal, prepareRuntimeInvocation } = require('../../dist/runtime/engine');
 const { HandlerExecutionError } = require('../../dist/runtime/handler-executor');
 const { InvocationJournal } = require('../../dist/runtime/journal');
 const { AdvisoryDedup } = require('../../dist/runtime/advisory-dedup');
@@ -40,6 +40,61 @@ function request(sid = 'session-one') {
     },
   };
 }
+
+test.each([
+  { fileToolContext: 'caws.runtime.file-tool-context.v2' },
+  { guardStrikes: 'caws.runtime.guard-strikes.v2' },
+  {
+    fileToolContext: 'caws.runtime.file-tool-context.v2',
+    guardStrikes: 'caws.runtime.guard-strikes.v2',
+  },
+])(
+  'native file authority cannot fall through to legacy execution without its V2 consumer: %j',
+  async (capabilities) => {
+    const payload = {
+      session_id: 'session-one',
+      tool_name: 'Write',
+      tool_input: { file_path: path.join(root, 'owned.txt'), content: 'owned' },
+    };
+    const original = {
+      ...request(),
+      ...capabilities,
+      surface: 'claude-code',
+      configuration: 'system',
+      deadlineEpochMs: Date.now() + 30000,
+      inputJson: JSON.stringify(payload),
+      payload,
+      caller: {
+        processId: process.pid,
+        cwd: root,
+        environment: { HOME: root, PATH: '/usr/bin:/bin' },
+      },
+    };
+    const capture = jest.fn();
+    const select = jest.fn();
+    const spawn = jest.spyOn(require('node:child_process'), 'spawn');
+    try {
+      await expect(
+        prepareRuntimeInvocation(
+          original,
+          new AbortController().signal,
+          { capture },
+          undefined,
+          undefined,
+          undefined,
+          select
+        )
+      ).rejects.toThrow(/Native file authorization is unavailable for this runtime generation/);
+      expect(capture).not.toHaveBeenCalled();
+      expect(select).not.toHaveBeenCalled();
+      expect(spawn).not.toHaveBeenCalled();
+      expect(fs.existsSync(path.join(root, '.caws'))).toBe(false);
+      expect(fs.existsSync(path.join(root, 'owned.txt'))).toBe(false);
+    } finally {
+      spawn.mockRestore();
+    }
+  }
+);
 
 test('aborted work read leaves the same outstanding input for the subsequent wire phase', async () => {
   const input = new PassThrough();

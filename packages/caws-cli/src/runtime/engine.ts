@@ -59,6 +59,7 @@ import {
   qualifiesForNativeSessionEndPrefix,
   qualifiesForNativeStartupProfile,
 } from './session-cache-admission';
+import { requestsNativeFileBackend } from './file-tools/metadata';
 import {
   sessionCacheInputSupported,
   type NativeSessionCachePort,
@@ -318,6 +319,10 @@ export async function prepareRuntimeInvocation(
   nativeFileToolContext?: NativeFileToolContextPort,
   nativeGuardStrikes?: NativeGuardStrikesPort
 ): Promise<PreparedRuntimeInvocation> {
+  if (requestsNativeFileBackend(request))
+    throw new Error(
+      'Native file authorization is unavailable for this runtime generation. The operation was refused.'
+    );
   if (nativeStopCliIdentity)
     assertMatchedCliIdentityReceipt(nativeStopCliIdentity, request, signal);
   if (request.contextGit !== undefined && !contextGit)
