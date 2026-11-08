@@ -965,7 +965,6 @@ caws_foreign_repo_root() {
   local project_common target_common project_identity target_identity
   [[ -n "$project_dir" ]] || return 0
   case "$target" in
-    "$project_dir"|"$project_dir"/*) return 0 ;;
     /*) ;;
     *) return 0 ;;
   esac

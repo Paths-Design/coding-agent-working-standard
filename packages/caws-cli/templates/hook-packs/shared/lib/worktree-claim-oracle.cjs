@@ -218,11 +218,12 @@ function classifyPath(projectDir, candidate) {
   // External Git payloads require an explicit registry entry. Common-directory
   // identity in the caller establishes membership, never ownership. Include a
   // directory target itself so removing an unregistered checkout is held too.
-  if (path.isAbsolute(candidate) && !containsPath(projectDir, candidate)) {
+  if (path.isAbsolute(candidate)) {
     var directory = path.dirname(candidate);
     try { if (fs.lstatSync(candidate).isDirectory()) directory = candidate; }
     catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error; }
     while (true) {
+      if (directory === projectDir) break;
       try {
         fs.lstatSync(path.join(directory, '.git'));
         return { kind: 'worktree', worktreeName: 'external', logical: path.relative(directory, candidate), rel: rel };

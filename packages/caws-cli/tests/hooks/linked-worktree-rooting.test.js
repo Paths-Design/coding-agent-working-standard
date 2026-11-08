@@ -149,6 +149,27 @@ test('unrelated repository stays foreign before ownership lookup', () => {
   expect(result.status).toBe(2);
   expect(result.stderr).toContain('DIFFERENT repository');
 });
+test('nested unregistered linked checkout remains held inside the canonical directory', () => {
+  const nested = path.join(repo, 'tmp/app-lane');
+  fs.mkdirSync(path.dirname(nested), { recursive: true });
+  git(repo, 'worktree', 'move', external, nested);
+  external = nested;
+  fs.writeFileSync(path.join(repo, '.caws/worktrees.json'), '{}');
+  const target = path.join(external, 'car.txt');
+  expect(membership(target)).toBe('');
+  expect(oracle(target)).toBe('ask_uncertain:worktree-payload-no-entry:external');
+  expect(guard(target).status).toBe(2);
+});
+test('nested independent repository is foreign despite its canonical path prefix', () => {
+  const nested = path.join(repo, 'tmp/foreign');
+  fs.mkdirSync(path.dirname(nested), { recursive: true });
+  fs.renameSync(sibling, nested);
+  const target = path.join(nested, 'car.txt');
+  expect(membership(target)).toBe(nested);
+  const result = guard(target);
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('DIFFERENT repository');
+});
 test('broken linked metadata cannot establish same-repository membership', () => {
   fs.writeFileSync(path.join(external, '.git'), 'gitdir: /nonexistent/caws-test\n');
   expect(membership(path.join(external, 'car.txt'))).toBe(external);
