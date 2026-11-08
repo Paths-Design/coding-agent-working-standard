@@ -22,16 +22,233 @@ test('the tag publish job depends on qualification of the same checkout', () => 
   const upgrades = qualification.jobs['package-upgrade'];
   expect(upgrades.strategy.matrix.os).toEqual(['ubuntu-latest', 'macos-latest']);
   expect(upgrades.strategy.matrix.node).toEqual(['18', '20', '22']);
+  expect(upgrades.needs).toEqual(['candidate-package']);
   const runs = upgrades.steps.map((step) => step.run).filter(Boolean);
   expect(runs).toContain(
-    'node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report qualification-report.json'
+    'node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report qualification-report.json --tarball selected-candidate/candidate.tgz --tarball-sha256 "$CAWS_SELECTED_TARBALL_SHA256"'
+  );
+  const invocation = upgrades.steps.find(
+    (step) => step.name === 'Install and upgrade the actual candidate package'
+  );
+  expect(invocation.env.CAWS_SELECTED_TARBALL_SHA256).toBe(
+    '${{ needs.candidate-package.outputs.tarball-sha256 }}'
+  );
+  const download = upgrades.steps.find((step) => step.uses === 'actions/download-artifact@v4');
+  expect(download.with).toEqual({
+    name: 'candidate-${{ github.sha }}',
+    path: 'selected-candidate',
+  });
+  expect(runs.some((run) => /npm pack/.test(run))).toBe(false);
+  const producer = qualification.jobs['candidate-package'];
+  expect(producer.outputs['tarball-sha256']).toBe('${{ steps.selected.outputs.sha256 }}');
+  expect(producer.steps.find((step) => step.uses === 'actions/upload-artifact@v4').with.name).toBe(
+    download.with.name
   );
   expect(qualification.jobs.tests.steps.map((step) => step.run)).toContain(
     'npm test -w @paths.design/caws-cli -- --coverage --maxWorkers=2'
   );
 });
 
-test('prerelease routing and fixture isolation contracts execute under Node', () => {
+function candidateSelectionFixture() {
+  const artifactRoot = process.env.CAWS_TEST_ARTIFACT_DIR || os.tmpdir();
+  fs.mkdirSync(artifactRoot, { recursive: true });
+  const fixture = fs.realpathSync(
+    fs.mkdtempSync(path.join(artifactRoot, 'caws-selected-artifact-'))
+  );
+  const cli = path.join(fixture, 'packages/caws-cli');
+  const home = path.join(fixture, 'home');
+  fs.mkdirSync(cli, { recursive: true });
+  fs.mkdirSync(home);
+  fs.writeFileSync(
+    path.join(fixture, 'package.json'),
+    '{"private":true,"workspaces":["packages/*"]}'
+  );
+  // This data-only workspace exercises the actual pack and binding steps.
+  fs.writeFileSync(
+    path.join(cli, 'package.json'),
+    JSON.stringify({
+      name: '@paths.design/caws-cli',
+      version: '1.0.0',
+      files: ['payload.bin'],
+    })
+  );
+  fs.writeFileSync(path.join(cli, 'payload.bin'), Buffer.from([0, 255, 128, 13, 10]));
+  const env = {
+    PATH: [path.dirname(process.execPath), process.env.PATH || ''].join(path.delimiter),
+    HOME: home,
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_SYSTEM: '/dev/null',
+    GIT_AUTHOR_NAME: 'Artifact fixture',
+    GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
+    GIT_COMMITTER_NAME: 'Artifact fixture',
+    GIT_COMMITTER_EMAIL: 'fixture@example.invalid',
+    npm_config_cache: path.join(fixture, 'npm-cache'),
+    npm_config_userconfig: path.join(home, '.npmrc'),
+    npm_config_offline: 'true',
+    npm_config_update_notifier: 'false',
+    GITHUB_OUTPUT: path.join(fixture, 'github-output'),
+  };
+  const git = (...args) => {
+    const result = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], {
+      cwd: fixture,
+      env,
+      encoding: 'utf8',
+      timeout: 10000,
+    });
+    expect({ status: result.status, signal: result.signal }).toEqual({ status: 0, signal: null });
+    return result.stdout.trim();
+  };
+  git('init', '-q', '-b', 'main');
+  git('add', 'package.json', 'packages');
+  git('commit', '-qm', 'artifact input');
+  env.GITHUB_SHA = git('rev-parse', 'HEAD');
+  const producer = readWorkflow('release-qualification.yml').jobs['candidate-package'];
+  const shell = (body) =>
+    spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', body], {
+      cwd: fixture,
+      env,
+      encoding: 'utf8',
+      timeout: 30000,
+      maxBuffer: 1024 * 1024,
+    });
+  const packed = shell(producer.steps.find((step) => step.name === 'Pack the candidate once').run);
+  expect({ status: packed.status, signal: packed.signal }).toEqual({ status: 0, signal: null });
+  const directory = path.join(fixture, 'candidate-package');
+  const record = JSON.parse(fs.readFileSync(path.join(directory, 'npm-pack.json'), 'utf8'))[0];
+  return {
+    fixture,
+    cli,
+    env,
+    shell,
+    directory,
+    record,
+    binding: producer.steps.find((step) => step.id === 'selected').run,
+    cleanup() {
+      if (!process.env.CAWS_TEST_ARTIFACT_DIR) fs.rmSync(fixture, { recursive: true, force: true });
+    },
+  };
+}
+
+test('the actual pack and selection workflow bind one npm artifact to its clean source', () => {
+  const f = candidateSelectionFixture();
+  try {
+    const bytes = fs.readFileSync(path.join(f.directory, f.record.filename));
+    const result = f.shell(f.binding);
+    expect({ status: result.status, signal: result.signal, stderr: result.stderr }).toEqual({
+      status: 0,
+      signal: null,
+      stderr: '',
+    });
+    expect(fs.readFileSync(path.join(f.directory, 'candidate.tgz'))).toEqual(bytes);
+    const selection = JSON.parse(fs.readFileSync(path.join(f.directory, 'selection.json'), 'utf8'));
+    const sha256 = require('node:crypto').createHash('sha256').update(bytes).digest('hex');
+    expect(selection.sourceCommit).toBe(f.env.GITHUB_SHA);
+    expect(selection.tarball).toEqual({
+      filename: 'candidate.tgz',
+      sha256,
+      sizeBytes: bytes.length,
+      integrity: f.record.integrity,
+    });
+    expect(fs.readFileSync(f.env.GITHUB_OUTPUT, 'utf8')).toBe(
+      `sha256=${sha256}\nsizeBytes=${bytes.length}\n`
+    );
+    expect(selection.packReceiptSha256).toBe(
+      require('node:crypto')
+        .createHash('sha256')
+        .update(fs.readFileSync(path.join(f.directory, 'npm-pack.json')))
+        .digest('hex')
+    );
+  } finally {
+    f.cleanup();
+  }
+});
+
+test.each([
+  'source',
+  'dirty',
+  'version',
+  'extra-record',
+  'bytes',
+  'sha1',
+  'integrity',
+  'traversal',
+  'symlink',
+])('artifact selection refuses changed %s without publishing a selection', (change) => {
+  const f = candidateSelectionFixture();
+  try {
+    const receipt = path.join(f.directory, 'npm-pack.json');
+    const records = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+    const original = path.join(f.directory, f.record.filename);
+    if (change === 'source') f.env.GITHUB_SHA = '0'.repeat(40);
+    if (change === 'dirty') fs.appendFileSync(path.join(f.cli, 'payload.bin'), 'changed');
+    if (change === 'version') records[0].version = '9.9.9';
+    if (change === 'extra-record') records.push({ ...records[0] });
+    if (change === 'bytes') fs.appendFileSync(original, 'changed');
+    if (change === 'sha1') records[0].shasum = '0'.repeat(40);
+    if (change === 'integrity') records[0].integrity = 'sha512-forged';
+    if (change === 'traversal') records[0].filename = '../outside.tgz';
+    if (change === 'symlink') {
+      const target = original + '.target';
+      fs.renameSync(original, target);
+      fs.symlinkSync(target, original);
+    }
+    fs.writeFileSync(receipt, JSON.stringify(records));
+    const result = f.shell(f.binding);
+    expect(result.error).toBeUndefined();
+    expect(result.signal).toBeNull();
+    expect(result.status).toBeGreaterThan(0);
+    expect(fs.existsSync(path.join(f.directory, 'selection.json'))).toBe(false);
+    expect(fs.existsSync(f.env.GITHUB_OUTPUT)).toBe(false);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('upgrade transport preserves raw bytes and modes through its actual archive step', () => {
+  const steps = readWorkflow('release-qualification.yml').jobs['package-upgrade'].steps;
+  const archive = steps.find((step) => step.name === 'Archive upgrade evidence with file modes');
+  const upload = steps.find((step) => step.uses === 'actions/upload-artifact@v4');
+  expect(archive.if).toBe('always()');
+  expect(upload.if).toBe('always()');
+  expect(upload.with.path.split('\n')).toContain('qualification-evidence.tgz');
+  const fixture = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'caws-upgrade-transport-'))
+  );
+  try {
+    const raw = path.join(fixture, 'qualification-report.json.artifacts', 'raw');
+    fs.mkdirSync(raw, { recursive: true });
+    const bytes = Buffer.from([0, 255, 128, 10, 13]);
+    fs.writeFileSync(path.join(raw, 'governance.bin'), bytes, { mode: 0o600 });
+    fs.writeFileSync(path.join(fixture, 'qualification-report.json'), '{"ok":false}');
+    fs.symlinkSync('loop', path.join(raw, 'loop'));
+    const archived = spawnSync(
+      '/bin/bash',
+      ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', archive.run],
+      { cwd: fixture, encoding: 'utf8', timeout: 10000 }
+    );
+    expect({ status: archived.status, signal: archived.signal, stderr: archived.stderr }).toEqual({
+      status: 0,
+      signal: null,
+      stderr: '',
+    });
+    const extracted = path.join(fixture, 'extracted');
+    fs.mkdirSync(extracted);
+    const result = spawnSync(
+      'tar',
+      ['-xpzf', path.join(fixture, 'qualification-evidence.tgz'), '-C', extracted],
+      { encoding: 'utf8', timeout: 10000 }
+    );
+    expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
+    const retained = path.join(extracted, 'qualification-report.json.artifacts/raw/governance.bin');
+    expect(fs.readFileSync(retained)).toEqual(bytes);
+    expect(fs.statSync(retained).mode & 0o777).toBe(0o600);
+    expect(fs.lstatSync(path.join(path.dirname(retained), 'loop')).isSymbolicLink()).toBe(true);
+  } finally {
+    fs.rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('prerelease routing and selected-artifact isolation contracts execute under Node', () => {
   const result = spawnSync(
     process.execPath,
     [
@@ -42,6 +259,7 @@ test('prerelease routing and fixture isolation contracts execute under Node', ()
       'scripts/release-tag-publish.test.mjs',
       'scripts/ci-governance-artifacts.test.mjs',
       'scripts/ci-matrix-version.test.mjs',
+      'packages/caws-cli/scripts/native-upgrade-artifacts.test.mjs',
     ],
     { cwd: root, encoding: 'utf8' }
   );
