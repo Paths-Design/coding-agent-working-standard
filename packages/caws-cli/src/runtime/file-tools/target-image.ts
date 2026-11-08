@@ -5,6 +5,7 @@ import { TextDecoder } from 'node:util';
 import { evaluatePath, matchGlob, SCOPE_RULES } from '../../kernel';
 import { matchPrefix } from '../../kernel/scope/match';
 import type { NativeFileAuthority } from './authority';
+import { originalNativeFileOperation } from './original-operation';
 
 export const MAX_NATIVE_FILE_IMAGE_BYTES = 16 * 1024 * 1024;
 const MAX_PATH_BYTES = 4096;
@@ -56,6 +57,7 @@ interface TargetBinding {
 
 export interface NativeFileTargetImage extends TargetBinding {
   readonly kind: 'admitted';
+  /** Semantic operation classified from the retained original surface/tool pair. */
   readonly originalTool: 'Write' | 'Edit';
   readonly preimage: string | null;
   readonly proposedContent: string;
@@ -188,8 +190,9 @@ function parseInput(
     'native-file-input',
     'session_cwd_mismatch'
   );
-  const tool = payload.tool_name;
-  need(tool === 'Write' || tool === 'Edit', 'native-file-input', 'unsupported_tool');
+  const operation = originalNativeFileOperation(authority.surface, payload.tool_name);
+  need(operation !== null, 'native-file-input', 'unsupported_tool');
+  const tool = operation === 'write' ? 'Write' : 'Edit';
   const input = payload.tool_input;
   need(object(input), 'native-file-input', 'invalid_tool_input');
   const required =
@@ -203,6 +206,12 @@ function parseInput(
   );
 
   const filePath = inputString(input.file_path, MAX_PATH_BYTES);
+  if (authority.surface === 'qwen-code')
+    need(
+      isAbsolute(filePath) && filePath === filePath.trim(),
+      'native-file-input',
+      'qwen_requires_absolute_stable_path'
+    );
   need(filePath.length > 0, 'native-file-input', 'invalid_file_path');
   const components = (isAbsolute(filePath) ? filePath.slice(1) : filePath).split('/');
   need(
@@ -464,7 +473,8 @@ export function captureNativeFileTargetImage(input: NativeFileTargetInput): Nati
   const uid = BigInt(process.geteuid!());
   const authority = input.authority;
   need(
-    authority?.surface === 'claude-code' && ['bound', 'bridged'].includes(authority.binding.kind),
+    ['claude-code', 'qwen-code'].includes(authority?.surface) &&
+      ['bound', 'bridged'].includes(authority.binding.kind),
     'scope-guard.sh',
     'no_authority'
   );

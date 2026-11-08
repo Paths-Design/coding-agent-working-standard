@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { GuardStrikeCommit } from './strikes-port';
+import { originalNativeFileOperation, readQwenOriginalWrite } from './original-operation';
 import { isAbsolute } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { objectMemberSource, parseJsonSource } from '../json-custody';
@@ -172,16 +173,17 @@ export function createNativeFileToolContextPort(
   if (
     (native
       ? request.guardStrikes !== GUARD_STRIKES_V2_CAPABILITY ||
-        request.surface !== 'claude-code' ||
-        !['Write', 'Edit'].includes(String(request.payload.tool_name))
+        originalNativeFileOperation(request.surface, request.payload.tool_name) === null
       : request.fileToolContext !== FILE_TOOL_CONTEXT_CAPABILITY || request.surface !== 'codex') ||
     request.event !== 'pre_tool_use' ||
     request.configuration !== 'system' ||
-    !['Write', 'Edit', 'apply_patch'].includes(String(request.payload.tool_name)) ||
+    (!native && !['Write', 'Edit', 'apply_patch'].includes(String(request.payload.tool_name))) ||
     !Number.isSafeInteger(request.deadlineEpochMs)
   )
     throw failure('capability unavailable');
   const requestSchema = native ? FILE_TOOL_CONTEXT_V2_REQUEST : FILE_TOOL_CONTEXT_REQUEST;
+  if (native && request.surface === 'qwen-code')
+    readQwenOriginalWrite(request.inputJson, request.payload);
   const resultSchema = native ? FILE_TOOL_CONTEXT_V2_RESULT : FILE_TOOL_CONTEXT_RESULT;
   const identity = Object.freeze({ id: request.id, runtimeDigest: request.runtimeDigest });
   const token = randomBytes(32).toString('hex');

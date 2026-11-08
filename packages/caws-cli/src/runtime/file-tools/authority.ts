@@ -15,6 +15,7 @@ import {
 } from '../../kernel';
 import { parseJsonSource } from '../json-custody';
 import type { FileToolContextSnapshot } from './context-port';
+import type { NativeFileSurface } from './original-operation';
 
 const MAX_FILE = 1024 * 1024;
 const MAX_TOTAL = 16 * 1024 * 1024;
@@ -33,7 +34,7 @@ export interface NativeFileAuthorityInput {
   readonly context: FileToolContextSnapshot;
   /** Original native callback identity. No environment/capsule fallback. */
   readonly originalSessionId: string;
-  readonly surface: 'claude-code';
+  readonly surface: NativeFileSurface;
   /** Original invocation budget/cancellation check; supplies no authority. */
   readonly checkpoint: () => void;
 }
@@ -48,7 +49,7 @@ export interface NativeFileAuthority {
   readonly checkout: string;
   readonly canonical: string;
   readonly originalSessionId: string;
-  readonly surface: 'claude-code';
+  readonly surface: NativeFileSurface;
   /** Actual bound checkout, or canonical root for an existing bridge. */
   readonly ownedRoot: string;
   readonly policy: Policy;
@@ -407,7 +408,7 @@ interface Captured {
 function capture(
   native: FileToolContextSnapshot,
   originalSessionId: string,
-  surface: 'claude-code',
+  surface: NativeFileSurface,
   checkpoint: () => void
 ): Captured {
   checkpoint();
@@ -576,7 +577,7 @@ export function readNativeFileAuthority(input: NativeFileAuthorityInput): Native
       }
     };
     checkpoint();
-    need(input.surface === 'claude-code', 'unsupported original surface');
+    need(['claude-code', 'qwen-code'].includes(input.surface), 'unsupported original surface');
     need(originalSession(input.originalSessionId), 'invalid original session identity');
     const sessionId = input.originalSessionId;
     const surface = input.surface;

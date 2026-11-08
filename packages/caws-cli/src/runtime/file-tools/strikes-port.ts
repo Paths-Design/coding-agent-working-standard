@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { TextDecoder } from 'node:util';
 import { objectMemberSource, parseJsonSource } from '../json-custody';
 import type { NativeFileToolContextPort } from './context-port';
+import { originalNativeFileOperation, readQwenOriginalWrite } from './original-operation';
 import {
   GUARD_STRIKES_CAPABILITY,
   GUARD_STRIKES_V2_CAPABILITY,
@@ -67,12 +68,11 @@ export function createNativeGuardStrikesPort(
     (native
       ? request.fileToolContext !== FILE_TOOL_CONTEXT_V2_CAPABILITY ||
         typeof fileContext?.association !== 'function' ||
-        request.surface !== 'claude-code' ||
-        !['Write', 'Edit'].includes(String(request.payload.tool_name))
+        originalNativeFileOperation(request.surface, request.payload.tool_name) === null
       : request.guardStrikes !== GUARD_STRIKES_CAPABILITY || request.surface !== 'codex') ||
     request.event !== 'pre_tool_use' ||
     request.configuration !== 'system' ||
-    !['apply_patch', 'Write', 'Edit'].includes(String(request.payload.tool_name)) ||
+    (!native && !['apply_patch', 'Write', 'Edit'].includes(String(request.payload.tool_name))) ||
     !request.id ||
     request.id.length > 128 ||
     !digest(request.runtimeDigest) ||
@@ -80,6 +80,8 @@ export function createNativeGuardStrikesPort(
     request.deadlineEpochMs <= 0
   )
     throw fail('capability unavailable');
+  if (native && request.surface === 'qwen-code')
+    readQwenOriginalWrite(request.inputJson, request.payload);
   const id = request.id,
     runtimeDigest = request.runtimeDigest,
     deadline = request.deadlineEpochMs;

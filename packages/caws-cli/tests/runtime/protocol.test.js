@@ -33,6 +33,33 @@ const request = (changes = {}) => ({
 const decode = (changes) => decodeRuntimeRequest(JSON.stringify(request(changes)), now);
 
 describe('native runtime protocol', () => {
+  test('paired Qwen Write is preserved without relabeling or extending the tool family', () => {
+    const payload = {
+      session_id: 'original-qwen',
+      cwd: '/project',
+      tool_name: 'write_file',
+      tool_input: { file_path: '/project/owned.ts', content: 'export const n = 1;' },
+    };
+    const candidate = {
+      surface: 'qwen-code',
+      fileToolContext: 'caws.runtime.file-tool-context.v2',
+      guardStrikes: 'caws.runtime.guard-strikes.v2',
+      payload,
+      inputJson: JSON.stringify(payload),
+    };
+    expect(decode(candidate)).toMatchObject(candidate);
+    for (const tool of ['Write', 'Edit', 'edit', 'apply_patch']) {
+      const changed = { ...payload, tool_name: tool };
+      expect(() =>
+        decode({ ...candidate, payload: changed, inputJson: JSON.stringify(changed) })
+      ).toThrow(/Qwen file backend/);
+    }
+    const ambiguous = JSON.stringify(payload).replace(
+      '"session_id":',
+      '"session_id":"foreign","session_id":'
+    );
+    expect(() => decode({ ...candidate, inputJson: ambiguous })).toThrow(/duplicate/);
+  });
   const claudeBackend = (tool = 'Write') => {
     const payload = {
       tool_name: tool,

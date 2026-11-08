@@ -40,6 +40,11 @@ import { createNativeContextGitPort } from './context-git-client';
 import { createNativeFileToolContextPort } from './file-tool-context';
 import { createNativeGuardStrikesPort } from './guard-strikes';
 import {
+  FILE_TOOL_CONTEXT_V2_CAPABILITY,
+  GUARD_STRIKES_V2_CAPABILITY,
+  requestsNativeFileBackend,
+} from './file-tools/metadata';
+import {
   CONTEXT_GIT_CAPABILITY,
   EXECUTION_WORKDIR_CONTEXT_GIT_CAPABILITY,
 } from './context-git-wire';
@@ -157,6 +162,21 @@ export async function runEngineEntry(reviewedCliIdentity?: ReviewedCliIdentity):
       ? await compareCliIdentity({ request, reviewed, signal: controller.signal })
       : undefined;
     if (controller.signal.aborted) throw controller.signal.reason;
+    const fileTransport = {
+      read: (signal: AbortSignal) => reader.read(signal),
+      write: (frame: Readonly<Record<string, unknown>>, signal: AbortSignal) =>
+        writeRuntimeFrame(process.stdout, frame, signal),
+    };
+    const fileContext =
+      request.fileToolContext === FILE_TOOL_CONTEXT_CAPABILITY ||
+      request.fileToolContext === FILE_TOOL_CONTEXT_V2_CAPABILITY
+        ? createNativeFileToolContextPort(request, fileTransport, controller.signal)
+        : undefined;
+    const fileStrikes =
+      request.guardStrikes === GUARD_STRIKES_CAPABILITY ||
+      request.guardStrikes === GUARD_STRIKES_V2_CAPABILITY
+        ? createNativeGuardStrikesPort(request, fileTransport, controller.signal, fileContext)
+        : undefined;
     prepared = await prepareRuntimeInvocation(
       request,
       controller.signal,
@@ -180,26 +200,8 @@ export async function runEngineEntry(reviewedCliIdentity?: ReviewedCliIdentity):
         ? createNativeStopLeaseContextPort(request, stopTransport, controller.signal)
         : undefined,
       cliIdentity?.status === 'matched' ? cliIdentity.receipt : undefined,
-      request.fileToolContext === FILE_TOOL_CONTEXT_CAPABILITY
-        ? createNativeFileToolContextPort(
-            request,
-            {
-              read: (signal) => reader.read(signal),
-              write: (frame, signal) => writeRuntimeFrame(process.stdout, frame, signal),
-            },
-            controller.signal
-          )
-        : undefined,
-      request.guardStrikes === GUARD_STRIKES_CAPABILITY
-        ? createNativeGuardStrikesPort(
-            request,
-            {
-              read: (signal) => reader.read(signal),
-              write: (frame, signal) => writeRuntimeFrame(process.stdout, frame, signal),
-            },
-            controller.signal
-          )
-        : undefined
+      fileContext,
+      fileStrikes
     );
     await writeRuntimeFrame(
       process.stdout,
@@ -224,26 +226,30 @@ export async function runEngineEntry(reviewedCliIdentity?: ReviewedCliIdentity):
       admission && isNativeStopAdmission(admission)
         ? await prepared.dispatch(undefined, admission)
         : await prepared.dispatch(admission ?? undefined);
-    const result = completion.nativeResult;
-    const containment = completion.containment ? containmentWire(completion.containment) : null;
     const token = randomUUID();
+    if (requestsNativeFileBackend(request) && !prepared.finalizeProposal)
+      throw new Error('Selected native file consumer has no finalizer');
+    const proposal = prepared.finalizeProposal
+      ? await prepared.finalizeProposal(request, completion)
+      : undefined;
+    const finalized = proposal?.completion ?? completion;
+    const result = finalized.nativeResult;
+    const containment = finalized.containment ? containmentWire(finalized.containment) : null;
+    const frame = {
+      schema: PROPOSAL_SCHEMA,
+      id: request.id,
+      runtimeDigest: request.runtimeDigest,
+      token,
+      response: JSON.parse(encodeRuntimeResponse(request, result)),
+      containment,
+    };
     clearTimeout(timer);
     wireTimer = setTimeout(
       () => wire.abort(new Error('Native result handoff deadline expired')),
       1100
     );
-    await writeRuntimeFrame(
-      process.stdout,
-      {
-        schema: PROPOSAL_SCHEMA,
-        id: request.id,
-        runtimeDigest: request.runtimeDigest,
-        token,
-        response: JSON.parse(encodeRuntimeResponse(request, result)),
-        containment,
-      },
-      wire.signal
-    );
+    proposal?.seal();
+    await writeRuntimeFrame(process.stdout, frame, wire.signal);
     proposed = true;
     const handoff = decodeHandoff(await reader.read(wire.signal), request, token, containment);
     handoffAcknowledged = true;

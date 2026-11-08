@@ -341,6 +341,196 @@ async function selectionReply(peer, request, corrupt = false) {
     });
 }
 
+function prepareQwenEntryGovernance(enabled = true) {
+  const put = (file, value) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(file, typeof value === 'string' ? value : JSON.stringify(value), {
+      mode: 0o600,
+    });
+  };
+  const sid = 'entry-qwen-original';
+  put(path.join(root, '.caws/policy.yaml'), {
+    version: 1,
+    risk_tiers: {
+      1: { max_files: 10, max_loc: 250 },
+      2: { max_files: 100, max_loc: 10000 },
+      3: { max_files: 500, max_loc: 40000 },
+    },
+    gates: {
+      budget_limit: { enabled: true, mode: 'warn' },
+      spec_completeness: { enabled: true, mode: 'block' },
+      scope_boundary: { enabled: true, mode: 'block' },
+    },
+  });
+  const spec = {
+    id: 'QWEN-ENTRY-001',
+    title: 'Qwen entry fixture',
+    mode: 'chore',
+    lifecycle_state: 'active',
+    blast_radius: { modules: ['fixture'] },
+    scope: { in: ['src'], out: [] },
+    invariants: ['Native facts alone do not grant target permission'],
+    acceptance: [{ id: 'A1', given: 'standing', when: 'proposal', then: 'checked' }],
+    non_functional: {},
+    contracts: [],
+  };
+  put(path.join(root, '.caws/specs', spec.id + '.yaml'), spec);
+  put(path.join(root, '.caws/worktrees.json'), {});
+  put(path.join(root, '.caws/claims/bridge.json'), {
+    [spec.id]: { session_id: sid, acquired_at: '2026-11-08T00:00:00Z' },
+  });
+  put(path.join(root, 'machine/surfaces/qwen-code/settings.json'), { version: 1, enabled });
+  fs.mkdirSync(path.join(root, '.git'), { recursive: true });
+  const target = path.join(root, 'src/main.ts');
+  put(target, 'export const n = 1;\n');
+  return {
+    sid,
+    target,
+    context: {
+      checkout: root,
+      canonical: root,
+      gitDir: path.join(root, '.git'),
+      commonDir: path.join(root, '.git'),
+      branch: 'main',
+      mergeInProgress: false,
+      worktrees: [
+        { path: root, branch: 'refs/heads/main', detached: false, prunable: false, bare: false },
+      ],
+    },
+  };
+}
+
+// Real compiled entry/engine; explicit framed native peer, not a genuine host.
+test.each(['clean', 'ask', 'protected', 'third-drift', 'inactive', 'bad-context-token'])(
+  'Qwen entry enforces the actual %s proposal boundary',
+  async (scenario) => {
+    prepareNativeSelectionFixture();
+    const f = prepareQwenEntryGovernance(scenario !== 'inactive');
+    const target =
+      scenario === 'protected' ? path.join(root, 'machine/state/adapter-runtime.json') : f.target;
+    const before = fs.readFileSync(target);
+    const mode = fs.statSync(target).mode;
+    const payload = {
+      session_id: f.sid,
+      cwd: root,
+      tool_name: 'write_file',
+      tool_use_id: 'actual-use',
+      tool_call_id: 'actual-call',
+      tool_input: {
+        file_path: target,
+        content: scenario === 'ask' ? '// TODO implement\n' : 'export const n = 2;\n',
+      },
+    };
+    await withEntry(
+      undefined,
+      async (peer) => {
+        const observations = [],
+          publications = [];
+        let ready = false;
+        for (;;) {
+          const frame = await peer.read();
+          if (frame.schema === 'caws.runtime.file-tool-context.request.v2') {
+            observations.push(frame);
+            expect(frame.ordinal).toBe(observations.length);
+            expect(frame.id).toBe(peer.request.id);
+            expect(frame.runtimeDigest).toBe(peer.request.runtimeDigest);
+            expect(frame.token).toBe(observations[0].token);
+            expect(frame.snapshotToken).toBe(frame.ordinal === 1 ? null : 'b'.repeat(64));
+            expect(frame.ordinal === 1 || ready).toBe(true);
+            await peer.write({
+              schema: 'caws.runtime.file-tool-context.result.v2',
+              id: frame.id,
+              runtimeDigest: frame.runtimeDigest,
+              token: scenario === 'bad-context-token' ? 'f'.repeat(64) : frame.token,
+              ordinal: frame.ordinal,
+              snapshotToken: 'b'.repeat(64),
+              context:
+                scenario === 'third-drift' && frame.ordinal === 3
+                  ? { ...f.context, branch: 'foreign-third' }
+                  : f.context,
+            });
+          } else if (frame.schema === 'caws.runtime.selection-observation.request.v1') {
+            expect(observations.map((row) => row.ordinal)).toEqual([1]);
+            expect(ready).toBe(false);
+            await selectionReply(peer, frame);
+          } else if (frame.schema === 'caws.runtime.ready.v1') {
+            expect(ready).toBe(false);
+            expect(frame.active).toBe(true);
+            expect(frame.sessionId).toBe(f.sid);
+            expect(observations.map((row) => row.ordinal)).toEqual([1]);
+            ready = true;
+            await peer.write({ schema: 'caws.runtime.dispatch.v1', ...identity });
+          } else if (frame.schema === 'caws.runtime.guard-strikes.request.v2') {
+            publications.push(frame);
+            expect(scenario).toBe('ask');
+            expect(observations.map((row) => row.ordinal)).toEqual([1, 2]);
+            expect(frame.operation).toBe('increment_shortcut_language');
+            expect(frame.token).toBe(observations[0].token);
+            expect(frame.contextSnapshotToken).toBe('b'.repeat(64));
+            await peer.write({
+              schema: 'caws.runtime.guard-strikes.result.v2',
+              id: frame.id,
+              runtimeDigest: frame.runtimeDigest,
+              token: frame.token,
+              operation: frame.operation,
+              contextSnapshotToken: frame.contextSnapshotToken,
+              count: 2,
+              stateSha256: 'c'.repeat(64),
+            });
+          } else if (frame.schema === 'caws.runtime.failure.v1') {
+            expect(['third-drift', 'inactive', 'bad-context-token']).toContain(scenario);
+            expect(observations.map((row) => row.ordinal)).toEqual(
+              scenario === 'third-drift' ? [1, 2, 3] : [1]
+            );
+            expect(publications).toEqual([]);
+            if (scenario !== 'third-drift') expect(ready).toBe(false);
+            expect((await peer.terminal()).code).toBe(1);
+            break;
+          } else if (frame.schema === 'caws.runtime.proposal.v2') {
+            expect(['clean', 'ask', 'protected']).toContain(scenario);
+            const result = frame.response.result;
+            expect(result.exitCode).toBe(scenario === 'protected' ? 2 : 0);
+            expect(observations.map((row) => row.ordinal)).toEqual(
+              scenario === 'protected' ? [1] : [1, 2, 3]
+            );
+            expect(publications).toHaveLength(scenario === 'ask' ? 1 : 0);
+            if (scenario !== 'clean') {
+              const output = JSON.parse(Buffer.from(result.stdoutBase64, 'base64').toString());
+              expect(output.hookSpecificOutput.permissionDecision).toBe(
+                scenario === 'ask' ? 'ask' : 'deny'
+              );
+              if (scenario === 'protected')
+                expect(Buffer.from(result.stderrBase64, 'base64').toString()).toContain(
+                  'protected-paths.sh'
+                );
+            }
+            await peer.write({
+              schema: 'caws.runtime.handoff.v2',
+              ...identity,
+              token: frame.token,
+              success: scenario !== 'protected',
+              containment: null,
+            });
+            expect((await peer.terminal()).code).toBe(0);
+            break;
+          } else throw new Error('Unexpected Qwen entry frame: ' + JSON.stringify(frame));
+        }
+        expect(fs.existsSync(peer.marker)).toBe(false);
+        expect(fs.readFileSync(target)).toEqual(before);
+        expect(fs.statSync(target).mode).toBe(mode);
+      },
+      {
+        surface: 'qwen-code',
+        fileToolContext: 'caws.runtime.file-tool-context.v2',
+        guardStrikes: 'caws.runtime.guard-strikes.v2',
+        selectionObservation: selectionAdvertisement(),
+        inputJson: JSON.stringify(payload),
+        payload,
+      }
+    );
+  }
+);
+
 test('actual entry serializes native selection reads on the existing reader before Ready', async () => {
   prepareNativeSelectionFixture();
   await withEntry(
