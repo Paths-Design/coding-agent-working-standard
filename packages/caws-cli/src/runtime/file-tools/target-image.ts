@@ -271,6 +271,37 @@ const REGISTRATION: Readonly<Record<string, readonly string[]>> = {
   '.kimi-code': ['config.toml'],
 };
 
+function vendorProtection(vendor: string, rest: readonly string[], target: string): string | null {
+  if (VENDORS.has(vendor)) {
+    if (rest.length === 1 && REGISTRATION[vendor]?.includes(rest[0]!)) return 'native_registration';
+    if (
+      rest[0] === 'logs' &&
+      rest.some((part) => /^(?:guard-strikes-|danger-latch-|guard-reprieve-)/.test(part))
+    )
+      return 'guard_state';
+    if (vendor === '.opencode' && rest[0] === 'plugins') return 'hook_artifact';
+  }
+  if (vendor === '.caws' || VENDORS.has(vendor)) {
+    if (rest[0] === 'hooks') {
+      if (
+        rest
+          .slice(1)
+          .some(
+            (part) =>
+              part === 'state' ||
+              part === '.state' ||
+              /^(?:guard-strikes-|danger-latch-|guard-reprieve-)/.test(part)
+          )
+      )
+        return 'guard_state';
+      // Documentation is not an admission. Ownership and scope still run.
+      return target.endsWith('.md') ? null : 'hook_artifact';
+    }
+    if (vendor === '.caws') return 'authority_state';
+  }
+  return null;
+}
+
 function protectedReason(
   target: string,
   authority: NativeFileAuthority,
@@ -290,6 +321,18 @@ function protectedReason(
       )
     )
       return 'machine_runtime';
+  }
+
+  // User-layer registrations and hooks retain their role even when a real
+  // repository is rooted inside their directory. Repository placement cannot
+  // hide the exact paths that the installed harness reads from HOME.
+  for (const vendor of VENDORS) {
+    checkpoint();
+    const root = fold(join(home, vendor));
+    if (!inside(root, file)) continue;
+    const rest = file.slice(root.length).replace(/^\//, '').split('/');
+    const reason = vendorProtection(vendor, rest, target);
+    if (reason) return reason;
   }
 
   // A managed checkout's ancestors can include another project's .caws.
@@ -326,35 +369,8 @@ function protectedReason(
     checkpoint();
     const vendor = parts[index]!;
     const rest = parts.slice(index + 1);
-    if (VENDORS.has(vendor)) {
-      if (rest.length === 1 && REGISTRATION[vendor]?.includes(rest[0]!))
-        return 'native_registration';
-      if (
-        rest[0] === 'logs' &&
-        rest.some((part) => /^(?:guard-strikes-|danger-latch-|guard-reprieve-)/.test(part))
-      )
-        return 'guard_state';
-      if (vendor === '.opencode' && rest[0] === 'plugins') return 'hook_artifact';
-    }
-    if (vendor === '.caws' || VENDORS.has(vendor)) {
-      if (rest[0] === 'hooks') {
-        if (
-          rest
-            .slice(1)
-            .some(
-              (part) =>
-                part === 'state' ||
-                part === '.state' ||
-                /^(?:guard-strikes-|danger-latch-|guard-reprieve-)/.test(part)
-            )
-        )
-          return 'guard_state';
-        // Documentation is not an admission. Ownership and scope still run.
-        if (!target.endsWith('.md')) return 'hook_artifact';
-        continue;
-      }
-      if (vendor === '.caws') return 'authority_state';
-    }
+    const reason = vendorProtection(vendor, rest, target);
+    if (reason) return reason;
   }
 
   for (const root of [authority.checkout, authority.canonical]) {

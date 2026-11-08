@@ -28,19 +28,22 @@ function fixture({
   bridge = false,
   managed = false,
   ancestors = [],
+  homeRepository = null,
   scope = ['src/allowed'],
   out = [],
 } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'native-target-')));
   roots.push(root);
   const container = path.join(root, ...ancestors);
-  const repo = path.join(container, 'project');
+  const home = path.join(root, 'home');
+  const repo = homeRepository
+    ? path.join(home, ...homeRepository)
+    : path.join(container, 'project');
   const lane = bridge
     ? repo
     : managed
       ? path.join(repo, '.caws/worktrees/owned')
       : path.join(container, 'owned');
-  const home = path.join(root, 'home');
   const machineHome = path.join(home, '.caws');
   for (const dir of [repo, lane, home, machineHome, path.join(lane, 'src/allowed')])
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -292,6 +295,74 @@ test('managed foreign payload reaches ownership refusal without borrowing its do
   f.persist();
   const target = path.join(peer, 'file.ts');
   errorFrom(() => f.capture(write(f, target)), 'foreign_worktree', 'worktree-write-guard.sh');
+  expect(fs.existsSync(target)).toBe(false);
+});
+
+test.each([
+  ['.claude', 'settings.json'],
+  ['.claude', 'settings.local.json'],
+  ['.claude', 'config.toml'],
+  ['.codex', 'hooks.json'],
+  ['.codex', 'settings.local.json'],
+  ['.codex', 'config.toml'],
+  ['.qwen', 'settings.json'],
+  ['.zcode', 'config.json'],
+  ['.kimi-code', 'config.toml'],
+])('actual HOME registration %s/%s survives an overlapping repository root', (vendor, name) => {
+  const f = fixture({ bridge: true, homeRepository: [vendor], scope: ['**'] });
+  const target = path.join(f.repo, name);
+  put(target, 'original registration', 0o600);
+  const authority = f.authority();
+  expect(authority.checkout).toBe(path.join(f.home, vendor));
+  expect(evaluatePath(name, authority.binding, authority.policy).kind).toBe('admit');
+  errorFrom(
+    () => f.capture(write(f, target), { authority }),
+    'native_registration',
+    'protected-paths.sh'
+  );
+  expect(fs.readFileSync(target, 'utf8')).toBe('original registration');
+  expect(mode(target)).toBe(0o600);
+});
+
+test.each([
+  '.claude',
+  '.codex',
+  '.qwen',
+  '.zcode',
+  '.kimi-code',
+  '.opencode',
+  '.dsh',
+  '.cursor',
+  '.windsurf',
+])('actual HOME %s hooks survive an overlapping repository root', (vendor) => {
+  const f = fixture({ bridge: true, homeRepository: [vendor, 'hooks'], scope: ['**'] });
+  const target = path.join(f.repo, 'guard.sh');
+  put(target, 'original executable hook', 0o700);
+  errorFrom(() => f.capture(write(f, target)), 'hook_artifact', 'protected-paths.sh');
+  expect(fs.readFileSync(target, 'utf8')).toBe('original executable hook');
+  expect(mode(target)).toBe(0o700);
+  const state = path.join(f.repo, 'state/guard-strikes-original.json');
+  put(state, 'original counter');
+  errorFrom(() => f.capture(write(f, state)), 'guard_state', 'protected-paths.sh');
+  expect(fs.readFileSync(state, 'utf8')).toBe('original counter');
+  const documentation = path.join(f.repo, 'README.md');
+  expect(f.capture(write(f, documentation))).toMatchObject({
+    kind: 'admitted',
+    target: documentation,
+  });
+  expect(fs.existsSync(documentation)).toBe(false);
+});
+
+test('actual HOME Codex worktree payload retains admission', () => {
+  const f = fixture({
+    bridge: true,
+    homeRepository: ['.codex', 'worktrees', 'lane'],
+    scope: ['**'],
+  });
+  const target = path.join(f.repo, 'src/allowed/file.ts');
+  const image = f.capture(write(f, target));
+  expect(image).toMatchObject({ kind: 'admitted', target, relativePath: 'src/allowed/file.ts' });
+  image.assertCurrent();
   expect(fs.existsSync(target)).toBe(false);
 });
 
