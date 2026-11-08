@@ -4,12 +4,47 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { execFileSync } = require('node:child_process');
+const { createHash } = require('node:crypto');
 const {
   parseDriverArguments,
   observeCommittedSource,
   npmEnvironment,
   assertNoNpmProjectConfig,
+  verifySelectedTarballLock,
 } = require('../../scripts/build-native-hook-image.cjs');
+
+test('selected tar lock binds the local source and bytes', () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-selected-tar-')));
+  try {
+    const prefix = path.join(root, 'prefix');
+    fs.mkdirSync(prefix);
+    const file = path.join(root, 'selected.tgz');
+    const bytes = Buffer.from('selected tar fixture');
+    fs.writeFileSync(file, bytes);
+    const pin = {
+      path: file,
+      sizeBytes: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    };
+    const entry = {
+      resolved: 'file:../selected.tgz',
+      integrity: 'sha512-' + createHash('sha512').update(bytes).digest('base64'),
+    };
+    const lock = { packages: { 'node_modules/@paths.design/caws-cli': entry } };
+    expect(() => verifySelectedTarballLock(lock, prefix, pin)).not.toThrow();
+    entry.integrity = 'sha512-invalid';
+    expect(() => verifySelectedTarballLock(lock, prefix, pin)).toThrow(/integrity differs/);
+    entry.integrity = 'sha512-' + createHash('sha512').update(bytes).digest('base64');
+    fs.writeFileSync(path.join(root, 'other.tgz'), bytes);
+    entry.resolved = 'file:../other.tgz';
+    expect(() => verifySelectedTarballLock(lock, prefix, pin)).toThrow(/source differs/);
+    entry.resolved = 'file:../selected.tgz';
+    fs.writeFileSync(file, Buffer.from('different tar bytes!'));
+    expect(() => verifySelectedTarballLock(lock, prefix, pin)).toThrow();
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 describe('native image driver explicit request arguments', () => {
   const request = ['--request', '/public/request.json', '--request-sha256', 'a'.repeat(64)];

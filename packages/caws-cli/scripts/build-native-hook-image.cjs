@@ -107,10 +107,23 @@ function admitDriver(phase, options) {
   );
   exactFields(
     request,
-    ['schema', 'outputRoot', 'sourceCommit', 'profile', 'sqliteArchive', 'node', 'vendorRoot'],
+    [
+      'schema',
+      'outputRoot',
+      'sourceCommit',
+      'profile',
+      'sqliteArchive',
+      'node',
+      'vendorRoot',
+      ...(request.schema === 'caws.native-hook-driver-request.v2' ? ['cliTarball'] : []),
+    ],
     'Driver request fields'
   );
-  assert.equal(request.schema, 'caws.native-hook-driver-request.v1');
+  assert(
+    ['caws.native-hook-driver-request.v1', 'caws.native-hook-driver-request.v2'].includes(
+      request.schema
+    )
+  );
   assert(/^[a-f0-9]{40}$/.test(request.sourceCommit), 'Expected committed source SHA');
   assert(['debug', 'release'].includes(request.profile), 'Select profile explicitly');
   absoluteName(request.outputRoot, 'Output root');
@@ -119,6 +132,9 @@ function admitDriver(phase, options) {
   for (const [name, value] of [
     ['SQLite archive', request.sqliteArchive],
     ['Node', request.node],
+    ...(request.schema === 'caws.native-hook-driver-request.v2'
+      ? [['CLI tarball', request.cliTarball]]
+      : []),
   ]) {
     checkedPin(value, name);
     assert(!beneath(request.outputRoot, value.path), 'Input lies inside fresh output');
@@ -411,6 +427,29 @@ async function cli() {
   const compiler = pin(require.resolve('typescript/bin/tsc', { paths: [driverPackage] }));
   await npmStep('cli-build', ['--prefix', driverPackage, '--workspaces=false', 'run', 'build']);
   driverCustody.verifyFile(compiler);
+  if (driver.schema === 'caws.native-hook-driver-request.v2') {
+    driverCustody.verifyFile(driver.cliTarball);
+    assert.deepEqual(committedBuildInputs(), before, 'Committed inputs changed during build');
+    save('cli-pack.result.json', {
+      schema: 'caws.native-hook-cli-selection.v2',
+      status: 'completed',
+      source: before,
+      compiler,
+      tarball: driver.cliTarball,
+      build: pin(path.join(base, 'cli-build.json')),
+      boundary:
+        'Selected tar bytes and maintained source build observed separately; their source-to-tar equivalence is not established.',
+    });
+    console.log(
+      JSON.stringify({
+        phase: 'cli',
+        status: 'completed',
+        sourceCommit: driver.sourceCommit,
+        tarball: driver.cliTarball,
+      })
+    );
+    return;
+  }
   const packed = await npmStep('cli-pack', [
     '--prefix',
     driverPackage,
@@ -473,26 +512,61 @@ function verifyPackedCliResult(result, tarball) {
     'Packed artifact integrity differs'
   );
 }
+function verifySelectedTarballLock(lock, prefixRoot, tarball) {
+  const selected = lock.packages?.['node_modules/@paths.design/caws-cli'];
+  assert(
+    selected && typeof selected.resolved === 'string' && selected.resolved.startsWith('file:'),
+    'Selected CLI lock source missing'
+  );
+  assert.equal(
+    fs.realpathSync(path.resolve(prefixRoot, selected.resolved.slice(5))),
+    tarball.path,
+    'CLI lock source differs'
+  );
+  const bytes = driverCustody.verifyFile(tarball);
+  assert.equal(
+    selected.integrity,
+    'sha512-' + crypto.createHash('sha512').update(bytes).digest('base64'),
+    'CLI lock integrity differs'
+  );
+}
 function loadCliPack() {
   const result = JSON.parse(
     driverCustody.readBounded(path.join(base, 'cli-pack.result.json'), 65536).toString('utf8')
   );
+  const selection = result.schema === 'caws.native-hook-cli-selection.v2';
   exactFields(
     result,
-    ['schema', 'status', 'source', 'compiler', 'tarball', 'build', 'pack', 'boundary'],
+    [
+      'schema',
+      'status',
+      'source',
+      'compiler',
+      'tarball',
+      'build',
+      ...(selection ? [] : ['pack']),
+      'boundary',
+    ],
     'CLI pack result fields'
   );
-  assert.equal(result.schema, 'caws.native-hook-cli-pack.v1');
+  assert.equal(
+    result.schema,
+    driver.schema === 'caws.native-hook-driver-request.v2'
+      ? 'caws.native-hook-cli-selection.v2'
+      : 'caws.native-hook-cli-pack.v1'
+  );
   assert.equal(result.status, 'completed');
   assert.equal(result.source.sourceCommit, driver.sourceCommit, 'CLI pack source differs');
-  assert(
-    beneath(path.join(base, 'cli-package'), result.tarball.path),
-    'CLI tarball escaped retained pack'
-  );
+  if (selection) assert.deepEqual(result.tarball, driver.cliTarball, 'Selected tarball differs');
+  else
+    assert(
+      beneath(path.join(base, 'cli-package'), result.tarball.path),
+      'CLI tarball escaped retained pack'
+    );
   checkedPin(result.tarball, 'CLI tarball');
   for (const [label, pinValue] of [
     ['cli-build', result.build],
-    ['cli-pack', result.pack],
+    ...(selection ? [] : [['cli-pack', result.pack]]),
   ]) {
     assert.equal(pinValue.path, path.join(base, label + '.json'));
     const record = JSON.parse(driverCustody.verifyFile(pinValue).toString('utf8'));
@@ -987,6 +1061,14 @@ async function image() {
     cliPack.tarball.path,
   ]);
   driverCustody.verifyFile(cliPack.tarball);
+  if (driver.schema === 'caws.native-hook-driver-request.v2') {
+    const lock = JSON.parse(
+      driverCustody
+        .readBounded(path.join(prefixRoot, 'package-lock.json'), 16777216)
+        .toString('utf8')
+    );
+    verifySelectedTarballLock(lock, prefixRoot, cliPack.tarball);
+  }
   const audit = await npmStep('cli-audit', [
     'audit',
     '--prefix',
@@ -1229,6 +1311,7 @@ module.exports = {
   observeCommittedSource,
   npmEnvironment,
   assertNoNpmProjectConfig,
+  verifySelectedTarballLock,
 };
 if (require.main === module) {
   process.once('SIGINT', abort);
