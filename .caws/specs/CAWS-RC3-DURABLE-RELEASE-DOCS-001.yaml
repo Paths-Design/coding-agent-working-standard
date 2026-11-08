@@ -42,3 +42,10 @@ rollback:
   - 'Revert the logical documentation commit through normal governed history if authoritative behavior contradicts it'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Source-inspected documentation635130eca: existing repair criteria preserved; installed production trust/Start/owned shell and file reads-writes/check/governed commit/protected refusal/Stop/semantic rendering is first integration milestone; all seven harnesses, 13 sessions/4 repos, six ten-case upgrade cells, all current mutation targets/floors and separate publication authorization remain final obligations. Current policy inventory governs beyond original16 execution/9 analysis targets. Durable evidence and isolated adoption ordering explicit. Source/document acceptance only; no runtime qualification verdict."
+    recorded_at: "2026-11-08T10:27:01.853Z"
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/release-docs/01a1ba85-9c82-7b01-8943-610e88a44364/final-gates.log"
+    commit_sha: "635130ecaa9bb69fba350b8cfbeb1945964de357"
