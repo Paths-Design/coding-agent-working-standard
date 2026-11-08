@@ -98,12 +98,17 @@ substitute for qualification before publication.
 
 ## Machine runtime qualification
 
-Run the installed-artifact upgrade check locally after building. Select an
-absolute report path in persistent ignored storage outside the candidate
-worktree before running it:
+Run the installed-artifact upgrade check from the native-cutover candidate
+checkout, including its repo-owned qualification supervisor. Select an absolute
+report path in persistent ignored storage outside the candidate worktree before
+running it:
 
 ```bash
 npm run build -w @paths.design/caws-cli
+rustup toolchain install 1.90.0 --profile minimal
+cargo +1.90.0 fetch --locked --manifest-path packages/caws-native/Cargo.toml
+CARGO_TARGET_DIR="$PWD/packages/caws-cli/reports/upgrade-cargo" cargo +1.90.0 build --locked --offline --release --manifest-path packages/caws-native/Cargo.toml --no-default-features --example upgrade-supervisor
+export CAWS_QUALIFICATION_SUPERVISOR="$PWD/packages/caws-cli/reports/upgrade-cargo/release/examples/upgrade-supervisor"
 node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report /absolute/retained/release-evidence/qualification-report.json
 ```
 
@@ -131,6 +136,30 @@ retained raw governance bytes and modes before and after, including failed and
 interrupted attempts. Hash-only governance maps do not discharge that
 obligation. Export the report, its referenced artifacts, tarball and required
 reconstruction inputs to the selected durable location before worktree teardown.
+
+The repo-built supervisor owns each command's child and private process group.
+It carries one monotonic deadline from its frontend to its custodian, stops the
+group before reaping its leader, and keeps child settlement separate from pipe
+EOF and command success. The frontend allows two seconds after command expiry
+for cleanup observation; this does not extend the command's execution budget. If
+settlement remains unproven, the frontend returns uncertainty while the
+custodian retains the child. Command receipts identify the supervisor executable
+and retained exchange directory. A private pipe carries live completion; a
+target-written artifact cannot substitute for that observation. The same private
+receipt binds output byte counts, hashes computed while draining the command
+pipes, and the custodian's held file identities. The adapter verifies those pins
+with bounded reads that refuse symlinks and nonregular files before using
+command output. Missing live pins leave the output unverified and retained.
+
+Linux uses a dedicated child subreaper and requires `ECHILD` after reaping the
+leader and adopted descendants. macOS observes only the original process group;
+a child that creates another session can escape it. Neither a successful command
+nor macOS group settlement authorizes fixture deletion. Reports name the
+retained fixture, and the qualifier performs no automatic fixture cleanup. The
+three-second timeout test checks a child that remains in its original group; a
+separate escaped session test demonstrates the narrower macOS guarantee. These
+checks do not prove general process containment or native harness event
+deadlines.
 
 These are subprocess fixtures. Before a runtime release, retain separate fresh
 native traces from all seven supported harnesses proving trust, SessionStart,
@@ -176,7 +205,8 @@ functions and 85% lines. After subtracting that group, the remaining runtime
 requires 60% statements, 50% branches, 60% functions and 60% lines. These are
 regression floors, not correctness proof. Every per-file mutation target and
 floor in `packages/caws-cli/mutation-policy.json` remains required, including
-the complete sixteen-file execution and nine-file analysis campaigns. CLI entry
+the original sixteen execution and nine analysis targets plus every additional
+declared target. The policy inventory defines each complete campaign. CLI entry
 points exercised only in child processes remain zero in Jest's in-process
 report; installed-artifact fixtures supply their behavioral evidence rather than
 manufacturing coverage hits.
