@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: qwen-native-file-consumer
 created_at: '2026-11-08T15:07:47.066Z'
-updated_at: '2026-11-08T15:08:28.415Z'
+updated_at: '2026-11-08T15:17:33.736Z'
 created_by_session: '01a1b814-5196-7cb1-8f01-002645d067e3'
 blast_radius:
   modules:
@@ -31,6 +31,8 @@ scope:
     - 'packages/caws-cli/tests/runtime/file-tool-backend.test.js'
     - 'packages/caws-cli/tests/runtime/file-tool-context.test.js'
     - 'packages/caws-cli/tests/runtime/guard-strikes.test.js'
+    - packages/caws-cli/tests/runtime/protocol.test.js
+    - packages/caws-cli/tests/runtime/native-file-operation.test.js
   out: []
 invariants:
   - 'Original surface/raw JSON/session/cwd and original deadline remain authoritative; no engine-selected context or identity, interpreter fallback or publication retry.'
