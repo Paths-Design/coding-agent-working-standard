@@ -215,6 +215,26 @@ function classifyPath(projectDir, candidate) {
   if (m) {
     return { kind: 'worktree', worktreeName: m[1], logical: m[2] || '', rel: rel };
   }
+  // External Git payloads require an explicit registry entry. Common-directory
+  // identity in the caller establishes membership, never ownership. Include a
+  // directory target itself so removing an unregistered checkout is held too.
+  if (path.isAbsolute(candidate)) {
+    var directory = path.dirname(candidate);
+    try { if (fs.lstatSync(candidate).isDirectory()) directory = candidate; }
+    catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error; }
+    while (true) {
+      if (directory === projectDir) break;
+      try {
+        fs.lstatSync(path.join(directory, '.git'));
+        return { kind: 'worktree', worktreeName: 'external', logical: path.relative(directory, candidate), rel: rel };
+      } catch (error) {
+        if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
+      }
+      var parent = path.dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
+  }
   return { kind: 'canonical', logical: rel, rel: rel };
 }
 
@@ -432,6 +452,14 @@ function main() {
     emit('error_fail_closed', 'missing-input');
   }
 
+  var cls, absoluteCandidate;
+  try {
+    absoluteCandidate = physicalEntryPath(projectDir, candidate);
+    cls = classifyPath(projectDir, absoluteCandidate);
+  } catch (e) {
+    emit('error_fail_closed', 'classify:' + e.message);
+  }
+
   var registryPath = path.join(projectDir, '.caws', 'worktrees.json');
   var registry, registryObserved = false;
   try {
@@ -443,7 +471,10 @@ function main() {
   } catch (e) {
     // Only a genuinely absent registry is uninitialized governance. Existing
     // unreadable, malformed or redirected authority cannot establish no owner.
-    if (!registryObserved && e.code === 'ENOENT') emit('pass', 'no-registry');
+    if (!registryObserved && e.code === 'ENOENT') {
+      if (cls.kind === 'worktree') emit('ask_uncertain', 'worktree-payload-no-entry:' + cls.worktreeName);
+      emit('pass', 'no-registry');
+    }
     emit('error_fail_closed', 'worktree-ownership-registry');
   }
 
@@ -469,6 +500,7 @@ function main() {
   }
 
   if (worktrees.length === 0) {
+    if (cls.kind === 'worktree') emit('ask_uncertain', 'worktree-payload-no-entry:' + cls.worktreeName);
     emit('pass', 'no-active-worktrees');
   }
 
@@ -478,14 +510,6 @@ function main() {
   // another worktree as an unclaimed canonical one (fail OPEN). Ask instead.
   if (process.env.CAWS_ORACLE_CWD_UNRESOLVED && !path.isAbsolute(candidate)) {
     emit('ask_uncertain', 'cwd-unresolved:' + candidate);
-  }
-
-  var cls, absoluteCandidate;
-  try {
-    absoluteCandidate = physicalEntryPath(projectDir, candidate);
-    cls = classifyPath(projectDir, absoluteCandidate);
-  } catch (e) {
-    emit('error_fail_closed', 'classify:' + e.message);
   }
 
   // Registered paths, not conventional directory names, supply ownership.

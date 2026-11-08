@@ -960,11 +960,23 @@ caws_bash_token_records() {
 #   (`cat > /tmp/patch.py`), which is normal and safe. The harm actually named
 #   is mutating files outside the governing repo, so the predicate is "inside a
 #   DIFFERENT git repository" — which /tmp is not.
+# Assign repository identity without depending on newer shared-state helpers.
+# Sentinels preserve pathnames ending in line feeds in older retained packs.
+_caws_foreign_common_identity() {
+  local common
+  common="$(CDPATH='' cd -- "$1" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null && printf x)" || return 1
+  [[ "$common" == *$'\n'x ]] || return 1
+  common="${common%x}"
+  common="${common%$'\n'}"
+  [[ "$common" == /* ]] || common="$1/$common"
+  (CDPATH='' cd -P -- "$common" 2>/dev/null && printf '%s' "$PWD")
+}
+
 caws_foreign_repo_root() {
   local target="$1" project_dir="${2:-}" dir
+  local project_identity target_identity
   [[ -n "$project_dir" ]] || return 0
   case "$target" in
-    "$project_dir"|"$project_dir"/*) return 0 ;;
     /*) ;;
     *) return 0 ;;
   esac
@@ -976,7 +988,15 @@ caws_foreign_repo_root() {
     [[ -n "$dir" ]] || dir=/
   fi
   while [[ -n "$dir" && "$dir" != "/" ]]; do
-    if [[ -e "$dir/.git" ]]; then
+    if [[ -e "$dir/.git" || -L "$dir/.git" ]]; then
+      # Matching Git common directories establish repository membership only.
+      # The ownership oracle must still admit this registered checkout.
+      # Unreadable metadata retains the foreign verdict.
+      if project_identity="$(_caws_foreign_common_identity "$project_dir" && printf x)" &&
+          target_identity="$(_caws_foreign_common_identity "$dir" && printf x)" &&
+          [[ "$project_identity" == "$target_identity" ]]; then
+        return 0
+      fi
       [[ "$dir" != "$project_dir" ]] && printf '%s' "$dir"
       return 0
     fi
