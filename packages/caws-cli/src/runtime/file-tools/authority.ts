@@ -457,7 +457,8 @@ function capture(
       );
     need(
       value.status === undefined ||
-        ['active', 'destroyed', 'missing'].includes(String(value.status)),
+        (typeof value.status === 'string' &&
+          ['active', 'destroyed', 'missing'].includes(value.status)),
       'unknown worktree authority state'
     );
     if (value.status === 'destroyed' || value.status === 'missing') continue;

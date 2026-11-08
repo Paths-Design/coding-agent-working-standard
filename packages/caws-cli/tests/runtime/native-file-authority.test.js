@@ -135,6 +135,26 @@ afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
+test.each([
+  { status: ['active'] },
+  { status: ['missing'] },
+  { status: ['destroyed'] },
+  { status: {} },
+  { status: true },
+  { status: false },
+  { status: null },
+  { status: 42 },
+])(
+  'refuses non-string registry status $status instead of coercing it into standing',
+  ({ status }) => {
+    const f = fixture();
+    expect(capture(f).binding.kind).toBe('bound');
+    f.registry.owned.status = status;
+    f.persist();
+    refuses(f);
+  }
+);
+
 test('derives the owned external checkout without launching a child or granting arbitrary targets', () => {
   const f = fixture();
   const children = [
