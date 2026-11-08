@@ -1,0 +1,40 @@
+id: CAWS-RC3-DURABLE-RELEASE-DOCS-001
+title: 'Define installed-workflow-first release acceptance and durable evidence guidance'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-11-08T09:57:50.594Z'
+updated_at: '2026-11-08T09:57:50.594Z'
+created_by_session: '01a1ba85-9c82-7b01-8943-610e88a44364'
+blast_radius:
+  modules:
+    - 'Release acceptance and native-runtime execution guidance'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/release-readiness.md'
+    - 'docs/architecture/caws-native-runtime.md'
+  out: []
+invariants:
+  - 'Preserve all release gates, seven harness obligations, thirteen-session four-repository workload, and unchanged deadlines'
+  - 'Keep tagging and npm publication behind separate user authorization'
+  - 'Document required and observed behavior distinctly without claiming runtime acceptance'
+acceptance:
+  - id: A1
+    given: 'the user-approved full release bar and installed-workflow-first order'
+    when: 'release guidance is read'
+    then: 'the complete installed milestone, all remaining final criteria, proof falsifiers and isolated-adoption ordering are explicit without lowering existing floors'
+  - id: A2
+    given: 'the net-new native authority decision and existing shared canonical governance'
+    when: 'the architecture contract is read'
+    then: 'legacy implementation quirks are not mandatory parity while canonical authority, required supported behavior and custom extensions remain required'
+  - id: A3
+    given: 'committed documentation and inspected CLI workflow and evidence consumers'
+    when: 'scoped documentation checks and independent review run'
+    then: 'links and formatting pass, commands match the implementation, load-bearing feedback is grounded and documentation acceptance is recorded separately from release qualification'
+observability:
+  - 'Retain scoped source/check output outside worktree teardown; runtime release statuses remain in existing canonical evidence'
+rollback:
+  - 'Revert the logical documentation commit through normal governed history if authoritative behavior contradicts it'
+non_functional: {}
+contracts: []
