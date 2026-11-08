@@ -193,72 +193,11 @@ export function prepareNativeRuntimeEntry(input: NativeImageInput): PreparedNati
   return prepareNativeImage(input);
 }
 
-function prepareNativeImage(
-  input: NativeImageInput,
-  build?: {
-    native: ReviewedFile;
-    stableEntry: ReviewedFile;
-    provenance: Buffer;
-    installedInvocation: InstalledInvocationCapability;
-  }
-): PreparedNativeEntry {
-  keys(
-    input,
-    [
-      'schema',
-      'prefixRoot',
-      'files',
-      'packages',
-      'omissions',
-      'native',
-      'node',
-      'stableEntry',
-      'timeoutMs',
-      ...(Object.hasOwn(input, 'stopProfile') ? ['stopProfile'] : []),
-      ...(Object.hasOwn(input, 'cliIdentityDomain') ? ['cliIdentityDomain'] : []),
-    ],
-    'native image'
-  );
-  if (
-    input.schema !== 'caws.runtime.native-image-input.v1' ||
-    !Number.isSafeInteger(input.timeoutMs) ||
-    input.timeoutMs < 1 ||
-    input.timeoutMs > 120000 ||
-    typeof input.prefixRoot !== 'string' ||
-    !path.isAbsolute(input.prefixRoot) ||
-    fs.realpathSync(input.prefixRoot) !== input.prefixRoot ||
-    !object(input.files) ||
-    !object(input.packages) ||
-    !object(input.omissions)
-  )
-    throw new Error('Invalid native image input');
-  const captured = new Map<string, Buffer>();
-  const modes = new Map<string, number>();
-  const visit = (relative: string): void => {
-    const source = path.join(input.prefixRoot, relative);
-    const stat = fs.lstatSync(source);
-    if (stat.isDirectory()) {
-      for (const child of fs.readdirSync(source).sort())
-        visit(relative ? `${relative}/${child}` : child);
-    } else {
-      nativeRelative(relative);
-      const pin = input.files[relative];
-      keys(pin, ['sha256', 'mode'], 'native image member');
-      if (!digest(pin.sha256) || ![0o644, 0o755].includes(pin.mode as number))
-        throw new Error(`Invalid member pin: ${relative}`);
-      const { bytes, stat: current } = capture(source); // Reject every link, including .bin; build with npm --bin-links=false.
-      if (sha(bytes) !== pin.sha256 || (current.mode & 0o777) !== pin.mode)
-        throw new Error(`Native image member mismatch: ${relative}`);
-      captured.set(relative, bytes);
-      modes.set(relative, pin.mode);
-    }
-  };
-  visit('');
-  if (
-    Object.keys(input.files).length !== captured.size ||
-    Object.keys(input.files).some((p) => !captured.has(nativeRelative(p)))
-  )
-    throw new Error('Native image inventory is incomplete');
+/** Validate the captured prefix independently of the way its bytes arrived. */
+function validateNativePrefix(
+  input: Pick<NativeImageInput, 'packages' | 'omissions'>,
+  captured: ReadonlyMap<string, Buffer>
+): string {
   if (!captured.has('package-lock.json') || !captured.has('package.json'))
     throw new Error('Native production prefix requires its npm lock provenance');
   const lock: unknown = JSON.parse(captured.get('package-lock.json')!.toString('utf8'));
@@ -394,6 +333,76 @@ function prepareNativeImage(
   ])
     if (!captured.has(`${cli}/${relative}`))
       throw new Error(`Native CLI entry/asset missing: ${relative}`);
+  return cli;
+}
+
+function prepareNativeImage(
+  input: NativeImageInput,
+  build?: {
+    native: ReviewedFile;
+    stableEntry: ReviewedFile;
+    provenance: Buffer;
+    installedInvocation: InstalledInvocationCapability;
+  }
+): PreparedNativeEntry {
+  keys(
+    input,
+    [
+      'schema',
+      'prefixRoot',
+      'files',
+      'packages',
+      'omissions',
+      'native',
+      'node',
+      'stableEntry',
+      'timeoutMs',
+      ...(Object.hasOwn(input, 'stopProfile') ? ['stopProfile'] : []),
+      ...(Object.hasOwn(input, 'cliIdentityDomain') ? ['cliIdentityDomain'] : []),
+    ],
+    'native image'
+  );
+  if (
+    input.schema !== 'caws.runtime.native-image-input.v1' ||
+    !Number.isSafeInteger(input.timeoutMs) ||
+    input.timeoutMs < 1 ||
+    input.timeoutMs > 120000 ||
+    typeof input.prefixRoot !== 'string' ||
+    !path.isAbsolute(input.prefixRoot) ||
+    fs.realpathSync(input.prefixRoot) !== input.prefixRoot ||
+    !object(input.files) ||
+    !object(input.packages) ||
+    !object(input.omissions)
+  )
+    throw new Error('Invalid native image input');
+  const captured = new Map<string, Buffer>();
+  const modes = new Map<string, number>();
+  const visit = (relative: string): void => {
+    const source = path.join(input.prefixRoot, relative);
+    const stat = fs.lstatSync(source);
+    if (stat.isDirectory()) {
+      for (const child of fs.readdirSync(source).sort())
+        visit(relative ? `${relative}/${child}` : child);
+    } else {
+      nativeRelative(relative);
+      const pin = input.files[relative];
+      keys(pin, ['sha256', 'mode'], 'native image member');
+      if (!digest(pin.sha256) || ![0o644, 0o755].includes(pin.mode as number))
+        throw new Error(`Invalid member pin: ${relative}`);
+      const { bytes, stat: current } = capture(source); // Reject every link, including .bin; build with npm --bin-links=false.
+      if (sha(bytes) !== pin.sha256 || (current.mode & 0o777) !== pin.mode)
+        throw new Error(`Native image member mismatch: ${relative}`);
+      captured.set(relative, bytes);
+      modes.set(relative, pin.mode);
+    }
+  };
+  visit('');
+  if (
+    Object.keys(input.files).length !== captured.size ||
+    Object.keys(input.files).some((p) => !captured.has(nativeRelative(p)))
+  )
+    throw new Error('Native image inventory is incomplete');
+  const cli = validateNativePrefix(input, captured);
   const files = new Map<string, Buffer>();
   const executablePaths = new Set<string>();
   for (const [relative, bytes] of captured) {
