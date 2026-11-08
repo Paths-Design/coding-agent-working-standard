@@ -1,3 +1,8 @@
+import type * as TypeScript from 'typescript';
+import { createRequire } from 'node:module';
+
+const parserRequire = createRequire(__filename);
+
 /**
  * Pure PreToolUse language evaluation for the original Claude tool.
  * The caller supplies authenticated, stable images and a canonical relative path.
@@ -89,51 +94,13 @@ function quoteEnd(value: string, start: number, step: () => void): number {
   return -1;
 }
 
-/** Closed JS expression literals are data; division and comments remain code. */
-function regularExpressionEnd(value: string, start: number, step: () => void): number {
-  if (value[start] !== '/' || value[start + 1] === '/' || value[start + 1] === '*') return -1;
-  const prefix = value.slice(0, start).trimEnd();
-  if (
-    prefix &&
-    !/[=([{,:;!?&|+*%~^<>-]$/.test(prefix) &&
-    !/\b(?:return|case|throw|yield|typeof|void|delete|instanceof|in|of|await)$/.test(prefix)
-  )
-    return -1;
-  let characterClass = false;
-  for (let at = start + 1; at < value.length; at++) {
-    step();
-    if (value[at] === '\\') at++;
-    else if (value[at] === '[') characterClass = true;
-    else if (value[at] === ']') characterClass = false;
-    else if (value[at] === '/' && !characterClass) {
-      let end = at + 1;
-      while (end < value.length && /[A-Za-z0-9_$]/.test(value.charAt(end))) {
-        step();
-        end++;
-      }
-      const flags = value.slice(at + 1, end);
-      if (
-        !/^[dgimsuvy]*$/.test(flags) ||
-        new Set(flags).size !== flags.length ||
-        (flags.includes('u') && flags.includes('v'))
-      )
-        return -1;
-      return end;
-    }
-  }
-  return -1;
-}
-
-function stripLiterals(value: string, step: () => void, regexLanguage: boolean): string {
+/** Non-JS profile only; JS-family data ranges come from the actual parser. */
+function stripLiterals(value: string, step: () => void): string {
   const parts: string[] = [];
   let from = 0;
   for (let at = 0; at < value.length; at++) {
     step();
-    const end = /['"`]/.test(value.charAt(at))
-      ? quoteEnd(value, at, step)
-      : regexLanguage
-        ? regularExpressionEnd(value, at, step)
-        : -1;
+    const end = /['"`]/.test(value.charAt(at)) ? quoteEnd(value, at, step) : -1;
     if (end === -1) continue;
     parts.push(value.slice(from, at), value.charAt(at).repeat(2));
     from = end;
@@ -149,13 +116,12 @@ interface CommentState {
   kind: CommentKind;
 }
 
-/** Lexer-lite: complete new-side context, including unchanged lines. */
+/** Non-JS lexer-lite, with complete new-side context including unchanged lines. */
 function comments(
   value: string,
   state: CommentState,
   visit: (kind: CommentKind, body: string) => void,
-  step: () => void,
-  regexLanguage: boolean
+  step: () => void
 ): void {
   if (state.close === null) {
     const leading = /^[ \t]*(--(?=[ \t])|\*(?=[ \t]|$))/.exec(value);
@@ -182,13 +148,6 @@ function comments(
         continue;
       }
     }
-    if (regexLanguage && value[at] === '/') {
-      const end = regularExpressionEnd(value, at, step);
-      if (end !== -1) {
-        at = end;
-        continue;
-      }
-    }
     if (at !== 0 && !/[ \t{}();,]/.test(value.charAt(at - 1))) {
       at++;
       continue;
@@ -210,6 +169,271 @@ function comments(
       at += 2;
     } else at++;
   }
+}
+
+type SourceRange = readonly [number, number];
+interface CommentRow {
+  readonly kind: CommentKind;
+  readonly body: string;
+}
+interface JavaScriptViews {
+  readonly code: readonly string[];
+  readonly deferred: readonly string[];
+  readonly comments: ReadonlyMap<number, readonly CommentRow[]>;
+  readonly explicit: ReadonlySet<number>;
+}
+
+/** Preserve UTF-16 offsets and every line separator while removing data. */
+function maskRanges(value: string, ranges: SourceRange[], checkpoint: () => void): string {
+  checkpoint();
+  ranges.sort((left, right) => left[0] - right[0]);
+  checkpoint();
+  const pieces: string[] = [];
+  let from = 0;
+  for (const [start, end] of ranges) {
+    checkpoint();
+    if (start < from) throw new NativeShortcutLanguageError('overlapping parser ranges');
+    pieces.push(value.slice(from, start));
+    for (let at = start; at < end; at += 4096) {
+      checkpoint();
+      pieces.push(value.slice(at, Math.min(at + 4096, end)).replace(/[^\r\n\u2028\u2029]/g, ' '));
+    }
+    from = end;
+  }
+  pieces.push(value.slice(from));
+  checkpoint();
+  const result = pieces.join('');
+  checkpoint();
+  return result;
+}
+
+function validateRegex(compiler: typeof TypeScript, value: string, checkpoint: () => void): void {
+  checkpoint();
+  const scanner = compiler.createScanner(
+    compiler.ScriptTarget.Latest,
+    false,
+    compiler.LanguageVariant.Standard,
+    value,
+    () => {
+      throw new NativeShortcutLanguageError('invalid regular-expression data');
+    }
+  );
+  const first = scanner.scan();
+  if (first !== compiler.SyntaxKind.SlashToken && first !== compiler.SyntaxKind.SlashEqualsToken)
+    throw new NativeShortcutLanguageError('invalid regular-expression range');
+  // Pinned 5.9.2 runtime API: true requests pattern and flag diagnostics.
+  const rescan = scanner.reScanSlashToken as unknown as (
+    reportErrors: boolean
+  ) => TypeScript.SyntaxKind;
+  if (
+    rescan.call(scanner, true) !== compiler.SyntaxKind.RegularExpressionLiteral ||
+    scanner.isUnterminated() ||
+    scanner.getTokenEnd() !== value.length ||
+    scanner.scan() !== compiler.SyntaxKind.EndOfFileToken
+  )
+    throw new NativeShortcutLanguageError('invalid regular-expression range');
+  checkpoint();
+}
+
+function javaScriptViews(
+  file: string,
+  value: string,
+  lines: readonly string[],
+  checkpoint: () => void
+): JavaScriptViews {
+  checkpoint();
+  // Lazy import keeps non-JS and inactive operations out of this import closure.
+  const compiler = parserRequire('typescript') as typeof TypeScript;
+  checkpoint();
+  if (compiler.version !== '5.9.2')
+    throw new NativeShortcutLanguageError('unsupported parser version');
+  const kind = /tsx$/.test(file)
+    ? compiler.ScriptKind.TSX
+    : /jsx$/.test(file)
+      ? compiler.ScriptKind.JSX
+      : /\.[cm]?ts$/.test(file)
+        ? compiler.ScriptKind.TS
+        : compiler.ScriptKind.JS;
+  let source: TypeScript.SourceFile;
+  try {
+    source = compiler.createSourceFile(
+      file,
+      value,
+      {
+        languageVersion: compiler.ScriptTarget.Latest,
+        jsDocParsingMode: compiler.JSDocParsingMode.ParseNone,
+      },
+      false,
+      kind
+    );
+  } catch {
+    throw new NativeShortcutLanguageError('JS-family parse unavailable');
+  }
+  checkpoint();
+  if (
+    !source ||
+    source.kind !== compiler.SyntaxKind.SourceFile ||
+    source.text !== value ||
+    source.fileName !== file
+  )
+    throw new NativeShortcutLanguageError('invalid parser source');
+  // Owned runtime property in pinned TypeScript 5.9.2; never infer success from
+  // its absence or use the recovery AST after a reported parse error.
+  const diagnostics = Object.getOwnPropertyDescriptor(source, 'parseDiagnostics');
+  if (!diagnostics || !Object.hasOwn(diagnostics, 'value') || !Array.isArray(diagnostics.value))
+    throw new NativeShortcutLanguageError('parser diagnostics unavailable');
+  if (diagnostics.value.length !== 0)
+    throw new NativeShortcutLanguageError('JS-family parse unavailable');
+
+  const starts: number[] = [];
+  let offset = 0;
+  for (const line of lines) {
+    checkpoint();
+    starts.push(offset);
+    offset += line.length + 1;
+  }
+  const checked = (start: number, end: number): SourceRange => {
+    if (
+      !Number.isSafeInteger(start) ||
+      !Number.isSafeInteger(end) ||
+      start < 0 ||
+      end < start ||
+      end > value.length
+    )
+      throw new NativeShortcutLanguageError('invalid parser range');
+    return [start, end];
+  };
+  const lineAt = (position: number): number => {
+    checked(position, position);
+    let low = 0;
+    let high = starts.length;
+    while (low + 1 < high) {
+      const middle = (low + high) >>> 1;
+      if (starts[middle]! <= position) low = middle;
+      else high = middle;
+    }
+    return low;
+  };
+  const data: SourceRange[] = [];
+  const explicit = new Set<number>();
+  const unwrap = (input: TypeScript.Expression): TypeScript.Expression => {
+    let expression = input;
+    for (let depth = 0; depth < 4096; depth++) {
+      checkpoint();
+      checked(expression.pos, expression.end);
+      if (
+        compiler.isParenthesizedExpression(expression) ||
+        compiler.isAsExpression(expression) ||
+        compiler.isTypeAssertionExpression(expression) ||
+        compiler.isNonNullExpression(expression) ||
+        compiler.isSatisfiesExpression(expression)
+      )
+        expression = expression.expression;
+      else return expression;
+    }
+    throw new NativeShortcutLanguageError('expression wrapper limit exceeded');
+  };
+  const pending: TypeScript.Node[] = [source];
+  let scheduled = 1;
+  while (pending.length) {
+    checkpoint();
+    const node = pending.pop()!;
+    if (!Number.isInteger(node.kind) || node.kind < 0 || node.kind >= compiler.SyntaxKind.Count)
+      throw new NativeShortcutLanguageError('invalid parser node');
+    checked(node.pos, node.end);
+    if (
+      compiler.isStringLiteral(node) ||
+      compiler.isRegularExpressionLiteral(node) ||
+      compiler.isNoSubstitutionTemplateLiteral(node) ||
+      compiler.isTemplateHead(node) ||
+      compiler.isTemplateMiddle(node) ||
+      compiler.isTemplateTail(node) ||
+      compiler.isJsxText(node)
+    ) {
+      const literal = node as unknown as { text?: unknown; isUnterminated?: unknown };
+      if (
+        typeof literal.text !== 'string' ||
+        (literal.isUnterminated !== undefined && literal.isUnterminated !== false)
+      )
+        throw new NativeShortcutLanguageError('invalid parser literal');
+      // JSX text is data from its full start, even when it resembles a comment.
+      const start = compiler.isJsxText(node) ? node.pos : node.getStart(source);
+      const range = checked(start, node.end);
+      if (compiler.isRegularExpressionLiteral(node))
+        validateRegex(compiler, value.slice(range[0], range[1]), checkpoint);
+      if (range[0] !== range[1]) data.push(range);
+    }
+    if (compiler.isThrowStatement(node)) {
+      const expression = unwrap(node.expression);
+      let callee: TypeScript.Expression | undefined;
+      let argument: TypeScript.Expression | undefined = expression;
+      if (compiler.isNewExpression(expression) || compiler.isCallExpression(expression)) {
+        callee = unwrap(expression.expression);
+        argument =
+          compiler.isIdentifier(callee) && callee.text === 'Error'
+            ? expression.arguments?.[0]
+            : undefined;
+      }
+      if (argument) argument = unwrap(argument);
+      const message =
+        argument && compiler.isTemplateExpression(argument) ? argument.head : argument;
+      if (
+        message &&
+        (compiler.isStringLiteral(message) ||
+          compiler.isNoSubstitutionTemplateLiteral(message) ||
+          compiler.isTemplateHead(message)) &&
+        /^not implemented/i.test(message.text)
+      ) {
+        // Attribute the trigger, not arbitrary new comments or later arguments.
+        for (const trigger of [node, expression, ...(callee ? [callee] : []), message])
+          explicit.add(lineAt(trigger.getStart(source)));
+      }
+    }
+    compiler.forEachChild(node, (child) => {
+      checkpoint();
+      if (++scheduled > 1_000_000)
+        throw new NativeShortcutLanguageError('parser node limit exceeded');
+      pending.push(child);
+    });
+  }
+  const withoutData = maskRanges(value, data, checkpoint);
+  const commentRanges: SourceRange[] = [];
+  const rows = new Map<number, CommentRow[]>();
+  const scanner = compiler.createScanner(
+    compiler.ScriptTarget.Latest,
+    false,
+    compiler.LanguageVariant.Standard,
+    withoutData,
+    () => {
+      throw new NativeShortcutLanguageError('masked source scan unavailable');
+    }
+  );
+  for (;;) {
+    checkpoint();
+    const token = scanner.scan();
+    const [start, end] = checked(scanner.getTokenStart(), scanner.getTokenEnd());
+    if (token === compiler.SyntaxKind.EndOfFileToken) break;
+    if (token === compiler.SyntaxKind.Unknown || scanner.isUnterminated())
+      throw new NativeShortcutLanguageError('masked source scan unavailable');
+    const block = token === compiler.SyntaxKind.MultiLineCommentTrivia;
+    if (!block && token !== compiler.SyntaxKind.SingleLineCommentTrivia) continue;
+    commentRanges.push([start, end]);
+    const commentKind: CommentKind =
+      block && value.startsWith('/**', start) && value[start + 3] !== '/' ? 'doc' : 'note';
+    let line = lineAt(start + 2);
+    for (const body of value.slice(start + 2, block ? end - 2 : end).split('\n')) {
+      checkpoint();
+      const existing = rows.get(line) ?? [];
+      existing.push({ kind: commentKind, body });
+      rows.set(line++, existing);
+    }
+  }
+  return {
+    code: maskRanges(withoutData, commentRanges, checkpoint).split('\n'),
+    deferred: withoutData.split('\n'),
+    comments: rows,
+    explicit,
+  };
 }
 
 function stripIds(value: string, includeTripleX: boolean): string {
@@ -302,7 +526,9 @@ export function evaluateNativeShortcutLanguage(
     'placeholder-stub',
   ] as const satisfies readonly NativeShortcutRule[];
   const state: CommentState = { close: null, kind: 'note' };
-  const regexLanguage = /\.(?:[cm]?[jt]sx?)$/.test(input.relativePath);
+  const javascript = /\.(?:[cm]?[jt]sx?)$/.test(input.relativePath)
+    ? javaScriptViews(input.relativePath, input.content, next, checkpoint)
+    : undefined;
   let ticks = 0;
   const step = (): void => {
     if (++ticks === 2048) {
@@ -325,23 +551,30 @@ export function evaluateNativeShortcutLanguage(
           excerpt: excerpt(line),
         });
     };
-    if (authored && /throw new Error\(["'`]not implemented/i.test(line)) save(0);
-    comments(
-      line,
-      state,
-      (kind, body) => {
-        if (!authored) return;
-        if (active(stripIds(body, true), /\b(?:TODO|FIXME|XXX|HACK|TBD)\b/gi, step)) save(1);
-        if (placeholder(kind, body)) save(4);
-      },
-      step,
-      regexLanguage
-    );
+    if (
+      authored &&
+      (javascript
+        ? javascript.explicit.has(index)
+        : /throw new Error\(["'`]not implemented/i.test(line))
+    )
+      save(0);
+    const visit = (kind: CommentKind, body: string): void => {
+      if (!authored) return;
+      if (active(stripIds(body, true), /\b(?:TODO|FIXME|XXX|HACK|TBD)\b/gi, step)) save(1);
+      if (placeholder(kind, body)) save(4);
+    };
+    if (javascript) {
+      for (const row of javascript.comments.get(index) ?? []) visit(row.kind, row.body);
+    } else comments(line, state, visit, step);
     if (authored) {
       checkpoint();
-      const code = stripIds(stripLiterals(line, step, regexLanguage), false);
+      const code = stripIds(
+        javascript ? javascript.code[index]! : stripLiterals(line, step),
+        false
+      );
       if (active(code, /\b(?:TODO|FIXME|HACK|TBD)\b/g, step)) save(2);
-      if (active(line, /not implemented|implement later|coming soon/gi, step)) save(3);
+      const deferred = javascript ? javascript.deferred[index]! : line;
+      if (active(deferred, /not implemented|implement later|coming soon/gi, step)) save(3);
     }
   }
   return done(winners.find((winner) => winner !== undefined) ?? { kind: 'clean' });

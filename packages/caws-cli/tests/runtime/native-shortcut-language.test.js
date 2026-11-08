@@ -17,22 +17,53 @@ describe('native Claude pre-tool shortcut language', () => {
     'const markers = /\\b(?:TODO|FIXME|XXX|HACK|TBD)\\b/gi;',
     'const marker = /TODO\\/path/;',
     'const marker = /[T/ODO]+/u;',
-    'return /TODO/;',
+    'function f() { return /TODO/; }',
     'match(/TODO/);',
+    'if(ready) /TODO/.test(value);',
+    'while(ready) /FIXME/.test(value);',
+    'if (\n  ready\n)\n  /TODO/.test(value);',
+    'const text = `TODO ${`FIXME ${1}`}`;',
+    'const text = `TODO ${/FIXME/.test(value)}`;',
+    'const text = "throw new Error(\'not implemented\')";',
+    'const text = `throw new Error("not implemented")`;',
+    'const text = `not implemented ${1}`;',
+    'const status = "not implemented";',
+    'const status = "coming soon";',
+    'const status = "implement later";',
   ])('treats a closed expression regex as data: %s', (content) => {
     expect(write(content)).toEqual({ kind: 'clean' });
   });
 
   test.each([
     'const ratio = count / TODO / total;',
+    'const ratio=count++ / TODO / total;',
+    'const ratio=count-- / HACK / total;',
+    'obj.return / FIXME / total;',
+    'obj.throw / TBD / total;',
+    'const ratio = obj<T> / TODO / total;',
+    'const marker = /clean/; // TODO: complete',
+    'const marker = /TODO/; const pending = FIXME;',
+    'const text = `${/*TODO*/1}`;',
+    'const text = `TODO ${`FIXME ${/*hack*/1}`}`;',
+    'const text = `TODO ${`FIXME ${TBD}`}`;',
+    'if(ready) /TODO/.test(value); // fixme: complete',
+    'const text = `TODO`; // hack: complete',
+    'const text = "TODO"; // tbd: complete',
+  ])('does not hide executable or real comment markers: %s', (content) => {
+    expect(write(content)).toMatchObject({ kind: 'hit', rule: 'incomplete-work', line: 1 });
+  });
+
+  test.each([
     'const marker = /TODO/gg;',
     'const marker = /TODO/uv;',
     'const marker = /TODO/unknown;',
     'const marker = /TODO;',
-    'const marker = /clean/; // TODO: complete',
-    'const marker = /TODO/; const pending = FIXME;',
-  ])('does not hide actual markers or malformed regex data: %s', (content) => {
-    expect(write(content)).toMatchObject({ kind: 'hit', rule: 'incomplete-work', line: 1 });
+    'const marker = /(/;',
+    'const text = "unterminated TODO',
+    'const text = `TODO ${1;',
+    'const node = <Input title="TODO";',
+  ])('refuses unresolved or invalid JS-family data rather than returning clean: %s', (content) => {
+    expect(() => write(content, null, 'src/main.tsx')).toThrow(NativeShortcutLanguageError);
   });
 
   test.each([
@@ -61,16 +92,17 @@ describe('native Claude pre-tool shortcut language', () => {
     ['// Renders a placeholder while the image loads', null],
     ['// set aria-placeholder later, once the label is known', null],
     ['/* ::placeholder until focus, then the label floats */', null],
-    ['<!-- placeholder slot for the hint text -->', null],
-    ['/** Placeholder */\nplaceholder?: string;', null],
-    ['/**\n * placeholder\n */\nplaceholder?: string;', null],
-    ['const Input = () => <input placeholder="Name" />;', null],
+    ['<!-- placeholder slot for the hint text -->', null, 'src/main.html'],
+    ['interface Props {\n/** Placeholder */\nplaceholder?: string;\n}', null],
+    ['interface Props {\n/**\n * placeholder\n */\nplaceholder?: string;\n}', null],
+    ['const Input = () => <input placeholder="Name" />;', null, 'src/main.tsx'],
     ['const props = { placeholderTextColor: "grey" };', null],
-    ['.input::placeholder { color: grey; }', null],
-    ['.input:placeholder-shown { color: grey; }', null],
+    ['.input::placeholder { color: grey; }', null, 'src/main.css'],
+    ['.input:placeholder-shown { color: grey; }', null, 'src/main.css'],
     ['// no coming soon message is shown', null],
-  ])('leaves authored data or descriptive language clean: %s', (content, preimage) => {
-    expect(write(content, preimage)).toEqual({ kind: 'clean' });
+  ])('leaves authored data or descriptive language clean: %s', (...values) => {
+    const [content, preimage, relativePath] = values;
+    expect(write(content, preimage, relativePath)).toEqual({ kind: 'clean' });
   });
 
   test.each([
@@ -87,10 +119,15 @@ describe('native Claude pre-tool shortcut language', () => {
       1,
       'const s = "ok"; const label = TODO;',
     ],
-    ['const s = "unterminated TODO', 'incomplete-work', 1, 'const s = "unterminated TODO'],
-    ["echo don't panic; # TODO: finish", 'incomplete-work', 1, "echo don't panic; # TODO: finish"],
+    [
+      "echo don't panic; # TODO: finish",
+      'incomplete-work',
+      1,
+      "echo don't panic; # TODO: finish",
+      'src/main.sh',
+    ],
     ['// "todo": finish', 'incomplete-work', 1, '// "todo": finish'],
-    ['-- todo: finish', 'incomplete-work', 1, '-- todo: finish'],
+    ['-- todo: finish', 'incomplete-work', 1, '-- todo: finish', 'src/main.sql'],
     ['const n = 1;\n// placeholder', 'placeholder-stub', 2, '// placeholder'],
     ['// This is just a placeholder', 'placeholder-stub', 1, '// This is just a placeholder'],
     [
@@ -106,10 +143,10 @@ describe('native Claude pre-tool shortcut language', () => {
       '// Placeholder implementation, replace with real logic',
     ],
     [
-      'return null; // placeholder for now',
+      'function f() { return null; } // placeholder for now',
       'placeholder-stub',
       1,
-      'return null; // placeholder for now',
+      'function f() { return null; } // placeholder for now',
     ],
     [
       'const n = 0; /* temporary placeholder */',
@@ -122,6 +159,7 @@ describe('native Claude pre-tool shortcut language', () => {
       'placeholder-stub',
       1,
       'x = 0 # placeholder until the service exists',
+      'src/main.py',
     ],
     [
       '/*\n * details\n * temporary placeholder\n */',
@@ -130,7 +168,6 @@ describe('native Claude pre-tool shortcut language', () => {
       '* temporary placeholder',
     ],
     ['// coming soon', 'deferred-work', 1, '// coming soon'],
-    ['const status = "not implemented";', 'deferred-work', 1, 'const status = "not implemented";'],
     [
       'function f() {\n  throw new Error("not implemented");\n}',
       'explicit-not-implemented',
@@ -149,10 +186,232 @@ describe('native Claude pre-tool shortcut language', () => {
       1,
       'throw new Error(`not implemented`);',
     ],
-  ])('reports the semantic rule and original line: %s', (content, rule, line, excerpt) => {
-    expect(write(content)).toEqual({ kind: 'hit', rule, line, excerpt });
+  ])('reports the semantic rule and original line: %s', (...values) => {
+    const [content, rule, line, excerpt, relativePath] = values;
+    expect(write(content, null, relativePath)).toEqual({ kind: 'hit', rule, line, excerpt });
   });
 
+  test.each([
+    ['src/main.js', 'const value = obj.return / FIXME / total;'],
+    ['src/main.mjs', 'const value = count++ / TODO / total;'],
+    ['src/main.cjs', 'module.exports = count++ / TODO / total;'],
+    ['src/main.ts', 'const value = obj<T> / TODO / total;'],
+    ['src/main.mts', 'const value = obj<T> / TODO / total;'],
+    ['src/main.cts', 'const value = obj<T> / TODO / total;'],
+  ])('uses grammar rather than a slash prefix guess in %s', (relativePath, content) => {
+    expect(write(content, null, relativePath)).toEqual({
+      kind: 'hit',
+      rule: 'incomplete-work',
+      line: 1,
+      excerpt: content,
+    });
+  });
+
+  test.each(['src/main.jsx', 'src/main.tsx'])(
+    'keeps JSX data separate from expression code in %s',
+    (relativePath) => {
+      expect(
+        write(
+          'const view = <Input title="TODO" note="throw new Error(\'not implemented\')">' +
+            'FIXME not implemented{"HACK"}</Input>;',
+          null,
+          relativePath
+        )
+      ).toEqual({ kind: 'clean' });
+      expect(write('const view = <Input value={TODO} />;', null, relativePath)).toEqual({
+        kind: 'hit',
+        rule: 'incomplete-work',
+        line: 1,
+        excerpt: 'const view = <Input value={TODO} />;',
+      });
+    }
+  );
+
+  test('handles typed TSX generics without treating the whole expression as data', () => {
+    const prefix = 'const id = <T,>(value: T): T => value;\n';
+    expect(
+      write(
+        prefix + 'const view = <Input<string> title="TODO" value={id("FIXME")} />;',
+        null,
+        'src/main.tsx'
+      )
+    ).toEqual({ kind: 'clean' });
+    expect(
+      write(
+        prefix + 'const view = <Input<string> title="TODO" value={TODO} />;',
+        null,
+        'src/main.tsx'
+      )
+    ).toEqual({
+      kind: 'hit',
+      rule: 'incomplete-work',
+      line: 2,
+      excerpt: 'const view = <Input<string> title="TODO" value={TODO} />;',
+    });
+  });
+
+  test('retains actual comments after JSX literals', () => {
+    const content = 'const view = <Input title="TODO" />; // fixme: complete';
+    expect(write(content, null, 'src/main.tsx')).toEqual({
+      kind: 'hit',
+      rule: 'incomplete-work',
+      line: 1,
+      excerpt: content,
+    });
+  });
+
+  test('retains nested-template expression comments at their original line', () => {
+    expect(write('const text = `TODO ${\n  `FIXME ${\n    /*hack*/1\n  }`\n}`;')).toEqual({
+      kind: 'hit',
+      rule: 'incomplete-work',
+      line: 3,
+      excerpt: '/*hack*/1',
+    });
+  });
+
+  test('recognizes actual throws inside template and JSX expressions', () => {
+    const expression = '(() => { throw new Error("not implemented"); })()';
+    const template = 'const text = `${' + expression + '}`;';
+    expect(write(template)).toEqual({
+      kind: 'hit',
+      rule: 'explicit-not-implemented',
+      line: 1,
+      excerpt: template,
+    });
+    const jsx = 'const view = <Input value={' + expression + '} />;';
+    expect(write(jsx, null, 'src/main.tsx')).toEqual({
+      kind: 'hit',
+      rule: 'explicit-not-implemented',
+      line: 1,
+      excerpt: jsx,
+    });
+  });
+
+  test.each([
+    'throw (new Error("not implemented"));',
+    'throw Error("not implemented");',
+    'throw ((Error))(("not implemented"));',
+    'throw new (Error)("not implemented");',
+    'throw (new Error("not implemented") as Error);',
+    'throw (<Error>new Error("not implemented"));',
+    'throw new Error(("not implemented" as string));',
+    'throw (new Error("not implemented")!);',
+    'throw (new Error("not implemented") satisfies Error);',
+    'throw new Error(`not implemented ${value}`);',
+    'throw ("not implemented");',
+    'throw `not implemented ${value}`;',
+  ])('recognizes an actual wrapped or direct stub throw: %s', (content) => {
+    expect(write(content)).toEqual({
+      kind: 'hit',
+      rule: 'explicit-not-implemented',
+      line: 1,
+      excerpt: content,
+    });
+  });
+
+  test('keeps wrapped throw examples inside data clean', () => {
+    expect(write(String.raw`const text = "throw (new Error(\"not implemented\"))";`)).toEqual({
+      kind: 'clean',
+    });
+  });
+
+  test('does not classify a commented throw example as an actual throw', () => {
+    expect(write('// throw new Error("not implemented")')).toEqual({
+      kind: 'hit',
+      rule: 'deferred-work',
+      line: 1,
+      excerpt: '// throw new Error("not implemented")',
+    });
+  });
+
+  test('attributes a newly authored multiline throw message to its own line', () => {
+    const before = 'function f() {\n  throw new Error(\n    "available"\n  );\n}';
+    const after = 'function f() {\n  throw new Error(\n    "not implemented"\n  );\n}';
+    expect(write(after, before)).toEqual({
+      kind: 'hit',
+      rule: 'explicit-not-implemented',
+      line: 3,
+      excerpt: '"not implemented"',
+    });
+  });
+
+  test('does not punish a retained throw when only an unrelated comment is added', () => {
+    const before = 'function f() {\n  throw new Error(\n    "not implemented"\n  );\n}';
+    const after =
+      'function f() {\n  throw new Error(\n    // This branch rejects unavailable requests.\n    "not implemented"\n  );\n}';
+    expect(write(after, before)).toEqual({ kind: 'clean' });
+  });
+
+  test('does not punish retained executable markers while checking new additions', () => {
+    const before = 'const ratio = obj<T> / TODO / total;\nconst n = 0;';
+    const after = 'const ratio = obj<T> / TODO / total;\nconst n = 1;';
+    expect(write(after, before)).toEqual({ kind: 'clean' });
+  });
+
+  test('parses the complete postimage even when broken syntax was preexisting', () => {
+    expect(() =>
+      write('const text = "unterminated TODO\nconst n = 1;', 'const text = "unterminated TODO')
+    ).toThrow('JS-family parse unavailable');
+  });
+
+  test('keeps the deliberately bounded non-JS string contract separate', () => {
+    expect(write('status = "not implemented"', null, 'src/main.py')).toEqual({
+      kind: 'hit',
+      rule: 'deferred-work',
+      line: 1,
+      excerpt: 'status = "not implemented"',
+    });
+  });
+
+  test.each([
+    ['unsupported parser version', (real) => ({ ...real, version: '0.0.0' })],
+    [
+      'parser diagnostics unavailable',
+      (real) => ({
+        ...real,
+        createSourceFile(...args) {
+          const source = real.createSourceFile(...args);
+          delete source.parseDiagnostics;
+          return source;
+        },
+      }),
+    ],
+    [
+      'invalid parser range',
+      (real) => ({
+        ...real,
+        createSourceFile(...args) {
+          const source = real.createSourceFile(...args);
+          source.statements[0].end = source.text.length + 1;
+          return source;
+        },
+      }),
+    ],
+  ])('refuses a violated pinned parser contract: %s', (message, replace) => {
+    const real = jest.requireActual('typescript');
+    const loader = jest.spyOn(require('node:module'), 'createRequire').mockReturnValue((name) => {
+      expect(name).toBe('typescript');
+      return replace(real);
+    });
+    try {
+      jest.isolateModules(() => {
+        const fresh = require('../../dist/runtime/file-tools/shortcut-language');
+        expect(() =>
+          fresh.evaluateNativeShortcutLanguage(
+            {
+              originalTool: 'Write',
+              relativePath: 'src/main.ts',
+              content: 'const text = "TODO";',
+              preimage: null,
+            },
+            () => {}
+          )
+        ).toThrow(message);
+      });
+    } finally {
+      loader.mockRestore();
+    }
+  });
   test('does not let a referenced marker hide a separate active occurrence', () => {
     expect(write('// the TODO; TODO: implement')).toEqual({
       kind: 'hit',
