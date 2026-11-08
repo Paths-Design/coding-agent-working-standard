@@ -1,0 +1,63 @@
+id: CAWS-GUARD-IDENTITY-MAINTENANCE-001
+title: 'Qualify and install a compatible linked-checkout identity guard repair'
+mode: fix
+lifecycle_state: active
+created_at: '2026-11-07T20:39:17.268Z'
+updated_at: '2026-11-07T21:01:49.543Z'
+created_by_session: '01a19baf-4b34-7a83-9cf8-f109a22c539e'
+blast_radius:
+  modules:
+    - 'Shared compatibility runtime distribution and repository identity guard'
+    - 'Qualified immutable snapshot publication through the shared installer lock'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/install-guard-identity-maintenance.cjs'
+    - 'scripts/install-guard-identity-maintenance.test.cjs'
+    - packages/caws-cli/src/init/machine-adapters.ts
+    - packages/caws-cli/tests/adapter/machine-runtime.test.js
+    - packages/caws-cli/templates/hook-packs/shared/scope-guard.sh
+  out: []
+invariants:
+  - 'Preserve every existing guard, native execution-contract rejection, acceptance gate, harness registration and session identity precedence'
+  - 'Publish verified captured runtime bytes through the shared installer lock and atomic activation, with expected candidate and predecessor identities; never edit an installed snapshot'
+acceptance:
+  - id: A1
+    given: 'verified compatible runtime 7be and retained source export'
+    when: 'maintenance candidate is built privately'
+    then: 'baseline is reproduced and only reviewed identity-related members differ, with every other member byte-identical'
+  - id: A2
+    given: 'the privately installed maintenance candidate'
+    when: 'real Git-linked and foreign repository fixtures exercise the guard'
+    then: 'owned scoped writes are admitted, foreign and out-of-scope writes are refused before effect, and rollback restores baseline bytes'
+  - id: A3
+    given: 'qualified maintenance bytes and unchanged native registration'
+    when: 'normal installer activates the candidate'
+    then: 'actual shell commands and owned file edits work, negative guard checks remain enforced, and source plus evidence are retained and properly landed'
+rollback:
+  - 'Use normal caws init adapters rollback to restore the verified previous runtime; preserve both snapshots and registration'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Qualified candidate01f1896529f252d7070f5b6133b9173842e0324b112ef7a53de3db29236ad6d5 built from verified7be source export, existing199b65af repair plus exact committed canonical-resolution block2f4d86eb. All113 member hashes verified; only scope-guard.sh changes, every other member and all modes preserved. New publisher357459f7 captures verified snapshot bytes under normal installer lock and checks expected predecessor before effects and publication. Source5830b87d; build/typecheck/lint and all73 machine-runtime tests passed. Four private qualification tests passed, including a template mutation after advisory plan. Full release/cutover remains open."
+    recorded_at: "2026-11-07T21:17:23.821Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/qualified/test-attempt-1.txt"
+    commit_sha: "5830b87da00b5312fef6c167953d1aa7c460d6be"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Candidate01f18965 passed real Git-linked owned admission, scope-out, foreign repo, foreign owner, missing governance, missing CLI, malformed CLI response, one-sided binding, and failed-Git controls with and without machine policy-root field. Every refusal exit2 and protected bytes unchanged. Exact private publication and normal rollback verified113 member bytes/modes. The earlier e736 fail-open attempt remains retained in test-attempt-4 and was never activated. Raw qualified/qualification-5uCGB2/commands.json and observations.json inspected. Four qualification tests and73 installer tests passed; independent feedback grounded in these coordinates. Actual host activation and main landing are A3."
+    recorded_at: "2026-11-07T21:17:31.948Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/qualified/qualification-5uCGB2/observations.json"
+    commit_sha: "5830b87da00b5312fef6c167953d1aa7c460d6be"
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Narrow maintenance activated through committed locked snapshot publisher: actual selected01f18965, previous7be; all113 installed hashes/modes verified, only scope-guard changed. Real host Bash succeeded; real apply_patch into owned release test admitted. Controlled actual foreign apply_patch was refused by active01f18965 scope-guard, protected SHA b5f7e7d285029324d9b3acae19cc05099271454ac98bfc059a92b0581625cd51 unchanged. Hook registration4e200c19 and bootstrap99bdbeec unchanged. Source commits ca437f58,357459f7,2f4d86eb,5830b87d on APP branch; main landing/push and release integration remain owed, so A3 not complete. No full native cutover or release claim. Artifacts retained in canonical .caws/state/guard-identity-maintenance; root retains ownership and next integrates these commits into release after its three fixture checks."
+    recorded_at: "2026-11-07T21:21:29.119Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/guard-identity-maintenance/qualified/post-activation.json"
+    commit_sha: "5830b87da00b5312fef6c167953d1aa7c460d6be"

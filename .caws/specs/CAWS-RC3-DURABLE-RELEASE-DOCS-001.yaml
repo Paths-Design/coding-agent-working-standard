@@ -1,0 +1,61 @@
+id: CAWS-RC3-DURABLE-RELEASE-DOCS-001
+title: 'Define installed-workflow-first release acceptance and durable evidence guidance'
+mode: doc
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Three existing documentation guides landed at a8ac15e7c; source/read-only review and actual scoped checks support A1-A3. Citation mismatch repaired with mechanically verified source commit and explicit manually inspected ignored raw logs. Full release implementation, native workflow, platform/load qualification, final integration and machine cutover remain with release owner; no tag/npm publication authorized.'
+created_at: '2026-11-08T09:57:50.594Z'
+updated_at: '2026-11-08T10:33:52.494Z'
+created_by_session: '01a1ba85-9c82-7b01-8943-610e88a44364'
+blast_radius:
+  modules:
+    - 'Release acceptance and native-runtime execution guidance'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/release-readiness.md'
+    - 'docs/architecture/caws-native-runtime.md'
+    - docs/release-procedure.md
+  out: []
+  support:
+    - node_modules/prettier
+invariants:
+  - 'Preserve all release gates, seven harness obligations, thirteen-session four-repository workload, and unchanged deadlines'
+  - 'Keep tagging and npm publication behind separate user authorization'
+  - 'Document required and observed behavior distinctly without claiming runtime acceptance'
+acceptance:
+  - id: A1
+    given: 'the user-approved full release bar and installed-workflow-first order'
+    when: 'release guidance is read'
+    then: 'the complete installed milestone, all remaining final criteria, proof falsifiers and isolated-adoption ordering are explicit without lowering existing floors'
+  - id: A2
+    given: 'the net-new native authority decision and existing shared canonical governance'
+    when: 'the architecture contract is read'
+    then: 'legacy implementation quirks are not mandatory parity while canonical authority, required supported behavior and custom extensions remain required'
+  - id: A3
+    given: 'committed documentation and inspected CLI workflow and evidence consumers'
+    when: 'scoped documentation checks and independent review run'
+    then: 'links and formatting pass, commands match the implementation, load-bearing feedback is grounded and documentation acceptance is recorded separately from release qualification'
+observability:
+  - 'Retain scoped source/check output outside worktree teardown; runtime release statuses remain in existing canonical evidence'
+rollback:
+  - 'Revert the logical documentation commit through normal governed history if authoritative behavior contradicts it'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Source-inspected documentation635130eca landed as a8ac15e7c. Complete first-installed workflow and full current final bar preserved with isolated adoption, durable custody and separate publication authorization. Mechanical verification covers the cited source commit. Supporting generated raw gate/format/metadata logs were directly inspected under canonical .caws/state/release-docs/01a1ba85-9c82-7b01-8943-610e88a44364/; they remain ignored per repository policy and are external observations, not tracked artifacts at635. The prior absolute/then ignored-artifact typed citations were rejected and are replaced with the applicable source citation; no runtime acceptance is inferred."
+    recorded_at: "2026-11-08T10:33:27.066Z"
+    commit_sha: "635130ecaa9bb69fba350b8cfbeb1945964de357"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "User-directed net-new authority decision reconciled in architecture decision/execution and release guidance. Inspected635130eca derives authorization from canonical current claim/scope/spec/waiver/policy with provenance, preserves supported behavior/extensions and containment while removing legacy private-lookup/bug parity as requirement. No implementation or activation acceptance inferred from the documentation."
+    recorded_at: "2026-11-08T10:27:14.010Z"
+    commit_sha: "635130ecaa9bb69fba350b8cfbeb1945964de357"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Directly inspected raw metadata-links.log strict3-doc metadata/8 links, final-format.log and actual committed3-path final-gates.log all5PASS under canonical ignored .caws/state/release-docs/01a1ba85-9c82-7b01-8943-610e88a44364/. Diff-check0, clean status and normal precommit passed. Independent Sol feedback on4685 grounded in actual release65c82436 source, repaired in635: supervisor build/export and custody-limit paragraphs preserved, full current policy inventory replaces stale complete16 count while retaining original16/9. Supervisor Rust/adapter unchanged since569 source (diff0); no clean qualifier or runtime rerun claimed. Mechanical verify checks source635 only; ignored generated logs are manually inspected supporting observations outside tracked-source citation, as repository policy requires. This explicitly corrects the earlier artifact_path mismatch rather than committing generated logs or claiming mechanical runtime proof."
+    recorded_at: "2026-11-08T10:33:37.152Z"
+    commit_sha: "635130ecaa9bb69fba350b8cfbeb1945964de357"

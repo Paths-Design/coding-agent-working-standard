@@ -748,7 +748,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'worktree',
   description:
-    'Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/review/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.',
+    'Manage CAWS worktrees (create/adopt/list/ensure/bind/destroy/untrack/merge/review/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.',
   subcommands: [
     {
       kind: 'leaf',
@@ -771,6 +771,27 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
           flag: '--no-link-node-modules',
           description:
             'Skip recognized root, workspace and hook Node dependency links; preserve existing paths and other artifact kinds',
+        },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'adopt',
+      argument: { name: 'name', required: true, description: 'New CAWS registry name' },
+      description:
+        'Register an existing Git linked worktree of this repository and bind a draft or active spec. Requires the exact root and a non-main, non-base branch; --branch creates a new branch for a detached app checkout. Preserves staged, unstaged and untracked source work; refuses local authority changes, conflicting registry bindings and foreign spec owners. Applies the CAWS authority sparse exclusion. Failure retains the checkout, commits and any explicitly requested new branch.',
+      options: [
+        { flag: '--path <path>', required: true, description: 'Existing linked worktree root' },
+        { flag: '--spec <id>', required: true, description: 'Draft or active spec to bind' },
+        {
+          flag: '--base-branch <branch>',
+          required: true,
+          description: 'Existing local integration base branch',
+        },
+        {
+          flag: '--branch <branch>',
+          description: 'New branch for a detached checkout; retained on later registration failure',
         },
         DATA_OPTION,
       ],

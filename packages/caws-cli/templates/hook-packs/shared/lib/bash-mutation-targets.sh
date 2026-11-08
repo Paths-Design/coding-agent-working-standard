@@ -997,6 +997,7 @@ caws_foreign_repo_root() {
   fi
   while [[ -n "$dir" && "$dir" != "/" ]]; do
     if [[ -e "$dir/.git" || -L "$dir/.git" ]]; then
+      # Repository membership does not grant worktree ownership or scope.
       if [[ "$dir" == "$project_dir" ]] || _caws_same_git_common_dir "$dir" "$project_dir"; then
         return 0
       fi

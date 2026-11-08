@@ -48,6 +48,7 @@ import {
 } from '../kernel';
 
 import { applyRegistryPatch } from './apply-patch';
+import { loadBridges } from './bridge-store';
 import { writeFileAtomic } from './atomic-write';
 import {
   autoCommit,
@@ -233,7 +234,14 @@ export type WorktreeWriterOutcome =
   | {
       readonly kind: 'success';
       readonly name: string;
-      readonly action: 'created' | 'bound' | 'destroyed' | 'merged' | 'pruned' | 'untracked';
+      readonly action:
+        | 'created'
+        | 'adopted'
+        | 'bound'
+        | 'destroyed'
+        | 'merged'
+        | 'pruned'
+        | 'untracked';
       readonly data?: Record<string, unknown>;
     }
   | {
@@ -1295,6 +1303,413 @@ export function createWorktree(
       artifact_links: artifactLinks,
       audit_commit: autoCommitOutcome,
       spec_activated: specActivated,
+    },
+  });
+}
+
+export interface AdoptWorktreeInput {
+  readonly name: string;
+  readonly path: string;
+  readonly specId: string;
+  readonly baseBranch: string;
+  readonly branch?: string;
+  readonly session: SessionIdentity;
+  readonly sessionCandidates: SessionCandidates;
+  readonly actor: EventBody['actor'];
+  readonly now?: () => Date;
+}
+
+/** Create the CAWS registry entry for an existing Git linked checkout.
+ * Source files and commits belong to the caller; failure never removes it. */
+export function adoptWorktree(
+  cawsDir: string,
+  input: AdoptWorktreeInput
+): Result<WorktreeWriterOutcome> {
+  const nameValidation = validateWorktreeName(input.name);
+  if (!nameValidation.ok) return nameValidation;
+  const specValidation = validateSpecId(input.specId);
+  if (!specValidation.ok) return specValidation;
+  const refuse = (message: string): Result<never> =>
+    err(storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, message, { subject: input.name }));
+  if (!input.path || /[\r\n\t]/.test(input.path + input.baseBranch + (input.branch ?? ''))) {
+    return refuse('Adoption requires a path and base branch without transport separators.');
+  }
+  let preState = capturePreWriteState(cawsDir, input.specId);
+  const result = withLifecycleLock(cawsDir, (): Result<WorktreeWriterOutcome> => {
+    const repoRoot = repoRootFromCawsDir(cawsDir);
+    const git = (args: string[], cwd: string): string => {
+      const r = runGit(args, cwd);
+      if (!r.ok) throw new Error(r.reason);
+      return r.stdout;
+    };
+    let wtPath: string, branch: string, baseSha: string, gitDir: string, sparsePath: string;
+    let createBranch = false;
+    try {
+      wtPath = fs.realpathSync(input.path);
+      if (/[\r\n\t]/.test(wtPath) || !fs.statSync(wtPath).isDirectory()) {
+        return refuse('Adoption requires a directory without transport separators.');
+      }
+      if (wtPath === fs.realpathSync(repoRoot))
+        return refuse('Cannot adopt the canonical checkout.');
+      if (fs.realpathSync(git(['rev-parse', '--show-toplevel'], wtPath).trim()) !== wtPath) {
+        return refuse('Adoption requires the exact linked worktree root, not a subdirectory.');
+      }
+      const common = fs.realpathSync(
+        git(['rev-parse', '--path-format=absolute', '--git-common-dir'], wtPath).trim()
+      );
+      const canonicalCommon = fs.realpathSync(
+        git(['rev-parse', '--path-format=absolute', '--git-common-dir'], repoRoot).trim()
+      );
+      gitDir = fs.realpathSync(git(['rev-parse', '--absolute-git-dir'], wtPath).trim());
+      if (common !== canonicalCommon || gitDir === common) {
+        return refuse('Adoption requires a linked worktree of the same canonical repository.');
+      }
+      const listed = git(['worktree', 'list', '--porcelain', '-z'], repoRoot)
+        .split('\0')
+        .some((s) => s.startsWith('worktree ') && realpathOrLiteral(s.slice(9)) === wtPath);
+      if (!listed) return refuse('Path is not a registered Git linked worktree.');
+      const attached = runGit(['symbolic-ref', '--quiet', '--short', 'HEAD'], wtPath);
+      createBranch = !attached.ok;
+      branch = attached.ok ? attached.stdout.trim() : (input.branch ?? '');
+      if (!branch) return refuse('Detached checkout requires --branch <new-branch>.');
+      git(['check-ref-format', '--branch', branch], repoRoot);
+      if (input.branch !== undefined && input.branch !== branch)
+        return refuse('Requested branch differs from the attached checkout branch.');
+      if (branch === 'main' || branch === 'master' || branch === input.baseBranch) {
+        return refuse('Adoption requires an attached non-main, non-base branch.');
+      }
+      git(['show-ref', '--verify', `refs/heads/${input.baseBranch}`], repoRoot);
+      baseSha = git(['merge-base', `refs/heads/${input.baseBranch}`, 'HEAD'], wtPath).trim();
+      for (const rel of ['.caws', '.caws/specs']) {
+        const p = path.join(wtPath, rel);
+        if (fs.existsSync(p) && fs.lstatSync(p).isSymbolicLink())
+          return refuse('Authority directories must not be symlinks.');
+      }
+      if (
+        git(
+          ['status', '--porcelain', '--untracked-files=all', '--ignored', '--', '.caws/specs'],
+          wtPath
+        ).trim()
+      ) {
+        return refuse('Worktree-local .caws/specs has changes; reconcile them before adoption.');
+      }
+      // Index flags can hide source edits from status. Inspect physical bytes
+      // against the index even for assume-unchanged/skip-worktree entries.
+      const authority = new Set(
+        git(['ls-files', '-z', '--', '.caws/specs'], wtPath).split('\0').filter(Boolean)
+      );
+      const inspectAuthority = (directory: string): boolean => {
+        if (!fs.existsSync(directory)) return true;
+        for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+          const file = path.join(directory, entry.name);
+          if (entry.isDirectory()) {
+            if (!inspectAuthority(file)) return false;
+          } else {
+            const rel = path.relative(wtPath, file).split(path.sep).join('/');
+            if (
+              !entry.isFile() ||
+              !authority.has(rel) ||
+              !fs.readFileSync(file).equals(Buffer.from(git(['show', `:${rel}`], wtPath)))
+            )
+              return false;
+          }
+        }
+        return true;
+      };
+      if (!inspectAuthority(path.join(wtPath, '.caws/specs')))
+        return refuse(
+          'Worktree-local .caws/specs has hidden or untracked changes; reconcile them before adoption.'
+        );
+      sparsePath = path.join(gitDir, 'info', 'sparse-checkout');
+      if (
+        fs.existsSync(sparsePath) &&
+        fs.readFileSync(sparsePath, 'utf8').trim() !== '/*\n!/.caws/specs/'
+      ) {
+        return refuse(
+          'Existing sparse-checkout patterns differ from the exact CAWS authority exclusion.'
+        );
+      }
+      if (fs.existsSync(path.join(gitDir, 'index.lock')))
+        return refuse('The checkout has an active Git index writer.');
+      const routed = runGit(['config', '--local', '--get', 'core.worktree'], repoRoot);
+      const bare = runGit(['config', '--local', '--get', 'core.bare'], repoRoot);
+      if (routed.ok || (bare.ok && bare.stdout.trim() === 'true')) {
+        return refuse(
+          'Adoption does not migrate repositories with core.worktree or core.bare routing.'
+        );
+      }
+    } catch (error) {
+      return refuse(`Cannot verify existing linked worktree: ${String(error)}`);
+    }
+    const spec = loadSpecOrError(cawsDir, input.specId);
+    if (!spec.ok) return err(spec.errors);
+    if (spec.value.spec.id !== input.specId)
+      return refuse('Spec identity does not match requested id.');
+    if (spec.value.lifecycleState !== 'draft' && spec.value.lifecycleState !== 'active') {
+      return nonGovernableSpecBindingError(input.specId, spec.value.lifecycleState);
+    }
+    if (spec.value.scopeIn.includes(SCOPE_IN_PLACEHOLDER))
+      return unscopedSpecBindingError(input.specId);
+    if (spec.value.currentWorktree)
+      return refuse(`Spec is already bound to worktree "${spec.value.currentWorktree}".`);
+    const registry = loadWorktrees(cawsDir);
+    if (!registry.ok) return err(registry.errors);
+    for (const [name, entry] of Object.entries(registry.value)) {
+      if (name === input.name) return refuse(`Worktree "${name}" already exists in registry.`);
+      if (entry.specId === input.specId)
+        return refuse(`Spec is already held by worktree "${name}".`);
+      const stored = realpathOrLiteral(
+        entry.path === undefined
+          ? worktreePathFor(cawsDir, name)
+          : path.resolve(repoRoot, entry.path)
+      );
+      if (
+        stored === wtPath ||
+        stored.startsWith(wtPath + path.sep) ||
+        wtPath.startsWith(stored + path.sep)
+      ) {
+        return refuse(`Path overlaps registered worktree "${name}".`);
+      }
+    }
+    const bridges = loadBridges(cawsDir);
+    if (!bridges.ok) return err(bridges.errors);
+    const bridge = bridges.value.bridges[input.specId];
+    if (bridge !== undefined && admitsOwner(input.sessionCandidates, bridge.session_id) === null) {
+      return refuse(
+        `Spec "${input.specId}" is bridged by a foreign owner; adoption does not take ownership.`
+      );
+    }
+    const now = (input.now ?? (() => new Date()))().toISOString();
+    const activation = activateSpecOnBind(
+      spec.value.source,
+      input.specId,
+      spec.value.lifecycleState,
+      input.actor,
+      now
+    );
+    if (!activation.ok) return err(activation.errors);
+    const specBytes = patchSpecSetWorktree(activation.value.bytes, input.name);
+    if (!specBytes.ok) return err(specBytes.errors);
+    const binding = kernelBindWorktree(
+      spec.value.spec,
+      registry.value,
+      input.name,
+      input.session,
+      { rebind: false },
+      new Date(now)
+    );
+    if (!binding.ok) return err(binding.errors);
+    const registrySnapshot = captureRegistrySnapshot(cawsDir);
+    if (!registrySnapshot.ok) return err(registrySnapshot.errors);
+    preState = capturePreWriteState(cawsDir, input.specId);
+    const snapshots = new Map<string, Buffer | null>();
+    const indexSemantics = (): string =>
+      git(['ls-files', '-v', '--stage', '-z'], wtPath)
+        .split('\0')
+        .filter((line) => !line.slice(line.indexOf('\t') + 1).startsWith('.caws/specs/'))
+        .join('\0');
+    let sourceIndex: string;
+    try {
+      sourceIndex = indexSemantics();
+      for (const file of [
+        path.join(gitDir, 'index'),
+        path.join(gitDir, 'config.worktree'),
+        sparsePath,
+      ]) {
+        try {
+          snapshots.set(file, fs.readFileSync(file));
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          snapshots.set(file, null);
+        }
+      }
+      for (const rel of git(['ls-files', '-z', '--', '.caws/specs'], wtPath)
+        .split('\0')
+        .filter(Boolean)) {
+        const file = path.join(wtPath, rel);
+        if (fs.existsSync(file)) {
+          if (!fs.lstatSync(file).isFile()) return refuse('Authority paths must be regular files.');
+          snapshots.set(file, fs.readFileSync(file));
+        }
+      }
+    } catch (error) {
+      return refuse(`Cannot snapshot adoption state: ${String(error)}`);
+    }
+    const expected = new Map<string, Buffer | null>();
+    const observeExpected = (): void => {
+      for (const file of snapshots.keys()) {
+        // Excluded authority is expected absent. A file appearing here belongs
+        // to a concurrent writer, not to sparse-checkout compensation.
+        if (file.startsWith(path.join(wtPath, '.caws/specs') + path.sep)) {
+          expected.set(file, null);
+          continue;
+        }
+        try {
+          expected.set(file, fs.readFileSync(file));
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          expected.set(file, null);
+        }
+      }
+    };
+    const compensate = (): readonly Diagnostic[] => {
+      const failures: Diagnostic[] = [];
+      const lock = path.join(gitDir, 'index.lock');
+      let descriptor: number | undefined;
+      try {
+        descriptor = fs.openSync(lock, 'wx');
+        if (sourceIndex !== indexSemantics())
+          throw new Error('Source staging changed during adoption; retained concurrent index.');
+        for (const [file, bytes] of expected) {
+          let current: Buffer | null;
+          try {
+            current = fs.readFileSync(file);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+            current = null;
+          }
+          if (
+            (bytes === null) !== (current === null) ||
+            (bytes !== null && current !== null && !bytes.equals(current))
+          ) {
+            throw new Error(`Concurrent adoption state changed; retained ${file}.`);
+          }
+        }
+        for (const [file, bytes] of snapshots) {
+          if (bytes === null) {
+            if (fs.existsSync(file)) fs.unlinkSync(file);
+          } else {
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+            const restored = writeFileAtomic(file, bytes, { preserveMode: true });
+            if (!restored.ok) failures.push(...restored.errors);
+          }
+        }
+      } catch (error) {
+        failures.push(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_WRITE_FAILED,
+            `Adoption compensation declined: ${String(error)}`,
+            { subject: wtPath }
+          )
+        );
+      } finally {
+        if (descriptor !== undefined) {
+          fs.closeSync(descriptor);
+          fs.unlinkSync(lock);
+        }
+      }
+      const restored = restoreRegistrySnapshot(cawsDir, registrySnapshot.value);
+      if (!restored.ok) failures.push(...restored.errors);
+      return failures;
+    };
+    // No checkout/reset/remove: Git retains source dirt. Its shared
+    // extensions.worktreeConfig enablement is monotonic and is not rolled back
+    // over other sessions' common configuration writes.
+    // A detached app checkout can acquire an explicitly requested new branch.
+    // Keep that ref on later failure: it preserves the caller's commit and is
+    // admitted on retry, without a reset, forced deletion or history rewrite.
+    if (createBranch) {
+      const attached = runGit(['switch', '-c', branch], wtPath);
+      if (!attached.ok)
+        return refuse(`Cannot attach requested new branch; checkout retained: ${attached.reason}`);
+    }
+    const sparse = runGit(['sparse-checkout', 'set', '--no-cone', '/*', '!/.caws/specs/'], wtPath);
+    try {
+      observeExpected();
+    } catch (error) {
+      const restored = restoreRegistrySnapshot(cawsDir, registrySnapshot.value);
+      return err([
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_WRITE_FAILED,
+          `Cannot observe adoption compensation state: ${String(error)}`
+        ),
+        ...(restored.ok ? [] : restored.errors),
+      ]);
+    }
+    if (!sparse.ok)
+      return err([
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_WRITE_FAILED,
+          `Adoption sparse exclusion failed: ${sparse.reason}`
+        ),
+        ...compensate(),
+      ]);
+    if (
+      fs.existsSync(path.join(wtPath, '.caws/specs')) &&
+      fs.readdirSync(path.join(wtPath, '.caws/specs')).length
+    ) {
+      return err([
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_WRITE_FAILED,
+          'Adoption did not exclude local authority files.'
+        ),
+        ...compensate(),
+      ]);
+    }
+    const applied = applyRegistryPatch(cawsDir, binding.value);
+    const augmented = applied.ok
+      ? augmentRegistryEntry(cawsDir, input.name, {
+          branch,
+          baseBranch: input.baseBranch,
+          baseSha,
+          path: wtPath,
+        })
+      : applied;
+    if (!augmented.ok) return err([...augmented.errors, ...compensate()]);
+    // Creation here is the registry fact, at the already-existing physical path.
+    const events: EventBody[] = [
+      {
+        event: 'worktree_created',
+        ts: now,
+        actor: input.actor,
+        data: {
+          name: input.name,
+          branch,
+          base_branch: input.baseBranch,
+          path: wtPath,
+          owner_session_id: input.session.session_id,
+        },
+      } as unknown as EventBody,
+      {
+        event: 'worktree_bound',
+        ts: now,
+        actor: input.actor,
+        spec_id: input.specId,
+        data: { worktree_name: input.name },
+      } as unknown as EventBody,
+    ];
+    if (activation.value.event !== null) events.push(activation.value.event);
+    const transaction = runLifecycleTransaction({
+      cawsDir,
+      plannedWrites: [{ path: spec.value.path, contents: specBytes.value }],
+      events,
+    });
+    if (!transaction.ok) return err([...transaction.errors, ...compensate()]);
+    if (transaction.value.kind !== 'success') {
+      const failures = compensate();
+      if (transaction.value.kind === 'partial_failure_unrecovered' || failures.length)
+        return err([...transaction.value.cause, ...failures]);
+      return ok({ kind: 'partial_failure_recovered', cause: transaction.value.cause });
+    }
+    return ok({
+      kind: 'success',
+      name: input.name,
+      action: 'adopted',
+      data: {
+        path: wtPath,
+        branch,
+        base_branch: input.baseBranch,
+        spec_id: input.specId,
+        spec_activated: activation.value.activated,
+      },
+    });
+  });
+  if (!result.ok || result.value.kind !== 'success') return result;
+  return ok({
+    ...result.value,
+    data: {
+      ...result.value.data,
+      audit_commit: autoCommitTransition(cawsDir, input.specId, input.name, 'bound', preState),
     },
   });
 }

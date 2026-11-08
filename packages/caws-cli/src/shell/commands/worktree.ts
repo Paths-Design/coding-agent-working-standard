@@ -61,6 +61,7 @@ import {
   planMigration,
 } from '../../store/worktrees-migration';
 import {
+  adoptWorktree,
   bindWorktreeRepair,
   createWorktree,
   destroyWorktree,
@@ -375,6 +376,66 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
   surfaceContinuation(id, path.resolve(ctx.repoRoot, String(wtPath)), out);
   surfaceArtifactLinks(outcome.data?.artifact_links, out);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
+  return 0;
+}
+
+export interface WorktreeAdoptOptions extends BaseCommandOptions {
+  readonly name: string;
+  readonly path: string;
+  readonly specId: string;
+  readonly baseBranch: string;
+  readonly branch?: string;
+}
+
+export function runWorktreeAdoptCommand(opts: WorktreeAdoptOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'adopt');
+  if (ctx === null) return 2;
+  if (
+    !lifecycleContainmentAdmits({
+      command: 'worktree adopt',
+      repoRoot: ctx.repoRoot,
+      cawsDir: ctx.cawsDir,
+      cwd,
+      env,
+      now: nowFn,
+      out,
+      err,
+    })
+  )
+    return 1;
+  const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'adopt');
+  if (id === null) return 2;
+  const result = adoptWorktree(ctx.cawsDir, {
+    name: opts.name,
+    path: path.resolve(cwd, opts.path),
+    specId: opts.specId,
+    baseBranch: opts.baseBranch,
+    session: id.session,
+    actor: id.actor,
+    now: nowFn,
+    ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
+    sessionCandidates: resolveSessionCandidates({
+      cawsDir: ctx.cawsDir,
+      env,
+      caller: { identity: id.session, source: id.source },
+    }),
+  });
+  if (!result.ok) {
+    err('caws worktree adopt: failed; existing checkout retained.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+  if (result.value.kind !== 'success') {
+    err('caws worktree adopt: registration did not complete; existing checkout retained.');
+    if (result.value.kind === 'partial_failure_recovered')
+      err(renderDiagnostics(result.value.cause, { showData }));
+    return 1;
+  }
+  out(`adopted ${opts.name} at ${String(result.value.data?.path)} (spec: ${opts.specId})`);
+  surfaceBindActivation(result.value.data, opts.specId, out);
+  surfaceContinuation(id, String(result.value.data?.path), out);
+  surfaceAuditCommit(result.value.data?.audit_commit, err);
   return 0;
 }
 

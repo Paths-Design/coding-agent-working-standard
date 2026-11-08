@@ -1,8 +1,21 @@
+---
+doc_id: release-readiness
+authority: canonical
+status: active
+title: Release readiness acceptance
+owner: CAWS release maintainers
+updated: 2026-11-08
+audience: maintainer
+---
+
 # Release readiness acceptance
 
-This checklist governs the repairs in `CAWS-RELEASE-AUDIT-REPAIRS-003`. It is a
-testable release bar, not a record that the candidate passed. Criterion verdicts
-and artifact references belong in the canonical spec evidence.
+This contract defines functional completion for the integrated release and
+native cutover. The repair criteria below also govern
+`CAWS-RELEASE-AUDIT-REPAIRS-003`. Criterion verdicts and artifact references
+belong in canonical spec evidence; a requirement stated here does not assert a
+passing result. Release tagging and npm publication require separate explicit
+user authorization, including after qualification and machine cutover.
 
 | Criterion             | Required observation                                                                                                                                  | Counterexample that must fail                                                                              |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -31,17 +44,74 @@ and artifact references belong in the canonical spec evidence.
 | Guard copy-path false positives    | Whole-command `cp`/`mv` heuristics mistake a canonical source plus an owned-lane destination for worktree-to-main copying; routine artifact transfer is blocked | Investigate in an isolated fixture before native adoption; parse normalized destinations without weakening canonical-write refusal |
 | Historical housekeeping            | Orphan worktree receipts, stale leases, old messages                                                                                                            | Defer ownership-sensitive cleanup; it does not qualify package behavior                                                            |
 
-## Execution and remaining release decisions
+## Execution order
 
-The repair criteria above do not by themselves authorize a release. Functional
-release completion also requires these observations:
+1. Establish the actual host boundary early. Identify supported harness
+   versions, authentic caller and workdir fields, trust requirements and refusal
+   callbacks. An unavailable host capability is a named dependency with a
+   specific next observation; component tests cannot establish host delivery.
+2. Complete one real installed production workflow: normal trust and Start,
+   legitimate owned-lane authority, reads and writes through shell and supported
+   native file tools, a representative check, a commit through normal gates,
+   protected-write refusal, Stop and semantic session rendering. Retain the
+   selected package/runtime identities and actual host observations. This is the
+   first integration milestone; the complete release bar remains required.
+3. Tie each additional prerequisite to the exact failing consumer step it
+   repairs, then return to that step. Continue independent CI repairs where
+   ownership, interfaces and resources permit. A component pass cannot discharge
+   its parent workflow.
+4. Extend the demonstrated path to all seven supported harnesses, supported
+   extensions, resident concurrency and recovery. Freeze the integrated
+   candidate for final qualification. Reuse retained results only where their
+   source, dependency, test, build and runtime inputs remain applicable; rerun
+   affected checks after changes.
+5. Qualify isolated package installation and rollback before broad machine
+   adoption. Complete normal review, evidence recording, landing and push, then
+   perform the ordered CLI package, shared runtime and harness-registration
+   cutover. Verify actual selected execution after adoption. Keep tagging and
+   publication withheld until separately authorized.
 
-| Release criterion         | Required evidence                                                                                                                                                                                                                                                                                                       |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Exact installed candidate | One complete ten-case detached qualification run, exit 0, with unchanged timeouts, retained tarball hash, command receipts and runtime output. Separate partial runs cannot be combined into this verdict.                                                                                                              |
-| Required quality gates    | Current candidate CI, coverage and every declared per-file mutation floor pass; any inherited result must identify its inputs and match the current source bytes.                                                                                                                                                       |
-| Native harness delivery   | Trusted registration, SessionStart, an admitted owned-lane operation, refused protected write with unchanged target bytes, Stop and rendered session output on each supported harness. Capture actual native payloads, including session cwd versus tool workdir; source fixtures cannot establish this correspondence. |
-| Publication identity      | A fresh npm version and intended channel identify the exact qualified artifact. Reusing a published version or qualifying different bytes does not meet this bar.                                                                                                                                                       |
+The immediate workflow uses the intended native implementation and production
+governance. A fixture engine or compatibility-only route cannot discharge it.
+Required supported behavior and canonical authority are the oracle; reproducing
+legacy implementation quirks is not a completion requirement.
+
+## Full functional acceptance
+
+The repair criteria and first installed workflow do not by themselves complete
+the release. Every criterion below requires an observable result on the
+identified candidate. The
+[native runtime contract](architecture/caws-native-runtime.md#functional-acceptance-and-proof)
+defines the detailed lifecycle, containment, extension and performance
+obligations.
+
+| Release criterion                   | Required evidence and falsifier                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ordinary governed work              | The complete installed workflow above succeeds on each of all seven supported harnesses. Retain authentic host events, file changes, command statuses, governed commit and rendered operation records. A missing callback, blocked legitimate operation or absent rendered operation fails the scenario.                                                                                                                                                                                      |
+| Fresh authority                     | Canonical, nested and app-managed linked worktrees resolve correctly, including distinct session cwd/tool workdir, relative and absolute targets, symlinks and changes to claims/specs/policy. Owned operations succeed; foreign ownership, released claims and protected writes refuse with protected bytes unchanged. Cross-session context borrowing fails.                                                                                                                                |
+| Refusal and containment             | The actual host withholds a prohibited operation before the unchanged deadline. Independently inspect its execution marker, protected bytes, native stdout/stderr/exit and settled children. Test timeout, disconnect, malformed output and defined Stop/configuration failures. Disposable termination targets exit while an unrelated control survives; request-owned mutation cannot continue after completion.                                                                            |
+| Selected replacement and extensions | Process/module observations from an unpacked installation without Python identify the intended first-party native/typed implementation, with no stock interpreter or per-handler subprocess fallback. Execute supported extension ordering, overrides, arguments, cwd and environment. A hidden fallback or skipped required behavior fails.                                                                                                                                                  |
+| Resident lifecycle and load         | At least thirteen simultaneous sessions across four repositories, with mixed harnesses, retain isolated contexts, bounded shared capacity and fair admission. Observe per-session outcomes, cold/warm latency distributions, queue times, worker counts and memory under slow extensions, repeated session IDs across projects, crashes, overload and generation changes. Leakage, starvation, unsafe replay or exceeded declared bounds fails.                                               |
+| Reproducible installed candidate    | Repo-owned sources and declared inputs reconstruct the candidate without disposable private hosts. Each of the six macOS/Linux and Node 18/20/22 cells completes one entire ten-case detached qualification run with exit 0 and unchanged timeouts. Retain package/native identities, raw command streams, raw governance before/after bytes and modes, corruption/interruption/rollback observations and zero-finding detached consumer audits. Partial runs cannot be combined into a pass. |
+| Required quality gates              | Current CI, build, typecheck, lint, docs, tests, coverage, zero-finding workspace audit and all five full mutation campaigns pass every declared per-file floor, including the original sixteen execution and nine analysis targets plus every additional declared target. The policy inventory defines each complete campaign. Baseline-only mutation runs, skipped campaigns, exclusions, lowered floors and stale reports fail acceptance.                                                 |
+| Integration and adoption            | Ground independent read-only committed-candidate feedback, land and push normally, record criteria through `caws specs evidence` and read back both spec and event. Qualify ordered CLI/runtime/harness cutover and rollback, then repeat actual owned-write/refusal/Stop/render observations with selected-execution readback. Source landing, installed configuration or a component pass alone cannot establish machine adoption.                                                          |
+| Publication identity                | Separate user authorization permits tagging/publishing only after required qualification. A fresh npm version and intended channel must identify the exact qualified artifact. Reusing a published version or qualifying different bytes fails the publication bar.                                                                                                                                                                                                                           |
+
+## Evidence custody and decisions
+
+Retain source revision, package hash, platform-specific native image, selected
+runtime, exact command/cwd, exit status, raw output and relevant state before
+and after for each observation. Preserve failed, skipped and interrupted
+attempts. Generated receipts and required build inputs must survive worktree
+teardown; scratch-only artifacts cannot support a durable acceptance claim.
+Package hash equality does not imply installed runtime-manifest equality:
+installation homes and generated dependency content can differ. Join each
+installation to its own selected generation and inputs.
+
+The [release procedure](release-procedure.md) defines the executable checks and
+publication mechanics. Keep operational guidance aligned with source changes and
+recorded observations. Runtime acceptance remains in the existing canonical
+spec/evidence records; documentation is not a second progress ledger.
 
 A handler's eventual exit 2 after its adapter timed out is not a delivered
 refusal. Preserve timeout status and interrupted execution journals, terminate

@@ -221,6 +221,7 @@ export type {
 } from './commands/specs';
 
 export {
+  runWorktreeAdoptCommand,
   runWorktreeCreateCommand,
   runWorktreeListCommand,
   runWorktreeBindCommand,

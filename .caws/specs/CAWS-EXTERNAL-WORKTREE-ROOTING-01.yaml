@@ -1,0 +1,74 @@
+id: CAWS-EXTERNAL-WORKTREE-ROOTING-01
+title: 'Adopt existing linked worktrees and preserve guard repository identity'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Source landed on main; A1/A2 committed preservation/refusal matrix re-executed by evidence writer (14 cases per citation). A3 native behavior was manually inspected from retained handler rows, actual native Bash/Edit probes and exact baseline-compatible runtime evidence; only code commit existence is mechanically re-derived for A3. Active runtime0c338b preserves working native contract; default broad upgrade remains unqualified. Both RC HEADs and 16 dirty paths preserved; original owners retain adoption/gameplay. Temporary CAWS test lane was merged and removed; app archival refused primary-checkout removal, so no extra app deletion was attempted.'
+created_at: '2026-11-08T03:36:35.651Z'
+updated_at: '2026-11-08T05:29:37.091Z'
+created_by_session: '01a1b932-77c5-7503-8f5d-a419fa70b710'
+blast_radius:
+  modules:
+    - 'External linked-worktree adoption and actual write-guard repository containment'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/index.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh'
+    - 'packages/caws-cli/tests/store/worktree-adoption.test.js'
+    - 'packages/caws-cli/tests/shell/worktree-adoption.test.js'
+    - 'packages/caws-cli/tests/hooks/linked-worktree-rooting.test.js'
+    - 'packages/caws-cli/docs/cli-reference.md'
+    - 'docs/guides/worktree-isolation.md'
+    - 'packages/caws-cli/docs/agents/full-guide.md'
+    - 'docs/agents/full-guide.md'
+    - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
+    - docs/command-reference.md
+  out: []
+  support:
+    - tmp/external-worktree-rooting
+invariants:
+  - 'Git common-directory identity establishes repository membership only; active spec scope and owner admission remain required.'
+  - 'Adoption preserves existing commits and source edits and never removes an existing checkout on failure.'
+acceptance:
+  - id: A1
+    given: 'an existing linked checkout of this repository'
+    when: 'its owning session adopts it through the CLI'
+    then: 'canonical registry and spec binding agree and existing committed, staged, unstaged and untracked source bytes are preserved.'
+  - id: A2
+    given: 'foreign repositories, conflicting owners and invalid checkout identities'
+    when: 'adoption or writes are attempted'
+    then: 'they are refused without granting authority or deleting source.'
+  - id: A3
+    given: 'the installed native write guard and the preserved RC linked checkouts'
+    when: 'repository containment and scoped write admission are exercised'
+    then: 'same-repository writes reach the ownership oracle while foreign repositories and unauthorized paths remain refused.'
+observability:
+  - 'Retain candidate identity, focused test logs, installed runtime identity and guard decisions outside tracked source.'
+rollback:
+  - 'Restore the prior installed CLI and shared runtime through supported installation and rollback commands; preserve all pre-existing checkouts.'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Inspected committed source preservation matrix and real app-checkout adoption. Native Git fixtures preserve HEAD, staged/unstaged diffs and binary untracked bytes. Actual adopted checkout claim was OWNED; native probes were restored. Runtime and raw external evidence are retained at /Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/. Generated evidence is intentionally ignored; test execution is the mechanically checked citation."
+    recorded_at: "2026-11-08T05:26:47.861Z"
+    test_nodeid: packages/caws-cli/tests/store/worktree-adoption.test.js
+    test_verified_at: c97dcb17a61f2e6cd8149d66e13027ffa63cefa1
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "The committed matrix executes positive preservation, foreign repository/bridge, invalid identity, hidden authority, overlap, partial-publication and concurrent staging controls. Inspected staged native replay additionally refuses foreign owner, missing registration, unrelated repository and nested missing registration for the expected reasons. Raw replay remains in tmp/external-worktree-rooting/native-replay.jsonl and the persistent external evidence directory; it is manually inspected runtime evidence, not a tracked artifact citation."
+    recorded_at: "2026-11-08T05:27:23.911Z"
+    test_nodeid: packages/caws-cli/tests/store/worktree-adoption.test.js
+    test_verified_at: "6de36f7b3a5522fb7591563807100ed9f52beacf"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Manually verified active runtime 0c338b108be9ae3ba94d90f5938409259e6cbbe6b9e6b883da6a7be5f4d9fccf against exact isolated reconstruction of baseline 01f189 (113 keys, only three repaired files). Native Bash and Edit callbacks executed in the actually adopted external checkout after reprieve revocation; source bytes restored to SHA256 148f1d635cbe290d44d76d68428fe16e117e223bae739322e60618b45019e94e. Both RC HEADs and all 16 dirty paths were read back unchanged. The native-proof.json receipt and handler rows are retained in tmp/external-worktree-rooting and the persistent external evidence directory. Commit existence below is a code citation only; actual native behavior comes from those inspected observations. Default full runtime upgrade remains unqualified; RC owners retain adoption/gameplay work."
+    recorded_at: "2026-11-08T05:27:55.339Z"
+    commit_sha: "3dfa5022109e2274c139c332bc76f989d58c7711"
