@@ -2,6 +2,7 @@ id: CAWS-EXTERNAL-WORKTREE-ROOTING-01
 title: 'Adopt existing linked worktrees and preserve guard repository identity'
 mode: fix
 lifecycle_state: active
+worktree: caws-external-rooting
 created_at: '2026-11-08T03:36:35.651Z'
 updated_at: '2026-11-08T04:17:11.016Z'
 created_by_session: '01a1b932-77c5-7503-8f5d-a419fa70b710'
