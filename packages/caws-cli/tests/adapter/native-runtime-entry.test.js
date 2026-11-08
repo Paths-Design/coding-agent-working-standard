@@ -2,10 +2,15 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 const dist = process.env.CAWS_TEST_DIST || path.join(__dirname, '../../dist');
-const { prepareNativeRuntimeEntry, prepareNativeRuntimeEntryFromBuild, readNativeImage } = require(
-  path.join(dist, 'init/native-runtime-entry')
-);
+const {
+  prepareNativeRuntimeEntry,
+  prepareNativeRuntimeEntryFromBuild,
+  readNativeImage,
+  sealPortableNativeImage,
+  readPortableNativeImage,
+} = require(path.join(dist, 'init/native-runtime-entry'));
 const nativeBuildTooling = require(path.join(dist, 'tooling/native-sqlite-build'));
 const { installMachineRuntime, rollbackMachineRuntime } = require(
   path.join(dist, 'init/machine-adapters')
@@ -845,6 +850,237 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       JSON.stringify(value)
     );
   }
+  function portableFixture(oldPack = false) {
+    const tar = reviewedFile('portable-cli.tgz', 'reviewed tar bytes');
+    const integrity =
+      'sha512-' + createHash('sha512').update(fs.readFileSync(tar.path)).digest('base64');
+    const lockData = JSON.parse(fs.readFileSync(path.join(input.prefixRoot, 'package-lock.json')));
+    lockData.packages[cli].resolved = 'file:../portable-cli.tgz';
+    lockData.packages[cli].integrity = integrity;
+    json('package-lock.json', lockData);
+    const identity = JSON.parse(JSON.stringify(loaded.build.observedIdentity));
+    identity.installedInvocation.stableEntryEventBudget = 'env-original-start-ms-v1';
+    replaceDiagnostic(identity);
+    loaded.build.prefixManifest = { sha256: identity.compiledPrefixSha256 };
+    const request = { source: { id: 'fixture' } };
+    const requestFile = reviewedFile('portable-request.json', JSON.stringify(request));
+    descriptor.requestFile = requestFile;
+    loaded.requestFile = requestFile;
+    loaded.build.requestDigest = sha(Buffer.from(JSON.stringify(request)));
+    loaded.build.sourceTreeDigest = sha(Buffer.from(JSON.stringify(request.source)));
+    const completion = reviewedFile('portable-completion.json', JSON.stringify(loaded.build));
+    loaded.completionReceipt = completion;
+    descriptor.completionReceipt = completion;
+    const commit = 'd'.repeat(40);
+    const record = (label) => {
+      const stdout = Buffer.from(
+        label === 'cli-audit'
+          ? JSON.stringify({ metadata: { vulnerabilities: { total: 0 } } })
+          : label === 'cli-pack'
+            ? JSON.stringify([
+                {
+                  name: '@paths.design/caws-cli',
+                  filename: path.basename(tar.path),
+                  size: tar.sizeBytes,
+                  integrity,
+                },
+              ])
+            : 'installed'
+      );
+      const stderr = Buffer.alloc(0);
+      return {
+        receipt: {
+          label,
+          argv: ['node', 'npm', tar.path],
+          exitCode: 0,
+          signal: null,
+          stopReason: null,
+          directChildReaped: true,
+          error: null,
+          persistenceError: null,
+          stdoutBase64: stdout.toString('base64'),
+          stdoutBytes: stdout.length,
+          stdoutRetainedBytes: stdout.length,
+          stdoutSha256: sha(stdout),
+          stderrBase64: stderr.toString('base64'),
+          stderrBytes: stderr.length,
+          stderrRetainedBytes: stderr.length,
+          stderrSha256: sha(stderr),
+        },
+      };
+    };
+    const build = reviewedFile('cli-build.json', JSON.stringify(record('cli-build')));
+    const pack = oldPack
+      ? reviewedFile('cli-pack.json', JSON.stringify(record('cli-pack')))
+      : undefined;
+    const records = {
+      selection: reviewedFile(
+        'selection.json',
+        JSON.stringify({
+          schema: oldPack ? 'caws.native-hook-cli-pack.v1' : 'caws.native-hook-cli-selection.v2',
+          status: 'completed',
+          source: { sourceCommit: commit },
+          tarball: tar,
+          build,
+          ...(pack ? { pack } : {}),
+        })
+      ),
+      build,
+      ...(pack ? { pack } : {}),
+      install: reviewedFile('install.json', JSON.stringify(record('cli-install'))),
+      audit: reviewedFile('audit.json', JSON.stringify(record('cli-audit'))),
+    };
+    const bytes = sealPortableNativeImage(descriptor, commit, tar, records);
+    const selection = {
+      expectedSha256: sha(bytes),
+      expectedCliTarball: { sha256: tar.sha256, sizeBytes: tar.sizeBytes },
+    };
+    return { bytes, selection, tar };
+  }
+  test('retains and verifies the original historical pack receipt', () => {
+    const { bytes, selection } = portableFixture(true);
+    expect(readPortableNativeImage(bytes, selection).stableEntry).toEqual(stableBytes);
+    const carrier = JSON.parse(bytes);
+    carrier.members = carrier.members.filter((entry) => entry.path !== 'evidence/cli-pack.json');
+    const changed = Buffer.from(JSON.stringify(carrier) + '\n');
+    expect(() =>
+      readPortableNativeImage(changed, { ...selection, expectedSha256: sha(changed) })
+    ).toThrow(/pack provenance/);
+  });
+  test('portable carrier revalidates exact members and independent selections', () => {
+    const { bytes, selection } = portableFixture();
+    const image = readPortableNativeImage(bytes, selection);
+    expect(image.files.get('native/caws-native')).toEqual(nativeBytes);
+    expect(image.stableEntry).toEqual(stableBytes);
+    expect(image.metadata.schema).toBe('caws.runtime.native-entry.v2');
+    expect(() =>
+      readPortableNativeImage(bytes, { ...selection, expectedSha256: '0'.repeat(64) })
+    ).toThrow(/selection mismatch/);
+    expect(() =>
+      readPortableNativeImage(bytes, {
+        ...selection,
+        expectedCliTarball: {
+          ...selection.expectedCliTarball,
+          sizeBytes: selection.expectedCliTarball.sizeBytes + 1,
+        },
+      })
+    ).toThrow(/tar or inventory/);
+    const carrier = JSON.parse(bytes);
+    carrier.members.find((member) => member.path === 'native/caws-native').base64 =
+      Buffer.from('wrong').toString('base64');
+    const changed = Buffer.from(JSON.stringify(carrier) + '\n');
+    expect(() =>
+      readPortableNativeImage(changed, { ...selection, expectedSha256: sha(changed) })
+    ).toThrow(/member bytes/);
+  });
+  test.each([
+    'platform',
+    'duplicate',
+    'case collision',
+    'invalid base64',
+    'missing evidence',
+    'failed audit',
+    'metadata mode',
+  ])('portable admission refuses %s despite a matching outer pin', (kind) => {
+    const { bytes, selection } = portableFixture();
+    const carrier = JSON.parse(bytes);
+    const member = (name) => carrier.members.find((entry) => entry.path === name);
+    const replace = (name, value) => {
+      const entry = member(name),
+        data = Buffer.from(JSON.stringify(value));
+      entry.base64 = data.toString('base64');
+      entry.sizeBytes = data.length;
+      entry.sha256 = sha(data);
+    };
+    if (kind === 'platform') carrier.platform.arch = 'x64';
+    if (kind === 'duplicate') carrier.members.push({ ...carrier.members[0] });
+    if (kind === 'case collision') {
+      carrier.members.push({ ...member('native/caws-native'), path: 'NATIVE/caws-native' });
+      carrier.members.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    }
+    if (kind === 'invalid base64') member('native/caws-native').base64 += '!';
+    if (kind === 'missing evidence')
+      carrier.members = carrier.members.filter((entry) => entry.path !== 'evidence/request.json');
+    if (kind === 'failed audit') {
+      const audit = JSON.parse(Buffer.from(member('evidence/audit.json').base64, 'base64'));
+      audit.receipt.exitCode = 1;
+      replace('evidence/audit.json', audit);
+    }
+    if (kind === 'metadata mode') member('native-entry.json').mode = 0o755;
+    const changed = Buffer.from(JSON.stringify(carrier) + '\n');
+    expect(() =>
+      readPortableNativeImage(changed, { ...selection, expectedSha256: sha(changed) })
+    ).toThrow();
+  });
+  test('portable refusal preserves installed pointer and entry bytes', () => {
+    const { bytes, selection } = portableFixture();
+    const file = path.join(root, 'portable-image.json');
+    fs.writeFileSync(file, bytes);
+    const home = existingHome();
+    const before = fixtureState(home);
+    expect(() =>
+      installMachineRuntime({
+        home,
+        nativeImage: file,
+        nativeImageSha256: '0'.repeat(64),
+        nativeImageCliTarballSha256: selection.expectedCliTarball.sha256,
+        nativeImageCliTarballSizeBytes: selection.expectedCliTarball.sizeBytes,
+        templatesRoot: path.join(__dirname, '../../templates/hook-packs'),
+      })
+    ).toThrow(/selection mismatch/);
+    expect(fixtureState(home)).toEqual(before);
+    expect(() => readNativeImage(file)).toThrow(/requires independent/);
+  });
+  test('portable carrier installs the exact selected native bytes into a private home', () => {
+    const { bytes, selection } = portableFixture();
+    const file = path.join(root, 'portable-success.json');
+    fs.writeFileSync(file, bytes);
+    const home = path.join(root, 'portable-home');
+    const result = installMachineRuntime({
+      home,
+      nativeImage: file,
+      nativeImageSha256: selection.expectedSha256,
+      nativeImageCliTarballSha256: selection.expectedCliTarball.sha256,
+      nativeImageCliTarballSizeBytes: selection.expectedCliTarball.sizeBytes,
+      templatesRoot: path.join(__dirname, '../../templates/hook-packs'),
+    });
+    expect(result.digest).toMatch(/^[a-f0-9]{64}$/);
+    const verified = verifyRuntime(home, result.digest);
+    expect(verified['native/caws-native']).toBe(sha(nativeBytes));
+    expect(readRetainedNativeEntryIdentity(home, result.digest).bytes).toEqual(stableBytes);
+  });
+  test('CLI routes all portable pins to private installation and refuses partial pins', () => {
+    const { bytes, selection } = portableFixture();
+    const file = path.join(root, 'portable-cli-image.json');
+    const home = path.join(root, 'portable-cli-home');
+    fs.writeFileSync(file, bytes);
+    const run = (args) =>
+      spawnSync(
+        process.execPath,
+        [path.join(dist, 'index.js'), 'init', 'adapters', 'install', ...args],
+        { cwd: root, env: { ...process.env, CAWS_HOME: home }, encoding: 'utf8' }
+      );
+    const args = [
+      '--native-image',
+      file,
+      '--native-image-sha256',
+      selection.expectedSha256,
+      '--native-image-cli-tarball-sha256',
+      selection.expectedCliTarball.sha256,
+      '--native-image-cli-tarball-size-bytes',
+      String(selection.expectedCliTarball.sizeBytes),
+    ];
+    const installed = run(args);
+    expect({ status: installed.status, stderr: installed.stderr }).toEqual({
+      status: 0,
+      stderr: '',
+    });
+    const before = fixtureState(home);
+    const refused = run(args.slice(0, 4));
+    expect(refused.status).toBe(1);
+    expect(refused.stderr).toMatch(/requires all three independent pins/);
+    expect(fixtureState(home)).toEqual(before);
+  });
   test('old diagnostic receipt cannot be stamped as an installed-capable image', () => {
     const old = { ...loaded.build.observedIdentity, schema: 'caws.sqlite_build_identity.v1' };
     delete old.installedInvocation;

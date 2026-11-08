@@ -501,6 +501,9 @@ export function registerShellCommands(
     projectsRoot?: string;
     nativeConfigTarget?: string;
     nativeImage?: string;
+    nativeImageSha256?: string;
+    nativeImageCliTarballSha256?: string;
+    nativeImageCliTarballSizeBytes?: string;
     entry?: 'native' | 'legacy';
   };
   const invokeInit = (
@@ -559,6 +562,14 @@ export function registerShellCommands(
       (runOpts as { nativeConfigTarget?: string }).nativeConfigTarget = opts.nativeConfigTarget;
     if (opts.nativeImage !== undefined)
       (runOpts as { nativeImage?: string }).nativeImage = opts.nativeImage;
+    if (opts.nativeImageSha256 !== undefined)
+      (runOpts as { nativeImageSha256?: string }).nativeImageSha256 = opts.nativeImageSha256;
+    if (opts.nativeImageCliTarballSha256 !== undefined)
+      (runOpts as { nativeImageCliTarballSha256?: string }).nativeImageCliTarballSha256 =
+        opts.nativeImageCliTarballSha256;
+    if (opts.nativeImageCliTarballSizeBytes !== undefined)
+      (runOpts as { nativeImageCliTarballSizeBytes?: string }).nativeImageCliTarballSizeBytes =
+        opts.nativeImageCliTarballSizeBytes;
     if (opts.entry !== undefined) (runOpts as { entry?: 'native' | 'legacy' }).entry = opts.entry;
     if (opts.from !== undefined) {
       (runOpts as { fromFile?: string }).fromFile = opts.from;
@@ -590,7 +601,7 @@ export function registerShellCommands(
       const parsed = invoked.optsWithGlobals() as InitOptions;
       const allowed = new Set(
         actionMeta.options.map((option) => {
-          const name = /--([a-z-]+)/.exec(option.flag)?.[1] ?? '';
+          const name = /--([a-z0-9-]+)/.exec(option.flag)?.[1] ?? '';
           return name.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
         })
       );

@@ -1055,7 +1055,19 @@ const INIT_INSTALL: LeafCommandMeta = {
     {
       flag: '--native-image <file>',
       description:
-        'Install an explicit local pinned native image and complete production prefix. Accepts reviewed native-image-input.v1 descriptors or receipt-selected native-image-input.v2 descriptors. Keeps existing harness registration; configure --entry native opts in separately.',
+        'Install an explicit local native image and production prefix. Portable v3 carriers require the independent carrier and CLI tarball pins. Keeps existing harness registration; configure --entry native opts in separately.',
+    },
+    {
+      flag: '--native-image-sha256 <sha256>',
+      description: 'Independent portable carrier SHA-256.',
+    },
+    {
+      flag: '--native-image-cli-tarball-sha256 <sha256>',
+      description: 'Independent selected CLI tarball SHA-256.',
+    },
+    {
+      flag: '--native-image-cli-tarball-size-bytes <bytes>',
+      description: 'Independent selected CLI tarball size.',
     },
   ],
 };

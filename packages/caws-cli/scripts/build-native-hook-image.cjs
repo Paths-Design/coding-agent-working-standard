@@ -1035,6 +1035,7 @@ async function image() {
   } = require('../dist/tooling/native-sqlite-build');
   const {
     prepareNativeRuntimeEntryFromBuild,
+    sealPortableNativeImage,
     nativeRelative,
   } = require('../dist/init/native-runtime-entry');
   const pkg = path.resolve(__dirname, '..');
@@ -1247,11 +1248,37 @@ async function image() {
     'Source changed during image preparation'
   );
   save('native-image.v2.json', input);
+  let portable;
+  if (driver.schema === 'caws.native-hook-driver-request.v2') {
+    const carrier = sealPortableNativeImage(input, driver.sourceCommit, cliPack.tarball, {
+      selection: custody.fileIdentity(path.join(base, 'cli-pack.result.json')),
+      build: custody.fileIdentity(path.join(base, 'cli-build.json')),
+      install: custody.fileIdentity(path.join(base, 'cli-install.json')),
+      audit: custody.fileIdentity(path.join(base, 'cli-audit.json')),
+    });
+    const file = path.join(base, 'native-image.v3.json');
+    const pending = path.join(base, 'native-image.v3.pending.json');
+    const fd = fs.openSync(pending, 'wx', 0o600);
+    try {
+      fs.writeFileSync(fd, carrier);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    const pendingIdentity = custody.fileIdentity(pending);
+    assert.equal(pendingIdentity.sha256, digest(carrier));
+    assert.equal(pendingIdentity.sizeBytes, carrier.length);
+    controller.signal.throwIfAborted();
+    fs.linkSync(pending, file);
+    fs.unlinkSync(pending);
+    portable = custody.fileIdentity(file);
+  }
   console.log(
     JSON.stringify({
       phase: 'image',
       status: 'prepared',
       descriptor: custody.fileIdentity(path.join(base, 'native-image.v2.json')),
+      ...(portable ? { portable } : {}),
       requestFile: loaded.requestFile,
       completionReceipt: loaded.completionReceipt,
       metadata: prepared.metadata,

@@ -6,6 +6,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { sha } from './machine-runtime-state';
 import { isDeepStrictEqual } from 'node:util';
+import { createHash } from 'node:crypto';
+import { installedEntryAdvertisesEventBudget } from './native-hook-identification';
 import {
   loadNativeSqliteBuildWithStableEntry,
   validateNativeSqliteBuildIdentity,
@@ -74,6 +76,10 @@ export interface PreparedNativeEntry {
   readonly executablePaths: ReadonlySet<string>;
   readonly stableEntry: Buffer;
   readonly metadata: NativeEntryMetadata;
+}
+export interface PortableImageSelection {
+  readonly expectedSha256: string;
+  readonly expectedCliTarball: { readonly sha256: string; readonly sizeBytes: number };
 }
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -977,8 +983,460 @@ export function prepareNativeRuntimeEntryFromBuild(
   );
 }
 
-export function readNativeImage(file: string): PreparedNativeEntry {
+const PORTABLE_SCHEMA = 'caws.runtime.native-image-carrier.v3';
+const PORTABLE_LIMIT = 768 * 1024 * 1024;
+const PORTABLE_TOTAL = 512 * 1024 * 1024;
+const PORTABLE_EVIDENCE = [
+  'evidence/request.json',
+  'evidence/completion.json',
+  'evidence/identity.json',
+  'evidence/selection.json',
+  'evidence/cli-build.json',
+  'evidence/install.json',
+  'evidence/audit.json',
+] as const;
+function portableCanonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(portableCanonical).join(',')}]`;
+  if (object(value))
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${portableCanonical(value[key])}`)
+      .join(',')}}`;
+  const encoded = JSON.stringify(value);
+  if (encoded === undefined) throw new Error('Unsupported portable JSON value');
+  return encoded;
+}
+
+function capturedPin(pin: ReviewedFile): Buffer {
+  reviewedFile(pin, 'portable producer input');
+  const bytes = capture(pin.path, pin).bytes;
+  if (sha(bytes) !== pin.sha256) throw new Error('Portable producer input changed');
+  return bytes;
+}
+
+/** Seal only an image that passed the complete receipt-selected producer admission. */
+export function sealPortableNativeImage(
+  input: NativeBuildImageInput,
+  sourceCommit: string,
+  cliTarball: ReviewedFile,
+  records: {
+    selection: ReviewedFile;
+    build: ReviewedFile;
+    install: ReviewedFile;
+    audit: ReviewedFile;
+    pack?: ReviewedFile;
+  }
+): Buffer {
+  if (!/^[a-f0-9]{40}$/.test(sourceCommit)) throw new Error('Invalid portable source commit');
+  if (process.platform !== 'darwin' || process.arch !== 'arm64')
+    throw new Error('Unsupported portable producer platform');
+  if (input.cliIdentityDomain) throw new Error('Portable CLI domain admission is unavailable');
+  const prepared = prepareNativeRuntimeEntryFromBuild(input);
+  const loaded = loadNativeSqliteBuildWithStableEntry(input.requestFile.path);
+  const tar = capturedPin(cliTarball);
+  const integrity = 'sha512-' + createHash('sha512').update(tar).digest('base64');
+  const lock = JSON.parse(prepared.files.get('native-prefix/package-lock.json')!.toString('utf8'));
+  const selected = lock.packages?.['node_modules/@paths.design/caws-cli'];
+  if (
+    !selected ||
+    selected.integrity !== integrity ||
+    typeof selected.resolved !== 'string' ||
+    !selected.resolved.startsWith('file:') ||
+    fs.realpathSync(path.resolve(input.prefixRoot, selected.resolved.slice(5))) !== cliTarball.path
+  )
+    throw new Error('Portable CLI lock does not bind selected tar');
+  const evidence = new Map<string, Buffer>([
+    ['evidence/request.json', capturedPin(input.requestFile)],
+    ['evidence/completion.json', capturedPin(input.completionReceipt)],
+    ['evidence/identity.json', capturedPin(loaded.build.artifacts.runtimeIdentity)],
+    ['evidence/selection.json', capturedPin(records.selection)],
+    ['evidence/cli-build.json', capturedPin(records.build)],
+    ['evidence/install.json', capturedPin(records.install)],
+    ['evidence/audit.json', capturedPin(records.audit)],
+  ]);
+  if (records.pack) evidence.set('evidence/cli-pack.json', capturedPin(records.pack));
+  const all = new Map([...prepared.files, ...evidence]);
+  if (all.size !== prepared.files.size + evidence.size) throw new Error('Portable path collision');
+  let total = 0;
+  if (all.size > 50008) throw new Error('Portable producer member count exceeded');
+  for (const bytes of all.values()) {
+    if (bytes.length > 256 * 1024 * 1024) throw new Error('Portable producer member too large');
+    total += bytes.length;
+    if (total > PORTABLE_TOTAL) throw new Error('Portable producer byte budget exceeded');
+  }
+  const members = [...all]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([name, bytes]) => ({
+      path: name,
+      mode: prepared.executablePaths.has(name) ? 0o755 : 0o644,
+      sizeBytes: bytes.length,
+      sha256: sha(bytes),
+      base64: bytes.toString('base64'),
+    }));
+  const carrier = Buffer.from(
+    JSON.stringify({
+      schema: PORTABLE_SCHEMA,
+      platform: { os: 'darwin', arch: 'arm64', target: 'aarch64-apple-darwin' },
+      sourceCommit,
+      cliTarball: { sizeBytes: cliTarball.sizeBytes, sha256: cliTarball.sha256, integrity },
+      packages: input.packages,
+      omissions: input.omissions,
+      members,
+    }) + '\n'
+  );
+  if (carrier.length > PORTABLE_LIMIT) throw new Error('Portable carrier byte budget exceeded');
+  const readback = readPortableNativeImage(carrier, {
+    expectedSha256: sha(carrier),
+    expectedCliTarball: { sizeBytes: cliTarball.sizeBytes, sha256: cliTarball.sha256 },
+  });
+  if (
+    !isDeepStrictEqual(readback.metadata, prepared.metadata) ||
+    !isDeepStrictEqual(
+      [...readback.executablePaths].sort(),
+      [...prepared.executablePaths].sort()
+    ) ||
+    readback.files.size !== prepared.files.size ||
+    [...prepared.files].some(([name, bytes]) => !readback.files.get(name)?.equals(bytes))
+  )
+    throw new Error('Portable producer readback differs');
+  return carrier;
+}
+
+/** Validate externally pinned carrier bytes without resolving producer paths or executing them. */
+export function readPortableNativeImage(
+  bytes: Buffer,
+  selection: PortableImageSelection
+): PreparedNativeEntry {
+  if (
+    !Buffer.isBuffer(bytes) ||
+    bytes.length < 1 ||
+    bytes.length > PORTABLE_LIMIT ||
+    !digest(selection?.expectedSha256) ||
+    sha(bytes) !== selection.expectedSha256 ||
+    !digest(selection.expectedCliTarball?.sha256) ||
+    !Number.isSafeInteger(selection.expectedCliTarball?.sizeBytes) ||
+    selection.expectedCliTarball.sizeBytes < 1
+  )
+    throw new Error('Portable image selection mismatch');
+  const value: unknown = JSON.parse(bytes.toString('utf8'));
+  if (!Buffer.from(JSON.stringify(value) + '\n').equals(bytes))
+    throw new Error('Portable image is not canonical JSON');
+  keys(
+    value,
+    ['schema', 'platform', 'sourceCommit', 'cliTarball', 'packages', 'omissions', 'members'],
+    'portable image'
+  );
+  keys(value.platform, ['os', 'arch', 'target'], 'portable platform');
+  if (
+    value.schema !== PORTABLE_SCHEMA ||
+    value.platform.os !== 'darwin' ||
+    value.platform.arch !== 'arm64' ||
+    value.platform.target !== 'aarch64-apple-darwin' ||
+    process.platform !== 'darwin' ||
+    process.arch !== 'arm64' ||
+    typeof value.sourceCommit !== 'string' ||
+    !/^[a-f0-9]{40}$/.test(value.sourceCommit)
+  )
+    throw new Error('Unsupported portable platform or source');
+  keys(value.cliTarball, ['sizeBytes', 'sha256', 'integrity'], 'portable CLI tarball');
+  if (
+    value.cliTarball.sha256 !== selection.expectedCliTarball.sha256 ||
+    value.cliTarball.sizeBytes !== selection.expectedCliTarball.sizeBytes ||
+    typeof value.cliTarball.integrity !== 'string' ||
+    !/^sha512-[A-Za-z0-9+/]{86}==$/.test(value.cliTarball.integrity) ||
+    !object(value.packages) ||
+    !object(value.omissions) ||
+    !Array.isArray(value.members) ||
+    value.members.length > 50008
+  )
+    throw new Error('Portable tar or inventory mismatch');
+  const all = new Map<string, Buffer>();
+  const modes = new Map<string, number>();
+  const folded = new Set<string>();
+  const paths = new Map<string, string>();
+  let previous = '',
+    total = 0;
+  for (const item of value.members) {
+    keys(item, ['path', 'mode', 'sizeBytes', 'sha256', 'base64'], 'portable member');
+    if (typeof item.path !== 'string') throw new Error('Invalid portable path');
+    const name = nativeRelative(item.path);
+    if (
+      /[^\x20-\x7e]/.test(name) ||
+      name <= previous ||
+      folded.has(name.toLowerCase()) ||
+      ![0o644, 0o755].includes(item.mode as number) ||
+      !Number.isSafeInteger(item.sizeBytes) ||
+      (item.sizeBytes as number) < 0 ||
+      (item.sizeBytes as number) > 256 * 1024 * 1024 ||
+      !digest(item.sha256) ||
+      typeof item.base64 !== 'string'
+    )
+      throw new Error('Invalid portable member identity');
+    const decoded = Buffer.from(item.base64, 'base64');
+    total += decoded.length;
+    if (
+      total > PORTABLE_TOTAL ||
+      decoded.toString('base64') !== item.base64 ||
+      decoded.length !== item.sizeBytes ||
+      sha(decoded) !== item.sha256
+    )
+      throw new Error('Portable member bytes differ');
+    previous = name;
+    folded.add(name.toLowerCase());
+    const parts = name.split('/');
+    for (let i = 1; i <= parts.length; i++) {
+      const prefix = parts.slice(0, i).join('/');
+      const prior = paths.get(prefix.toLowerCase());
+      if (prior !== undefined && prior !== prefix) throw new Error('Portable case collision');
+      paths.set(prefix.toLowerCase(), prefix);
+    }
+    all.set(name, decoded);
+    modes.set(name, item.mode as number);
+  }
+  for (const name of all.keys()) {
+    const parts = name.toLowerCase().split('/');
+    for (let i = 1; i < parts.length; i++)
+      if (folded.has(parts.slice(0, i).join('/')))
+        throw new Error('Portable file/directory collision');
+  }
+  for (const name of PORTABLE_EVIDENCE)
+    if (!all.has(name) || modes.get(name) !== 0o644 || !all.get(name)!.length)
+      throw new Error('Portable provenance missing');
+  const files = new Map([...all].filter(([name]) => !name.startsWith('evidence/')));
+  const executablePaths = new Set([...files.keys()].filter((name) => modes.get(name) === 0o755));
+  const permitted = (name: string): boolean =>
+    name.startsWith('native-prefix/') ||
+    name.startsWith('native/licenses/native/') ||
+    name.startsWith('native/licenses/node/') ||
+    [
+      'native/caws-native',
+      'native/node',
+      'native/caws-hook-native',
+      'native-entry.json',
+      'native-build-provenance.json',
+      'native-modes.json',
+      'native-stop-profile.json',
+    ].includes(name);
+  if (
+    [...all.keys()].some((name) =>
+      name.startsWith('evidence/')
+        ? !PORTABLE_EVIDENCE.includes(name as (typeof PORTABLE_EVIDENCE)[number]) &&
+          name !== 'evidence/cli-pack.json'
+        : !permitted(name)
+    )
+  )
+    throw new Error('Unexpected portable member');
+  const prefix = new Map(
+    [...files]
+      .filter(([name]) => name.startsWith('native-prefix/'))
+      .map(([name, data]) => [name.slice('native-prefix/'.length), data])
+  );
+  const cli = validateNativePrefix(
+    {
+      packages: value.packages as unknown as NativeImageInput['packages'],
+      omissions: value.omissions as NativeImageInput['omissions'],
+    },
+    prefix
+  );
+  const lock = JSON.parse(prefix.get('package-lock.json')!.toString('utf8'));
+  if (lock.packages?.[cli]?.integrity !== value.cliTarball.integrity)
+    throw new Error('Portable CLI lock integrity mismatch');
+  for (const kind of ['native', 'node'])
+    if (
+      ![...files].some(
+        ([name, data]) => name.startsWith('native/licenses/' + kind + '/') && data.length > 0
+      )
+    )
+      throw new Error('Portable notices missing');
+  for (const name of ['native/caws-native', 'native/node', 'native/caws-hook-native'])
+    if (!files.get(name)?.length || !executablePaths.has(name))
+      throw new Error('Portable executable missing');
+  for (const name of files.keys())
+    if (
+      !name.startsWith('native-prefix/') &&
+      !['native/caws-native', 'native/node', 'native/caws-hook-native'].includes(name) &&
+      modes.get(name) !== 0o644
+    )
+      throw new Error('Portable metadata or notice mode mismatch');
+  const metadata: unknown = JSON.parse(files.get('native-entry.json')!.toString('utf8'));
+  keys(
+    metadata,
+    [
+      'schema',
+      'installedInvocation',
+      'nativeExecutable',
+      'nodeExecutable',
+      'engineEntry',
+      'describeEntry',
+      'timeoutMs',
+    ],
+    'portable entry'
+  );
+  if (
+    metadata.schema !== 'caws.runtime.native-entry.v2' ||
+    metadata.nativeExecutable !== 'native/caws-native' ||
+    metadata.nodeExecutable !== 'native/node' ||
+    metadata.engineEntry !== 'native-prefix/' + cli + '/dist/runtime/engine-entry.js' ||
+    metadata.describeEntry !== 'native-prefix/' + cli + '/dist/runtime/describe-entry.js' ||
+    !Number.isSafeInteger(metadata.timeoutMs) ||
+    (metadata.timeoutMs as number) < 1 ||
+    (metadata.timeoutMs as number) > 30000 ||
+    !installedEntryAdvertisesEventBudget(metadata.installedInvocation)
+  )
+    throw new Error('Portable entry metadata mismatch');
+  const completion = JSON.parse(all.get('evidence/completion.json')!.toString('utf8'));
+  const request = JSON.parse(all.get('evidence/request.json')!.toString('utf8'));
+  const provenance = JSON.parse(files.get('native-build-provenance.json')!.toString('utf8'));
+  keys(
+    provenance,
+    [
+      'schema',
+      'requestFile',
+      'completionReceipt',
+      'requestDigest',
+      'sourceTreeDigest',
+      'profile',
+      'artifacts',
+    ],
+    'portable build provenance'
+  );
+  keys(provenance.artifacts, ['native', 'stableEntry'], 'portable artifact provenance');
+  const identity = validateNativeSqliteBuildIdentity(
+    JSON.parse(all.get('evidence/identity.json')!.toString('utf8')),
+    completion.prefixManifest?.sha256
+  );
+  const sameIdentity = (data: Buffer, pin: unknown): boolean =>
+    object(pin) && pin.sizeBytes === data.length && pin.sha256 === sha(data);
+  if (
+    completion.schema !== 'caws.native_sqlite_build_receipt.v2' ||
+    completion.status !== 'completed' ||
+    completion.adoption !== 'NOT_ADOPTED' ||
+    provenance.schema !== 'caws.runtime.native-build-provenance.v1' ||
+    completion.requestDigest !== sha(Buffer.from(portableCanonical(request))) ||
+    completion.sourceTreeDigest !== sha(Buffer.from(portableCanonical(request.source))) ||
+    !sameIdentity(all.get('evidence/request.json')!, provenance.requestFile) ||
+    !sameIdentity(all.get('evidence/completion.json')!, provenance.completionReceipt) ||
+    !sameIdentity(all.get('evidence/identity.json')!, completion.artifacts?.runtimeIdentity) ||
+    !sameIdentity(files.get('native/caws-native')!, completion.artifacts?.native) ||
+    !sameIdentity(files.get('native/caws-hook-native')!, completion.artifacts?.stableEntry) ||
+    !sameIdentity(files.get('native/caws-native')!, provenance.artifacts.native) ||
+    !sameIdentity(files.get('native/caws-hook-native')!, provenance.artifacts.stableEntry) ||
+    !isDeepStrictEqual(identity, completion.observedIdentity) ||
+    identity.schema !== 'caws.sqlite_build_identity.v2' ||
+    !isDeepStrictEqual(identity.installedInvocation, metadata.installedInvocation) ||
+    provenance.requestDigest !== completion.requestDigest ||
+    provenance.sourceTreeDigest !== completion.sourceTreeDigest ||
+    provenance.profile !== completion.profile
+  )
+    throw new Error('Portable build provenance mismatch');
+  const selected = JSON.parse(all.get('evidence/selection.json')!.toString('utf8'));
+  if (
+    !['caws.native-hook-cli-selection.v2', 'caws.native-hook-cli-pack.v1'].includes(
+      selected.schema
+    ) ||
+    selected.status !== 'completed' ||
+    selected.source?.sourceCommit !== value.sourceCommit ||
+    selected.tarball?.sha256 !== value.cliTarball.sha256 ||
+    selected.tarball?.sizeBytes !== value.cliTarball.sizeBytes ||
+    !sameIdentity(all.get('evidence/cli-build.json')!, selected.build)
+  )
+    throw new Error('Portable source selection mismatch');
+  const oldPack = selected.schema === 'caws.native-hook-cli-pack.v1';
+  if (
+    oldPack !== all.has('evidence/cli-pack.json') ||
+    (oldPack &&
+      (modes.get('evidence/cli-pack.json') !== 0o644 ||
+        !sameIdentity(all.get('evidence/cli-pack.json')!, selected.pack)))
+  )
+    throw new Error('Portable pack provenance mismatch');
+  for (const name of ['build', 'install', 'audit', ...(oldPack ? ['pack'] : [])]) {
+    const record = JSON.parse(
+      all
+        .get('evidence/' + (name === 'build' || name === 'pack' ? 'cli-' + name : name) + '.json')!
+        .toString('utf8')
+    );
+    if (
+      record.receipt?.label !== 'cli-' + name ||
+      record.receipt?.exitCode !== 0 ||
+      record.receipt?.signal !== null ||
+      record.receipt?.stopReason !== null ||
+      record.receipt?.directChildReaped !== true ||
+      record.receipt?.error !== null ||
+      record.receipt?.persistenceError !== null
+    )
+      throw new Error('Portable package admission record failed');
+    for (const channel of ['stdout', 'stderr']) {
+      const text = record.receipt[channel + 'Base64'];
+      if (typeof text !== 'string') throw new Error('Portable package output missing');
+      const output = Buffer.from(text, 'base64');
+      if (
+        output.toString('base64') !== text ||
+        output.length !== record.receipt[channel + 'Bytes'] ||
+        output.length !== record.receipt[channel + 'RetainedBytes'] ||
+        sha(output) !== record.receipt[channel + 'Sha256']
+      )
+        throw new Error('Portable package output mismatch');
+    }
+    if (
+      name === 'install' &&
+      (!Array.isArray(record.receipt.argv) || record.receipt.argv.at(-1) !== selected.tarball.path)
+    )
+      throw new Error('Portable install selected a different tar');
+    if (name === 'audit') {
+      const audit = JSON.parse(Buffer.from(record.receipt.stdoutBase64, 'base64').toString('utf8'));
+      if (audit.metadata?.vulnerabilities?.total !== 0) throw new Error('Portable audit failed');
+    }
+    if (name === 'pack') {
+      const pack = JSON.parse(Buffer.from(record.receipt.stdoutBase64, 'base64').toString('utf8'));
+      if (
+        !Array.isArray(pack) ||
+        pack.length !== 1 ||
+        pack[0].name !== '@paths.design/caws-cli' ||
+        pack[0].filename !== path.basename(selected.tarball.path) ||
+        pack[0].size !== value.cliTarball.sizeBytes ||
+        pack[0].integrity !== value.cliTarball.integrity
+      )
+        throw new Error('Portable pack observation differs');
+    }
+  }
+  const expectedModes = Object.fromEntries(
+    [...files.keys()].sort().map((name) => [name, modes.get(name)])
+  );
+  if (
+    !isDeepStrictEqual(JSON.parse(files.get('native-modes.json')!.toString('utf8')), expectedModes)
+  )
+    throw new Error('Portable mode inventory mismatch');
+  if (files.has('native-stop-profile.json'))
+    validateStopProfile(files.get('native-stop-profile.json')!, files);
+  return {
+    files,
+    executablePaths,
+    stableEntry: Buffer.from(files.get('native/caws-hook-native')!),
+    metadata: metadata as unknown as NativeEntryMetadataV2,
+  };
+}
+
+export function readNativeImage(
+  file: string,
+  selection?: PortableImageSelection
+): PreparedNativeEntry {
+  if (selection) {
+    const absoluteFile = path.resolve(file);
+    const size = fs.lstatSync(absoluteFile).size;
+    if (!Number.isSafeInteger(size) || size < 1 || size > PORTABLE_LIMIT)
+      throw new Error('Portable image size bound');
+    return readPortableNativeImage(
+      capture(absoluteFile, {
+        path: absoluteFile,
+        sizeBytes: size,
+        sha256: selection.expectedSha256,
+      }).bytes,
+      selection
+    );
+  }
   const input: unknown = JSON.parse(capture(path.resolve(file)).bytes.toString('utf8'));
+  if (object(input) && input.schema === PORTABLE_SCHEMA)
+    throw new Error('Portable image requires independent carrier and tar pins');
   return object(input) && input.schema === 'caws.runtime.native-image-input.v2'
     ? prepareNativeRuntimeEntryFromBuild(input as unknown as NativeBuildImageInput)
     : prepareNativeRuntimeEntry(input as NativeImageInput);
