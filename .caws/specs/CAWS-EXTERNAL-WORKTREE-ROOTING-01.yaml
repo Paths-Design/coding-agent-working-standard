@@ -1,10 +1,11 @@
 id: CAWS-EXTERNAL-WORKTREE-ROOTING-01
 title: 'Adopt existing linked worktrees and preserve guard repository identity'
 mode: fix
-lifecycle_state: active
-worktree: caws-external-rooting
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Implemented explicit linked-worktree adoption and repository-identity ownership routing; inspected independent feedback and preserved staged/unstaged/untracked and concurrent staging controls. All three ACs recorded pass with source and native evidence. Runtime 0c338b108be9ae3ba94d90f5938409259e6cbbe6b9e6b883da6a7be5f4d9fccf is the verified baseline-compatible backport; full default runtime upgrade remains unqualified for this host. RC source and both original worktrees were preserved; their owners retain adoption and lap/ghost integration.'
 created_at: '2026-11-08T03:36:35.651Z'
-updated_at: '2026-11-08T04:41:03.100Z'
+updated_at: '2026-11-08T05:21:45.195Z'
 created_by_session: '01a1b932-77c5-7503-8f5d-a419fa70b710'
 blast_radius:
   modules:
