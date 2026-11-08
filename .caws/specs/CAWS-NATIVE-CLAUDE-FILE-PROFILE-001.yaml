@@ -3,7 +3,7 @@ title: 'Native Claude file-tool admission and compiled stock enforcement'
 mode: feature
 lifecycle_state: active
 created_at: '2026-11-07T23:06:58.475Z'
-updated_at: '2026-11-07T23:06:58.475Z'
+updated_at: '2026-11-08T00:10:56.155Z'
 created_by_session: '01a19baf-4b34-7a83-9cf8-f109a22c539e'
 blast_radius:
   modules:
@@ -21,6 +21,10 @@ scope:
     - 'packages/caws-cli/tests/execution/'
     - 'packages/caws-cli/scripts/qualify-native-claude.cjs'
     - 'packages/caws-cli/tests/ci/native-claude-capture.test.js'
+    - packages/caws-native/src/guard_strikes_wire.rs
+    - packages/caws-native/src/guard_strikes.rs
+    - packages/caws-native/src/runner.rs
+    - packages/caws-native/src/main.rs
   out: []
 invariants:
   - 'Keep ownership, scope, protected-path, exact-source admission, original deadlines and all existing acceptance floors intact.'
