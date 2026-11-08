@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: linux-native-producer
 created_at: '2026-11-08T14:37:56.359Z'
-updated_at: '2026-11-08T14:38:22.063Z'
+updated_at: '2026-11-08T14:54:15.719Z'
 created_by_session: '01a1bb92-c923-7f62-b332-4c05ba2f171e'
 blast_radius:
   modules:
@@ -29,6 +29,7 @@ scope:
     - 'packages/caws-cli/tests/adapter/machine-adapters.test.js'
     - 'packages/caws-native/build.rs'
     - 'packages/caws-native/tests/sqlite_identity.rs'
+    - packages/caws-cli/tests/ci/native-image-driver.test.js
   out: []
 invariants:
   - 'Darwin v1 and v2 contracts retain their behavior and unsupported platforms fail closed'
