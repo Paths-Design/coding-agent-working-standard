@@ -1,0 +1,53 @@
+id: CAWS-LINUX-NATIVE-PRODUCER-001
+title: 'Portable and Linux native production image'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-11-08T14:37:56.359Z'
+updated_at: '2026-11-08T14:37:56.359Z'
+created_by_session: '01a1bb92-c923-7f62-b332-4c05ba2f171e'
+blast_radius:
+  modules:
+    - 'native SQLite production and portable image admission'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/tooling/sqlite-static-build.ts'
+    - 'packages/caws-cli/src/tooling/native-sqlite-build.ts'
+    - 'packages/caws-cli/src/tooling/ar-archive.ts'
+    - 'packages/caws-cli/scripts/build-native-hook-image.cjs'
+    - 'packages/caws-cli/src/init/native-runtime-entry.ts'
+    - 'packages/caws-cli/src/init/machine-adapters.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/tests/tooling/sqlite-static-build.test.js'
+    - 'packages/caws-cli/tests/tooling/native-sqlite-build.test.js'
+    - 'packages/caws-cli/tests/tooling/ar-archive.test.js'
+    - 'packages/caws-cli/tests/adapter/native-runtime-entry.test.js'
+    - 'packages/caws-cli/tests/adapter/machine-adapters.test.js'
+    - 'packages/caws-native/build.rs'
+    - 'packages/caws-native/tests/sqlite_identity.rs'
+  out: []
+invariants:
+  - 'Darwin v1 and v2 contracts retain their behavior and unsupported platforms fail closed'
+  - 'Portable admission requires independently supplied carrier and exact CLI tar identities and validates content before publication'
+acceptance:
+  - id: A1
+    given: 'a fully verified Darwin or Linux producer'
+    when: 'an image carrier is sealed and supplied with independently trusted carrier and exact tar pins'
+    then: 'portable admission validates the bounded original provenance and exact install payload and privately installs it'
+  - id: A2
+    given: 'a pinned Linux x86_64 glibc 2.35 qualification closure'
+    when: 'the reviewed SQLite and native production image build completes'
+    then: 'exact source, archive, target, ELF and tool identities are verified and retained'
+  - id: A3
+    given: 'altered inputs or unsupported host'
+    when: 'build or installer admission is attempted'
+    then: 'publication is refused without a completion receipt'
+  - id: A4
+    given: 'a genuine Linux native production image'
+    when: 'installed privately and exercised'
+    then: 'SQLite write close reopen and read succeeds'
+non_functional: {}
+contracts: []
