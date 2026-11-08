@@ -4,7 +4,7 @@ authority: architecture
 status: active
 title: Native runtime migration contract
 owner: CAWS runtime maintainers
-updated: 2026-10-18
+updated: 2026-11-08
 audience: maintainer
 ---
 
@@ -32,9 +32,13 @@ same TypeScript engine must work in one-shot mode before resident mode is
 admitted. The one-shot path is a maintained execution mode, not a second policy
 engine.
 
-Rust must not reimplement claim, scope, spec, waiver or policy semantics. A
-native binary provides no evidence that those semantics or native harness
-delivery agree.
+Canonical project state and supported governance contracts define authority for
+the native implementation. Any native authority evaluation must enforce current
+claim, scope, spec, waiver and policy requirements with explicit provenance;
+runtime availability or a successful legacy lookup cannot confer permission.
+Legacy private-environment lookups and implementation defects are not required
+parity. A native binary provides no evidence that governance behavior or actual
+harness delivery satisfies these contracts.
 
 ## OpenCode project transport
 
@@ -486,15 +490,16 @@ machine adoption remain unqualified.
 
 ## Functional acceptance and proof
 
-Each parity claim names a preserved behavior and its dependency chain, not only
-a file, command, schema, or language replacement. In particular, danger-latch
-containment requires retained latch/warning records, resolved session and
-process-instance observations, signal attempts and observed target exit, native
-refusal bytes, and a surviving unrelated-process control. Prove that the blocked
-tool did not execute. Include wrong-session, reused-PID, unavailable-target,
-read-only/reset exceptions, file tools and resident-caller cases according to
-the governing contract. These checks are blocking dependencies of replacement;
-passing classifier, protocol or identity tests does not establish them.
+Each replacement claim names a required behavior and its dependency chain, not
+only a file, command, schema, or language replacement. In particular,
+danger-latch containment requires retained latch/warning records, resolved
+session and process-instance observations, signal attempts and observed target
+exit, native refusal bytes, and a surviving unrelated-process control. Prove
+that the blocked tool did not execute. Include wrong-session, reused-PID,
+unavailable-target, read-only/reset exceptions, file tools and resident-caller
+cases according to the governing contract. These checks are blocking
+dependencies of replacement; passing classifier, protocol or identity tests does
+not establish them.
 
 Scenario evidence retains exact commands, revision/build/source identities, raw
 output bytes, exit status, relevant state before/after, and observed consumer
@@ -523,29 +528,36 @@ acceptance claim.
 
 ## Execution order
 
-The next implementation milestone is an executable one-shot path through the
-native client, typed engine, selected production guards and native result.
-Finish bounded component work already in flight, then prioritize that path over
-adding more isolated ports. It needs actual handler, environment, override,
-journal and Stop/handoff behavior; a fixture engine cannot discharge that
-milestone.
+The [release acceptance contract](../release-readiness.md#execution-order)
+defines the integration sequence and full final bar. The first milestone is one
+real installed workflow through the native client, intended production engine,
+selected guards and actual harness. It includes trust/Start, legitimate owned
+reads and writes through shell and supported file tools, a representative check,
+a governed commit, a protected-write refusal, Stop and semantic rendering. It
+needs actual environment, override, journal and handoff behavior; a fixture
+engine cannot discharge the milestone. Complete this consumer path before adding
+more isolated ports, while independent CI repairs continue where safe.
 
 - **Investigate:** map current guard behavior and retained failure lineage to
   the consumer path; attribute baseline cost and settle package/rollback
   boundaries. Historical ledger descriptions guide probes, not current authority
   claims.
-- **Implement:** integrate the one-shot path and prove positive and refusal
-  behavior through it. Replace remaining features with their consumers, then run
-  that same engine under the resident host and thirteen-session workload.
+- **Implement:** integrate the installed one-shot path and prove positive and
+  refusal behavior through it. Tie prerequisites to failing consumer steps and
+  return to those steps after repair. Extend to all seven harnesses, supported
+  extensions and recovery, then run the same engine under the resident host and
+  thirteen-session, four-repository workload. Freeze the integrated candidate
+  for final checks and retain only applicable evidence.
 - **Change:** qualify an isolated packaged adoption and rollback before
   selecting it for active machine sessions. Machine-wide replacement requires
-  full parity with the previous selected version, including supported native
-  harness and project-override behavior; component or partial-path success
-  cannot trigger installation. Once that parity is established, install the
-  replacement on this machine and verify its selected execution. Retire each old
-  consumer only after its real replacement is selected and checked. Keep the
-  full migration open until every replacement, supported harness and acceptance
-  obligation is discharged.
+  all required supported behavior, including native harness and project-override
+  behavior, plus the complete release qualification; component or partial-path
+  success cannot trigger installation. Once those requirements are established,
+  install the replacement on this machine and verify its selected execution.
+  Retire each old consumer only after its real replacement is selected and
+  checked. Keep the full migration open until every replacement, supported
+  harness and acceptance obligation is discharged. Tagging and npm publication
+  require separate user authorization after qualification.
 
 ## Authority boundaries and reconstruction falsifiers
 

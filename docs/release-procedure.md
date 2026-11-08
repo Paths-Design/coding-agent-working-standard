@@ -1,7 +1,20 @@
+---
+doc_id: release-procedure
+authority: canonical
+status: active
+title: Release procedure
+owner: CAWS release maintainers
+updated: 2026-11-08
+audience: maintainer
+---
+
 # Release procedure (CAWS-RELEASE-TAG-DRIVEN-001 v1)
 
-This is the canonical release procedure for `@paths.design/caws-cli` as of
-`v11.1.4+1` (the first release under tag-driven CI).
+This is the canonical release procedure for `@paths.design/caws-cli`. The
+[release acceptance contract](release-readiness.md) defines the installed
+workflow milestone, full qualification and machine-cutover requirements. Tagging
+and npm publication require separate explicit user authorization; passing checks
+or completing machine cutover does not grant it.
 
 ## Summary
 
@@ -85,11 +98,18 @@ substitute for qualification before publication.
 
 ## Machine runtime qualification
 
-Run the installed-artifact upgrade check locally after building:
+Run the installed-artifact upgrade check from the native-cutover candidate
+checkout, including its repo-owned qualification supervisor. Select an absolute
+report path in persistent ignored storage outside the candidate worktree before
+running it:
 
 ```bash
 npm run build -w @paths.design/caws-cli
-node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report /tmp/caws-upgrade-report.json
+rustup toolchain install 1.90.0 --profile minimal
+cargo +1.90.0 fetch --locked --manifest-path packages/caws-native/Cargo.toml
+CARGO_TARGET_DIR="$PWD/packages/caws-cli/reports/upgrade-cargo" cargo +1.90.0 build --locked --offline --release --manifest-path packages/caws-native/Cargo.toml --no-default-features --example upgrade-supervisor
+export CAWS_QUALIFICATION_SUPERVISOR="$PWD/packages/caws-cli/reports/upgrade-cargo/release/examples/upgrade-supervisor"
+node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report /absolute/retained/release-evidence/qualification-report.json
 ```
 
 The runner installs the actual npm `12.1.0` baseline, creates stock and custom
@@ -111,13 +131,45 @@ Schema-v2 reports name a unique directory under
 stdout/stderr, before/after governance hashes, the source transcript and
 rendered turn. Failed runs retain their report and command receipts too. Inspect
 these artifacts before accepting preservation or rollback claims; the report's
-boolean case summaries alone are insufficient.
+boolean case summaries alone are insufficient. Full acceptance also requires
+retained raw governance bytes and modes before and after, including failed and
+interrupted attempts. Hash-only governance maps do not discharge that
+obligation. Export the report, its referenced artifacts, tarball and required
+reconstruction inputs to the selected durable location before worktree teardown.
+
+The repo-built supervisor owns each command's child and private process group.
+It carries one monotonic deadline from its frontend to its custodian, stops the
+group before reaping its leader, and keeps child settlement separate from pipe
+EOF and command success. The frontend allows two seconds after command expiry
+for cleanup observation; this does not extend the command's execution budget. If
+settlement remains unproven, the frontend returns uncertainty while the
+custodian retains the child. Command receipts identify the supervisor executable
+and retained exchange directory. A private pipe carries live completion; a
+target-written artifact cannot substitute for that observation. The same private
+receipt binds output byte counts, hashes computed while draining the command
+pipes, and the custodian's held file identities. The adapter verifies those pins
+with bounded reads that refuse symlinks and nonregular files before using
+command output. Missing live pins leave the output unverified and retained.
+
+Linux uses a dedicated child subreaper and requires `ECHILD` after reaping the
+leader and adopted descendants. macOS observes only the original process group;
+a child that creates another session can escape it. Neither a successful command
+nor macOS group settlement authorizes fixture deletion. Reports name the
+retained fixture, and the qualifier performs no automatic fixture cleanup. The
+three-second timeout test checks a child that remains in its original group; a
+separate escaped session test demonstrates the narrower macOS guarantee. These
+checks do not prove general process containment or native harness event
+deadlines.
 
 These are subprocess fixtures. Before a runtime release, retain separate fresh
-native traces from the intended harnesses proving trust, SessionStart, an
-expected guarded-write refusal, Stop and the rendered user/tool record. For
-Sterling, also prove its retained custom behavior and reconcile its local
-handler/library pins using the
+native traces from all seven supported harnesses proving trust, SessionStart,
+legitimate owned-lane shell/file operations, a representative check, a governed
+commit, delivered protected-write refusal with unchanged bytes, Stop and the
+rendered user/tool record. Complete one real installed workflow first, then
+extend it under the full
+[release bar](release-readiness.md#full-functional-acceptance). For Sterling,
+also prove its retained custom behavior and reconcile its local handler/library
+pins using the
 [Sterling migration guide](guides/sterling-machine-runtime-migration.md).
 Successful Codex migration does not establish Claude adoption, and installed
 configuration does not prove native execution. The release qualification matrix
@@ -125,14 +177,14 @@ covers native runtime subprocesses on Linux/macOS; it makes no Windows native
 harness claim.
 
 Before selecting a release candidate, require current mutation topology,
-successful baseline/discovery, and per-file mutation results for kernel, store
-and shell on the candidate commit. A setup/import failure is inconclusive, not a
-killed mutant. Release Qualification currently does not run that mutation
-pipeline: dispatch the Mutation Gate for the candidate branch and check its
-retained reports separately before publication. A green qualification run alone
-is not release approval. The tag-driven Release workflow also calls the full
-Mutation Gate with `required: true`; both qualification and mutation block
-publish.
+successful baseline/discovery, and full per-file mutation results for kernel,
+store, shell, analysis and execution on the candidate commit. A setup/import
+failure is inconclusive, not a killed mutant. Release Qualification currently
+does not run that mutation pipeline: dispatch the Mutation Gate for the
+candidate branch and check its retained reports separately before publication. A
+green qualification run alone is not release approval. The tag-driven Release
+workflow also calls the full Mutation Gate with `required: true`; both
+qualification and mutation block publish.
 
 ## Dependency, coverage and fixture gates
 
@@ -151,9 +203,11 @@ LCOV reports in a commit-named artifact, including when a threshold fails. The
 init/machine-runtime surface requires 85% statements, 70% branches, 90%
 functions and 85% lines. After subtracting that group, the remaining runtime
 requires 60% statements, 50% branches, 60% functions and 60% lines. These are
-regression floors, not correctness proof; the 28 per-file mutation targets in
-`packages/caws-cli/mutation-policy.json` keep their separate 80% floors. CLI
-entry points exercised only in child processes remain zero in Jest's in-process
+regression floors, not correctness proof. Every per-file mutation target and
+floor in `packages/caws-cli/mutation-policy.json` remains required, including
+the original sixteen execution and nine analysis targets plus every additional
+declared target. The policy inventory defines each complete campaign. CLI entry
+points exercised only in child processes remain zero in Jest's in-process
 report; installed-artifact fixtures supply their behavioral evidence rather than
 manufacturing coverage hits.
 
