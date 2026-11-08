@@ -686,7 +686,12 @@ function captureStopProfile(pin: Pin, files: ReadonlyMap<string, Buffer>): Buffe
   const observed = capture(pin.source, { path: pin.source, sha256: pin.sha256, sizeBytes: size });
   if (observed.bytes.length > 8 * 1024 * 1024 || sha(observed.bytes) !== pin.sha256)
     throw new Error('Semantic profile size or hash mismatch');
-  const profile: unknown = JSON.parse(observed.bytes.toString('utf8'));
+  return validateStopProfile(observed.bytes, files);
+}
+
+/** Validate semantic evidence against the captured implementation bytes. */
+function validateStopProfile(bytes: Buffer, files: ReadonlyMap<string, Buffer>): Buffer {
+  const profile: unknown = JSON.parse(bytes.toString('utf8'));
   keys(
     profile,
     [
@@ -865,7 +870,7 @@ function captureStopProfile(pin: Pin, files: ReadonlyMap<string, Buffer>): Buffe
   // The native loader validates fixed coverage/selectors/SQLite/environment on
   // the authenticated bytes. Installation never treats successful inclusion as
   // earned end-to-end qualification, and never follows provenance paths.
-  return Buffer.from(observed.bytes);
+  return Buffer.from(bytes);
 }
 
 function reviewedFile(value: unknown, label: string): asserts value is ReviewedFile {
