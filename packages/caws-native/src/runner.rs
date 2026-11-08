@@ -1134,20 +1134,38 @@ impl Session {
     pub(crate) fn run_guard_strikes(
         &mut self,
         owner: &mut crate::guard_strikes_wire::Owner,
+        context: Option<&mut caws_native::context_git::file_tools::Preparation>,
+        frame: &[u8],
+        until: Instant,
+    ) -> Result<(), String> {
+        let result = self.run_guard_strikes_inner(owner, context.as_deref(), frame, until);
+        if result.is_err() {
+            owner.poison();
+            if let Some(context) = context {
+                context.poison();
+            }
+        }
+        result
+    }
+    fn run_guard_strikes_inner(
+        &mut self,
+        owner: &mut crate::guard_strikes_wire::Owner,
         context: Option<&caws_native::context_git::file_tools::Preparation>,
         frame: &[u8],
         until: Instant,
     ) -> Result<(), String> {
         // Consumption precedes decode, phase checks, roots, and any filesystem effect.
         let control = owner.begin(frame)?;
-        let credit = frame
+        let frame_credit = frame
             .len()
             .checked_add(1)
             .ok_or("scope strike control credit overflow")?;
-        if self.guard_strikes_control_credit != 0
-            || credit > crate::guard_strikes_wire::MAX_CONTROL_CREDIT
-        {
-            return Err("scope strike control credit exceeds one request".into());
+        let credit = self
+            .guard_strikes_control_credit
+            .checked_add(frame_credit)
+            .ok_or("scope strike accumulated control credit overflow")?;
+        if credit > owner.control_credit_limit() {
+            return Err("strike control credit exceeds original operation budget".into());
         }
         self.guard_strikes_control_credit = credit;
         let original = self.original_deadline.clone();
@@ -1188,6 +1206,7 @@ impl Session {
                 return Err("engine output overlapped partial scope strike result".into());
             }
         }
+        owner.result_delivered()?;
         // Do not probe the reader after the final write: a legitimate following
         // capture2/proposal may already be queued for the ordinary phase loop.
         Ok(())
@@ -1217,6 +1236,19 @@ impl Session {
         after_dispatch: bool,
         until: Instant,
     ) -> Result<(), String> {
+        let result = self.run_file_tool_context_inner(owner, frame, after_dispatch, until);
+        if result.is_err() {
+            owner.poison();
+        }
+        result
+    }
+    fn run_file_tool_context_inner(
+        &mut self,
+        owner: &mut caws_native::context_git::file_tools::Preparation,
+        frame: &[u8],
+        after_dispatch: bool,
+        until: Instant,
+    ) -> Result<(), String> {
         let original = self.original_deadline.clone();
         let until = until.min(original.expires());
         let reply = owner.observe(
@@ -1234,8 +1266,8 @@ impl Session {
             .file_tool_context_control_credit
             .checked_add(frame.len() + 1)
             .ok_or("file-tool context control credit overflow")?;
-        if credit > caws_native::context_git::file_tools::MAX_CONTROL_CREDIT {
-            return Err("file-tool context exceeds two requests".into());
+        if credit > owner.control_credit_limit() {
+            return Err("file-tool context exceeds original observation budget".into());
         }
         self.file_tool_context_control_credit = credit;
         self.file_tool_context_checkpoint(until)?;
@@ -1246,7 +1278,32 @@ impl Session {
                 return Err("engine output overlapped partial file-tool context result".into());
             }
         }
-        Ok(())
+        owner.observation_delivered()
+    }
+    pub(crate) fn seal_file_proposal(
+        &mut self,
+        owner: &mut caws_native::context_git::file_tools::Preparation,
+        exit_code: u8,
+        until: Instant,
+    ) -> Result<(), String> {
+        let required = owner.requires_finality();
+        let original = self.original_deadline.clone();
+        let until = until.min(original.expires());
+        let result = (|| {
+            owner.seal_proposal(exit_code, until, &|| {
+                crate::cancellation::check().is_err() || check_until(&original, until).is_err()
+            })?;
+            if required && exit_code != 2 {
+                // Reject already queued surplus controls before a nonblocking
+                // result. This never executes or retries their effects.
+                self.file_tool_context_checkpoint(until)?;
+            }
+            Ok(())
+        })();
+        if result.is_err() {
+            owner.poison();
+        }
+        result
     }
     fn file_tool_context_checkpoint(&mut self, until: Instant) -> Result<(), String> {
         check_until(&self.original_deadline, until)?;

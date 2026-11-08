@@ -19,8 +19,12 @@ use std::{
 pub const CAPABILITY: &str = "caws.runtime.file-tool-context.v1";
 pub const REQUEST_SCHEMA: &str = "caws.runtime.file-tool-context.request.v1";
 const RESULT_SCHEMA: &str = "caws.runtime.file-tool-context.result.v1";
+pub const NATIVE_CAPABILITY: &str = "caws.runtime.file-tool-context.v2";
+pub const NATIVE_REQUEST_SCHEMA: &str = "caws.runtime.file-tool-context.request.v2";
+const NATIVE_RESULT_SCHEMA: &str = "caws.runtime.file-tool-context.result.v2";
 pub const MAX_REQUEST: usize = 1024;
 pub const MAX_CONTROL_CREDIT: usize = 2 * (MAX_REQUEST + 1);
+const NATIVE_CONTROL_CREDIT: usize = 3 * (MAX_REQUEST + 1);
 const MAX_REPLY: usize = 2 * 1024 * 1024;
 const MAX_WORKTREES: usize = 4096;
 
@@ -36,6 +40,77 @@ pub fn eligible_payload(payload: &RawValue) -> Result<bool, String> {
         Some("apply_patch" | "Write" | "Edit")
     ))
 }
+pub fn eligible_native_payload(payload: &RawValue) -> Result<bool, String> {
+    #[derive(Deserialize)]
+    struct Tool {
+        tool_name: Option<String>,
+    }
+    let tool: Tool = serde_json::from_str(payload.get())
+        .map_err(|error| format!("original native file-tool name: {error}"))?;
+    if !matches!(tool.tool_name.as_deref(), Some("Write" | "Edit")) {
+        return Ok(false);
+    }
+    native_original_session(payload)?;
+    Ok(true)
+}
+
+/// Original callback identity only. Known selectors reject duplicates while
+/// unrelated extension values remain opaque. No fallback supplies a session.
+pub fn native_original_session(payload: &RawValue) -> Result<String, String> {
+    #[derive(Deserialize)]
+    struct Original {
+        session_id: String,
+        tool_name: String,
+        #[serde(rename = "cwd")]
+        _cwd: Option<String>,
+        #[serde(rename = "execution_workdir")]
+        _execution_workdir: Option<Box<RawValue>>,
+        tool_input: Box<RawValue>,
+        #[serde(rename = "tool_use_id")]
+        _tool_use_id: Option<Box<RawValue>>,
+        #[serde(rename = "permission_mode")]
+        _permission_mode: Option<Box<RawValue>>,
+    }
+    #[derive(Deserialize)]
+    struct ToolInput {
+        #[serde(rename = "file_path")]
+        _file_path: Option<Box<RawValue>>,
+        #[serde(rename = "cwd")]
+        _cwd: Option<Box<RawValue>>,
+        #[serde(rename = "workdir")]
+        _workdir: Option<Box<RawValue>>,
+        #[serde(rename = "command")]
+        _command: Option<Box<RawValue>>,
+        #[serde(rename = "content")]
+        _content: Option<Box<RawValue>>,
+        #[serde(rename = "old_string")]
+        _old_string: Option<Box<RawValue>>,
+        #[serde(rename = "new_string")]
+        _new_string: Option<Box<RawValue>>,
+        #[serde(rename = "replace_all")]
+        _replace_all: Option<Box<RawValue>>,
+    }
+    let original: Original = serde_json::from_str(payload.get())
+        .map_err(|error| format!("original native file selectors: {error}"))?;
+    if !matches!(original.tool_name.as_str(), "Write" | "Edit")
+        || original.session_id.is_empty()
+        || original.session_id.trim().is_empty()
+    {
+        return Err(
+            "native file callback lacks a nonempty original session or eligible tool".into(),
+        );
+    }
+    let _: ToolInput = serde_json::from_str(original.tool_input.get())
+        .map_err(|error| format!("original native file input selectors: {error}"))?;
+    Ok(original.session_id)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NativeStrikePhase {
+    ScopeGuard,
+    ShortcutLanguage,
+}
+
 fn check(
     original: &MonotonicDeadline,
     until: Instant,
@@ -66,6 +141,7 @@ struct Control {
 }
 #[derive(Default)]
 struct Exchanges {
+    native: bool,
     consumed: u8,
     ready: bool,
     poisoned: bool,
@@ -82,17 +158,29 @@ impl Exchanges {
         after_dispatch: bool,
     ) -> Result<Control, String> {
         let admitted = (|| {
-            if self.poisoned || self.unused || self.consumed >= 2 || bytes.len() > MAX_REQUEST {
+            let maximum = if self.native { 3 } else { 2 };
+            if self.poisoned || self.unused || self.consumed >= maximum || bytes.len() > MAX_REQUEST
+            {
                 return Err("file-tool context exhausted, poisoned or oversized".into());
             }
             let control: Control = serde_json::from_slice(bytes)
                 .map_err(|error| format!("file-tool context request: {error}"))?;
-            if control.schema != REQUEST_SCHEMA
+            let schema = if self.native {
+                NATIVE_REQUEST_SCHEMA
+            } else {
+                REQUEST_SCHEMA
+            };
+            let dispatched_ordinal = if self.native {
+                control.ordinal >= 2
+            } else {
+                control.ordinal == 2
+            };
+            if control.schema != schema
                 || control.id != id
                 || control.runtime_digest != digest
                 || !super::lower_hex(&control.token)
                 || control.ordinal != self.consumed + 1
-                || after_dispatch != (control.ordinal == 2)
+                || after_dispatch != dispatched_ordinal
                 || self.ready != after_dispatch
             {
                 return Err("file-tool context identity, ordinal or phase differs".into());
@@ -657,6 +745,18 @@ impl RetainedInput {
         }
     }
 }
+#[derive(Default)]
+struct NativeState {
+    dispatch_written: bool,
+    active: bool,
+    sealed: bool,
+    delivered: u8,
+    pending_delivery: Option<u8>,
+    // Encoded and fully delivered are distinct receipts. The original owner
+    // retains actual replies through transport failure and terminal cleanup.
+    replies: [Option<Vec<u8>>; 3],
+}
+
 /// Moved intact into Failure/fallback. An untouched offer has never started a
 /// Git custodian. Failed/partial capture and late pending Git remain cleanup-only.
 pub struct Preparation {
@@ -667,6 +767,7 @@ pub struct Preparation {
     capture_failure: Option<RemoteFailure>,
     refusal: Option<String>,
     exchanges: Exchanges,
+    native_state: Option<NativeState>,
 }
 /// Borrowed original roots; cannot be decoded or manufactured by the engine.
 pub struct ScopeStrikeRoots<'a> {
@@ -691,6 +792,16 @@ impl Preparation {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<ScopeStrikeRoots<'_>, String> {
         self.exchanges.scope_strike_phase()?;
+        self.bound_strike_roots(id, runtime_digest, original, until, cancelled)
+    }
+    fn bound_strike_roots(
+        &self,
+        id: &str,
+        runtime_digest: &str,
+        original: &MonotonicDeadline,
+        until: Instant,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<ScopeStrikeRoots<'_>, String> {
         if self.input.id != id
             || self.input.runtime_digest != runtime_digest
             || self.original.envelope() != original.envelope()
@@ -755,7 +866,178 @@ impl Preparation {
             capture_failure: None,
             refusal,
             exchanges: Exchanges::default(),
+            native_state: None,
         }
+    }
+    /// No project query or transaction starts until the original engine
+    /// requests observation. An unused V2 callback may refuse, never allow.
+    pub fn retain_native(
+        input: Input<'_>,
+        original: &MonotonicDeadline,
+        until: Instant,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Self {
+        let mut owner = Self::retain_original(input, original, until, cancelled);
+        owner.exchanges.native = true;
+        owner.native_state = Some(NativeState::default());
+        owner
+    }
+    pub fn control_credit_limit(&self) -> usize {
+        if self.native_state.is_some() {
+            NATIVE_CONTROL_CREDIT
+        } else {
+            MAX_CONTROL_CREDIT
+        }
+    }
+    pub fn poison(&mut self) {
+        if self.native_state.is_some() {
+            self.exchanges.poisoned = true;
+        }
+    }
+    /// Called only after the original dispatch grant is fully written.
+    pub fn grant_written(&mut self, active: bool) -> Result<(), String> {
+        let Some(state) = self.native_state.as_mut() else {
+            return Ok(());
+        };
+        if state.dispatch_written || state.sealed || self.exchanges.poisoned {
+            self.exchanges.poisoned = true;
+            return Err("native file dispatch cannot be replayed or upgraded".into());
+        }
+        state.dispatch_written = true;
+        state.active = active;
+        Ok(())
+    }
+    /// Sole runner writer acknowledgement, never query-completion credit.
+    pub fn observation_delivered(&mut self) -> Result<(), String> {
+        let result = (|| {
+            let Some(state) = self.native_state.as_mut() else {
+                return Ok(());
+            };
+            let ordinal = state
+                .pending_delivery
+                .take()
+                .ok_or("native context has no pending result delivery")?;
+            if self.exchanges.poisoned
+                || state.sealed
+                || ordinal != state.delivered + 1
+                || ordinal != self.exchanges.consumed
+                || state.replies[usize::from(ordinal - 1)].is_none()
+            {
+                return Err("native context delivery phase differs".into());
+            }
+            state.delivered = ordinal;
+            Ok(())
+        })();
+        if result.is_err() {
+            self.poison();
+        }
+        result
+    }
+    pub fn requires_finality(&self) -> bool {
+        self.native_state.is_some()
+    }
+    /// Observation is not permission. The admitted engine separately validates
+    /// canonical policy/spec/binding/source/preimage synchronously. This seal
+    /// enforces delivered observations and existing original native custody.
+    pub fn seal_proposal(
+        &mut self,
+        exit_code: u8,
+        until: Instant,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<(), String> {
+        if self.native_state.is_none() {
+            return Ok(());
+        }
+        let result = (|| {
+            check(&self.original, until, cancelled)?;
+            let state = self.native_state.as_mut().unwrap();
+            if std::mem::replace(&mut state.sealed, true) {
+                return Err("native file proposal already sealed".into());
+            }
+            // A protective refusal starts no additional query/effect. Existing
+            // pending custody/publications remain with their original owners.
+            if exit_code == 2 {
+                return Ok(());
+            }
+            if self.exchanges.poisoned || state.pending_delivery.is_some() {
+                return Err("native file proposal retains poisoned or partial observation".into());
+            }
+            if !state.dispatch_written
+                || !state.active
+                || self.exchanges.unused
+                || !self.exchanges.ready
+                || self.exchanges.consumed != 3
+                || state.delivered != 3
+                || state.replies.iter().any(Option::is_none)
+                || self.capture_failure.is_some()
+                || self.refusal.is_some()
+            {
+                return Err(
+                    "native nonblocking file proposal requires three delivered observations".into(),
+                );
+            }
+            let owner = self
+                .owner
+                .as_ref()
+                .ok_or("native final observation has no original project owner")?;
+            if owner.pending.is_some() {
+                return Err("native final observation retains pending Git custody".into());
+            }
+            owner.verify(until, cancelled, &mut || {
+                check(&self.original, until, cancelled)
+            })?;
+            check(&self.original, until, cancelled)
+        })();
+        if result.is_err() {
+            self.poison();
+        }
+        result
+    }
+    pub fn native_strike_roots(
+        &self,
+        phase: NativeStrikePhase,
+        token: &str,
+        snapshot: &str,
+        id: &str,
+        runtime_digest: &str,
+        original: &MonotonicDeadline,
+        until: Instant,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<ScopeStrikeRoots<'_>, String> {
+        let state = self
+            .native_state
+            .as_ref()
+            .ok_or("native strike lacks original native file context")?;
+        let expected = match phase {
+            NativeStrikePhase::ScopeGuard => 1,
+            NativeStrikePhase::ShortcutLanguage => 2,
+        };
+        if self.exchanges.poisoned
+            || self.exchanges.unused
+            || !self.exchanges.ready
+            || state.sealed
+            || !state.dispatch_written
+            || !state.active
+            || state.pending_delivery.is_some()
+            || self.exchanges.consumed != expected
+            || state.delivered != expected
+            || self.exchanges.token.as_deref() != Some(token)
+            || self.exchanges.snapshot.as_deref() != Some(snapshot)
+        {
+            return Err("native strike token, snapshot or delivered phase differs".into());
+        }
+        if phase == NativeStrikePhase::ShortcutLanguage {
+            #[derive(Deserialize)]
+            struct Tool {
+                tool_name: Option<String>,
+            }
+            let tool: Tool = serde_json::from_str(self.input.payload.get())
+                .map_err(|error| format!("original shortcut tool: {error}"))?;
+            if tool.tool_name.as_deref() != Some("Write") {
+                return Err("native shortcut strike requires original Write".into());
+            }
+        }
+        self.bound_strike_roots(id, runtime_digest, original, until, cancelled)
     }
     fn initialize(
         &mut self,
@@ -849,6 +1131,14 @@ impl Preparation {
         Ok(())
     }
     pub fn mark_ready(&mut self) -> Result<(), String> {
+        if let Some(state) = self.native_state.as_ref()
+            && (state.pending_delivery.is_some()
+                || state.delivered != self.exchanges.consumed
+                || state.sealed)
+        {
+            self.poison();
+            return Err("native Ready precedes complete context delivery".into());
+        }
         self.exchanges.mark_ready()
     }
     pub fn observe(
@@ -859,14 +1149,23 @@ impl Preparation {
         cancelled: &dyn Fn() -> bool,
         mut pump: impl FnMut(&[libc::pollfd], i32) -> Result<(), String>,
     ) -> Result<Vec<u8>, String> {
-        // Admission consumes/poisons the offer before any lazy query can start.
-        let control = self.exchanges.admit(
-            bytes,
-            &self.input.id,
-            &self.input.runtime_digest,
-            after_dispatch,
-        )?;
         let result = (|| {
+            if let Some(state) = self.native_state.as_ref()
+                && (state.sealed
+                    || state.pending_delivery.is_some()
+                    || state.delivered != self.exchanges.consumed
+                    || (after_dispatch && (!state.dispatch_written || !state.active)))
+            {
+                return Err("native context request precedes delivery or active dispatch".into());
+            }
+            // Consume/poison before starting any lazy original query.
+            let control = self.exchanges.admit(
+                bytes,
+                &self.input.id,
+                &self.input.runtime_digest,
+                after_dispatch,
+            )?;
+            let ordinal = control.ordinal;
             self.initialize(until, cancelled, &mut pump)?;
             let owner = self
                 .owner
@@ -876,8 +1175,13 @@ impl Preparation {
             if control.ordinal == 1 {
                 self.exchanges.snapshot = Some(owner.snapshot_token()?);
             }
+            let schema = if self.native_state.is_some() {
+                NATIVE_RESULT_SCHEMA
+            } else {
+                RESULT_SCHEMA
+            };
             let mut reply = serde_json::to_vec(&serde_json::json!({
-                "schema":RESULT_SCHEMA,"id":control.id,"runtimeDigest":control.runtime_digest,
+                "schema":schema,"id":control.id,"runtimeDigest":control.runtime_digest,
                 "token":control.token,"ordinal":control.ordinal,"snapshotToken":self.exchanges.snapshot,
                 "context":context
             })).map_err(|error| error.to_string())?;
@@ -885,6 +1189,10 @@ impl Preparation {
                 return Err("file-tool context reply exceeds 2MiB".into());
             }
             reply.push(b'\n');
+            if let Some(state) = self.native_state.as_mut() {
+                state.replies[usize::from(ordinal - 1)] = Some(reply.clone());
+                state.pending_delivery = Some(ordinal);
+            }
             Ok(reply)
         })();
         if result.is_err() {
@@ -1270,6 +1578,7 @@ mod tests {
             capture_failure: None,
             refusal: Some("unused native pin refusal".into()),
             exchanges: Exchanges::default(),
+            native_state: None,
         }
     }
     #[test]

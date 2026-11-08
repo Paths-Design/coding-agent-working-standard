@@ -151,6 +151,9 @@ pub struct Request {
 }
 
 impl Request {
+    pub(crate) fn native_file_backend(&self) -> bool {
+        self.file_tool_context == Some(caws_native::context_git::file_tools::NATIVE_CAPABILITY)
+    }
     pub(crate) fn guard_strikes_input(
         &self,
     ) -> Option<crate::guard_strikes_wire::OriginalInput<'_>> {
@@ -510,6 +513,13 @@ impl Request {
             && caws_native::context_git::file_tools::eligible_payload(&payload)?
         {
             Some(caws_native::context_git::file_tools::CAPABILITY)
+        } else if cfg!(target_os = "macos")
+            && config.configuration == "system"
+            && config.surface == "claude-code"
+            && config.event == "pre_tool_use"
+            && caws_native::context_git::file_tools::eligible_native_payload(&payload)?
+        {
+            Some(caws_native::context_git::file_tools::NATIVE_CAPABILITY)
         } else {
             None
         };
@@ -536,7 +546,13 @@ impl Request {
                 .then_some(STOP_LEASE_CONTEXT_CAPABILITY),
             selection_observation: None,
             file_tool_context,
-            guard_strikes: file_tool_context.map(|_| crate::guard_strikes_wire::CAPABILITY),
+            guard_strikes: file_tool_context.map(|capability| {
+                if capability == caws_native::context_git::file_tools::NATIVE_CAPABILITY {
+                    crate::guard_strikes_wire::NATIVE_CAPABILITY
+                } else {
+                    crate::guard_strikes_wire::CAPABILITY
+                }
+            }),
             #[cfg(target_os = "macos")]
             session_end_prefix: caws_native::session_cache_wire::PREFIX_CAPABILITY,
             #[cfg(target_os = "macos")]
@@ -723,10 +739,17 @@ pub fn validate_frame(bytes: &[u8], request: &Request) -> Result<EngineFrame, St
     }
     let header: Discriminator =
         serde_json::from_slice(bytes).map_err(|e| format!("invalid engine frame: {e}"))?;
-    if header.schema == crate::guard_strikes_wire::REQUEST_SCHEMA {
+    if header.schema == crate::guard_strikes_wire::REQUEST_SCHEMA
+        || header.schema == crate::guard_strikes_wire::NATIVE_REQUEST_SCHEMA
+    {
         // Classification grants no effects or credit. Even malformed/oversized
         // recognized requests must reach the one-shot owner's consumption check.
         return Ok(EngineFrame::GuardStrikesRequest(bytes.to_vec()));
+    }
+    if header.schema == caws_native::context_git::file_tools::NATIVE_REQUEST_SCHEMA {
+        // Classification grants no effects or credit. Recognized malformed,
+        // oversized and late controls reach the original owner's poison check.
+        return Ok(EngineFrame::FileToolContextRequest(bytes.to_vec()));
     }
     if header.schema == caws_native::context_git::file_tools::REQUEST_SCHEMA {
         if request.file_tool_context.is_none()

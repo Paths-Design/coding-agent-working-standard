@@ -278,19 +278,33 @@ fn execute_observed<'deadline>(
     // Root custody outlives closing brackets, String-only callbacks and the
     // outcome closure. A callback never owns the last retained Git failure.
     let mut file_tool_context = request.file_tool_context_input().map(|input| {
-        caws_native::context_git::file_tools::Preparation::retain_original(
-            input,
-            original_deadline,
-            deadline,
-            &|| {
-                cancellation::check().is_err()
-                    || runner::check_until(original_deadline, deadline).is_err()
-            },
-        )
+        let cancelled = || {
+            cancellation::check().is_err()
+                || runner::check_until(original_deadline, deadline).is_err()
+        };
+        if request.native_file_backend() {
+            caws_native::context_git::file_tools::Preparation::retain_native(
+                input,
+                original_deadline,
+                deadline,
+                &cancelled,
+            )
+        } else {
+            caws_native::context_git::file_tools::Preparation::retain_original(
+                input,
+                original_deadline,
+                deadline,
+                &cancelled,
+            )
+        }
     });
-    let mut guard_strikes = request
-        .guard_strikes_input()
-        .map(|input| guard_strikes_wire::Owner::retain(input, original_deadline));
+    let mut guard_strikes = request.guard_strikes_input().map(|input| {
+        if request.native_file_backend() {
+            guard_strikes_wire::Owner::retain_native(input, original_deadline)
+        } else {
+            guard_strikes_wire::Owner::retain(input, original_deadline)
+        }
+    });
     let mut stop_git_custody = stop_git::FailureCustody::default();
     let outcome = (|| -> Result<u8, Failure<'deadline>> {
         progress.mark("selection-owner");
@@ -413,7 +427,7 @@ fn execute_observed<'deadline>(
                             guard_strikes
                                 .as_mut()
                                 .ok_or("scope strikes were not advertised")?,
-                            file_tool_context.as_ref(),
+                            file_tool_context.as_mut(),
                             &frame,
                             deadline,
                         )?;
@@ -603,6 +617,9 @@ fn execute_observed<'deadline>(
             if let Some(owner) = guard_strikes.as_mut() {
                 owner.grant_written(dispatched)?;
             }
+            if let Some(owner) = file_tool_context.as_mut() {
+                owner.grant_written(dispatched)?;
+            }
             let mut cache_attempted = false;
             let mut prefix_complete = false;
             let mut publication_attempted = false;
@@ -619,7 +636,7 @@ fn execute_observed<'deadline>(
                             guard_strikes
                                 .as_mut()
                                 .ok_or("scope strikes were not advertised")?,
-                            file_tool_context.as_ref(),
+                            file_tool_context.as_mut(),
                             &frame,
                             deadline,
                         )?;
@@ -949,7 +966,12 @@ fn execute_observed<'deadline>(
                         token,
                         result,
                         containment,
-                    } => break Ok((token, result, containment)),
+                    } => {
+                        if let Some(owner) = file_tool_context.as_mut() {
+                            session.seal_file_proposal(owner, result.exit_code, deadline)?;
+                        }
+                        break Ok((token, result, containment));
+                    }
                     protocol::EngineFrame::Failure(message) => break Err(message),
                     protocol::EngineFrame::Ready(_) => {
                         break Err("unexpected ready after dispatch grant".into());
@@ -960,6 +982,14 @@ fn execute_observed<'deadline>(
         let (token, result, containment) = match stop_git_custody.preserve(proposal) {
             Ok(value) => value,
             Err(mut message) => {
+                // Includes malformed/unclassified protocol input. A failed
+                // invocation cannot resume or upgrade completed observations.
+                if let Some(owner) = file_tool_context.as_mut() {
+                    owner.poison();
+                }
+                if let Some(owner) = guard_strikes.as_mut() {
+                    owner.poison();
+                }
                 if let Err(error) = session.cleanup_until(original_deadline, bounds.processing) {
                     message.push_str(&format!("; cleanup: {error}"));
                 }

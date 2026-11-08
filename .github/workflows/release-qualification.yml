@@ -125,6 +125,25 @@ jobs:
         run: |
           export CAWS_NATIVE_CUSTODY_NODE_PATH="$(command -v node)"
           cargo +1.90.0 test --locked --offline --manifest-path packages/caws-native/Cargo.toml --no-default-features --test context_git --jobs 2 -- --test-threads=1
+      - name: Exercise native file protocol with the optimized image
+        id: native-file
+        env:
+          CAWS_NATIVE_TEST_ARTIFACT_ROOT: ${{ github.workspace }}/native-file-observations
+        run: |
+          mkdir -p "$CAWS_NATIVE_TEST_ARTIFACT_ROOT"
+          git rev-parse HEAD > "$CAWS_NATIVE_TEST_ARTIFACT_ROOT/source-commit.txt"
+          export CAWS_NATIVE_CUSTODY_NODE_PATH="$(command -v node)"
+          cargo +1.90.0 test --release --locked --offline --manifest-path packages/caws-native/Cargo.toml --no-default-features --test native_file_owner --jobs 2 -- --test-threads=1
+      - name: Archive native file observations without following fixture symlinks
+        if: ${{ always() && steps.native-file.outcome != 'skipped' }}
+        run: tar -czf native-file-observations.tgz -- native-file-observations
+      - name: Retain native file observations
+        if: ${{ always() && steps.native-file.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-file-${{ github.sha }}
+          path: native-file-observations.tgz
+          if-no-files-found: error
 
   package-upgrade:
     name: Packaged upgrade (${{ matrix.os }}, Node ${{ matrix.node }})

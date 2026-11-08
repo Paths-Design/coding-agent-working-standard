@@ -841,6 +841,13 @@ impl StrikeStore {
     ) -> Result<CommittedStrike> {
         self.increment("scope_guard", legacy, budget)
     }
+    pub fn increment_shortcut_language(
+        &self,
+        legacy: &[PathBuf],
+        budget: TransactionBudget<'_>,
+    ) -> Result<CommittedStrike> {
+        self.increment("shortcut_language", legacy, budget)
+    }
     /// Generic Rust-only entry for existing shell guards; no Node guard selector.
     pub fn increment(
         &self,
