@@ -1309,6 +1309,36 @@ pub(crate) fn observe_with_query(
     original_payload: &RawValue,
     expires: Instant,
     is_cancelled: &dyn Fn() -> bool,
+    run: impl FnMut(
+        &SelectedExecutable,
+        &Path,
+        &BTreeMap<String, String>,
+        &[&str],
+        Instant,
+        &dyn Fn() -> bool,
+    ) -> Result<QueryOutput, ProjectFailure>,
+) -> Result<ObservedProject, ProjectFailure> {
+    observe_with_query_selection(
+        caller_cwd,
+        environment,
+        original_payload,
+        expires,
+        is_cancelled,
+        None,
+        run,
+    )
+}
+
+/// An admitted native caller supplies the exact image and effective environment.
+/// The original environment still selects/binds the original candidate; it
+/// never reselects an executable in the explicit-image branch.
+pub(crate) fn observe_with_query_selection(
+    caller_cwd: &str,
+    environment: &BTreeMap<String, String>,
+    original_payload: &RawValue,
+    expires: Instant,
+    is_cancelled: &dyn Fn() -> bool,
+    admitted: Option<(&SelectedExecutable, &BTreeMap<String, String>)>,
     mut run: impl FnMut(
         &SelectedExecutable,
         &Path,
@@ -1335,13 +1365,29 @@ pub(crate) fn observe_with_query(
         ));
     }
     let candidate = candidate(caller_cwd, environment, original_payload)?;
-    let filtered: BTreeMap<String, String> = environment
-        .iter()
-        .filter(|(name, _)| !name.starts_with("GIT_") && !name.starts_with("HOOK_"))
-        .map(|(name, value)| (name.clone(), value.clone()))
-        .collect();
-    let executable_path = select_executable(caller_cwd, &filtered)?;
-    let executable = pin_executable(&executable_path, expires, is_cancelled)?;
+    let (executable, filtered) = match admitted {
+        Some((selected, effective)) => {
+            if effective.iter().any(|(name, value)| {
+                name.is_empty() || name.contains(['=', '\0']) || value.contains('\0')
+            }) {
+                return Err(ProjectFailure::new(
+                    ProjectPhase::Caller,
+                    "invalid native effective Git environment",
+                ));
+            }
+            verify_executable(selected, ProjectPhase::BeforeLaunch, expires, is_cancelled)?;
+            (selected.clone(), effective.clone())
+        }
+        None => {
+            let filtered: BTreeMap<String, String> = environment
+                .iter()
+                .filter(|(name, _)| !name.starts_with("GIT_") && !name.starts_with("HOOK_"))
+                .map(|(name, value)| (name.clone(), value.clone()))
+                .collect();
+            let path = select_executable(caller_cwd, &filtered)?;
+            (pin_executable(&path, expires, is_cancelled)?, filtered)
+        }
+    };
     let first = run(
         &executable,
         &candidate,

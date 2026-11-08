@@ -531,6 +531,8 @@ impl Owner {
         checkpoint: &mut impl FnMut() -> Result<(), String>,
     ) -> Result<(), String> {
         check(&self.original, until, cancelled)?;
+        self.captured
+            .verify_native_file_git(&self.native, until, cancelled)?;
         project::verify_executable(
             &self.native,
             project::ProjectPhase::BeforeLaunch,
@@ -568,6 +570,8 @@ impl Owner {
         pump: &mut impl FnMut(&[libc::pollfd], i32) -> Result<(), String>,
     ) -> Result<(i32, Vec<u8>), String> {
         check(&self.original, until, cancelled)?;
+        self.captured
+            .verify_native_file_git(&self.native, until, cancelled)?;
         if self.pending.is_some() {
             return Err("file-tool query retains previous custody".into());
         }
@@ -604,6 +608,8 @@ impl Owner {
             if let Some(bytes) = value {
                 let (code, stdout) = settled_query(&bytes)?;
                 self.pending.take();
+                self.captured
+                    .verify_native_file_git(&self.native, until, cancelled)?;
                 project::verify_executable(
                     &self.native,
                     project::ProjectPhase::AfterLaunch,
@@ -775,6 +781,8 @@ pub struct Preparation {
     original: MonotonicDeadline,
     native: Option<project::SelectedExecutable>,
     owner: Option<Owner>,
+    // Retain completed capture facts even if later root/fence setup refuses.
+    retained_capture: Option<CapturedProject>,
     capture_failure: Option<RemoteFailure>,
     refusal: Option<String>,
     exchanges: Exchanges,
@@ -874,6 +882,7 @@ impl Preparation {
             original: original.clone(),
             native,
             owner: None,
+            retained_capture: None,
             capture_failure: None,
             refusal,
             exchanges: Exchanges::default(),
@@ -1093,7 +1102,16 @@ impl Preparation {
                     }
                 }
             };
-            original_project::capture(self.input.input(), &native, &clock, &interrupted)
+            if self.native_state.is_some() {
+                original_project::capture_native_file(
+                    self.input.input(),
+                    &native,
+                    &clock,
+                    &interrupted,
+                )
+            } else {
+                original_project::capture(self.input.input(), &native, &clock, &interrupted)
+            }
         };
         let captured = match captured {
             Ok(captured) => captured,
@@ -1108,8 +1126,11 @@ impl Preparation {
         // A transport failure cannot be upgraded by a concurrently arriving
         // successful capture; no additional queries or effects may follow it.
         if let Some(error) = transport_error.into_inner() {
+            self.retained_capture = Some(captured);
             return Err(error);
         }
+        self.retained_capture = Some(captured);
+        let captured = self.retained_capture.as_ref().unwrap();
         let mut checkpoint = || {
             check(&clock, until, cancelled)?;
             pump(&[], 0)?;
@@ -1126,7 +1147,7 @@ impl Preparation {
         } else {
             None
         };
-        let git = ContextGitOwner::new(Invocation {
+        let invocation = Invocation {
             id: self.input.id.clone(),
             runtime_digest: self.input.runtime_digest.clone(),
             deadline: until,
@@ -1136,10 +1157,15 @@ impl Preparation {
                 .iter()
                 .map(|(name, value)| (name.into(), value.into()))
                 .collect(),
-        })?;
+        };
+        let git = if self.native_state.is_some() {
+            ContextGitOwner::new_native_file(invocation, captured)?
+        } else {
+            ContextGitOwner::new(invocation)?
+        };
         self.owner = Some(Owner {
             original: clock,
-            captured,
+            captured: self.retained_capture.take().unwrap(),
             native,
             git,
             checkout,
@@ -1614,6 +1640,7 @@ mod tests {
             original: MonotonicDeadline::capture(Duration::from_secs(1)).unwrap(),
             native: None,
             owner: None,
+            retained_capture: None,
             capture_failure: None,
             refusal: Some("unused native pin refusal".into()),
             exchanges: Exchanges::default(),

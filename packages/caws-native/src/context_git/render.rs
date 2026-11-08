@@ -1080,6 +1080,7 @@ pub(super) fn run_configuration(
                         executable: &git.path,
                         cwd: &config.cwd,
                         environment: &environment,
+                        native_file: false,
                         argv: operation.argv(),
                         expires_ns: until,
                     },

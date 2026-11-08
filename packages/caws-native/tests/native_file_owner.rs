@@ -60,10 +60,13 @@ impl Fixture {
         symlink(&node, root.join("configured-node")).unwrap();
         fs::write(
             root.join("configured-git"),
-            br#"#!/bin/sh
-printf 'query\n' >> "${NATIVE_FILE_ROOT}/git-queries.log"
-exec /usr/bin/git "$@"
-"#,
+            format!(
+                "#!/bin/sh\n: > '{}'\nexit 97\n",
+                root.join("git-queries.log")
+                    .to_str()
+                    .unwrap()
+                    .replace('\'', "'\\''")
+            ),
         )
         .unwrap();
         fs::set_permissions(
@@ -71,6 +74,21 @@ exec /usr/bin/git "$@"
             fs::Permissions::from_mode(0o755),
         )
         .unwrap();
+        let path_sentinel = format!(
+            "#!/bin/sh\n: > '{}'\nexit 97\n",
+            root.join("path-tool-executed")
+                .to_str()
+                .unwrap()
+                .replace('\'', "'\\''")
+        );
+        for name in ["git", "xcrun", "xcode-select"] {
+            fs::write(root.join("bin").join(name), &path_sentinel).unwrap();
+            fs::set_permissions(
+                root.join("bin").join(name),
+                fs::Permissions::from_mode(0o700),
+            )
+            .unwrap();
+        }
         fs::write(
             root.join("unadmitted-git"),
             b"#!/bin/sh\n: > \"$NATIVE_FILE_ROOT/engine-git-executed\"\nexec /usr/bin/git \"$@\"\n",
@@ -160,6 +178,10 @@ exec /usr/bin/git "$@"
             .env("NATIVE_FILE_PROJECT", &self.project)
             .env("NATIVE_FILE_LANE", &self.lane)
             .env("NATIVE_FILE_MODE", mode)
+            .envs(
+                (mode == "developer-override")
+                    .then(|| ("DEVELOPER_DIR", self.root.join("unadmitted-developer"))),
+            )
             .env("NATIVE_FILE_EXPECTED_COUNT", count.to_string())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -706,11 +728,8 @@ fn real_native_write_and_edit_observe_original_canonical_roots_and_fixed_counter
         assert_eq!(contexts[1]["ordinal"], 2);
         assert_eq!(contexts[2]["ordinal"], 3);
         assert_eq!(contexts[0]["snapshotToken"], contexts[2]["snapshotToken"]);
-        assert!(
-            !fs::read(fixture.root.join("git-queries.log"))
-                .unwrap()
-                .is_empty()
-        );
+        assert!(!fixture.root.join("git-queries.log").exists());
+        assert!(!fixture.root.join("path-tool-executed").exists());
         let strikes = fixture.strike_controls();
         assert_eq!(strikes.len(), if tool == "Write" { 2 } else { 1 });
         for strike in strikes {
@@ -826,11 +845,8 @@ fn unrelated_opaque_duplicate_extensions_and_large_numerals_do_not_select_author
     assert_eq!(state["scope_guard"], 1);
     assert_eq!(state["shortcut_language"], 1);
     assert_eq!(fixture.context_results().len(), 3);
-    assert!(
-        !fs::read(fixture.root.join("git-queries.log"))
-            .unwrap()
-            .is_empty()
-    );
+    assert!(!fixture.root.join("git-queries.log").exists());
+    assert!(!fixture.root.join("path-tool-executed").exists());
 }
 
 #[test]
@@ -1039,13 +1055,12 @@ fn independent_unused_operations_are_refused_after_final_observation() {
 }
 
 #[test]
-fn replay_late_controls_and_post_shortcut_image_drift_cannot_upgrade_to_allow() {
+fn replay_and_late_controls_cannot_upgrade_to_allow() {
     for mode in [
         "scope-replay",
         "shortcut-replay",
         "late-strike",
         "buffered-late-strike",
-        "git-image-drift",
     ] {
         let fixture = Fixture::new();
         let output = fixture.invoke(mode, "Write");
@@ -1069,24 +1084,85 @@ fn replay_late_controls_and_post_shortcut_image_drift_cannot_upgrade_to_allow() 
             assert_eq!(fixture.context_results().len(), 1);
         } else {
             assert_eq!(state["shortcut_language"], 1, "{mode}");
-            if mode == "git-image-drift" {
-                assert_eq!(strikes.len(), 2);
-                assert_eq!(fixture.context_results().len(), 2);
-                assert!(fixture.controls().iter().any(|row| {
-                    row["schema"] == "caws.runtime.file-tool-context.request.v2"
-                        && row["ordinal"] == 3
-                }));
-                assert_eq!(
-                    fs::read_link(fixture.root.join("configured-git")).unwrap(),
-                    PathBuf::from("/usr/bin/git")
-                );
-            } else {
-                assert_eq!(strikes.len(), 3, "{mode}");
-                assert_eq!(strikes[2]["operation"], "increment_shortcut_language");
-                if mode != "shortcut-replay" {
-                    assert_eq!(fixture.context_results().len(), 3, "{mode}");
-                }
+            assert_eq!(strikes.len(), 3, "{mode}");
+            assert_eq!(strikes[2]["operation"], "increment_shortcut_language");
+            if mode != "shortcut-replay" {
+                assert_eq!(fixture.context_results().len(), 3, "{mode}");
             }
         }
     }
+}
+
+#[test]
+fn native_system_git_ignores_caller_image_path_and_global_config() {
+    let fixture = Fixture::new();
+    // If caller HOME/global config leaks into Git, this invalid file must fail
+    // parsing. It is not an expected-distribution receipt or fake Git output.
+    fs::write(
+        fixture.home.join(".gitconfig"),
+        b"THIS IS NOT A VALID GIT CONFIG\n",
+    )
+    .unwrap();
+    let output = fixture.invoke("complete", "Write");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"native-owner-ok\n");
+    assert_eq!(fixture.context_results().len(), 3);
+    let state = fixture.state().unwrap();
+    assert_eq!(state["scope_guard"], 1);
+    assert_eq!(state["shortcut_language"], 1);
+    assert!(!fixture.root.join("git-queries.log").exists());
+    assert!(!fixture.root.join("path-tool-executed").exists());
+}
+
+#[test]
+fn changing_an_ignored_caller_override_cannot_reselect_the_admitted_git() {
+    let fixture = Fixture::new();
+    let output = fixture.invoke("git-image-drift", "Write");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"native-owner-ok\n");
+    assert_eq!(fixture.context_results().len(), 3);
+    assert_eq!(
+        fs::read_link(fixture.root.join("configured-git")).unwrap(),
+        PathBuf::from("/usr/bin/git")
+    );
+    assert!(!fixture.root.join("git-queries.log").exists());
+    assert!(!fixture.root.join("path-tool-executed").exists());
+    let state = fixture.state().unwrap();
+    assert_eq!(state["scope_guard"], 1);
+    assert_eq!(state["shortcut_language"], 1);
+}
+
+#[test]
+fn developer_override_refuses_before_repository_observation_or_publication() {
+    let fixture = Fixture::new();
+    let output = fixture.invoke("developer-override", "Write");
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        fixture.controls()[0]["schema"],
+        "caws.runtime.file-tool-context.request.v2"
+    );
+    assert!(fixture.context_results().is_empty());
+    assert!(fixture.strike_controls().is_empty());
+    assert!(fixture.state().is_none());
+    assert!(!fixture.root.join("git-queries.log").exists());
+    assert!(!fixture.root.join("path-tool-executed").exists());
+    let diagnostic = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        diagnostic.contains("unsupported original developer or loader environment"),
+        "{diagnostic}"
+    );
 }

@@ -12,6 +12,9 @@ use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
+#[path = "apple_system_git.rs"]
+mod apple_system_git;
+
 pub(super) const CONFIG_SCHEMA: &str = "caws.native.original-project.configuration.v1";
 const REPLY_SCHEMA: &str = "caws.native.original-project.reply.v1";
 // Two queries, each with at most MAX_OUTPUT raw bytes, plus base64, bounded
@@ -39,8 +42,28 @@ pub struct CapturedProject {
     deadline: DeadlineEnvelope,
     project: project::ObservedProject,
     query_cwds: [PathBuf; 2],
+    native_git: Option<apple_system_git::Facts>,
+    native_queries: Vec<QueryReceipt>,
 }
 impl CapturedProject {
+    pub(crate) fn is_native_file(&self) -> bool {
+        self.native_git.is_some()
+    }
+    pub(crate) fn verify_native_file_git(
+        &self,
+        executor: &project::SelectedExecutable,
+        until: Instant,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<(), String> {
+        let Some(facts) = &self.native_git else {
+            return Ok(());
+        };
+        facts.validate(&Pinned::capture(executor), &self.native_queries)?;
+        let clock = MonotonicDeadline::receive(self.deadline).map_err(|e| e.to_string())?;
+        facts.verify(until.min(clock.expires()), &|| {
+            cancelled() || clock.check().is_err()
+        })
+    }
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -244,10 +267,12 @@ struct Configuration {
     payload: String,
     deadline: DeadlineEnvelope,
     executor: Pinned,
+    #[serde(default, skip_serializing_if = "is_false")]
+    native_file: bool,
 }
 impl Configuration {
     fn digest(&self) -> Result<String, String> {
-        let bytes = serde_json::to_vec(&(
+        let binding = (
             &self.id,
             &self.runtime_digest,
             &self.nonce,
@@ -256,7 +281,14 @@ impl Configuration {
             &self.payload,
             self.deadline,
             &self.executor,
-        ))
+        );
+        // Preserve ordinary configuration binding bytes; native mode is an
+        // additional authenticated producer choice, never an engine selector.
+        let bytes = if self.native_file {
+            serde_json::to_vec(&(super::NATIVE_FILE_GIT_POLICY, binding))
+        } else {
+            serde_json::to_vec(&binding)
+        }
         .map_err(|e| e.to_string())?;
         Ok(format!("{:x}", Sha256::digest(bytes)))
     }
@@ -326,6 +358,10 @@ struct Reply {
     rows: Vec<Row>,
     project: Option<ProjectResult>,
     failure: Option<WireFailure>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    native_git: Option<apple_system_git::Facts>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    system_queries: Vec<QueryReceipt>,
 }
 fn positive(r: &QueryReceipt) -> bool {
     r.cleanup.group_settled && r.cleanup.stdout_eof && r.cleanup.stderr_eof && r.cleanup.reaped
@@ -387,6 +423,26 @@ fn validate_reply(r: &Reply, c: &Configuration, payload: &RawValue) -> Result<()
         || r.rows.len() > 2
     {
         return Err("private original-project reply binding mismatch".into());
+    }
+    if !c.native_file {
+        if r.native_git.is_some() || !r.system_queries.is_empty() {
+            return Err("ordinary project reply contains native admission data".into());
+        }
+    } else {
+        if !r.system_queries.is_empty() {
+            return Err("fixed native Git admission cannot contain resolver queries".into());
+        }
+        if let Some(facts) = &r.native_git {
+            facts.validate(&c.executor, &r.system_queries)?;
+            if r.project
+                .as_ref()
+                .is_some_and(|p| p.git != facts.implementation)
+            {
+                return Err("project used a different image from native Git admission".into());
+            }
+        } else if r.project.is_some() || !r.rows.is_empty() {
+            return Err("native project query preceded authenticated system Git admission".into());
+        }
     }
     if r.terminal {
         if r.project.is_some() == r.failure.is_some()
@@ -678,6 +734,37 @@ pub fn capture(
     deadline: &MonotonicDeadline,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<CapturedProject, RemoteFailure> {
+    capture_with_policy(input, executor, deadline, cancelled, false)
+}
+
+/// Native file-only factory. JSON observations alone cannot invoke this
+/// constructor or replace the actual current native custodian image.
+pub fn capture_native_file(
+    input: Input<'_>,
+    executor: &project::SelectedExecutable,
+    deadline: &MonotonicDeadline,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<CapturedProject, RemoteFailure> {
+    checkpoint(deadline, cancelled)?;
+    let current = std::env::current_exe()
+        .and_then(fs::canonicalize)
+        .map_err(|e| RemoteFailure::before(FailureKind::Io, e.to_string()))?;
+    if current != executor.physical_path {
+        return Err(RemoteFailure::before(
+            FailureKind::Protocol,
+            "native file capture requires its actual current executor",
+        ));
+    }
+    capture_with_policy(input, executor, deadline, cancelled, true)
+}
+
+fn capture_with_policy(
+    input: Input<'_>,
+    executor: &project::SelectedExecutable,
+    deadline: &MonotonicDeadline,
+    cancelled: &dyn Fn() -> bool,
+    native_file: bool,
+) -> Result<CapturedProject, RemoteFailure> {
     checkpoint(deadline, cancelled)?;
     project::verify_executable(
         executor,
@@ -702,6 +789,7 @@ pub fn capture(
         payload: STANDARD.encode(input.payload.get().as_bytes()),
         deadline: deadline.envelope(),
         executor: Pinned::capture(executor),
+        native_file,
     };
     c.input_digest = c
         .digest()
@@ -819,12 +907,24 @@ pub fn capture(
                 .map_err(|e| RemoteFailure::before(kind(e.first_phase), e.to_string()))?;
                 let expected = r.project.as_ref().unwrap();
                 let mut index = 0;
-                let observed = project::observe_with_query(
+                let admitted = r
+                    .native_git
+                    .as_ref()
+                    .map(|facts| facts.implementation.selected());
+                if native_file && admitted.is_none() {
+                    return Err(RemoteFailure::before(
+                        FailureKind::Protocol,
+                        "native project success lacks admitted Git image",
+                    ));
+                }
+                let effective = native_file.then(native_file_environment);
+                let observed = project::observe_with_query_selection(
                     input.caller_cwd,
                     input.environment,
                     input.payload,
                     deadline.expires(),
                     cancelled,
+                    admitted.as_ref().zip(effective.as_ref()),
                     |selected, cwd, _, args, _, _| {
                         let row = r.rows.get(index).ok_or_else(|| {
                             project::ProjectFailure::new(
@@ -855,6 +955,11 @@ pub fn capture(
                         "private physical project result changed",
                     ));
                 }
+                if let Some(facts) = &r.native_git {
+                    facts
+                        .verify(deadline.expires(), cancelled)
+                        .map_err(|e| RemoteFailure::before(FailureKind::Protocol, e))?;
+                }
                 checkpoint(deadline, cancelled)?;
                 Ok(CapturedProject {
                     id: r.id.clone(),
@@ -863,6 +968,8 @@ pub fn capture(
                     deadline: r.deadline,
                     project: observed,
                     query_cwds: [r.rows[0].cwd.clone(), r.rows[1].cwd.clone()],
+                    native_git: r.native_git.clone(),
+                    native_queries: r.system_queries.clone(),
                 })
             })();
             return result.map_err(|mut e| {
@@ -987,6 +1094,8 @@ pub(super) fn run_configuration(
         rows: Vec::new(),
         project: None,
         failure: None,
+        native_git: None,
+        system_queries: Vec::new(),
     };
     // Invalid/expired clocks produce a correlated no-query refusal, never a new
     // timeout. The private configuration still authenticates original binding.
@@ -1012,12 +1121,35 @@ pub(super) fn run_configuration(
         &stopped,
     )
     .and_then(|()| {
-        project::observe_with_query(
+        let admitted = if c.native_file {
+            let facts =
+                apple_system_git::admit(&c.environment, &c.executor, deadline.expires(), &stopped)
+                    .map_err(|message| {
+                        project::ProjectFailure::new(
+                            if stopped() {
+                                project::ProjectPhase::Cancelled
+                            } else if deadline.check().is_err() {
+                                project::ProjectPhase::QueryDeadline
+                            } else {
+                                project::ProjectPhase::SelectExecutable
+                            },
+                            message,
+                        )
+                    })?;
+            let selected = facts.implementation.selected();
+            reply.native_git = Some(facts);
+            Some(selected)
+        } else {
+            None
+        };
+        let effective = c.native_file.then(native_file_environment);
+        project::observe_with_query_selection(
             &c.caller_cwd,
             &c.environment,
             &payload,
             deadline.expires(),
             &stopped,
+            admitted.as_ref().zip(effective.as_ref()),
             |selected, cwd, environment, args, expires, cancelled| {
                 let index = reply.rows.len();
                 let operation = match index {
@@ -1037,6 +1169,11 @@ pub(super) fn run_configuration(
                     ));
                 }
                 let until = expires.min(Instant::now() + project::QUERY_BUDGET);
+                if let Some(facts) = &reply.native_git {
+                    facts.verify(until, cancelled).map_err(|message| {
+                        project::ProjectFailure::new(project::ProjectPhase::BeforeLaunch, message)
+                    })?;
+                }
                 project::verify_executable(
                     selected,
                     project::ProjectPhase::BeforeLaunch,
@@ -1075,6 +1212,7 @@ pub(super) fn run_configuration(
                         executable: &selected.path,
                         cwd: &cwd,
                         environment: &env,
+                        native_file: c.native_file,
                         argv: operation.argv(),
                         expires_ns: ns,
                     },
@@ -1128,6 +1266,11 @@ pub(super) fn run_configuration(
                     until,
                     cancelled,
                 )?;
+                if let Some(facts) = &reply.native_git {
+                    facts.verify(until, cancelled).map_err(|message| {
+                        project::ProjectFailure::new(project::ProjectPhase::AfterLaunch, message)
+                    })?;
+                }
                 successful_output(r)
             },
         )
@@ -1192,6 +1335,7 @@ mod tests {
                 changed_seconds: 1,
                 changed_nanoseconds: 0,
             },
+            native_file: false,
         };
         c.input_digest = c.digest().unwrap();
         c
@@ -1240,7 +1384,35 @@ mod tests {
                 git: c.executor.clone(),
             }),
             failure: None,
+            native_git: None,
+            system_queries: Vec::new(),
         }
+    }
+    #[test]
+    fn native_policy_is_bound_and_cannot_accept_caller_selection_receipts() {
+        let mut c = config();
+        let ordinary_digest = c.input_digest.clone();
+        c.native_file = true;
+        assert_ne!(c.digest().unwrap(), ordinary_digest);
+        assert!(
+            c.validate().is_err(),
+            "mode change without rebinding must refuse"
+        );
+        c.input_digest = c.digest().unwrap();
+        let payload = c.payload().unwrap();
+        let r = reply(&c);
+        assert!(
+            validate_reply(&r, &c, &payload).is_err(),
+            "ordinary two-query data cannot establish native admission"
+        );
+        c.native_file = false;
+        c.input_digest = c.digest().unwrap();
+        let mut r = reply(&c);
+        r.system_queries.push(r.rows[0].receipt.clone());
+        assert!(
+            validate_reply(&r, &c, &payload).is_err(),
+            "ordinary mode cannot import native observation data"
+        );
     }
     #[test]
     fn two_query_reply_uses_its_own_bound_and_preserves_exact_wire_bytes() {
