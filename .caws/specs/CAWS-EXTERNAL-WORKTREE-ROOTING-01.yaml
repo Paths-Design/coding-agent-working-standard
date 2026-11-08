@@ -67,8 +67,6 @@ evidence:
     test_verified_at: "6de36f7b3a5522fb7591563807100ed9f52beacf"
   - criterion_id: A3
     status: pass
-    evidence_ref: "Installed runtime 0c338b108be9ae3ba94d90f5938409259e6cbbe6b9e6b883da6a7be5f4d9fccf was built through retained installer 14d8ae10f76f154b-MYcxEk after an exact isolated reconstruction of working 01f189 runtime. Same 113 manifest keys; only root predicate, ownership oracle and legacy allowlist uncertainty handling changed. Native shell and Edit callbacks succeeded in the actually adopted external checkout with reprieve revoked; temporary bytes were restored to original SHA256. Active handler journal rows and tool-level writes retained. All 3 K and 13 RVGL dirty paths and both HEADs are unchanged. Original RC lanes remain for their owners to adopt; no RC writes, gameplay acceptance or full default-runtime qualification inferred. Failed 41fc/fca cutovers were rolled back and are retained in proof."
-    recorded_at: "2026-11-08T05:18:25.414Z"
-    exit_code: 0
-    artifact_path: "/Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/native-proof.json"
-    commit_sha: "2f5a0a6a31d45f97891196fae90f8c4bd5b2fb3f"
+    evidence_ref: "Manually verified active runtime 0c338b108be9ae3ba94d90f5938409259e6cbbe6b9e6b883da6a7be5f4d9fccf against exact isolated reconstruction of baseline 01f189 (113 keys, only three repaired files). Native Bash and Edit callbacks executed in the actually adopted external checkout after reprieve revocation; source bytes restored to SHA256 148f1d635cbe290d44d76d68428fe16e117e223bae739322e60618b45019e94e. Both RC HEADs and all 16 dirty paths were read back unchanged. The native-proof.json receipt and handler rows are retained in tmp/external-worktree-rooting and the persistent external evidence directory. Commit existence below is a code citation only; actual native behavior comes from those inspected observations. Default full runtime upgrade remains unqualified; RC owners retain adoption/gameplay work."
+    recorded_at: "2026-11-08T05:27:55.339Z"
+    commit_sha: "3dfa5022109e2274c139c332bc76f989d58c7711"
