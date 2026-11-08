@@ -15,12 +15,16 @@ static SERIAL: AtomicU64 = AtomicU64::new(0);
 
 struct Fixture {
     root: PathBuf,
+    home: PathBuf,
     project: PathBuf,
     lane: PathBuf,
 }
 
 impl Fixture {
     fn new() -> Self {
+        Self::with_original_home(None)
+    }
+    fn with_original_home(shared: Option<PathBuf>) -> Self {
         let parent = std::env::var_os("CAWS_NATIVE_TEST_ARTIFACT_ROOT")
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir);
@@ -46,9 +50,13 @@ impl Fixture {
         .unwrap();
         assert!(node.is_absolute());
         fs::create_dir(root.join("bin")).unwrap();
-        fs::create_dir(root.join("home")).unwrap();
-        fs::create_dir(root.join("home/.caws")).unwrap();
-        fs::set_permissions(root.join("home/.caws"), fs::Permissions::from_mode(0o700)).unwrap();
+        let home = shared.unwrap_or_else(|| root.join("home"));
+        if !home.exists() {
+            fs::create_dir(&home).unwrap();
+            fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        fs::create_dir(root.join("machine")).unwrap();
+        fs::set_permissions(root.join("machine"), fs::Permissions::from_mode(0o700)).unwrap();
         symlink(&node, root.join("configured-node")).unwrap();
         fs::write(
             root.join("configured-git"),
@@ -96,6 +104,7 @@ exec /usr/bin/git "$@"
         fs::write(root.join("engine.cjs"), ENGINE).unwrap();
         Self {
             root,
+            home,
             project,
             lane,
         }
@@ -108,6 +117,9 @@ exec /usr/bin/git "$@"
     }
 
     fn invoke_with_timeout(&self, mode: &str, tool: &str, timeout_ms: u32) -> Output {
+        self.invoke_with_count(mode, tool, timeout_ms, 1)
+    }
+    fn invoke_with_count(&self, mode: &str, tool: &str, timeout_ms: u32, count: u64) -> Output {
         let timeout = timeout_ms.to_string();
         let mut child = Command::new(env!("CARGO_BIN_EXE_caws-native"))
             .arg("invoke")
@@ -131,12 +143,14 @@ exec /usr/bin/git "$@"
             .env_clear()
             // No literal PATH Git or Node: native selection is configured.
             .env("PATH", self.root.join("bin"))
-            .env("HOME", self.root.join("home"))
+            .env("HOME", &self.home)
+            .env("CAWS_HOME", self.root.join("machine"))
             .env("CAWS_GIT_BINARY", self.root.join("configured-git"))
             .env("NATIVE_FILE_ROOT", &self.root)
             .env("NATIVE_FILE_PROJECT", &self.project)
             .env("NATIVE_FILE_LANE", &self.lane)
             .env("NATIVE_FILE_MODE", mode)
+            .env("NATIVE_FILE_EXPECTED_COUNT", count.to_string())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -201,8 +215,8 @@ exec /usr/bin/git "$@"
     fn state(&self) -> Option<Value> {
         // StrikeStore::open: HOME/.caws/state/sessions/<safe>/strikes.json.
         let path = self
-            .root
-            .join("home/.caws/state/sessions/native-file-owner/strikes.json");
+            .home
+            .join(".caws/state/sessions/native-file-owner/strikes.json");
         match fs::read(path) {
             Ok(bytes) => Some(serde_json::from_slice(&bytes).unwrap()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
@@ -256,7 +270,7 @@ const send = value => sendText(JSON.stringify(value) + '\n');
   let snapshot = null;
   const ready = active => ({
     schema:'caws.runtime.ready.v1', ...identity, active,
-    budgetHome:root + '/home/.caws',
+    budgetHome:root + '/machine',
     projectDigest:active ? crypto.createHash('sha256')
       .update(process.env.NATIVE_FILE_PROJECT).digest('hex') : null,
     sessionId:active ? original.session_id : null
@@ -317,7 +331,7 @@ const send = value => sendText(JSON.stringify(value) + '\n');
     assert.equal(result.token, token);
     assert.equal(result.operation, actions[key]);
     assert.equal(result.contextSnapshotToken, snapshot);
-    assert.equal(result.count, 1);
+    assert.equal(result.count, Number(process.env.NATIVE_FILE_EXPECTED_COUNT));
     assert.match(result.stateSha256, /^[a-f0-9]{64}$/);
   }
   if (mode === 'decline' || mode === 'zero-effect-refusal') {
@@ -444,6 +458,112 @@ impl Fixture {
             .into_iter()
             .filter(|row| row["schema"] == "caws.runtime.guard-strikes.request.v2")
             .collect()
+    }
+}
+
+#[test]
+fn first_publication_initializes_original_home_and_does_not_follow_machine_home() {
+    let fixture = Fixture::new();
+    assert!(!fixture.home.join(".caws").exists());
+    let output = fixture.invoke("complete", "Write");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"native-owner-ok\n");
+    let state = fixture.state().unwrap();
+    assert_eq!(state["scope_guard"], 1);
+    assert_eq!(state["shortcut_language"], 1);
+    assert_eq!(
+        fs::metadata(fixture.home.join(".caws"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+    assert!(
+        !fixture
+            .root
+            .join("machine/state/sessions/native-file-owner/strikes.json")
+            .exists()
+    );
+}
+
+#[test]
+fn one_session_keeps_its_standing_across_repositories_and_machine_homes() {
+    let first = Fixture::new();
+    let second = Fixture::with_original_home(Some(first.home.clone()));
+    assert_ne!(first.project, second.project);
+    assert_ne!(first.root.join("machine"), second.root.join("machine"));
+    for (fixture, expected) in [(&first, 1), (&second, 2)] {
+        let output = fixture.invoke_with_count("complete", "Write", 30_000, expected);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, b"native-owner-ok\n");
+        let state = fixture.state().unwrap();
+        assert_eq!(state["scope_guard"], expected);
+        assert_eq!(state["shortcut_language"], expected);
+        assert!(
+            !fixture
+                .root
+                .join("machine/state/sessions/native-file-owner/strikes.json")
+                .exists()
+        );
+    }
+}
+
+#[test]
+fn unsafe_original_home_or_counter_root_cannot_create_state_or_redirect_publication() {
+    for mode in ["symlink", "file", "shared-home"] {
+        let fixture = Fixture::new();
+        let target = fixture.home.join(".caws");
+        let victim = fixture.root.join("victim");
+        fs::create_dir(&victim).unwrap();
+        match mode {
+            "symlink" => symlink(&victim, &target).unwrap(),
+            "file" => fs::write(&target, b"preserve original entry").unwrap(),
+            "shared-home" => {
+                fs::set_permissions(&fixture.home, fs::Permissions::from_mode(0o777)).unwrap()
+            }
+            _ => unreachable!(),
+        }
+        let output = fixture.invoke("complete", "Write");
+        assert_eq!(output.status.code(), Some(2), "{mode}");
+        assert_eq!(fixture.context_results().len(), 1, "{mode}");
+        assert_eq!(fixture.strike_controls().len(), 1, "{mode}");
+        let diagnostic = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(diagnostic.contains("UnsafePath"), "{mode}: {diagnostic}");
+        assert_eq!(fs::read_dir(&victim).unwrap().count(), 0, "{mode}");
+        assert!(
+            !fixture
+                .root
+                .join("machine/state/sessions/native-file-owner/strikes.json")
+                .exists(),
+            "{mode}"
+        );
+        match mode {
+            "symlink" => assert_eq!(fs::read_link(&target).unwrap(), victim),
+            "file" => assert_eq!(fs::read(&target).unwrap(), b"preserve original entry"),
+            "shared-home" => {
+                assert!(!target.exists());
+                assert_eq!(
+                    fs::metadata(&fixture.home).unwrap().permissions().mode() & 0o777,
+                    0o777
+                );
+            }
+            _ => unreachable!(),
+        }
     }
 }
 

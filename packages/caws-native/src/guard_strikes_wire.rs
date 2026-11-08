@@ -407,14 +407,12 @@ impl Owner {
         }
         let budget = TransactionBudget::original(&self.original, until, cancelled);
         let result =
-            StrikeStore::open(&home.join(".caws"), identity, budget).and_then(
-                |store| match pending.operation {
-                    NativeOperation::ScopeGuard => store.increment_scope_guard(&[], budget),
-                    NativeOperation::ShortcutLanguage => {
-                        store.increment_shortcut_language(&[], budget)
-                    }
-                },
-            );
+            StrikeStore::open_original_home(home, identity, budget).and_then(|store| match pending
+                .operation
+            {
+                NativeOperation::ScopeGuard => store.increment_scope_guard(&[], budget),
+                NativeOperation::ShortcutLanguage => store.increment_shortcut_language(&[], budget),
+            });
         let index = pending.operation.index();
         // Completed or uncertain publication stays with the original owner
         // before encoding, cancellation handling or attempted result delivery.

@@ -765,7 +765,29 @@ impl StrikeStore {
         identity: StrikeIdentity,
         budget: TransactionBudget<'_>,
     ) -> Result<Self> {
-        let mut directory = Directory::open(home, budget)?;
+        Self::from_directory(Directory::open(home, budget)?, home, identity, budget)
+    }
+    /// Native callers supply the retained original HOME, never an engine path.
+    /// Initialize only its literal .caws child through the retained directory
+    /// descriptor. The complete HOME chain stays pinned through publication.
+    /// CAWS_HOME cannot split a session's standing across repositories.
+    pub fn open_original_home(
+        original_home: &Path,
+        identity: StrikeIdentity,
+        budget: TransactionBudget<'_>,
+    ) -> Result<Self> {
+        let mut directory = Directory::open(original_home, budget)?;
+        directory.verify(budget)?;
+        directory.descend(c".caws", true, budget)?;
+        directory.verify(budget)?;
+        Self::from_directory(directory, &original_home.join(".caws"), identity, budget)
+    }
+    fn from_directory(
+        mut directory: Directory,
+        home: &Path,
+        identity: StrikeIdentity,
+        budget: TransactionBudget<'_>,
+    ) -> Result<Self> {
         let session = CString::new(identity.safe.as_bytes()).unwrap();
         for component in [c"state", c"sessions", session.as_c_str()] {
             directory.verify(budget)?;
