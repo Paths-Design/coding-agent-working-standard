@@ -29,7 +29,7 @@ scope:
 invariants:
   - 'Keep ownership, scope, protected-path, exact-source admission, original deadlines and all existing acceptance floors intact.'
   - 'A declared default Claude file-tool profile must not silently execute whole compatibility dispatch or first-party handler subprocesses.'
-  - 'Preserve supported custom extensions and preserve unrelated source and unfinished qualification work.'
+  - 'Native authority is the forward contract; legacy lookup decisions and compatibility execution confer no authority. Preserve user-owned extension source and data; any executed extension requires an explicit supported native contract.'
 acceptance:
   - id: A1
     given: 'a default system Claude Write or Edit callback'
