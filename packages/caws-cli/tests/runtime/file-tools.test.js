@@ -543,10 +543,12 @@ describe('complete stock file-tool prewrite handlers', () => {
     // bytes must decline admission until their behavior is qualified separately.
     // The ownership fixture is the authentic source at 200edef2da345744c4603647858290ca22a2de7d.
     // The SID fixture is the authentic source at 79a8867fe8e12933d7e8c873352bb04b033093c5.
+    // The scope fixture is the authentic source at 569c5db0315d90b17c34e7062b814add4086aeb1.
     const reviewedSources = {
       'block-dangerous.sh': '636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5',
       'worktree-write-guard.sh': '737ef2a0b6b6a4b4a87ed65cb2a45e56e81b9c95f0b803d6c076dce6e93c41a9',
       'lib/session-id.sh': 'cf662f10e6d3477cecbf5deabd8d2b63284f6f4ac14fa7070725ff8502515c53',
+      'scope-guard.sh': '36cd1dc511641035e23b8aff9363d91921d388a8bebaf7fe391be0798457df77',
     };
     for (const [name, expectedSha256] of Object.entries(reviewedSources)) {
       const reviewedSource = fs.readFileSync(path.join(__dirname, 'fixtures/reviewed-stock', name));
@@ -913,6 +915,23 @@ describe('complete stock file-tool prewrite handlers', () => {
       else selection.handlers.find((handler) => handler.name === name).sha256 = expected;
     }
   };
+  test.each(['ten', 'eleven'])(
+    'shipping canonical-resolution guard cannot borrow the reviewed %s-handler v1 profile',
+    (profile) => {
+      if (profile === 'eleven') actualDefaultPatchProfile();
+      installCurrentFileToolMembers();
+      const handler = selection.handlers.find((entry) => entry.name === 'scope-guard.sh');
+      const shipping = fs.readFileSync(path.join(templates, 'shared/scope-guard.sh'));
+      const shippingSha = crypto.createHash('sha256').update(shipping).digest('hex');
+      expect(shippingSha).toBe('4e2acd443760b59ab08bbc92831fb9f6e9b8cac8abfc0e54a5567b23887e0cb6');
+      expect(shippingSha).not.toBe(handler.sha256);
+      fs.writeFileSync(handler.path, shipping);
+      handler.sha256 = shippingSha;
+      expect(prepare()).toBeNull();
+      expect(count()).toBe(0);
+      expect(fs.existsSync(path.join(repo, '.caws/leases'))).toBe(false);
+    }
+  );
   test.each(
     ['ten', 'eleven'].flatMap((profile) => Array.from({ length: 8 }, (_, mask) => [profile, mask]))
   )('only complete %s source cohorts admit, mask=%s', (profile, mask) => {
