@@ -934,7 +934,9 @@ describe('mutation policy topology contract', () => {
       const originals = {};
       for (const file of [...suppressed, ...protectedFiles]) {
         const content = suppressed.includes(file)
-          ? 'export const fixture: number = 1;\n'
+          ? single
+            ? 'export const fixture: number = 1;\n'
+            : fs.readFileSync(path.join(PACKAGE_ROOT, file), 'utf8')
           : single && file === testFile
             ? single.testSource
             : fs.readFileSync(path.join(PACKAGE_ROOT, file), 'utf8');
@@ -955,6 +957,7 @@ describe('mutation policy topology contract', () => {
         const { Project } = await import(pathToFileURL(path.join(core, 'dist/src/fs/project.js')));
         const { DisableTypeChecksPreprocessor } = await import(pathToFileURL(path.join(core, 'dist/src/sandbox/disable-type-checks-preprocessor.js')));
         const { disableTypeChecks } = await import(pathToFileURL(${JSON.stringify(instrumenter)}));
+        const { typeCheckImage } = await import(pathToFileURL(${JSON.stringify(INPUT_IDENTITY)}));
         const config = ${
           single
             ? `(await import(pathToFileURL(${JSON.stringify(path.join(dir, 'stryker.conf.cjs'))}))).default`
@@ -972,7 +975,10 @@ describe('mutation policy topology contract', () => {
         for (const file of files) observations[file] = {
           matched: matcher.matches(file), content: await project.files.get(path.resolve(file)).readContent(),
         };
-        console.log(JSON.stringify({ warnings, observations }));
+        const expected = Object.fromEntries(${JSON.stringify(suppressed)}.map(file => [
+          file, typeCheckImage(${JSON.stringify(originals)}[file]),
+        ]));
+        console.log(JSON.stringify({ warnings, observations, expected }));
       `;
       const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
         cwd: dir,
@@ -989,7 +995,7 @@ describe('mutation policy topology contract', () => {
       for (const file of suppressed) {
         expect(observed.observations[file]).toEqual({
           matched: true,
-          content: '// @ts-nocheck\n' + originals[file],
+          content: observed.expected[file],
         });
       }
       for (const file of protectedFiles) {
@@ -1093,6 +1099,68 @@ describe('per-file mutation report contract', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('PASS dist/a.js 80.00% (4/5 detected)');
   });
+});
+
+describe('exact type-check preprocessing image', () => {
+  test.each([
+    ['module.exports = 3;\n', '// @ts-nocheck\nmodule.exports = 3;\n'],
+    [
+      '/** retained */\nmodule.exports = 3;\n',
+      '/** retained */\n// @ts-nocheck\n\nmodule.exports = 3;\n',
+    ],
+    [
+      ' \n/* retained */const amount = 3;\n',
+      ' \n/* retained */\n// @ts-nocheck\nconst amount = 3;\n',
+    ],
+    [
+      '#!/usr/bin/env node\nmodule.exports = 3;\n',
+      '#!/usr/bin/env node\n// @ts-nocheck\nmodule.exports = 3;\n',
+    ],
+    ['#!/usr/bin/env node', '#!/usr/bin/env node'],
+    [
+      '// authored line\nmodule.exports = 3;\n',
+      '// @ts-nocheck\n// authored line\nmodule.exports = 3;\n',
+    ],
+  ])(
+    'preserves exact authored bytes around its one supported insertion: %j',
+    (source, expected) => {
+      const script = `
+      import { typeCheckImage } from ${JSON.stringify(INPUT_IDENTITY)};
+      process.stdout.write(JSON.stringify(typeCheckImage(${JSON.stringify(source)})));
+    `;
+      const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+        cwd: PACKAGE_ROOT,
+        env: nodeProcessEnv(),
+        encoding: 'utf8',
+        timeout: 15000,
+      });
+      expect(child.error).toBeUndefined();
+      expect({ status: child.status, stderr: child.stderr }).toEqual({ status: 0, stderr: '' });
+      expect(JSON.parse(child.stdout)).toBe(expected);
+    }
+  );
+  test.each(['// @ts-expect-error\nconst a = 3;\n', 'const text = "@ts-ignore";\n'])(
+    'directive-bearing authored text requires separately qualified transformation support',
+    (source) => {
+      const script = `
+        import { typeCheckImage } from ${JSON.stringify(INPUT_IDENTITY)};
+        try { typeCheckImage(${JSON.stringify(source)}); }
+        catch (error) { process.stderr.write(error.message); process.exitCode = 1; }
+      `;
+      const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+        cwd: PACKAGE_ROOT,
+        env: nodeProcessEnv(),
+        encoding: 'utf8',
+        timeout: 15000,
+      });
+      expect(child.error).toBeUndefined();
+      expect(child.status).toBe(1);
+      expect(child.stdout).toBe('');
+      expect(child.stderr).toBe(
+        'mutation identity: unsupported type-check directive transformation'
+      );
+    }
+  );
 });
 
 describe('analysis type-consumer preprocessing identity', () => {

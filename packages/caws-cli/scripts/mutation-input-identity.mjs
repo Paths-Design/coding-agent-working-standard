@@ -366,6 +366,21 @@ export function assertBuildOutputsUnchanged(captured, packageRoot) {
     fail('emitted dist changed after build');
 }
 
+export function typeCheckImage(source) {
+  // The installed Stryker 9.6.1 prefix preserves a leading block comment or
+  // shebang. Directive removal is a different transform and requires explicit
+  // support; no current declared target or consumer contains a directive.
+  if (/@ts-[a-z-]+/.test(source)) fail('unsupported type-check directive transformation');
+  if (source.startsWith('#')) {
+    const newline = source.indexOf('\n');
+    return newline > 0
+      ? source.slice(0, newline) + '\n// @ts-nocheck\n' + source.slice(newline + 1)
+      : source;
+  }
+  const header = /^\s*\/\*[\s\S]*?\*\//.exec(source)?.[0] || '';
+  return (header ? header + '\n' : '') + '// @ts-nocheck\n' + source.slice(header.length);
+}
+
 function sameSandboxInputs(original, sandbox, surface, surfaceId) {
   const scope = selectMutationScope(
     { surfaces: { [surfaceId]: surface } },
@@ -414,7 +429,7 @@ function sameSandboxInputs(original, sandbox, surface, surfaceId) {
       captured.size !== Buffer.byteLength(source)
     )
       fail(`unbound type consumer source: ${file}`);
-    const transformed = '// @ts-nocheck\n' + source;
+    const transformed = typeCheckImage(source);
     expected.set(
       file,
       fingerprint({
