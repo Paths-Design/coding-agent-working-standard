@@ -49,3 +49,8 @@ evidence:
     recorded_at: "2026-11-08T10:27:01.853Z"
     artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/release-docs/01a1ba85-9c82-7b01-8943-610e88a44364/final-gates.log"
     commit_sha: "635130ecaa9bb69fba350b8cfbeb1945964de357"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "User-directed net-new authority decision reconciled in architecture decision/execution and release guidance. Inspected635130eca derives authorization from canonical current claim/scope/spec/waiver/policy with provenance, preserves supported behavior/extensions and containment while removing legacy private-lookup/bug parity as requirement. No implementation or activation acceptance inferred from the documentation."
+    recorded_at: "2026-11-08T10:27:14.010Z"
+    commit_sha: "635130ecaa9bb69fba350b8cfbeb1945964de357"
