@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { selectMutationScope, assertSelectionBinding } from './mutation-selection.cjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(scriptDir, '..');
@@ -67,6 +68,9 @@ function countStatuses(mutants) {
 export function appendSummary(file, surfaceId, sha, verdicts, passed, inputIdentity = null) {
   const rows = [
     `## Mutation score: ${surfaceId}`,
+    inputIdentity?.selection?.target
+      ? `Selected target: \`${inputIdentity.selection.target}\``
+      : 'Selection: all declared surface targets.',
     '',
     `Descriptive SHA (not verified): \`${sha}\``,
     '',
@@ -86,7 +90,13 @@ export function appendSummary(file, surfaceId, sha, verdicts, passed, inputIdent
   fs.appendFileSync(file, `${rows.join('\n')}\n`, 'utf8');
 }
 
-export function assertMutationReport({ policy, surfaceId, report, inputIdentity = null }) {
+export function assertMutationReport({
+  policy,
+  surfaceId,
+  report,
+  inputIdentity = null,
+  target = null,
+}) {
   const errors = [];
   const verdicts = [];
   const surface = policy.surfaces && policy.surfaces[surfaceId];
@@ -107,6 +117,13 @@ export function assertMutationReport({ policy, surfaceId, report, inputIdentity 
       errors: [`mutation surface ${surfaceId} declares no targets; nothing would be verified`],
       verdicts,
     };
+  }
+  let scope;
+  try {
+    scope = selectMutationScope(policy, surfaceId, target);
+    if (inputIdentity) assertSelectionBinding(inputIdentity, scope.selection);
+  } catch (error) {
+    return { errors: [error.message], verdicts };
   }
   if (inputIdentity && (!Array.isArray(surface.tests) || surface.tests.length === 0))
     errors.push('bound mutation surface declares no tests');
@@ -167,7 +184,7 @@ export function assertMutationReport({ policy, surfaceId, report, inputIdentity 
     errors.push('duplicate normalized report source paths');
   const expected = new Set();
 
-  for (const target of surface.targets) {
+  for (const target of scope.targets) {
     const file = (target.reportPath || target.source).replace(/^\.\//, '');
     expected.add(file);
     const result = reportFiles.get(file);
@@ -236,9 +253,9 @@ export function assertMutationReport({ policy, surfaceId, report, inputIdentity 
   // Every declared target must have produced a verdict. This is the structural
   // counterpart to the targets check above: it fails if a future edit adds a
   // loop path that skips a target instead of recording one.
-  if (verdicts.length !== surface.targets.length) {
+  if (verdicts.length !== scope.targets.length) {
     errors.push(
-      `expected one verdict per declared target (${surface.targets.length}), got ${verdicts.length}`
+      `expected one verdict per declared target (${scope.targets.length}), got ${verdicts.length}`
     );
   }
 

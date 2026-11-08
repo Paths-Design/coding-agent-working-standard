@@ -77,19 +77,34 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  mutation:
-    name: Mutation (${{ matrix.surface }}, per-file floor)
+  mutation_plan:
+    name: Plan every declared mutation target
     needs: harness_integrity
     if: >-
       inputs.required ||
       github.event_name != 'pull_request' ||
       contains(github.event.pull_request.labels.*.name, 'run-mutation')
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - id: matrix
+        working-directory: packages/caws-cli
+        run: node scripts/mutation-selection.cjs --matrix >> "$GITHUB_OUTPUT"
+
+  mutation:
+    name: Mutation (${{ matrix.surface }}, ${{ matrix.target }})
+    needs: [harness_integrity, mutation_plan]
+    if: ${{ needs.mutation_plan.result == 'success' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      matrix:
-        surface: [kernel, store, shell, analysis, execution]
+      matrix: ${{ fromJSON(needs.mutation_plan.outputs.matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -110,10 +125,13 @@ jobs:
       # step here restored a path Stryker never writes, implying an
       # optimisation that is deliberately absent.
 
-      - name: Run mutation surface
+      - name: Run full mutation shard
         working-directory: packages/caws-cli
+        env:
+          MUTATION_TARGET: ${{ matrix.target }}
         run: >-
           npm run mutation:run:${{ matrix.surface }} --
+          --target "$MUTATION_TARGET"
           --summary "$GITHUB_STEP_SUMMARY"
           --sha "${{ github.sha }}"
 
@@ -121,7 +139,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mutation-${{ matrix.surface }}-${{ github.sha }}
+          name: mutation-${{ matrix.surface }}-${{ matrix.shard }}-${{ github.sha }}
           path: |
             packages/caws-cli/reports/mutation-${{ matrix.surface }}/mutation-report.json
             packages/caws-cli/reports/mutation-${{ matrix.surface }}/index.html
@@ -129,3 +147,23 @@ jobs:
             packages/caws-cli/reports/mutation-${{ matrix.surface }}/runs/
           if-no-files-found: warn
           retention-days: 30
+
+  mutation_complete:
+    name: Full mutation gate
+    needs: [harness_integrity, mutation_plan, mutation]
+    if: >-
+      always() &&
+      (inputs.required ||
+       github.event_name != 'pull_request' ||
+       contains(github.event.pull_request.labels.*.name, 'run-mutation'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Require every full shard
+        working-directory: packages/caws-cli
+        env:
+          CAWS_MUTATION_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/mutation-selection.cjs --assert-complete

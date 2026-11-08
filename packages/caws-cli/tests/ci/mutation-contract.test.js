@@ -227,6 +227,7 @@ function qualificationFixture({ buildBody, coreBody } = {}) {
     'validate-mutation-policy.mjs',
     'mutation-input-identity.mjs',
     'stryker-config.cjs',
+    'mutation-selection.cjs',
     'clean-staged-docs.mjs',
     'lib/node-process-env.cjs',
   ]) {
@@ -2307,7 +2308,37 @@ describe('active workflow topology contract', () => {
     const parsed = yaml.load(workflow);
     const surfaces = ['kernel', 'store', 'shell', 'analysis', 'execution'];
     expect(parsed.jobs.harness_integrity.strategy.matrix.surface).toEqual(surfaces);
-    expect(parsed.jobs.mutation.strategy.matrix.surface).toEqual(surfaces);
+    const {
+      mutationMatrix,
+      assertMutationMatrix,
+    } = require('../../scripts/mutation-selection.cjs');
+    const livePolicy = JSON.parse(fs.readFileSync(POLICY, 'utf8'));
+    const matrix = mutationMatrix(livePolicy);
+    assertMutationMatrix(livePolicy, matrix);
+    expect([...new Set(matrix.include.map((row) => row.surface))]).toEqual(surfaces);
+    expect(parsed.jobs.mutation.strategy.matrix).toBe(
+      '${{ fromJSON(needs.mutation_plan.outputs.matrix) }}'
+    );
+    expect(parsed.jobs.mutation.needs).toEqual(['harness_integrity', 'mutation_plan']);
+    expect(parsed.jobs.mutation['timeout-minutes']).toBe(180);
+    expect(parsed.jobs.mutation.strategy['fail-fast']).toBe(false);
+    const run = parsed.jobs.mutation.steps.find((step) => step.name === 'Run full mutation shard');
+    expect(run.run).toContain('npm run mutation:run:${{ matrix.surface }}');
+    expect(run.run).toContain('--target "$MUTATION_TARGET"');
+    expect(run.run).not.toContain('--dry-run-only');
+    expect(run.env.MUTATION_TARGET).toBe('${{ matrix.target }}');
+    expect(parsed.jobs.mutation_plan.outputs.matrix).toBe('${{ steps.matrix.outputs.matrix }}');
+    expect(parsed.jobs.mutation_plan.steps.find((step) => step.id === 'matrix').run).toBe(
+      'node scripts/mutation-selection.cjs --matrix >> "$GITHUB_OUTPUT"'
+    );
+    const complete = parsed.jobs.mutation_complete;
+    expect(complete.name).toBe('Full mutation gate');
+    expect(complete.needs).toEqual(['harness_integrity', 'mutation_plan', 'mutation']);
+    expect(complete.if).toContain('always()');
+    expect(complete.if).toContain('inputs.required');
+    const requireAll = complete.steps.find((step) => step.name === 'Require every full shard');
+    expect(requireAll.run).toBe('node scripts/mutation-selection.cjs --assert-complete');
+    expect(requireAll.env.CAWS_MUTATION_NEEDS).toBe('${{ toJSON(needs) }}');
     const scripts = JSON.parse(
       fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8')
     ).scripts;
@@ -2322,6 +2353,9 @@ describe('active workflow topology contract', () => {
       (step) => step.name === 'Retain mutation evidence'
     );
     expect(retained.if).toBe('always()');
+    expect(retained.with.name).toBe(
+      'mutation-${{ matrix.surface }}-${{ matrix.shard }}-${{ github.sha }}'
+    );
     expect(
       retained.with.path
         .trim()
@@ -2406,5 +2440,362 @@ describe('a surface that verifies nothing cannot report success', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('PASS dist/a.js 80.00%');
+  });
+});
+
+describe('bound per-file mutation sharding', () => {
+  const {
+    selectMutationScope,
+    selectionDigest,
+    assertSelectionBinding,
+    mutationMatrix,
+    assertMutationMatrix,
+    assertFullMutationCompletion,
+  } = require('../../scripts/mutation-selection.cjs');
+  const live = () => JSON.parse(fs.readFileSync(POLICY, 'utf8'));
+  const a = 'src/store/a.ts';
+  const b = 'src/store/b.ts';
+  const bt = 'tests/store/b.test.js';
+  const prefix = [
+    "if (JSON.stringify(config.mutate) !== JSON.stringify([context.selection.target])) throw new Error('fixture expected exact singleton instrumentation');",
+    "const declared = JSON.parse(fs.readFileSync(path.join(context.packageRoot, 'mutation-policy.json'), 'utf8')).surfaces.store;",
+    "if (JSON.stringify(config.jest.config.testMatch) !== JSON.stringify(declared.tests.map(file => '<rootDir>/' + file))) throw new Error('fixture detected narrowed surface tests');",
+    "if (config.coverageAnalysis !== declared.coverageAnalysis || config.concurrency !== 2 || config.timeoutMS !== 120000 || config.incremental !== false) throw new Error('fixture detected changed execution policy');",
+    "fs.writeFileSync(path.join(sandbox, 'src/store/b.ts'), '// @ts-nocheck\\n' + context.inputIdentity.targets['src/store/b.ts']);",
+  ].join('\n');
+  const addTest =
+    "report.testFiles['tests/store/b.test.js'] = { source: context.inputIdentity.tests['tests/store/b.test.js'], tests: [{ id: '1', name: 'sibling remains selected' }] };";
+  function shardFixture(options = {}) {
+    const fixture = qualificationFixture({
+      coreBody: fixtureCoreBody({
+        ...options,
+        beforeSandboxBuild: prefix + '\n' + (options.beforeSandboxBuild || ''),
+        reportBody: addTest + '\n' + (options.reportBody || ''),
+      }),
+    });
+    fixture.put(b, 'module.exports = 3;\n');
+    fixture.put(bt, "test('sibling remains selected', () => expect(3).toBe(3));\n");
+    fixture.policy.proofGroups[0].files.push(b);
+    fixture.policy.surfaces.store.targets.push({ source: b });
+    fixture.policy.surfaces.store.tests.push(bt);
+    fixture.put('mutation-policy.json', JSON.stringify(fixture.policy) + '\n');
+    return fixture;
+  }
+  test('the matrix covers every live policy target once without editing its topology', () => {
+    const policy = live();
+    const original = JSON.stringify(policy);
+    const matrix = mutationMatrix(policy);
+    assertMutationMatrix(policy, matrix);
+    const expected = Object.entries(policy.surfaces)
+      .flatMap(([surface, value]) => value.targets.map(({ source }) => surface + '\0' + source))
+      .sort();
+    expect(matrix.include.map((x) => x.surface + '\0' + x.target).sort()).toEqual(expected);
+    expect(new Set(matrix.include.map((x) => x.shard)).size).toBe(expected.length);
+    for (const row of matrix.include) {
+      const scope = selectMutationScope(policy, row.surface, row.target);
+      expect(scope.targets).toEqual(
+        policy.surfaces[row.surface].targets.filter((x) => x.source === row.target)
+      );
+      expect(scope.surface.tests).toEqual(policy.surfaces[row.surface].tests);
+      expect(scope.surface.coverageAnalysis).toBe(policy.surfaces[row.surface].coverageAnalysis);
+      expect(scope.targets[0].threshold ?? scope.surface.threshold).toBe(
+        policy.surfaces[row.surface].targets.find((x) => x.source === row.target).threshold ??
+          policy.surfaces[row.surface].threshold
+      );
+    }
+    expect(JSON.stringify(policy)).toBe(original);
+  });
+  test('the actual planning CLI emits the complete policy-derived matrix', () => {
+    const result = spawnSync(
+      process.execPath,
+      [path.join(PACKAGE_ROOT, 'scripts/mutation-selection.cjs'), '--matrix'],
+      { cwd: PACKAGE_ROOT, env: nodeProcessEnv(), encoding: 'utf8', timeout: 15000 }
+    );
+    expect({ error: result.error, status: result.status, stderr: result.stderr }).toEqual({
+      error: undefined,
+      status: 0,
+      stderr: '',
+    });
+    expect(result.stdout.startsWith('matrix=')).toBe(true);
+    const matrix = JSON.parse(result.stdout.slice('matrix='.length));
+    assertMutationMatrix(live(), matrix);
+    expect(matrix.include.map((x) => x.target).sort()).toEqual(
+      Object.values(live().surfaces)
+        .flatMap((surface) => surface.targets.map((x) => x.source))
+        .sort()
+    );
+  });
+  test.each(['success', 'failure', 'cancelled', 'skipped'])(
+    'the actual aggregate CLI preserves matrix result %s',
+    (result) => {
+      const needs = {
+        harness_integrity: { result: 'success' },
+        mutation_plan: { result: 'success' },
+        mutation: { result },
+      };
+      const child = spawnSync(
+        process.execPath,
+        [path.join(PACKAGE_ROOT, 'scripts/mutation-selection.cjs'), '--assert-complete'],
+        {
+          cwd: PACKAGE_ROOT,
+          env: { ...nodeProcessEnv(), CAWS_MUTATION_NEEDS: JSON.stringify(needs) },
+          encoding: 'utf8',
+          timeout: 15000,
+        }
+      );
+      expect(child.error).toBeUndefined();
+      expect(child.signal).toBeNull();
+      expect(child.status).toBe(result === 'success' ? 0 : 1);
+      expect(result === 'success' ? child.stdout : child.stderr).toContain(
+        result === 'success'
+          ? 'All planned full mutation shards completed successfully.'
+          : 'mutation did not complete successfully'
+      );
+    }
+  );
+  test('a newly declared proof unit requires a new matrix cell without a fixed target count', () => {
+    const policy = live();
+    const previous = mutationMatrix(policy);
+    policy.surfaces.execution.targets.push({ source: 'src/execution/new-proof-unit.ts' });
+    const current = mutationMatrix(policy);
+    expect(current.include).toHaveLength(previous.include.length + 1);
+    expect(
+      current.include.filter((x) => x.target === 'src/execution/new-proof-unit.ts')
+    ).toHaveLength(1);
+    expect(() => assertMutationMatrix(policy, previous)).toThrow(/count mismatch/);
+  });
+  test.each(['missing', 'duplicate', 'wrong target', 'wrong identity'])(
+    'matrix refuses %s cells',
+    (kind) => {
+      const policy = live();
+      const matrix = mutationMatrix(policy);
+      if (kind === 'missing') matrix.include.pop();
+      if (kind === 'duplicate') matrix.include[1] = { ...matrix.include[0] };
+      if (kind === 'wrong target') matrix.include[0].target += '.other';
+      if (kind === 'wrong identity') matrix.include[0].shard = '0'.repeat(64);
+      expect(() => assertMutationMatrix(policy, matrix)).toThrow();
+    }
+  );
+  test.each(['kernel', 'store', 'shell', 'analysis', 'execution'])(
+    'a missing %s surface cannot form a complete matrix',
+    (surface) => {
+      const policy = live();
+      delete policy.surfaces[surface];
+      expect(() => mutationMatrix(policy)).toThrow(/exactly five surfaces/);
+    }
+  );
+  test.each(['', '*.ts', './src/store/a.ts', 'src/store/../store/a.ts', '/src/store/a.ts'])(
+    'selector does not normalize or expand %j',
+    (target) =>
+      expect(() =>
+        selectMutationScope(
+          { surfaces: { store: { targets: [{ source: a }], tests: [bt] } } },
+          'store',
+          target
+        )
+      ).toThrow(/exact member/)
+  );
+  test('a declared target cannot borrow the test and floor context of another surface', () => {
+    const policy = live();
+    expect(() =>
+      selectMutationScope(policy, 'store', policy.surfaces.execution.targets[0].source)
+    ).toThrow(/exact member/);
+  });
+  test.each([
+    ['unknown target', ['--target', 'src/store/unknown.ts']],
+    ['duplicate selector', ['--target', a, '--target', b]],
+    ['dry-run substitution', ['--target', a, '--dry-run-only']],
+  ])('%s refuses before any build', (_name, args) => {
+    const fixture = shardFixture();
+    const result = runQualificationFixture(fixture, args);
+    expect(result.status).toBe(2);
+    expect(result.receipt).toBeNull();
+    expect(result.stdout).not.toContain('fixture build emitted');
+  });
+  test('singleton runner keeps all original inputs/tests and binds the raw completed report', () => {
+    const fixture = shardFixture();
+    const result = runQualificationFixture(fixture, ['--target', a]);
+    expect({ error: result.error, status: result.status, stderr: result.stderr }).toEqual({
+      error: undefined,
+      status: 0,
+      stderr: '',
+    });
+    const record = result.receipt;
+    const selection = { surfaceId: 'store', target: a };
+    expect(record.status).toBe('input-build-report-bound');
+    expect(record.dryRunOnly).toBe(false);
+    expect(record.discovery).toEqual({
+      sourceCount: 1,
+      mutantCount: 5,
+      reportMutantCount: 5,
+      declaredSourceCount: 1,
+    });
+    expect(record.verdicts).toEqual([{ file: a, detected: 4, valid: 5, score: 80, passed: true }]);
+    expect(Object.keys(record.inputIdentity.targets)).toEqual([a, b]);
+    expect(Object.keys(record.inputIdentity.tests)).toEqual(['tests/store/a.test.js', bt]);
+    expect(record.inputIdentity.files.some((entry) => entry.path === b)).toBe(true);
+    const context = JSON.parse(
+      fs.readFileSync(
+        path.join(fixture.packageRoot, 'reports/mutation-store/runs', record.runId, 'context.json'),
+        'utf8'
+      )
+    );
+    const sandbox = record.sandboxBuilds[0];
+    for (const holder of [
+      record,
+      record.inputIdentity,
+      context,
+      sandbox,
+      sandbox.inputIdentity,
+      record.report,
+    ]) {
+      expect(holder.selection).toEqual(selection);
+      expect(holder.selectionDigest).toBe(selectionDigest(selection));
+      expect(() => assertSelectionBinding(holder, selection)).not.toThrow();
+    }
+    expect(sandbox.inputIdentity.targets[b]).toBe(
+      '// @ts-nocheck\n' + record.inputIdentity.targets[b]
+    );
+    const bytes = fs.readFileSync(record.report.path);
+    expect(record.report.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+    expect(record.report.size).toBe(bytes.length);
+    expect(record.report.selectionDigest).toBe(selectionDigest(selection));
+    expect(
+      fs.readFileSync(
+        path.join(
+          fixture.packageRoot,
+          'reports/mutation-store/runs',
+          record.runId,
+          'mutation-report.json'
+        )
+      )
+    ).toEqual(bytes);
+    expect(Object.keys(JSON.parse(bytes).files)).toEqual([a]);
+  });
+  test.each([
+    [
+      'sibling body',
+      "fs.appendFileSync(path.join(sandbox, 'src/store/b.ts'), '// changed\\n');",
+      b,
+    ],
+    [
+      'sibling mode',
+      "const file = path.join(sandbox, 'src/store/b.ts'); const originalMode = fs.statSync(file).mode & 0o777; fs.chmodSync(file, originalMode === 0o600 ? 0o640 : 0o600);",
+      b,
+    ],
+    [
+      'sibling test',
+      "fs.appendFileSync(path.join(sandbox, 'tests/store/b.test.js'), '// changed\\n');",
+      bt,
+    ],
+  ])('unselected %s cannot hide behind the instrumentation exemption', (_name, change, file) => {
+    const fixture = shardFixture({ beforeSandboxBuild: change });
+    const result = runQualificationFixture(fixture, ['--target', a]);
+    expect(result.status).toBe(1);
+    expect(result.receipt.status).toBe('failed');
+    expect(result.stderr).toContain('sandbox input detached from captured input: ' + file);
+    const observed = JSON.parse(
+      fs.readFileSync(path.join(fixture.repoRoot, 'fixture-build-observation.json'), 'utf8')
+    );
+    expect(observed.status).toBe(1);
+    expect(fs.existsSync(path.join(observed.sandbox, 'dist'))).toBe(false);
+  });
+  test('a sandbox record for the sibling selection cannot be borrowed', () => {
+    const fixture = shardFixture({
+      afterSandbox: [
+        "const file = path.join(context.sandboxBuildDir, 'sandbox-fixture.json');",
+        "const record = JSON.parse(fs.readFileSync(file, 'utf8'));",
+        "const { selectionDigest } = require(path.join(context.packageRoot, 'scripts/mutation-selection.cjs'));",
+        "record.selection = { surfaceId: 'store', target: 'src/store/b.ts' };",
+        'record.selectionDigest = selectionDigest(record.selection);',
+        'record.inputIdentity.selection = record.selection;',
+        'record.inputIdentity.selectionDigest = record.selectionDigest;',
+        'fs.writeFileSync(file, JSON.stringify(record));',
+      ].join('\n'),
+    });
+    const result = runQualificationFixture(fixture, ['--target', a]);
+    expect(result.status).toBe(1);
+    expect(result.receipt.stryker.status).toBe(0);
+    expect(result.receipt.status).toBe('failed');
+    expect(result.stderr).toContain('selection differs from original invocation');
+  });
+  test.each([
+    [
+      'missing selected source',
+      "delete report.files['src/store/a.ts'];",
+      0,
+      'refusing empty mutation surface',
+    ],
+    [
+      'extra sibling source',
+      "report.files['src/store/b.ts'] = { ...report.files['src/store/a.ts'], source: context.inputIdentity.targets['src/store/b.ts'], mutants: [report.files['src/store/a.ts'].mutants[0]] };",
+      6,
+      'undeclared file in mutation report: ' + b,
+    ],
+    [
+      'missing selected test',
+      "delete report.testFiles['tests/store/b.test.js'];",
+      5,
+      'missing report test file ' + bt,
+    ],
+    [
+      'changed test text',
+      "report.testFiles['tests/store/b.test.js'].source += '// changed';",
+      5,
+      bt + ' test source does not match captured input',
+    ],
+    [
+      'below floor',
+      "report.files['src/store/a.ts'].mutants[0].status = 'Survived';",
+      5,
+      '60.00% is below 80.00%',
+    ],
+    [
+      'pending verdict',
+      "report.files['src/store/a.ts'].mutants[0].status = 'Pending';",
+      5,
+      '1 invalid or pending mutant verdict(s)',
+    ],
+    [
+      'unknown verdict',
+      "report.files['src/store/a.ts'].mutants[0].status = 'unrecognized';",
+      5,
+      'unknown mutant status: unrecognized',
+    ],
+  ])(
+    'singleton report rejects %s despite a zero-exit child',
+    (_name, reportBody, count, reason) => {
+      const fixture = shardFixture({ reportBody, loggedMutantCount: count });
+      const result = runQualificationFixture(fixture, ['--target', a]);
+      expect(result.status).toBe(1);
+      expect(result.receipt.stryker.status).toBe(0);
+      expect(result.receipt.status).toBe('failed');
+      expect(result.stderr).toContain(reason);
+      expect(result.stdout).not.toContain('Captured input/build/report binding:');
+    }
+  );
+  for (const job of ['harness_integrity', 'mutation_plan', 'mutation']) {
+    test.each(['failure', 'cancelled', 'skipped', undefined])(
+      job + ' result %s cannot complete the gate',
+      (result) => {
+        const needs = {
+          harness_integrity: { result: 'success' },
+          mutation_plan: { result: 'success' },
+          mutation: { result: 'success' },
+        };
+        needs[job] = { result };
+        expect(() => assertFullMutationCompletion(needs)).toThrow(job);
+      }
+    );
+  }
+  test('all three completed dependencies are necessary for aggregate success', () => {
+    expect(() =>
+      assertFullMutationCompletion({
+        harness_integrity: { result: 'success' },
+        mutation_plan: { result: 'success' },
+        mutation: { result: 'success' },
+      })
+    ).not.toThrow();
+    expect(() => assertFullMutationCompletion(null)).toThrow();
   });
 });

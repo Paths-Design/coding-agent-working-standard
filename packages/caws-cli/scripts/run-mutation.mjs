@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { nodeProcessEnv } from './lib/node-process-env.cjs';
 import { validateMutationPolicy } from './validate-mutation-policy.mjs';
 import { assertMutationReport, appendSummary } from './assert-mutation-report.mjs';
+import { selectMutationScope, selectionDigest } from './mutation-selection.cjs';
 import {
   captureMutationInputs,
   assertInputsUnchanged,
@@ -39,6 +40,7 @@ function parseArgs(argv) {
   const options = {
     surface: 'store',
     dryRunOnly: false,
+    target: null,
     summary: null,
     sha: process.env.GITHUB_SHA || 'unknown',
   };
@@ -46,15 +48,19 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === '--dry-run-only') {
       options.dryRunOnly = true;
-    } else if (['--surface', '--summary', '--sha'].includes(arg)) {
+    } else if (['--surface', '--summary', '--sha', '--target'].includes(arg)) {
       const value = argv[index + 1];
-      if (!value) throw new Error(`${arg} requires a value`);
+      if (!value || value.startsWith('--')) throw new Error(`${arg} requires a value`);
+      if (arg === '--target' && options.target !== null)
+        throw new Error('--target may appear only once');
       options[arg.slice(2).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())] = value;
       index += 1;
     } else {
       throw new Error(`unknown argument: ${arg}`);
     }
   }
+  if (options.target !== null && options.dryRunOnly)
+    throw new Error('--target requires a full mutation run');
   return options;
 }
 
@@ -202,6 +208,14 @@ export async function main(argv) {
     return 2;
   }
 
+  let scope;
+  try {
+    scope = selectMutationScope(policy, options.surface, options.target);
+  } catch (error) {
+    console.error(`mutation-runner: ${error.message}`);
+    return 2;
+  }
+
   let strykerBin;
   try {
     strykerBin = resolveStrykerBin();
@@ -219,6 +233,8 @@ export async function main(argv) {
     schemaVersion: 1,
     runId: randomUUID(),
     surfaceId: options.surface,
+    selection: scope.selection,
+    selectionDigest: selectionDigest(scope.selection),
     descriptiveSha: options.sha,
     dryRunOnly: options.dryRunOnly,
     status: 'failed',
@@ -250,7 +266,12 @@ export async function main(argv) {
     // Bind once at the command boundary. Subsequent capture/drift checks remain strict.
     const childEnv = nodeProcessEnv();
     process.env.PATH = childEnv.PATH;
-    const inputOptions = { packageRoot, policy, surfaceId: options.surface };
+    const inputOptions = {
+      packageRoot,
+      policy,
+      surfaceId: options.surface,
+      target: options.target,
+    };
     const inputIdentity = captureMutationInputs(inputOptions);
     record.inputIdentity = inputIdentity;
     const npm = resolveNpmCommand();
@@ -286,6 +307,8 @@ export async function main(argv) {
       packageRoot,
       repoRoot: inputIdentity.repoRoot,
       surfaceId: options.surface,
+      selection: scope.selection,
+      selectionDigest: selectionDigest(scope.selection),
       inputIdentity,
       sandboxBuildDir,
       tempDirName,
@@ -336,7 +359,13 @@ export async function main(argv) {
       if (!stat?.isFile() || stat.isSymbolicLink())
         throw new Error(`Stryker exited 0 but did not write a regular report: ${reportPath}`);
       const bytes = fs.readFileSync(reportPath);
-      record.report = { path: reportPath, sha256: sha256(bytes), size: bytes.length };
+      record.report = {
+        path: reportPath,
+        sha256: sha256(bytes),
+        size: bytes.length,
+        selection: scope.selection,
+        selectionDigest: selectionDigest(scope.selection),
+      };
       // Keep the exact bytes associated with this run even when a later run
       // replaces the conventional report path used by artifact uploaders.
       fs.writeFileSync(path.join(runDir, 'mutation-report.json'), bytes, { flag: 'wx' });
@@ -346,10 +375,10 @@ export async function main(argv) {
         0
       );
       record.discovery.reportMutantCount = reportMutantCount;
-      record.discovery.declaredSourceCount = surface.targets.length;
-      if (sourceCount !== surface.targets.length)
+      record.discovery.declaredSourceCount = scope.targets.length;
+      if (sourceCount !== scope.targets.length)
         throw new Error(
-          `instrumented source count ${sourceCount} does not match declared target count ${surface.targets.length}`
+          `instrumented source count ${sourceCount} does not match declared target count ${scope.targets.length}`
         );
       if (mutantCount !== reportMutantCount)
         throw new Error(
@@ -358,6 +387,7 @@ export async function main(argv) {
       const result = assertMutationReport({
         policy,
         surfaceId: options.surface,
+        target: options.target,
         report,
         inputIdentity,
       });

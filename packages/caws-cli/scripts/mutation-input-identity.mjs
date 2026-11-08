@@ -9,6 +9,11 @@ import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { typeCheckConsumers } from './stryker-config.cjs';
+import {
+  selectMutationScope,
+  selectionDigest,
+  assertSelectionBinding,
+} from './mutation-selection.cjs';
 
 export const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const slash = (file) => file.split(path.sep).join('/');
@@ -208,7 +213,7 @@ function mirrorPackageNodeModules(context, sandboxRoot) {
   return observePackageNodeModules(sandboxRoot);
 }
 
-export function captureMutationInputs({ packageRoot, policy, surfaceId }) {
+export function captureMutationInputs({ packageRoot, policy, surfaceId, target = null }) {
   const root = assertDirectoryAncestry(packageRoot);
   const repoRoot = assertDirectoryAncestry(path.resolve(root, '../..'));
   const packageNodeModules = observePackageNodeModules(root);
@@ -262,8 +267,8 @@ export function captureMutationInputs({ packageRoot, policy, surfaceId }) {
   ])
     add(path.join(root, file));
   captureDependencies(path.join(root, 'package.json'), add);
-  const surface = policy.surfaces?.[surfaceId];
-  if (!surface) fail(`unknown surface ${surfaceId}`);
+  const scope = selectMutationScope(policy, surfaceId, target);
+  const surface = scope.surface;
   if (
     !Array.isArray(surface.targets) ||
     !surface.targets.length ||
@@ -296,6 +301,8 @@ export function captureMutationInputs({ packageRoot, policy, surfaceId }) {
     files,
     targets,
     tests,
+    selection: scope.selection,
+    selectionDigest: selectionDigest(scope.selection),
     typeConsumerSources,
     packageNodeModules,
     digest: sha256(JSON.stringify(files)),
@@ -304,6 +311,7 @@ export function captureMutationInputs({ packageRoot, policy, surfaceId }) {
 
 export function assertInputsUnchanged(captured, options) {
   const current = captureMutationInputs(options);
+  assertSelectionBinding(captured, current.selection);
   if (JSON.stringify(current.packageNodeModules) !== JSON.stringify(captured.packageNodeModules))
     fail('package-local dependency binding changed');
   if (current.digest !== captured.digest) {
@@ -359,6 +367,13 @@ export function assertBuildOutputsUnchanged(captured, packageRoot) {
 }
 
 function sameSandboxInputs(original, sandbox, surface, surfaceId) {
+  const scope = selectMutationScope(
+    { surfaces: { [surfaceId]: surface } },
+    surfaceId,
+    original.selection?.target
+  );
+  assertSelectionBinding(original, scope.selection);
+  assertSelectionBinding(sandbox, scope.selection);
   const targetBinding = (binding) =>
     binding && {
       canonical: binding.canonical,
@@ -369,7 +384,7 @@ function sameSandboxInputs(original, sandbox, surface, surfaceId) {
     JSON.stringify(targetBinding(sandbox.packageNodeModules))
   )
     fail('sandbox package-local dependency binding detached from captured input');
-  const targets = new Set(surface.targets.map((target) => target.source));
+  const targets = new Set(scope.targets.map((target) => target.source));
   const fingerprint = (record) => JSON.stringify([record.sha256, record.size, record.mode]);
   // External canonical paths are represented relative to the sandbox package,
   // so compare their physical identity after resolving those relative paths.
@@ -381,11 +396,16 @@ function sameSandboxInputs(original, sandbox, surface, surfaceId) {
   const actual = new Map(
     sandbox.files.map((entry) => [key(entry.path, sandbox.packageRoot), fingerprint(entry)])
   );
-  // Only the exact installed preprocessor prefix may change these non-target
-  // consumers. Bind its suffix to the captured authored hash, size and mode;
+  // Preserve the declared preprocessing cohort, including unmutated siblings.
+  // Bind the exact prefix and authored suffix, size and original mode;
   // neither an arbitrary replacement nor a generator/test rewrite is admitted.
-  for (const file of typeCheckConsumers(surfaceId)) {
-    const source = original.typeConsumerSources?.[file];
+  const prefixed = new Set([
+    ...surface.targets.map((target) => target.source),
+    ...typeCheckConsumers(surfaceId),
+  ]);
+  for (const file of prefixed) {
+    if (targets.has(file)) continue;
+    const source = original.targets?.[file] ?? original.typeConsumerSources?.[file];
     const captured = original.files.find((entry) => entry.path === file);
     if (
       typeof source !== 'string' ||
@@ -432,6 +452,15 @@ export function validateSandboxBuildRecord({ context, surface, record, fileName 
   ) {
     fail(`detached or failed sandbox build record: ${fileName}`);
   }
+  const scope = selectMutationScope(
+    { surfaces: { [context.surfaceId]: surface } },
+    context.surfaceId,
+    context.selection?.target
+  );
+  assertSelectionBinding(context, scope.selection);
+  assertSelectionBinding(context.inputIdentity, scope.selection);
+  assertSelectionBinding(record, scope.selection);
+  assertSelectionBinding(record.inputIdentity, scope.selection);
   const input = record.inputIdentity;
   const outputs = record.outputs;
   if (
@@ -516,10 +545,13 @@ export function runSandboxBuild(contextFile, surfaceId) {
   const policy = JSON.parse(
     readRegular(path.join(cwd, 'mutation-policy.json')).bytes.toString('utf8')
   );
-  const surface = policy.surfaces?.[surfaceId];
+  const scope = selectMutationScope(policy, surfaceId, context.selection?.target);
+  assertSelectionBinding(context, scope.selection);
+  assertSelectionBinding(context.inputIdentity, scope.selection);
+  const surface = scope.surface;
   if (!surface?.buildCommand) fail(`surface ${surfaceId} declares no sandbox build`);
   mirrorPackageNodeModules(context, cwd);
-  const options = { packageRoot: cwd, policy, surfaceId };
+  const options = { packageRoot: cwd, policy, surfaceId, target: scope.selection.target };
   const inputIdentity = captureMutationInputs(options);
   sameSandboxInputs(context.inputIdentity, inputIdentity, surface, surfaceId);
   const startedAtMs = Date.now();
@@ -533,6 +565,8 @@ export function runSandboxBuild(contextFile, surfaceId) {
     schemaVersion: 1,
     runId: context.runId,
     surfaceId,
+    selection: scope.selection,
+    selectionDigest: selectionDigest(scope.selection),
     command: surface.buildCommand,
     cwd,
     startedAtMs,

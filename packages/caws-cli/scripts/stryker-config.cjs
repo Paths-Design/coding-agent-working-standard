@@ -14,6 +14,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
+const { selectMutationScope, assertSelectionBinding } = require('./mutation-selection.cjs');
 
 const packageRoot = path.resolve(__dirname, '..');
 const policy = JSON.parse(fs.readFileSync(path.join(packageRoot, 'mutation-policy.json'), 'utf8'));
@@ -42,6 +43,26 @@ function createJestConfig(surfaceId, tests) {
     };
   }
   return config;
+}
+
+function runnerTarget(surfaceId) {
+  const file = process.env.CAWS_MUTATION_RUN_CONTEXT;
+  if (!file) return null;
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || fs.realpathSync(file) !== path.resolve(file))
+    throw new Error('Invalid mutation selection context file');
+  const context = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (
+    context.schemaVersion !== 1 ||
+    context.surfaceId !== surfaceId ||
+    !context.selection ||
+    !Object.hasOwn(context.selection, 'target')
+  )
+    throw new Error('Detached mutation selection context');
+  const scope = selectMutationScope(policy, surfaceId, context.selection.target);
+  assertSelectionBinding(context, scope.selection);
+  assertSelectionBinding(context.inputIdentity, scope.selection);
+  return scope.selection.target;
 }
 
 function createStrykerConfig(surfaceId) {
@@ -88,8 +109,9 @@ function createStrykerConfig(surfaceId) {
     if (ancestor === tempDirName)
       throw new Error(`Mutation sandbox parent already exists: ${ancestor}`);
   }
+  const scope = selectMutationScope(policy, surfaceId, runnerTarget(surfaceId));
   const config = {
-    mutate: surface.targets.map((target) => target.source),
+    mutate: scope.targets.map((target) => target.source),
     // Jest's exact testMatch below owns file selection. Core turns testFiles
     // into file-path testFilter values for static/off-coverage mutants, while
     // the Jest runner treats testFilter as test names and then runs no tests.
