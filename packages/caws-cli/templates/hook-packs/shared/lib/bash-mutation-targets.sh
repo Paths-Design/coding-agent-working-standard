@@ -962,6 +962,7 @@ caws_bash_token_records() {
 #   DIFFERENT git repository" — which /tmp is not.
 caws_foreign_repo_root() {
   local target="$1" project_dir="${2:-}" dir
+  local project_common target_common project_identity target_identity
   [[ -n "$project_dir" ]] || return 0
   case "$target" in
     "$project_dir"|"$project_dir"/*) return 0 ;;
@@ -976,7 +977,22 @@ caws_foreign_repo_root() {
     [[ -n "$dir" ]] || dir=/
   fi
   while [[ -n "$dir" && "$dir" != "/" ]]; do
-    if [[ -e "$dir/.git" ]]; then
+    if [[ -e "$dir/.git" || -L "$dir/.git" ]]; then
+      # Matching Git common directories establish repository membership only.
+      # The ownership oracle must still admit this registered checkout.
+      # Unreadable metadata or missing helpers retain the foreign verdict.
+      if declare -F caws_git_path_into >/dev/null 2>&1 &&
+          declare -F caws_physical_dir_into >/dev/null 2>&1 &&
+          caws_git_path_into project_common "$project_dir" --git-common-dir &&
+          caws_git_path_into target_common "$dir" --git-common-dir; then
+        [[ "$project_common" == /* ]] || project_common="$project_dir/$project_common"
+        [[ "$target_common" == /* ]] || target_common="$dir/$target_common"
+        if caws_physical_dir_into project_identity "$project_common" &&
+            caws_physical_dir_into target_identity "$target_common" &&
+            [[ "$project_identity" == "$target_identity" ]]; then
+          return 0
+        fi
+      fi
       [[ "$dir" != "$project_dir" ]] && printf '%s' "$dir"
       return 0
     fi

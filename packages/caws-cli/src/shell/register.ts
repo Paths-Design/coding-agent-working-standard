@@ -139,6 +139,7 @@ import {
   runWorkingTreeAckCommand,
   runWorkingTreeCheckCommand,
   runWorktreeBindCommand,
+  runWorktreeAdoptCommand,
   runWorktreeCreateCommand,
   runWorktreeDestroyCommand,
   runWorktreeEnsureCommand,
@@ -1920,6 +1921,24 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
+    }
+  );
+
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'adopt')).action(
+    (
+      name: string,
+      opts: { path: string; spec: string; baseBranch: string; branch?: string; data?: boolean }
+    ) => {
+      exit(
+        runWorktreeAdoptCommand({
+          name,
+          path: opts.path,
+          specId: opts.spec,
+          baseBranch: opts.baseBranch,
+          ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
+          showData: opts.data === true,
+        })
+      );
     }
   );
 

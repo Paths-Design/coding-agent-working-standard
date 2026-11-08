@@ -17,7 +17,7 @@ git worktrees**. This guide covers the v11.1 workflow: create worktrees with
 `caws worktree create`, surface and govern ownership with `caws claim`.
 
 > **v11 surface.** The current line ships full worktree lifecycle:
-> `caws worktree create | ensure | list | bind | destroy | untrack | merge | review | migrate-registry | repair-sparse | repair | prune | cleanup-plan`.
+> `caws worktree create | adopt | ensure | list | bind | destroy | untrack | merge | review | migrate-registry | repair-sparse | repair | prune | cleanup-plan`.
 > Use these commands — they write bidirectional bindings, emit audit events, and
 > enforce ownership. (`caws worktree repair` is the governed half-state executor
 > for ghost registry entries and dead spec→worktree bindings; `repair-sparse`
@@ -59,6 +59,28 @@ caws claim
 Creation records the owner in `.caws/worktrees.json`. Ordinary `caws claim`
 checks that owner against the current session; it does not mint a new identity
 to satisfy the comparison. List worktrees with `caws worktree list`.
+
+An app-managed Git checkout can acquire CAWS authority through explicit
+adoption:
+
+```bash
+caws worktree adopt my-lane --path /absolute/existing/checkout \
+  --spec <spec-id> --base-branch main
+# For a detached checkout, add --branch caws/my-lane.
+```
+
+Adoption verifies that the exact directory is a linked checkout of this
+repository. It preserves commits and staged, unstaged and untracked source work,
+excludes worktree-local `.caws/specs`, and records the canonical binding. Local
+authority edits, overlapping registrations and foreign spec ownership are
+refused. A failed registration retains the checkout and any explicitly requested
+new branch. Rollback refuses to overwrite concurrent staging and reports
+unrecovered state for inspection. Git can retain its shared
+`extensions.worktreeConfig` enablement after a failed attempt.
+
+`bind` repairs an existing registry entry; it does not adopt a checkout. Sharing
+a Git common directory establishes repository membership, while the registry
+owner and active specification establish write authority.
 
 When creation has no caller identity, it mints a new capsule and prints a
 `Continue in this shell:` command that exports the exact created
