@@ -39,6 +39,7 @@
         "src/kernel/spec/validate-shape.ts",
         "src/kernel/worktree/freshness.ts",
         "src/kernel/worktree/transitions.ts",
+        "src/runtime/file-tools/authority.ts",
         "src/runtime/file-tools/context-port.ts",
         "src/runtime/file-tools/metadata.ts",
         "src/runtime/file-tools/strikes-port.ts",
@@ -295,6 +296,7 @@
         { "source": "src/execution/prepared-schema.ts" },
         { "source": "src/execution/protocol.ts" },
         { "source": "src/execution/writer.ts" },
+        { "source": "src/runtime/file-tools/authority.ts" },
         { "source": "src/runtime/file-tools/context-port.ts" },
         { "source": "src/runtime/file-tools/metadata.ts" },
         { "source": "src/runtime/file-tools/strikes-port.ts" },
@@ -321,6 +323,7 @@
         "tests/runtime/engine-core.test.js",
         "tests/runtime/file-tool-context.test.js",
         "tests/runtime/guard-strikes.test.js",
+        "tests/runtime/native-file-authority.test.js",
         "tests/runtime/protocol.test.js",
         "tests/store/git-runtime.test.js"
       ]
