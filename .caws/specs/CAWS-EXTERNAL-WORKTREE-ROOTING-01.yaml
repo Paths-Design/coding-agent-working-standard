@@ -1,9 +1,11 @@
 id: CAWS-EXTERNAL-WORKTREE-ROOTING-01
 title: 'Adopt existing linked worktrees and preserve guard repository identity'
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Source landed on main; A1/A2 committed preservation/refusal matrix re-executed by evidence writer (14 cases per citation). A3 native behavior was manually inspected from retained handler rows, actual native Bash/Edit probes and exact baseline-compatible runtime evidence; only code commit existence is mechanically re-derived for A3. Active runtime0c338b preserves working native contract; default broad upgrade remains unqualified. Both RC HEADs and 16 dirty paths preserved; original owners retain adoption/gameplay. Temporary CAWS test lane was merged and removed; app archival refused primary-checkout removal, so no extra app deletion was attempted.'
 created_at: '2026-11-08T03:36:35.651Z'
-updated_at: '2026-11-08T05:22:59.424Z'
+updated_at: '2026-11-08T05:29:37.091Z'
 created_by_session: '01a1b932-77c5-7503-8f5d-a419fa70b710'
 blast_radius:
   modules:
