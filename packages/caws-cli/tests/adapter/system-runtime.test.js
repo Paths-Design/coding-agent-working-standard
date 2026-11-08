@@ -255,6 +255,7 @@ test('the Codex renderer uses native content provenance to exclude injected user
   const result = spawnSync(
     'python3',
     [
+      '-B',
       '-c',
       'import runpy,json,sys; print(json.dumps(runpy.run_path(sys.argv[1])["parse_transcript_events"](sys.argv[2])))',
       adapter,

@@ -25,6 +25,10 @@ jobs:
           cache: npm
       - name: Observe interpreter immediately after setup
         run: node scripts/observe-test-interpreter.cjs after-setup-node hook-artifacts/interpreter/after-setup-node.json
+      - name: Prepare owned CI interpreter permissions
+        run: node scripts/prepare-ci-test-interpreter.cjs > hook-artifacts/interpreter/prepared.json
+      - name: Verify CI interpreter preparation boundaries
+        run: node --test scripts/prepare-ci-test-interpreter.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

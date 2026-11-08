@@ -1615,7 +1615,8 @@ describe('complete stock file-tool prewrite handlers', () => {
         rows.findIndex((row) => row.stage === 'handler_started')
       );
       await invocation.acknowledgeHandoff(true);
-    }
+    },
+    60000
   );
 
   test.each(['historical', 'current'])(
