@@ -1,6 +1,6 @@
 'use strict';
 // This qualifies the test transport with actual Stryker instrumentation and
-// selection. The two tiny functions are harness fixtures, not product behavior.
+// selection. The tiny functions and unrelated module are harness fixtures.
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
@@ -23,6 +23,26 @@ function canary(disruption) {
       bytes = Buffer.from(
         bytes.toString().replace('testId: context.testId,', 'testId: "unknown test",')
       );
+    if (name === 'child-coverage-preload.cjs' && disruption === 'unrelated-missing') {
+      const previous = bytes.toString();
+      bytes = Buffer.from(
+        previous.replace(
+          "process.once('exit', () => {",
+          "process.once('exit', () => { if (process.argv[1] === 'unrelated') return;"
+        )
+      );
+      expect(bytes.toString()).not.toBe(previous);
+    }
+    if (name === 'child-coverage-preload.cjs' && disruption === 'unrelated-null') {
+      const previous = bytes.toString();
+      bytes = Buffer.from(
+        previous.replace(
+          'coverage: globalThis.__stryker__?.mutantCoverage ?? null',
+          'coverage: (process.argv[1] === "unrelated" ? null : globalThis.__stryker__?.mutantCoverage ?? null)'
+        )
+      );
+      expect(bytes.toString()).not.toBe(previous);
+    }
     hashes[name] = createHash('sha256').update(bytes).digest('hex');
     fs.writeFileSync(path.join(root, name), bytes);
   }
@@ -30,6 +50,7 @@ function canary(disruption) {
     path.join(root, 'branches.cjs'),
     'exports.left = function left() { return "LEFT"; };\nexports.right = function right() { return "RIGHT"; };\n'
   );
+  fs.writeFileSync(path.join(root, 'unselected.cjs'), 'module.exports = "UNRELATED";\n');
   const trace = path.join(root, 'selected-tests.jsonl');
   fs.writeFileSync(
     path.join(root, 'branches.test.js'),
@@ -41,6 +62,14 @@ for(const name of ['left','right']) test(name,()=>{
   const collector=globalThis.__stryker__;
   fs.appendFileSync(process.env.CAWS_TEST_SELECTION_TRACE,JSON.stringify({name,active:String(collector?.activeMutant??process.env.__STRYKER_ACTIVE_MUTANT__??''),testId:collector?.currentTestId??null,hits:collector?.mutantCoverage?.perTest?.[collector?.currentTestId]??{}})+'\\n');
   expect(child.status).toBe(0); expect(child.stderr).toBe(''); expect(child.stdout).toBe(name.toUpperCase());
+});
+test('unrelated',()=>{
+  const change=${JSON.stringify(disruption)} === 'unrelated-replaced'
+    ? 'globalThis.__stryker__.mutantCoverage = { static: {}, perTest: {} };' : '';
+  const child=spawnCoveredSync(process.execPath,['-e',change+'process.stdout.write(require("./unselected.cjs"));','unrelated'],{cwd:__dirname,encoding:'utf8',timeout:3000});
+  const collector=globalThis.__stryker__;
+  fs.appendFileSync(process.env.CAWS_TEST_SELECTION_TRACE,JSON.stringify({name:'unrelated',active:String(collector?.activeMutant??process.env.__STRYKER_ACTIVE_MUTANT__??''),testId:collector?.currentTestId??null,hits:collector?.mutantCoverage?.perTest?.[collector?.currentTestId]??{}})+'\\n');
+  expect(child.status).toBe(0); expect(child.stderr).toBe(''); expect(child.stdout).toBe('UNRELATED');
 });
 `
   );
@@ -113,9 +142,13 @@ test('actual child-only branch coverage selects and kills only its corresponding
   expect(leftCoverage.hits[right.id]).toBeUndefined();
   expect(rightCoverage.hits[right.id]).toBeGreaterThan(0);
   expect(rightCoverage.hits[left.id]).toBeUndefined();
+  const unrelated = observations.find((row) => row.active === '' && row.name === 'unrelated');
+  expect(unrelated).toBeDefined();
+  expect(unrelated.testId).toBe('unrelated');
+  expect(unrelated.hits).toEqual({});
 }, 120000);
 
-test.each(['missing', 'unknown'])(
+test.each(['missing', 'unknown', 'unrelated-missing', 'unrelated-null', 'unrelated-replaced'])(
   '%s child coverage makes the actual baseline fail',
   (disruption) => {
     const { root, run } = canary(disruption);
