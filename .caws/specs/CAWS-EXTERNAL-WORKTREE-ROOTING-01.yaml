@@ -59,3 +59,10 @@ evidence:
     exit_code: 0
     artifact_path: "/Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/final-tests.log"
     commit_sha: "2f5a0a6a31d45f97891196fae90f8c4bd5b2fb3f"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Inspected adoption tests refuse canonical/subdirectory/foreign/detached-without-branch identities, hidden authority dirt, overlapping registrations and foreign bridge ownership. Event failure restores unchanged source/index; concurrent staging is retained with explicit compensation refusal. Staged exact-runtime Codex controls refuse foreign owner, unregistered payload, unrelated repository and nested unregistered payload, with reason assertions. No hostile payload command is executed."
+    recorded_at: "2026-11-08T05:18:24.253Z"
+    exit_code: 0
+    artifact_path: "/Users/darianrosebrook/.codex/visualizations/2026/11/08/01a1b932-77c5-7503-8f5d-a419fa70b710/compatible-runtime/native-replay.jsonl"
+    commit_sha: "2f5a0a6a31d45f97891196fae90f8c4bd5b2fb3f"
