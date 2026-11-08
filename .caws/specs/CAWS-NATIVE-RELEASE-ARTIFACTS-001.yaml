@@ -1,0 +1,47 @@
+id: CAWS-NATIVE-RELEASE-ARTIFACTS-001
+title: 'Qualify selected native release artifacts across installed upgrade paths'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-11-08T14:30:26.699Z'
+updated_at: '2026-11-08T14:30:26.699Z'
+created_by_session: '01a19baf-4b34-7a83-9cf8-f109a22c539e'
+blast_radius:
+  modules:
+    - 'Selected release tarball and native-image installation, preservation and rollback qualification'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/runtime-upgrade-smoke.mjs'
+    - 'packages/caws-cli/scripts/native-upgrade-artifacts.cjs'
+    - 'packages/caws-cli/tests/ci/runtime-upgrade-smoke.test.js'
+    - 'packages/caws-cli/tests/ci/native-upgrade-artifacts.test.js'
+    - 'packages/caws-cli/tests/ci/release-qualification.test.js'
+    - 'packages/caws-cli/tests/ci/release-path-integrity.test.js'
+    - '.github/workflows/release-qualification.yml'
+    - 'docs/release-procedure.md'
+  out: []
+invariants:
+  - 'Qualification never repacks a supplied selected artifact or accepts a platform image without pinned bytes and normal production admission.'
+  - 'All existing ten upgrade cases, original deadlines, protected bytes and modes, zero audit findings, mutation floors and release acceptance remain required.'
+acceptance:
+  - id: A1
+    given: 'a selected committed CLI tarball and platform native image with reviewed pins'
+    when: 'installed upgrade qualification runs'
+    then: 'it installs those exact bytes through production admission and retains identities proving the actual selected native entry rather than compatibility fallback'
+  - id: A2
+    given: 'mismatched, altered, unavailable or wrong-platform artifacts and interrupted or corrupt installation'
+    when: 'qualification attempts admission and recovery'
+    then: 'failure remains visible, prior selected state survives or rolls back through the normal operation, and raw before/after governance bytes and modes are retained outside teardown'
+  - id: A3
+    given: 'six Mac and Linux Node18/20/22 jobs for one selected candidate'
+    when: 'release qualification aggregates their ten-case results'
+    then: 'every cell binds the same CLI tar identity and applicable platform native image, and missing, skipped or failed native proof cannot pass'
+observability:
+  - 'Retain raw commands, exit status, selected tar and native-image pins, production admission, actual runtime entry identity, and before/after governance bytes and modes in ignored evidence outside worktree teardown.'
+rollback:
+  - 'Revert owned qualifier and workflow changes through a normal corrective commit; retain raw failed and successful artifacts and leave the prior machine runtime selected.'
+non_functional:
+  security:
+    - 'No trust-store changes, guard bypass, waived acceptance, first-party interpreter fallback or global activation is permitted by qualification.'
+contracts: []
