@@ -1,10 +1,11 @@
 id: CAWS-FIRST-MAC-INSTALLED-IMAGE-001
 title: 'Build and preflight the selected Mac image for the first installed workflow'
 mode: chore
-lifecycle_state: active
-worktree: first-mac-installed-image
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Artifact-only Mac build and private preflight completed for clean source11d7d09559f7723c90f4aeb018af2cb6998bba04; A1-A3 recorded and matching ac_recorded16068-16070 read back. Producer V2 probe, sealed carrier, exact CLI tar, all installed bytes/modes and actual capability/SQLite/Node identities inspected; independent read-only feedback corroborated artifact identities, not acceptance. Durable evidence/export/whole producer archive retained canonical .caws/state/first-installed-workflow/mac/11d7d0955. Keep physical build checkout until release owner finishes consuming original absolute paths; no authored source delta to merge. Release chat01a19baf retains the unfinished first genuine installed workflow, Qwen host pin/trust/transport safety/semantic callback joins, native remaining callbacks/Stop/domain and full final release bar. Shared runtime and trust/auth unchanged; no first-workflow, release acceptance, tagging or publication claim. Root companion continues read-only dependency support from this retained candidate.'
 created_at: '2026-11-09T04:32:04.846Z'
-updated_at: '2026-11-09T04:35:56.761Z'
+updated_at: '2026-11-09T05:11:14.045Z'
 created_by_session: '01a1ba85-9c82-7b01-8943-610e88a44364'
 blast_radius:
   modules:
