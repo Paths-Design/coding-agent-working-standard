@@ -98,10 +98,10 @@ substitute for qualification before publication.
 
 ## Machine runtime qualification
 
-Run the installed-artifact upgrade check from the native-cutover candidate
-checkout, including its repo-owned qualification supervisor. Select an absolute
-report path in persistent ignored storage outside the candidate worktree before
-running it:
+Run the installed-artifact compatibility check from the candidate checkout,
+including its repo-owned qualification supervisor. Select an absolute report
+path in persistent ignored storage outside the candidate worktree before running
+it:
 
 ```bash
 npm run build -w @paths.design/caws-cli
@@ -132,9 +132,9 @@ the producer job output. The runner stages a private byte-for-byte copy, checks
 the installed npm lockfile's local resolution and SHA-512 integrity, and retains
 the selected tarball. A local invocation without `--tarball` builds its artifact
 selection through `npm pack`; use the pinned form above when comparing cells or
-candidates. These installed subprocess scenarios establish compatibility and
-preservation; genuine native harness execution has its separate acceptance
-requirements.
+candidates. These installed subprocess scenarios exercise legacy adapter
+compatibility and preservation. They do not install a compiled native image or
+establish genuine native harness execution.
 
 Schema-v2 reports name a unique directory under
 `qualification-report.json.artifacts/` containing command inputs, exit statuses,
@@ -188,9 +188,11 @@ also prove its retained custom behavior and reconcile its local handler/library
 pins using the
 [Sterling migration guide](guides/sterling-machine-runtime-migration.md).
 Successful Codex migration does not establish Claude adoption, and installed
-configuration does not prove native execution. The release qualification matrix
-covers native runtime subprocesses on Linux/macOS; it makes no Windows native
-harness claim.
+configuration does not prove native execution. The six-cell matrix invokes this
+compatibility runner. Native release qualification also requires the same
+selected CLI tarball, a pinned native image for each platform, and observed
+selection of the compiled native entry in every cell. Windows native harnesses
+are outside this matrix.
 
 Before selecting a release candidate, require current mutation topology,
 successful baseline/discovery, and full per-file mutation results for kernel,
