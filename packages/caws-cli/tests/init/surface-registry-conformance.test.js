@@ -73,6 +73,24 @@ describe('surface registry conformance (A2)', () => {
     expect(generated.SURFACE_ENV_VARS.none).toEqual([]);
   });
 
+  test('the dsh harness-plugin facts project to SURFACE_HARNESS_PLUGINS', () => {
+    const facts = registry.surfaces.dsh.harnessPlugin;
+    expect(facts).toEqual({
+      profileBundle: '@caws/dsh-bundle',
+      pluginIds: ['caws-hooks', 'caws-session-log', 'caws-agents-lifecycle'],
+      profileEnvVar: 'DSH_PROFILE_DIR',
+    });
+    expect(generated.SURFACE_HARNESS_PLUGINS.dsh).toEqual(facts);
+    // Only surfaces that actually have a harness-managed bundle carry facts.
+    for (const [id, surface] of entries) {
+      if (surface.harnessPlugin === undefined) {
+        expect(generated.SURFACE_HARNESS_PLUGINS[id]).toBeUndefined();
+      } else {
+        expect(generated.SURFACE_HARNESS_PLUGINS[id]).toEqual(surface.harnessPlugin);
+      }
+    }
+  });
+
   test('the dsh entry is pinned correctly (the reference adapter surface)', () => {
     expect(registry.surfaces.dsh.envVars).toEqual(['DSH_SESSION_ID']);
     expect(registry.surfaces.dsh.pinVar).toBe('DSH_SESSION_ID');
