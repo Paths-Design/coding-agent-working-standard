@@ -1,4 +1,5 @@
 import type { JsonSource } from '../json-custody';
+import { originalNativeFileOperation, readQwenOriginalWrite } from './original-operation';
 
 export const FILE_TOOL_CONTEXT_CAPABILITY = 'caws.runtime.file-tool-context.v1';
 export const GUARD_STRIKES_CAPABILITY = 'caws.runtime.guard-strikes.v1';
@@ -88,12 +89,22 @@ export function assertFileToolBackendSelection(
   if (
     capabilities.fileToolContext !== FILE_TOOL_CONTEXT_V2_CAPABILITY ||
     capabilities.guardStrikes !== GUARD_STRIKES_V2_CAPABILITY ||
-    envelope.surface !== 'claude-code' ||
     envelope.event !== 'pre_tool_use' ||
     envelope.configuration !== 'system' ||
     typeof payload.tool_name !== 'string' ||
-    !['Write', 'Edit'].includes(payload.tool_name)
+    originalNativeFileOperation(envelope.surface, payload.tool_name) === null
   )
-    refuse('Unpaired or ineligible Claude file backend capabilities');
+    refuse(
+      'Unpaired or ineligible ' +
+        (envelope.surface === 'qwen-code' ? 'Qwen' : 'Claude') +
+        ' file backend capabilities'
+    );
   assertUniqueOriginalToolSelector(source, refuse);
+  if (envelope.surface === 'qwen-code') {
+    try {
+      readQwenOriginalWrite(source.text.slice(source.root.start, source.root.end), payload);
+    } catch (error) {
+      refuse(String(error));
+    }
+  }
 }

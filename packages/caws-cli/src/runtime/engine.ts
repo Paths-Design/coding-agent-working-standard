@@ -59,7 +59,13 @@ import {
   qualifiesForNativeSessionEndPrefix,
   qualifiesForNativeStartupProfile,
 } from './session-cache-admission';
-import { requestsNativeFileBackend } from './file-tools/metadata';
+import {
+  requestsNativeFileBackend,
+  FILE_TOOL_CONTEXT_V2_CAPABILITY,
+  GUARD_STRIKES_V2_CAPABILITY,
+} from './file-tools/metadata';
+import { readQwenOriginalWrite } from './file-tools/original-operation';
+import { prepareNativeFileGuardPlan } from './file-tools/guard-plan';
 import {
   sessionCacheInputSupported,
   type NativeSessionCachePort,
@@ -270,6 +276,10 @@ export interface PreparedDispatchResult {
   readonly nativeResult: NativeResult;
   readonly containment: ValidatedContainmentIntent | null;
 }
+export interface PreparedRuntimeProposal {
+  readonly completion: PreparedDispatchResult;
+  seal(): void;
+}
 /** Native effect receipt is a separate observation from output and message delivery. */
 export function recordContainmentHandoff(
   journal: Pick<InvocationJournal, 'append' | 'diagnostics'>,
@@ -301,6 +311,10 @@ export interface PreparedRuntimeInvocation {
     admission?: NativeRenderAdmission,
     nativeStop?: NativeStopAdmission
   ): Promise<PreparedDispatchResult>;
+  readonly finalizeProposal?: (
+    originalRequest: RuntimeRequest,
+    completion: PreparedDispatchResult
+  ) => Promise<PreparedRuntimeProposal>;
   acknowledgeHandoff(success: boolean, containment?: ContainmentReceipt | null): Promise<string>;
 }
 
@@ -319,17 +333,41 @@ export async function prepareRuntimeInvocation(
   nativeFileToolContext?: NativeFileToolContextPort,
   nativeGuardStrikes?: NativeGuardStrikesPort
 ): Promise<PreparedRuntimeInvocation> {
-  if (requestsNativeFileBackend(request))
+  const nativeFile = requestsNativeFileBackend(request) && request.surface === 'qwen-code';
+  // This first executable consumer does not enable the deferred Claude route.
+  if (requestsNativeFileBackend(request) && !nativeFile)
     throw new Error(
       'Native file authorization is unavailable for this runtime generation. The operation was refused.'
+    );
+  const originalFile = nativeFile
+    ? readQwenOriginalWrite(request.inputJson, request.payload)
+    : undefined;
+  if (
+    nativeFile &&
+    (request.fileToolContext !== FILE_TOOL_CONTEXT_V2_CAPABILITY ||
+      request.guardStrikes !== GUARD_STRIKES_V2_CAPABILITY ||
+      !nativeFileToolContext ||
+      typeof nativeFileToolContext.finalize !== 'function' ||
+      typeof nativeFileToolContext.association !== 'function' ||
+      !nativeGuardStrikes ||
+      typeof nativeGuardStrikes.incrementShortcutLanguage !== 'function')
+  )
+    throw new Error(
+      'Native Qwen file authorization requires its associated request-owned V2 ports'
     );
   if (nativeStopCliIdentity)
     assertMatchedCliIdentityReceipt(nativeStopCliIdentity, request, signal);
   if (request.contextGit !== undefined && !contextGit)
     throw new Error('Native context Git capability requires its request-owned port');
-  if ((request.fileToolContext === FILE_TOOL_CONTEXT_CAPABILITY) !== Boolean(nativeFileToolContext))
+  if (
+    (nativeFile || request.fileToolContext === FILE_TOOL_CONTEXT_CAPABILITY) !==
+    Boolean(nativeFileToolContext)
+  )
     throw new Error('Native file-tool context capability requires its request-owned port');
-  if ((request.guardStrikes === GUARD_STRIKES_CAPABILITY) !== Boolean(nativeGuardStrikes))
+  if (
+    (nativeFile || request.guardStrikes === GUARD_STRIKES_CAPABILITY) !==
+    Boolean(nativeGuardStrikes)
+  )
     throw new Error('Native guard-strikes capability requires its request-owned port');
   const environment = invocationEnvironment(request.caller);
   clearGuardConfigurationTransport(environment);
@@ -348,6 +386,8 @@ export async function prepareRuntimeInvocation(
     throw new Error('Runtime requires an absolute caller machine home');
   environment.CAWS_HOME = home;
   const executionWorkdir = resolveExecutionWorkdir(request.payload, request.event);
+  if (nativeFile && executionWorkdir.status === 'resolved')
+    throw new Error('Native file callback cannot borrow shell execution-workdir authority');
   if (executionWorkdir.status === 'resolved' && request.contextGit === CONTEXT_GIT_CAPABILITY)
     throw new Error('Native context Git does not support host execution-workdir resolution');
   if (
@@ -372,12 +412,15 @@ export async function prepareRuntimeInvocation(
       : { status: 'inactive' as const, reason: context.reason };
   // Session authority is resolved first. The additive directory cannot turn an
   // active session into an inactive invocation or borrow another project's policy.
-  let context = await resolveRuntimeProject(
-    request.payload,
-    request.caller,
-    request.deadlineEpochMs,
-    contextGit
-  );
+  const nativeCaptured = nativeFile ? await nativeFileToolContext!.capture() : undefined;
+  let context: Awaited<ReturnType<typeof resolveRuntimeProject>> = nativeCaptured
+    ? { status: 'resolved', checkout: nativeCaptured.checkout, canonical: nativeCaptured.canonical }
+    : await resolveRuntimeProject(
+        request.payload,
+        request.caller,
+        request.deadlineEpochMs,
+        contextGit
+      );
   let selection = await select(context);
   if (executionWorkdir.status === 'resolved') {
     if (context.status !== 'resolved') {
@@ -440,6 +483,8 @@ export async function prepareRuntimeInvocation(
     requireRuntimeProjectGovernancePaths(context.canonical);
   if (signal.aborted) throw signal.reason;
   if (selection.status === 'inactive') {
+    if (nativeFile)
+      throw new Error('Native file authorization requires an active selected native consumer');
     let used = false;
     return {
       active: false,
@@ -471,7 +516,9 @@ export async function prepareRuntimeInvocation(
   }
   const profile = PROFILES[request.surface];
   if (!profile) throw new Error('Runtime surface profile unavailable');
-  const identity = resolveInvocationIdentity(request, signal);
+  const identity = originalFile
+    ? Object.freeze({ sessionId: originalFile.sessionId, diagnostic: '' })
+    : resolveInvocationIdentity(request, signal);
   if (identity.sessionId) environment.CAWS_SESSION_ID = identity.sessionId;
   else delete environment.CAWS_SESSION_ID;
   if (selection.configuration === 'system')
@@ -491,8 +538,29 @@ export async function prepareRuntimeInvocation(
     identity.sessionId,
     home
   );
+  const nativeFilePlan = nativeFile
+    ? prepareNativeFileGuardPlan({
+        request,
+        selection,
+        environment,
+        signal,
+        captured: nativeCaptured!,
+        contextPort: nativeFileToolContext!,
+        strikes: nativeGuardStrikes!,
+        machineHome: home,
+        observeStrike(operation, committed) {
+          journal.append('native_file_strike_result', {
+            observation_boundary: 'native_guard_strikes_result',
+            operation,
+            count: committed.count,
+            state_sha256: committed.stateSha256,
+          });
+        },
+      })
+    : undefined;
   let capturedFileToolContext: FileToolContextSnapshot | undefined;
   if (
+    !nativeFile &&
     nativeFileToolContext &&
     nativeGuardStrikes &&
     qualifiesForFileToolHandlers({
@@ -509,6 +577,10 @@ export async function prepareRuntimeInvocation(
   let dispatched = false,
     acknowledged = false,
     result: NativeResult | null = null;
+  let finalizationAttempted = false,
+    proposalSealed = false;
+  let ownedCompletion: PreparedDispatchResult | null = null;
+  let ownedCompletionKey: string | null = null;
   let containment: ValidatedContainmentIntent | null = null;
   let offers: readonly OfferMembership[] = [],
     pending: readonly PendingDedup[] = [];
@@ -524,6 +596,45 @@ export async function prepareRuntimeInvocation(
       !identity.sessionId.includes('\0')
         ? identity.sessionId
         : null,
+    ...(nativeFilePlan
+      ? {
+          async finalizeProposal(
+            originalRequest: RuntimeRequest,
+            completion: PreparedDispatchResult
+          ): Promise<PreparedRuntimeProposal> {
+            if (finalizationAttempted) throw new Error('Native file finalization is single-use');
+            finalizationAttempted = true;
+            const assertCompletion = (): void => {
+              if (
+                originalRequest !== request ||
+                !dispatched ||
+                acknowledged ||
+                completion !== ownedCompletion ||
+                ownedCompletionKey === null ||
+                encodeRuntimeResponse(request, completion.nativeResult) !== ownedCompletionKey
+              )
+                throw new Error('Native file finalization lacks original request/completion');
+            };
+            assertCompletion();
+            const checkFile =
+              completion.nativeResult.exitCode !== 2 ? await nativeFilePlan.finalize() : undefined;
+            let sealAttempted = false;
+            return Object.freeze({
+              completion,
+              seal(): void {
+                if (sealAttempted) throw new Error('Native file proposal seal is single-use');
+                sealAttempted = true;
+                assertCompletion();
+                checkFile?.();
+                if (checkFile && (signal.aborted || Date.now() >= request.deadlineEpochMs))
+                  throw new Error('Native file proposal expired at final egress');
+                assertCompletion();
+                proposalSealed = true;
+              },
+            });
+          },
+        }
+      : {}),
     async dispatch(admission, nativeStop) {
       if (nativeStop && (serviceOffer || admission))
         throw new Error('Native Stop routing cannot coexist with service admission');
@@ -535,7 +646,7 @@ export async function prepareRuntimeInvocation(
       // OpenCode Stop already selects compatibilityRequired=true; discard only
       // this optional native route before any prefix request or other effect.
       if (nativeStop && !nativeStopCliIdentity) nativeStop = undefined;
-      if (dispatched || acknowledged)
+      if (dispatched || acknowledged || (nativeFilePlan && finalizationAttempted))
         throw new Error('Invocation dispatch is single-use and cannot resume after settlement');
       if (signal.aborted) throw signal.reason;
       dispatched = true;
@@ -545,7 +656,9 @@ export async function prepareRuntimeInvocation(
         const options = {
           request,
           selection,
-          environment: invocationGuardConfiguration(selection, environment),
+          environment: nativeFilePlan
+            ? environment
+            : invocationGuardConfiguration(selection, environment),
           signal,
           ...(capturedFileToolContext && nativeFileToolContext && nativeGuardStrikes
             ? {
@@ -565,7 +678,7 @@ export async function prepareRuntimeInvocation(
               }
             : {}),
         };
-        const fileTools = prepareFileToolHandlers(options);
+        const fileTools = nativeFilePlan ?? prepareFileToolHandlers(options);
         let compatibility =
           fileTools === null && compatibilityRequired(request, selection, environment);
         let sessionSeal: NativeSessionSealExecution | undefined;
@@ -721,7 +834,7 @@ export async function prepareRuntimeInvocation(
                 }),
             });
           }
-        } else if (!compatibility) {
+        } else if (!compatibility && !nativeFilePlan) {
           const sid = request.payload.session_id;
           // Unsafe/non-string identity retains the complete parser's diagnostic
           // behavior. Resolved fallback identity must never select cache writes.
@@ -802,14 +915,16 @@ export async function prepareRuntimeInvocation(
                   }),
               record: (observation) => journal.record(observation),
               eligibility: (handler) =>
-                handlerEligibility(handler, {
-                  home,
-                  canonical: selection.canonical,
-                  vendorDirectory: profile.vendor,
-                  sessionId: identity.sessionId,
-                  event: request.event,
-                  environment,
-                }),
+                nativeFilePlan
+                  ? { status: 'run' as const }
+                  : handlerEligibility(handler, {
+                      home,
+                      canonical: selection.canonical,
+                      vendorDirectory: profile.vendor,
+                      sessionId: identity.sessionId,
+                      event: request.event,
+                      environment,
+                    }),
               dedup,
             }
           );
@@ -858,9 +973,16 @@ export async function prepareRuntimeInvocation(
           source_digest_boundary: 'before_and_after_dispatch',
           process_exit_observed: false,
         });
-      return Object.freeze({ nativeResult: native, containment });
+      const completion = Object.freeze({ nativeResult: native, containment });
+      if (nativeFilePlan) {
+        ownedCompletion = completion;
+        ownedCompletionKey = encodeRuntimeResponse(request, native);
+      }
+      return completion;
     },
     async acknowledgeHandoff(success, receipt = null) {
+      if (nativeFilePlan && success && !proposalSealed)
+        throw new Error('Native file output cannot be acknowledged before its proposal seal');
       if (acknowledged)
         throw new Error('Native handoff was already acknowledged; settlement is not retried');
       acknowledged = true;

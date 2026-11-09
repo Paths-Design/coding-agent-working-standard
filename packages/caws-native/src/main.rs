@@ -283,8 +283,9 @@ fn execute_observed<'deadline>(
                 || runner::check_until(original_deadline, deadline).is_err()
         };
         if request.native_file_backend() {
-            caws_native::context_git::file_tools::Preparation::retain_native(
+            caws_native::context_git::file_tools::Preparation::retain_native_for_surface(
                 input,
+                &config.surface,
                 original_deadline,
                 deadline,
                 &cancelled,
@@ -300,7 +301,15 @@ fn execute_observed<'deadline>(
     });
     let mut guard_strikes = request.guard_strikes_input().map(|input| {
         if request.native_file_backend() {
-            guard_strikes_wire::Owner::retain_native(input, original_deadline)
+            if config.surface == "claude-code" {
+                guard_strikes_wire::Owner::retain_native(input, original_deadline)
+            } else {
+                guard_strikes_wire::Owner::retain_native_for_surface(
+                    input,
+                    &config.surface,
+                    original_deadline,
+                )
+            }
         } else {
             guard_strikes_wire::Owner::retain(input, original_deadline)
         }

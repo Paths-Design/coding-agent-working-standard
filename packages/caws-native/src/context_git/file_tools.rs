@@ -20,6 +20,8 @@ use std::{
 };
 
 pub const CAPABILITY: &str = "caws.runtime.file-tool-context.v1";
+#[path = "file_tools/operation.rs"]
+pub mod operation;
 pub const REQUEST_SCHEMA: &str = "caws.runtime.file-tool-context.request.v1";
 const RESULT_SCHEMA: &str = "caws.runtime.file-tool-context.result.v1";
 pub const NATIVE_CAPABILITY: &str = "caws.runtime.file-tool-context.v2";
@@ -764,6 +766,7 @@ impl RetainedInput {
 }
 #[derive(Default)]
 struct NativeState {
+    original_operation: Option<Result<operation::OriginalOperation, String>>,
     dispatch_written: bool,
     active: bool,
     sealed: bool,
@@ -897,9 +900,25 @@ impl Preparation {
         until: Instant,
         cancelled: &dyn Fn() -> bool,
     ) -> Self {
+        Self::retain_native_for_surface(input, "claude-code", original, until, cancelled)
+    }
+    pub fn retain_native_for_surface(
+        input: Input<'_>,
+        surface: &str,
+        original: &MonotonicDeadline,
+        until: Instant,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Self {
+        let operation = operation::capture(surface, input.payload);
         let mut owner = Self::retain_original(input, original, until, cancelled);
         owner.exchanges.native = true;
-        owner.native_state = Some(NativeState::default());
+        if let Err(error) = &operation {
+            owner.refusal.get_or_insert_with(|| error.clone());
+        }
+        owner.native_state = Some(NativeState {
+            original_operation: Some(operation),
+            ..NativeState::default()
+        });
         owner
     }
     pub fn control_credit_limit(&self) -> usize {
@@ -1047,14 +1066,14 @@ impl Preparation {
             return Err("native strike token, snapshot or delivered phase differs".into());
         }
         if phase == NativeStrikePhase::ShortcutLanguage {
-            #[derive(Deserialize)]
-            struct Tool {
-                tool_name: Option<String>,
-            }
-            let tool: Tool = serde_json::from_str(self.input.payload.get())
-                .map_err(|error| format!("original shortcut tool: {error}"))?;
-            if tool.tool_name.as_deref() != Some("Write") {
-                return Err("native shortcut strike requires original Write".into());
+            let operation = state
+                .original_operation
+                .as_ref()
+                .ok_or("native shortcut lacks original operation")?
+                .as_ref()
+                .map_err(Clone::clone)?;
+            if operation.operation != operation::FileOperation::Write {
+                return Err("native shortcut strike requires original authored Write".into());
             }
         }
         self.bound_strike_roots(id, runtime_digest, original, until, cancelled)

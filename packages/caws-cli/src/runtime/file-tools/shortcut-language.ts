@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 const parserRequire = createRequire(__filename);
 
 /**
- * Pure PreToolUse language evaluation for the original Claude tool.
+ * Pure PreToolUse language evaluation for a classified original file operation.
  * The caller supplies authenticated, stable images and a canonical relative path.
  * A null preimage means witnessed absence; this module does not establish custody,
  * ownership, path permission, strike state, or permission to publish a result.

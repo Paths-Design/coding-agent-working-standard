@@ -169,9 +169,18 @@ impl Owner {
         }
     }
     pub(crate) fn retain_native(input: OriginalInput<'_>, original: &MonotonicDeadline) -> Self {
+        Self::retain_native_for_surface(input, "claude-code", original)
+    }
+    pub(crate) fn retain_native_for_surface(
+        input: OriginalInput<'_>,
+        surface: &str,
+        original: &MonotonicDeadline,
+    ) -> Self {
         let mut owner = Self::retain(input, original);
-        owner.native_session =
-            Some(caws_native::context_git::file_tools::native_original_session(&owner.payload));
+        owner.native_session = Some(
+            caws_native::context_git::file_tools::operation::capture(surface, &owner.payload)
+                .map(|operation| operation.session_id),
+        );
         owner.native = Some(NativeLedger::default());
         owner
     }

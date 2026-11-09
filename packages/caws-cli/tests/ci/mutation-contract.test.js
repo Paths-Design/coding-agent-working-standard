@@ -548,9 +548,29 @@ describe('mutation policy topology contract', () => {
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
     // The inventory includes execution and all shared inspection decisions.
-    expect(result.stdout).toMatch(/^PASS: 234 source files accounted for exactly once$/m);
-    expect(result.stdout).toMatch(/^PASS: 53 mutation targets across 5 surfaces$/m);
+    expect(result.stdout).toMatch(/^PASS: 236 source files accounted for exactly once$/m);
+    expect(result.stdout).toMatch(/^PASS: 55 mutation targets across 5 surfaces$/m);
   });
+
+  test.each([
+    'src/runtime/file-tools/guard-plan.ts',
+    'src/runtime/file-tools/original-operation.ts',
+  ])(
+    'native file consumer decisions retain whole-file execution mutation coverage: %s',
+    (source) => {
+      const policy = loadPolicy();
+      expect(
+        policy.proofGroups
+          .filter((group) => group.files.includes(source))
+          .map(({ id, strategy }) => ({ id, strategy }))
+      ).toEqual([{ id: 'mutation', strategy: 'mutation' }]);
+      expect(policy.surfaces.execution.threshold).toBe(80);
+      expect(
+        policy.surfaces.execution.targets.filter((target) => target.source === source)
+      ).toEqual([{ source, threshold: 80 }]);
+      expect(policy.surfaces.execution.targets).toHaveLength(24);
+    }
+  );
 
   test.each([
     'src/shell/analysis/caws-read-metadata.ts',
@@ -797,9 +817,12 @@ describe('mutation policy topology contract', () => {
       '<rootDir>/tests/execution/protocol.test.js',
       '<rootDir>/tests/execution/writer.test.js',
       '<rootDir>/tests/runtime/engine-core.test.js',
+      '<rootDir>/tests/runtime/engine-entry.test.js',
       '<rootDir>/tests/runtime/file-tool-context.test.js',
       '<rootDir>/tests/runtime/guard-strikes.test.js',
       '<rootDir>/tests/runtime/native-file-authority.test.js',
+      '<rootDir>/tests/runtime/native-file-engine.test.js',
+      '<rootDir>/tests/runtime/native-file-operation.test.js',
       '<rootDir>/tests/runtime/native-file-target-image.test.js',
       '<rootDir>/tests/runtime/native-shortcut-language.test.js',
       '<rootDir>/tests/runtime/protocol.test.js',
@@ -823,7 +846,9 @@ describe('mutation policy topology contract', () => {
       'src/execution/writer.ts',
       'src/runtime/file-tools/authority.ts',
       'src/runtime/file-tools/context-port.ts',
+      'src/runtime/file-tools/guard-plan.ts',
       'src/runtime/file-tools/metadata.ts',
+      'src/runtime/file-tools/original-operation.ts',
       'src/runtime/file-tools/shortcut-language.ts',
       'src/runtime/file-tools/strikes-port.ts',
       'src/runtime/file-tools/target-image.ts',
