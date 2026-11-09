@@ -103,7 +103,11 @@ SessionStart, a denied write whose file stays absent, Stop, and
 canonical/linked-root resolution. A shell fixture cannot establish another
 harness's live parity. JSON configuration helpers exist for Codex, Claude Code
 and Qwen Code; Kimi, ZCode, OpenCode and DSH require native registration work by
-their harness agents. Shipping their adapter libraries is not a claim of native
+their harness agents. DSH's transport is a profile-loaded plugin bundle
+(`hookMechanism: harness-plugin`): `caws init` installs the shared core and the
+surface doctrine, but the bundle must be composed in the harness profile, and
+`caws init --plan` / `caws doctor` report that observed composition instead of
+assuming it. Shipping their adapter libraries is not a claim of native
 activation.
 
 Doctor observes the selected digest, runtime integrity, explicit overrides and

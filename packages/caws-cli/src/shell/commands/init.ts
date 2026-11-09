@@ -83,6 +83,9 @@ import {
 import { SHARED_PACK, sharedPackForSurface } from '../../init/hook-packs/manifest-shared';
 import type { AgentSurface, HookPackInstallResult, HookPackV1 } from '../../init/hook-packs/types';
 import { isAdapterCoveredSurface } from '../../init/hook-packs/types';
+import { observeHarnessPluginWiring } from '../../init/hook-packs/harness-plugin-wiring';
+import { renderHarnessPluginWiring } from '../../init/hook-packs/harness-plugin-wiring';
+import type { HarnessPluginWiringObservation } from '../../kernel/doctor/types';
 import { autoCommit } from '../../store/git-autocommit';
 import {
   manageGitignore,
@@ -466,6 +469,12 @@ interface InitPlanDocument {
     | (GitignorePlanResult & { readonly skipped?: false })
     | { readonly skipped: true; readonly reason: 'not_git_working_tree' };
   readonly hook_pack: HookPackInstallResult & { readonly read_only?: true };
+  /**
+   * CAWS-DSH-HARNESS-PLUGIN-PARITY-001: observed profile composition for a
+   * harness-plugin surface (today: dsh). Absent when the surface has no
+   * harness-plugin transport or when no profile environment was readable.
+   */
+  readonly harness_plugin_wiring?: HarnessPluginWiringObservation;
   readonly claude_settings?: {
     readonly settings_json: SettingsMergePlanResult;
     readonly settings_example: SettingsExamplePlanResult;
@@ -796,6 +805,12 @@ function renderInitPlan(plan: InitPlanDocument): string {
     lines.push(...renderActionList(plan.hook_pack.actions));
   }
 
+  if (plan.harness_plugin_wiring !== undefined) {
+    lines.push('');
+    lines.push('Harness-plugin hook plane (observed profile composition):');
+    lines.push(...renderHarnessPluginWiring(plan.harness_plugin_wiring));
+  }
+
   if (plan.claude_settings) {
     lines.push('');
     lines.push('.claude settings wiring:');
@@ -992,6 +1007,11 @@ function runInitPlan(
     resolution?.kind === 'declared_not_implemented'
       ? `--agent-surface "${chosen.surface}" is declared but not yet implemented in this CLI version.`
       : undefined;
+  // CAWS-DSH-HARNESS-PLUGIN-PARITY-001: a harness-plugin surface's hooks are
+  // not a repo-local file, so the plan must show the observed profile
+  // composition instead of implying the pack alone makes the guard chain live.
+  const harnessPluginWiring =
+    chosen.surface !== null ? observeHarnessPluginWiring(chosen.surface) : undefined;
 
   const anyRefused = hookPlan.actions.some((a) => a.action === 'refused');
   const gitignore = isInsideGitWorkingTree(repoRoot)
@@ -1064,6 +1084,7 @@ function runInitPlan(
     canonical_state: projectPlan.value,
     gitignore,
     hook_pack: { ...hookPlan, read_only: true },
+    ...(harnessPluginWiring !== undefined ? { harness_plugin_wiring: harnessPluginWiring } : {}),
     ...(claudeSettings ? { claude_settings: claudeSettings } : {}),
     ...(zcodeSettings ? { zcode_settings: zcodeSettings } : {}),
     ...(kimiSettings ? { kimi_settings: kimiSettings } : {}),
@@ -1368,6 +1389,12 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
 
   const detection = detectAgentHarness(repoRoot);
   const chosen = chooseSurface(opts.agentSurface, detection);
+  // CAWS-DSH-HARNESS-PLUGIN-PARITY-001: observe the active profile composition
+  // once, before the activation contract renders, so a harness-plugin surface
+  // (dsh) states the real hook-plane verdict instead of only the mechanism.
+  const harnessPluginWiring =
+    chosen.surface !== null ? observeHarnessPluginWiring(chosen.surface) : undefined;
+
   let system: boolean;
   try {
     system = systemSurfaceEnabled(chosen.surface, opts.home);
@@ -1601,6 +1628,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     out(
       renderActivationContract(hookPackResult, wiringStatus, {
         ...(opts.adopt === true ? { adoptRequested: true } : {}),
+        ...(harnessPluginWiring !== undefined ? { harnessPluginWiring } : {}),
       })
     );
   }

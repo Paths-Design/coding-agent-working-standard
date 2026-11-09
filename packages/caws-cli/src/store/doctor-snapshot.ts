@@ -62,6 +62,7 @@ import {
 } from '../init/hook-install';
 import { listStrandedTmpSiblings } from './atomic-write';
 import { ADAPTER_COVERED_SURFACES } from '../init/hook-packs/types';
+import { observeAllHarnessPluginWiring } from '../init/hook-packs/harness-plugin-wiring';
 import { observeSystemRuntime } from './system-runtime-observation';
 import { observeGlobalHome } from './global-home-observation';
 import { observeGatedSurfaceWiring } from '../init/hook-packs/user-scope-wiring';
@@ -374,6 +375,11 @@ function observeFilesystem(
       process.env.CAWS_HOME || path.join(os.homedir(), '.caws')
     ),
     adapterPackSurfaceMarkers: observeAdapterPackSurfaceMarkers(repoRoot),
+    // CAWS-DSH-HARNESS-PLUGIN-PARITY-001: harness-plugin surfaces (dsh) have
+    // no settings/config registration to observe; their hook transport is the
+    // active harness profile's composed bundle tree. Read it here (read-only),
+    // so the kernel can flag installed-but-unwired without doing I/O.
+    harnessPluginWiring: observeAllHarnessPluginWiring(),
     // CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: which installed surfaces
     // still CLAIM those rows. Delegated to the install module for the same
     // reason as observeSharedPackBodyDrift above: the installer's own notion

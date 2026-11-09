@@ -58,7 +58,16 @@
       "pinVar": "DSH_SESSION_ID",
       "trustGated": false,
       "hookMechanism": "harness-plugin",
-      "vendorDir": ".dsh"
+      "vendorDir": ".dsh",
+      "harnessPlugin": {
+        "profileBundle": "@caws/dsh-bundle",
+        "pluginIds": [
+          "caws-hooks",
+          "caws-session-log",
+          "caws-agents-lifecycle"
+        ],
+        "profileEnvVar": "DSH_PROFILE_DIR"
+      }
     },
     "cursor": {
       "envVars": [

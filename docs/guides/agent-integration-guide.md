@@ -27,6 +27,18 @@ JSON registration helpers currently support Codex, Claude Code and Qwen Code.
 Other native configurations require adapters authored and verified by agents in
 those harnesses. Pack-template availability is a separate compatibility fact.
 
+DSH is a separate shape: its hooks are a harness-loaded plugin bundle composed in
+the harness profile (`hookMechanism: harness-plugin`), not a user-level JSON
+registration and not a repo-local hook file. `caws init --agent-surface dsh`
+installs the shared core and `.dsh/AGENTS.md`; the `@caws/dsh-bundle` reference
+adapter must be selected in the active profile (for example with
+`dsh plugin --profile <name> add @caws/dsh-bundle`) and the profile restarted.
+`caws init --agent-surface dsh --plan` reports the observed composition (WIRED,
+NOT WIRED with the exact repair, or UNOBSERVED), and `caws doctor` warns
+`doctor.hooks.harness_plugin_unwired` when a repo has the DSH pack but its
+active profile does not compose the bundle. Verify from the harness, not from
+`.dsh/`.
+
 Native evidence must include fresh lifecycle execution, a forbidden-write control,
 and session rendering. Fixtures establish protocol behavior, not native loading or
 trust. Keep harness-specific parsers in `~/.caws/surfaces/<surface>/lib/`; preserve

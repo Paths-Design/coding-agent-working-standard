@@ -49,5 +49,17 @@ export const SURFACE_HOOK_MECHANISMS: Readonly<Record<AgentSurface, string>> = {
   'none': 'none',
 };
 
+/** Surfaces whose hooks load through a harness-managed plugin bundle rather
+ *  than a repo-local file or a settings key. Absent for every other surface. */
+export interface HarnessPluginFacts {
+  readonly profileBundle: string;
+  readonly pluginIds: readonly string[];
+  readonly profileEnvVar?: string;
+}
+
+export const SURFACE_HARNESS_PLUGINS: Readonly<Partial<Record<AgentSurface, HarnessPluginFacts>>> = {
+  'dsh': { profileBundle: '@caws/dsh-bundle', pluginIds: ['caws-hooks', 'caws-session-log', 'caws-agents-lifecycle'], profileEnvVar: 'DSH_PROFILE_DIR' },
+};
+
 /** The sentinel surface ('none'): generic identity, no harness. */
 export const SENTINEL_SURFACE: AgentSurface = 'none';

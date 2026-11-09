@@ -192,12 +192,18 @@ dispatch, renderers and harness adapters.
   (CLI package → shared runtime → native registration) and how to verify it:
   `CONTRIBUTING.md`, "Activating your build as the `caws` command".
 - **Two hook copies are live.** Claude Code and Codex run guards from `~/.caws`;
-  qwen-code, kimi-code, opencode, zcode and dsh exec
-  `.caws/hooks/dispatch/<event>.sh` directly. An edit under `.caws/hooks/` is
-  invisible from Claude but live for those five. **Never delete or prune
-  `.caws/hooks/`.** **Extend guards; do not fork them:** declare repo-specific
-  behavior in `.caws/hooks/hook-policy.json` (agent-write-blocked by design).
-  Both are detailed in `docs/architecture/repo-local-hook-policy.md`.
+  qwen-code, kimi-code, opencode and zcode exec
+  `.caws/hooks/dispatch/<event>.sh` directly. dsh reaches the same dispatchers
+  only through the harness-loaded `@caws/dsh-bundle` plugin composed into the
+  DSH profile — the harness reads no project hooks by itself, and a profile
+  without the bundle runs no CAWS guard. `caws init --agent-surface dsh --plan`
+  and `caws doctor` report the observed profile composition; never infer dsh
+  wiring from `.dsh/` alone. An edit under `.caws/hooks/` is invisible from
+  Claude but live for every project-wired surface, and for dsh once its bundle
+  is loaded. **Never delete or prune `.caws/hooks/`.** **Extend guards; do not
+  fork them:** declare repo-specific behavior in `.caws/hooks/hook-policy.json`
+  (agent-write-blocked by design). Both are detailed in
+  `docs/architecture/repo-local-hook-policy.md`.
 - Reprieves are human-granted, cover one session in one repo (`--all-repos`
   widens that), and refuse a grant covering only part of a handler set that
   jointly enforces one boundary. See `caws reprieve grant --help`.

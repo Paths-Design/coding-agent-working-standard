@@ -16,6 +16,8 @@ import {
 } from '../../init/hook-install';
 import { IMPLEMENTED_SURFACES } from '../../init/hook-packs/register';
 import { SURFACE_HOOK_MECHANISMS } from '../../init/hook-packs/surfaces.generated';
+import { renderHarnessPluginWiring } from '../../init/hook-packs/harness-plugin-wiring';
+import type { HarnessPluginWiringObservation } from '../../kernel/doctor/types';
 import type { HookPackInstallResult } from '../../init/hook-packs/types';
 
 function repeatChar(ch: string, n: number): string {
@@ -576,6 +578,14 @@ export function renderSettingsWiring(
 export interface ActivationRenderContext {
   /** True when the caller invoked init with --adopt. */
   readonly adoptRequested?: boolean;
+  /**
+   * CAWS-DSH-HARNESS-PLUGIN-PARITY-001: observed harness-plugin wiring for
+   * surfaces whose hooks are a harness-managed plugin bundle. Only supplied
+   * when the caller could actually observe the active profile; absent means
+   * the wiring is unobserved, and the panel must say so rather than imply a
+   * verdict.
+   */
+  readonly harnessPluginWiring?: HarnessPluginWiringObservation;
 }
 
 export function renderActivationContract(
@@ -677,6 +687,17 @@ export function renderActivationContract(
           lines.push('  The DSH surface doctrine is installed. The plugin is active once');
           lines.push('  the profile bundle list loads it and the profile is reloaded —');
           lines.push('  read the composed profile rather than assuming either way.');
+        }
+        if (result.activation === 'restart_required') {
+          lines.push('');
+          if (context?.harnessPluginWiring !== undefined) {
+            lines.push(...renderHarnessPluginWiring(context.harnessPluginWiring));
+          } else {
+            lines.push('  Hook plane: UNOBSERVED — no readable DSH profile environment was');
+            lines.push('  supplied with this run, so composition was not judged. Verify from');
+            lines.push('  the DSH session (read dsh.profile.bundles + the bundle patch, or');
+            lines.push('  `dsh --profile <name> --dump-config`).');
+          }
         }
         break;
       }
