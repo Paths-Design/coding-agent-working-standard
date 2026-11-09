@@ -29,17 +29,28 @@ function request() {
     payload,
   };
 }
-function fixture({ count = 1, mutate, transform, native = false, tool = 'Write' } = {}) {
+function fixture({
+  count = 1,
+  mutate,
+  transform,
+  native = false,
+  tool = 'Write',
+  surface = 'claude-code',
+} = {}) {
   const req = request(),
     controller = new AbortController(),
     frames = [];
   if (native)
     Object.assign(req, {
-      surface: 'claude-code',
+      surface,
       guardStrikes: 'caws.runtime.guard-strikes.v2',
       fileToolContext: 'caws.runtime.file-tool-context.v2',
       payload: { ...req.payload, tool_name: tool },
     });
+  if (native && surface === 'qwen-code') {
+    req.payload.tool_input.file_path = '/fixture/checkout/src/outside/a';
+    req.inputJson = JSON.stringify(req.payload);
+  }
   const transport = {
     write: jest.fn(async (frame) => {
       frames.push(frame);
@@ -80,6 +91,26 @@ function fixture({ count = 1, mutate, transform, native = false, tool = 'Write' 
 afterEach(() => {
   jest.restoreAllMocks();
   jest.useRealTimers();
+});
+test('Qwen original write exposes the associated one-shot shortcut strike', async () => {
+  const f = fixture({ native: true, surface: 'qwen-code', tool: 'write_file' });
+  expect(typeof f.port.incrementShortcutLanguage).toBe('function');
+  await expect(f.port.incrementShortcutLanguage()).resolves.toEqual({
+    count: 1,
+    stateSha256: 'b'.repeat(64),
+  });
+  expect(f.frames).toHaveLength(1);
+  expect(f.frames[0]).toMatchObject({
+    schema: GUARD_STRIKES_V2_REQUEST,
+    operation: 'increment_shortcut_language',
+    token: 'd'.repeat(64),
+    contextSnapshotToken: 'e'.repeat(64),
+  });
+  await expect(f.port.incrementShortcutLanguage()).rejects.toThrow('consumed');
+  expect(f.transport.write).toHaveBeenCalledTimes(1);
+  expect(() => fixture({ native: true, surface: 'qwen-code', tool: 'Write' })).toThrow(
+    'capability unavailable'
+  );
 });
 test('native publications are distinct one-shot operations with action-correlated receipts', async () => {
   const f = fixture({ native: true, count: 2 });

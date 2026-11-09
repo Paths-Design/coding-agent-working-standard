@@ -88,7 +88,8 @@ export function createNativeGuardStrikesPort(
   const token = randomBytes(32).toString('hex');
   const requestSchema = native ? GUARD_STRIKES_V2_REQUEST : GUARD_STRIKES_REQUEST;
   const resultSchema = native ? GUARD_STRIKES_V2_RESULT : GUARD_STRIKES_RESULT;
-  const shortcutAvailable = native && request.payload.tool_name === 'Write';
+  const shortcutAvailable =
+    native && originalNativeFileOperation(request.surface, request.payload.tool_name) === 'write';
   type Action = 'increment_scope_guard' | 'increment_shortcut_language';
   const used = new Set<Action>();
   let poisoned = false;

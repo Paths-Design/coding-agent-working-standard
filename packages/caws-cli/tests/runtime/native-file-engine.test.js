@@ -546,9 +546,14 @@ test('fresh context3 is consumed rather than an original/second snapshot clone',
   const f = fixture();
   const prepared = await f.prepare();
   const result = await prepared.dispatch();
-  f.third = { ...clone(f.context), branch: 'foreign-third-branch' };
+  f.third = clone(f.context);
+  f.third.branch = 'foreign-third-branch';
+  f.third.worktrees.find((entry) => entry.path === f.lane).branch =
+    'refs/heads/foreign-third-branch';
   const proposal = await prepared.finalizeProposal(f.request, result);
+  expect(contexts(f)).toEqual([1, 2, 3]);
   expect(() => proposal.seal()).toThrow(/original native context changed/);
+  expect(fs.readFileSync(f.file, 'utf8')).toBe('export const n = 1;\n');
 });
 
 test('wrong context3 token poisons finalization without query or effect replay', async () => {
