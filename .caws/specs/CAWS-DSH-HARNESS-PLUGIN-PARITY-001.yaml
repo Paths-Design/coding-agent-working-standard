@@ -110,3 +110,8 @@ evidence:
     recorded_at: "2026-11-09T19:43:24.640Z"
     test_nodeid: "packages/caws-cli/tests/init/init-hook-pack-render.test.js::the doctrine names the bundle patch layer, not the profile patch, as the plugin-id source"
     commit_sha: "631cedeb4"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Live qualification on the user's desktop 0.2.2-rc.1 profile after plugin_manager install_bundle (application: applied): the profile now lists @caws/dsh-bundle in dependencies and dsh.profile.bundles; this running session wrote .caws/sessions/session-74b10232-1e29-4980-b55d-f883ef12d18a/.session-envelope.json with platform=dsh and an active dsh lease (last_seen_reason=pre_tool_use), and the DSH session log contains plugin:hooks-caws injections. Independent isolated-home E2E on the same harness denied protected-artifact write and Bash mutation attempts with CawsGuardRefusal and absent targets; bridge-level mapping and zero-model dispatch probes covered apply_patch->Write / str_replace_editor->Edit. Model-level invocation of those two aliases is unexercised because the base profile mounts only bash/read/write/edit/grep/glob; strike-2 ask/approval and strike-3 through the bridge remain unproven."
+    recorded_at: "2026-11-09T19:43:25.576Z"
+    commit_sha: cebf6cf3e
