@@ -98,3 +98,9 @@ evidence:
     recorded_at: "2026-11-09T19:43:22.720Z"
     test_nodeid: "packages/caws-cli/tests/init/harness-plugin-wiring.test.js::an installed DSH pack plus an unwired profile emits the warning"
     commit_sha: cebf6cf3e
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Hostile profile inputs are classified without throwing: missing profile dir, missing/invalid package.json, missing manifest shape, bundle-not-installed vs installed-but-unselected, unresolvable bundle, missing bundle patch, unreadable/non-list patch YAML, patch omitting CAWS ids, and malformed dependency specs each yield a distinct unwired/unobserved verdict; none is classified wired."
+    recorded_at: "2026-11-09T19:43:23.681Z"
+    test_nodeid: "packages/caws-cli/tests/init/harness-plugin-wiring.test.js::never throws: malformed dependency specs and hostile manifests degrade to a verdict"
+    commit_sha: cebf6cf3e
