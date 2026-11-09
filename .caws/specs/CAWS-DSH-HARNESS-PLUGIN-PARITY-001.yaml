@@ -86,3 +86,9 @@ evidence:
     recorded_at: "2026-11-09T19:42:58.333Z"
     test_nodeid: "packages/caws-cli/tests/init/harness-plugin-wiring.test.js::--plan --json exposes a wired observation for a composing profile"
     commit_sha: cebf6cf3e
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "The apply activation panel renders 'Hook plane: NOT WIRED — profile ... does not compose @caws/dsh-bundle', states that CAWS guards will not run, prints the exact 'dsh plugin --profile test-profile add @caws/dsh-bundle' repair, and does not claim hooks are installed and wired. Unobserved environments render UNOBSERVED instead of a guessed verdict."
+    recorded_at: "2026-11-09T19:43:21.789Z"
+    test_nodeid: "packages/caws-cli/tests/init/harness-plugin-wiring.test.js::the apply activation panel says NOT WIRED and prints the repair"
+    commit_sha: cebf6cf3e
