@@ -104,3 +104,9 @@ evidence:
     recorded_at: "2026-11-09T19:43:23.681Z"
     test_nodeid: "packages/caws-cli/tests/init/harness-plugin-wiring.test.js::never throws: malformed dependency specs and hostile manifests degrade to a verdict"
     commit_sha: cebf6cf3e
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "The DSH doctrine template and its installed copy now state the harness-plugin profile transport, name agent/created (not the removed agent/session-start), describe ask via the approval seam, document the init/doctor wiring checks and dump-config/plugin-manager verification, and the template equals .dsh/AGENTS.md (pack v4). CLAUDE.md, hook-pack-shared-core, repo-local-hook-policy, hooks-and-agent-workflows and agent-integration-guide were corrected and the shipped-doctrine lockstep tests pass."
+    recorded_at: "2026-11-09T19:43:24.640Z"
+    test_nodeid: "packages/caws-cli/tests/init/init-hook-pack-render.test.js::the doctrine names the bundle patch layer, not the profile patch, as the plugin-id source"
+    commit_sha: "631cedeb4"
