@@ -1,7 +1,8 @@
 'use strict';
 
 // Public host-package identity only; authentication and loaded OS libraries are
-// outside this inventory. Capture again after each host observation.
+// outside this inventory. This is not an atomic snapshot against an uncooperative
+// writer; capture again after each host observation.
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
@@ -27,14 +28,35 @@ function snapshotHostTree(root) {
     fs.realpathSync(root) === root && rootStat.isDirectory(),
     'Physical directory root required'
   );
+  const ancestorIdentity = (stat) => [stat.dev, stat.ino, stat.mode].map(String).join(':');
+  const ancestors = [];
+  let ancestor = path.parse(root).root;
+  for (const part of path.relative(ancestor, root).split(path.sep).filter(Boolean)) {
+    ancestor = path.join(ancestor, part);
+    const stat = fs.lstatSync(ancestor, { bigint: true });
+    insist(stat.isDirectory() && !stat.isSymbolicLink(), 'Host ancestor must be physical');
+    ancestors.push({ path: ancestor, identity: ancestorIdentity(stat) });
+  }
+  const checkAncestors = () => {
+    for (const entry of ancestors) {
+      const stat = fs.lstatSync(entry.path, { bigint: true });
+      insist(
+        stat.isDirectory() && !stat.isSymbolicLink() && ancestorIdentity(stat) === entry.identity,
+        'Host ancestor changed'
+      );
+    }
+  };
   const entries = [],
     folded = new Set();
+  const observed = [];
   let total = 0;
   const inside = (file) => file.startsWith(root + path.sep);
   function visit(directory, relative) {
+    checkAncestors();
     const before = fs.lstatSync(directory, { bigint: true });
     insist(before.isDirectory() && !before.isSymbolicLink(), 'Directory identity changed');
     for (const name of fs.readdirSync(directory).sort()) {
+      checkAncestors();
       const rel = relative ? relative + '/' + name : name;
       insist(
         rel.length <= 4096 &&
@@ -49,6 +71,7 @@ function snapshotHostTree(root) {
       insist(folded.size <= MAX_ENTRIES, 'Host tree entry limit');
       const file = path.join(directory, name),
         stat = fs.lstatSync(file, { bigint: true });
+      observed.push({ file, identity: identity(stat) });
       const mode = Number(stat.mode & 0o7777n);
       if (stat.isSymbolicLink()) {
         const target = fs.readlinkSync(file);
@@ -91,7 +114,14 @@ function snapshotHostTree(root) {
             identity(fs.fstatSync(fd, { bigint: true })) === identity(stat),
             'Host file changed before read'
           );
-          const bytes = fs.readFileSync(fd);
+          const bytes = Buffer.alloc(Number(stat.size));
+          let offset = 0;
+          while (offset < bytes.length) {
+            const count = fs.readSync(fd, bytes, offset, bytes.length - offset, null);
+            insist(count > 0, 'Host file truncated during read');
+            offset += count;
+          }
+          insist(fs.readSync(fd, Buffer.alloc(1), 0, 1, null) === 0, 'Host file grew during read');
           insist(
             bytes.length === Number(stat.size) &&
               identity(fs.fstatSync(fd, { bigint: true })) === identity(stat) &&
@@ -118,6 +148,13 @@ function snapshotHostTree(root) {
     );
   }
   visit(root, '');
+  checkAncestors();
+  insist(fs.realpathSync(root) === root, 'Host root physical path changed');
+  for (const member of observed)
+    insist(
+      identity(fs.lstatSync(member.file, { bigint: true })) === member.identity,
+      'Host member changed after read'
+    );
   entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   insist(
     identity(fs.lstatSync(root, { bigint: true })) === identity(rootStat),
