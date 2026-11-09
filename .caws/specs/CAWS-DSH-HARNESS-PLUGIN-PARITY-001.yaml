@@ -1,10 +1,11 @@
 id: CAWS-DSH-HARNESS-PLUGIN-PARITY-001
 title: 'Wire and verify the DSH harness-plugin hook surface to peer-harness parity'
 mode: feature
-lifecycle_state: active
-worktree: caws-dsh-parity
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'DSH harness-plugin wiring parity: registry-owned bundle facts, read-only profile composition observation, init WIRED/NOT-WIRED/UNOBSERVED verdicts, doctor.hooks.harness_plugin_unwired, corrected DSH doctrine/docs (pack v4), and tests (143 pass across 7 impacted suites; gates OK). Live desktop 0.2.2-rc.1 profile now composes @caws/dsh-bundle with an active platform=dsh session envelope/lease; isolated E2E denied protected-artifact write and Bash mutation. Residual: model-level apply_patch/str_replace_editor unexercised (not mounted in base profile), strike-2 ask/approval and strike-3 through the bridge unproven, shared pack v95 lag and pre-existing shared-pack fingerprint baseline drift are not part of this slice.'
 created_at: '2026-11-09T18:09:54.269Z'
-updated_at: '2026-11-09T19:42:03.370Z'
+updated_at: '2026-11-09T19:43:36.381Z'
 created_by_session: 'session-74b10232-1e29-4980-b55d-f883ef12d18a'
 blast_radius:
   modules:
