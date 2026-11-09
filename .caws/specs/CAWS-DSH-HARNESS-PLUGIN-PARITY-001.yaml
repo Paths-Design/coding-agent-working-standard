@@ -79,3 +79,10 @@ non_functional:
   security:
     - 'Profile composition observation parses package.json and patch YAML only; it must not import or execute profile package modules.'
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Wiring observation classifies a composing profile as wired from the real profile package.json + bundle patch, and caws init --agent-surface dsh --plan --json exposes the verdict (harness_plugin_wiring.kind=wired, observed ids, profile name). Fixture profile and bundle checkouts are synthesized in the test's temp dir; no machine profile is touched."
+    recorded_at: "2026-11-09T19:42:58.333Z"
+    test_nodeid: "packages/caws-cli/tests/init/harness-plugin-wiring.test.js::--plan --json exposes a wired observation for a composing profile"
+    commit_sha: cebf6cf3e
