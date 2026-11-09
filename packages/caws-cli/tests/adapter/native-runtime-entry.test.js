@@ -1082,7 +1082,7 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       const out = Buffer.from(
         JSON.stringify({
           schema: 'caws.native.installed-entry-capability.v1',
-          installedInvocation: { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 1 },
+          installedInvocation: { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 30000 },
         }) + '\n'
       );
       probe.stdoutBase64 = out.toString('base64');
