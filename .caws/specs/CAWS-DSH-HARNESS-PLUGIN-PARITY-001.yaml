@@ -92,3 +92,9 @@ evidence:
     recorded_at: "2026-11-09T19:43:21.789Z"
     test_nodeid: "packages/caws-cli/tests/init/harness-plugin-wiring.test.js::the apply activation panel says NOT WIRED and prints the repair"
     commit_sha: cebf6cf3e
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Kernel rule doctor.hooks.harness_plugin_unwired fires (warning, with profile path and exact repair) when a repo carries the DSH CAWS-MANAGED-HOOK marker and the observed active profile does not compose the bundle; wired and unobserved profiles stay silent, and a repo without the DSH marker stays silent even if unwired. CLI end-to-end arm runs the built doctor against a marked fixture repo."
+    recorded_at: "2026-11-09T19:43:22.720Z"
+    test_nodeid: "packages/caws-cli/tests/init/harness-plugin-wiring.test.js::an installed DSH pack plus an unwired profile emits the warning"
+    commit_sha: cebf6cf3e
