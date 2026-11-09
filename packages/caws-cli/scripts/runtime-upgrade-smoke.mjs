@@ -350,9 +350,15 @@ export function retainFixtureDiagnostics(root, artifacts) {
 }
 const governance = (repo) =>
   snapshot(path.join(repo, '.caws'), (rel) =>
-    ['policy.yaml', 'specs', 'waivers', 'events.jsonl', 'worktrees.json', 'agents.json'].includes(
-      rel.split(path.sep)[0]
-    )
+    [
+      'policy.yaml',
+      'specs',
+      'claims',
+      'waivers',
+      'events.jsonl',
+      'worktrees.json',
+      'agents.json',
+    ].includes(rel.split(path.sep)[0])
   );
 
 export function qualify({

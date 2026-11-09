@@ -38,8 +38,8 @@ function expectedDigest(value) {
   assert(typeof value === 'string' && /^[a-f0-9]{64}$/.test(value), 'Expected SHA-256 pin');
 }
 
-function realDirectory(directory) {
-  assert.equal(fs.realpathSync(directory), directory, 'Expected canonical evidence directory');
+function realDirectory(directory, label = 'evidence') {
+  assert.equal(fs.realpathSync(directory), directory, `Expected canonical ${label} directory`);
   const stat = fs.lstatSync(directory);
   assert(stat.isDirectory() && !stat.isSymbolicLink(), 'Expected real evidence directory');
 }
@@ -64,7 +64,9 @@ function createDirectories(root, relative) {
 function stageSelectedTarball(source, expectedSha256, outputDirectory) {
   expectedDigest(expectedSha256);
   const sourcePath = path.resolve(source);
+  realDirectory(path.dirname(sourcePath), 'artifact source');
   const selected = captureRegular(sourcePath, 256 * 1024 * 1024);
+  realDirectory(path.dirname(sourcePath), 'artifact source');
   assert(selected.bytes.length > 0, 'Selected tarball is empty');
   assert.equal(sha256(selected.bytes), expectedSha256, 'Selected tarball pin mismatch');
   const directory = path.resolve(outputDirectory);
@@ -121,6 +123,7 @@ function verifyInstalledTarballLock(lock, consumer, selected, packageName) {
 const governanceNames = [
   'policy.yaml',
   'specs',
+  'claims',
   'waivers',
   'events.jsonl',
   'worktrees.json',

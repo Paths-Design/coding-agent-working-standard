@@ -263,6 +263,8 @@ test('prerelease routing and selected-artifact isolation contracts execute under
     ],
     { cwd: root, encoding: 'utf8' }
   );
+  if (result.status !== 0)
+    throw new Error(`Node contract execution failed:\n${result.stdout}\n${result.stderr}`);
   expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
   expect(result.stdout).toContain('# fail 0');
 });

@@ -58,6 +58,10 @@ function fixture(t) {
   fs.mkdirSync(governance, { mode: 0o750 });
   fs.mkdirSync(path.join(governance, 'specs'), { mode: 0o750 });
   fs.mkdirSync(path.join(governance, 'waivers'), { mode: 0o700 });
+  fs.mkdirSync(path.join(governance, 'claims'), { mode: 0o700 });
+  fs.writeFileSync(path.join(governance, 'claims', 'bridge.json'), '{"spec":"owner"}\n', {
+    mode: 0o600,
+  });
   const policy = Buffer.from([0, 255, 13, 10, 128, 65]);
   fs.writeFileSync(path.join(governance, 'policy.yaml'), policy, { mode: 0o640 });
   fs.writeFileSync(path.join(governance, 'specs', 'A.yaml'), 'owned-spec\n', { mode: 0o600 });
@@ -94,6 +98,22 @@ test('selected artifact is copied byte-for-byte to a fresh private file', (t) =>
     () => stageSelectedTarball(source, hash(fs.readFileSync(source)), f.staging),
     /EEXIST/
   );
+});
+
+test('matching tarball bytes reached through a source-directory link refuse before staging', (t) => {
+  const f = fixture(t);
+  const sourceDirectory = path.join(f.root, 'source-directory');
+  const alias = path.join(f.root, 'source-alias');
+  fs.mkdirSync(sourceDirectory);
+  const bytes = Buffer.from('exact selected artifact');
+  fs.writeFileSync(path.join(sourceDirectory, 'candidate.tgz'), bytes);
+  fs.symlinkSync(sourceDirectory, alias);
+  assert.throws(
+    () => stageSelectedTarball(path.join(alias, 'candidate.tgz'), hash(bytes), f.staging),
+    /canonical artifact source directory/
+  );
+  assert.deepEqual(fs.readdirSync(f.staging), []);
+  assert.deepEqual(fs.readFileSync(path.join(sourceDirectory, 'candidate.tgz')), bytes);
 });
 
 for (const kind of [
@@ -251,6 +271,7 @@ for (const change of [
   'bytes',
   'file-mode',
   'directory-mode',
+  'bridge-claim',
   'root-mode',
   'removed',
   'added',
@@ -265,6 +286,11 @@ for (const change of [
     if (change === 'bytes') fs.writeFileSync(policy, 'different governance');
     if (change === 'file-mode') fs.chmodSync(policy, 0o600);
     if (change === 'directory-mode') fs.chmodSync(path.join(f.governance, 'waivers'), 0o750);
+    if (change === 'bridge-claim')
+      fs.writeFileSync(
+        path.join(f.governance, 'claims', 'bridge.json'),
+        '{"spec":"different-owner"}\n'
+      );
     if (change === 'root-mode') fs.chmodSync(f.governance, 0o700);
     if (change === 'removed') fs.unlinkSync(policy);
     if (change === 'added')
