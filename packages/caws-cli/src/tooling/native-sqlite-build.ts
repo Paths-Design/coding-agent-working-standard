@@ -967,6 +967,15 @@ function buildEnvironment(
   prefix: SqlitePrefixManifest,
   prefixPin: ReviewedFile
 ): Record<string, string> {
+  return probeEnvironment(request, prefix.archive.path, prefix.header.path, prefixPin);
+}
+
+function probeEnvironment(
+  request: NativeSqliteBuildRequest,
+  archivePath: string,
+  headerPath: string,
+  prefixPin: ReviewedFile
+): Record<string, string> {
   const root = request.outputRoot;
   return {
     PATH: '/usr/bin:/bin',
@@ -983,8 +992,8 @@ function buildEnvironment(
     CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER: request.tools.clang.path,
     CC: request.tools.clang.path,
     AR: request.tools.ar.path,
-    SQLITE3_LIB_DIR: path.dirname(prefix.archive.path),
-    SQLITE3_INCLUDE_DIR: path.dirname(prefix.header.path),
+    SQLITE3_LIB_DIR: path.dirname(archivePath),
+    SQLITE3_INCLUDE_DIR: path.dirname(headerPath),
     SQLITE3_STATIC: '1',
     SQLITE3_NO_PKG_CONFIG: '1',
     CAWS_SQLITE_PREFIX_MANIFEST: prefixPin.path,
@@ -1003,6 +1012,62 @@ export function verifyNativeStableEntryProbe(input: {
   if (!installedEntryAdvertisesEventBudget(input.capability)) return;
   insist(input.stableEntry, 'Event budget requires a selected stable entry');
   verifyFile(input.stableEntry);
+  verifyStableEntryProbeReceipt(input, (file) => readBounded(file, 4096));
+  verifyFile(input.stableEntry);
+}
+
+/** Verify the embedded observation without opening paths from the producer's machine. */
+export function verifyPortableStableEntryProbe(input: {
+  capability: InstalledInvocationCapability;
+  request: NativeSqliteBuildRequest;
+  outputRoot: string;
+  prefixManifest: ReviewedFile;
+  stableEntry: ReviewedFile;
+  steps: readonly StepReceipt[];
+}): void {
+  if (!installedEntryAdvertisesEventBudget(input.capability)) return;
+  absolute(input.outputRoot);
+  insist(input.request?.outputRoot === input.outputRoot, 'Stable entry request root mismatch');
+  absolute(input.request.sdk?.root);
+  absolute(input.request.tools?.rustc?.path);
+  absolute(input.request.tools?.clang?.path);
+  absolute(input.request.tools?.ar?.path);
+  absolute(input.stableEntry?.path);
+  digest(input.prefixManifest?.sha256);
+  const locations = prefixPaths(input.outputRoot);
+  insist(input.prefixManifest.path === locations.manifest, 'Stable entry prefix location mismatch');
+  const expectedEnvironment = probeEnvironment(
+    input.request,
+    locations.archive,
+    locations.header,
+    input.prefixManifest
+  );
+  verifyStableEntryProbeReceipt({ ...input, expectedEnvironment }, (_file, encoded) => {
+    insist(
+      typeof encoded === 'string' && encoded.length <= 5464,
+      'Invalid stable entry probe output'
+    );
+    const bytes = Buffer.from(encoded, 'base64');
+    insist(
+      bytes.length <= 4096 && bytes.toString('base64') === encoded,
+      'Invalid stable entry probe encoding'
+    );
+    return bytes;
+  });
+}
+
+function verifyStableEntryProbeReceipt(
+  input: {
+    capability: InstalledInvocationCapability;
+    stableEntry: ReviewedFile | undefined;
+    outputRoot: string;
+    expectedEnvironment: Record<string, string>;
+    steps: readonly StepReceipt[];
+  },
+  readOutput: (file: string, encoded: string) => Buffer
+): void {
+  if (!installedEntryAdvertisesEventBudget(input.capability)) return;
+  insist(input.stableEntry, 'Event budget requires a selected stable entry');
   absolute(input.outputRoot);
   insist(Array.isArray(input.steps), 'Missing stable entry probe steps');
   const probes = input.steps.filter((step) => step?.label === STABLE_ENTRY_PROBE);
@@ -1058,7 +1123,7 @@ export function verifyNativeStableEntryProbe(input: {
   const channel = (name: 'stdout' | 'stderr'): Buffer => {
     const file = path.join(input.outputRoot, `${STABLE_ENTRY_PROBE}.${name}`);
     insist(probe[`${name}Path`] === file, 'Stable entry probe output path mismatch');
-    const bytes = readBounded(file, 4096);
+    const bytes = readOutput(file, probe[`${name}Base64`]);
     insist(
       bytes.length === probe[`${name}Bytes`] &&
         bytes.length === probe[`${name}RetainedBytes`] &&
@@ -1079,7 +1144,6 @@ export function verifyNativeStableEntryProbe(input: {
   );
   const observed = parseInstalledInvocationCapability(diagnostic.installedInvocation);
   insist(canonical(observed) === canonical(input.capability), 'Stable entry capability mismatch');
-  verifyFile(input.stableEntry);
 }
 
 export async function buildNativeSqliteCandidate(

@@ -11,6 +11,7 @@ import { installedEntryAdvertisesEventBudget } from './native-hook-identificatio
 import {
   loadNativeSqliteBuildWithStableEntry,
   validateNativeSqliteBuildIdentity,
+  verifyPortableStableEntryProbe,
   type InstalledInvocationCapability,
 } from '../tooling/native-sqlite-build';
 import type { ReviewedFile } from '../tooling/sqlite-static-build';
@@ -1345,6 +1346,14 @@ export function readPortableNativeImage(
     provenance.profile !== completion.profile
   )
     throw new Error('Portable build provenance mismatch');
+  verifyPortableStableEntryProbe({
+    capability: identity.installedInvocation,
+    request,
+    outputRoot: completion.outputRoot,
+    prefixManifest: completion.prefixManifest,
+    stableEntry: completion.artifacts.stableEntry,
+    steps: completion.steps,
+  });
   const selected = JSON.parse(all.get('evidence/selection.json')!.toString('utf8'));
   if (
     !['caws.native-hook-cli-selection.v2', 'caws.native-hook-cli-pack.v1'].includes(

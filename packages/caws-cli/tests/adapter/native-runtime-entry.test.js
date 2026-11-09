@@ -861,8 +861,75 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     const identity = JSON.parse(JSON.stringify(loaded.build.observedIdentity));
     identity.installedInvocation.stableEntryEventBudget = 'env-original-start-ms-v1';
     replaceDiagnostic(identity);
-    loaded.build.prefixManifest = { sha256: identity.compiledPrefixSha256 };
-    const request = { source: { id: 'fixture' } };
+    const outputRoot = path.join(root, 'producer-output');
+    const prefixManifest = path.join(outputRoot, 'prefix', 'prefix-manifest.json');
+    loaded.build.outputRoot = outputRoot;
+    loaded.build.prefixManifest = { path: prefixManifest, sha256: identity.compiledPrefixSha256 };
+    // Keys are in canonical order, as used by the actual producer's request digest.
+    const request = {
+      outputRoot,
+      sdk: { root: '/fixture/sdk' },
+      source: { id: 'fixture' },
+      tools: {
+        ar: { path: '/fixture/ar' },
+        clang: { path: '/fixture/clang' },
+        rustc: { path: '/fixture/rustc' },
+      },
+    };
+    const stdout = Buffer.from(
+      JSON.stringify({
+        schema: 'caws.native.installed-entry-capability.v1',
+        installedInvocation: identity.installedInvocation,
+      }) + '\n'
+    );
+    const stderr = Buffer.alloc(0);
+    loaded.build.steps = [
+      {
+        label: 'stable-entry-capability',
+        argv: [loaded.build.artifacts.stableEntry.path, '--installed-entry-capability-v1'],
+        cwd: outputRoot,
+        env: {
+          PATH: '/usr/bin:/bin',
+          LANG: 'C',
+          LC_ALL: 'C',
+          TZ: 'UTC',
+          HOME: path.join(outputRoot, 'home'),
+          CARGO_HOME: path.join(outputRoot, 'cargo-home'),
+          CARGO_TARGET_DIR: path.join(outputRoot, 'target'),
+          TMPDIR: path.join(outputRoot, 'tmp'),
+          SDKROOT: request.sdk.root,
+          MACOSX_DEPLOYMENT_TARGET: '11.0',
+          RUSTC: request.tools.rustc.path,
+          CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER: request.tools.clang.path,
+          CC: request.tools.clang.path,
+          AR: request.tools.ar.path,
+          SQLITE3_LIB_DIR: path.join(outputRoot, 'prefix', 'lib'),
+          SQLITE3_INCLUDE_DIR: path.join(outputRoot, 'prefix', 'include'),
+          SQLITE3_STATIC: '1',
+          SQLITE3_NO_PKG_CONFIG: '1',
+          CAWS_SQLITE_PREFIX_MANIFEST: prefixManifest,
+          CAWS_SQLITE_PREFIX_MANIFEST_SHA256: identity.compiledPrefixSha256,
+        },
+        startedAt: '2026-11-07T00:00:00.000Z',
+        durationMs: 1,
+        stdoutPath: path.join(outputRoot, 'stable-entry-capability.stdout'),
+        stderrPath: path.join(outputRoot, 'stable-entry-capability.stderr'),
+        stdoutBytes: stdout.length,
+        stderrBytes: stderr.length,
+        stdoutRetainedBytes: stdout.length,
+        stderrRetainedBytes: stderr.length,
+        stdoutSha256: sha(stdout),
+        stderrSha256: sha(stderr),
+        stdoutBase64: stdout.toString('base64'),
+        stderrBase64: stderr.toString('base64'),
+        persistenceError: null,
+        exitCode: 0,
+        signal: null,
+        directChildReaped: true,
+        stopReason: null,
+        error: null,
+      },
+    ];
     const requestFile = reviewedFile('portable-request.json', JSON.stringify(request));
     descriptor.requestFile = requestFile;
     loaded.requestFile = requestFile;
@@ -982,6 +1049,57 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     expect(() =>
       readPortableNativeImage(changed, { ...selection, expectedSha256: sha(changed) })
     ).toThrow(/member bytes/);
+  });
+  test.each([
+    'missing',
+    'duplicate',
+    'failed',
+    'invocation',
+    'environment',
+    'output',
+    'capability',
+  ])('portable admission rejects a repinned %s stable-entry probe', (kind) => {
+    const { bytes, selection } = portableFixture();
+    const carrier = JSON.parse(bytes);
+    const member = (name) => carrier.members.find((entry) => entry.path === name);
+    const replace = (name, value) => {
+      const entry = member(name),
+        data = Buffer.from(JSON.stringify(value));
+      entry.base64 = data.toString('base64');
+      entry.sizeBytes = data.length;
+      entry.sha256 = sha(data);
+      return data;
+    };
+    const completion = JSON.parse(Buffer.from(member('evidence/completion.json').base64, 'base64'));
+    const probe = completion.steps[0];
+    if (kind === 'missing') completion.steps = [];
+    if (kind === 'duplicate') completion.steps.push({ ...probe });
+    if (kind === 'failed') probe.exitCode = 1;
+    if (kind === 'invocation') probe.argv[0] = '/fixture/other';
+    if (kind === 'environment') probe.env.PATH = '/unreviewed';
+    if (kind === 'output') probe.stdoutSha256 = '0'.repeat(64);
+    if (kind === 'capability') {
+      const out = Buffer.from(
+        JSON.stringify({
+          schema: 'caws.native.installed-entry-capability.v1',
+          installedInvocation: { protocol: 'invoke-installed-v1', maxOriginalTimeoutMs: 1 },
+        }) + '\n'
+      );
+      probe.stdoutBase64 = out.toString('base64');
+      probe.stdoutBytes = probe.stdoutRetainedBytes = out.length;
+      probe.stdoutSha256 = sha(out);
+    }
+    const completionBytes = replace('evidence/completion.json', completion);
+    const provenance = JSON.parse(
+      Buffer.from(member('native-build-provenance.json').base64, 'base64')
+    );
+    provenance.completionReceipt.sizeBytes = completionBytes.length;
+    provenance.completionReceipt.sha256 = sha(completionBytes);
+    replace('native-build-provenance.json', provenance);
+    const changed = Buffer.from(JSON.stringify(carrier) + '\n');
+    expect(() =>
+      readPortableNativeImage(changed, { ...selection, expectedSha256: sha(changed) })
+    ).toThrow(/stable entry/i);
   });
   test.each([
     'platform',
