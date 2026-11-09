@@ -45,3 +45,9 @@ rollback:
   - 'Preserve failed build roots and raw records; leave the globally selected runtime and native registrations unchanged'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "Active companion build lane first-mac-installed-image owned by01a1ba85; selected coherent source11d7d0955 from release owner, no authored source changes. Pinned Node22.23.4 2cc28a and SQLite1e71dd copied and freshly hashed, Rust1.90/Xcode SDK+licenses/vendor prerequisites present. Fresh npmci661packages exit0 after preserving config-path failure; normal CLIbuild0/clean source and explicit CLI npmpack0 produce3,185,067-byte rc3 tar SHA4cd5fd33bb7381d23e6bd351f2dd2cbc31b03ad7ba4f1c3575366e43f6dc61be. Incorrect repository-root pack retained but rejected/unselected. Driver-v2 requestc2d128... and selected-inputs.json retained canonical .caws/state/first-installed-workflow/mac/11d7d0955; actual cli phase running with no final result. Next cli/sqlite/prepare-native, inspect request pins, native/image under unchanged1job10min4MiB limits, retain full v2 probe receipts and v3 separately. Root retains v3-reader probe gap, full workflow/allA-H/publication hold. No install/host/auth/trust/global activation or release acceptance claimed."
+    recorded_at: "2026-11-09T04:44:06.510Z"
+    commit_sha: "11d7d09559f7723c90f4aeb018af2cb6998bba04"
