@@ -144,6 +144,13 @@ test('never turns terminal success into proof a tool succeeded or a callback den
   );
 });
 
+test('preserves a changed callback input for scenario-level comparison', () => {
+  const observed = inspect(undefined, [{ ...callback, tool_input: { file_path: '/different' } }]);
+  assert.equal(observed.calls[0].input.file_path, '/fixture/lane/allowed.txt');
+  assert.equal(observed.calls[0].callbackInput.file_path, '/different');
+  assert.throws(() => inspect([init, terminal], []), /missing tool call/i);
+});
+
 test('refuses separate calls sharing a callback hook identity', () => {
   const secondCall = JSON.parse(JSON.stringify(call));
   secondCall.message.content[0].id = 'call-2';

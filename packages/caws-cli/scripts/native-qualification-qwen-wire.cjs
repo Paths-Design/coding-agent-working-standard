@@ -116,6 +116,7 @@ function inspectQwenWire(bytes, callbackBytes, expected) {
     }
   }
   insist(terminal, 'Missing terminal result');
+  insist(calls.size > 0, 'Missing tool call');
   insist(
     [...calls.values()].every((call) => call.resultError !== null),
     'Missing tool result'
@@ -141,6 +142,9 @@ function inspectQwenWire(bytes, callbackBytes, expected) {
     hooks.add(callback.tool_call_id);
     hookUseIds.add(callback.tool_use_id);
     call.hookUseId = callback.tool_use_id;
+    // Qwen may normalize path arguments before the callback. Retain both
+    // projections so the scenario can compare the actual intended operation.
+    call.callbackInput = callback.tool_input;
   }
   insist(hooks.size === calls.size, 'Missing callback');
   return { sessionId, terminal, calls: [...calls.values()] };
