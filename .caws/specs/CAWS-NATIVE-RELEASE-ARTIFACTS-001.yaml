@@ -4,7 +4,7 @@ mode: feature
 lifecycle_state: active
 worktree: native-session-id-admission
 created_at: '2026-11-08T14:30:26.699Z'
-updated_at: '2026-11-09T07:45:03.080Z'
+updated_at: '2026-11-09T07:49:41.582Z'
 created_by_session: '01a19baf-4b34-7a83-9cf8-f109a22c539e'
 blast_radius:
   modules:
@@ -26,6 +26,7 @@ scope:
     - scripts/prepare-ci-test-interpreter.test.mjs
     - packages/caws-cli/src/runtime/file-tools/strikes-port.ts
     - packages/caws-cli/tests/runtime/guard-strikes.test.js
+    - packages/caws-cli/tests/runtime/native-file-engine.test.js
   out: []
   support:
     - packages/caws-cli/src/init/native-runtime-entry.ts
