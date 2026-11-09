@@ -35,7 +35,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
         id: dependencies
       - name: Verify Qwen qualification wire identity
-        run: node --test packages/caws-cli/scripts/native-qualification-qwen-wire.test.cjs packages/caws-cli/scripts/native-qualification-host-tree.test.cjs packages/caws-cli/scripts/qualify-qwen-hook-failure.test.cjs
+        run: node --test packages/caws-cli/scripts/native-qualification-qwen-wire.test.cjs packages/caws-cli/scripts/native-qualification-host-tree.test.cjs packages/caws-cli/scripts/qualify-qwen-hook-failure.test.cjs packages/caws-cli/scripts/qualify-qwen-managed-guard.test.cjs
       - name: Prepare pinned Rust and locked Cargo dependencies
         run: |
           rustup toolchain install 1.90.0 --profile minimal
