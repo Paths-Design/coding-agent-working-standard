@@ -1,0 +1,40 @@
+id: CAWS-FIRST-MAC-INSTALLED-IMAGE-001
+title: 'Build and preflight the selected Mac image for the first installed workflow'
+mode: chore
+lifecycle_state: draft
+created_at: '2026-11-09T04:32:04.846Z'
+updated_at: '2026-11-09T04:32:04.846Z'
+created_by_session: '01a1ba85-9c82-7b01-8943-610e88a44364'
+blast_radius:
+  modules:
+    - 'First installed-workflow Mac production image and private admission preflight'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/reports/release-rc3/'
+    - 'packages/caws-cli/dist/'
+  out: []
+invariants:
+  - 'Use the root-selected coherent committed candidate and retain independent source, CLI tar, native request and portable carrier identities'
+  - 'Preserve existing deadlines, quality floors, full seven-harness release bar and separate publication authorization'
+  - 'No shared-machine activation, hook-trust changes, credentials access or source edits are authorized by this build slice'
+acceptance:
+  - id: A1
+    given: 'the selected coherent committed source and reviewed tool/dependency inputs'
+    when: 'the normally bound isolated Mac lane prepares its production driver request'
+    then: 'source and all Node SQLite Rust vendor and selected CLI tar pins are verified without assuming historical source-to-tar equivalence'
+  - id: A2
+    given: 'the exact selected request'
+    when: 'the normal five-phase production driver executes under unchanged limits'
+    then: 'real native completion and portable carrier readback bind the source and selected tar, all raw attempts remain retained and no compatibility artifact is substituted'
+  - id: A3
+    given: 'the built image and independently selected CLI tar'
+    when: 'isolated production installation is preflighted and artifacts are exported'
+    then: 'normal admission validates exact carrier and tar identities and durable retained outputs survive lane teardown without claiming genuine harness or full release acceptance'
+observability:
+  - 'Retain raw phase commands/statuses, actual request and completion records, tool/source/tar/carrier hashes and private installation preflight outside worktree teardown'
+rollback:
+  - 'Preserve failed build roots and raw records; leave the globally selected runtime and native registrations unchanged'
+non_functional: {}
+contracts: []
