@@ -75,16 +75,12 @@ async function probe(root, digest) {
           Object.keys(body).sort().join(',') ===
             'arguments,promptId,protocolVersion,requestId,sessionId,toolCallId,toolName';
         if (mode === 'timeout') return;
-        if (mode === 'http-error') {
-          response.statusCode = 500;
-          response.end('{}');
-          return;
-        }
+        if (mode === 'http-error') response.statusCode = 500;
         response.end(
           JSON.stringify({
             protocolVersion: 1,
             requestId: mode === 'mismatch' ? 'wrong-id' : body.requestId,
-            allowed: mode === 'allow',
+            allowed: mode === 'allow' || mode === 'mismatch' || mode === 'http-error',
           })
         );
       } catch {
