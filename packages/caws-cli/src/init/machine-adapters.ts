@@ -30,6 +30,9 @@ export interface MachineRuntimeOptions {
   readonly plan?: boolean;
   /** Explicit local, pinned production image; installation never opts a harness in. */
   readonly nativeImage?: string;
+  readonly nativeImageSha256?: string;
+  readonly nativeImageCliTarballSha256?: string;
+  readonly nativeImageCliTarballSizeBytes?: number;
 }
 
 export interface MachineRuntimeResult {
@@ -440,7 +443,30 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
     options.templatesRoot ?? path.resolve(__dirname, '../../templates/hook-packs');
   const files = runtimeFiles(templatesRoot, home);
   const executablePaths = new Set([...files.keys()].filter((relative) => relative.endsWith('.sh')));
-  const native = options.nativeImage ? readNativeImage(options.nativeImage) : undefined;
+  const pins = [
+    options.nativeImageSha256,
+    options.nativeImageCliTarballSha256,
+    options.nativeImageCliTarballSizeBytes,
+  ];
+  if (
+    pins.some((pin) => pin !== undefined) &&
+    (!options.nativeImage || pins.some((pin) => pin === undefined))
+  )
+    throw new Error('Portable native image requires all three independent pins');
+  const native = options.nativeImage
+    ? readNativeImage(
+        options.nativeImage,
+        options.nativeImageSha256 === undefined
+          ? undefined
+          : {
+              expectedSha256: options.nativeImageSha256,
+              expectedCliTarball: {
+                sha256: options.nativeImageCliTarballSha256!,
+                sizeBytes: options.nativeImageCliTarballSizeBytes!,
+              },
+            }
+      )
+    : undefined;
   if (native) {
     for (const relative of native.executablePaths) executablePaths.add(relative);
     for (const [relative, bytes] of native.files) {
