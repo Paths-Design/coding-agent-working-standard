@@ -19,8 +19,10 @@ looks.
   outside review, absent on a fresh clone and in CI.
 - **It reaches only half the surfaces.** Machine state is read by the
   machine-routed launcher (`claude-code`, `codex`). Project-wired surfaces
-  (`qwen-code`, `kimi-code`, `opencode`, `zcode`, `dsh`) run a literal
-  `HANDLERS=(...)` array baked into `.caws/hooks/dispatch/<event>.sh`.
+  (`qwen-code`, `kimi-code`, `opencode`, `zcode`) run a literal `HANDLERS=(...)`
+  array baked into `.caws/hooks/dispatch/<event>.sh`; DSH reaches the same
+  dispatchers through its profile-loaded plugin bundle, so its project copy is
+  live only while that profile composes the bundle.
 
 ## Location is the authority argument
 
@@ -297,10 +299,10 @@ each is consumed.
 Guard scripts exist in two places at once, and **which one executes depends on
 the surface, not on the file**:
 
-| Copy                                                               | Executed by             | In the CAWS repo                                     |
-| ------------------------------------------------------------------ | ----------------------- | ---------------------------------------------------- |
-| `~/.caws` (machine runtime, via `~/.caws/bin/caws-hook`)           | machine-routed surfaces | `claude-code`, `codex`                               |
-| `.caws/hooks/dispatch/<event>.sh` (project-local, exec'd directly) | project-wired surfaces  | `qwen-code`, `kimi-code`, `opencode`, `zcode`, `dsh` |
+| Copy                                                     | Executed by                                                                                                          | In the CAWS repo                                     |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `~/.caws` (machine runtime, via `~/.caws/bin/caws-hook`) | machine-routed surfaces                                                                                              | `claude-code`, `codex`                               |
+| `.caws/hooks/dispatch/<event>.sh` (project-local)        | project-wired surfaces (`qwen-code`, `kimi-code`, `opencode`, `zcode`; DSH through its profile-loaded plugin bundle) | `qwen-code`, `kimi-code`, `opencode`, `zcode`, `dsh` |
 
 The asymmetry is the trap, and it points the opposite way from the obvious
 guess. From a Claude Code session, `.claude/settings.json` carries no hook
