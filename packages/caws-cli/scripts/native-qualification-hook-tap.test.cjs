@@ -66,3 +66,35 @@ test('records overflow as incomplete without truncating the forwarded output', (
   assert.equal(observed.receipt.streams.stdout.totalBytes, 1048577);
   assert.ok(observed.data.stdout.length <= 1048576);
 });
+
+test('receipt failure cannot change an exit-2 refusal into an exit-1 allow', () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-hook-receipt-fail-')));
+  try {
+    const capture = path.join(root, 'capture');
+    const preload = path.join(root, 'preload.cjs');
+    fs.mkdirSync(capture, { mode: 0o700 });
+    fs.writeFileSync(
+      preload,
+      "const fs = require('node:fs'); const original = fs.writeFileSync; fs.writeFileSync = (p, ...args) => { if (String(p).endsWith('.json')) throw Error('simulated receipt failure'); return original(p, ...args); };\n"
+    );
+    const run = spawnSync(
+      process.execPath,
+      [
+        '--require',
+        preload,
+        tap,
+        capture,
+        process.execPath,
+        '-e',
+        'process.stdin.resume(); process.stdin.on("end", () => { process.stderr.write("denied"); process.exitCode = 2; });',
+      ],
+      { input: '{}', timeout: 10000 }
+    );
+    assert.equal(run.error, undefined);
+    assert.equal(run.status, 2);
+    assert.equal(run.stderr.toString(), 'denied');
+    assert.equal(fs.readdirSync(capture).filter((name) => name.endsWith('.json')).length, 0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

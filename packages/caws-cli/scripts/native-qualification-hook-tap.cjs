@@ -126,8 +126,8 @@ function start(argv = process.argv.slice(2)) {
         mode: 0o600,
       });
     } catch {
-      process.exitCode = 1;
-      return;
+      // The absent receipt invalidates the observation. Do not change the
+      // launcher verdict: some hosts interpret exit 2 as the only refusal.
     }
     if (signal) process.kill(process.pid, signal);
     else process.exitCode = Number.isInteger(exitCode) ? exitCode : 1;
