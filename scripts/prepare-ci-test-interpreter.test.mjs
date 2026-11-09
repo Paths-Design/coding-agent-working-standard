@@ -120,6 +120,7 @@ test('hard-linked and foreign-owned interpreter identities refuse', (t) => {
 test('replacement during open refuses before changing either inode', (t) => {
   const f = fixture(t);
   const original = f.executable + '.original';
+  const originalBytes = fs.readFileSync(f.executable);
   let closed = false;
   const io = {
     ...fs,
@@ -140,11 +141,49 @@ test('replacement during open refuses before changing either inode', (t) => {
   };
   assert.throws(
     () => prepareCiTestInterpreter({ runtime: f.runtime, io }),
-    /changed before chmod/
+    /CI interpreter preparation: interpreter changed (?:while opening|before chmod)/
   );
   assert.equal(closed, true);
   assert.equal(mode(original), 0o777);
   assert.equal(mode(f.executable), 0o777);
+  assert.deepEqual(fs.readFileSync(original), originalBytes);
+  assert.equal(fs.readFileSync(f.executable, 'utf8'), 'replacement');
+});
+
+test('replacement at the named-path check refuses before changing either inode', (t) => {
+  const f = fixture(t);
+  const original = f.executable + '.original';
+  const originalBytes = fs.readFileSync(f.executable);
+  let executableStats = 0;
+  let closed = false;
+  const io = {
+    ...fs,
+    lstatSync(file, ...args) {
+      if (file === f.executable && ++executableStats === 2) {
+        fs.renameSync(f.executable, original);
+        fs.writeFileSync(f.executable, 'replacement');
+        fs.chmodSync(f.executable, 0o777);
+      }
+      return fs.lstatSync(file, ...args);
+    },
+    fchmodSync() {
+      assert.fail('named replacement must refuse before chmod');
+    },
+    closeSync(fd) {
+      closed = true;
+      fs.closeSync(fd);
+    },
+  };
+  assert.throws(
+    () => prepareCiTestInterpreter({ runtime: f.runtime, io }),
+    /CI interpreter preparation: interpreter changed before chmod/
+  );
+  assert.equal(executableStats, 2);
+  assert.equal(closed, true);
+  assert.equal(mode(original), 0o777);
+  assert.equal(mode(f.executable), 0o777);
+  assert.deepEqual(fs.readFileSync(original), originalBytes);
+  assert.equal(fs.readFileSync(f.executable, 'utf8'), 'replacement');
 });
 
 test('unsuccessful chmod cannot report successful preparation', (t) => {

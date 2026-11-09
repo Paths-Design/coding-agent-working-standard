@@ -70,7 +70,7 @@ jobs:
             packages/caws-cli/coverage/coverage-summary.json
             packages/caws-cli/coverage/lcov.info
           if-no-files-found: error
-      - run: node --test scripts/release-tag-publish.test.mjs scripts/ci-governance-artifacts.test.mjs scripts/ci-matrix-version.test.mjs packages/caws-cli/scripts/runtime-upgrade-smoke.test.mjs packages/caws-cli/scripts/runtime-upgrade-supervisor.test.mjs
+      - run: node --test scripts/release-tag-publish.test.mjs scripts/ci-governance-artifacts.test.mjs scripts/ci-matrix-version.test.mjs packages/caws-cli/scripts/runtime-upgrade-smoke.test.mjs packages/caws-cli/scripts/native-upgrade-artifacts.test.mjs packages/caws-cli/scripts/runtime-upgrade-supervisor.test.mjs
         env:
           CAWS_QUALIFICATION_SUPERVISOR: ${{ github.workspace }}/packages/caws-native/target/release/examples/upgrade-supervisor
           CAWS_RELEASE_ARTIFACT_DIR: ${{ github.workspace }}/release-scenarios
@@ -145,8 +145,79 @@ jobs:
           path: native-file-observations.tgz
           if-no-files-found: error
 
+  candidate-package:
+    name: Selected CLI candidate artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      tarball-sha256: ${{ steps.selected.outputs.sha256 }}
+      tarball-size-bytes: ${{ steps.selected.outputs.sizeBytes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build -w @paths.design/caws-cli
+      - name: Pack the candidate once
+        run: |
+          mkdir -p candidate-package
+          npm pack --json --workspace @paths.design/caws-cli --pack-destination candidate-package > candidate-package/npm-pack.json
+      - name: Bind the selected artifact to the source and npm receipt
+        id: selected
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import crypto from 'node:crypto';
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          const digest = (bytes, algorithm = 'sha256', encoding = 'hex') => crypto.createHash(algorithm).update(bytes).digest(encoding);
+          const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+          assert.match(sourceCommit, /^[a-f0-9]{40}$/);
+          assert.equal(sourceCommit, process.env.GITHUB_SHA);
+          assert.equal(execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], { encoding: 'utf8' }), '');
+          const root = fs.realpathSync('candidate-package');
+          const receipt = fs.readFileSync(path.join(root, 'npm-pack.json'));
+          const records = JSON.parse(receipt);
+          assert(Array.isArray(records) && records.length === 1);
+          const pack = records[0];
+          assert.equal(pack.name, '@paths.design/caws-cli');
+          assert.equal(pack.version, JSON.parse(fs.readFileSync('packages/caws-cli/package.json', 'utf8')).version);
+          assert.equal(typeof pack.filename, 'string');
+          assert.equal(path.basename(pack.filename), pack.filename);
+          assert(!pack.filename.includes('\\') && pack.filename.endsWith('.tgz'));
+          const original = path.join(root, pack.filename);
+          const stat = fs.lstatSync(original);
+          assert(stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1 && stat.size > 0 && stat.size <= 256 * 1024 * 1024);
+          const bytes = fs.readFileSync(original);
+          assert.equal(bytes.length, pack.size);
+          assert.equal(digest(bytes, 'sha1'), pack.shasum);
+          const integrity = 'sha512-' + digest(bytes, 'sha512', 'base64');
+          assert.equal(integrity, pack.integrity);
+          const sha256 = digest(bytes);
+          const selected = path.join(root, 'candidate.tgz');
+          assert(!fs.existsSync(selected));
+          fs.renameSync(original, selected);
+          const selection = {
+            schema: 'caws.release.candidate-selection.v1', sourceCommit,
+            package: { name: pack.name, version: pack.version },
+            tarball: { filename: 'candidate.tgz', sha256, sizeBytes: bytes.length, integrity },
+            packReceiptSha256: digest(receipt),
+          };
+          fs.writeFileSync(path.join(root, 'selection.json'), JSON.stringify(selection, null, 2) + '\n', { flag: 'wx' });
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `sha256=${sha256}\nsizeBytes=${bytes.length}\n`);
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-${{ github.sha }}
+          path: candidate-package/
+          if-no-files-found: error
+
   package-upgrade:
     name: Packaged upgrade (${{ matrix.os }}, Node ${{ matrix.node }})
+    needs: [candidate-package]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -164,7 +235,10 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm ci --no-audit --no-fund
-      - run: npm run build -w @paths.design/caws-cli
+      - uses: actions/download-artifact@v4
+        with:
+          name: candidate-${{ github.sha }}
+          path: selected-candidate
       - name: Build qualification process custodian
         run: |
           rustup toolchain install 1.90.0 --profile minimal
@@ -176,17 +250,31 @@ jobs:
           python3 --version
           jq --version
       - name: Install and upgrade the actual candidate package
-        run: node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report qualification-report.json
+        run: node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report qualification-report.json --tarball selected-candidate/candidate.tgz --tarball-sha256 "$CAWS_SELECTED_TARBALL_SHA256"
         env:
           CAWS_QUALIFICATION_SUPERVISOR: ${{ github.workspace }}/packages/caws-native/target/release/examples/upgrade-supervisor
+          CAWS_SELECTED_TARBALL_SHA256: ${{ needs.candidate-package.outputs.tarball-sha256 }}
       - name: Bash 3.2 dispatch regression
         if: runner.os == 'macOS' && matrix.node == '22'
         run: npm run test:bats:macos -w @paths.design/caws-cli
+      - name: Archive upgrade evidence with file modes
+        if: always()
+        shell: bash
+        run: |
+          paths=()
+          for entry in qualification-report.json qualification-report.json.artifacts; do
+            if [[ -e "$entry" ]]; then
+              paths+=("$entry")
+            fi
+          done
+          if (( ${#paths[@]} )); then
+            tar -czf qualification-evidence.tgz -- "${paths[@]}"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: upgrade-${{ github.sha }}-${{ matrix.os }}-node${{ matrix.node }}
           path: |
             qualification-report.json
-            qualification-report.json.artifacts/
+            qualification-evidence.tgz
           if-no-files-found: error

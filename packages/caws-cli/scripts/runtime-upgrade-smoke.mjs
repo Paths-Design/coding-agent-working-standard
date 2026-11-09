@@ -9,6 +9,14 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, URL } from 'node:url';
 import { requireQualificationSupervisor, supervisedSpawn } from './runtime-upgrade-supervisor.mjs';
+import {
+  stageSelectedTarball,
+  verifySelectedTarball,
+  verifyInstalledTarballLock,
+  captureGovernance,
+  captureFailedGovernance,
+  verifyGovernancePreserved,
+} from './native-upgrade-artifacts.cjs';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packageName = '@paths.design/caws-cli';
@@ -342,17 +350,30 @@ export function retainFixtureDiagnostics(root, artifacts) {
 }
 const governance = (repo) =>
   snapshot(path.join(repo, '.caws'), (rel) =>
-    ['policy.yaml', 'specs', 'waivers', 'events.jsonl', 'worktrees.json', 'agents.json'].includes(
-      rel.split(path.sep)[0]
-    )
+    [
+      'policy.yaml',
+      'specs',
+      'claims',
+      'waivers',
+      'events.jsonl',
+      'worktrees.json',
+      'agents.json',
+    ].includes(rel.split(path.sep)[0])
   );
 
 export function qualify({
   candidate = packageRoot,
   baseline = `${packageName}@12.1.0`,
   reportPath,
+  tarball: selectedTarball,
+  tarballSha256,
   supervisor = process.env.CAWS_QUALIFICATION_SUPERVISOR,
 } = {}) {
+  assert.equal(
+    selectedTarball !== undefined,
+    tarballSha256 !== undefined,
+    'Selected tarball and expected SHA-256 must be supplied together'
+  );
   supervisor = requireQualificationSupervisor(supervisor);
   const uncertainOutcomes = [];
   const onUncertainOutcome = (outcome) => uncertainOutcomes.push(outcome);
@@ -376,7 +397,7 @@ export function qualify({
     return result;
   };
   candidate = fs.realpathSync(candidate);
-  if (!fs.existsSync(path.join(candidate, 'dist/index.js')))
+  if (selectedTarball === undefined && !fs.existsSync(path.join(candidate, 'dist/index.js')))
     throw new Error('Built candidate dist/index.js is required');
   if (json(path.join(candidate, 'package.json')).name !== packageName)
     throw new Error('Expected CAWS CLI candidate');
@@ -420,11 +441,15 @@ export function qualify({
     platform: process.platform,
     node: process.version,
     cases: [],
+    governance: [],
     proof: 'installed-artifact subprocess fixtures; native harness activation is separate',
     persistentCustodyVerified: false,
     qualifierSha256: hash(fs.readFileSync(fileURLToPath(import.meta.url))),
     qualifierSupervisorAdapterSha256: hash(
       fs.readFileSync(new URL('./runtime-upgrade-supervisor.mjs', import.meta.url))
+    ),
+    qualifierArtifactAdapterSha256: hash(
+      fs.readFileSync(new URL('./native-upgrade-artifacts.cjs', import.meta.url))
     ),
   };
   const custody = { guards: [], renderers: [] };
@@ -446,12 +471,19 @@ export function qualify({
       : null;
   };
   const capture = (file, name) => captureQualificationFile(file, evidenceRoot, name);
+  const fixtures = [];
   let failure = null;
   try {
+    // Capture a supplied artifact before any installation can observe its path.
+    // A source build/pack is only the explicit compatibility-mode alternative.
+    const selected =
+      selectedTarball === undefined
+        ? null
+        : stageSelectedTarball(selectedTarball, tarballSha256, root);
+    report.artifactSelection = selected ? { ...selected } : null;
     step('install published baseline and materialize stock/custom projects');
     run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', baseline], consumer, env);
     report.baselineVersion = cli(consumer, '--version').trim();
-    const fixtures = [];
     for (const surface of ['codex', 'claude-code']) {
       for (const custom of [false, true]) {
         const name = `${surface}-${custom ? 'custom' : 'stock'}`;
@@ -476,27 +508,66 @@ export function qualify({
         }
         git(repo, 'add', '.');
         git(repo, 'commit', '-qm', 'baseline project');
-        fixtures.push({ name, repo, surface, custom, native, before: governance(repo) });
+        const rawRecord = {
+          name,
+          before: captureGovernance(repo, evidenceRoot, `${name}-before`),
+          after: null,
+        };
+        report.governance.push(rawRecord);
+        write(
+          path.join(evidenceRoot, `${name}-governance-raw.json`),
+          JSON.stringify(rawRecord, null, 2) + '\n'
+        );
+        fixtures.push({
+          name,
+          repo,
+          surface,
+          custom,
+          native,
+          before: governance(repo),
+          rawRecord,
+        });
       }
     }
-    step('pack candidate, replace baseline package and install global runtime');
-    const packed = JSON.parse(
-      run('npm', ['pack', '--json', '--pack-destination', root], candidate, env)
-    );
-    const tarball = path.join(root, packed[0].filename);
+    step('select candidate artifact, replace baseline package and install global runtime');
+    const packed = selected
+      ? null
+      : JSON.parse(run('npm', ['pack', '--json', '--pack-destination', root], candidate, env));
+    const tarball = selected ? selected.path : path.join(root, packed[0].filename);
     report.tarballSha256 = hash(fs.readFileSync(tarball));
-    report.packageFiles = {
-      count: packed[0].files.length,
-      bytecode: packed[0].files
-        .filter(({ path: file }) => /(?:__pycache__\/|\.py[co]$)/.test(file))
-        .map(({ path: file }) => file),
-    };
-    assert.deepEqual(report.packageFiles.bytecode, []);
+    report.packageFiles = packed
+      ? {
+          count: packed[0].files.length,
+          bytecode: packed[0].files
+            .filter(({ path: file }) => /(?:__pycache__\/|\.py[co]$)/.test(file))
+            .map(({ path: file }) => file),
+        }
+      : null;
+    if (packed) assert.deepEqual(report.packageFiles.bytecode, []);
+    if (selected) verifySelectedTarball(selected);
     if (artifacts) {
       report.candidateArtifact = path.join(artifacts, 'candidate.tgz');
       fs.copyFileSync(tarball, report.candidateArtifact);
+      assert.equal(hash(fs.readFileSync(report.candidateArtifact)), report.tarballSha256);
     }
+    if (selected) verifySelectedTarball(selected);
     run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', tarball], consumer, env);
+    if (selected) {
+      verifySelectedTarball(selected);
+      verifyInstalledTarballLock(
+        json(path.join(consumer, 'package-lock.json')),
+        consumer,
+        selected,
+        packageName
+      );
+      const installedFiles = Object.keys(snapshot(path.dirname(path.dirname(entry))));
+      report.packageFiles = {
+        basis: 'installed-selected-package',
+        count: installedFiles.length,
+        bytecode: installedFiles.filter((file) => /(?:__pycache__\/|\.py[co]$)/.test(file)),
+      };
+      assert.deepEqual(report.packageFiles.bytecode, []);
+    }
     assert.equal(cli(consumer, '--version').trim(), report.candidateVersion);
     const resolvedCli = run('/bin/bash', ['-c', 'command -v caws'], consumer, env).trim();
     assert.equal(fs.realpathSync(resolvedCli), fs.realpathSync(entry));
@@ -666,6 +737,13 @@ export function qualify({
       const applied = JSON.parse(cli(f.repo, ...args));
       assert.equal(applied.results[0].ok, true);
       assert.equal(JSON.parse(cli(f.repo, ...args, '--plan')).results[0].changed, false);
+      const rawAfter = captureGovernance(f.repo, evidenceRoot, `${f.name}-after`);
+      f.rawRecord.after = rawAfter;
+      write(
+        path.join(evidenceRoot, `${f.name}-governance-raw.json`),
+        JSON.stringify(f.rawRecord, null, 2) + '\n'
+      );
+      verifyGovernancePreserved(f.rawRecord.before, rawAfter, evidenceRoot);
       assert.deepEqual(governance(f.repo), f.before);
       if (artifacts)
         write(
@@ -907,6 +985,14 @@ export function qualify({
     });
     saveCustody();
     verifyQualificationCustody(evidenceRoot, expectations);
+    for (const f of fixtures) {
+      f.rawRecord.completed = captureGovernance(f.repo, evidenceRoot, `${f.name}-completed`);
+      write(
+        path.join(evidenceRoot, `${f.name}-governance-raw.json`),
+        JSON.stringify(f.rawRecord, null, 2) + '\n'
+      );
+      verifyGovernancePreserved(f.rawRecord.before, f.rawRecord.completed, evidenceRoot);
+    }
     report.custody = artifacts ? path.join(artifacts, 'custody.json') : null;
     report.persistentCustodyVerified = Boolean(artifacts);
     assert.equal(uncertainOutcomes.length, 0, 'Uncertain subprocess custody');
@@ -916,6 +1002,32 @@ export function qualify({
     failure = error instanceof Error ? error : new Error(String(error));
     report.ok = false;
     report.error = { name: failure.name, message: failure.message };
+    const failedProjects = new Map(fixtures.map((f) => [f.name, f]));
+    for (const name of [
+      'codex-stock',
+      'codex-custom',
+      'claude-code-stock',
+      'claude-code-custom',
+      'fresh',
+      'linked',
+    ]) {
+      const repo = path.join(root, name);
+      if (failedProjects.has(name) || !fs.existsSync(repo)) continue;
+      const rawRecord = { name, before: null, after: null, beforeCapture: 'not completed' };
+      report.governance.push(rawRecord);
+      failedProjects.set(name, { name, repo, rawRecord });
+    }
+    for (const f of failedProjects.values()) {
+      try {
+        f.rawRecord.failed = captureFailedGovernance(f.repo, evidenceRoot, `${f.name}-failed`);
+        write(
+          path.join(evidenceRoot, `${f.name}-governance-raw.json`),
+          JSON.stringify(f.rawRecord, null, 2) + '\n'
+        );
+      } catch (captureError) {
+        f.rawRecord.failureCaptureError = captureError.message;
+      }
+    }
     if (artifacts) {
       try {
         report.failureTraces = retainFixtureDiagnostics(root, artifacts);
@@ -945,21 +1057,38 @@ export function qualify({
   return report;
 }
 
+export function parseQualificationOptions(argv) {
+  const options = {};
+  const flags = {
+    '--package': 'candidate',
+    '--baseline': 'baseline',
+    '--report': 'reportPath',
+    '--tarball': 'tarball',
+    '--tarball-sha256': 'tarballSha256',
+  };
+  for (let i = 0; i < argv.length; i += 2) {
+    const flag = argv[i],
+      value = argv[i + 1];
+    const key = Object.hasOwn(flags, flag) ? flags[flag] : undefined;
+    if (!key || !value || value.startsWith('--') || Object.hasOwn(options, key))
+      throw new Error(
+        'Usage: runtime-upgrade-smoke.mjs [--package source-package] [--baseline package-or-tarball] [--report path] [--tarball path --tarball-sha256 sha256]'
+      );
+    options[key] = value;
+  }
+  assert.equal(
+    Object.hasOwn(options, 'tarball'),
+    Object.hasOwn(options, 'tarballSha256'),
+    'Selected tarball and expected SHA-256 must be supplied together'
+  );
+  if (Object.hasOwn(options, 'tarballSha256'))
+    assert.match(options.tarballSha256, /^[a-f0-9]{64}$/, 'Expected SHA-256 pin');
+  return options;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const options = {};
-    for (let i = 2; i < process.argv.length; i += 2) {
-      const flag = process.argv[i],
-        value = process.argv[i + 1];
-      const key = { '--package': 'candidate', '--baseline': 'baseline', '--report': 'reportPath' }[
-        flag
-      ];
-      if (!key || !value)
-        throw new Error(
-          'Usage: runtime-upgrade-smoke.mjs [--package built-package] [--baseline package-or-tarball] [--report path]'
-        );
-      options[key] = value;
-    }
+    const options = parseQualificationOptions(process.argv.slice(2));
     const report = qualify(options);
     if (!options.reportPath)
       console.log(`[runtime-upgrade] Retained fixture: ${report.retainedFixture}`);

@@ -109,23 +109,33 @@ rustup toolchain install 1.90.0 --profile minimal
 cargo +1.90.0 fetch --locked --manifest-path packages/caws-native/Cargo.toml
 CARGO_TARGET_DIR="$PWD/packages/caws-cli/reports/upgrade-cargo" cargo +1.90.0 build --locked --offline --release --manifest-path packages/caws-native/Cargo.toml --no-default-features --example upgrade-supervisor
 export CAWS_QUALIFICATION_SUPERVISOR="$PWD/packages/caws-cli/reports/upgrade-cargo/release/examples/upgrade-supervisor"
-node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report /absolute/retained/release-evidence/qualification-report.json
+node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --tarball /absolute/selected/candidate.tgz --tarball-sha256 "${CAWS_SELECTED_TARBALL_SHA256:?set the reviewed producer SHA-256}" --report /absolute/retained/release-evidence/qualification-report.json
 ```
 
 The runner installs the actual npm `12.1.0` baseline, creates stock and custom
-Codex/Claude projects, replaces the package with a packed candidate, then tests
-machine installation, registration and project migration. It verifies preview
-purity, repeat operation stability, exact governance preservation, retained
-custom behavior, mixed migrated/unmigrated projects, linked worktrees, lifecycle
-rendering, delivery of one shared guard/renderer update to two projects, corrupt
-snapshot refusal and verified rollback. It uses disposable HOME, CAWS_HOME, Git
-configuration and npm configuration, with no inherited agent identity. The
-report records the platform, Node version, baseline version, candidate tarball
-SHA-256 and runtime digest. It also audits the detached upgraded consumer with
-`npm audit --omit=dev --audit-level=low`, requires zero findings, and records
-that consumer lockfile's hash. This checks the dependency graph actually
-installed by users, without workspace overrides. CI retains the report under a
-commit-named artifact; generated reports are not committed to the source ledger.
+Codex/Claude projects, replaces the package with the selected candidate, then
+tests machine installation, registration and project migration. It verifies
+preview purity, repeat operation stability, exact governance preservation,
+retained custom behavior, mixed migrated/unmigrated projects, linked worktrees,
+lifecycle rendering, delivery of one shared guard/renderer update to two
+projects, corrupt snapshot refusal and verified rollback. It uses disposable
+HOME, CAWS_HOME, Git configuration and npm configuration, with no inherited
+agent identity. The report records the platform, Node version, baseline version,
+candidate tarball SHA-256 and runtime digest. It also audits the detached
+upgraded consumer with `npm audit --omit=dev --audit-level=low`, requires zero
+findings, and records that consumer lockfile's hash. This checks the dependency
+graph actually installed by users, without workspace overrides. CI retains the
+report under a commit-named artifact; generated reports are not committed to the
+source ledger. The `candidate-package` CI job builds and packs the CLI once. All
+six upgrade cells download that artifact and receive its expected SHA-256 from
+the producer job output. The runner stages a private byte-for-byte copy, checks
+the installed npm lockfile's local resolution and SHA-512 integrity, and retains
+the selected tarball. A local invocation without `--tarball` builds its artifact
+selection through `npm pack`; use the pinned form above when comparing cells or
+candidates. These installed subprocess scenarios establish compatibility and
+preservation; genuine native harness execution has its separate acceptance
+requirements.
+
 Schema-v2 reports name a unique directory under
 `qualification-report.json.artifacts/` containing command inputs, exit statuses,
 stdout/stderr, before/after governance hashes, the source transcript and
@@ -133,9 +143,15 @@ rendered turn. Failed runs retain their report and command receipts too. Inspect
 these artifacts before accepting preservation or rollback claims; the report's
 boolean case summaries alone are insufficient. Full acceptance also requires
 retained raw governance bytes and modes before and after, including failed and
-interrupted attempts. Hash-only governance maps do not discharge that
-obligation. Export the report, its referenced artifacts, tarball and required
-reconstruction inputs to the selected durable location before worktree teardown.
+interrupted attempts. The runner retains those raw bytes, original file and
+directory modes, and membership at migration and completion boundaries. Failure
+captures preserve available bytes and record missing or unsupported states; an
+incomplete capture cannot satisfy preservation verification. Raw data files
+remain private, with original governance modes recorded in their manifests. CI
+wraps the report and artifacts in `qualification-evidence.tgz` to preserve their
+modes through artifact upload. Export the report, its referenced artifacts,
+tarball and required reconstruction inputs to the selected durable location
+before worktree teardown.
 
 The repo-built supervisor owns each command's child and private process group.
 It carries one monotonic deadline from its frontend to its custodian, stops the
