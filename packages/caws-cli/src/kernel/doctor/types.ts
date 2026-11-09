@@ -70,6 +70,37 @@ export interface TemplateCheck {
 // DoctorInput — explicit, caller-provided state snapshot.
 // ----------------------------------------------------------------------------
 
+/**
+ * CAWS-DSH-HARNESS-PLUGIN-PARITY-001: observed state of a harness-managed
+ * plugin-bundle hook transport (today: DSH). The store observes the active
+ * profile composition; the kernel only judges. `unobserved` is deliberately
+ * distinct from `unwired`: absence of a profile environment proves nothing
+ * about whether the hooks are installed, so it must never become a warning.
+ */
+export interface HarnessPluginWiringObservation {
+  /** The harness surface whose plugin bundle was observed (e.g. 'dsh'). */
+  readonly surface: string;
+  readonly kind: 'wired' | 'unwired' | 'unobserved';
+  /** Profile name (e.g. 'desktop') when one was resolved. */
+  readonly profileName?: string;
+  /** Absolute profile directory the composition was read from. */
+  readonly profileDir?: string;
+  /** The bundle package whose plugin rows must appear in the composition. */
+  readonly profileBundle?: string;
+  /** Machine-stable reason code for `unwired`/`unobserved`. */
+  readonly reason?: string;
+  /** Plugin row ids the surface facts require. */
+  readonly expectedPluginIds?: readonly string[];
+  /** Plugin row ids actually found in the composed bundle patches. */
+  readonly observedPluginIds?: readonly string[];
+  /** Expected ids absent from the composition (only for `unwired`). */
+  readonly missingPluginIds?: readonly string[];
+  /** Exact repair the operator/agent can run, when a repair is known. */
+  readonly repair?: string;
+  /** Human-readable detail (resolved profile path, bundle path, parse error). */
+  readonly detail?: string;
+}
+
 export interface DoctorInput {
   /** All specs the shell has loaded and parsed (including closed/archived). */
   readonly specs: readonly Spec[];
@@ -309,6 +340,13 @@ export interface DoctorInput {
      * HOOKS_PACK_BODY_DRIFT (warning). Undefined or empty = clean (silent).
      */
     readonly installedSharedPackBodyDrift?: readonly SharedPackDriftRow[];
+    /**
+     * CAWS-DSH-HARNESS-PLUGIN-PARITY-001: observed composition of harness-
+     * managed plugin bundles (today: DSH). The store reads the active profile
+     * and its bundle patches; the kernel only judges whether an installed
+     * surface is unwired. Undefined = unobserved (silent), never "unwired".
+     */
+    readonly harnessPluginWiring?: readonly HarnessPluginWiringObservation[];
     /**
      * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the repo-local hook policy
      * (.caws/hooks/hook-policy.json) with its fork provenance and compiled

@@ -1,4 +1,8 @@
-import type { GlobalHomeObservation, SystemRuntimeObservation } from '../kernel/doctor/types';
+import type {
+  GlobalHomeObservation,
+  HarnessPluginWiringObservation,
+  SystemRuntimeObservation,
+} from '../kernel/doctor/types';
 import type { BridgeRegistry } from './bridge-store';
 // Node-only store types.
 //
@@ -233,6 +237,9 @@ export interface StoreSnapshot {
      * has no `.caws/hooks/hook-policy.json` — silent, never a finding.
      */
     readonly repoHookPolicy?: RepoHookPolicyObservation;
+    /** CAWS-DSH-HARNESS-PLUGIN-PARITY-001: observed harness-plugin profile
+     *  composition (today: dsh). Undefined = unobserved. */
+    readonly harnessPluginWiring?: readonly HarnessPluginWiringObservation[];
     /** The superseded `.caws/hooks/adapter-policy.json` is still on disk. */
     readonly legacyAdapterPolicyPresent?: boolean;
     /** CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded lease tmp files. */

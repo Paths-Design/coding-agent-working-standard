@@ -1266,6 +1266,51 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     );
   }
 
+  // CAWS-DSH-HARNESS-PLUGIN-PARITY-001: a harness-plugin surface (dsh) is
+  // initialized in this repo (its CAWS-MANAGED-HOOK pack marker is installed)
+  // but the active harness profile does not compose the CAWS plugin bundle.
+  // The guard chain exists only when the profile loads the bundle, so an
+  // installed marker without a composed bundle is the "installed but not
+  // wired" split-brain: init reports a pack, the session file exists, and no
+  // CAWS guard runs. `unobserved` stays silent — absence of a readable profile
+  // proves nothing, and a warning there would train agents to ignore it.
+  const harnessPluginWiring = input.filesystem?.harnessPluginWiring;
+  if (
+    harnessPluginWiring !== undefined &&
+    harnessPluginWiring.length > 0 &&
+    adapterSurfaces !== undefined &&
+    adapterSurfaces.length > 0
+  ) {
+    for (const observation of harnessPluginWiring) {
+      if (observation.kind !== 'unwired') continue;
+      if (!adapterSurfaces.includes(observation.surface)) continue;
+      findings.push(
+        finding(
+          DOCTOR_RULES.HOOKS_HARNESS_PLUGIN_UNWIRED,
+          'warning',
+          `The ${observation.surface} surface pack is installed in this repository, but the active ${observation.surface} profile (${observation.profileName ?? 'unnamed'}) does not compose ${observation.profileBundle ?? 'its CAWS plugin bundle'}. In a harness whose hooks are a profile-loaded plugin, this means CAWS guards will NOT run in ${observation.surface} sessions on this machine: the repository looks governed while the guard chain is absent.`,
+          {
+            subject: observation.profileDir ?? observation.surface,
+            narrowRepair:
+              observation.repair ??
+              `Install/select the CAWS bundle in the ${observation.surface} profile, then restart it.`,
+            data: {
+              surface: observation.surface,
+              kind: observation.kind,
+              reason: observation.reason,
+              profile_name: observation.profileName,
+              profile_dir: observation.profileDir,
+              profile_bundle: observation.profileBundle,
+              expected_plugin_ids: observation.expectedPluginIds,
+              observed_plugin_ids: observation.observedPluginIds,
+              missing_plugin_ids: observation.missingPluginIds,
+            },
+          }
+        )
+      );
+    }
+  }
+
   // CAWS-GATED-SURFACE-SCOPE-GUARD-001: a trust-gated surface wired at BOTH
   // scopes double-fires every dispatcher. Both observations must be present;
   // the rule fires per surface that appears in BOTH lists. Either list

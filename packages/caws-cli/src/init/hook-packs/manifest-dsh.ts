@@ -1,8 +1,8 @@
 // DeepSeek Harness (DSH) hook pack manifest.
 //
 // DSH's interposition is a harness-loaded plugin (the harness's canonical
-// interception points: tools/pre-execute, tools/post-execute,
-// agent/session-start, agent/turn-stopping). Per-surface facts live in
+// interception points: tools/pre-execute, tools/post-execute, agent/created,
+// agent/turn-stopping). Per-surface facts live in
 // surfaces/registry.json; `dsh` carries hookMechanism: 'harness-plugin'. The
 // CAWS reference adapter is the `@caws/dsh-bundle` bundle (repo
 // `caws-dsh-bundle`), which composes three plugins — caws-hooks (policy
@@ -25,20 +25,22 @@
 // edit→Edit, …).
 //
 // Blocking semantics: DSH supports allow/ask/deny on tools/pre-execute via the
-// typed PreToolDecision and the approval seam, so the surface uses the "ask"
-// permission vocab (like claude-code) — a CAWS "ask" escalates to a real
-// confirmation prompt, not a silent allow.
+// typed PreToolDecision and the approval seam. The bridge resolves a CAWS "ask"
+// through that seam; a rejection or unavailable approval channel degrades to a
+// denial, never a silent allow.
 //
-// Activation: DSH loads plugins at profile start. Installing the pack
-// mid-session does NOT activate the plugin until the profile is reloaded —
-// hence activation: 'restart_required'. Whether a given machine is wired is a
-// property of the live profile (its bundle list plus each bundle's patch),
-// never of a settings key.
+// Activation: DSH loads plugins at profile start (or live-recomposes under
+// HMR). Installing the pack mid-session does NOT activate the plugin until the
+// profile loads the bundle — hence activation: 'restart_required'. Whether a
+// given machine is wired is a property of the live profile (its bundle list
+// plus each bundle's patch), never of a settings key. `caws init
+// --agent-surface dsh --plan` and `caws doctor` observe that composition and
+// report WIRED / NOT WIRED / UNOBSERVED instead of assuming it.
 
 import type { HookPackV1 } from './types';
 import { SURFACE_HOOK_MECHANISMS } from './surfaces.generated';
 
-export const DSH_PACK_VERSION = 3;
+export const DSH_PACK_VERSION = 4;
 
 export const DSH_PACK: HookPackV1 = {
   id: 'dsh',
