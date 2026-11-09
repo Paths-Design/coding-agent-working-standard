@@ -5,6 +5,7 @@
 // enforcement. A fail-open result is an explicit failing verdict.
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { setTimeout, clearTimeout } = require('node:timers');
 const { verifyHostTree } = require('./native-qualification-host-tree.cjs');
 
 async function probe(hostRoot, expectedDigest) {
@@ -83,22 +84,28 @@ async function probe(hostRoot, expectedDigest) {
 }
 
 if (require.main === module) {
+  // Only a fresh process can bind Node's module cache to the supplied digest.
+  // An unsettleable component is an incomplete result, never success.
+  process.exitCode = 2;
   const [root, digest, ...extra] = process.argv.slice(2);
-  if (!root || !digest || extra.length) {
+  if (!root || !digest || extra.length || process.execArgv.length || process.env.NODE_OPTIONS) {
     process.stderr.write('Expected absolute host-tree path and expected SHA256\n');
-    process.exitCode = 2;
   } else {
+    const timer = setTimeout(() => {
+      process.stderr.write('Qwen hook failure probe did not settle\n');
+      process.exit(2);
+    }, 5000);
     probe(root, digest).then(
       (observation) => {
+        clearTimeout(timer);
         process.stdout.write(JSON.stringify(observation) + '\n');
         process.exitCode = observation.safeForFailClosed ? 0 : 1;
       },
       (error) => {
+        clearTimeout(timer);
         process.stderr.write('Qwen hook failure probe incomplete: ' + String(error) + '\n');
         process.exitCode = 2;
       }
     );
   }
 }
-
-module.exports = { probe };
