@@ -446,7 +446,15 @@ test.each(['clean', 'ask', 'protected', 'third-drift', 'inactive', 'bad-context-
               snapshotToken: 'b'.repeat(64),
               context:
                 scenario === 'third-drift' && frame.ordinal === 3
-                  ? { ...f.context, branch: 'foreign-third' }
+                  ? {
+                      ...f.context,
+                      branch: 'foreign-third',
+                      worktrees: f.context.worktrees.map((entry) =>
+                        entry.path === f.context.checkout
+                          ? { ...entry, branch: 'refs/heads/foreign-third' }
+                          : entry
+                      ),
+                    }
                   : f.context,
             });
           } else if (frame.schema === 'caws.runtime.selection-observation.request.v1') {
@@ -479,6 +487,8 @@ test.each(['clean', 'ask', 'protected', 'third-drift', 'inactive', 'bad-context-
             });
           } else if (frame.schema === 'caws.runtime.failure.v1') {
             expect(['third-drift', 'inactive', 'bad-context-token']).toContain(scenario);
+            if (scenario === 'third-drift')
+              expect(frame.message).toContain('original native context changed');
             expect(observations.map((row) => row.ordinal)).toEqual(
               scenario === 'third-drift' ? [1, 2, 3] : [1]
             );
