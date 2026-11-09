@@ -73,7 +73,7 @@ test('each process probes the newly pinned host, never a cached earlier module',
   });
 });
 
-test('an unsettled host produces a bounded incomplete outcome', () => {
+test('an asynchronously unsettled host produces an incomplete outcome', () => {
   fixture(
     'export async function firePreToolUseHook() { return new Promise(() => {}); }\n',
     (root, digest) => {

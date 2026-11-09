@@ -85,7 +85,9 @@ async function probe(hostRoot, expectedDigest) {
 
 if (require.main === module) {
   // Only a fresh process can bind Node's module cache to the supplied digest.
-  // An unsettleable component is an incomplete result, never success.
+  // An asynchronously unsettled component is incomplete, never success. A
+  // caller must still supervise the whole process: synchronous I/O can block
+  // the event loop and cannot be bounded by this timer.
   process.exitCode = 2;
   const [root, digest, ...extra] = process.argv.slice(2);
   if (!root || !digest || extra.length || process.execArgv.length || process.env.NODE_OPTIONS) {
