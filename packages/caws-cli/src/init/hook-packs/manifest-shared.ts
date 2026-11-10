@@ -653,7 +653,9 @@ import { isAdapterCoveredSurface } from './types';
 // operand libraries; their executable behavior is unchanged.
 // v127: secret advisories retain line/category order and shell-option semantics
 // while matching token expressions without per-line external processes.
-export const SHARED_PACK_VERSION = 127;
+// v128: the native hook envelope's chat identity takes precedence over a
+// shared live process record in session-id.sh.
+export const SHARED_PACK_VERSION = 128;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

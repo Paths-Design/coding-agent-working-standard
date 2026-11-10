@@ -453,6 +453,25 @@ test.each([
   expect(heartbeat).not.toHaveBeenCalled();
 });
 
+test('reviewed Bash mutation source admits stock routes but changed bytes keep shell ownership', () => {
+  useCodexLibraries();
+  command('echo safe');
+  const guard = select('block-dangerous.sh');
+  expect(tryExecuteStockHandler(guard, context())).not.toBeNull();
+  expect(qualifiesForNativeContainment(guard, context())).toBe(true);
+  const utility = select('hook-utilities.sh');
+  expect(tryExecuteStockHandler(utility, context())).not.toBeNull();
+
+  const source = path.join(runtime, 'lib/bash-mutation-targets.sh');
+  fs.appendFileSync(source, '\n# unreviewed write analysis\n');
+  selection.libraries['bash-mutation-targets.sh'].sha256 = digest(source);
+  const changedGuard = select('block-dangerous.sh');
+  expect(tryExecuteStockHandler(changedGuard, context())).toBeNull();
+  expect(qualifiesForNativeContainment(changedGuard, context())).toBe(false);
+  const changedUtility = select('hook-utilities.sh');
+  expect(tryExecuteStockHandler(changedUtility, context())).toBeNull();
+});
+
 test.each(['parse-input.sh', 'emit.sh'])(
   'reviewed %s bytes cannot move between shared and surface source roles',
   (name) => {

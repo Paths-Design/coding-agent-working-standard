@@ -51,7 +51,11 @@ const LIBRARIES: Readonly<Record<string, readonly string[]>> = {
     '32bd200bf9160dffc5d349a7e13341bbcf6644ab9c47ad3f491f68d3ba77bcf4',
     '7719c904cce6073598717e6a90d82e1c88e99482f79afbfd12b35d23f6d7e86e',
   ],
-  'session-id.sh': ['cf662f10e6d3477cecbf5deabd8d2b63284f6f4ac14fa7070725ff8502515c53'],
+  'session-id.sh': [
+    'cf662f10e6d3477cecbf5deabd8d2b63284f6f4ac14fa7070725ff8502515c53',
+    // Native envelope identity takes precedence over a shared process record.
+    'dac4866c1576b65732ab3eb5b350fd978b3b746c6bce02b484210a1ce3676c8c',
+  ],
   'caws-state.sh': [
     '2d27e94fbc3303ca96d7729720d8d7570ec772bc0f9a02d5b1bf46b98f4931e1',
     '8a3484f121b0751e566cb7173406c1eb296154af3c1fa08ca09927acd7fdf837',
@@ -61,6 +65,8 @@ const LIBRARIES: Readonly<Record<string, readonly string[]>> = {
   'bash-mutation-targets.sh': [
     '3b40bcc29a9793c85c7db4f01c0e4650429be46db504df774e3ff95d6ab8f6ac',
     'd545511184b6513b2f40ca5b37d8bf2a45b0914626293f45884df50cc50ef3b5',
+    // Python write-target analysis stays on the shell route for opaque commands.
+    '2d6274fb8dcc31fc5d57d4b47a0225676fe10336b7c134466f799eabc672504c',
   ],
   'heredoc.sh': [
     '75643e42630f6077959da625f50f6cdf888ed82e4d0d983a560378d928cc5e0d',

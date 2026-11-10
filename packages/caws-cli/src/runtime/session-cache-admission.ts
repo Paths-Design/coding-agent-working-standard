@@ -35,8 +35,17 @@ const agentSurfaceProfiles = [
   'f8d154f1795c0f643479daa715411a584cb062136cf9003ee007de5f25338e5a',
   PREFIX['lib/agent-surface.sh']!,
 ];
+const sessionIdProfiles = [
+  PREFIX['lib/session-id.sh']!,
+  // Native envelope identity takes precedence over a shared process record.
+  'dac4866c1576b65732ab3eb5b350fd978b3b746c6bce02b484210a1ce3676c8c',
+];
 const identities = (relative: string): readonly string[] =>
-  relative === 'lib/agent-surface.sh' ? agentSurfaceProfiles : [PREFIX[relative]!];
+  relative === 'lib/agent-surface.sh'
+    ? agentSurfaceProfiles
+    : relative === 'lib/session-id.sh'
+      ? sessionIdProfiles
+      : [PREFIX[relative]!];
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const nativePath = (value: string): boolean =>
@@ -113,7 +122,8 @@ const SESSION_END_SOURCES: Readonly<Record<string, string>> = {
 function sessionEndIdentities(relative: string): readonly string[] {
   const expected = SESSION_END_SOURCES[relative];
   if (!expected) return [];
-  return relative === 'lib/agent-surface.sh' ? [expected, exactPathAgentSurface] : [expected];
+  if (relative === 'lib/agent-surface.sh') return [expected, exactPathAgentSurface];
+  return relative === 'lib/session-id.sh' ? sessionIdProfiles : [expected];
 }
 
 /** Finite complete-prefix profile for the sole reviewed SessionEnd logger.
