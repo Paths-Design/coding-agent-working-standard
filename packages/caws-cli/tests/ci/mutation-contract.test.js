@@ -533,8 +533,8 @@ describe('mutation policy topology contract', () => {
     expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
-    // The inventory includes inspection-prefix analysis, its entry point and shared CAWS reader metadata.
-    expect(result.stdout).toMatch(/^PASS: 207 source files accounted for exactly once$/m);
+    // The inventory includes inspection-prefix analysis, shared CAWS reader metadata, and worktree removal.
+    expect(result.stdout).toMatch(/^PASS: 208 source files accounted for exactly once$/m);
     expect(result.stdout).toMatch(/^PASS: 28 mutation targets across 4 surfaces$/m);
   });
 
