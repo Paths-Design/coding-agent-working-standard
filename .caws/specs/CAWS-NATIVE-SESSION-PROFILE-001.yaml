@@ -25,7 +25,7 @@ scope:
 invariants:
   - 'Only explicitly reviewed session identity bytes qualify for native routing; unknown or rehashed bytes fail closed.'
   - 'Payload-bearing native calls preserve per-chat identity ahead of a shared live PID record; absent payload keeps its fallback boundary.'
-  - 'Native stock paths use only the reviewed unchanged token-record behavior; Python write-target analysis remains on the selected shell route.'
+  - 'Native stock paths use only the reviewed token-record behavior; opaque capability or confirmation outcomes retain selected-shell handling.'
 acceptance:
   - id: A1
     given: 'the committed payload-first session-id.sh and its earlier reviewed profile'
