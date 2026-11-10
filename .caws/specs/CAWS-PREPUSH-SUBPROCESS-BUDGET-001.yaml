@@ -1,0 +1,36 @@
+id: CAWS-PREPUSH-SUBPROCESS-BUDGET-001
+title: 'Bound subprocess integration tests for full-suite contention'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-10T17:01:15.987Z'
+updated_at: '2026-11-10T17:01:15.987Z'
+created_by_session: '01a1c44b-1650-7c43-811d-3a9ea259b43b'
+blast_radius:
+  modules:
+    - 'CAWS CLI shell runtime integration tests'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/runtime/service-image.test.js'
+    - 'packages/caws-cli/tests/runtime/render-writer-client.test.js'
+  out: []
+invariants:
+  - 'Production runtime behavior and child exit, signal, and output assertions remain unchanged.'
+acceptance:
+  - id: A1
+    given: 'direct service-image runner integration'
+    when: 'it executes under full-suite contention'
+    then: 'the child retains a bounded deadline and exit, signal, and output assertions.'
+  - id: A2
+    given: 'stock session logger adoption integration'
+    when: 'it executes under full-suite contention'
+    then: 'the child retains a bounded deadline and custody assertions for statuses 0 and 75.'
+observability:
+  - 'Focused and full pre-push Jest results distinguish timeout failures from child behavior failures.'
+rollback:
+  - 'Revert the two test-only deadline edits through the governed branch path.'
+non_functional:
+  security:
+    - 'No guard or production behavior changes.'
+contracts: []
