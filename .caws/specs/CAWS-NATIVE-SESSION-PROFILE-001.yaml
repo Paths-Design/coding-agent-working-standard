@@ -39,8 +39,8 @@ acceptance:
     given: 'the reviewed Bash mutation source and a changed or rehashed copy'
     when: 'stock guard and containment eligibility run'
     then: >-
-      unchanged native stock behavior qualifies with the reviewed source while
-      changed source bytes and unmodeled Python write effects stay on the shell
-      route
+      unchanged native stock behavior qualifies with the reviewed source; changed
+      source bytes refuse native admission and opaque capability or confirmation
+      outcomes retain selected-shell handling
 non_functional: {}
 contracts: []
