@@ -10,6 +10,7 @@ blast_radius:
   modules:
     - 'Native stock handler and session cache source admission'
     - 'Shared hook pack version and fingerprint'
+    - 'Native stock guard admission for reviewed Bash mutation source'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -24,6 +25,7 @@ scope:
 invariants:
   - 'Only explicitly reviewed session identity bytes qualify for native routing; unknown or rehashed bytes fail closed.'
   - 'Payload-bearing native calls preserve per-chat identity ahead of a shared live PID record; absent payload keeps its fallback boundary.'
+  - 'Native stock paths use only the reviewed unchanged token-record behavior; Python write-target analysis remains on the selected shell route.'
 acceptance:
   - id: A1
     given: 'the committed payload-first session-id.sh and its earlier reviewed profile'
