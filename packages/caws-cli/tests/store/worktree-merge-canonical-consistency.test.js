@@ -354,10 +354,14 @@ test('CAS contention retries discovery and preserves the eventual linked checkou
   const original = repoRootStore.runGit;
   let attempts = 0;
   let observations = 0;
+  const observationsAtPublication = [];
   jest.spyOn(repoRootStore, 'runGit').mockImplementation((args, cwd) => {
     if (args[0] === 'worktree' && args[1] === 'list') observations++;
-    if (args[0] === 'update-ref' && ++attempts === 1) {
-      return { ok: false, reason: 'cannot lock ref: injected contention' };
+    if (args[0] === 'update-ref') {
+      observationsAtPublication.push(observations);
+      if (++attempts === 1) {
+        return { ok: false, reason: 'cannot lock ref: injected contention' };
+      }
     }
     return original(args, cwd);
   });
@@ -365,7 +369,7 @@ test('CAS contention retries discovery and preserves the eventual linked checkou
   const data = successful(merge(caws, 'wt-linked-retry'));
 
   expect(attempts).toBe(2);
-  expect(observations).toBe(2);
+  expect(observationsAtPublication).toEqual([1, 2]);
   expect(data.base_checkout_sync).toEqual([{ path: parent, state: 'in_sync' }]);
   expect(git(parent, ['show', ':payload.txt'])).toBe('lane');
   expect(fs.readFileSync(path.join(parent, 'payload.txt'), 'utf8')).toBe('lane\n');
