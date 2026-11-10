@@ -359,7 +359,7 @@ function createQualificationFixture({ artifactRoot, label }) {
   const consumerRoot = path.join(evidenceRoot, 'consumer');
   fs.mkdirSync(consumerRoot);
   fs.mkdirSync(path.join(consumerRoot, 'user'));
-  const scratch = path.join(SOURCE_ROOT, '.tmp');
+  const scratch = path.join(PACKAGE_ROOT, '.tmp');
   fs.mkdirSync(scratch, { recursive: true });
   const fixtureRoot = fs.mkdtempSync(path.join(scratch, 'pytest-entrypoint-' + label + '-'));
   const packageRoot = path.join(fixtureRoot, 'packages/caws-cli');
@@ -493,7 +493,7 @@ function cleanupQualification(result) {
     throw new Error(
       'Cleanup refused: owned process-group absence is unconfirmed; retain source fixture'
     );
-  const scratch = fs.realpathSync(path.join(SOURCE_ROOT, '.tmp'));
+  const scratch = fs.realpathSync(path.join(PACKAGE_ROOT, '.tmp'));
   const actual = fs.realpathSync(result.fixtureRoot);
   if (path.dirname(actual) !== scratch || !path.basename(actual).startsWith('pytest-entrypoint-'))
     throw new Error('Cleanup refused: source copy is not an owned fixture');
