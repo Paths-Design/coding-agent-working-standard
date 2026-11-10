@@ -1,0 +1,25 @@
+id: CAWS-MUTATION-SOURCE-PIN-001
+title: 'Align mutation inventory count with current source'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-10T15:13:29.880Z'
+updated_at: '2026-11-10T15:13:29.880Z'
+created_by_session: '01a1c44b-1650-7c43-811d-3a9ea259b43b'
+blast_radius:
+  modules:
+    - 'CAWS CLI mutation policy CI contract'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+  out: []
+invariants:
+  - 'The test pins the exact inventoried source count and the validator accounts for each source exactly once.'
+acceptance:
+  - id: A1
+    given: 'the current mutation policy and source tree'
+    when: 'the mutation topology contract test runs'
+    then: 'the validator and pinned count agree on 208 sources and 28 mutation targets'
+non_functional: {}
+contracts: []
