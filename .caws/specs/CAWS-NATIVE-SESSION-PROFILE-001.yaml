@@ -1,9 +1,10 @@
 id: CAWS-NATIVE-SESSION-PROFILE-001
 title: 'Qualify payload-first session identity for native routing'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: native-session-profile
 created_at: '2026-11-10T15:47:18.970Z'
-updated_at: '2026-11-10T15:47:18.970Z'
+updated_at: '2026-11-10T15:47:41.598Z'
 created_by_session: '01a1c44b-1650-7c43-811d-3a9ea259b43b'
 blast_radius:
   modules:
