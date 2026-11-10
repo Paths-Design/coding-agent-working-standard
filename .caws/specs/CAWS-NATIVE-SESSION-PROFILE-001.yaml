@@ -54,3 +54,12 @@ evidence:
     exit_code: 0
     commit_sha: "37ce36421776c594b3a7f8787fa88cc52a0148f9"
     test_verified_at: "37ce36421776c594b3a7f8787fa88cc52a0148f9"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "At 37ce36421, SHARED_PACK_VERSION and the recorded shared fingerprint match the changed template bytes; the pack fingerprint guard passed in the seven-suite run."
+    recorded_at: "2026-11-10T16:11:02.244Z"
+    test_nodeid: packages/caws-cli/tests/init/pack-fingerprint.test.js
+    command: "./node_modules/.bin/jest --runInBand tests/runtime/stock-handlers.test.js tests/runtime/session-cache-admission.test.js tests/runtime/engine-routing.test.js tests/runtime/session-seal-routing.test.js tests/runtime/stop-dispatch-connection.test.js tests/runtime/containment.test.js tests/init/pack-fingerprint.test.js"
+    exit_code: 0
+    commit_sha: "37ce36421776c594b3a7f8787fa88cc52a0148f9"
+    test_verified_at: "37ce36421776c594b3a7f8787fa88cc52a0148f9"
