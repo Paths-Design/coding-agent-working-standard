@@ -24,9 +24,9 @@ acceptance:
     when: 'it executes under full-suite contention'
     then: 'the child retains a bounded deadline and exit, signal, and output assertions.'
   - id: A2
-    given: 'stock session logger adoption integration'
-    when: 'it executes under full-suite contention'
-    then: 'the child retains a bounded deadline and custody assertions for statuses 0 and 75.'
+    given: 'render-writer client and stock logger integrations'
+    when: 'they execute under full-suite contention'
+    then: 'child processes retain bounded deadlines and expected exit, fallback, and custody assertions.'
 observability:
   - 'Focused and full pre-push Jest results distinguish timeout failures from child behavior failures.'
 rollback:
