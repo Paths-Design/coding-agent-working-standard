@@ -35,5 +35,12 @@ acceptance:
     given: 'the changed shared hook pack'
     when: 'the pack fingerprint guard runs'
     then: 'a bumped shared pack version and its recorded fingerprint match the actual template bytes'
+  - id: A3
+    given: 'the reviewed Bash mutation source and a changed or rehashed copy'
+    when: 'stock guard and containment eligibility run'
+    then: >-
+      unchanged native stock behavior qualifies with the reviewed source while
+      changed source bytes and unmodeled Python write effects stay on the shell
+      route
 non_functional: {}
 contracts: []
