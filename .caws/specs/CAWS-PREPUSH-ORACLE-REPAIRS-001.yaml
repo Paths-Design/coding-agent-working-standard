@@ -74,3 +74,12 @@ evidence:
     exit_code: 0
     commit_sha: "9021dd5ec8425e59daaf63d7b4dc1de368dcfe26"
     test_verified_at: "9021dd5ec8425e59daaf63d7b4dc1de368dcfe26"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: packages/caws-cli/tests/hooks/pytest-entrypoint.test.js
+    recorded_at: "2026-11-10T16:31:53.535Z"
+    test_nodeid: packages/caws-cli/tests/hooks/pytest-entrypoint.test.js
+    command: "./node_modules/.bin/jest --runInBand --silent tests/hooks/pytest-entrypoint.test.js"
+    exit_code: 0
+    commit_sha: "9021dd5ec8425e59daaf63d7b4dc1de368dcfe26"
+    test_verified_at: "9021dd5ec8425e59daaf63d7b4dc1de368dcfe26"
