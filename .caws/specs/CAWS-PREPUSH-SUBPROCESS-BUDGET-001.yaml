@@ -35,3 +35,13 @@ non_functional:
   security:
     - 'No guard or production behavior changes.'
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: packages/caws-cli/tests/runtime/service-image.test.js
+    recorded_at: "2026-11-10T17:39:32.730Z"
+    test_nodeid: packages/caws-cli/tests/runtime/service-image.test.js
+    command: "./node_modules/.bin/jest --runInBand --silent tests/runtime/service-image.test.js"
+    exit_code: 0
+    commit_sha: "61b1b3cfb53f88f2970dc4e11e1dd95dd2f591bf"
+    test_verified_at: "61b1b3cfb53f88f2970dc4e11e1dd95dd2f591bf"
