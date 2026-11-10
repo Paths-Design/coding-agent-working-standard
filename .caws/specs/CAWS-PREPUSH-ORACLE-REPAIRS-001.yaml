@@ -1,10 +1,11 @@
 id: CAWS-PREPUSH-ORACLE-REPAIRS-001
 title: 'Repair pre-push test oracles and cold pytest fixture dependency ancestry'
 mode: fix
-lifecycle_state: active
-worktree: prepush-oracle-repairs
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge prepush-oracle-repairs at 9f56870262bfd97c07ce8f62d06e666e70e6c3f6'
 created_at: '2026-11-10T15:55:24.040Z'
-updated_at: '2026-11-10T15:55:36.428Z'
+updated_at: '2026-11-10T16:33:00.812Z'
 created_by_session: '01a1c62a-5799-7803-89ee-3aa4d3894650'
 blast_radius:
   modules:
