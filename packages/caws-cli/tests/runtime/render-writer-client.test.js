@@ -64,7 +64,8 @@ function run(body, args, environment) {
     env: environment,
     cwd: root,
     encoding: 'utf8',
-    timeout: 3000,
+    // Keep a hang ceiling without treating parallel Jest scheduling as latency failure.
+    timeout: 10000,
   });
 }
 
@@ -186,7 +187,8 @@ test.each(['0', '75'])(
     const result = spawnSync('/bin/bash', [logger], {
       cwd: f.project,
       encoding: 'utf8',
-      timeout: 3000,
+      // Full Jest runs shell-heavy fixtures in parallel; this caps hangs, not latency.
+      timeout: 10000,
       env: {
         ...f.environment,
         RESULT: status,
@@ -199,6 +201,7 @@ test.each(['0', '75'])(
         HOOK_TRANSCRIPT_PATH: f.fields[9],
       },
     });
+    expect(result.error).toBeUndefined();
     expect(result.status).toBe(Number(status));
     const recorded = readRecordedArguments(f.environment.RECORD);
     expect(recorded.slice(0, 8)).toEqual([

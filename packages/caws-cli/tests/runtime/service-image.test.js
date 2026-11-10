@@ -387,7 +387,8 @@ test.each([
           CAWS_HOOK_ADVISORY_DEDUP: '0',
         },
         encoding: 'utf8',
-        timeout: 3000,
+        // Full Jest runs shell-heavy fixtures in parallel; this caps hangs, not latency.
+        timeout: 10000,
         stdio: ['ignore', 'pipe', 'pipe', ...descriptors],
       });
     } finally {
