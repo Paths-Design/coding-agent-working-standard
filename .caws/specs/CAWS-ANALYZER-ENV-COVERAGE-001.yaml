@@ -64,3 +64,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a merge is left unrewritten when the agent's own BASH_ENV makes it unprovable"
     commit_sha: f0f136dc9
     test_verified_at: f0f136dc9a275d15c63b5971860cc42e59086db8
+  - criterion_id: A3
+    status: pass
+    evidence_ref: launcher test asserts exit 2 and the exact two cp/mv refused lines for cp -R src dest
+    recorded_at: "2026-11-11T09:55:41.950Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a directory copy is refused with the copy-role reason and the way to restate it"
+    commit_sha: f0f136dc9
+    test_verified_at: f0f136dc9a275d15c63b5971860cc42e59086db8
