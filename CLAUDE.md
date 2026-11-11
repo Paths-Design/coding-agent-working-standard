@@ -223,6 +223,17 @@ legacy reset scripts live under `.caws/hooks/`). Never re-run the command in
 another shape (`command git ...`, `env ... git ...`, `bash -lc '...'`): the
 latch recognizes those variants.
 
+Not every refusal is the latch; the message says which it is
+([full contract](docs/guides/hook-packs.md#guard-verdicts-and-refusals)).
+
+- **Refused, latch not armed** (an opaque `python3 -c` / `node -e` payload, a
+  command the classifier could not analyze, a bare commit over staged
+  deletions): restate it as the message says and continue. A repeat of an opaque
+  or unanalyzable command sent after that refusal arms the latch; calls queued
+  in the same reply count with the first. The bare commit never latches.
+- **Guard or classifier unavailable**: your command did not cause it and nothing
+  was counted. Retrying cannot help. Stop and report the message.
+
 ## Decision cadence
 
 Take the narrowest reversible decision local authority supports; ambiguity alone

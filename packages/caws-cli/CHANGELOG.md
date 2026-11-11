@@ -64,6 +64,13 @@ status`, message delivery, the peer notice) report the later of that file's
   heartbeat that fails or is ended is not retried until the interval passes. The peer notice can trail a change in the peer set by up to
   the heartbeat interval. Deleting or pruning a lease removes its `.active`,
   `.hb`, `.hb.lease` and `.mail` files. Shared pack 137.
+- The `CLAUDE.md` template `caws init` writes tells an agent how to read a
+  dangerous-command refusal: refused without a latch (restate and continue; a
+  repeat sent afterwards latches), guard or classifier unavailable (stop and
+  report; nothing was counted), or latch armed. It previously told the agent to
+  stop on every `block` or `ask`. `docs/guides/hook-packs.md` documents the
+  guard verdict and refusal contract, session liveness, and the checks to run
+  before merging a guard change.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

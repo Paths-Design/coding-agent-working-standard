@@ -472,16 +472,30 @@ trail shows when and why a guard was skipped. A foreign session is never covered
   governed paths.
 - **Waivers on T1 gates** — emergency only; document mitigation plan.
 - **`caws claim --takeover`** — never without explicit authorization.
-- **A dangerous-command hook fires** — `block-dangerous.sh` returning `block` or
-  `ask` is a human-review boundary, not a syntax problem to solve. Do not
-  rephrase, wrap, reorder, or alias the command. Stop and ask. The hook also
-  engages a per-session quarantine trap: only fixed read-only commands run until
-  the user runs `reset-danger-latch.sh`; every other attempt — including every
-  Write/Edit, so a file write cannot route around the shell boundary — is
-  recorded as a strike, `caws message send`/`reply` are refused, and on
-  kill-enabled surfaces the first such attempt terminates the session's process.
-  Read [`docs/failure-lineage.md`](docs/failure-lineage.md) Entry 17 for why
-  this rule exists.
+- **A dangerous-command hook fires** — read which of three refusals
+  `block-dangerous.sh` gave; the message states it.
+  - _Refused, latch not armed._ An opaque inline payload (`python3 -c`,
+    `node -e` with shell interpolation), a command the classifier could not
+    finish analyzing, or a bare commit over staged deletions. Restate it the way
+    the message says and continue. Do not send the same shape again: a repeat of
+    an opaque or unanalyzable command sent after this refusal arms the latch.
+    Calls queued in the same reply as the refused one count with it, not as
+    repeats. The bare commit never latches, however often it is repeated.
+  - _Guard or classifier unavailable._ The message says your command did not
+    cause it and that no strike or latch was added. Retrying cannot help. Stop
+    and report the message to the user.
+  - _Latch armed._ A human-review boundary, not a syntax problem to solve. Do
+    not rephrase, wrap, reorder, or alias the command. Stop and ask. The session
+    is quarantined: only fixed read-only commands run until the user runs
+    `reset-danger-latch.sh`; every other attempt — including every Write/Edit,
+    so a file write cannot route around the shell boundary — is recorded as a
+    strike, `caws message send`/`reply` are refused, and on kill-enabled
+    surfaces the first such attempt terminates the session's process.
+
+  Read [`docs/failure-lineage.md`](docs/failure-lineage.md) Entry 17 for why the
+  latch exists, Entries 47 and 48 for the other two, and
+  [`docs/guides/hook-packs.md`](docs/guides/hook-packs.md#guard-verdicts-and-refusals)
+  for the full contract.
 
 ## Resources
 
