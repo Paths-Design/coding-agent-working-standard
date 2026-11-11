@@ -32,9 +32,13 @@ acceptance:
     when: 'scope-guard builds the inventory'
     then: 'the edit is refused with an inventory message naming the conflict'
   - id: A3
-    given: 'a surface other than kimi-code and an Edit payload carrying only tool_input.path'
-    when: 'scope-guard builds the inventory'
-    then: 'the edit is refused as before with ''empty or unrepresentable target path'''
+    given: >-
+      a surface other than kimi-code and an Edit payload carrying
+      tool_input.file_path and a different tool_input.path
+    when: 'scope-guard adjudicates the edit'
+    then: >-
+      the target is the file_path value; tool_input.path is neither read as a target
+      nor treated as a conflict
 rollback:
   - 'Revert the merge commit; shared pack returns to 131'
 non_functional: {}
