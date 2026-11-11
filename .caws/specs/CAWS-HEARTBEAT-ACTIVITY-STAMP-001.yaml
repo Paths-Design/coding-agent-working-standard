@@ -1,0 +1,56 @@
+id: CAWS-HEARTBEAT-ACTIVITY-STAMP-001
+title: 'Heartbeat: launcher-stamped liveness, CLI off the per-call path, bounded mail poll'
+mode: feature
+lifecycle_state: draft
+created_at: '2026-11-11T16:09:56.934Z'
+updated_at: '2026-11-11T16:09:56.934Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh'
+    - 'packages/caws-cli/templates/hook-packs/runtime/caws-hook.py'
+    - 'packages/caws-cli/src/store/leases-store.ts'
+    - 'packages/caws-cli/src/application/agent-heartbeat.ts'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/CHANGELOG.md'
+    - 'packages/caws-cli/tests/hooks/bats/agent-heartbeat-activity.bats'
+    - 'packages/caws-cli/tests/store/leases-activity-stamp.test.js'
+    - 'packages/caws-cli/tests/application/agent-heartbeat.test.js'
+    - 'packages/caws-cli/tests/adapter/system-runtime.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a lease file and an activity stamp beside it whose mtime is later than the recorded last_active'
+    when: 'leases are loaded'
+    then: 'the lease reports last_active at the stamp instant, while a stamp older than the recorded value, or a stamp with no lease, changes nothing'
+  - id: A2
+    given: 'a session that has a lease'
+    when: 'the machine launcher dispatches any hook event for it, including post_tool_use and stop'
+    then: 'the stamp mtime advances with no CLI subprocess, and a session without a lease gets no stamp and no lease'
+  - id: A3
+    given: 'a full heartbeat completed under fifteen seconds ago, the lease unchanged since, and no mailbox change'
+    when: 'the PreToolUse heartbeat handler runs'
+    then: 'it invokes no CLI and emits nothing; a mailbox change triggers only the poll; a lease rewritten since (for example by stop) triggers the full heartbeat'
+  - id: A4
+    given: 'a fresh activity stamp and a recorded last_active older than the throttle'
+    when: 'a throttled heartbeat is requested'
+    then: 'the lease is rewritten, because the throttle reads the recorded value and not the stamp'
+  - id: A5
+    given: 'a lease with sidecar files'
+    when: 'the lease is deleted or pruned'
+    then: 'its sidecars are removed with it'
+  - id: A6
+    given: 'a CLI that does not return'
+    when: 'the heartbeat handler runs'
+    then: 'each CLI call is ended at the deadline, the handler exits 0 with no output, and the tool call is not refused'
+non_functional: {}
+contracts: []
