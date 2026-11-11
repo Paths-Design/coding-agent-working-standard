@@ -556,7 +556,16 @@ test("a merge is left unrewritten when the agent's own BASH_ENV makes it unprova
   fs.writeFileSync(startup, '');
   installMachineRuntime({ home });
   const result = bash(p, 'caws worktree merge wt-x', { BASH_ENV: startup });
-  expect(result.stdout).not.toContain('updatedInput');
+  // The write guard answers first with an ask that names the cause; the command
+  // reaches the agent's approval path as written, never rerooted.
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe('');
+  const decision = JSON.parse(result.stdout).hookSpecificOutput;
+  expect(decision.permissionDecision).toBe('ask');
+  expect(decision.permissionDecisionReason).toContain(
+    'inherited-environment: Unmodeled inherited environment BASH_ENV.'
+  );
+  expect(decision).not.toHaveProperty('updatedInput');
 });
 
 test('a directory copy is refused with the copy-role reason and the way to restate it', () => {
