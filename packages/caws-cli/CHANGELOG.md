@@ -36,6 +36,10 @@
   arms the latch; it was refused without limit before. A second
   capability-risk command queued with the warned one is refused without a
   latch. Shared pack 134.
+- A failure of the command classifier itself (missing, crashed, or returning
+  a decision the guard does not know) refuses the Bash command and names the
+  fault. It previously armed the danger latch on the first occurrence, which
+  quarantined a session for a fault it did not cause. Shared pack 135.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.
