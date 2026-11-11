@@ -54,3 +54,11 @@ rollback:
   - 'Revert the merge commit; shared pack returns to 134'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "missing classifier file: refusal names the file, no sentinel. python3-absent half is not exercised by a test"
+    recorded_at: "2026-11-11T14:22:30.218Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats::classifier failure: a missing classifier file refuses, names the file, and does not arm the latch"
+    commit_sha: "7d0982be7"
+    test_verified_at: "7d0982be7c71a0e1eb50985a8cbba43b01493c69"
