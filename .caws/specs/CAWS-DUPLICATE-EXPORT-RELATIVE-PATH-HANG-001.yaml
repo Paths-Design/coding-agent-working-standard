@@ -40,3 +40,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/export-check-relative-target.bats::duplicate-export: a relative target returns and reports the duplicate in its package"
     commit_sha: "23d109084"
     test_verified_at: "23d109084d8406252a80265f7be075a711b3789b"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "bats export-check-relative-target.bats cases 3 and 5 pass at 23d109084: relative and absolute targets with no package.json exit 0 with empty output"
+    recorded_at: "2026-11-11T19:15:29.736Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/export-check-relative-target.bats::duplicate-export: a relative target with no package.json above it exits silently"
+    commit_sha: "23d109084"
+    test_verified_at: "23d109084d8406252a80265f7be075a711b3789b"
