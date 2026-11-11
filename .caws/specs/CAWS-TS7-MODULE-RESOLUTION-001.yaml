@@ -1,0 +1,53 @@
+id: CAWS-TS7-MODULE-RESOLUTION-001
+title: 'Typecheck configs load under TypeScript 7 resolution modes'
+mode: chore
+lifecycle_state: draft
+created_at: '2026-11-11T04:18:20.864Z'
+updated_at: '2026-11-11T04:18:20.864Z'
+created_by_session: 'ffa00c0e-9de5-4f86-a2af-764bbae875b0'
+blast_radius:
+  modules:
+    - 'packages/caws-cli typecheck and build configuration'
+    - 'packages/caws-cli/src/shell/analysis parser type imports'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tsconfig.vnext.json'
+    - 'packages/caws-cli/tsconfig.vnext.test.json'
+    - 'packages/caws-cli/tsconfig.kernel-test.json'
+    - 'packages/caws-cli/tests/transcripts/tsconfig.json'
+    - 'tsconfig.json'
+    - 'packages/caws-cli/src/shell/analysis/parser-types.ts'
+  out: []
+invariants:
+  - 'The installed compiler stays typescript ^5 and no dependency or lockfile entry changes'
+  - 'Runtime loading of unbash is unchanged: load-parser.js keeps its native dynamic import'
+  - 'No tsconfig strictness flag is removed or weakened'
+acceptance:
+  - id: A1
+    given: 'the four caws-cli typecheck projects (tsconfig.vnext.json, tsconfig.vnext.test.json, tsconfig.kernel-test.json, tests/transcripts/tsconfig.json) at the lane head'
+    when: 'a TypeScript 7.1 compiler (tsrs 0.24.0-ts7.1.0-beta and official typescript 7.1.0-beta) runs each with --noEmit and no command-line option overrides'
+    then: 'every run exits 0 with zero diagnostics, and restoring the removed moduleResolution value makes the run fail with TS5108'
+  - id: A2
+    given: 'the same four projects at the lane head'
+    when: 'the installed typescript 5.9 compiler runs the package typecheck script'
+    then: 'it exits 0 with zero diagnostics'
+  - id: A3
+    given: 'parser-types.ts at the lane head'
+    when: 'its unbash type import is resolved under a resolution mode that honours package exports'
+    then: 'it resolves through an entry the unbash exports map declares, and restoring the unbash/dist/types specifier makes a TypeScript 7.1 run fail with TS2307'
+  - id: A4
+    given: 'the base revision and the lane head built with the installed typescript 5.9 compiler'
+    when: 'tsc -p tsconfig.vnext.json emits into separate output directories'
+    then: 'the emitted .js and .d.ts trees are byte-identical'
+  - id: A5
+    given: 'the lane head'
+    when: 'the jest projects that compile through these configs run (the kernel ts-jest project and the transcripts foundation test)'
+    then: 'they pass with the same test counts as the base revision'
+rollback:
+  - 'Revert the lane merge commit, which returns the configs to moduleResolution Node and the deep unbash type import'
+non_functional: {}
+contracts:
+  - name: 'typecheck-configs'
+    type: behavior
