@@ -71,3 +71,8 @@ evidence:
     evidence_ref: "parser-types.ts:13 imports from 'unbash', whose package.json exports['.'].types is ./dist/parser.d.ts (which has export type * from ./types.ts). Counterexample run at the lane head with 'unbash/dist/types' temporarily restored: tsc 5.9.2, typescript 7.1.0-beta and tsrs each reported 11 errors including parser-types.ts(13,8) TS2307. Restored before commit."
     recorded_at: "2026-11-11T09:15:57.857Z"
     commit_sha: "39cb6b379"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "tsc 5.9.2 -p tsconfig.vnext.json --outDir at base 296101840 and at the lane head, 1312 files each. diff -rq reported only shell/analysis/parser-types.d.ts and parser-types.d.ts.map. The .d.ts diff is one line: the specifier 'unbash/dist/types' became 'unbash'. Output trees live outside the repo in ~/.cache/tsrs-trial/emit-base and emit-head."
+    recorded_at: "2026-11-11T09:15:59.888Z"
+    commit_sha: "39cb6b379"
