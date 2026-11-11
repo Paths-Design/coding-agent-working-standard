@@ -61,3 +61,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/kimi-surface.bats::shim: a protected hook edit carrying kimi's tool_input.path is blocked end-to-end"
     commit_sha: c2820e7db
     test_verified_at: c2820e7db28804384289df1edba89582e63f1169
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "exit 2 with 'tool_input.file_path and tool_input.path name different targets'"
+    recorded_at: "2026-11-11T10:52:55.292Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/kimi-surface.bats::scope-guard: a kimi payload naming two different targets is refused whole"
+    commit_sha: c2820e7db
+    test_verified_at: c2820e7db28804384289df1edba89582e63f1169
