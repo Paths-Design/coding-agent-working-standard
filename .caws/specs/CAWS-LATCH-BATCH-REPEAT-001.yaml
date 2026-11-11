@@ -1,0 +1,59 @@
+id: CAWS-LATCH-BATCH-REPEAT-001
+title: 'Latch escalation counts a batch of queued calls once and latches a repeated no-latch refusal'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-11T11:47:09.929Z'
+updated_at: '2026-11-11T11:47:09.929Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'hook-packs/shared block-dangerous latch arming, quarantine escalation and repeat counting'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/reset-danger-latch.sh'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'A refused command never runs, whichever batch it belongs to; batching changes only whether a refusal escalates'
+  - 'Escalation (strike, latch, process kill) requires a call issued after the agent could have read the earlier refusal'
+  - 'A batch is identified from the harness transcript, never from anything the agent supplies in the tool input'
+acceptance:
+  - id: A1
+    given: 'a transcript in which two tool calls share one assistant message, and the first arms the danger latch'
+    when: 'the second runs under the latch'
+    then: 'it is refused with text saying it was queued together with the arming command, no strike is recorded and no kill escalation is attempted'
+  - id: A2
+    given: 'an armed latch'
+    when: 'a non-allowlisted call from a later assistant message runs'
+    then: 'it is refused, a strike is recorded and escalation is attempted as before'
+  - id: A3
+    given: 'an armed latch and a payload with no transcript or tool-use id'
+    when: 'a call arrives within the batch window of the arming time, and another after it'
+    then: 'the first is refused without strike or escalation and the second is refused with strike and escalation'
+  - id: A4
+    given: 'an opaque-exec or bare-commit-deletions refusal earlier in the session'
+    when: 'a command of the same classification is issued in a later batch'
+    then: 'it is refused and the latch is armed, and the text says it repeated a refusal of that classification'
+  - id: A5
+    given: 'the same earlier refusal'
+    when: 'a command of that classification arrives in the same batch, or a command of a different no-latch classification arrives later'
+    then: 'it is refused without arming the latch'
+  - id: A6
+    given: 'a first capability-risk command that was warned and allowed'
+    when: 'a second capability-risk command arrives in the same batch'
+    then: 'it is refused without arming the latch, with text saying it was queued with the warned command; a capability-risk command in a later batch arms the latch as before'
+  - id: A7
+    given: 'a human reset of the latch'
+    when: 'reset-danger-latch.sh clears the session'
+    then: 'the repeat record is cleared with it'
+rollback:
+  - 'Revert the merge commit; shared pack returns to 133'
+non_functional: {}
+contracts: []
