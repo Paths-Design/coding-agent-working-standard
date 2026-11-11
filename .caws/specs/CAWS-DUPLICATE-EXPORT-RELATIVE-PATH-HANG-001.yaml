@@ -32,3 +32,11 @@ acceptance:
     then: 'it exits 0 with no output'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "bats export-check-relative-target.bats cases 1-2 pass at 23d109084; against the unfixed handler cases 1-3 fail by reaching the 20s process-group limit"
+    recorded_at: "2026-11-11T19:15:22.593Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/export-check-relative-target.bats::duplicate-export: a relative target returns and reports the duplicate in its package"
+    commit_sha: "23d109084"
+    test_verified_at: "23d109084d8406252a80265f7be075a711b3789b"
