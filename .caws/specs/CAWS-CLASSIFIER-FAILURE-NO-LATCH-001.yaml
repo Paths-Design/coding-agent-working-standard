@@ -29,7 +29,7 @@ acceptance:
     when: 'a Bash command is checked'
     then: 'the command is refused with text naming the missing classifier, no danger-latch sentinel is written, and a second command is refused the same way'
   - id: A2
-    given: 'the classifier exits with an error'
+    given: 'the classifier process exits with an error, including a traceback containing quotes'
     when: 'a Bash command is checked'
     then: 'the command is refused with the classifier''s error text, no sentinel is written, and the text says the command did not cause it'
   - id: A3
