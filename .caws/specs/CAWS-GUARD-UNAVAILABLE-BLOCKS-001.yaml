@@ -162,3 +162,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a guard that prints a block decision and then exits 1 keeps its own decision"
     commit_sha: "538e5d54e"
     test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A11
+    status: pass
+    evidence_ref: "bats: reprieve.bats 'A5 — missing lib/reprieve.sh: dispatcher does not crash; guards run normally' at 538e5d54e"
+    recorded_at: "2026-11-11T02:29:46.433Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/reprieve.bats::A5 — missing lib/reprieve.sh: dispatcher does not crash; guards run normally"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
