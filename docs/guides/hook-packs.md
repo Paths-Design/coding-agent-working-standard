@@ -562,9 +562,13 @@ starts the CLI only when work is owed:
 
 Each CLI call the handler makes is ended after
 `CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS` (default 3) where `perl` is available. The
-peer notice can trail a change in the peer set by up to the heartbeat interval.
-Mail is polled only on a main-thread call; a subagent's call carries the
-parent's session id and leaves the mail queued
+CLI runs in its own process group and the whole group is ended, so a launcher
+script's child does not outlive the deadline. A full heartbeat that fails or is
+ended is still recorded as attempted: the next attempt waits out the interval,
+so a slow or broken CLI costs its deadline once per interval and not on every
+tool call. The peer notice can trail a change in the peer set by up to the
+heartbeat interval. Mail is polled only on a main-thread call; a subagent's call
+carries the parent's session id and leaves the mail queued
 ([failure-lineage Entry 46](../failure-lineage.md#entry-46-mail-addressed-to-a-session-was-settled-delivered-into-its-subagents-contexts-each-repair-stated-the-rule-correctly-and-applied-it-to-bytes-another-layer-had-already-transformed-october-2026)).
 
 The handler and the launcher keep four files beside the lease. All are removed

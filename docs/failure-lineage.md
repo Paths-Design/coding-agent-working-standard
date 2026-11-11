@@ -5200,7 +5200,11 @@ message or wait read that value.
 - **The CLI runs only when work is owed**: a full heartbeat when none completed
   in the last 15 seconds or the lease file was replaced since, a mailbox poll
   when `messages.jsonl` changed since the session's last poll.
-- **A deadline on each CLI call**, so a hung CLI cannot hold the guards.
+- **A deadline on each CLI call**, applied to the CLI's whole process group, so
+  a hung CLI cannot hold the guards and leaves no child behind. A heartbeat that
+  fails or is ended is not retried until the interval passes. Both came from
+  peer review: the first version ended only the launcher process and retried a
+  failing CLI on every call.
 - **The throttle reads the recorded value.** With the stamp refreshed on every
   event, a throttle reading the reported `last_active` would never let the lease
   be rewritten, and status and checkout context would go stale.
