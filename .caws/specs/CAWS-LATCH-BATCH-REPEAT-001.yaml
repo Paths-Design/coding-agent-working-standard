@@ -124,3 +124,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::repeat: a human reset clears the repeat record"
     commit_sha: "380216711"
     test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "arming call records only its tool-use id; message resolved at comparison with window 0"
+    recorded_at: "2026-11-11T13:36:28.675Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::batch: a transcript line written after the arming call still identifies its batch"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
