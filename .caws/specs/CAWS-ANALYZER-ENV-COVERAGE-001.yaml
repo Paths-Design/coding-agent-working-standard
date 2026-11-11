@@ -57,3 +57,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a single worktree merge is rerooted to the project through the launcher"
     commit_sha: f0f136dc9
     test_verified_at: f0f136dc9a275d15c63b5971860cc42e59086db8
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "launcher test asserts exit 0, ask decision naming BASH_ENV, no updatedInput"
+    recorded_at: "2026-11-11T09:55:24.205Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a merge is left unrewritten when the agent's own BASH_ENV makes it unprovable"
+    commit_sha: f0f136dc9
+    test_verified_at: f0f136dc9a275d15c63b5971860cc42e59086db8
