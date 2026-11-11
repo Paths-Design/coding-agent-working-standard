@@ -44,5 +44,12 @@ acceptance:
     given: 'the edited documents'
     when: 'the docs validator and prettier check run'
     then: 'both exit 0'
+  - id: A6
+    given: 'the shipped agent-facing template packages/caws-cli/templates/CLAUDE.md'
+    when: 'its dangerous-command section is read'
+    then: >-
+      it states the refusal classes an agent meets: refused without a latch, refused
+      and latched on a repeat sent after the first refusal was shown, and latched at
+      once, and that a guard fault is not the agent's to discharge
 non_functional: {}
 contracts: []
