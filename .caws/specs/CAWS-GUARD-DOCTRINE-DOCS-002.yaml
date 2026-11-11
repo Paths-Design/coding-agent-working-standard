@@ -1,10 +1,11 @@
 id: CAWS-GUARD-DOCTRINE-DOCS-002
 title: 'Document guard failure, refusal, latch-repeat and liveness doctrine from packs 129-136'
 mode: doc
-lifecycle_state: active
-worktree: guard-doctrine-docs
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge guard-doctrine-docs at beb94c0fcebf571b8cf5e0b7c58148e73a97f118'
 created_at: '2026-11-11T16:37:08.593Z'
-updated_at: '2026-11-11T18:42:23.866Z'
+updated_at: '2026-11-11T21:05:19.774Z'
 created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
 blast_radius:
   modules:
