@@ -67,3 +67,8 @@ evidence:
     evidence_ref: "docs/guides/hook-packs.md 'Session liveness' and docs/guides/multi-agent-workflow.md at 9a16dfa3b: stamp, when the CLI runs, mail poll rule, four sidecar files; matches agent-heartbeat.sh, caws-hook.py and leases-store.ts merged at 0b8a65986"
     recorded_at: "2026-11-11T21:04:56.227Z"
     commit_sha: "9a16dfa3b"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "docs/failure-lineage.md entries 47-50 at 9a16dfa3b, each with what happened, what we built and what it does not catch; linked from hook-packs.md"
+    recorded_at: "2026-11-11T21:04:57.428Z"
+    commit_sha: "9a16dfa3b"
