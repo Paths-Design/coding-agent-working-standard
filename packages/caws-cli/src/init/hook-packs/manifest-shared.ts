@@ -689,12 +689,15 @@ import { isAdapterCoveredSurface } from './types';
 // arming the danger latch, and names the fault. A command the classifier ran
 // on but could not finish analyzing is refused once without a latch and arms
 // it when repeated, like an opaque payload.
-// v136: agent-heartbeat.sh stamps <session>.active beside the lease on every
+// v136: duplicate-export-check.sh resolves a relative Write target against
+// the payload working directory. Its walk to the package root ends at "/",
+// which a relative path never reaches, so the handler did not return.
+// v137: agent-heartbeat.sh stamps <session>.active beside the lease on every
 // call and starts the CLI only when no full heartbeat completed in the last
 // 15 seconds or the lease file was replaced since. The mailbox is polled on a
 // full heartbeat and when messages.jsonl changed since the session's last
 // poll. Each CLI call is ended after 3 seconds.
-export const SHARED_PACK_VERSION = 136;
+export const SHARED_PACK_VERSION = 137;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
