@@ -77,3 +77,8 @@ evidence:
     evidence_ref: "CONTRIBUTING.md pitfalls and hook-packs.md 'Checks before merging a guard change' and 'Shell and test-harness traps' at 9a16dfa3b"
     recorded_at: "2026-11-11T21:04:58.711Z"
     commit_sha: "9a16dfa3b"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "prettier --check on the eight edited files and validate-docs.mjs both exit 0 at 9a16dfa3b; jest tests/docs tests/ci tests/init and three doc-pinning suites: 47 suites, 977 tests passed"
+    recorded_at: "2026-11-11T21:05:00.056Z"
+    commit_sha: "9a16dfa3b"
