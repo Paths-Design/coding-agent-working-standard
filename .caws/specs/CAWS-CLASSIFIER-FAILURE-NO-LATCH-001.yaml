@@ -69,3 +69,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats::classifier failure: a traceback with quotes in it is still reported as the classifier's failure"
     commit_sha: "7d0982be7"
     test_verified_at: "7d0982be7c71a0e1eb50985a8cbba43b01493c69"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "unrecognized decision named, no sentinel"
+    recorded_at: "2026-11-11T14:22:38.536Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats::classifier failure: an unrecognized decision refuses, names it, and does not arm the latch"
+    commit_sha: "7d0982be7"
+    test_verified_at: "7d0982be7c71a0e1eb50985a8cbba43b01493c69"
