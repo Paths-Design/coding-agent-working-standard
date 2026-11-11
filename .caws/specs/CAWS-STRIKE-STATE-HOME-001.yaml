@@ -48,3 +48,11 @@ rollback:
   - 'Revert the merge commit; shared pack returns to 132'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "strikes.json under CAWS_HOME with count 1; HOME/.caws absent; fails when CAWS_HOME is ignored"
+    recorded_at: "2026-11-11T11:43:23.468Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats::strike state is written under CAWS_HOME, not under HOME"
+    commit_sha: c29f650a6
+    test_verified_at: c29f650a651b7855e4e0099a3fc7464c80999d40
