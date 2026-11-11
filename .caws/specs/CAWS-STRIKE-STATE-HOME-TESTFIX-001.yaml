@@ -30,3 +30,11 @@ rollback:
   - 'Revert the merge commit'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: engine-routing suite passes at 1713a1de5 reading strikes.json from CAWS_HOME and asserting HOME/.caws has none
+    recorded_at: "2026-11-11T12:44:08.821Z"
+    test_nodeid: packages/caws-cli/tests/runtime/engine-routing.test.js
+    commit_sha: "1713a1de5"
+    test_verified_at: "1713a1de57e586dca9b89ba84f8f5c480c2d7d8b"
