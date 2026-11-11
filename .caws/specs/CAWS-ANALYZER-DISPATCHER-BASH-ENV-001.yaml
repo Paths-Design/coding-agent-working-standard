@@ -79,3 +79,8 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::the agent's own BASH_ENV is still reported, with the cause named in the copy refusal"
     commit_sha: "01e7e7197"
     test_verified_at: "01e7e71973d44263604d41764b9650e20cdfd342"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "bats tests/hooks/bats/bash-analysis-dispatcher-env.bats at 01e7e7197 (6 of 6 ok, also within the full 755-test run): recording stub observes 'unset', the prior path, and the unrelated path; bats is not re-executed by --verify"
+    recorded_at: "2026-11-11T05:06:43.876Z"
+    commit_sha: "01e7e7197"
