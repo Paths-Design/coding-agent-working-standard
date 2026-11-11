@@ -117,3 +117,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::capability: a second risk command queued with the warned one is refused without a latch"
     commit_sha: "380216711"
     test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "reset removes sentinel and repeat record; next opaque exec is a first refusal"
+    recorded_at: "2026-11-11T13:36:15.387Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::repeat: a human reset clears the repeat record"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
