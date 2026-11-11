@@ -16,7 +16,7 @@
   instead of the dispatcher's own. The dispatcher's value made the analyzer
   report every command as unanalyzable, so each Bash call raised a permission
   prompt and every `cp`/`mv` was refused. A `worktree-guard` copy refusal states
-  the analyzer issue or copy-role reason behind it. Shared pack 130.
+  every analyzer issue and the copy-role reason behind it. Shared pack 131.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

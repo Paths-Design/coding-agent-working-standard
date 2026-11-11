@@ -540,6 +540,66 @@ test("the agent's own BASH_ENV is still reported, with the cause named in the co
   expect(result.stderr).toContain('[worktree-guard] authority unavailable: copy-roles; blocked');
 });
 
+test('a single worktree merge is rerooted to the project through the launcher', () => {
+  const p = repo('analyzer-merge');
+  installMachineRuntime({ home });
+  const result = withoutBashEnv(() => bash(p, 'caws worktree merge wt-x'));
+  expect(result.status).toBe(0);
+  const decision = JSON.parse(result.stdout).hookSpecificOutput;
+  expect(decision.permissionDecision).toBe('allow');
+  expect(decision.updatedInput).toEqual({ command: `cd ${p} && caws worktree merge wt-x` });
+});
+
+test("a merge is left unrewritten when the agent's own BASH_ENV makes it unprovable", () => {
+  const p = repo('analyzer-merge-own-env');
+  const startup = path.join(root, 'agent-startup.sh');
+  fs.writeFileSync(startup, '');
+  installMachineRuntime({ home });
+  const result = bash(p, 'caws worktree merge wt-x', { BASH_ENV: startup });
+  // The write guard answers first with an ask that names the cause; the command
+  // reaches the agent's approval path as written, never rerooted.
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe('');
+  const decision = JSON.parse(result.stdout).hookSpecificOutput;
+  expect(decision.permissionDecision).toBe('ask');
+  expect(decision.permissionDecisionReason).toContain(
+    'inherited-environment: Unmodeled inherited environment BASH_ENV.'
+  );
+  expect(decision).not.toHaveProperty('updatedInput');
+});
+
+test('a directory copy is refused with the copy-role reason and the way to restate it', () => {
+  const p = repo('analyzer-cp-dir');
+  fs.mkdirSync(path.join(p, 'src'));
+  fs.writeFileSync(path.join(p, 'src/a.txt'), 'a\n');
+  installMachineRuntime({ home });
+  const result = withoutBashEnv(() => bash(p, 'cp -R src dest'));
+  expect(result.status).toBe(2);
+  expect(result.stdout).toBe('');
+  expect(result.stderr.split('\n').filter((line) => line.includes('cp/mv refused'))).toEqual([
+    '[worktree-guard.sh] [worktree-guard] cp/mv refused: the command analyzer reported: mutation-copy-roles: Copy or move option semantics are outside the closed file profile.',
+    '[worktree-guard.sh] [worktree-guard] cp/mv refused: copy operand roles are unresolved. Name each source as an existing regular file and the destination as a literal path.',
+  ]);
+  expect(result.stderr).toContain('[worktree-guard] authority unavailable: copy-roles; blocked');
+});
+
+test('a copy refusal names every analyzer issue, not only the first', () => {
+  const p = repo('analyzer-cp-issues');
+  fs.mkdirSync(path.join(p, 'src'));
+  const startup = path.join(root, 'agent-startup.sh');
+  fs.writeFileSync(startup, '');
+  installMachineRuntime({ home });
+  const result = bash(p, 'cp -R src dest', { BASH_ENV: startup });
+  expect(result.status).toBe(2);
+  const reported = result.stderr
+    .split('\n')
+    .filter((line) => line.includes('the command analyzer reported'));
+  expect(reported).toEqual([
+    '[worktree-guard.sh] [worktree-guard] cp/mv refused: the command analyzer reported: mutation-copy-roles: Copy or move option semantics are outside the closed file profile.',
+    '[worktree-guard.sh] [worktree-guard] cp/mv refused: the command analyzer reported: inherited-environment: Unmodeled inherited environment BASH_ENV.',
+  ]);
+});
+
 test('system audit logs are machine-owned and do not dirty either project', () => {
   const a = repo('audit-a'),
     b = repo('audit-b');

@@ -667,7 +667,9 @@ import { isAdapterCoveredSurface } from './types';
 // BASH_ENV rather than the dispatcher's own handler-env.sh, which the analyzer
 // reported as an unmodeled environment for every command. A worktree-guard
 // copy refusal states the analyzer issue or copy-role reason behind it.
-export const SHARED_PACK_VERSION = 130;
+// v131: a worktree-guard copy refusal prints every analyzer issue and the
+// copy-role reason together, so one retry can address all of them.
+export const SHARED_PACK_VERSION = 131;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
