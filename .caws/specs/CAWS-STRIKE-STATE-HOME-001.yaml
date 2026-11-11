@@ -77,3 +77,8 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats::an unresolved session is refused with that reason, not reported as a third strike"
     commit_sha: c29f650a6
     test_verified_at: c29f650a651b7855e4e0099a3fc7464c80999d40
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "full bats suite (769 cases) at c29f650a6, stdin closed: /private/tmp/.caws absent before and absent after; the three opencode jest tests that failed on that marker pass (55 suites, 1888 tests)"
+    recorded_at: "2026-11-11T11:43:37.176Z"
+    commit_sha: c29f650a6
