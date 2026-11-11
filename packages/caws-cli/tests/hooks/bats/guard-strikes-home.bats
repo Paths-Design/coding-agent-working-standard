@@ -63,8 +63,8 @@ BLOCK:third" ]
 @test "with neither CAWS_HOME nor HOME the finding is refused with that reason and nothing lands in /tmp" {
   drive "$SID" 2
   [ "$status" -eq 0 ]
-  [ "$output" = "BLOCK:Strike state is unavailable: neither CAWS_HOME nor HOME is set. This finding is refused outright because it cannot be counted; it is not a strike. Finding: third
-BLOCK:Strike state is unavailable: neither CAWS_HOME nor HOME is set. This finding is refused outright because it cannot be counted; it is not a strike. Finding: third" ]
+  [ "$output" = "BLOCK:Strike state is unavailable: neither CAWS_HOME nor HOME is set. This finding is refused outright because it cannot be counted. The finding follows; its strike number does not apply: third
+BLOCK:Strike state is unavailable: neither CAWS_HOME nor HOME is set. This finding is refused outright because it cannot be counted. The finding follows; its strike number does not apply: third" ]
   [ ! -e "/tmp/.caws/state/sessions/$SID" ]
   [ ! -e "$WORK/project/.caws" ]
 }
@@ -72,12 +72,44 @@ BLOCK:Strike state is unavailable: neither CAWS_HOME nor HOME is set. This findi
 @test "an unresolved session is refused with that reason, not reported as a third strike" {
   drive unknown 1 CAWS_HOME="$WORK/machine"
   [ "$status" -eq 0 ]
-  [ "$output" = "BLOCK:Strike state is unavailable: the session id is unresolved. This finding is refused outright because it cannot be counted; it is not a strike. Finding: third" ]
+  [ "$output" = "BLOCK:Strike state is unavailable: the session id is unresolved. This finding is refused outright because it cannot be counted. The finding follows; its strike number does not apply: third" ]
   [ ! -e "$WORK/machine/state" ]
 }
 
 @test "an empty session id is refused the same way" {
   drive "" 1 CAWS_HOME="$WORK/machine"
   [ "$status" -eq 0 ]
-  [ "$output" = "BLOCK:Strike state is unavailable: the session id is unresolved. This finding is refused outright because it cannot be counted; it is not a strike. Finding: third" ]
+  [ "$output" = "BLOCK:Strike state is unavailable: the session id is unresolved. This finding is refused outright because it cannot be counted. The finding follows; its strike number does not apply: third" ]
+}
+
+@test "a machine home that cannot be written refuses with that reason, not as a third strike" {
+  : > "$WORK/not-a-directory"
+  drive "$SID" 1 CAWS_HOME="$WORK/not-a-directory"
+  [ "$status" -eq 0 ]
+  # stderr carries mkdir's own error as well; the decision is the BLOCK line.
+  [ "$(printf '%s\n' "$output" | grep -cxF "BLOCK:Strike state is unavailable: the strike record under $WORK/not-a-directory/state/sessions could not be read or written (jq missing, the record is corrupt, or the directory is not writable). This finding is refused outright because it cannot be counted. The finding follows; its strike number does not apply: third")" -eq 1 ]
+  [ "$(printf '%s\n' "$output" | grep -c '^WARN:\|^ASK:')" -eq 0 ]
+}
+
+@test "a corrupt strike record refuses every finding instead of restarting the count" {
+  mkdir -p "$WORK/machine/state/sessions/$SID"
+  printf 'not json' > "$WORK/machine/state/sessions/$SID/strikes.json"
+  drive "$SID" 2 CAWS_HOME="$WORK/machine"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | grep -c '^BLOCK:Strike state is unavailable: the strike record under ')" -eq 2 ]
+  [ "$(printf '%s\n' "$output" | grep -c '^WARN:')" -eq 0 ]
+  [ "$(cat "$WORK/machine/state/sessions/$SID/strikes.json")" = "not json" ]
+}
+
+@test "without jq every finding is refused instead of repeating the first warning" {
+  local bin="$WORK/bin" tool
+  mkdir -p "$bin"
+  for tool in bash cat mkdir mv rm tr dirname printf; do
+    ln -s "$(command -v "$tool")" "$bin/$tool"
+  done
+  run env -i PATH="$bin" CAWS_PROJECT_DIR="$WORK/project" CAWS_HOME="$WORK/machine" \
+    "$bin/bash" "$WORK/drive.sh" "$SHARED" "$SID" 3 </dev/null
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | grep -c '^BLOCK:Strike state is unavailable: the strike record under ')" -eq 3 ]
+  [ "$(printf '%s\n' "$output" | grep -c '^WARN:')" -eq 0 ]
 }

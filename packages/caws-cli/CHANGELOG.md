@@ -25,7 +25,9 @@
 - Guard strike state is written under `CAWS_HOME`, else `HOME/.caws`. It
   previously ignored `CAWS_HOME` and fell back to `/tmp/.caws` when `HOME` was
   unset. A finding whose strike cannot be recorded is refused with the reason
-  stated, where it was reported as "strike 3 of 3". Shared pack 133.
+  stated, where it was reported as "strike 3 of 3". A missing `jq` or a
+  corrupt strike record is refused the same way; either previously left the
+  count at one, so the guard warned and allowed without limit. Shared pack 133.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

@@ -174,7 +174,13 @@ guard_record_strike() {
   local state_file
   local current_count
 
-  state_file=$(guard_strikes_file "$session_id" "$cwd_hint") || return 0
+  # Every failure below returns non-zero with no count on stdout. The caller
+  # refuses on a missing count; it must never read one as a first strike.
+  command -v jq >/dev/null 2>&1 || {
+    printf 'guard-strikes: strike state is unavailable: jq is not installed\n' >&2
+    return 1
+  }
+  state_file=$(guard_strikes_file "$session_id" "$cwd_hint") || return 1
   if [[ ! -f "$state_file" ]]; then
     # First write: fold legacy repo-local counts into the global record
     # ONCE, read-only (the legacy files are never written again).
@@ -190,15 +196,22 @@ guard_record_strike() {
     fi
   fi
 
-  current_count=$(jq -r --arg guard "$guard_name" '.[$guard] // 0' "$state_file" 2>/dev/null || printf '0')
-  if [[ ! "$current_count" =~ ^[0-9]+$ ]]; then
-    current_count=0
+  # An unreadable record is not a zero count: starting over would let a
+  # session shed its strikes by corrupting the file.
+  if ! current_count=$(jq -er --arg guard "$guard_name" 'if type == "object" then (.[$guard] // 0) else error("not an object") end' "$state_file" 2>/dev/null) ||
+      [[ ! "$current_count" =~ ^[0-9]+$ ]]; then
+    printf 'guard-strikes: strike state is unavailable: %s is not a readable strike record\n' "$state_file" >&2
+    return 1
   fi
 
   current_count=$((current_count + 1))
 
-  jq --arg guard "$guard_name" --argjson count "$current_count" '.[$guard] = $count' "$state_file" > "$state_file.tmp"
-  mv "$state_file.tmp" "$state_file"
+  if ! jq --arg guard "$guard_name" --argjson count "$current_count" '.[$guard] = $count' "$state_file" > "$state_file.tmp" ||
+      ! mv "$state_file.tmp" "$state_file"; then
+    rm -f "$state_file.tmp"
+    printf 'guard-strikes: strike state is unavailable: cannot write %s\n' "$state_file" >&2
+    return 1
+  fi
 
   printf '%s\n' "$current_count"
 }
@@ -224,11 +237,14 @@ guard_enforce_progressive_strikes() {
   # say why, so the finding is not mistaken for a third strike.
   unavailable="$(guard_strike_state_unavailable_reason "$session_id")"
   if [[ -n "$unavailable" ]]; then
-    guard_emit_block "Strike state is unavailable: $unavailable. This finding is refused outright because it cannot be counted; it is not a strike. Finding: $third_message"
+    guard_emit_block "Strike state is unavailable: $unavailable. This finding is refused outright because it cannot be counted. The finding follows; its strike number does not apply: $third_message"
     return
   fi
 
-  strike=$(guard_record_strike "$session_id" "$guard_name" "$cwd_hint")
+  if ! strike=$(guard_record_strike "$session_id" "$guard_name" "$cwd_hint") || [[ ! "$strike" =~ ^[1-9][0-9]*$ ]]; then
+    guard_emit_block "Strike state is unavailable: the strike record under $(guard_strike_home)/state/sessions could not be read or written (jq missing, the record is corrupt, or the directory is not writable). This finding is refused outright because it cannot be counted. The finding follows; its strike number does not apply: $third_message"
+    return
+  fi
 
   case "$strike" in
     1)
