@@ -56,3 +56,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats::strike state is written under CAWS_HOME, not under HOME"
     commit_sha: c29f650a6
     test_verified_at: c29f650a651b7855e4e0099a3fc7464c80999d40
+  - criterion_id: A2
+    status: pass
+    evidence_ref: strikes.json under HOME/.caws
+    recorded_at: "2026-11-11T11:43:26.119Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats::without CAWS_HOME, strike state is written under HOME/.caws"
+    commit_sha: c29f650a6
+    test_verified_at: c29f650a651b7855e4e0099a3fc7464c80999d40
