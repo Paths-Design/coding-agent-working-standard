@@ -53,3 +53,11 @@ rollback:
   - 'Revert the merge commit; shared pack returns to 131'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "kimi shim cases: protected file refused by protected-paths; ordinary file adjudicated under its own name; both fail with the kimi branch disabled"
+    recorded_at: "2026-11-11T10:52:45.012Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/kimi-surface.bats::shim: a protected hook edit carrying kimi's tool_input.path is blocked end-to-end"
+    commit_sha: c2820e7db
+    test_verified_at: c2820e7db28804384289df1edba89582e63f1169
