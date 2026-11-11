@@ -79,5 +79,11 @@ acceptance:
     then: >-
       run_handlers returns 0 with no decision on stdout and a [DRY-RUN] line naming
       what would have blocked
+  - id: A11
+    given: 'a project directory with .caws that is not a git repository and a Write to a protected hook path'
+    when: 'the PreToolUse dispatcher runs'
+    then: >-
+      worktree-write-guard reaches a verdict and protected-paths refuses the write
+      with BLOCKED, with no guard-unavailable refusal
 non_functional: {}
 contracts: []
