@@ -72,3 +72,8 @@ evidence:
     evidence_ref: "docs/failure-lineage.md entries 47-50 at 9a16dfa3b, each with what happened, what we built and what it does not catch; linked from hook-packs.md"
     recorded_at: "2026-11-11T21:04:57.428Z"
     commit_sha: "9a16dfa3b"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "CONTRIBUTING.md pitfalls and hook-packs.md 'Checks before merging a guard change' and 'Shell and test-harness traps' at 9a16dfa3b"
+    recorded_at: "2026-11-11T21:04:58.711Z"
+    commit_sha: "9a16dfa3b"
