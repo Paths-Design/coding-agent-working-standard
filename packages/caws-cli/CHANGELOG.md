@@ -6,9 +6,10 @@
   that is missing, not executable, or exits with a status other than 0 or 2
   without a block decision previously let the call run. Write, Edit, Bash and
   any tool not known to be read-only are refused with a reason that names the
-  guard and the fault, states that the command did not cause it, and records no
-  strike or latch. A payload with no tool name is refused the same way. Read,
-  Glob and Grep report the fault on stderr and proceed. Shared pack 129.
+  guard and the fault, states that the command did not cause it, and itself
+  adds no strike or latch. A payload with no tool name is refused the same way.
+  Read, Glob and Grep report the fault on stderr and proceed. Lifecycle events
+  keep their exit semantics. Shared pack 129.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

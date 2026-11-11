@@ -100,7 +100,10 @@ reason() {
   [[ "$r" == *"crash.sh exited with status 1 without reaching a verdict"* ]] || fail "reason lacks guard and status: $r"
   [[ "$r" == *"jq: command not found"* ]] || fail "reason lacks the guard's own output: $r"
   [[ "$r" == *"Your command did not cause this"* ]] || fail "reason does not clear the agent: $r"
-  [[ "$r" == *"no strike or latch was recorded"* ]] || fail "reason does not state the strike outcome: $r"
+  # The runner can vouch only for itself: an earlier guard in the same dispatch
+  # may have recorded a strike, so the reason must not claim none exists.
+  [[ "$r" == *"this refusal adds no strike and arms no latch"* ]] || fail "reason does not state the strike outcome: $r"
+  [[ "$r" != *"no strike or latch was recorded"* ]] || fail "reason claims no strike exists at all: $r"
   [[ "$r" == *"stop and report this message to the user"* ]] || fail "reason gives no next step: $r"
   [[ "$r" == *"Bash tool call is refused"* ]] || fail "reason does not name the refused tool: $r"
 }
@@ -185,6 +188,48 @@ reason() {
   "
   [ "$status" -eq 0 ]
   [ -z "$output" ]
+}
+
+@test "a guard that prints a block decision and then exits 1 keeps its own decision" {
+  cat > "$FAKE_HOOKS/deny-then-crash.sh" <<'EOF'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s\n' '{"decision":"block","reason":"GUARD-OWN-VERDICT"}'
+exit 1
+EOF
+  chmod +x "$FAKE_HOOKS/deny-then-crash.sh"
+  chain Bash --short-circuit-on-block deny-then-crash.sh
+  [ "$status" -eq 2 ]
+  [ "$(reason)" = "GUARD-OWN-VERDICT" ] || fail "the guard's verdict was replaced: $output"
+}
+
+@test "a lifecycle event dispatched with the enforcing flag is not refused for lacking a tool" {
+  local event
+  for event in Stop SubagentStop SessionStart SessionEnd PreCompact PostToolUse UserPromptSubmit Notification; do
+    chain "" --short-circuit-on-block ok.sh crash.sh later.sh -- HOOK_EVENT_NAME="$event"
+    [ "$status" -eq 1 ] || fail "$event: status $status, expected the crashed handler's own status"
+    [ -z "$output" ] || fail "$event produced a decision: $output"
+    [[ "$stderr" != *"guard unavailable"* ]] || fail "$event: $stderr"
+    [ -e "$MARKER" ] || fail "$event: the rest of the chain did not run"
+    rm -f "$MARKER"
+  done
+}
+
+@test "an unset or unrecognized event name stays enforcing" {
+  local event
+  for event in "" BeforeTool pre_tool_use; do
+    chain Bash --short-circuit-on-block crash.sh -- HOOK_EVENT_NAME="$event"
+    [ "$status" -eq 2 ] || fail "event '$event' disarmed the chain (status $status)"
+  done
+}
+
+@test "dry-run reports a crashed and a missing guard and blocks neither" {
+  chain Bash --short-circuit-on-block crash.sh absent-guard.sh later.sh -- CAWS_HOOK_DRY_RUN=1
+  [ "$status" -eq 0 ]
+  [ -z "$output" ] || fail "dry-run produced a decision: $output"
+  [[ "$stderr" == *"[DRY-RUN] crash.sh would have exited 1"* ]] || fail "$stderr"
+  [[ "$stderr" == *"[DRY-RUN] absent-guard.sh is missing or not executable and would have blocked"* ]] || fail "$stderr"
+  [ -e "$MARKER" ] || fail "dry-run stopped the chain"
 }
 
 @test "a genuine exit-2 refusal keeps its own status and gains no guard-unavailable text" {

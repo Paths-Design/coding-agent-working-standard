@@ -496,8 +496,9 @@ _rh_remove_stage() {
 # tool call that can mutate.
 #
 # The refusal is an infrastructure fault, not a finding about the agent's
-# command: it says so, names the guard and what it could not do, records no
-# strike and arms no latch, and tells the blocked party what to do next. Read,
+# command: it says so, names the guard and what it could not do, itself records
+# no strike and arms no latch (a guard that ran earlier in the same dispatch may
+# have), and tells the blocked party what to do next. Read,
 # Glob and Grep are not refused, because a session that cannot read cannot
 # diagnose the fault either; they report it on stderr and proceed.
 
@@ -546,7 +547,7 @@ _rh_guard_unavailable() {
   fi
   local reason="CAWS guard unavailable: ${guard} ${what}."
   [[ -z "$excerpt" ]] || reason="${reason} Its last output was: ${excerpt}"
-  reason="${reason} Your command did not cause this, and no strike or latch was recorded. The ${HOOK_TOOL_NAME:-unidentified} tool call is refused because a guard that cannot run cannot clear it. Retrying or rephrasing the command will not change the result: stop and report this message to the user. For the user: run 'caws doctor' in this project to see the state of the hook runtime."
+  reason="${reason} Your command did not cause this, and this refusal adds no strike and arms no latch. The ${HOOK_TOOL_NAME:-unidentified} tool call is refused because a guard that cannot run cannot clear it. Retrying or rephrasing the command will not change the result: stop and report this message to the user. For the user: run 'caws doctor' in this project to see the state of the hook runtime."
   printf '[run-handlers] %s\n' "$reason" >&2
   printf '{"decision":"block","reason":"%s"}\n' "$(_rh_json_string "$reason")"
   return 0
@@ -713,9 +714,21 @@ run_handlers() {
   # out empirically.
   if (( ${#entries[@]} > 0 )); then
 
+  # Guard-unavailable handling applies to the chain that gates a tool call. The
+  # flag marks that chain, but a lifecycle event carries no tool to refuse, so a
+  # dispatcher that passes the flag for one keeps the plain exit semantics. An
+  # unset or unrecognized event name stays enforcing: surfaces name the
+  # pre-tool event differently, and treating an unknown name as exempt would
+  # let a renamed event disarm the chain.
+  local enforcing="$short_circuit"
+  case "${HOOK_EVENT_NAME:-}" in
+    PostToolUse|Stop|SubagentStop|SessionStart|SessionEnd|PreCompact|UserPromptSubmit|Notification)
+      enforcing=0 ;;
+  esac
+
   # A call the guards cannot identify cannot be cleared by them: every guard
   # filters on the tool name and would exit 0 for an empty one.
-  if (( short_circuit && dry_run == 0 )) && [[ -z "${HOOK_TOOL_NAME:-}" ]]; then
+  if (( enforcing && dry_run == 0 )) && [[ -z "${HOOK_TOOL_NAME:-}" ]]; then
     _rh_guard_unavailable "the guard chain" \
       "cannot run because the hook payload carried no tool name (the payload is malformed, or the python3 that parses it is broken)" || true
     [[ -z "$_dedup_pending" ]] || rm -f "$_dedup_pending" 2>/dev/null || true
@@ -759,7 +772,7 @@ run_handlers() {
     fi
     if [[ ! -x "$handler_path" ]]; then
       _rh_record_execution "$handler" "$handler_path" missing null /dev/null ""
-      if (( short_circuit )); then
+      if (( enforcing )); then
         if (( dry_run )); then
           printf '[DRY-RUN] %s is missing or not executable and would have blocked\n' "$handler" >&2
         elif _rh_guard_unavailable "$handler" "is missing or not executable at ${handler_path}, so it cannot run"; then
@@ -833,7 +846,7 @@ run_handlers() {
       done < "$stderr_file"
     fi
     local fault_excerpt=""
-    if (( short_circuit )) && [[ "$exit_code" -ne 0 && "$exit_code" -ne 2 ]]; then
+    if (( enforcing )) && [[ "$exit_code" -ne 0 && "$exit_code" -ne 2 ]]; then
       fault_excerpt="$(_rh_fault_excerpt "$stderr_file")"
     fi
     rm -f "$stderr_file"
@@ -853,7 +866,7 @@ run_handlers() {
     # before reaching a verdict (a `set -e` abort, a missing interpreter, a
     # signal). A block decision the guard managed to print is still honored
     # below; anything else it printed is not a verdict.
-    if (( short_circuit )) && [[ "$exit_code" -ne 0 && "$exit_code" -ne 2 ]] \
+    if (( enforcing )) && [[ "$exit_code" -ne 0 && "$exit_code" -ne 2 ]] \
        && [[ -z "$stdout_buf" || "$(_rh_stdout_priority "$stdout_buf")" -ne 3 ]]; then
       if _rh_guard_unavailable "$handler" "exited with status ${exit_code} without reaching a verdict" "$fault_excerpt"; then
         _rh_record_offer "$handler_offer_file" "released" "$handler" "guard unavailable; dispatch refused"
