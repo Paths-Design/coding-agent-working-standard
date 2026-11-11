@@ -96,3 +96,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::batch: with no transcript the time window decides"
     commit_sha: "380216711"
     test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "second opaque exec in a later reply arms the latch with the repeat text; fails when repeat escalation is disabled"
+    recorded_at: "2026-11-11T13:35:45.657Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::repeat: the same no-latch classification in a later reply arms the latch"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
