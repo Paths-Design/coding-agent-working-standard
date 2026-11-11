@@ -689,7 +689,10 @@ import { isAdapterCoveredSurface } from './types';
 // arming the danger latch, and names the fault. A command the classifier ran
 // on but could not finish analyzing is refused once without a latch and arms
 // it when repeated, like an opaque payload.
-export const SHARED_PACK_VERSION = 135;
+// v136: duplicate-export-check.sh resolves a relative Write target against
+// the payload working directory. Its walk to the package root ends at "/",
+// which a relative path never reaches, so the handler did not return.
+export const SHARED_PACK_VERSION = 136;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
