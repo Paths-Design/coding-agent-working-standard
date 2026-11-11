@@ -76,3 +76,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats::classifier failure: an unrecognized decision refuses, names it, and does not arm the latch"
     commit_sha: "7d0982be7"
     test_verified_at: "7d0982be7c71a0e1eb50985a8cbba43b01493c69"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: rm -rf / after a classifier fault still arms the latch
+    recorded_at: "2026-11-11T14:22:44.903Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats::classifier failure: a real catastrophic deny still arms the latch after a classifier fault"
+    commit_sha: "7d0982be7"
+    test_verified_at: "7d0982be7c71a0e1eb50985a8cbba43b01493c69"
