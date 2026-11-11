@@ -58,3 +58,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a read-only command is not reported as unanalyzable because of the dispatcher BASH_ENV"
     commit_sha: "01e7e7197"
     test_verified_at: "01e7e71973d44263604d41764b9650e20cdfd342"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest at 01e7e7197: 'cp a.txt b.txt' through bin/caws-hook exits 0, no 'authority unavailable'; fails with the fix call removed"
+    recorded_at: "2026-11-11T05:05:32.169Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a plain file copy passes the stock guards through the launcher"
+    commit_sha: "01e7e7197"
+    test_verified_at: "01e7e71973d44263604d41764b9650e20cdfd342"
