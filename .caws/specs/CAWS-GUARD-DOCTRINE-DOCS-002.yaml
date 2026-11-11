@@ -1,0 +1,48 @@
+id: CAWS-GUARD-DOCTRINE-DOCS-002
+title: 'Document guard failure, refusal, latch-repeat and liveness doctrine from packs 129-136'
+mode: doc
+lifecycle_state: draft
+created_at: '2026-11-11T16:37:08.593Z'
+updated_at: '2026-11-11T16:37:08.593Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'Guard and hook documentation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/guides/hook-packs.md'
+    - 'docs/architecture/hook-pack-shared-core.md'
+    - 'docs/failure-lineage.md'
+    - 'docs/guides/multi-agent-workflow.md'
+    - 'CONTRIBUTING.md'
+    - 'CLAUDE.md'
+    - 'AGENTS.md'
+  out: []
+invariants:
+  - 'Guides state present-tense behavior verified against source at the documented revision; incident history lives only in failure-lineage entries.'
+  - 'No shipped hook-pack template is edited, so no pack version changes.'
+acceptance:
+  - id: A1
+    given: 'the dispatcher, strike and danger-latch sources on main'
+    when: 'docs/guides/hook-packs.md is read'
+    then: 'it states which guard faults refuse a call and which report and proceed, what a refusal message must name, where strike state lives, and when a refusal blocks, strikes or latches, including that calls queued in one model reply count once and that an infrastructure fault never counts'
+  - id: A2
+    given: 'the heartbeat handler, launcher and lease store on main'
+    when: 'the hook-packs and multi-agent guides are read'
+    then: 'they state how liveness is recorded and read, when the CLI runs, when mail is polled, and the named sidecar files'
+  - id: A3
+    given: 'the incidents behind packs 129 to 136'
+    when: 'docs/failure-lineage.md is read'
+    then: 'new entries record what happened, what was built and what it does not catch, and the guides link to them'
+  - id: A4
+    given: 'a contributor changing a guard template'
+    when: 'CONTRIBUTING.md and the hook-packs testing section are read'
+    then: 'they state the whole-suite rule, the native twin pins and the frozen fixture list, the bats stdin requirement, and that bash 3.2 compares file times in whole seconds'
+  - id: A5
+    given: 'the edited documents'
+    when: 'the docs validator and prettier check run'
+    then: 'both exit 0'
+non_functional: {}
+contracts: []
