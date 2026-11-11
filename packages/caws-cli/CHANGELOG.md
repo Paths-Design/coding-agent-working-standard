@@ -43,6 +43,11 @@
   classifier could not finish analyzing (nesting past its budget) is refused
   once with the way to restate it and arms the latch only when repeated.
   Shared pack 135.
+- `duplicate-export-check` returns on a relative Write target. It previously
+  never returned when the target was relative and the hook's working directory
+  had no `package.json`, holding the PostToolUse chain until the harness timed
+  it out. The target is resolved against the payload working directory, so a
+  duplicate export is also reported for a relative target. Shared pack 136.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.
