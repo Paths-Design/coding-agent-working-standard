@@ -84,6 +84,60 @@ const LEASE_FILENAME_RE = /^[A-Za-z0-9._:-]+$/;
 export interface LoadLeasesResult {
   readonly leases: LeaseRegistry;
   readonly diagnostics: ReadonlyArray<Diagnostic>;
+  /**
+   * The last_active value written in the lease file, for each session whose
+   * reported last_active came from its activity stamp instead. A writer that
+   * rate-limits its own lease writes reads this, never the stamped value.
+   */
+  readonly recordedLastActive: Readonly<Record<string, string>>;
+}
+
+/**
+ * Sidecars a session keeps beside its lease. `.active` is the activity stamp:
+ * a file whose mtime is the instant of the session's most recent hook event,
+ * touched by the hook launcher and the heartbeat handler without starting the
+ * CLI; its content carries no meaning. `.hb`, `.hb.lease` and `.mail` are the heartbeat
+ * handler's own bookkeeping. None ends in `.json`, so none is read as a lease.
+ */
+export const LEASE_ACTIVITY_SUFFIX = '.active';
+const LEASE_SIDECAR_SUFFIXES = [LEASE_ACTIVITY_SUFFIX, '.hb', '.hb.lease', '.mail'] as const;
+
+/** Path of a session's activity stamp. The caller has validated the id. */
+export function leaseActivityStampPath(cawsDir: string, sessionId: string): string {
+  return path.join(cawsDir, LEASES_DIRNAME, sessionId + LEASE_ACTIVITY_SUFFIX);
+}
+
+/**
+ * Record activity for a session that already has a lease, without rewriting
+ * the lease. Best effort: liveness is an observation, never authority.
+ */
+export function touchLeaseActivity(cawsDir: string, sessionId: string, now: Date): boolean {
+  if (!LEASE_FILENAME_RE.test(sessionId) || sessionId === 'unknown') return false;
+  const stamp = leaseActivityStampPath(cawsDir, sessionId);
+  try {
+    if (!fs.existsSync(path.join(cawsDir, LEASES_DIRNAME, sessionId + '.json'))) return false;
+    fs.closeSync(
+      fs.openSync(
+        stamp,
+        fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW,
+        0o600
+      )
+    );
+    fs.utimesSync(stamp, now, now);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The stamp's instant, or null when there is no usable regular-file stamp. */
+function activityStampMs(leasesDir: string, sessionId: string): number | null {
+  try {
+    const stat = fs.lstatSync(path.join(leasesDir, sessionId + LEASE_ACTIVITY_SUFFIX));
+    return stat.isFile() ? stat.mtimeMs : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -161,7 +215,7 @@ export function loadLeases(cawsDir: string): Result<LoadLeasesResult> {
   const leasesDir = path.join(cawsDir, LEASES_DIRNAME);
 
   if (!fs.existsSync(leasesDir)) {
-    return ok({ leases: {}, diagnostics: [] });
+    return ok({ leases: {}, diagnostics: [], recordedLastActive: {} });
   }
 
   let entries: string[];
@@ -179,6 +233,9 @@ export function loadLeases(cawsDir: string): Result<LoadLeasesResult> {
 
   const leases: Record<string, AgentLease> = {};
   const diagnostics: Diagnostic[] = [];
+  const recordedLastActive: Record<string, string> = {};
+  // A stamp dated after this read began is a clock fault, not activity.
+  const loadedAtMs = Date.now();
 
   for (const entry of entries) {
     if (!entry.endsWith('.json')) continue;
@@ -249,10 +306,20 @@ export function loadLeases(cawsDir: string): Result<LoadLeasesResult> {
     // validation is deferred to a future kernel-side validateAgentLease
     // function; for now, the kernel's TypeScript shape is the structural
     // contract, and ill-typed-but-parseable files load successfully.
-    leases[sessionId] = obj as unknown as AgentLease;
+    const lease = obj as unknown as AgentLease;
+    // The stamp only ever moves last_active forward. A recorded value that
+    // does not parse compares false and is kept: the stamp repairs no record.
+    const stampMs = activityStampMs(leasesDir, sessionId);
+    const recordedMs = Date.parse(lease.last_active);
+    if (stampMs !== null && stampMs > recordedMs && stampMs <= loadedAtMs + 1000) {
+      recordedLastActive[sessionId] = lease.last_active;
+      leases[sessionId] = { ...lease, last_active: new Date(stampMs).toISOString() };
+    } else {
+      leases[sessionId] = lease;
+    }
   }
 
-  return ok({ leases, diagnostics });
+  return ok({ leases, diagnostics, recordedLastActive });
 }
 
 /**
@@ -496,6 +563,15 @@ export function applyLeasePatch(
   }
 
   // delete_lease
+  // The sidecars describe only this lease; a stamp that outlived it would
+  // resurface as activity if the session id were ever leased again.
+  for (const suffix of LEASE_SIDECAR_SUFFIXES) {
+    try {
+      fs.unlinkSync(filePath.slice(0, -'.json'.length) + suffix);
+    } catch {
+      /* Absent or unremovable: the lease deletion below decides the result. */
+    }
+  }
   if (!fs.existsSync(filePath)) {
     // Idempotent: deleting an absent lease is a no-op success.
     return ok({ wrote: false, diagnostics: [] });

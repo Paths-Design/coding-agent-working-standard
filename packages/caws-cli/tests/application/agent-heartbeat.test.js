@@ -84,7 +84,9 @@ test('throttle does not write new metadata; exact boundary writes while preservi
   });
   expect(within.ok).toBe(true);
   expect(within.value).toMatchObject({ wrote: false, throttled: true, active_agent_count: 1 });
-  expect(within.value.active_agents[0].last_active_age_ms).toBe(14999);
+  // A throttled call is activity: it is recorded in the stamp, so the session
+  // reads as active now while the lease file below stays byte-identical.
+  expect(within.value.active_agents[0].last_active_age_ms).toBe(0);
   expect(lease(input)).toEqual(before);
   const boundary = heartbeatAgentActivity({
     ...input,
@@ -188,4 +190,40 @@ test('failed summary reload preserves successful write and prewrite summary fall
   expect(result.ok).toBe(true);
   expect(result.value).toMatchObject({ wrote: true, active_agent_count: 0, active_agents: [] });
   expect(lease(input)).toMatchObject({ hook_pid: 47001, status: 'active' });
+});
+
+describe('activity stamp', () => {
+  const at = (iso) => () => new Date(iso);
+
+  test('the throttle reads the recorded last_active, so a fresh stamp cannot suppress a due lease write', () => {
+    const input = fixture('stamp-throttle');
+    expect(heartbeatAgentActivity(input).value.wrote).toBe(true);
+    // Activity one minute on, recorded only in the stamp.
+    expect(
+      store.touchLeaseActivity(
+        input.cawsDir,
+        'stamp-throttle',
+        new Date('2026-10-20T12:01:00.000Z')
+      )
+    ).toBe(true);
+    // Five seconds after that stamp, but 65 seconds after the last lease write.
+    const result = heartbeatAgentActivity({ ...input, now: at('2026-10-20T12:01:05.000Z') });
+    expect(result.value).toMatchObject({ wrote: true, throttled: false });
+    expect(lease(input).last_active).toBe('2026-10-20T12:01:05.000Z');
+  });
+
+  test('a throttled heartbeat records the activity in the stamp and leaves the lease bytes alone', () => {
+    const input = fixture('stamp-throttled');
+    heartbeatAgentActivity(input);
+    const file = path.join(input.cawsDir, 'leases/stamp-throttled.json');
+    const before = fs.readFileSync(file, 'utf8');
+    const result = heartbeatAgentActivity({ ...input, now: at('2026-10-20T12:00:05.000Z') });
+    expect(result.value).toMatchObject({ wrote: false, throttled: true });
+    expect(fs.readFileSync(file, 'utf8')).toBe(before);
+    expect(store.loadLeases(input.cawsDir).value.leases['stamp-throttled'].last_active).toBe(
+      '2026-10-20T12:00:05.000Z'
+    );
+    // The caller's own summary reflects the activity it just recorded.
+    expect(result.value.active_agents.find((agent) => agent.is_self).last_active_age_ms).toBe(0);
+  });
 });

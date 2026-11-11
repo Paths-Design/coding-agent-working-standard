@@ -48,6 +48,22 @@
   had no `package.json`, holding the PostToolUse chain until the harness timed
   it out. The target is resolved against the payload working directory, so a
   duplicate export is also reported for a relative target. Shared pack 136.
+- A session's liveness is recorded on every hook event, not only before a tool
+  call. The hook launcher and the heartbeat handler touch
+  `.caws/leases/<session>.active`; lease readers (`caws agents list`, `caws
+status`, message delivery, the peer notice) report the later of that file's
+  time and the lease's recorded `last_active`. A session in a long tool run or
+  at a stop now reads as active at the time of its last event.
+  `agent-heartbeat` no longer starts the CLI on every tool call: the full
+  heartbeat runs when none completed in the last 15 seconds
+  (`CAWS_HEARTBEAT_INTERVAL_SECONDS`) or the lease file was replaced since, and
+  the mailbox is polled on a full heartbeat and whenever `messages.jsonl`
+  changed since the session's last poll. Each CLI call the handler makes is
+  ended after 3 seconds (`CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS`) where `perl`
+  is available, together with any child process it started, and a full
+  heartbeat that fails or is ended is not retried until the interval passes. The peer notice can trail a change in the peer set by up to
+  the heartbeat interval. Deleting or pruning a lease removes its `.active`,
+  `.hb`, `.hb.lease` and `.mail` files. Shared pack 137.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.
