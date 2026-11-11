@@ -89,3 +89,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::batch: a call from a later reply is a strike and escalates"
     commit_sha: "380216711"
     test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "no transcript: inside the window no strike, window 0 strike"
+    recorded_at: "2026-11-11T13:35:38.981Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::batch: with no transcript the time window decides"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
