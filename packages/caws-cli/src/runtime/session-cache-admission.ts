@@ -117,12 +117,18 @@ const SESSION_END_SOURCES: Readonly<Record<string, string>> = {
   'lib/guard-config.cjs': 'b7947a24da1670613bb43a548be9951d7fe3be6d4be2f9418607a35dac945a85',
 };
 
-// SessionEnd accepts only its original profile and the reviewed exact-path
-// root fallback; do not inherit other session-cache profile alternatives.
+// The runner that refuses an unavailable guard differs from the original only
+// on the chain invoked with --short-circuit-on-block. SessionEnd never passes
+// that flag, so its dispatch, staging and exit status are the original's.
+const guardUnavailableRunner = 'bbcc9e595621d388476827016cbc5296abe200fac1a6bb936db2af015d4348c5';
+
+// SessionEnd accepts only its original profile and the reviewed alternatives
+// named here; do not inherit other session-cache profile alternatives.
 function sessionEndIdentities(relative: string): readonly string[] {
   const expected = SESSION_END_SOURCES[relative];
   if (!expected) return [];
   if (relative === 'lib/agent-surface.sh') return [expected, exactPathAgentSurface];
+  if (relative === 'lib/run-handlers.sh') return [expected, guardUnavailableRunner];
   return relative === 'lib/session-id.sh' ? sessionIdProfiles : [expected];
 }
 
