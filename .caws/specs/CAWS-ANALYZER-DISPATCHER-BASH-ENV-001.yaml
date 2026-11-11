@@ -72,3 +72,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::the agent's own BASH_ENV is still reported, with the cause named in the copy refusal"
     commit_sha: "01e7e7197"
     test_verified_at: "01e7e71973d44263604d41764b9650e20cdfd342"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest at 01e7e7197: stderr carries '[worktree-guard] cp/mv refused: the command analyzer reported: inherited-environment: Unmodeled inherited environment BASH_ENV.' beside the copy-roles refusal"
+    recorded_at: "2026-11-11T05:06:18.382Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::the agent's own BASH_ENV is still reported, with the cause named in the copy refusal"
+    commit_sha: "01e7e7197"
+    test_verified_at: "01e7e71973d44263604d41764b9650e20cdfd342"
