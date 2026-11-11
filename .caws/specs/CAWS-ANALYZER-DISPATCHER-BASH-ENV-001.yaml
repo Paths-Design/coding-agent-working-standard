@@ -50,3 +50,11 @@ acceptance:
     then: 'stderr contains the analyzer issue text alongside the refusal'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest tests/adapter/system-runtime.test.js at 01e7e7197: 'ls' through bin/caws-hook (claude-code, built CLI) exits 0 with no inherited-environment; with the fix call removed the same test fails on the bash-write-guard ask"
+    recorded_at: "2026-11-11T05:04:58.195Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a read-only command is not reported as unanalyzable because of the dispatcher BASH_ENV"
+    commit_sha: "01e7e7197"
+    test_verified_at: "01e7e71973d44263604d41764b9650e20cdfd342"
