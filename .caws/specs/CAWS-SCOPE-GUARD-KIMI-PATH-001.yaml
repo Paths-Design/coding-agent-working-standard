@@ -68,3 +68,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/kimi-surface.bats::scope-guard: a kimi payload naming two different targets is refused whole"
     commit_sha: c2820e7db
     test_verified_at: c2820e7db28804384289df1edba89582e63f1169
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "claude-code payload with file_path a.txt and path b.txt is adjudicated on a.txt; b.txt never appears"
+    recorded_at: "2026-11-11T10:53:07.631Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/kimi-surface.bats::scope-guard: tool_input.path is not a second target name on another surface"
+    commit_sha: c2820e7db
+    test_verified_at: c2820e7db28804384289df1edba89582e63f1169
