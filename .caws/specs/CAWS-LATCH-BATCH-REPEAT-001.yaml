@@ -74,3 +74,11 @@ rollback:
   - 'Revert the merge commit; shared pack returns to 133'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "queued Bash and Write calls refused with the queued-together text; trap_strikes stays 0; fails when the same-batch check is disabled"
+    recorded_at: "2026-11-11T13:35:29.951Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::batch: calls queued with the arming command are refused without a strike"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
