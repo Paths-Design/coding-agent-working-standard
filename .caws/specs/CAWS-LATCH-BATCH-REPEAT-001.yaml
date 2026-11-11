@@ -103,3 +103,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::repeat: the same no-latch classification in a later reply arms the latch"
     commit_sha: "380216711"
     test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "three opaque execs in one reply: all refused, no sentinel; fails when batch matching is disabled"
+    recorded_at: "2026-11-11T13:35:53.947Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::repeat: the same classification queued in one reply does not arm the latch"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
