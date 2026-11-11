@@ -91,3 +91,11 @@ acceptance:
     then: 'the guard''s own reason is returned unchanged with status 2'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'a guard that exits 1 blocks a Bash call and the reason names the guard, its status and its output' at 538e5d54e; baseline main runner returns 0 for the same chain"
+    recorded_at: "2026-11-11T02:27:02.071Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a guard that exits 1 blocks a Bash call and the reason names the guard, its status and its output"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
