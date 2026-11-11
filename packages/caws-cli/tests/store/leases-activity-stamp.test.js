@@ -110,6 +110,22 @@ test('touching activity refuses a session with no lease, an unsafe id, and the u
   expect(fs.existsSync(path.join(cawsDir, 'escape.active'))).toBe(false);
 });
 
+test('a stop with a later stamp present never writes the stamp time into the lease', () => {
+  const cawsDir = fixture();
+  stamp(cawsDir, 'stamped', LATER);
+  const result = applyLeasePatch(cawsDir, {
+    kind: 'mark_stopped',
+    session_id: 'stamped',
+    transitioned_at: '2026-10-20T12:06:00.000Z',
+  });
+  expect(result.ok).toBe(true);
+  const written = JSON.parse(fs.readFileSync(path.join(cawsDir, 'leases/stamped.json'), 'utf8'));
+  expect(written.status).toBe('stopped');
+  expect(written.last_active).toBe(RECORDED);
+  // Readers still see the later activity; it lives only in the stamp.
+  expect(loadLeases(cawsDir).value.leases.stamped.last_active).toBe(LATER.toISOString());
+});
+
 test('deleting a lease removes every sidecar, and only that session`s', () => {
   const cawsDir = fixture(['gone', 'kept']);
   const leases = path.join(cawsDir, 'leases');

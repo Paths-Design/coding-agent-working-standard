@@ -60,7 +60,8 @@ status`, message delivery, the peer notice) report the later of that file's
   the mailbox is polled on a full heartbeat and whenever `messages.jsonl`
   changed since the session's last poll. Each CLI call the handler makes is
   ended after 3 seconds (`CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS`) where `perl`
-  is available. The peer notice can trail a change in the peer set by up to
+  is available, together with any child process it started, and a full
+  heartbeat that fails or is ended is not retried until the interval passes. The peer notice can trail a change in the peer set by up to
   the heartbeat interval. Deleting or pruning a lease removes its `.active`,
   `.hb`, `.hb.lease` and `.mail` files. Shared pack 137.
 - Repository hook policy supports inspection, compilation, reviewed selective

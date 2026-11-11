@@ -17,10 +17,15 @@ setup_file() {
 printf '%s\n' "$*" >> "$HB_CLI_LOG"
 exec "$CAWS_TEST_CLI" "$@"
 STUB
+  # A launcher that does not exec: the sleep is its child, so ending only the
+  # launcher would leave it running. The duration carries this run's pid so a
+  # concurrent run of this file is not mistaken for a survivor.
+  export HB_HANG_SECONDS="47.$$"
   cat > "$HB_STUB_DIR/caws-hangs" <<'STUB'
 #!/bin/bash
 printf '%s\n' "$*" >> "$HB_CLI_LOG"
-exec sleep 47
+sleep "$HB_HANG_SECONDS"
+exit 0
 STUB
   chmod +x "$HB_STUB_DIR/caws-recording" "$HB_STUB_DIR/caws-hangs"
 }
@@ -93,7 +98,7 @@ _hb_prime() {
   [ "$HB_LEASES/$HB_SESSION.active" -nt "$CAWS_TEST_HOME/reference-$BATS_TEST_NUMBER" ]
 }
 
-@test "heartbeat-activity: a dispatcher-parsed call that owes nothing exits before reading its piped payload" {
+@test "heartbeat-activity: a dispatcher-parsed call that owes nothing starts no CLI and prints nothing" {
   _hb_prime
   _hb_run "$(_hb_main_payload)" HOOK_TOOL_NAME=Read HOOK_SESSION_ID="$HB_SESSION"
   [ "$status" -eq 0 ]
@@ -202,13 +207,44 @@ _hb_prime() {
 @test "heartbeat-activity: a CLI that never returns is ended at the deadline and the call proceeds" {
   local started ended
   started="$(date +%s)"
-  _hb_run "$(_hb_main_payload)" CAWS_BIN="$HB_STUB_DIR/caws-hangs" CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS=1
+  _hb_run "$(_hb_main_payload)" CAWS_BIN="$HB_STUB_DIR/caws-hangs" CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS=1 HB_HANG_SECONDS="$HB_HANG_SECONDS"
   ended="$(date +%s)"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
   [ "$(_hb_cli_calls '^agents heartbeat ')" -eq 1 ]
   [ "$(( ended - started ))" -lt 10 ]
   # The hung CLI is gone, not left running behind the handler.
-  run pgrep -f "sleep 47"
+  run pgrep -f "sleep $HB_HANG_SECONDS"
   [ "$status" -ne 0 ]
+}
+
+@test "heartbeat-activity: a heartbeat ended at the deadline is not retried until the interval passes" {
+  _hb_prime
+  printf '%s\n' "$(( $(date +%s) - 3600 ))" > "$HB_LEASES/$HB_SESSION.hb"
+  _hb_run "$(_hb_main_payload)" CAWS_BIN="$HB_STUB_DIR/caws-hangs" CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS=1 HB_HANG_SECONDS="$HB_HANG_SECONDS"
+  [ "$status" -eq 0 ]
+  [ "$(_hb_cli_calls '^agents heartbeat ')" -eq 1 ]
+  : > "$HB_CLI_LOG"
+  _hb_run "$(_hb_main_payload)" CAWS_BIN="$HB_STUB_DIR/caws-hangs" CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS=1 HB_HANG_SECONDS="$HB_HANG_SECONDS"
+  [ "$status" -eq 0 ]
+  [ ! -s "$HB_CLI_LOG" ]
+}
+
+@test "heartbeat-activity: a call that owes nothing does not strand a payload larger than a pipe" {
+  _hb_prime
+  local big="$CAWS_TEST_HOME/big-payload-$BATS_TEST_NUMBER.json"
+  jq -nc --arg s "$HB_SESSION" --arg c "$(head -c 300000 /dev/zero | tr '\0' 'x')" \
+    '{session_id:$s, tool_name:"Write", tool_input:{file_path:"x", content:$c}}' > "$big"
+  # pipefail reports the writer: 141 if the handler exits with the pipe unread.
+  run env \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    CAWS_HOME="$CAWS_TEST_HOME/.caws" \
+    CAWS_BIN="$HB_STUB_DIR/caws-recording" \
+    HB_CLI_LOG="$HB_CLI_LOG" \
+    HOOK_TOOL_NAME=Write HOOK_SESSION_ID="$HB_SESSION" \
+    bash -c "set -o pipefail; cat '$big' | bash '$CAWS_TEST_HOOKS_DIR/agent-heartbeat.sh'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ ! -s "$HB_CLI_LOG" ]
 }

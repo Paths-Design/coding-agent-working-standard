@@ -51,7 +51,8 @@
 # every full heartbeat and otherwise only when .caws/messages.jsonl changed since
 # this session's last poll. Each CLI call is ended after
 # CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS (default 3) so a hung CLI cannot hold the
-# guards behind it.
+# guards behind it, and a full heartbeat that fails is not retried until the
+# interval has passed.
 
 set -uo pipefail
 
@@ -140,15 +141,22 @@ _hb_plan() {
 }
 
 # _hb_cli <args...>
-#   caws_run_cli with a wall-clock limit. Without perl the call is unbounded,
+#   caws_run_cli with a wall-clock limit. The CLI runs in its own process
+#   group and the whole group is ended at the limit, so a launcher script's
+#   child does not outlive the deadline. Without perl the call is unbounded,
 #   as it was before the limit existed.
+_HB_BOUNDED='setpgrp(0, 0); my $limit = shift; my $pid = fork;
+exit 127 unless defined $pid;
+if (!$pid) { exec @ARGV; exit 127 }
+$SIG{ALRM} = sub { $SIG{TERM} = "IGNORE"; kill("TERM", -$$); exit 124 };
+alarm $limit; waitpid($pid, 0); exit($? >> 8);'
 _hb_cli() {
   local limit="${CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS:-3}" bin="${CAWS_BIN:-caws}"
   if [[ "$limit" =~ ^[1-9][0-9]*$ ]] && command -v perl >/dev/null 2>&1; then
     if [[ -n "${CAWS_PROJECT_DIR:-}" && "${CAWS_PROJECT_DIR}" != "." && -d "${CAWS_PROJECT_DIR}" ]]; then
-      ( cd "${CAWS_PROJECT_DIR}" && exec perl -e 'alarm shift; exec @ARGV or exit 127' "$limit" "$bin" "$@" )
+      ( cd "${CAWS_PROJECT_DIR}" && exec perl -e "$_HB_BOUNDED" "$limit" "$bin" "$@" )
     else
-      perl -e 'alarm shift; exec @ARGV or exit 127' "$limit" "$bin" "$@"
+      perl -e "$_HB_BOUNDED" "$limit" "$bin" "$@"
     fi
   else
     caws_run_cli "$@"
@@ -247,13 +255,13 @@ CLI_OUT="$(
     ${CAWS_SESSION_KIND:+--session-kind "$CAWS_SESSION_KIND"} \
     ${CAWS_FORKED_FROM:+--forked-from "$CAWS_FORKED_FROM"} \
   2>/dev/null
-)" || exit 0
+)" || CLI_OUT=""
 
-if [[ -z "$CLI_OUT" ]]; then
-  exit 0
-fi
 # The first heartbeat of a session creates its lease, so plan again to learn
-# the bookkeeping paths, then record the completed heartbeat.
+# the bookkeeping paths, then record the attempt. A heartbeat that failed or
+# was ended at the deadline is recorded too: the next attempt waits out the
+# interval, so a slow or broken CLI costs its deadline once per interval and
+# not on every call.
 if [[ -z "$_HB_GATE" ]]; then
   _hb_plan "$HOOK_SESSION_ID"
 fi
@@ -263,6 +271,9 @@ if [[ -n "$_HB_GATE" ]]; then
      ln -f "${_HB_GATE%.hb}.json" "$_HB_GATE.lease" 2>/dev/null; then
     printf '%s\n' "$_HB_EPOCH" > "$_HB_GATE" 2>/dev/null
   fi
+fi
+if [[ -z "$CLI_OUT" ]]; then
+  exit 0
 fi
 _HB_NEED_POLL=1
 fi
