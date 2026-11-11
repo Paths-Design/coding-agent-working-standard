@@ -42,9 +42,13 @@ acceptance:
     when: 'a call arrives within the batch window of the arming time, and another after it'
     then: 'the first is refused without strike or escalation and the second is refused with strike and escalation'
   - id: A4
-    given: 'an opaque-exec or bare-commit-deletions refusal earlier in the session'
-    when: 'a command of the same classification is issued in a later batch'
-    then: 'it is refused and the latch is armed, and the text says it repeated a refusal of that classification'
+    given: 'an opaque-exec refusal earlier in the session'
+    when: 'another opaque-exec command is issued in a later batch'
+    then: >-
+      it is refused and the latch is armed, and the text says it repeated a refusal
+      of that classification; the bare-commit-over-deletions refusal is unchanged
+      and does not count repeats, because the native runtime answers it for Codex
+      outside this guard
   - id: A5
     given: 'the same earlier refusal'
     when: 'a command of that classification arrives in the same batch, or a command of a different no-latch classification arrives later'
