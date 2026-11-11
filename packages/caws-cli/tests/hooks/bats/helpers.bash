@@ -144,7 +144,11 @@ hook_envelope_content() {
 # Populates bats' $status and $output (stdout+stderr merged by `run`).
 run_guard() {
   local guard="$1" envelope="$2"
+  # These envelopes carry no transcript, so a guard cannot tell which calls
+  # were queued together. A zero window makes every call a later batch, the
+  # case the escalation tests are about; a test of the window overrides it.
   run env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
+    CAWS_BATCH_WINDOW_SECONDS="${CAWS_BATCH_WINDOW_SECONDS:-0}" \
     CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$CAWS_TEST_REPO" \
@@ -171,7 +175,11 @@ run_guard_missing_lib() {
   cp -R "$CAWS_TEST_REPO/.caws" "$broken_repo/.caws"
   broken_hooks="$broken_repo/.caws/hooks"
   rm -f "$broken_hooks/lib/$missing_lib"
+  # These envelopes carry no transcript, so a guard cannot tell which calls
+  # were queued together. A zero window makes every call a later batch, the
+  # case the escalation tests are about; a test of the window overrides it.
   run env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
+    CAWS_BATCH_WINDOW_SECONDS="${CAWS_BATCH_WINDOW_SECONDS:-0}" \
     CAWS_PROJECT_DIR="$broken_repo" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$broken_repo" \
@@ -195,7 +203,11 @@ run_dispatcher_missing_lib() {
   cp -R "$CAWS_TEST_REPO/.caws" "$broken_repo/.caws"
   broken_hooks="$broken_repo/.caws/hooks"
   rm -f "$broken_hooks/lib/$missing_lib"
+  # These envelopes carry no transcript, so a guard cannot tell which calls
+  # were queued together. A zero window makes every call a later batch, the
+  # case the escalation tests are about; a test of the window overrides it.
   run env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
+    CAWS_BATCH_WINDOW_SECONDS="${CAWS_BATCH_WINDOW_SECONDS:-0}" \
     CAWS_PROJECT_DIR="$broken_repo" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$broken_repo" \

@@ -28,6 +28,14 @@
   stated, where it was reported as "strike 3 of 3". A missing `jq` or a
   corrupt strike record is refused the same way; either previously left the
   count at one, so the guard warned and allowed without limit. Shared pack 133.
+- The danger latch counts a batch of queued tool calls once. A call issued in
+  the same model reply as a refused one is refused without a strike, a latch
+  or a process kill, because the agent could not have read the first refusal;
+  previously three queued calls could be denied, latched and killed in
+  sequence. A second opaque inline payload sent after the first refusal now
+  arms the latch; it was refused without limit before. A second
+  capability-risk command queued with the warned one is refused without a
+  latch. Shared pack 134.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.
