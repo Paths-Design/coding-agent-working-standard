@@ -99,3 +99,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a guard that exits 1 blocks a Bash call and the reason names the guard, its status and its output"
     commit_sha: "538e5d54e"
     test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'a missing guard blocks a mutating call and the reason names the guard and its expected path' at 538e5d54e"
+    recorded_at: "2026-11-11T02:27:22.187Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a missing guard blocks a mutating call and the reason names the guard and its expected path"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
