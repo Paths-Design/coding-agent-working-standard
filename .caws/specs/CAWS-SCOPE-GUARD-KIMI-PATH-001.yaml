@@ -75,3 +75,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/kimi-surface.bats::scope-guard: tool_input.path is not a second target name on another surface"
     commit_sha: c2820e7db
     test_verified_at: c2820e7db28804384289df1edba89582e63f1169
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "exit 2 with the cause in the refusal text, on claude-code (path only) and kimi (empty path)"
+    recorded_at: "2026-11-11T10:53:21.740Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/kimi-surface.bats::scope-guard: an edit naming its target only in tool_input.path is refused on another surface"
+    commit_sha: c2820e7db
+    test_verified_at: c2820e7db28804384289df1edba89582e63f1169
