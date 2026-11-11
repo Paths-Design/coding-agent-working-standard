@@ -1,10 +1,11 @@
 id: CAWS-CLASSIFIER-FAILURE-NO-LATCH-001
 title: 'A command classifier failure refuses the command without arming the danger latch'
 mode: fix
-lifecycle_state: active
-worktree: classifier-failure-no-latch
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge classifier-failure-no-latch at cf6a291eabaacd864410c15d8c401de96d4ed8d8'
 created_at: '2026-11-11T13:40:25.711Z'
-updated_at: '2026-11-11T13:40:27.014Z'
+updated_at: '2026-11-11T14:23:06.578Z'
 created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
 blast_radius:
   modules:
