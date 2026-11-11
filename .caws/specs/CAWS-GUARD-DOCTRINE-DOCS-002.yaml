@@ -62,3 +62,8 @@ evidence:
     evidence_ref: "docs/guides/hook-packs.md 'Guard verdicts and refusals' at 9a16dfa3b: fault table, refusal contract, block/strike/latch incl. queued calls and infrastructure faults, strike state path; checked against lib/run-handlers.sh, guard-strikes.sh and block-dangerous.sh on main"
     recorded_at: "2026-11-11T21:04:55.057Z"
     commit_sha: "9a16dfa3b"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "docs/guides/hook-packs.md 'Session liveness' and docs/guides/multi-agent-workflow.md at 9a16dfa3b: stamp, when the CLI runs, mail poll rule, four sidecar files; matches agent-heartbeat.sh, caws-hook.py and leases-store.ts merged at 0b8a65986"
+    recorded_at: "2026-11-11T21:04:56.227Z"
+    commit_sha: "9a16dfa3b"
