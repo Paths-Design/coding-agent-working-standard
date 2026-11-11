@@ -84,7 +84,9 @@ test('throttle does not write new metadata; exact boundary writes while preservi
   });
   expect(within.ok).toBe(true);
   expect(within.value).toMatchObject({ wrote: false, throttled: true, active_agent_count: 1 });
-  expect(within.value.active_agents[0].last_active_age_ms).toBe(14999);
+  // A throttled call is activity: it is recorded in the stamp, so the session
+  // reads as active now while the lease file below stays byte-identical.
+  expect(within.value.active_agents[0].last_active_age_ms).toBe(0);
   expect(lease(input)).toEqual(before);
   const boundary = heartbeatAgentActivity({
     ...input,

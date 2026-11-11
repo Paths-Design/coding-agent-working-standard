@@ -924,7 +924,7 @@ describe('activity stamp', () => {
   }
 
   test.each(['pre_tool_use', 'post_tool_use', 'stop'])(
-    'the launcher advances the session stamp on %s without rewriting the lease',
+    'the launcher advances the session stamp on %s',
     (event) => {
       const p = repo('stamp-' + event);
       installMachineRuntime({ home });
@@ -936,9 +936,12 @@ describe('activity stamp', () => {
       invoke(p, event);
       // Whole-second filesystems round down, so allow one second of slack.
       expect(fs.statSync(stamp).mtimeMs).toBeGreaterThanOrEqual(startedMs - 1000);
-      expect(fs.readFileSync(path.join(p, '.caws/leases/system-test.json'), 'utf8')).toBe(
-        leaseBefore
-      );
+      // PreToolUse and Stop have handlers that own the lease and may rewrite
+      // it. PostToolUse has none, so there the stamp is the only record.
+      if (event === 'post_tool_use')
+        expect(fs.readFileSync(path.join(p, '.caws/leases/system-test.json'), 'utf8')).toBe(
+          leaseBefore
+        );
     }
   );
 

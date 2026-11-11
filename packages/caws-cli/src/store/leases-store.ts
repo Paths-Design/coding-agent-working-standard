@@ -307,16 +307,11 @@ export function loadLeases(cawsDir: string): Result<LoadLeasesResult> {
     // function; for now, the kernel's TypeScript shape is the structural
     // contract, and ill-typed-but-parseable files load successfully.
     const lease = obj as unknown as AgentLease;
-    // The stamp only ever moves last_active forward. A lease whose recorded
-    // value does not parse keeps it: the stamp does not repair a bad record.
+    // The stamp only ever moves last_active forward. A recorded value that
+    // does not parse compares false and is kept: the stamp repairs no record.
     const stampMs = activityStampMs(leasesDir, sessionId);
     const recordedMs = Date.parse(lease.last_active);
-    if (
-      stampMs !== null &&
-      Number.isFinite(recordedMs) &&
-      stampMs > recordedMs &&
-      stampMs <= loadedAtMs + 1000
-    ) {
+    if (stampMs !== null && stampMs > recordedMs && stampMs <= loadedAtMs + 1000) {
       recordedLastActive[sessionId] = lease.last_active;
       leases[sessionId] = { ...lease, last_active: new Date(stampMs).toISOString() };
     } else {
