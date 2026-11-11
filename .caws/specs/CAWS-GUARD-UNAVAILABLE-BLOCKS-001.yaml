@@ -32,6 +32,8 @@ invariants:
   - 'A guard-unavailable refusal records no strike and arms no latch.'
   - 'Read, Glob and Grep are never blocked by a guard-unavailable fault; the fault is reported on stderr.'
   - 'Chains other than the enforcing PreToolUse chain keep their existing exit semantics.'
+  - 'A chain member with no refusal path (agent-heartbeat.sh, cwd-guard.sh, scan-secrets.sh, quiet-merge.sh) never refuses a call by being absent or crashing; its fault is reported on stderr.'
+  - 'The payload''s event name never disarms the chain its dispatcher selected with --short-circuit-on-block.'
 acceptance:
   - id: A1
     given: 'the enforcing PreToolUse chain and tool_name Bash, Write or Edit'
