@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: duplicate-export-hang
 created_at: '2026-11-11T18:25:46.894Z'
-updated_at: '2026-11-11T19:14:13.573Z'
+updated_at: '2026-11-11T19:15:01.157Z'
 created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
 blast_radius:
   modules:
@@ -14,7 +14,6 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'packages/caws-cli/templates/hook-packs/shared/duplicate-export-check.sh'
-    - 'packages/caws-cli/tests/hooks/bats/duplicate-export-check.bats'
     - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
     - 'packages/caws-cli/CHANGELOG.md'
