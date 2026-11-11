@@ -1,10 +1,11 @@
 id: CAWS-HEARTBEAT-ACTIVITY-STAMP-001
 title: 'Heartbeat: launcher-stamped liveness, CLI off the per-call path, bounded mail poll'
 mode: feature
-lifecycle_state: active
-worktree: heartbeat-activity-stamp
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge heartbeat-activity-stamp at 0b8a65986605a1856be16bf7d7432a7d7fcb1dff'
 created_at: '2026-11-11T16:09:56.934Z'
-updated_at: '2026-11-11T16:10:13.679Z'
+updated_at: '2026-11-11T21:02:00.811Z'
 created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
 blast_radius:
   modules:
