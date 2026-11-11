@@ -62,5 +62,12 @@ acceptance:
     given: 'a later handler in the chain'
     when: 'an earlier handler was unavailable on a mutating call'
     then: 'the block is returned without running handlers that could record a strike or latch'
+  - id: A8
+    given: 'the enforcing chain and a mutating tool'
+    when: 'agent-heartbeat.sh, cwd-guard.sh, scan-secrets.sh or quiet-merge.sh is missing or exits 1'
+    then: >-
+      run_handlers does not return 2, stderr names the advisory handler and its
+      fault, and the rest of the chain runs; shortcut-language-check.sh in the same
+      state is refused as a guard
 non_functional: {}
 contracts: []
