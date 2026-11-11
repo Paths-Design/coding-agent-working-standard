@@ -65,3 +65,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a plain file copy passes the stock guards through the launcher"
     commit_sha: "01e7e7197"
     test_verified_at: "01e7e71973d44263604d41764b9650e20cdfd342"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest at 01e7e7197: harness BASH_ENV naming a real file -> exit 2, stderr names inherited-environment and BASH_ENV"
+    recorded_at: "2026-11-11T05:05:53.163Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::the agent's own BASH_ENV is still reported, with the cause named in the copy refusal"
+    commit_sha: "01e7e7197"
+    test_verified_at: "01e7e71973d44263604d41764b9650e20cdfd342"
