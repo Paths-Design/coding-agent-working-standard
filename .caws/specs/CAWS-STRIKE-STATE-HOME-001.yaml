@@ -63,3 +63,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats::without CAWS_HOME, strike state is written under HOME/.caws"
     commit_sha: c29f650a6
     test_verified_at: c29f650a651b7855e4e0099a3fc7464c80999d40
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "exact refusal text; no /tmp/.caws session directory"
+    recorded_at: "2026-11-11T11:43:29.017Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats::with neither CAWS_HOME nor HOME the finding is refused with that reason and nothing lands in /tmp"
+    commit_sha: c29f650a6
+    test_verified_at: c29f650a651b7855e4e0099a3fc7464c80999d40
