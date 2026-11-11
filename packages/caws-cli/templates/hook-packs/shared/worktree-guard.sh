@@ -346,11 +346,13 @@ if printf '%s\n' "$COMMAND" | grep -qE '^(cp|mv)[[:space:]]'; then
   if [[ -n "$CAWS_COPY_UNRESOLVED" || ${#CAWS_AST_COPY_OPERATION[@]} -eq 0 || ${#CAWS_AST_ISSUES[@]} -gt 0 ]]; then
     # Name the cause: the bare label sends the agent hunting for a fault it
     # cannot see. Each of these is a property of the command or its environment.
-    if [[ ${#CAWS_AST_ISSUES[@]} -gt 0 ]]; then
-      printf '[worktree-guard] cp/mv refused: the command analyzer reported: %s\n' "${CAWS_AST_ISSUES[0]}" >&2
-    elif [[ -n "$CAWS_COPY_UNRESOLVED" ]]; then
+    # Every held cause is printed, so one retry can address all of them.
+    for _wg_issue in ${CAWS_AST_ISSUES[@]+"${CAWS_AST_ISSUES[@]}"}; do
+      printf '[worktree-guard] cp/mv refused: the command analyzer reported: %s\n' "$_wg_issue" >&2
+    done
+    if [[ -n "$CAWS_COPY_UNRESOLVED" ]]; then
       printf '[worktree-guard] cp/mv refused: %s. Name each source as an existing regular file and the destination as a literal path.\n' "$CAWS_COPY_UNRESOLVED" >&2
-    else
+    elif [[ ${#CAWS_AST_COPY_OPERATION[@]} -eq 0 && ${#CAWS_AST_ISSUES[@]} -eq 0 ]]; then
       printf '[worktree-guard] cp/mv refused: no copy operation could be identified in the command.\n' >&2
     fi
     worktree_authority_unavailable copy-roles

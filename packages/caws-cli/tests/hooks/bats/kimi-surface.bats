@@ -293,7 +293,9 @@ SPY
     CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$CAWS_TEST_REPO" \
-    bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"caws worktree merge wt-x\"}}' | bash '$CAWS_TEST_HOOKS_DIR/quiet-merge.sh'"
+    bash -c "printf '%s' '{\"cwd\":\"$(cd "$CAWS_TEST_REPO" && pwd -P)\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"caws worktree merge wt-x\"}}' | bash '$CAWS_TEST_HOOKS_DIR/quiet-merge.sh'"
   assert_success
-  assert_output --partial 'updatedInput'
+  # The analyzer proves the lifecycle from the cwd the payload carries; a
+  # payload without one is never rewritten.
+  assert_output --partial "\"updatedInput\":{\"command\":\"cd $CAWS_TEST_REPO && caws worktree merge wt-x\"}"
 }
