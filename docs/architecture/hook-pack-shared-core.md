@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: Shared hook runtime and native adapter contract
 owner: CAWS maintainers
-updated: 2026-10-26
+updated: 2026-11-11
 audience: consumer
 ---
 
@@ -112,7 +112,11 @@ SessionStart, a denied write whose file stays absent, Stop, and
 canonical/linked-root resolution. A shell fixture cannot establish another
 harness's live parity. JSON configuration helpers exist for Codex, Claude Code
 and Qwen Code; Kimi, ZCode, OpenCode and DSH require native registration work by
-their harness agents. Shipping their adapter libraries is not a claim of native
+their harness agents. DSH's transport is a profile-loaded plugin bundle
+(`hookMechanism: harness-plugin`): `caws init` installs the shared core and the
+surface doctrine, but the bundle must be composed in the harness profile, and
+`caws init --plan` / `caws doctor` report that observed composition instead of
+assuming it. Shipping their adapter libraries is not a claim of native
 activation.
 
 Doctor observes the selected digest, runtime integrity, explicit overrides and
@@ -625,6 +629,34 @@ wrong for the merged tree. Integrate them serially:
 
 Vendor packs version independently (`manifest-<surface>.ts`). A lane that
 changes only a vendor tree does not contend for the shared version.
+
+### Native compatibility identities
+
+The native runtime implements some stock handlers in TypeScript so that a
+surface can be answered without starting a shell. It does not trust a handler by
+name. `src/runtime/stock-handlers.ts` records the sha256 of each shell handler
+the native code was written against (`agent-stop.sh`, `agent-heartbeat.sh`,
+`block-dangerous.sh`, `hook-utilities.sh`), and
+`src/runtime/session-cache-admission.ts` and `src/runtime/service-image.ts`
+record `lib/run-handlers.sh`. The native path answers only when the installed
+file matches its recorded identity; any other bytes run the shell handler.
+
+That makes the recorded hash a claim of behavioral agreement, and three rules
+follow:
+
+- A shell handler change that the native code does not mirror must leave the
+  hash alone. The shell handler then stays in charge, which is slower and
+  correct.
+- Updating the hash asserts that the native code gives the same answers.
+  `tests/runtime/stock-handlers.test.js` runs both against the same inputs.
+- Where the native code covers only part of a handler, the uncovered cases
+  return no answer and fall through to the shell. A rule added to the shell
+  handler for a case the native code answers must be added to both or
+  deliberately scoped out; the bare-commit refusal in `block-dangerous.sh` does
+  not count repeats for this reason.
+
+The contributor checklist is in the hook guide's
+[checks before merging a guard change](../guides/hook-packs.md#checks-before-merging-a-guard-change).
 
 ## Install behavior (preserved invariants)
 

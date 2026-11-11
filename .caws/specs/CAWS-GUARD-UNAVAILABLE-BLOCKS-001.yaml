@@ -1,0 +1,172 @@
+id: CAWS-GUARD-UNAVAILABLE-BLOCKS-001
+title: 'A PreToolUse guard that cannot reach a verdict blocks mutating tools and names the fault'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge guard-unavailable-blocks at d3b1faf4a2e761df46ae5a8b8a66fcc1a911af06'
+created_at: '2026-11-11T00:08:00.467Z'
+updated_at: '2026-11-11T02:30:53.727Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'shared hook pack handler runner (lib/run-handlers.sh) and the guards that exit 0 when a dependency is missing'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats'
+    - 'packages/caws-cli/CHANGELOG.md'
+    - packages/caws-cli/src/runtime/session-cache-admission.ts
+    - packages/caws-cli/tests/hooks/bats/run-handlers-advisory-budget.bats
+    - packages/caws-cli/tests/hooks/bats/run-handlers-advisory-dedup.bats
+    - packages/caws-cli/tests/adapter/system-runtime.test.js
+    - packages/caws-cli/tests/hooks/bats/reprieve.bats
+    - packages/caws-cli/tests/hooks/bats/parse-input.bats
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+  out: []
+invariants:
+  - 'On the enforcing PreToolUse chain, a handler that is missing, not executable, or exits with a status other than 0 or 2 without a control decision never lets a mutating tool call proceed.'
+  - 'A refusal produced because a guard could not run names the guard, what it could not do, states that the agent''s command did not cause it, and gives a remedy the blocked party can execute or an explicit instruction to stop and hand the fault to the user.'
+  - 'A guard-unavailable refusal records no strike and arms no latch.'
+  - 'Read, Glob and Grep are never blocked by a guard-unavailable fault; the fault is reported on stderr.'
+  - 'Chains other than the enforcing PreToolUse chain keep their existing exit semantics.'
+  - 'A chain member with no refusal path (agent-heartbeat.sh, cwd-guard.sh, scan-secrets.sh, quiet-merge.sh) never refuses a call by being absent or crashing; its fault is reported on stderr.'
+  - 'The payload''s event name never disarms the chain its dispatcher selected with --short-circuit-on-block.'
+acceptance:
+  - id: A1
+    given: 'the enforcing PreToolUse chain and tool_name Bash, Write or Edit'
+    when: 'a handler exits 1 with stderr text and no control JSON'
+    then: 'run_handlers returns 2 and prints one block decision whose reason names the handler, its exit status, the stderr tail, says the command did not cause the fault, and tells the agent to stop and report it'
+  - id: A2
+    given: 'the enforcing PreToolUse chain and a mutating tool'
+    when: 'a listed handler is missing or not executable'
+    then: 'run_handlers returns 2 with a block decision naming the handler and its expected path'
+  - id: A3
+    given: 'the enforcing PreToolUse chain and tool_name Read, Glob or Grep'
+    when: 'a handler exits 1 or is missing'
+    then: 'run_handlers does not return 2, and stderr names the handler and the fault'
+  - id: A4
+    given: 'the enforcing PreToolUse chain with at least one handler and a payload that carries no tool name'
+    when: 'the chain is dispatched'
+    then: >-
+      run_handlers returns 2 with a block decision saying the payload carried no
+      tool name, because an unidentified tool is not provably read-only and every
+      guard filters on the tool name
+  - id: A5
+    given: 'a chain invoked without the enforcing flag (PostToolUse, Stop)'
+    when: 'a handler exits 1'
+    then: 'the return status and output are unchanged from before this change'
+  - id: A7
+    given: 'a later handler in the chain'
+    when: 'an earlier handler was unavailable on a mutating call'
+    then: 'the block is returned without running handlers that could record a strike or latch'
+  - id: A8
+    given: 'the enforcing chain and a mutating tool'
+    when: 'agent-heartbeat.sh, cwd-guard.sh, scan-secrets.sh or quiet-merge.sh is missing or exits 1'
+    then: >-
+      run_handlers does not return 2, stderr names the advisory handler and its
+      fault, and the rest of the chain runs; shortcut-language-check.sh in the same
+      state is refused as a guard
+  - id: A9
+    given: 'the enforcing chain, a mutating tool and a crashed guard'
+    when: 'the payload names any event, including Stop, SessionEnd or PostToolUse'
+    then: 'run_handlers returns 2 and later handlers do not run'
+  - id: A10
+    given: 'CAWS_HOOK_DRY_RUN=1 on the enforcing chain'
+    when: 'a guard is missing, a guard exits 1, or the payload parser is missing'
+    then: >-
+      run_handlers returns 0 with no decision on stdout and a [DRY-RUN] line naming
+      what would have blocked
+  - id: A11
+    given: 'a project directory with .caws that is not a git repository and a Write to a protected hook path'
+    when: 'the PreToolUse dispatcher runs'
+    then: >-
+      worktree-write-guard reaches a verdict and protected-paths refuses the write
+      with BLOCKED, with no guard-unavailable refusal
+  - id: A12
+    given: 'a guard that prints a block decision and exits 1'
+    when: 'the enforcing chain runs'
+    then: 'the guard''s own reason is returned unchanged with status 2'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'a guard that exits 1 blocks a Bash call and the reason names the guard, its status and its output' at 538e5d54e; baseline main runner returns 0 for the same chain"
+    recorded_at: "2026-11-11T02:27:02.071Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a guard that exits 1 blocks a Bash call and the reason names the guard, its status and its output"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'a missing guard blocks a mutating call and the reason names the guard and its expected path' at 538e5d54e"
+    recorded_at: "2026-11-11T02:27:22.187Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a missing guard blocks a mutating call and the reason names the guard and its expected path"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'Read, Glob and Grep are not blocked by a crashed guard, and stderr names the fault' at 538e5d54e"
+    recorded_at: "2026-11-11T02:27:28.137Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::Read, Glob and Grep are not blocked by a crashed guard, and stderr names the fault"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'a call with no tool name is treated as mutating' at 538e5d54e"
+    recorded_at: "2026-11-11T02:27:35.801Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a call with no tool name is treated as mutating"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'a chain run without the enforcing flag keeps a crashed handler's status and does not block' at 538e5d54e"
+    recorded_at: "2026-11-11T02:27:49.261Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a chain run without the enforcing flag keeps a crashed handler's status and does not block"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'handlers after an unavailable guard do not run on a mutating call' at 538e5d54e"
+    recorded_at: "2026-11-11T02:28:06.000Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::handlers after an unavailable guard do not run on a mutating call"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'a crashed or missing advisory handler is reported and does not refuse the call' at 538e5d54e"
+    recorded_at: "2026-11-11T02:28:25.288Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a crashed or missing advisory handler is reported and does not refuse the call"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A9
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'the payload's event name cannot disarm the chain its dispatcher selected' at 538e5d54e"
+    recorded_at: "2026-11-11T02:28:43.749Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::the payload's event name cannot disarm the chain its dispatcher selected"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A10
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'dry-run reports a crashed and a missing guard and blocks neither' at 538e5d54e"
+    recorded_at: "2026-11-11T02:29:00.939Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::dry-run reports a crashed and a missing guard and blocks neither"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A12
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'a guard that prints a block decision and then exits 1 keeps its own decision' at 538e5d54e"
+    recorded_at: "2026-11-11T02:29:22.829Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a guard that prints a block decision and then exits 1 keeps its own decision"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A11
+    status: pass
+    evidence_ref: "bats: reprieve.bats 'A5 — missing lib/reprieve.sh: dispatcher does not crash; guards run normally' at 538e5d54e"
+    recorded_at: "2026-11-11T02:29:46.433Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/reprieve.bats::A5 — missing lib/reprieve.sh: dispatcher does not crash; guards run normally"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"

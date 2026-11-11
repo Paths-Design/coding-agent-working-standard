@@ -1,0 +1,87 @@
+id: CAWS-ANALYZER-DISPATCHER-BASH-ENV-001
+title: 'Command analysis under the machine dispatcher sees the agent''s BASH_ENV, not the dispatcher''s'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge analyzer-dispatcher-env at 95397d1bd1b06d3f18893b5ad27a6b8cb8912b9d'
+created_at: '2026-11-11T04:29:19.884Z'
+updated_at: '2026-11-11T05:07:14.734Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'hook-packs shared guards'
+    - 'machine adapter runtime'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-analysis.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/quiet-merge.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/worktree-guard.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/adapter/system-runtime.test.js'
+    - 'packages/caws-cli/tests/hooks/bats/bash-analysis-dispatcher-env.bats'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'The analyzer still reports inherited-environment when the agent''s own environment carries BASH_ENV.'
+  - 'Only a BASH_ENV equal to the running machine runtime''s handler-env.sh is replaced, and only with the value the dispatcher saved in CAWS_PRIOR_BASH_ENV.'
+  - 'A worktree-guard copy refusal states the analyzer issue or copy-role reason that caused it.'
+acceptance:
+  - id: A1
+    given: 'a stock machine runtime installed from the templates and a governed project'
+    when: 'a Bash PreToolUse payload for ''ls'' is dispatched through bin/caws-hook with the built CLI as CAWS_BIN and no BASH_ENV in the harness environment'
+    then: 'the launcher exits 0 and neither stdout nor stderr contains inherited-environment'
+  - id: A2
+    given: 'the same runtime and project with two regular files'
+    when: 'a Bash PreToolUse payload for ''cp a.txt b.txt'' is dispatched through bin/caws-hook'
+    then: 'the launcher exits 0 and stderr does not contain ''authority unavailable'''
+  - id: A3
+    given: 'the same runtime with BASH_ENV naming a real file in the harness environment'
+    when: 'a Bash PreToolUse payload for ''cp a.txt b.txt'' is dispatched'
+    then: 'the call is refused with exit 2 and the output names inherited-environment and BASH_ENV'
+  - id: A4
+    given: 'caws_bash_prepare_analysis sourced with a recording stub as CAWS_BIN'
+    when: 'BASH_ENV equals the runtime handler-env.sh with CAWS_PRIOR_BASH_ENV empty, then with it set to a path, then when BASH_ENV is some unrelated path'
+    then: 'the stub observes BASH_ENV unset, the prior path, and the unrelated path respectively'
+  - id: A5
+    given: 'a worktree-guard run in which the analyzer reports an issue for a cp command'
+    when: 'the guard refuses'
+    then: 'stderr contains the analyzer issue text alongside the refusal'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest tests/adapter/system-runtime.test.js at 01e7e7197: 'ls' through bin/caws-hook (claude-code, built CLI) exits 0 with no inherited-environment; with the fix call removed the same test fails on the bash-write-guard ask"
+    recorded_at: "2026-11-11T05:04:58.195Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a read-only command is not reported as unanalyzable because of the dispatcher BASH_ENV"
+    commit_sha: "01e7e7197"
+    test_verified_at: "01e7e71973d44263604d41764b9650e20cdfd342"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest at 01e7e7197: 'cp a.txt b.txt' through bin/caws-hook exits 0, no 'authority unavailable'; fails with the fix call removed"
+    recorded_at: "2026-11-11T05:05:32.169Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a plain file copy passes the stock guards through the launcher"
+    commit_sha: "01e7e7197"
+    test_verified_at: "01e7e71973d44263604d41764b9650e20cdfd342"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest at 01e7e7197: harness BASH_ENV naming a real file -> exit 2, stderr names inherited-environment and BASH_ENV"
+    recorded_at: "2026-11-11T05:05:53.163Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::the agent's own BASH_ENV is still reported, with the cause named in the copy refusal"
+    commit_sha: "01e7e7197"
+    test_verified_at: "01e7e71973d44263604d41764b9650e20cdfd342"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest at 01e7e7197: stderr carries '[worktree-guard] cp/mv refused: the command analyzer reported: inherited-environment: Unmodeled inherited environment BASH_ENV.' beside the copy-roles refusal"
+    recorded_at: "2026-11-11T05:06:18.382Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::the agent's own BASH_ENV is still reported, with the cause named in the copy refusal"
+    commit_sha: "01e7e7197"
+    test_verified_at: "01e7e71973d44263604d41764b9650e20cdfd342"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "bats tests/hooks/bats/bash-analysis-dispatcher-env.bats at 01e7e7197 (6 of 6 ok, also within the full 755-test run): recording stub observes 'unset', the prior path, and the unrelated path; bats is not re-executed by --verify"
+    recorded_at: "2026-11-11T05:06:43.876Z"
+    commit_sha: "01e7e7197"

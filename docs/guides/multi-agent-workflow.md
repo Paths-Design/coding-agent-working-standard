@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: Multi-agent workflow
 owner: vNext rewrite team
-updated: 2026-08-19
+updated: 2026-11-11
 audience: consumer
 ---
 
@@ -51,6 +51,15 @@ includes diagnostics. Stale and stopped rows retain their bridge bindings when
 revealed with `--include-stale` and `--include-stopped`; `--active` restricts
 the view to active leases. These display joins do not grant authority or refresh
 leases.
+
+A row's age is the time since that session's most recent hook event of any kind:
+a tool call starting or returning, or a stop. A session inside a long tool run
+reads as active from the moment the run began, and one that has just ended its
+turn reads as recently active with a stopped lease. A session that is generating
+a long reply with no tool call fires no hook and ages meanwhile. An old age
+means "no hook event since", never "ended", and it grants nothing: takeover
+still requires the user's authorization. How the value is recorded is in
+[Session liveness](hook-packs.md#session-liveness).
 
 ## Anti-pattern (do not do this)
 

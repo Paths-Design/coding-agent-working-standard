@@ -1,0 +1,85 @@
+id: CAWS-STRIKE-STATE-HOME-001
+title: 'Strike state follows CAWS_HOME and never falls back to /tmp'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge strike-state-home at 8dfa79f7d2711407b8e5b8dbc42f61272ebc54d6'
+created_at: '2026-11-11T10:54:58.577Z'
+updated_at: '2026-11-11T11:43:56.910Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'hook-packs/shared guard-strikes state location'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/guard-strikes.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/reset-strikes.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'Strike state lives under the machine home (CAWS_HOME, else HOME/.caws) and nowhere else; no world-writable fallback'
+  - 'A finding whose strike cannot be recorded is refused, and the refusal names why the strike state is unavailable'
+acceptance:
+  - id: A1
+    given: 'CAWS_HOME set to a directory and HOME set to a different one'
+    when: 'a guard records a strike for a resolved session'
+    then: 'strikes.json is written under CAWS_HOME/state/sessions/<id> and nothing is written under HOME/.caws'
+  - id: A2
+    given: 'CAWS_HOME unset and HOME set'
+    when: 'a strike is recorded'
+    then: 'strikes.json is written under HOME/.caws/state/sessions/<id>'
+  - id: A3
+    given: 'neither CAWS_HOME nor HOME set'
+    when: 'a guard enforces a finding'
+    then: 'nothing is created under /tmp/.caws, the call is refused, and the refusal text says strike state is unavailable because neither CAWS_HOME nor HOME is set'
+  - id: A4
+    given: 'an unresolved session id'
+    when: 'a guard enforces a finding'
+    then: 'the call is refused and the refusal text says the session id is unresolved, instead of reporting strike 3 of 3'
+  - id: A5
+    given: 'the full hook bats suite run with HOME unset in its fixtures'
+    when: 'it finishes'
+    then: 'no /tmp/.caws directory was created by it'
+rollback:
+  - 'Revert the merge commit; shared pack returns to 132'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "strikes.json under CAWS_HOME with count 1; HOME/.caws absent; fails when CAWS_HOME is ignored"
+    recorded_at: "2026-11-11T11:43:23.468Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats::strike state is written under CAWS_HOME, not under HOME"
+    commit_sha: c29f650a6
+    test_verified_at: c29f650a651b7855e4e0099a3fc7464c80999d40
+  - criterion_id: A2
+    status: pass
+    evidence_ref: strikes.json under HOME/.caws
+    recorded_at: "2026-11-11T11:43:26.119Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats::without CAWS_HOME, strike state is written under HOME/.caws"
+    commit_sha: c29f650a6
+    test_verified_at: c29f650a651b7855e4e0099a3fc7464c80999d40
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "exact refusal text; no /tmp/.caws session directory"
+    recorded_at: "2026-11-11T11:43:29.017Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats::with neither CAWS_HOME nor HOME the finding is refused with that reason and nothing lands in /tmp"
+    commit_sha: c29f650a6
+    test_verified_at: c29f650a651b7855e4e0099a3fc7464c80999d40
+  - criterion_id: A4
+    status: pass
+    evidence_ref: exact refusal text naming the unresolved session
+    recorded_at: "2026-11-11T11:43:33.253Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats::an unresolved session is refused with that reason, not reported as a third strike"
+    commit_sha: c29f650a6
+    test_verified_at: c29f650a651b7855e4e0099a3fc7464c80999d40
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "full bats suite (769 cases) at c29f650a6, stdin closed: /private/tmp/.caws absent before and absent after; the three opencode jest tests that failed on that marker pass (55 suites, 1888 tests)"
+    recorded_at: "2026-11-11T11:43:37.176Z"
+    commit_sha: c29f650a6

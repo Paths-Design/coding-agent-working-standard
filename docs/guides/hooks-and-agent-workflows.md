@@ -19,9 +19,10 @@ CAWS ships its own runtime hooks, in two planes. The **machine runtime** under
 user configuration: `~/.caws/bin/caws-hook <surface> <event> --system` is wired
 from `~/.claude/settings.json` and `~/.codex/hooks.json` and resolves the
 handler chain from the home directory. The **repo-local plane** is
-`.caws/hooks/dispatch/<event>.sh`, which the harnesses that read project hooks
-directly (qwen-code, kimi-code, opencode, zcode, dsh) execute in place. Run
-`caws hooks list` to see the effective chain per event and the tier that put
+`.caws/hooks/dispatch/<event>.sh`, which project-wired harnesses execute in
+place: qwen-code, kimi-code, opencode and zcode directly, and dsh through its
+profile-loaded plugin bundle (the DSH harness itself reads no project hooks).
+Run `caws hooks list` to see the effective chain per event and the tier that put
 each handler there.
 
 The integration patterns below describe how each agent runtime participates in

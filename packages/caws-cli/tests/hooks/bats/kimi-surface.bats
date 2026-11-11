@@ -208,6 +208,51 @@ SPY
   assert_output --partial '.kimi-code/hooks/lib/emit.sh is protected'
 }
 
+# _kimi_edit <tool_input-json> — send an Edit through the kimi shim, the way
+# the harness does, so the kimi parser adapter and the whole chain run.
+_kimi_edit() {
+  run env -i PATH="$PATH" \
+    bash -c "cd '$CAWS_TEST_REPO' && printf '%s' '{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"session_bats\",\"cwd\":\"$CAWS_TEST_REPO\",\"tool_name\":\"Edit\",\"tool_input\":$1,\"tool_call_id\":\"tool_1\"}' | '$KIMI_SHIM' PreToolUse"
+}
+
+@test "scope-guard: a kimi edit naming its target in tool_input.path is adjudicated on that target" {
+  _kimi_edit '{"path":"notes.txt","old_string":"a","new_string":"b"}'
+  refute_output --partial 'invalid target inventory'
+  assert_output --partial "CAWS scope-guard strike"
+  assert_output --partial "for 'notes.txt'. This is a CAWS governance decision"
+}
+
+@test "scope-guard: a kimi payload naming two different targets is refused whole" {
+  _kimi_edit '{"file_path":"a.txt","path":"b.txt","old_string":"a","new_string":"b"}'
+  assert_failure 2
+  assert_output --partial '[scope-guard] invalid target inventory: tool_input.file_path and tool_input.path name different targets'
+}
+
+@test "scope-guard: a kimi edit with an empty tool_input.path is refused, naming the missing target" {
+  _kimi_edit '{"path":"","old_string":"a","new_string":"b"}'
+  assert_failure 2
+  assert_output --partial 'The entire edit is refused. Cause: the payload names no target: tool_input.file_path is missing or empty.'
+}
+
+@test "scope-guard: an edit naming its target only in tool_input.path is refused on another surface" {
+  run env -i PATH="$PATH" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    bash -c "cd '$CAWS_TEST_REPO' && printf '%s' '{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"session_bats\",\"cwd\":\"$CAWS_TEST_REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"path\":\"notes.txt\",\"old_string\":\"a\",\"new_string\":\"b\"}}' | bash '$CAWS_TEST_HOOKS_DIR/scope-guard.sh'"
+  assert_failure 2
+  assert_output --partial 'The entire edit is refused. Cause: the payload names no target: tool_input.file_path is missing or empty.'
+}
+
+@test "scope-guard: tool_input.path is not a second target name on another surface" {
+  run env -i PATH="$PATH" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    bash -c "cd '$CAWS_TEST_REPO' && printf '%s' '{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"session_bats\",\"cwd\":\"$CAWS_TEST_REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"a.txt\",\"path\":\"b.txt\",\"old_string\":\"a\",\"new_string\":\"b\"}}' | bash '$CAWS_TEST_HOOKS_DIR/scope-guard.sh'"
+  refute_output --partial 'name different targets'
+  assert_output --partial "for 'a.txt'. This is a CAWS governance decision"
+  refute_output --partial "b.txt"
+}
+
 # --- run-handlers override ------------------------------------------------------
 
 @test "kimi run-handlers: deny ranks priority-3 (immediate block) alongside block" {
@@ -293,7 +338,9 @@ SPY
     CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$CAWS_TEST_REPO" \
-    bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"caws worktree merge wt-x\"}}' | bash '$CAWS_TEST_HOOKS_DIR/quiet-merge.sh'"
+    bash -c "printf '%s' '{\"cwd\":\"$(cd "$CAWS_TEST_REPO" && pwd -P)\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"caws worktree merge wt-x\"}}' | bash '$CAWS_TEST_HOOKS_DIR/quiet-merge.sh'"
   assert_success
-  assert_output --partial 'updatedInput'
+  # The analyzer proves the lifecycle from the cwd the payload carries; a
+  # payload without one is never rewritten.
+  assert_output --partial "\"updatedInput\":{\"command\":\"cd $CAWS_TEST_REPO && caws worktree merge wt-x\"}"
 }

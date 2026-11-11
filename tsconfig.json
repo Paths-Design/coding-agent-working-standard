@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
+    "module": "Node20",
     "lib": ["ES2022"],
     "strict": true,
     "esModuleInterop": true,
@@ -12,7 +12,6 @@
     "sourceMap": true,
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
-    "moduleResolution": "node",
     "typeRoots": ["node_modules/@types"],
     "incremental": true
   },

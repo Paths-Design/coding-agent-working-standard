@@ -1,0 +1,85 @@
+id: CAWS-SCOPE-GUARD-KIMI-PATH-001
+title: 'scope-guard reads kimi-code''s tool_input.path instead of refusing every kimi edit'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge scope-guard-kimi-path at 15d282fe38449ff701a48a3a165786db8b3cf0cd'
+created_at: '2026-11-11T09:57:26.613Z'
+updated_at: '2026-11-11T10:53:38.596Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'hook-packs/shared scope-guard target inventory'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/scope-guard.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/kimi-surface.bats'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'The target inventory comes from the original payload; a payload whose target cannot be named exactly is refused whole'
+  - 'Only the kimi-code surface may name its target in tool_input.path, and only when tool_input.file_path is absent'
+acceptance:
+  - id: A1
+    given: 'the kimi-code shim and PreToolUse Edit payloads carrying only tool_input.path'
+    when: 'the chain runs for a protected hook file from a subdirectory, and for an ordinary file'
+    then: >-
+      the protected file is refused naming '.kimi-code/hooks/lib/emit.sh is
+      protected', the ordinary file is adjudicated by scope-guard under its own
+      name, and neither produces an inventory refusal
+  - id: A2
+    given: 'the kimi-code surface and an Edit payload carrying both tool_input.file_path and a different tool_input.path'
+    when: 'scope-guard builds the inventory'
+    then: 'the edit is refused with an inventory message naming the conflict'
+  - id: A3
+    given: >-
+      a surface other than kimi-code and an Edit payload carrying
+      tool_input.file_path and a different tool_input.path
+    when: 'scope-guard adjudicates the edit'
+    then: >-
+      the target is the file_path value; tool_input.path is neither read as a target
+      nor treated as a conflict
+  - id: A4
+    given: 'a Write or Edit payload on any surface that names no target the guard can read'
+    when: 'scope-guard runs in a governed project'
+    then: >-
+      exit 2 with a refusal whose text carries the cause 'the payload names no
+      target: tool_input.file_path is missing or empty'; the call is not passed
+      unadjudicated
+rollback:
+  - 'Revert the merge commit; shared pack returns to 131'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "kimi shim cases: protected file refused by protected-paths; ordinary file adjudicated under its own name; both fail with the kimi branch disabled"
+    recorded_at: "2026-11-11T10:52:45.012Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/kimi-surface.bats::shim: a protected hook edit carrying kimi's tool_input.path is blocked end-to-end"
+    commit_sha: c2820e7db
+    test_verified_at: c2820e7db28804384289df1edba89582e63f1169
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "exit 2 with 'tool_input.file_path and tool_input.path name different targets'"
+    recorded_at: "2026-11-11T10:52:55.292Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/kimi-surface.bats::scope-guard: a kimi payload naming two different targets is refused whole"
+    commit_sha: c2820e7db
+    test_verified_at: c2820e7db28804384289df1edba89582e63f1169
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "claude-code payload with file_path a.txt and path b.txt is adjudicated on a.txt; b.txt never appears"
+    recorded_at: "2026-11-11T10:53:07.631Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/kimi-surface.bats::scope-guard: tool_input.path is not a second target name on another surface"
+    commit_sha: c2820e7db
+    test_verified_at: c2820e7db28804384289df1edba89582e63f1169
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "exit 2 with the cause in the refusal text, on claude-code (path only) and kimi (empty path)"
+    recorded_at: "2026-11-11T10:53:21.740Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/kimi-surface.bats::scope-guard: an edit naming its target only in tool_input.path is refused on another surface"
+    commit_sha: c2820e7db
+    test_verified_at: c2820e7db28804384289df1edba89582e63f1169

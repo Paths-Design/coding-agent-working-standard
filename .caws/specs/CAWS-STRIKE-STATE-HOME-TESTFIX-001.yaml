@@ -1,0 +1,46 @@
+id: CAWS-STRIKE-STATE-HOME-TESTFIX-001
+title: 'Repair the engine-routing strike-path expectation left red by CAWS-STRIKE-STATE-HOME-001'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge strike-home-testfix at 190fc6bdfb63321a376ce397d916b51e19246a3e'
+created_at: '2026-11-11T12:24:50.661Z'
+updated_at: '2026-11-11T12:45:31.397Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'tests/runtime engine-routing shortcut-language strike assertions'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/runtime/engine-routing.test.js'
+  out: []
+invariants:
+  - 'Strike state lives under CAWS_HOME when it is set; the test asserts that location and not HOME/.caws'
+acceptance:
+  - id: A1
+    given: 'the engine-routing shortcut-language cases, which set HOME and CAWS_HOME to different directories'
+    when: 'they run on main with CAWS-STRIKE-STATE-HOME-001 merged'
+    then: 'they pass, reading strikes.json from CAWS_HOME/state/sessions/<id>, and assert nothing was written under HOME/.caws'
+  - id: A2
+    given: 'the whole caws-cli jest suite at the fix commit'
+    when: 'it runs'
+    then: 'no test fails that passed before CAWS-STRIKE-STATE-HOME-001 was merged'
+rollback:
+  - 'Revert the merge commit'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: engine-routing suite passes at 1713a1de5 reading strikes.json from CAWS_HOME and asserting HOME/.caws has none
+    recorded_at: "2026-11-11T12:44:08.821Z"
+    test_nodeid: packages/caws-cli/tests/runtime/engine-routing.test.js
+    commit_sha: "1713a1de5"
+    test_verified_at: "1713a1de57e586dca9b89ba84f8f5c480c2d7d8b"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "whole caws-cli jest suite at 1713a1de5, no path filter: 387 suites passed, 10674 tests passed, 12 skipped, 0 failed"
+    recorded_at: "2026-11-11T12:45:18.020Z"
+    commit_sha: "1713a1de5"

@@ -235,7 +235,9 @@ printf '%s\n' '{"decision":"block","reason":"BLOCKED-BY-CONTROL-DECISION"}'
 EOF
   chmod +x "$fake_hooks/block.sh"
 
-  run env -i PATH="$PATH" CAWS_HOOK_ADVISORY_BUDGET_BYTES=4000 bash -c "
+  # The enforcing chain refuses a call it cannot identify, so the fixture names
+  # the tool; what this test pins is the control decision's precedence.
+  run env -i PATH="$PATH" CAWS_HOOK_ADVISORY_BUDGET_BYTES=4000 HOOK_TOOL_NAME=Bash bash -c "
     source '$CAWS_TEST_HOOKS_DIR/lib/run-handlers.sh'
     export HOOKS_DIR='$fake_hooks' HOOK_INPUT_JSON='{}'
     run_handlers --short-circuit-on-block block.sh

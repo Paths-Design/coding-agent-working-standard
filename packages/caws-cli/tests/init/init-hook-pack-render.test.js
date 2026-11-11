@@ -1046,3 +1046,87 @@ describe('A6: no-pack activation renders the run honestly (CAWS-DEFECT-HOOK-DRIF
     expect(out).toContain('--adopt only decides collision handling DURING an install');
   });
 });
+
+/**
+ * A9 — DSH harness-plugin wiring verdicts (CAWS-DSH-HARNESS-PLUGIN-PARITY-001).
+ *
+ * A dsh install used to render only the mechanism and a "check the profile"
+ * instruction, so "installed" could be read as "wired" even when the profile
+ * composed no CAWS bundle. The activation panel now renders the observed
+ * verdict passed by init: WIRED / NOT WIRED with the exact repair / UNOBSERVED
+ * when composition could not be read. These arms pin all three shapes.
+ */
+describe('A9: DSH harness-plugin wiring verdicts (CAWS-DSH-HARNESS-PLUGIN-PARITY-001)', () => {
+  const PACK_RESULT = {
+    pack: DSH_PACK,
+    outcome: 'already_installed',
+    activation: 'restart_required',
+    actions: [],
+  };
+  const BUNDLE = '@caws/dsh-bundle';
+  const IDS = ['caws-hooks', 'caws-session-log', 'caws-agents-lifecycle'];
+
+  function render(wiring) {
+    return renderActivationContract(
+      PACK_RESULT,
+      undefined,
+      wiring === undefined ? {} : { harnessPluginWiring: wiring }
+    );
+  }
+
+  test('WIRED names the profile and the observed plugin ids', () => {
+    const out = render({
+      surface: 'dsh',
+      kind: 'wired',
+      profileName: 'web',
+      profileDir: '/home/u/.dsh/profiles/web',
+      profileBundle: BUNDLE,
+      observedPluginIds: IDS,
+    });
+    expect(out).toContain('Hook plane: WIRED');
+    expect(out).toContain("profile 'web'");
+    expect(out).toContain(BUNDLE);
+    expect(out).toContain('caws-hooks');
+    expect(out).not.toContain('NOT WIRED');
+  });
+
+  test('NOT WIRED states the consequence and prints the exact repair', () => {
+    const out = render({
+      surface: 'dsh',
+      kind: 'unwired',
+      profileName: 'desktop',
+      profileDir: '/home/u/.dsh/profiles/desktop',
+      profileBundle: BUNDLE,
+      reason: 'bundle-not-installed',
+      expectedPluginIds: IDS,
+      observedPluginIds: [],
+      missingPluginIds: IDS,
+      repair:
+        "install the CAWS DSH bundle into profile 'desktop': `dsh plugin --profile desktop add @caws/dsh-bundle`",
+    });
+    expect(out).toContain('Hook plane: NOT WIRED');
+    expect(out).toContain('CAWS guards will NOT run');
+    expect(out).toContain('Repair:');
+    expect(out).toContain('dsh plugin --profile desktop add');
+    expect(out).toContain('missing plugin ids');
+  });
+
+  test('UNOBSERVED is not a missing-hooks claim and names how to verify', () => {
+    const out = render({
+      surface: 'dsh',
+      kind: 'unobserved',
+      reason: 'no-profile-environment',
+      profileBundle: BUNDLE,
+    });
+    expect(out).toContain('Hook plane: UNOBSERVED');
+    expect(out).toContain('not a claim that hooks are missing');
+    expect(out).toContain('dump-config');
+  });
+
+  test('a caller that supplies no observation renders UNOBSERVED, never a guessed verdict', () => {
+    const out = render(undefined);
+    expect(out).toContain('Hook plane: UNOBSERVED');
+    expect(out).not.toContain('Hook plane: WIRED');
+    expect(out).not.toContain('Hook plane: NOT WIRED');
+  });
+});

@@ -136,7 +136,8 @@ test('observer refuses cleanup of its registered live fixture until actual settl
   expect(sourceBytes).toEqual(
     fs.readFileSync(require.resolve('../helpers/pytest-entrypoint-fixture'))
   );
-  expect(path.dirname(fixture.fixtureRoot)).toBe(path.resolve(PACKAGE, '../../.tmp'));
+  expect(path.dirname(fixture.fixtureRoot)).toBe(path.join(PACKAGE, '.tmp'));
+  expect(fs.existsSync(path.join(fixture.packageRoot, 'node_modules'))).toBe(false);
   const ready = path.join(fixture.evidenceRoot, 'registered-child-ready.json');
   const release = path.join(fixture.evidenceRoot, 'release-registered-child');
   const script = `const fs=require('node:fs');

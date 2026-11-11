@@ -1,0 +1,69 @@
+id: CAWS-NATIVE-QWEN-WRITE-CONSUMER-001
+title: 'Native Qwen original write_file permission consumer'
+mode: feature
+lifecycle_state: active
+worktree: qwen-native-file-consumer
+created_at: '2026-11-08T15:07:47.066Z'
+updated_at: '2026-11-08T16:15:02.231Z'
+created_by_session: '01a1b814-5196-7cb1-8f01-002645d067e3'
+blast_radius:
+  modules:
+    - 'Native original-operation ownership, Qwen Write authorization, and engine proposal egress'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/protocol.rs'
+    - 'packages/caws-native/src/main.rs'
+    - 'packages/caws-native/src/context_git/file_tools.rs'
+    - 'packages/caws-native/src/context_git/file_tools/'
+    - 'packages/caws-native/src/guard_strikes_wire.rs'
+    - 'packages/caws-native/tests/native_file_owner.rs'
+    - 'packages/caws-cli/src/runtime/file-tools/'
+    - 'packages/caws-cli/src/runtime/engine.ts'
+    - 'packages/caws-cli/src/runtime/engine-entry.ts'
+    - 'packages/caws-cli/tests/runtime/native-file-engine.test.js'
+    - 'packages/caws-cli/tests/runtime/engine-entry.test.js'
+    - 'packages/caws-cli/tests/runtime/engine-core.test.js'
+    - 'packages/caws-cli/tests/runtime/native-file-authority.test.js'
+    - 'packages/caws-cli/tests/runtime/native-file-target-image.test.js'
+    - 'packages/caws-cli/tests/runtime/native-shortcut-language.test.js'
+    - 'packages/caws-cli/tests/runtime/file-tool-backend.test.js'
+    - 'packages/caws-cli/tests/runtime/file-tool-context.test.js'
+    - 'packages/caws-cli/tests/runtime/guard-strikes.test.js'
+    - packages/caws-cli/tests/runtime/protocol.test.js
+    - packages/caws-cli/tests/runtime/native-file-operation.test.js
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+  out: []
+invariants:
+  - 'Original surface/raw JSON/session/cwd and original deadline remain authoritative; no engine-selected context or identity, interpreter fallback or publication retry.'
+  - 'Every nonblocking Qwen file proposal requires three delivered native observations followed by a one-shot synchronous authority/target/source seal after all awaited dispatch work.'
+  - 'Scope/ownership/protected-path refusal remains blocking independent of advisory strike standing; existing acceptance floors and Claude backend behavior remain intact.'
+acceptance:
+  - id: A1
+    given: 'original Qwen write_file and Claude Write/Edit callback bytes'
+    when: 'native V2 producers and owners select operations'
+    then: 'Qwen authored Write alone is newly admitted with original identity, surface and deadline retained; ambiguous or unsupported operations refuse without an upgrade or replay'
+  - id: A2
+    given: 'canonical standing and stable owned target image'
+    when: 'the integrated real engine and framed entry dispatch Qwen Write'
+    then: 'owned permission proposals require all three native observations and final synchronous authority/target/source revalidation; protected/foreign/scope-out inputs refuse with Qwen-specific stderr and unchanged bytes/mode'
+  - id: A3
+    given: 'actual compiled native owner and hostile request/delivery timing'
+    when: 'identity, phase, snapshots, source or target drift, cancellation, stale bytes or uncertain publication occur'
+    then: 'no nonblocking upgrade, first-party interpreter dispatch or replay occurs and original cleanup custody is retained'
+  - id: A4
+    given: 'a genuine supported installed Qwen session using the same qualified candidate'
+    when: 'it performs owned Write and Read, protected refusal and joined lifecycle/rendering'
+    then: 'real host observations establish that bounded consumer result; this remains unmet until root-coordinated genuine host execution and does not establish all-seven-host cutover'
+observability:
+  - 'Retain raw bounded commands, original-operation identity, three observation order, native cleanup/publication receipts, source hashes and protected pre/post bytes/modes.'
+rollback:
+  - 'Revert logical source commits through normal governed history; no machine runtime activation is performed by this implementation slice.'
+non_functional:
+  security:
+    - 'No host/model/login/trust mutation or synthetic session identity is used to establish source correctness; actual Claude execution is deferred.'
+contracts:
+  - name: 'native-qwen-original-write'
+    type: behavior

@@ -1,0 +1,90 @@
+id: CAWS-GUARD-DOCTRINE-DOCS-002
+title: 'Document guard failure, refusal, latch-repeat and liveness doctrine from packs 129-136'
+mode: doc
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge guard-doctrine-docs at beb94c0fcebf571b8cf5e0b7c58148e73a97f118'
+created_at: '2026-11-11T16:37:08.593Z'
+updated_at: '2026-11-11T21:05:19.774Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'Guard and hook documentation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/guides/hook-packs.md'
+    - 'docs/architecture/hook-pack-shared-core.md'
+    - 'docs/failure-lineage.md'
+    - 'docs/guides/multi-agent-workflow.md'
+    - 'CONTRIBUTING.md'
+    - 'CLAUDE.md'
+    - 'AGENTS.md'
+    - packages/caws-cli/templates/CLAUDE.md
+    - packages/caws-cli/CHANGELOG.md
+  out: []
+invariants:
+  - 'Guides state present-tense behavior verified against source at the documented revision; incident history lives only in failure-lineage entries.'
+  - 'A shipped template edited here carries its pack version bump and fingerprint in the same change.'
+acceptance:
+  - id: A1
+    given: 'the dispatcher, strike and danger-latch sources on main'
+    when: 'docs/guides/hook-packs.md is read'
+    then: 'it states which guard faults refuse a call and which report and proceed, what a refusal message must name, where strike state lives, and when a refusal blocks, strikes or latches, including that calls queued in one model reply count once and that an infrastructure fault never counts'
+  - id: A2
+    given: 'the heartbeat handler, launcher and lease store on main'
+    when: 'the hook-packs and multi-agent guides are read'
+    then: 'they state how liveness is recorded and read, when the CLI runs, when mail is polled, and the named sidecar files'
+  - id: A3
+    given: 'the incidents behind packs 129 to 136'
+    when: 'docs/failure-lineage.md is read'
+    then: 'new entries record what happened, what was built and what it does not catch, and the guides link to them'
+  - id: A4
+    given: 'a contributor changing a guard template'
+    when: 'CONTRIBUTING.md and the hook-packs testing section are read'
+    then: 'they state the whole-suite rule, the native twin pins and the frozen fixture list, the bats stdin requirement, and that bash 3.2 compares file times in whole seconds'
+  - id: A5
+    given: 'the edited documents'
+    when: 'the docs validator and prettier check run'
+    then: 'both exit 0'
+  - id: A6
+    given: 'the shipped agent-facing template packages/caws-cli/templates/CLAUDE.md'
+    when: 'its dangerous-command section is read'
+    then: >-
+      it states the refusal classes an agent meets: refused without a latch, refused
+      and latched on a repeat sent after the first refusal was shown, and latched at
+      once, and that a guard fault is not the agent's to discharge
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "docs/guides/hook-packs.md 'Guard verdicts and refusals' at 9a16dfa3b: fault table, refusal contract, block/strike/latch incl. queued calls and infrastructure faults, strike state path; checked against lib/run-handlers.sh, guard-strikes.sh and block-dangerous.sh on main"
+    recorded_at: "2026-11-11T21:04:55.057Z"
+    commit_sha: "9a16dfa3b"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "docs/guides/hook-packs.md 'Session liveness' and docs/guides/multi-agent-workflow.md at 9a16dfa3b: stamp, when the CLI runs, mail poll rule, four sidecar files; matches agent-heartbeat.sh, caws-hook.py and leases-store.ts merged at 0b8a65986"
+    recorded_at: "2026-11-11T21:04:56.227Z"
+    commit_sha: "9a16dfa3b"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "docs/failure-lineage.md entries 47-50 at 9a16dfa3b, each with what happened, what we built and what it does not catch; linked from hook-packs.md"
+    recorded_at: "2026-11-11T21:04:57.428Z"
+    commit_sha: "9a16dfa3b"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "CONTRIBUTING.md pitfalls and hook-packs.md 'Checks before merging a guard change' and 'Shell and test-harness traps' at 9a16dfa3b"
+    recorded_at: "2026-11-11T21:04:58.711Z"
+    commit_sha: "9a16dfa3b"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "prettier --check on the eight edited files and validate-docs.mjs both exit 0 at 9a16dfa3b; jest tests/docs tests/ci tests/init and three doc-pinning suites: 47 suites, 977 tests passed"
+    recorded_at: "2026-11-11T21:05:00.056Z"
+    commit_sha: "9a16dfa3b"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "packages/caws-cli/templates/CLAUDE.md dangerous-command section at 9a16dfa3b lists the three refusal kinds; AGENTS.md and CLAUDE.md carry the same split"
+    recorded_at: "2026-11-11T21:05:01.521Z"
+    commit_sha: "9a16dfa3b"

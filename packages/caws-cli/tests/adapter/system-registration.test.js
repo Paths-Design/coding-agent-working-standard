@@ -318,15 +318,18 @@ test('registration REFUSES surfaces with no verified harness adapter', () => {
   const before = snapshotTree(user);
   // Pack availability does not confer machine registration capability.
   // OpenCode has a separate explicit project-native Stop transport.
-  for (const surface of ['dsh', 'zcode']) {
-    expect(() => configureSystemRuntime({ ...options, surface })).toThrow(
-      /requires an adapter authored and verified in that harness/
-    );
-    // The refusal routes: it names the supported set rather than just failing.
-    expect(() => configureSystemRuntime({ ...options, surface })).toThrow(
-      /codex, claude-code, qwen-code/
-    );
-  }
+  expect(() => configureSystemRuntime({ ...options, surface: 'dsh' })).toThrow(
+    /harness-managed plugin bundle \(@caws\/dsh-bundle\)/
+  );
+  expect(() => configureSystemRuntime({ ...options, surface: 'dsh' })).toThrow(
+    'caws init --agent-surface dsh --plan'
+  );
+  expect(() => configureSystemRuntime({ ...options, surface: 'zcode' })).toThrow(
+    /requires an adapter authored and verified in that harness/
+  );
+  expect(() => configureSystemRuntime({ ...options, surface: 'zcode' })).toThrow(
+    /codex, claude-code, qwen-code/
+  );
   expect(() => configureSystemRuntime({ ...options, surface: 'opencode' })).toThrow(
     'requires explicit --entry native'
   );

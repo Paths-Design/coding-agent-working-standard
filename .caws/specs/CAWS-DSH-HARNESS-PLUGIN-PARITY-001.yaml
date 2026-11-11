@@ -1,0 +1,118 @@
+id: CAWS-DSH-HARNESS-PLUGIN-PARITY-001
+title: 'Wire and verify the DSH harness-plugin hook surface to peer-harness parity'
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'DSH harness-plugin wiring parity: registry-owned bundle facts, read-only profile composition observation, init WIRED/NOT-WIRED/UNOBSERVED verdicts, doctor.hooks.harness_plugin_unwired, corrected DSH doctrine/docs (pack v4), and tests (143 pass across 7 impacted suites; gates OK). Live desktop 0.2.2-rc.1 profile now composes @caws/dsh-bundle with an active platform=dsh session envelope/lease; isolated E2E denied protected-artifact write and Bash mutation. Residual: model-level apply_patch/str_replace_editor unexercised (not mounted in base profile), strike-2 ask/approval and strike-3 through the bridge unproven, shared pack v95 lag and pre-existing shared-pack fingerprint baseline drift are not part of this slice.'
+created_at: '2026-11-09T18:09:54.269Z'
+updated_at: '2026-11-09T19:43:36.381Z'
+created_by_session: 'session-74b10232-1e29-4980-b55d-f883ef12d18a'
+blast_radius:
+  modules:
+    - 'DSH harness-plugin composition observation and init/doctor wiring verdicts'
+    - 'DSH surface doctrine, hook documentation, and activation contract'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/hook-packs/harness-plugin-wiring.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-dsh.ts'
+    - 'packages/caws-cli/src/init/hook-packs/types.ts'
+    - 'packages/caws-cli/src/init/hook-packs/surfaces.generated.ts'
+    - 'packages/caws-cli/surfaces/registry.json'
+    - 'packages/caws-cli/scripts/generate-surface-registry.mjs'
+    - 'packages/caws-cli/src/shell/render/init-hook-pack.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/src/init/system-runtime.ts'
+    - 'packages/caws-cli/src/store/doctor-snapshot.ts'
+    - 'packages/caws-cli/src/kernel/doctor/inspect.ts'
+    - 'packages/caws-cli/src/kernel/doctor/rules.ts'
+    - 'packages/caws-cli/src/kernel/doctor/types.ts'
+    - 'packages/caws-cli/tests/init/harness-plugin-wiring.test.js'
+    - 'packages/caws-cli/tests/init/init-hook-pack-render.test.js'
+    - 'packages/caws-cli/tests/init/surface-registry-conformance.test.js'
+    - 'packages/caws-cli/tests/init/pack-fingerprint.test.js'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/kernel/doctor-harness-plugin-wiring.test.js'
+    - 'packages/caws-cli/templates/hook-packs/dsh/AGENTS.md'
+    - '.dsh/AGENTS.md'
+    - 'CLAUDE.md'
+    - 'docs/architecture/hook-pack-shared-core.md'
+    - 'docs/architecture/repo-local-hook-policy.md'
+    - 'docs/guides/hooks-and-agent-workflows.md'
+    - 'docs/guides/agent-integration-guide.md'
+    - packages/caws-cli/src/store/types.ts
+  out: []
+invariants:
+  - 'A harness-plugin surface is reported wired only when the active profile composition actually carries its plugin ids; unobserved composition is reported unknown, never wired or unwired.'
+  - 'Wiring observation is read-only: it never executes profile plugin code and never mutates the DSH profile.'
+  - 'CAWS init and doctor never claim hook enforcement for DSH unless profile composition is observed and wired.'
+acceptance:
+  - id: A1
+    given: 'a DSH session environment whose active profile lists @caws/dsh-bundle and whose bundle patch inserts caws-hooks, caws-session-log and caws-agents-lifecycle'
+    when: 'caws init --agent-surface dsh --plan --json runs'
+    then: 'the plan reports the hook plane wired with the three plugin ids and prescribes no repair'
+  - id: A2
+    given: 'a DSH session environment whose active profile does not compose the CAWS bundle'
+    when: 'caws init --agent-surface dsh runs'
+    then: 'the activation contract states hooks are NOT wired, names the profile and missing bundle, and prints the exact dsh plugin add plus restart repair instead of claiming hooks are installed'
+  - id: A3
+    given: 'a repo whose .dsh/AGENTS.md carries the dsh CAWS-MANAGED-HOOK header and a DSH profile environment that is unwired'
+    when: 'caws doctor runs'
+    then: 'doctor emits a warning doctor.hooks.harness_plugin_unwired naming the profile and repair, and emits nothing when no DSH profile is observable'
+  - id: A4
+    given: 'hostile profile inputs (missing profile dir, invalid package.json, bundle listed but unresolvable, bundle patch missing, patch omitting the CAWS ids)'
+    when: 'wiring observation runs'
+    then: 'each case yields a distinct classified verdict without throwing and none is classified wired'
+  - id: A5
+    given: 'the repo docs, CLAUDE.md, and the DSH hook-pack AGENTS.md template and installed copy'
+    when: 'a reader follows the DSH setup description'
+    then: 'they are told hooks load only through the profile-mounted harness plugin, how to verify composition and import with dsh --dump-config and --dump-config-schema, and the template equals the installed copy, with no claim that DSH executes .caws/hooks/dispatch directly without the bundle'
+  - id: A6
+    given: 'the reference @caws/dsh-bundle composed in a DSH 0.2.2-rc.1 profile in a .caws repo'
+    when: 'a fresh DSH session starts, attempts a governed tool call and stops'
+    then: 'retained evidence shows the CAWS hook plugins loaded and invoked and CAWS telemetry or lease artifacts appear (or an explicit recorded failure names the incompatibility), including a write-capable DSH tool mapped to the canonical write vocabulary and denied when out of scope, with exact commands, outputs and stated model-invocation limits'
+observability:
+  - 'Wiring verdicts and doctor finding data carry the resolved profile path, bundle list, observed plugin ids, and the unobserved reason.'
+rollback:
+  - 'Revert the worktree branch; this slice performs no state migration and no machine-profile mutation.'
+non_functional:
+  security:
+    - 'Profile composition observation parses package.json and patch YAML only; it must not import or execute profile package modules.'
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Wiring observation classifies a composing profile as wired from the real profile package.json + bundle patch, and caws init --agent-surface dsh --plan --json exposes the verdict (harness_plugin_wiring.kind=wired, observed ids, profile name). Fixture profile and bundle checkouts are synthesized in the test's temp dir; no machine profile is touched."
+    recorded_at: "2026-11-09T19:42:58.333Z"
+    test_nodeid: "packages/caws-cli/tests/init/harness-plugin-wiring.test.js::--plan --json exposes a wired observation for a composing profile"
+    commit_sha: cebf6cf3e
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "The apply activation panel renders 'Hook plane: NOT WIRED — profile ... does not compose @caws/dsh-bundle', states that CAWS guards will not run, prints the exact 'dsh plugin --profile test-profile add @caws/dsh-bundle' repair, and does not claim hooks are installed and wired. Unobserved environments render UNOBSERVED instead of a guessed verdict."
+    recorded_at: "2026-11-09T19:43:21.789Z"
+    test_nodeid: "packages/caws-cli/tests/init/harness-plugin-wiring.test.js::the apply activation panel says NOT WIRED and prints the repair"
+    commit_sha: cebf6cf3e
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Kernel rule doctor.hooks.harness_plugin_unwired fires (warning, with profile path and exact repair) when a repo carries the DSH CAWS-MANAGED-HOOK marker and the observed active profile does not compose the bundle; wired and unobserved profiles stay silent, and a repo without the DSH marker stays silent even if unwired. CLI end-to-end arm runs the built doctor against a marked fixture repo."
+    recorded_at: "2026-11-09T19:43:22.720Z"
+    test_nodeid: "packages/caws-cli/tests/init/harness-plugin-wiring.test.js::an installed DSH pack plus an unwired profile emits the warning"
+    commit_sha: cebf6cf3e
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Hostile profile inputs are classified without throwing: missing profile dir, missing/invalid package.json, missing manifest shape, bundle-not-installed vs installed-but-unselected, unresolvable bundle, missing bundle patch, unreadable/non-list patch YAML, patch omitting CAWS ids, and malformed dependency specs each yield a distinct unwired/unobserved verdict; none is classified wired."
+    recorded_at: "2026-11-09T19:43:23.681Z"
+    test_nodeid: "packages/caws-cli/tests/init/harness-plugin-wiring.test.js::never throws: malformed dependency specs and hostile manifests degrade to a verdict"
+    commit_sha: cebf6cf3e
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "The DSH doctrine template and its installed copy now state the harness-plugin profile transport, name agent/created (not the removed agent/session-start), describe ask via the approval seam, document the init/doctor wiring checks and dump-config/plugin-manager verification, and the template equals .dsh/AGENTS.md (pack v4). CLAUDE.md, hook-pack-shared-core, repo-local-hook-policy, hooks-and-agent-workflows and agent-integration-guide were corrected and the shipped-doctrine lockstep tests pass."
+    recorded_at: "2026-11-09T19:43:24.640Z"
+    test_nodeid: "packages/caws-cli/tests/init/init-hook-pack-render.test.js::the doctrine names the bundle patch layer, not the profile patch, as the plugin-id source"
+    commit_sha: "631cedeb4"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Live qualification on the user's desktop 0.2.2-rc.1 profile after plugin_manager install_bundle (application: applied): the profile now lists @caws/dsh-bundle in dependencies and dsh.profile.bundles; this running session wrote .caws/sessions/session-74b10232-1e29-4980-b55d-f883ef12d18a/.session-envelope.json with platform=dsh and an active dsh lease (last_seen_reason=pre_tool_use), and the DSH session log contains plugin:hooks-caws injections. Independent isolated-home E2E on the same harness denied protected-artifact write and Bash mutation attempts with CawsGuardRefusal and absent targets; bridge-level mapping and zero-model dispatch probes covered apply_patch->Write / str_replace_editor->Edit. Model-level invocation of those two aliases is unexercised because the base profile mounts only bash/read/write/edit/grep/glob; strike-2 ask/approval and strike-3 through the bridge remain unproven."
+    recorded_at: "2026-11-09T19:43:25.576Z"
+    commit_sha: cebf6cf3e

@@ -317,7 +317,24 @@ force-push, `reset --hard`, `rebase`, `cherry-pick`, `clean -f`,
 `commit --amend` (history rewrite), bare `checkout <path>` / `checkout .`
 (discards changes), `rm -rf` outside safe prefixes, pipe-to-shell, and
 the `git init` bootstrap family (including flag-split variants like
-`git --bare init`). When the hook returns `block` or `ask`:
+`git --bare init`).
+
+Read the refusal before acting on it: the message states which of three it is.
+
+- **Refused, latch NOT armed.** An opaque inline payload (`python3 -c` or
+  `node -e` carrying `$VAR`, `$(...)` or backticks), a command the classifier
+  could not finish analyzing, or the bare commit above. Restate it the way the
+  message says and continue. Do not send the same shape again: a second opaque
+  or unanalyzable command sent after this refusal arms the latch. Calls you
+  queued in the same reply as the refused one are refused with it and do not
+  count as repeats. The bare commit never arms the latch.
+- **Guard or classifier unavailable.** The message says your command did not
+  cause this and that no strike or latch was added. Retrying or rephrasing
+  cannot help. Stop and report the message to the user, who can run
+  `caws doctor`.
+- **Latch armed.** The steps below apply.
+
+When the latch is armed:
 
 1. **Stop.** Do not rephrase, wrap, reorder, or alias the command. Do not retry with `command git ...`, `env ... git ...`, `bash -lc '...'`, or `git --bare init`. The hook recognizes those variants and will block them too.
 2. The hook writes a per-session trap sentinel at `.claude/hooks/state/danger-latch-<session>.json` and the session is **QUARANTINED**. Only fixed read-only single commands run (ls, cat, head, tail, wc, pwd, echo, printf, grep, rg, diff, stat, file, jq; `git status|diff|log|show|rev-parse`; read-only `caws` verbs such as `caws status` or `caws specs list`) and the reset invocation itself. **Everything else blocks — including `git commit`, the `caws` CLI, and every Write/Edit:** the trap covers the file tools too, so there is no read-only file mutation and no routing a write around the shell boundary. Each blocked attempt is recorded as a strike. On surfaces where kill escalation is enabled (per-session CLI harnesses; server-shaped hosts ship it off), the FIRST blocked attempt terminates the session's agent process with an identity-verified SIGTERM. `caws message send` / `caws message reply` are refused with a dedicated reason so a trapped session cannot enlist a peer. The block message names which command first engaged the trap — if it is not the command you just ran, the trap was set by an earlier command, not a problem with the current one.

@@ -1,5 +1,5 @@
-// Type-only bridge for the pinned ESM parser and the CLI's legacy Node module
-// resolution. Keep this internal layout dependency confined to one adapter.
+// Type-only bridge for the pinned ESM parser. The types come from the package's
+// exported root entry; runtime loading stays in load-parser.js.
 export type {
   Assignment,
   Command,
@@ -11,4 +11,4 @@ export type {
   Word,
   WordPart,
   SyntaxNode,
-} from 'unbash/dist/types';
+} from 'unbash';

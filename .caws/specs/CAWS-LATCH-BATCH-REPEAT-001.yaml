@@ -1,0 +1,134 @@
+id: CAWS-LATCH-BATCH-REPEAT-001
+title: 'Latch escalation counts a batch of queued calls once and latches a repeated no-latch refusal'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge latch-batch-repeat at bd316b7bbf826b876d940323655c038f90d310cd'
+created_at: '2026-11-11T11:47:09.929Z'
+updated_at: '2026-11-11T13:36:44.573Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'hook-packs/shared block-dangerous latch arming, quarantine escalation and repeat counting'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/reset-danger-latch.sh'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats'
+    - 'packages/caws-cli/CHANGELOG.md'
+    - packages/caws-cli/tests/hooks/bats/helpers.bash
+    - packages/caws-cli/tests/hooks/bats/block-dangerous.bats
+    - packages/caws-cli/tests/runtime/stock-handlers.test.js
+  out: []
+invariants:
+  - 'A refused command never runs, whichever batch it belongs to; batching changes only whether a refusal escalates'
+  - 'Escalation (strike, latch, process kill) requires a call issued after the agent could have read the earlier refusal'
+  - 'A batch is identified from the harness transcript, never from anything the agent supplies in the tool input'
+acceptance:
+  - id: A1
+    given: 'a transcript in which two tool calls share one assistant message, and the first arms the danger latch'
+    when: 'the second runs under the latch'
+    then: 'it is refused with text saying it was queued together with the arming command, no strike is recorded and no kill escalation is attempted'
+  - id: A2
+    given: 'an armed latch'
+    when: 'a non-allowlisted call from a later assistant message runs'
+    then: 'it is refused, a strike is recorded and escalation is attempted as before'
+  - id: A3
+    given: 'an armed latch and a payload with no transcript or tool-use id'
+    when: 'a call arrives within the batch window of the arming time, and another after it'
+    then: 'the first is refused without strike or escalation and the second is refused with strike and escalation'
+  - id: A4
+    given: 'an opaque-exec refusal earlier in the session'
+    when: 'another opaque-exec command is issued in a later batch'
+    then: >-
+      it is refused and the latch is armed, and the text says it repeated a refusal
+      of that classification; the bare-commit-over-deletions refusal is unchanged
+      and does not count repeats, because the native runtime answers it for Codex
+      outside this guard
+  - id: A5
+    given: 'an opaque-exec refusal earlier in the session'
+    when: >-
+      another opaque-exec command arrives in the same batch, or a command of a
+      different classification arrives later
+    then: 'it is handled without arming the latch on account of the earlier refusal'
+  - id: A6
+    given: 'a first capability-risk command that was warned and allowed'
+    when: 'a second capability-risk command arrives in the same batch'
+    then: 'it is refused without arming the latch, with text saying it was queued with the warned command; a capability-risk command in a later batch arms the latch as before'
+  - id: A7
+    given: 'a human reset of the latch'
+    when: 'reset-danger-latch.sh clears the session'
+    then: 'the repeat record is cleared with it'
+  - id: A8
+    given: 'an arming or refused call whose transcript line is written only after its hook started'
+    when: 'a later call is compared with it'
+    then: >-
+      the earlier call's message is looked up from its recorded tool-use id at
+      comparison time, so calls of one message are one batch and calls of different
+      messages are not, whatever the time window says
+rollback:
+  - 'Revert the merge commit; shared pack returns to 133'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "queued Bash and Write calls refused with the queued-together text; trap_strikes stays 0; fails when the same-batch check is disabled"
+    recorded_at: "2026-11-11T13:35:29.951Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::batch: calls queued with the arming command are refused without a strike"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "later reply: QUARANTINED refusal, trap_strikes 1"
+    recorded_at: "2026-11-11T13:35:33.713Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::batch: a call from a later reply is a strike and escalates"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "no transcript: inside the window no strike, window 0 strike"
+    recorded_at: "2026-11-11T13:35:38.981Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::batch: with no transcript the time window decides"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "second opaque exec in a later reply arms the latch with the repeat text; fails when repeat escalation is disabled"
+    recorded_at: "2026-11-11T13:35:45.657Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::repeat: the same no-latch classification in a later reply arms the latch"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "three opaque execs in one reply: all refused, no sentinel; fails when batch matching is disabled"
+    recorded_at: "2026-11-11T13:35:53.947Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::repeat: the same classification queued in one reply does not arm the latch"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "second capability command in the warned batch refused without latch; concurrent-hooks case draws exactly one warning"
+    recorded_at: "2026-11-11T13:36:03.861Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::capability: a second risk command queued with the warned one is refused without a latch"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "reset removes sentinel and repeat record; next opaque exec is a first refusal"
+    recorded_at: "2026-11-11T13:36:15.387Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::repeat: a human reset clears the repeat record"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "arming call records only its tool-use id; message resolved at comparison with window 0"
+    recorded_at: "2026-11-11T13:36:28.675Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::batch: a transcript line written after the arming call still identifies its batch"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"

@@ -1,0 +1,40 @@
+id: CAWS-LAUNCHER-UNCAUGHT-EXCEPTION-BLOCKS-001
+title: 'Hook launcher: an unexpected exception on PreToolUse refuses the call instead of exiting 1'
+mode: fix
+lifecycle_state: active
+worktree: launcher-uncaught-exception
+created_at: '2026-11-11T22:15:49.486Z'
+updated_at: '2026-11-11T22:15:51.273Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'machine hook launcher (bootstrap.py, caws-hook.py)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/runtime/caws-hook.py'
+    - 'packages/caws-cli/templates/hook-packs/runtime/bootstrap.py'
+    - 'packages/caws-cli/tests/adapter/launcher-unexpected-exception.test.js'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'On an enforcing event the launcher exits 2 with a block decision naming the fault for every exception it can catch; a handler''s own verdict (SystemExit) is never altered.'
+  - 'On a non-enforcing event a launcher fault before dispatch is reported on stderr and exits 0.'
+acceptance:
+  - id: A1
+    given: 'a pre_tool_use invocation in which the launcher raises an exception type outside ValueError, OSError, KeyError, TypeError and AttributeError'
+    when: 'the launcher or the bootstrap handles it'
+    then: 'the process exits 2 and prints a block decision whose reason names the exception type, where it previously exited 1 and the harness ran the tool call'
+  - id: A2
+    given: 'the same fault on post_tool_use before dispatch'
+    when: 'the launcher handles it'
+    then: 'it exits 0 and reports the fault on stderr'
+  - id: A3
+    given: 'a handler chain that returns its own verdict'
+    when: 'the launcher exits through SystemExit'
+    then: 'the exit status and stdout are unchanged'
+non_functional: {}
+contracts: []

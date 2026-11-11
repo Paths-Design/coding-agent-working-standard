@@ -653,16 +653,62 @@ import { isAdapterCoveredSurface } from './types';
 // operand libraries; their executable behavior is unchanged.
 // v127: secret advisories retain line/category order and shell-option semantics
 // while matching token expressions without per-line external processes.
-// v128 (CAWS-RELEASE-RC3-001): compare physical Git common directories for
-// external linked checkouts while retaining foreign-repository refusals.
-// v129 (CAWS-RELEASE-RC3-001): opaque refusals do not infer write operands
-// from path mentions or recommend an unadmitted script execution route.
-// v130: registered Write uncertainty retains configured human approval;
-// foreign ownership, failed observations and unavailable approval refuse.
-// v131: payload-owner approval cannot turn unrelated registry uncertainty
-// into approval for a canonical claim.
-// v135: linked checkouts refuse when canonical Git discovery falls back to the leaf.
-export const SHARED_PACK_VERSION = 136;
+// v128: the native hook envelope's chat identity takes precedence over a
+// shared live process record in session-id.sh.
+// v129: on the enforcing PreToolUse chain, run-handlers.sh refuses a mutating
+// tool call when a guard is missing, not executable, or exits with a status
+// other than 0 or 2 without a block decision, and when the payload carries no
+// tool name. The refusal names the guard and the fault. Read, Glob and Grep
+// report the fault on stderr and proceed, as does a handler with no refusal
+// path (agent-heartbeat, cwd-guard, scan-secrets, quiet-merge). Other chains
+// are unchanged. worktree-write-guard.sh counts zero git worktrees outside a
+// repository instead of ending without a verdict.
+// v130: command analysis under the machine dispatcher is given the agent's
+// BASH_ENV rather than the dispatcher's own handler-env.sh, which the analyzer
+// reported as an unmodeled environment for every command. A worktree-guard
+// copy refusal states the analyzer issue or copy-role reason behind it.
+// v131: a worktree-guard copy refusal prints every analyzer issue and the
+// copy-role reason together, so one retry can address all of them.
+// v132: scope-guard reads a kimi-code file tool target from tool_input.path,
+// the field that surface sends, rather than refusing the edit for want of
+// tool_input.file_path. Two differing names for one target are refused.
+// A Write or Edit naming no target is refused with the cause, not passed.
+// v133: strike state is written under CAWS_HOME, else HOME/.caws, with no
+// fallback to /tmp. A finding whose strike cannot be recorded is refused with
+// the reason (unresolved session, or no machine home) rather than reported as
+// a third strike. reset-strikes.sh lists the same location.
+// v134: block-dangerous.sh identifies the batch a tool call was queued in
+// (the assistant message that carries it, from the transcript; a short time
+// window when none is named). A call queued with a refused one is refused
+// without a strike, latch or kill. A second opaque-exec refusal sent after
+// the first could be read arms the latch. The bare-commit refusal does not
+// count repeats: the native runtime answers it for Codex without this script.
+// reset-danger-latch.sh clears the repeat record.
+// v135: block-dangerous.sh refuses a command the classifier could not judge
+// (classifier missing, crashed, or returning an unknown decision) without
+// arming the danger latch, and names the fault. A command the classifier ran
+// on but could not finish analyzing is refused once without a latch and arms
+// it when repeated, like an opaque payload.
+// v136: duplicate-export-check.sh resolves a relative Write target against
+// the payload working directory. Its walk to the package root ends at "/",
+// which a relative path never reaches, so the handler did not return.
+// v137: agent-heartbeat.sh stamps <session>.active beside the lease on every
+// call and starts the CLI only when no full heartbeat completed in the last
+// 15 seconds or the lease file was replaced since. The mailbox is polled on a
+// full heartbeat and when messages.jsonl changed since the session's last
+// poll. Each CLI call is ended after 3 seconds.
+// v138 (CAWS-RELEASE-RC3-001), carried from the 12.2.0-rc.3 release lane,
+// where these were numbered 128 to 136 before it was reconciled with main:
+// compare physical Git common directories for external linked checkouts while
+// retaining foreign-repository refusals; registered Write uncertainty retains
+// configured human approval, while foreign ownership, failed observations and
+// unavailable approval refuse; payload-owner approval cannot turn unrelated
+// registry uncertainty into approval for a canonical claim; linked checkouts
+// refuse when canonical Git discovery falls back to the leaf. An opaque-exec
+// refusal does not infer write operands from path mentions or recommend an
+// unadmitted script execution route, and it arms the latch on a repeat only
+// when it offered a rewrite the agent can use.
+export const SHARED_PACK_VERSION = 138;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

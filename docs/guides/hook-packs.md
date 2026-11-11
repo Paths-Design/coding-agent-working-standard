@@ -4,7 +4,7 @@ authority: reference
 status: active
 title: CAWS shared runtime setup and hook maintenance
 owner: CAWS maintainers
-updated: 2026-10-26
+updated: 2026-11-11
 audience: consumer
 ---
 
@@ -442,6 +442,162 @@ bytes, symbolic links and multiple links refuse before pointer publication.
 Native dispatch failures never trigger legacy fallback. Filesystem checks and
 fixture tests do not establish native harness execution or adoption.
 
+## Guard verdicts and refusals
+
+The PreToolUse chain decides whether a tool call runs. This section states what
+each outcome means for the agent, so that a guard author and a blocked agent
+read the same contract. The incidents behind it are
+[failure-lineage Entry 47](../failure-lineage.md#entry-47-a-guard-that-could-not-run-let-the-call-through-and-a-refusal-that-did-not-name-its-cause-sent-the-agent-searching-november-2026)
+and
+[Entry 48](../failure-lineage.md#entry-48-calls-queued-in-one-reply-took-a-session-from-its-first-refusal-to-a-kill-before-it-could-read-any-of-them-november-2026).
+
+### A guard that cannot run refuses the call
+
+Only exit 2, or a block decision on stdout, stops a tool call. A guard that is
+missing, not executable, or exits with any other non-zero status has reached no
+verdict. On the enforcing chain `lib/run-handlers.sh` treats that as a refusal,
+because a missing verdict that reads as "no objection" lets an agent remove a
+guard by breaking it.
+
+| Fault                                                | Write, Edit, Bash, unknown tools | Read, Glob, Grep    |
+| ---------------------------------------------------- | -------------------------------- | ------------------- |
+| Guard missing or not executable                      | Refused                          | Reported, call runs |
+| Guard exits other than 0 or 2 with no block decision | Refused                          | Reported, call runs |
+| Payload carries no tool name                         | Refused                          | Not applicable      |
+| Advisory handler missing or crashed                  | Reported, call runs              | Reported, call runs |
+
+The advisory handlers are `agent-heartbeat.sh`, `cwd-guard.sh`,
+`scan-secrets.sh` and `quiet-merge.sh`. They warn or rewrite and contain no
+refusal path. Every other chain member is a guard, including
+`shortcut-language-check.sh`, whose strike ramp can refuse. A handler added to
+the advisory list must not be relied on to stop anything. Read-only tools are
+not refused because a session that cannot read cannot diagnose the fault.
+
+One fault is outside this contract. The harness applies its own timeout to the
+whole PreToolUse hook, and when that expires the tool call runs with no guard
+verdict. Nothing inside the chain can refuse on that path. Keep each handler's
+cost bounded for that reason; the heartbeat ends each CLI call it makes at a
+deadline (see [Session liveness](#session-liveness)).
+
+### A refusal names its cause and what discharges it
+
+A refusal is the only text an agent reads at the moment it is blocked. A refusal
+that names a symptom sends the agent to try variations until one passes, which
+is the behavior guards exist to prevent. Every refusal states:
+
+- **Which guard refused and what it found**, in terms of the command or payload.
+  Where several causes apply, all of them: `worktree-guard` prints every
+  analyzer issue behind a refused copy and the copy-role reason.
+- **Whether the agent's command caused it.** A guard fault says "Your command
+  did not cause this" and tells the agent to stop and report; retrying cannot
+  help. A finding about the command says what to change.
+- **What it cost.** Whether a strike was recorded, whether the latch was armed,
+  and what the next occurrence will do.
+- **The missing input, by name.** `scope-guard` refuses a Write or Edit whose
+  payload names no target and states the field it looked for; a payload that
+  cannot be inventoried is refused with the cause appended.
+
+When adding a refusal, test its remedy as well as its verdict
+([Testing a refusal's remedy](#testing-a-refusals-remedy)).
+
+### Block, strike and latch
+
+A refusal is one of three weights. Choose the lightest that holds the boundary.
+
+| Weight | Effect on the session                                                                                                               | Used for                                                                                                       |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Block  | This call is refused. Nothing is recorded against the session.                                                                      | Guard faults; a first opaque inline payload; a first unanalyzable command; a bare commit over staged deletions |
+| Strike | The finding is counted for the session, across every repo. The first warns and allows, the second asks, the third and later refuse. | Findings a guard wants corrected over repetition: `scope-guard`, `shortcut-language-check`                     |
+| Latch  | The session is quarantined until a human resets it. On kill-enabled surfaces the next blocked attempt ends the process.             | Catastrophic or bypass-shaped commands, and a repeat of a blocked classification                               |
+
+Rules that hold across guards:
+
+- **An infrastructure fault never counts.** A missing guard, a classifier that
+  is absent or crashed, a classifier sidecar error and an unrecordable strike
+  are refused without a strike or a latch. The agent cannot discharge them, so
+  counting them only moves the session toward a kill it cannot avoid.
+- **A repeat latches only after the first refusal could be read.** A second
+  opaque inline payload, or a second command the classifier could not finish
+  analyzing, arms the latch when it is sent after the earlier refusal. The first
+  refusal says so.
+- **Calls queued in one model reply count once.** A harness can issue several
+  tool calls from one reply before any result returns. Calls that share a reply
+  are one occurrence: the later ones are refused, and they neither escalate nor
+  arm the latch, and a kill never fires on a call issued before the latch was
+  delivered. `block-dangerous.sh` identifies a reply from the transcript's
+  message id for the call's `tool_use_id`. Where no transcript is available it
+  treats calls within `CAWS_BATCH_WINDOW_SECONDS` (default 5) as one reply, so a
+  retry inside that window is refused and not escalated.
+- **Capability-risk commands warn once.** The first such command in a session
+  draws a warning; a later one arms the latch. A second one queued with the
+  first is refused without a latch.
+- **A bare commit over staged deletions never latches**, however often it is
+  repeated. The native runtime answers that refusal for Codex without the shell
+  guard, and both must agree.
+
+Strike counts live in the machine session store, at
+`$CAWS_HOME/state/sessions/<session>/strikes.json`, falling back to
+`$HOME/.caws`. The count belongs to the session and not to a repo, so a session
+refused in one repo is not cleared by moving to another. When neither is set, or
+the record cannot be read or written (`jq` missing, a corrupt record, an
+unwritable directory), the finding is refused outright and the message states
+that it could not be counted. It is not reported as a third strike.
+
+## Session liveness
+
+A session's lease, `.caws/leases/<session>.json` in the canonical checkout,
+records its status and the checkout it works in. Liveness is the later of two
+times: the lease's `last_active`, and the modification time of the activity
+stamp `.caws/leases/<session>.active`. The lease store applies that rule when it
+loads leases, so `caws agents list`, `caws status`, message delivery and the
+peer notice all read the same value. Liveness is an observation: it never grants
+ownership and a stale session is not an ended one.
+
+The stamp is written without starting the CLI:
+
+- The machine launcher touches it for every hook event it dispatches, so a
+  session is seen as active during a long tool run, after a tool returns and at
+  a stop.
+- `agent-heartbeat.sh` touches it on every PreToolUse call, which covers the
+  surfaces that run project dispatchers without the launcher.
+- A CLI heartbeat that is throttled touches it instead of rewriting the lease.
+
+A stamp is written only for a session that already has a lease, and never moves
+`last_active` backward. A stamp dated in the future is ignored.
+
+`agent-heartbeat.sh` runs first in the PreToolUse chain and is advisory. It
+starts the CLI only when work is owed:
+
+| Work                                            | Runs when                                                                                                       |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Full heartbeat: rewrite the lease, peer summary | None completed in the last `CAWS_HEARTBEAT_INTERVAL_SECONDS` (default 15), or the lease file was replaced since |
+| Mailbox poll                                    | On every full heartbeat, and when `.caws/messages.jsonl` changed since this session's last poll                 |
+| Neither                                         | The call stamps activity and exits                                                                              |
+
+Each CLI call the handler makes is ended after
+`CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS` (default 3) where `perl` is available. The
+CLI runs in its own process group and the whole group is ended, so a launcher
+script's child does not outlive the deadline. A full heartbeat that fails or is
+ended is still recorded as attempted: the next attempt waits out the interval,
+so a slow or broken CLI costs its deadline once per interval and not on every
+tool call. The peer notice can trail a change in the peer set by up to the
+heartbeat interval. Mail is polled only on a main-thread call; a subagent's call
+carries the parent's session id and leaves the mail queued
+([failure-lineage Entry 46](../failure-lineage.md#entry-46-mail-addressed-to-a-session-was-settled-delivered-into-its-subagents-contexts-each-repair-stated-the-rule-correctly-and-applied-it-to-bytes-another-layer-had-already-transformed-october-2026)).
+
+The handler and the launcher keep four files beside the lease. All are removed
+when the lease is deleted or pruned.
+
+| File                 | Meaning                                                                                                                                                    |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<session>.active`   | Activity stamp. Only its modification time is read.                                                                                                        |
+| `<session>.hb`       | Epoch second of the last completed full heartbeat.                                                                                                         |
+| `<session>.hb.lease` | Hard link to the lease file as of that heartbeat. A lease write replaces the file, so the link no longer names it and the next call runs a full heartbeat. |
+| `<session>.mail`     | Written by the main thread before each poll. A mailbox no older than it is polled again.                                                                   |
+
+The reasoning is in
+[failure-lineage Entry 50](../failure-lineage.md#entry-50-liveness-was-measured-at-one-hook-event-by-starting-the-cli-on-every-tool-call-november-2026).
+
 ## Human latch recovery
 
 From the canonical project checkout, a human can run the reset helper from the
@@ -583,3 +739,71 @@ For a guard that names a remedy:
   `core.hooksPath=/dev/null` on every repository it creates, so a git hook under
   test never fires there unless the test points `core.hooksPath` back at the
   hooks it installs. A refusal test in such a fixture passes vacuously.
+
+### Checks before merging a guard change
+
+A change to any file under `templates/hook-packs/` is pinned from more places
+than the hook tests. Run all of these in the worktree, after `npm run build`,
+before `caws worktree merge`:
+
+- **The whole jest suite and the whole bats suite**, not the directories that
+  look related. `tests/runtime/` and `tests/tooling/` assert guard bytes and
+  guard behavior, and a run limited to `tests/init`, `tests/hooks` and
+  `tests/adapter` leaves them unrun.
+- **The pack version and fingerprint.** Bump the pack's version constant
+  (`SHARED_PACK_VERSION` in `src/init/hook-packs/manifest-shared.ts` for the
+  shared pack), record why in the comment above it, and update the version and
+  fingerprint in `tests/init/pack-fingerprints.json`. The failing fingerprint
+  test prints the new value. Without the bump, installed packs are never offered
+  the change.
+- **The native compatibility identities.** `src/runtime/stock-handlers.ts` holds
+  the sha256 of `agent-stop.sh`, `agent-heartbeat.sh`, `block-dangerous.sh` and
+  `hook-utilities.sh`. The native runtime answers for one of those handlers only
+  while the installed file matches its recorded hash; otherwise the shell
+  handler runs. After changing one of them, decide whether the native
+  implementation still gives the same answers. If it does, update the hash. If
+  it does not, change the native implementation in the same slice or leave the
+  hash, so the shell handler stays in charge.
+  `tests/runtime/stock-handlers.test.js` runs both and compares them.
+- **The dispatcher identities.** `lib/run-handlers.sh` is recorded by hash in
+  `src/runtime/session-cache-admission.ts` and by exact lines in
+  `src/runtime/service-image.ts`.
+- **Not the reference inventory.** `tests/tooling/qualify-stop-profile.test.js`
+  lists template hashes as a fixed, reviewed reference that current templates
+  are compared against. It is not a pin to update when a template changes.
+
+### Shell and test-harness traps
+
+Each of these has passed a wrong guard or failed a right one.
+
+- **Run bats with stdin closed and a clean environment:**
+  `env -u GIT_EDITOR -u BATS_TEST_TIMEOUT npx bats tests/hooks/bats </dev/null`.
+  When stdin is a socket, as it is under an agent's shell tool, a fixture's
+  `env -i bash -c` sources `~/.bashrc` and its stray stderr line fails cases
+  that assert on output.
+- **bash 3.2 compares file times in whole seconds.** macOS ships bash 3.2 as
+  `/bin/bash`, and its `-nt` and `-ot` ignore the fractional second. Two writes
+  in one second compare as equal, so "changed since" is missed exactly when the
+  changes are closest together. To detect that a file was replaced, keep a hard
+  link and test `-ef`. Where only times are available, write the comparison so
+  that a tie takes the safe branch.
+- **Under bash 3.2 a false `[[ ... ]]` fails a bats case only as the last
+  statement.** Assert with `[ ... ]` or a helper.
+- **Run a handler from a directory that resembles a consumer's, not this
+  repository's.** A handler that walks upward for `package.json` or `.git` finds
+  this repository's when the test runner's working directory is inside it, and a
+  fault that needs their absence stays hidden
+  ([failure-lineage Entry 49](../failure-lineage.md#entry-49-an-advisory-handler-never-returned-on-a-relative-path-every-test-had-run-it-from-inside-a-package-november-2026)).
+  Send relative paths as well as absolute ones; several harnesses do.
+- **Bound a case that can hang by its process group.** `alarm` in the outer
+  process ends only that process. A looping child keeps the case's output pipe
+  open and the suite waits on it. Start the command in its own group and signal
+  the group at the limit; `tests/hooks/bats/export-check-relative-target.bats`
+  has the pattern.
+- **Name a new test file past the shadow-file guard.**
+  `tests/ci/release-path-integrity.test.js` rejects any tracked filename that
+  matches a shadow or duplicate pattern, including one that only contains the
+  word `duplicate`. The commit hook does not run that check; the jest suite
+  does.
+- **Confirm a new case can fail.** Remove the behavior it pins and run it. A
+  case that passes against the unfixed handler is testing the fixture.

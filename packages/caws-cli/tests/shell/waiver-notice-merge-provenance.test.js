@@ -468,8 +468,9 @@ describe('hook guards: reprieve is live, scope.support is not consulted', () => 
 
 function sentences(text) {
   return text
-    .split(/\r?\n[\t ]*\r?\n/)
-    .flatMap((paragraph) => paragraph.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+(?=[A-Z`(])/))
+    .split(/(^[ \t]*#{1,6}[ \t]+[^\r\n]*$)|(?:\r?\n[ \t]*){2,}/m)
+    .filter(Boolean)
+    .flatMap((block) => block.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+(?=[A-Z`(])/))
     .map((s) => s.trim())
     .filter(Boolean);
 }
@@ -524,6 +525,26 @@ describe('A5: operator copy routes a lane-provenance merge refusal to --add-supp
     (surface) => {
       const text = surfaces[surface]().replace(/\s+/g, ' ');
       expect(text).toContain('caws specs amend-scope <spec> --add-support <path>');
+    }
+  );
+
+  test('a Markdown heading cannot attach a grant command to the preceding remedy', () => {
+    const remedy =
+      'A lane-provenance merge refusal is remedied with caws specs amend-scope <spec> --add-support <path>.';
+    expect(sentences(`${remedy}\n### \`caws reprieve grant\`\nGrant a hook reprieve.`)).toEqual([
+      remedy,
+      '### `caws reprieve grant`',
+      'Grant a hook reprieve.',
+    ]);
+  });
+
+  test.each(['waiver', 'reprieve grant'])(
+    'a real same-sentence %s recommendation remains detectable',
+    (forbidden) => {
+      const unsafe = `A lane-provenance merge refusal requires a\n${forbidden}.`;
+      const extracted = sentences(unsafe).filter((sentence) => PROVENANCE.test(sentence));
+      expect(extracted).toEqual([unsafe.replace(/\s+/g, ' ')]);
+      expect(extracted[0]).toMatch(/waiver|reprieve grant/i);
     }
   );
 

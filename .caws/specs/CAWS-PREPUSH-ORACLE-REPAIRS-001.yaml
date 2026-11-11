@@ -1,0 +1,86 @@
+id: CAWS-PREPUSH-ORACLE-REPAIRS-001
+title: 'Repair pre-push test oracles and cold pytest fixture dependency ancestry'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge prepush-oracle-repairs at 9f56870262bfd97c07ce8f62d06e666e70e6c3f6'
+created_at: '2026-11-10T15:55:24.040Z'
+updated_at: '2026-11-10T16:33:00.812Z'
+created_by_session: '01a1c62a-5799-7803-89ee-3aa4d3894650'
+blast_radius:
+  modules:
+    - 'CAWS CLI registration, operator-copy, CAS and pytest entrypoint test contracts'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/adapter/system-registration.test.js'
+    - 'packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js'
+    - 'packages/caws-cli/tests/store/worktree-merge-canonical-consistency.test.js'
+    - 'packages/caws-cli/tests/hooks/pytest-entrypoint.test.js'
+    - 'packages/caws-cli/tests/helpers/pytest-entrypoint-fixture.js'
+  out: []
+invariants:
+  - 'Production runtime behavior and genuine hostile-path negative controls remain unchanged.'
+acceptance:
+  - id: A1
+    given: 'unsupported harness surfaces'
+    when: 'registration is attempted'
+    then: 'DSH-specific and generic refusals are asserted before any user settings or machine-surface writes.'
+  - id: A2
+    given: 'operator copy and Markdown boundaries'
+    when: 'provenance remedies are inspected'
+    then: 'headings cannot form false forbidden-grant claims and genuine same-sentence forbidden grants are rejected.'
+  - id: A3
+    given: 'a racing canonical compare-and-swap'
+    when: 'merge retries'
+    then: 'each update-ref attempt observes a fresh discovery and cleanup observations do not alter that oracle.'
+  - id: A4
+    given: 'an isolated cold pytest entrypoint source fixture'
+    when: 'npm runs with and without pretest'
+    then: 'the normal entrypoint builds and invokes the marker while the missing-pretest control fails before invocation.'
+observability:
+  - 'Focused Jest output and retained pytest entrypoint build and consumer artifacts identify behavior and negative controls.'
+rollback:
+  - 'Revert only the owned test and fixture changes using the normal governed branch path.'
+non_functional:
+  security:
+    - 'No production authority changes or guard bypasses.'
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: packages/caws-cli/tests/adapter/system-registration.test.js
+    recorded_at: "2026-11-10T16:26:42.718Z"
+    test_nodeid: packages/caws-cli/tests/adapter/system-registration.test.js
+    command: "./node_modules/.bin/jest --runInBand --silent tests/adapter/system-registration.test.js"
+    exit_code: 0
+    commit_sha: "9021dd5ec8425e59daaf63d7b4dc1de368dcfe26"
+    test_verified_at: "9021dd5ec8425e59daaf63d7b4dc1de368dcfe26"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js
+    recorded_at: "2026-11-10T16:28:06.905Z"
+    test_nodeid: packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js
+    command: "./node_modules/.bin/jest --runInBand --silent tests/shell/waiver-notice-merge-provenance.test.js"
+    exit_code: 0
+    commit_sha: "9021dd5ec8425e59daaf63d7b4dc1de368dcfe26"
+    test_verified_at: "9021dd5ec8425e59daaf63d7b4dc1de368dcfe26"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: packages/caws-cli/tests/store/worktree-merge-canonical-consistency.test.js
+    recorded_at: "2026-11-10T16:29:48.796Z"
+    test_nodeid: packages/caws-cli/tests/store/worktree-merge-canonical-consistency.test.js
+    command: "./node_modules/.bin/jest --runInBand --silent tests/store/worktree-merge-canonical-consistency.test.js"
+    exit_code: 0
+    commit_sha: "9021dd5ec8425e59daaf63d7b4dc1de368dcfe26"
+    test_verified_at: "9021dd5ec8425e59daaf63d7b4dc1de368dcfe26"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: packages/caws-cli/tests/hooks/pytest-entrypoint.test.js
+    recorded_at: "2026-11-10T16:31:53.535Z"
+    test_nodeid: packages/caws-cli/tests/hooks/pytest-entrypoint.test.js
+    command: "./node_modules/.bin/jest --runInBand --silent tests/hooks/pytest-entrypoint.test.js"
+    exit_code: 0
+    commit_sha: "9021dd5ec8425e59daaf63d7b4dc1de368dcfe26"
+    test_verified_at: "9021dd5ec8425e59daaf63d7b4dc1de368dcfe26"

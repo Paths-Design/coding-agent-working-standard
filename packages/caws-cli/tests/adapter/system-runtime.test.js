@@ -307,7 +307,8 @@ test('global registration waits for legacy retirement without duplicating the lo
       cwd: p,
       encoding: 'utf8',
       env: { ...process.env, CAWS_HOME: home },
-      input: JSON.stringify({ cwd: p, session_id: 'transition-test' }),
+      // A PreToolUse payload names its tool; the enforcing chain refuses one that does not.
+      input: JSON.stringify({ cwd: p, session_id: 'transition-test', tool_name: 'Write' }),
     });
   expect(invoke(p).status).toBe(0);
   expect(invoke(p).stdout).toBe('');
@@ -451,6 +452,153 @@ test('unmodified stock guards protect hook paths and the stock renderer records 
   expect(JSON.stringify(turn)).toContain('The checkout is clean.');
   expect(fs.existsSync(path.join(sessionDir, 'turn-002.json'))).toBe(false);
   expect(fs.existsSync(path.join(p, '.caws/hooks'))).toBe(false);
+});
+
+// The dispatcher exports its own BASH_ENV for handlers. The command analyzer
+// reports an inherited BASH_ENV as unmodeled, so these run the unmodified guards
+// and the built CLI together through the launcher, the only arrangement in
+// which the two meet.
+// Claude Code is the surface used: the analyzer refuses every Codex native
+// payload on its own execution-contract grounds before environment is considered.
+function bash(p, command, extra = {}) {
+  fs.mkdirSync(path.join(home, 'surfaces/claude-code'), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, 'surfaces/claude-code/settings.json'),
+    JSON.stringify({ version: 1, enabled: true })
+  );
+  const args = [path.join(home, 'bin/caws-hook'), 'claude-code', 'pre_tool_use', '--system'];
+  const input = JSON.stringify({
+    cwd: p,
+    session_id: 'system-test',
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Bash',
+    tool_input: { command },
+  });
+  const environmentOverrides = {
+    CAWS_HOME: home,
+    CAWS_PROJECT_DIR: '',
+    CAWS_BIN: path.resolve(__dirname, '../../dist/index.js'),
+    ...extra,
+  };
+  const result = spawnSync('python3', args, {
+    cwd: p,
+    encoding: 'utf8',
+    env: { ...process.env, ...environmentOverrides },
+    input,
+  });
+  invocations.push({
+    command: ['python3', ...args],
+    cwd: p,
+    input,
+    environmentOverrides,
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  });
+  return result;
+}
+function withoutBashEnv(body) {
+  const saved = process.env.BASH_ENV;
+  delete process.env.BASH_ENV;
+  try {
+    return body();
+  } finally {
+    if (saved !== undefined) process.env.BASH_ENV = saved;
+  }
+}
+
+test('a read-only command is not reported as unanalyzable because of the dispatcher BASH_ENV', () => {
+  const p = repo('analyzer-ls');
+  installMachineRuntime({ home });
+  const result = withoutBashEnv(() => bash(p, 'ls'));
+  expect(result.stdout + result.stderr).not.toContain('inherited-environment');
+  expect(result.stdout).not.toContain('"permissionDecision"');
+  expect(result.status).toBe(0);
+});
+
+test('a plain file copy passes the stock guards through the launcher', () => {
+  const p = repo('analyzer-cp');
+  fs.writeFileSync(path.join(p, 'a.txt'), 'a\n');
+  installMachineRuntime({ home });
+  const result = withoutBashEnv(() => bash(p, 'cp a.txt b.txt'));
+  expect(result.stderr).not.toContain('authority unavailable');
+  expect(result.stdout + result.stderr).not.toContain('inherited-environment');
+  expect(result.status).toBe(0);
+});
+
+test("the agent's own BASH_ENV is still reported, with the cause named in the copy refusal", () => {
+  const p = repo('analyzer-own-env');
+  fs.writeFileSync(path.join(p, 'a.txt'), 'a\n');
+  const startup = path.join(root, 'agent-startup.sh');
+  fs.writeFileSync(startup, '');
+  installMachineRuntime({ home });
+  const result = bash(p, 'cp a.txt b.txt', { BASH_ENV: startup });
+  expect(result.status).toBe(2);
+  expect(result.stdout).toBe('');
+  expect(result.stderr).toContain(
+    '[worktree-guard] cp/mv refused: the command analyzer reported: inherited-environment: Unmodeled inherited environment BASH_ENV.'
+  );
+  expect(result.stderr).toContain('[worktree-guard] authority unavailable: copy-roles; blocked');
+});
+
+test('a single worktree merge is rerooted to the project through the launcher', () => {
+  const p = repo('analyzer-merge');
+  installMachineRuntime({ home });
+  const result = withoutBashEnv(() => bash(p, 'caws worktree merge wt-x'));
+  expect(result.status).toBe(0);
+  const decision = JSON.parse(result.stdout).hookSpecificOutput;
+  expect(decision.permissionDecision).toBe('allow');
+  expect(decision.updatedInput).toEqual({ command: `cd ${p} && caws worktree merge wt-x` });
+});
+
+test("a merge is left unrewritten when the agent's own BASH_ENV makes it unprovable", () => {
+  const p = repo('analyzer-merge-own-env');
+  const startup = path.join(root, 'agent-startup.sh');
+  fs.writeFileSync(startup, '');
+  installMachineRuntime({ home });
+  const result = bash(p, 'caws worktree merge wt-x', { BASH_ENV: startup });
+  // The write guard answers first with an ask that names the cause; the command
+  // reaches the agent's approval path as written, never rerooted.
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe('');
+  const decision = JSON.parse(result.stdout).hookSpecificOutput;
+  expect(decision.permissionDecision).toBe('ask');
+  expect(decision.permissionDecisionReason).toContain(
+    'inherited-environment: Unmodeled inherited environment BASH_ENV.'
+  );
+  expect(decision).not.toHaveProperty('updatedInput');
+});
+
+test('a directory copy is refused with the copy-role reason and the way to restate it', () => {
+  const p = repo('analyzer-cp-dir');
+  fs.mkdirSync(path.join(p, 'src'));
+  fs.writeFileSync(path.join(p, 'src/a.txt'), 'a\n');
+  installMachineRuntime({ home });
+  const result = withoutBashEnv(() => bash(p, 'cp -R src dest'));
+  expect(result.status).toBe(2);
+  expect(result.stdout).toBe('');
+  expect(result.stderr.split('\n').filter((line) => line.includes('cp/mv refused'))).toEqual([
+    '[worktree-guard.sh] [worktree-guard] cp/mv refused: the command analyzer reported: mutation-copy-roles: Copy or move option semantics are outside the closed file profile.',
+    '[worktree-guard.sh] [worktree-guard] cp/mv refused: copy operand roles are unresolved. Name each source as an existing regular file and the destination as a literal path.',
+  ]);
+  expect(result.stderr).toContain('[worktree-guard] authority unavailable: copy-roles; blocked');
+});
+
+test('a copy refusal names every analyzer issue, not only the first', () => {
+  const p = repo('analyzer-cp-issues');
+  fs.mkdirSync(path.join(p, 'src'));
+  const startup = path.join(root, 'agent-startup.sh');
+  fs.writeFileSync(startup, '');
+  installMachineRuntime({ home });
+  const result = bash(p, 'cp -R src dest', { BASH_ENV: startup });
+  expect(result.status).toBe(2);
+  const reported = result.stderr
+    .split('\n')
+    .filter((line) => line.includes('the command analyzer reported'));
+  expect(reported).toEqual([
+    '[worktree-guard.sh] [worktree-guard] cp/mv refused: the command analyzer reported: mutation-copy-roles: Copy or move option semantics are outside the closed file profile.',
+    '[worktree-guard.sh] [worktree-guard] cp/mv refused: the command analyzer reported: inherited-environment: Unmodeled inherited environment BASH_ENV.',
+  ]);
 });
 
 test('system audit logs are machine-owned and do not dirty either project', () => {
@@ -762,4 +910,78 @@ test('the carve-out is by error CLASS, not by one error message', () => {
   expect(exit.status).toBe(0);
   expect(exit.stdout).not.toContain('"decision"');
   expect(exit.stderr).toContain('Malformed system project surface');
+});
+
+describe('activity stamp', () => {
+  const OLD = new Date('2020-01-01T00:00:00.000Z');
+  function leased(p, session = 'system-test') {
+    const leases = path.join(p, '.caws/leases');
+    fs.mkdirSync(leases, { recursive: true });
+    fs.writeFileSync(
+      path.join(leases, session + '.json'),
+      JSON.stringify({ session_id: session, status: 'active', last_active: OLD.toISOString() })
+    );
+    return path.join(leases, session + '.active');
+  }
+
+  test.each(['pre_tool_use', 'post_tool_use', 'stop'])(
+    'the launcher advances the session stamp on %s',
+    (event) => {
+      const p = repo('stamp-' + event);
+      installMachineRuntime({ home });
+      const stamp = leased(p);
+      fs.writeFileSync(stamp, '');
+      fs.utimesSync(stamp, OLD, OLD);
+      const leaseBefore = fs.readFileSync(path.join(p, '.caws/leases/system-test.json'), 'utf8');
+      const startedMs = Date.now();
+      invoke(p, event);
+      // Whole-second filesystems round down, so allow one second of slack.
+      expect(fs.statSync(stamp).mtimeMs).toBeGreaterThanOrEqual(startedMs - 1000);
+      // PreToolUse and Stop have handlers that own the lease and may rewrite
+      // it. PostToolUse has none, so there the stamp is the only record.
+      if (event === 'post_tool_use')
+        expect(fs.readFileSync(path.join(p, '.caws/leases/system-test.json'), 'utf8')).toBe(
+          leaseBefore
+        );
+    }
+  );
+
+  test('the launcher creates the stamp for a leased session that has none yet', () => {
+    const p = repo('stamp-create');
+    installMachineRuntime({ home });
+    const stamp = leased(p);
+    invoke(p, 'post_tool_use');
+    expect(fs.statSync(stamp).isFile()).toBe(true);
+  });
+
+  test('a session without a lease gets no stamp and no lease from a non-heartbeat event', () => {
+    const p = repo('stamp-no-lease');
+    installMachineRuntime({ home });
+    invoke(p, 'post_tool_use');
+    const leases = path.join(p, '.caws/leases');
+    const entries = fs.existsSync(leases) ? fs.readdirSync(leases) : [];
+    expect(entries.filter((name) => name.startsWith('system-test'))).toEqual([]);
+  });
+
+  test('a session id that is not a safe filename is never stamped', () => {
+    const p = repo('stamp-unsafe');
+    installMachineRuntime({ home });
+    // A lease-shaped file where the unchecked id would resolve.
+    fs.mkdirSync(path.join(p, '.caws/leases'), { recursive: true });
+    fs.writeFileSync(path.join(p, '.caws/escape.json'), '{}');
+    invoke(p, 'post_tool_use', {}, { file_path: 'x.ts' }, { session_id: '../escape' });
+    expect(fs.existsSync(path.join(p, '.caws/escape.active'))).toBe(false);
+  });
+
+  test('a stamp that is a symbolic link is not followed', () => {
+    const p = repo('stamp-symlink');
+    installMachineRuntime({ home });
+    const stamp = leased(p);
+    const target = path.join(p, 'victim.txt');
+    fs.writeFileSync(target, 'victim');
+    fs.utimesSync(target, OLD, OLD);
+    fs.symlinkSync(target, stamp);
+    invoke(p, 'post_tool_use');
+    expect(fs.statSync(target).mtimeMs).toBe(OLD.getTime());
+  });
 });

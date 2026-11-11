@@ -1,0 +1,101 @@
+id: CAWS-HEARTBEAT-ACTIVITY-STAMP-001
+title: 'Heartbeat: launcher-stamped liveness, CLI off the per-call path, bounded mail poll'
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge heartbeat-activity-stamp at 0b8a65986605a1856be16bf7d7432a7d7fcb1dff'
+created_at: '2026-11-11T16:09:56.934Z'
+updated_at: '2026-11-11T21:02:00.811Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh'
+    - 'packages/caws-cli/templates/hook-packs/runtime/caws-hook.py'
+    - 'packages/caws-cli/src/store/leases-store.ts'
+    - 'packages/caws-cli/src/application/agent-heartbeat.ts'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/CHANGELOG.md'
+    - 'packages/caws-cli/tests/hooks/bats/agent-heartbeat-activity.bats'
+    - 'packages/caws-cli/tests/store/leases-activity-stamp.test.js'
+    - 'packages/caws-cli/tests/application/agent-heartbeat.test.js'
+    - 'packages/caws-cli/tests/adapter/system-runtime.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a lease file and an activity stamp beside it whose mtime is later than the recorded last_active'
+    when: 'leases are loaded'
+    then: 'the lease reports last_active at the stamp instant, while a stamp older than the recorded value, or a stamp with no lease, changes nothing'
+  - id: A2
+    given: 'a session that has a lease'
+    when: 'the machine launcher dispatches any hook event for it, including post_tool_use and stop'
+    then: 'the stamp mtime advances with no CLI subprocess, and a session without a lease gets no stamp and no lease'
+  - id: A3
+    given: 'a full heartbeat completed under fifteen seconds ago, the lease unchanged since, and no mailbox change'
+    when: 'the PreToolUse heartbeat handler runs'
+    then: 'it invokes no CLI and emits nothing; a mailbox change triggers only the poll; a lease rewritten since (for example by stop) triggers the full heartbeat'
+  - id: A4
+    given: 'a fresh activity stamp and a recorded last_active older than the throttle'
+    when: 'a throttled heartbeat is requested'
+    then: 'the lease is rewritten, because the throttle reads the recorded value and not the stamp'
+  - id: A5
+    given: 'a lease with sidecar files'
+    when: 'the lease is deleted or pruned'
+    then: 'its sidecars are removed with it'
+  - id: A6
+    given: 'a CLI that does not return'
+    when: 'the heartbeat handler runs'
+    then: 'each CLI call is ended at the deadline, the handler exits 0 with no output, and the tool call is not refused'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "leases-activity-stamp.test.js: later stamp reported, older and future stamps and lease-less stamps ignored; mutants S1-S4 killed"
+    recorded_at: "2026-11-11T21:00:31.448Z"
+    test_nodeid: "packages/caws-cli/tests/store/leases-activity-stamp.test.js::a stamp later than the recorded value becomes the reported last_active"
+    commit_sha: "801efda3b"
+    test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "agent-heartbeat-activity.bats cases 2-10: no CLI when nothing is owed, poll only on mailbox change, full heartbeat on a replaced lease; mutants M1-M8 killed"
+    recorded_at: "2026-11-11T21:00:37.144Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/agent-heartbeat-activity.bats::heartbeat-activity: a call soon after a full heartbeat starts no CLI, prints nothing, and advances the stamp"
+    commit_sha: "801efda3b"
+    test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "leases-activity-stamp.test.js: delete removes .active .hb .hb.lease .mail for that session only, also when the lease is already absent; mutant S5 killed"
+    recorded_at: "2026-11-11T21:00:45.735Z"
+    test_nodeid: "packages/caws-cli/tests/store/leases-activity-stamp.test.js::deleting an already absent lease still clears sidecars left behind"
+    commit_sha: "801efda3b"
+    test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "agent-heartbeat-activity.bats case 13: non-exec launcher with a sleeping child ended at a 1s deadline, exit 0, empty output, no surviving child; mutant R1 killed"
+    recorded_at: "2026-11-11T21:00:53.298Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/agent-heartbeat-activity.bats::heartbeat-activity: a CLI that never returns is ended at the deadline and the call proceeds"
+    commit_sha: "801efda3b"
+    test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "system-runtime.test.js activity stamp block (7 cases): stamp advances on pre_tool_use, post_tool_use and stop; created on post_tool_use for a leased session; lease bytes unchanged on post_tool_use; no stamp without a lease; mutants L1-L4 killed"
+    recorded_at: "2026-11-11T21:01:46.643Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::the launcher creates the stamp for a leased session that has none yet"
+    commit_sha: "801efda3b"
+    test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "application/agent-heartbeat.test.js: fresh stamp with recorded last_active 65s old still writes the lease; mutant A1 killed"
+    recorded_at: "2026-11-11T21:01:58.852Z"
+    test_nodeid: "packages/caws-cli/tests/application/agent-heartbeat.test.js::the throttle reads the recorded last_active, so a fresh stamp cannot suppress a due lease write"
+    commit_sha: "801efda3b"
+    test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"

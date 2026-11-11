@@ -385,6 +385,10 @@ done
 # DANGER-LATCH-APPROVAL-AND-FEEDBACK-001: clear the warn markers too, so the
 # next flagged ask in a post-reset session gets a fresh first-strike warning.
 for WARN in ${WARN_FILES[@]+"${WARN_FILES[@]}"}; do
+  # The repeat record (refusals that did not arm the latch) is cleared with
+  # the session, so a reset session starts its repeat count over.
+  REPEAT="${WARN/danger-warn-/danger-repeat-}"
+  [[ ! -f "$REPEAT" ]] || rm -f "$REPEAT"
   if [[ -f "$WARN" ]]; then
     rm -f "$WARN"
     WARNS_CLEARED=$((WARNS_CLEARED + 1))

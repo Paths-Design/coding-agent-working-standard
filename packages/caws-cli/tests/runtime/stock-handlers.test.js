@@ -1025,6 +1025,9 @@ describe('selected stock handler behavior', () => {
     'selected guard retains capability warning and repeat latch: %s',
     async (input) => {
       environment.CAWS_TRAP_KILL = '0';
+      // No transcript names the batch here; a zero window makes the second call
+      // a later attempt, which is the case this test is about.
+      environment.CAWS_BATCH_WINDOW_SECONDS = '0';
       environment.PATH = '/usr/bin:/bin';
       command(input);
       const handler = select();

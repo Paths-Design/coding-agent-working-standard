@@ -139,8 +139,10 @@ EOF
 
   local i
   for i in 1 2 3; do
+    # The enforcing chain refuses a call it cannot identify, so the fixture
+    # names the tool; what this test pins is that a block is never deduplicated.
     run env -i PATH="$PATH" CAWS_HOME="$BATS_TEST_TMPDIR/caws-home" \
-      HOOK_SESSION_ID="dedup-control" bash -c "
+      HOOK_SESSION_ID="dedup-control" HOOK_TOOL_NAME=Bash bash -c "
         source '$CAWS_TEST_HOOKS_DIR/lib/run-handlers.sh'
         export HOOKS_DIR='$fake_hooks' HOOK_INPUT_JSON='{}'
         run_handlers --short-circuit-on-block block.sh

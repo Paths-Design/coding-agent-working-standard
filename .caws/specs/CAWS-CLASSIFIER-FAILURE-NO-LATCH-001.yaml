@@ -1,0 +1,93 @@
+id: CAWS-CLASSIFIER-FAILURE-NO-LATCH-001
+title: 'A command classifier failure refuses the command without arming the danger latch'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge classifier-failure-no-latch at cf6a291eabaacd864410c15d8c401de96d4ed8d8'
+created_at: '2026-11-11T13:40:25.711Z'
+updated_at: '2026-11-11T14:23:06.578Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'hook-packs/shared block-dangerous classifier-failure branches'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh'
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'A command the classifier could not judge never runs unreviewed'
+  - 'A fault in the classifier itself is not the agent''s doing: it adds no strike and arms no latch, and the refusal names the fault'
+acceptance:
+  - id: A1
+    given: 'python3 or classify_command.py is unavailable to the guard'
+    when: 'a Bash command is checked'
+    then: 'the command is refused with text naming the missing classifier, no danger-latch sentinel is written, and a second command is refused the same way'
+  - id: A2
+    given: 'the classifier process exits with an error, including a traceback containing quotes'
+    when: 'a Bash command is checked'
+    then: 'the command is refused with the classifier''s error text, no sentinel is written, and the text says the command did not cause it'
+  - id: A3
+    given: 'the classifier returns a decision the guard does not recognize'
+    when: 'a Bash command is checked'
+    then: 'the command is refused naming the unrecognized decision and no sentinel is written'
+  - id: A4
+    given: 'a catastrophic deny or a second capability-risk command in a later batch'
+    when: 'it is checked'
+    then: 'the latch is armed exactly as before this change'
+  - id: A5
+    given: >-
+      a command the classifier ran on but could not finish analyzing (source
+      classifier_error returned by the classifier, such as nesting past its budget)
+    when: 'it is checked for the first time, and again in a later batch'
+    then: >-
+      the first is refused without a latch, with the way to restate it and a notice
+      that a repeat arms the latch; the second arms the latch naming the repeated
+      classification; a classifier process crash in between does not count as the
+      repeat
+rollback:
+  - 'Revert the merge commit; shared pack returns to 134'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "missing classifier file: refusal names the file, no sentinel. python3-absent half is not exercised by a test"
+    recorded_at: "2026-11-11T14:22:30.218Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats::classifier failure: a missing classifier file refuses, names the file, and does not arm the latch"
+    commit_sha: "7d0982be7"
+    test_verified_at: "7d0982be7c71a0e1eb50985a8cbba43b01493c69"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "classifier exit error and quoted traceback: refused with the error text, no sentinel"
+    recorded_at: "2026-11-11T14:22:33.705Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats::classifier failure: a traceback with quotes in it is still reported as the classifier's failure"
+    commit_sha: "7d0982be7"
+    test_verified_at: "7d0982be7c71a0e1eb50985a8cbba43b01493c69"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "unrecognized decision named, no sentinel"
+    recorded_at: "2026-11-11T14:22:38.536Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats::classifier failure: an unrecognized decision refuses, names it, and does not arm the latch"
+    commit_sha: "7d0982be7"
+    test_verified_at: "7d0982be7c71a0e1eb50985a8cbba43b01493c69"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: rm -rf / after a classifier fault still arms the latch
+    recorded_at: "2026-11-11T14:22:44.903Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats::classifier failure: a real catastrophic deny still arms the latch after a classifier fault"
+    commit_sha: "7d0982be7"
+    test_verified_at: "7d0982be7c71a0e1eb50985a8cbba43b01493c69"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "nested command: first refused without latch, second arms it; crash in between does not count"
+    recorded_at: "2026-11-11T14:22:52.582Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats::unanalyzable command: a second one sent after the refusal arms the latch"
+    commit_sha: "7d0982be7"
+    test_verified_at: "7d0982be7c71a0e1eb50985a8cbba43b01493c69"

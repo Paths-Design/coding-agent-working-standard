@@ -96,8 +96,15 @@ if [[ "$COMMAND" == *caws* ]]; then
     if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then cat "$HOOK_PAYLOAD_FILE"
     else printf '%s' "${HOOK_INPUT_JSON:-}"; fi
   }
+  # The analyzer is given the agent's BASH_ENV, not the machine dispatcher's own
+  # (see caws_run_with_agent_bash_env in lib/bash-mutation-analysis.sh).
+  if [[ ! -r "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" ]] ||
+      ! source "$SCRIPT_DIR/lib/bash-mutation-analysis.sh"; then
+    echo '[quiet-merge] Command analysis library is unavailable; lifecycle CWD rewrite skipped.' >&2
+    exit 0
+  fi
   if ! command -v "${CAWS_BIN:-caws}" >/dev/null 2>&1 ||
-      ! FACTS="$(original_payload | "${CAWS_BIN:-caws}" hooks mutation-view --json \
+      ! FACTS="$(original_payload | caws_run_with_agent_bash_env "${CAWS_BIN:-caws}" hooks mutation-view --json \
         --cwd "$EXPECTED_CWD" --project "$PROJECT_DIR")"; then
     echo '[quiet-merge] Lifecycle source/context could not be proved; CWD rewrite skipped.' >&2
     exit 0

@@ -243,6 +243,19 @@ export const DOCTOR_RULES = {
   HOOKS_STALE_TELEMETRY_PACK: 'doctor.hooks.stale_telemetry_pack',
 
   /**
+   * CAWS-DSH-HARNESS-PLUGIN-PARITY-001: a repo has the harness-plugin surface
+   * pack installed (e.g. `.dsh/AGENTS.md` with `hook_pack: dsh`) while the
+   * active harness profile does NOT compose that surface's CAWS plugin bundle.
+   * The guard chain only exists when the profile loads the bundle, so this is
+   * the "installed but not wired" split-brain: init reports a pack, doctor is
+   * silent, and no CAWS guard runs in the harness. Fires only when both the
+   * project marker and a readable profile composition exist; an unobservable
+   * profile is silent (unobserved is not unwired). Severity: warning. Repair:
+   * install/select the bundle in the profile and restart it.
+   */
+  HOOKS_HARNESS_PLUGIN_UNWIRED: 'doctor.hooks.harness_plugin_unwired',
+
+  /**
    * CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: the repo's INSTALLED shared
    * hook pack (.caws/hooks rows, stamped hook_pack_version header) lags the
    * SHIPPING SHARED_PACK_VERSION. The hooks that enforce governance are the

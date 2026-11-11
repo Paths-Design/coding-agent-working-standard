@@ -514,7 +514,13 @@ _wwg_count_worktrees_z() {
 }
 
 if [[ "$WT_COUNT" -lt 1 ]] 2>/dev/null; then
-  if GIT_WT_INFO="$(git -C "$PROJECT_DIR" worktree list --porcelain -z 2>/dev/null | _wwg_count_worktrees_z)"; then
+  if [[ -z "${GIT_DIR_RAW:-}" ]]; then
+    # Not a git repository: a directory with a .git entry that git could not
+    # read was refused above, so git has no worktrees to count here. Listing
+    # them anyway fails, and under errexit that ends the guard without a
+    # verdict or a diagnostic.
+    GIT_WT_INFO="0:"
+  elif GIT_WT_INFO="$(git -C "$PROJECT_DIR" worktree list --porcelain -z 2>/dev/null | _wwg_count_worktrees_z)"; then
     :
   elif [[ "$PROJECT_DIR" == *$'\n'* ]]; then
     # git before 2.36 has no -z, and its line form cannot carry the root's

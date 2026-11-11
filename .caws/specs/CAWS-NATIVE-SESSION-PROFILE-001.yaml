@@ -1,0 +1,75 @@
+id: CAWS-NATIVE-SESSION-PROFILE-001
+title: 'Qualify payload-first session identity for native routing'
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Reviewed current shared source identities qualify native routing with exact-byte refusal retained; seven focused suites, payload/Python guards and pack fingerprint passed at 37ce36421. Full pre-push suite remains a parent-task obligation.'
+created_at: '2026-11-10T15:47:18.970Z'
+updated_at: '2026-11-10T16:13:11.221Z'
+created_by_session: '01a1c44b-1650-7c43-811d-3a9ea259b43b'
+blast_radius:
+  modules:
+    - 'Native stock handler and session cache source admission'
+    - 'Shared hook pack version and fingerprint'
+    - 'Native stock guard admission for reviewed Bash mutation source'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/runtime/stock-handlers.ts'
+    - 'packages/caws-cli/src/runtime/session-cache-admission.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/runtime/stock-handlers.test.js'
+    - 'packages/caws-cli/tests/runtime/session-cache-admission.test.js'
+  out: []
+invariants:
+  - 'Only explicitly reviewed session identity bytes qualify for native routing; unknown or rehashed bytes fail closed.'
+  - 'Payload-bearing native calls preserve per-chat identity ahead of a shared live PID record; absent payload keeps its fallback boundary.'
+  - 'Native stock paths use only the reviewed token-record behavior; opaque capability or confirmation outcomes retain selected-shell handling.'
+acceptance:
+  - id: A1
+    given: 'the committed payload-first session-id.sh and its earlier reviewed profile'
+    when: 'stock and native prefix eligibility checks run'
+    then: 'both reviewed profiles qualify where applicable and changed or rehashed source bytes are refused'
+  - id: A2
+    given: 'the changed shared hook pack'
+    when: 'the pack fingerprint guard runs'
+    then: 'a bumped shared pack version and its recorded fingerprint match the actual template bytes'
+  - id: A3
+    given: 'the reviewed Bash mutation source and a changed or rehashed copy'
+    when: 'stock guard and containment eligibility run'
+    then: >-
+      unchanged native stock behavior qualifies with the reviewed source; changed
+      source bytes refuse native admission and opaque capability or confirmation
+      outcomes retain selected-shell handling
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "At 37ce36421, the seven focused native suites passed 393 tests. Current payload-first session-id bytes and prior bytes match the two explicit pins; stock and SessionEnd admission tests exercise current eligibility and changed-source refusal. Historical profile execution was source-checked, not rerun."
+    recorded_at: "2026-11-10T16:10:38.139Z"
+    test_nodeid: packages/caws-cli/tests/runtime/session-cache-admission.test.js
+    command: "./node_modules/.bin/jest --runInBand tests/runtime/stock-handlers.test.js tests/runtime/session-cache-admission.test.js tests/runtime/engine-routing.test.js tests/runtime/session-seal-routing.test.js tests/runtime/stop-dispatch-connection.test.js tests/runtime/containment.test.js tests/init/pack-fingerprint.test.js"
+    exit_code: 0
+    commit_sha: "37ce36421776c594b3a7f8787fa88cc52a0148f9"
+    test_verified_at: "37ce36421776c594b3a7f8787fa88cc52a0148f9"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "At 37ce36421, SHARED_PACK_VERSION and the recorded shared fingerprint match the changed template bytes; the pack fingerprint guard passed in the seven-suite run."
+    recorded_at: "2026-11-10T16:11:02.244Z"
+    test_nodeid: packages/caws-cli/tests/init/pack-fingerprint.test.js
+    command: "./node_modules/.bin/jest --runInBand tests/runtime/stock-handlers.test.js tests/runtime/session-cache-admission.test.js tests/runtime/engine-routing.test.js tests/runtime/session-seal-routing.test.js tests/runtime/stop-dispatch-connection.test.js tests/runtime/containment.test.js tests/init/pack-fingerprint.test.js"
+    exit_code: 0
+    commit_sha: "37ce36421776c594b3a7f8787fa88cc52a0148f9"
+    test_verified_at: "37ce36421776c594b3a7f8787fa88cc52a0148f9"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "At 37ce36421, stock handler tests cover current guard and utility eligibility, changed-and-rehashed Bash helper refusal, and stateful capability/confirm fallback to selected shell. Python write-literal shell tests passed separately (50 tests with payload identity suite). Ordinary allowed Python commands are outside this narrowed claim."
+    recorded_at: "2026-11-10T16:12:26.602Z"
+    test_nodeid: packages/caws-cli/tests/runtime/stock-handlers.test.js
+    command: "./node_modules/.bin/jest --runInBand tests/runtime/stock-handlers.test.js tests/runtime/session-cache-admission.test.js tests/runtime/engine-routing.test.js tests/runtime/session-seal-routing.test.js tests/runtime/stop-dispatch-connection.test.js tests/runtime/containment.test.js tests/init/pack-fingerprint.test.js"
+    exit_code: 0
+    commit_sha: "37ce36421776c594b3a7f8787fa88cc52a0148f9"
+    test_verified_at: "37ce36421776c594b3a7f8787fa88cc52a0148f9"

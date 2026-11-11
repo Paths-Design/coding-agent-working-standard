@@ -1,0 +1,73 @@
+id: CAWS-NATIVE-RELEASE-ARTIFACTS-001
+title: 'Qualify selected native release artifacts across installed upgrade paths'
+mode: feature
+lifecycle_state: active
+worktree: native-session-id-admission
+created_at: '2026-11-08T14:30:26.699Z'
+updated_at: '2026-11-09T07:59:39.897Z'
+created_by_session: '01a19baf-4b34-7a83-9cf8-f109a22c539e'
+blast_radius:
+  modules:
+    - 'Selected release tarball and native-image installation, preservation and rollback qualification'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/runtime-upgrade-smoke.mjs'
+    - 'packages/caws-cli/scripts/native-upgrade-artifacts.cjs'
+    - 'packages/caws-cli/tests/ci/runtime-upgrade-smoke.test.js'
+    - 'packages/caws-cli/tests/ci/native-upgrade-artifacts.test.js'
+    - 'packages/caws-cli/tests/ci/release-qualification.test.js'
+    - 'packages/caws-cli/tests/ci/release-path-integrity.test.js'
+    - '.github/workflows/release-qualification.yml'
+    - 'docs/release-procedure.md'
+    - packages/caws-cli/scripts/runtime-upgrade-smoke.test.mjs
+    - packages/caws-cli/scripts/native-upgrade-artifacts.test.mjs
+    - scripts/prepare-ci-test-interpreter.test.mjs
+    - packages/caws-cli/src/runtime/file-tools/strikes-port.ts
+    - packages/caws-cli/tests/runtime/guard-strikes.test.js
+    - packages/caws-cli/tests/runtime/native-file-engine.test.js
+    - packages/caws-cli/tests/runtime/engine-entry.test.js
+  out: []
+  support:
+    - packages/caws-cli/src/init/native-runtime-entry.ts
+    - packages/caws-cli/src/tooling/native-sqlite-build.ts
+    - packages/caws-cli/tests/adapter/native-runtime-entry.test.js
+    - packages/caws-cli/scripts/native-qualification-qwen-wire.cjs
+    - packages/caws-cli/scripts/native-qualification-qwen-wire.test.cjs
+    - packages/caws-cli/scripts/native-qualification-host-tree.cjs
+    - packages/caws-cli/scripts/native-qualification-host-tree.test.cjs
+    - packages/caws-cli/scripts/native-qualification-hook-tap.cjs
+    - packages/caws-cli/scripts/native-qualification-hook-tap.test.cjs
+    - packages/caws-cli/scripts/qualify-qwen-hook-failure.cjs
+    - packages/caws-cli/scripts/qualify-qwen-hook-failure.test.cjs
+    - packages/caws-cli/scripts/qualify-qwen-managed-guard.cjs
+    - packages/caws-cli/scripts/qualify-qwen-managed-guard.test.cjs
+    - packages/caws-cli/src/init/system-runtime.ts
+    - packages/caws-cli/tests/adapter/system-registration.test.js
+    - packages/caws-cli/templates/hook-packs/shared/scope-guard.sh
+    - packages/caws-cli/tests/hooks/pytest/test_scope_guard_canonical_state.py
+invariants:
+  - 'Qualification never repacks a supplied selected artifact or accepts a platform image without pinned bytes and normal production admission.'
+  - 'All existing ten upgrade cases, original deadlines, protected bytes and modes, zero audit findings, mutation floors and release acceptance remain required.'
+acceptance:
+  - id: A1
+    given: 'a selected committed CLI tarball and platform native image with reviewed pins'
+    when: 'installed upgrade qualification runs'
+    then: 'it installs those exact bytes through production admission and retains identities proving the actual selected native entry rather than compatibility fallback'
+  - id: A2
+    given: 'mismatched, altered, unavailable or wrong-platform artifacts and interrupted or corrupt installation'
+    when: 'qualification attempts admission and recovery'
+    then: 'failure remains visible, prior selected state survives or rolls back through the normal operation, and raw before/after governance bytes and modes are retained outside teardown'
+  - id: A3
+    given: 'six Mac and Linux Node18/20/22 jobs for one selected candidate'
+    when: 'release qualification aggregates their ten-case results'
+    then: 'every cell binds the same CLI tar identity and applicable platform native image, and missing, skipped or failed native proof cannot pass'
+observability:
+  - 'Retain raw commands, exit status, selected tar and native-image pins, production admission, actual runtime entry identity, and before/after governance bytes and modes in ignored evidence outside worktree teardown.'
+rollback:
+  - 'Revert owned qualifier and workflow changes through a normal corrective commit; retain raw failed and successful artifacts and leave the prior machine runtime selected.'
+non_functional:
+  security:
+    - 'No trust-store changes, guard bypass, waived acceptance, first-party interpreter fallback or global activation is permitted by qualification.'
+contracts: []

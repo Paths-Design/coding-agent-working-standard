@@ -45,6 +45,7 @@ import {
   readPristineBaseline,
 } from './hook-install';
 import { isKnownSurface, resolveHookPack } from './hook-packs/register';
+import { SURFACE_HARNESS_PLUGINS } from './hook-packs/surfaces.generated';
 import { readManifest, readPointer, sha } from './machine-runtime-state';
 import {
   OPENCODE_PROJECT_PLUGIN,
@@ -88,6 +89,16 @@ const empty = (): SystemSurfacePolicy => ({
   libraries: {},
 });
 const vendorFor = (surface: string): string => {
+  // CAWS-DSH-HARNESS-PLUGIN-PARITY-001: a harness-plugin surface has no
+  // machine-level JSON hook registration to configure. Its transport is a
+  // plugin bundle composed into the harness profile, so `configure` cannot
+  // write it here — name the real mechanism and the verification path instead
+  // of reporting a generic unsupported-surface error.
+  const harnessPlugin = SURFACE_HARNESS_PLUGINS[surface as keyof typeof SURFACE_HARNESS_PLUGINS];
+  if (harnessPlugin !== undefined)
+    throw new Error(
+      `System registration for ${surface} is not a JSON native config: its hooks load through a harness-managed plugin bundle (${harnessPlugin.profileBundle}). Install/select that bundle in the active ${surface} profile, restart the profile, then verify composition with \`caws init --agent-surface ${surface} --plan\` (or \`caws doctor\`). No user-level settings file is written for this surface.`
+    );
   if (!['codex', 'claude-code', 'qwen-code'].includes(surface))
     throw new Error(
       `System registration for ${surface} requires an adapter authored and verified in that harness; supported JSON registrations: codex, claude-code, qwen-code`

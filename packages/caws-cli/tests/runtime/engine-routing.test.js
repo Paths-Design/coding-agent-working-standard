@@ -1102,7 +1102,9 @@ test.each(shortcutRoutes)(
       const second = path.join(repo, 'second.js');
       put(first, '// TODO already existed\nconst x = 2;\n');
       put(second, 'const clean = 1;\n');
-      const strikes = path.join(root, '.caws/state/sessions/shortcut-test/strikes.json');
+      // Strike state belongs to the machine home (CAWS_HOME), not to HOME/.caws.
+      const strikes = path.join(home, 'state/sessions/shortcut-test/strikes.json');
+      const userHomeStrikes = path.join(root, '.caws/state/sessions/shortcut-test/strikes.json');
       let counter = 0;
       let lastStderr = '';
       async function runTool(toolName, toolInput, expectedExit = 0, event = 'post_tool_use') {
@@ -1301,6 +1303,7 @@ test.each(shortcutRoutes)(
       await runPatch(`*** Begin Patch\n*** Update File: ${first}\nunknown`);
       expect(lastStderr).toContain('authored content unavailable; no strike recorded');
       expect(JSON.parse(fs.readFileSync(strikes)).shortcut_language).toBe(6);
+      expect(fs.existsSync(userHomeStrikes)).toBe(false);
       // Direct Edit: identical old lines, empty/deletion and missing fields never
       // charge old content, including filenames carrying a literal LF.
       const lfPath = path.join(repo, 'owned\nlane.js');

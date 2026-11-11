@@ -21,6 +21,23 @@ const pinVars = entries
   .join('\n');
 const gated = entries.filter(([, s]) => s.trustGated === true).map(([id]) => `'${id}'`);
 const mechanisms = entries.map(([id, s]) => `  '${id}': '${s.hookMechanism}',`).join('\n');
+const listLiteral = (values) => `[${values.map((v) => `'${v}'`).join(', ')}]`;
+// Surfaces whose hook transport is a harness-managed plugin bundle (there is
+// no repo-local file or settings key to inspect): the per-surface facts the
+// composition observer needs. Surfaces without `harnessPlugin` are omitted.
+const harnessPlugins = entries
+  .filter(([, s]) => s.harnessPlugin !== undefined)
+  .map(
+    ([id, s]) =>
+      `  '${id}': { profileBundle: '${s.harnessPlugin.profileBundle}', pluginIds: ${listLiteral(
+        s.harnessPlugin.pluginIds ?? []
+      )}${
+        s.harnessPlugin.profileEnvVar !== undefined
+          ? `, profileEnvVar: '${s.harnessPlugin.profileEnvVar}'`
+          : ''
+      } },`
+  )
+  .join('\n');
 const sentinel = entries.find(([, s]) => s.sentinel === true)?.[0] ?? 'none';
 
 const out = `// @generated — DO NOT EDIT.
@@ -51,6 +68,18 @@ export const TRUST_GATED_SURFACES: readonly AgentSurface[] = [${gated.join(', ')
 /** The hook mechanism each harness exposes (shell-hooks, js-plugin, ...). */
 export const SURFACE_HOOK_MECHANISMS: Readonly<Record<AgentSurface, string>> = {
 ${mechanisms}
+};
+
+/** Surfaces whose hooks load through a harness-managed plugin bundle rather
+ *  than a repo-local file or a settings key. Absent for every other surface. */
+export interface HarnessPluginFacts {
+  readonly profileBundle: string;
+  readonly pluginIds: readonly string[];
+  readonly profileEnvVar?: string;
+}
+
+export const SURFACE_HARNESS_PLUGINS: Readonly<Partial<Record<AgentSurface, HarnessPluginFacts>>> = {
+${harnessPlugins}
 };
 
 /** The sentinel surface ('none'): generic identity, no harness. */

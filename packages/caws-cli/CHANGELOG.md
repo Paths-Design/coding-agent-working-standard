@@ -5,6 +5,75 @@ channel.
 
 ### Behavior and workflow changes since rc.2
 
+- A PreToolUse guard that cannot reach a verdict refuses the tool call. A guard
+  that is missing, not executable, or exits with a status other than 0 or 2
+  without a block decision previously let the call run. Write, Edit, Bash and
+  any tool not known to be read-only are refused with a reason that names the
+  guard and the fault, states that the command did not cause it, and itself
+  adds no strike or latch. A payload with no tool name is refused the same way.
+  Read, Glob and Grep report the fault on stderr and proceed, as does a handler
+  with no refusal path (`agent-heartbeat`, `cwd-guard`, `scan-secrets`,
+  `quiet-merge`). `worktree-write-guard` no longer ends without a verdict in a
+  `.caws` directory that is not a git repository. Shared pack 129.
+- Under the machine runtime, command analysis receives the agent's `BASH_ENV`
+  instead of the dispatcher's own. The dispatcher's value made the analyzer
+  report every command as unanalyzable, so each Bash call raised a permission
+  prompt and every `cp`/`mv` was refused. A `worktree-guard` copy refusal states
+  every analyzer issue and the copy-role reason behind it. Shared pack 131.
+- `scope-guard` reads a kimi-code Edit or Write target from `tool_input.path`,
+  the field that surface sends. It previously required `tool_input.file_path`
+  and refused every kimi-code edit. A Write or Edit whose payload names no
+  target is refused with the missing field named; it previously passed
+  `scope-guard` unexamined. Shared pack 132.
+- Guard strike state is written under `CAWS_HOME`, else `HOME/.caws`. It
+  previously ignored `CAWS_HOME` and fell back to `/tmp/.caws` when `HOME` was
+  unset. A finding whose strike cannot be recorded is refused with the reason
+  stated, where it was reported as "strike 3 of 3". A missing `jq` or a
+  corrupt strike record is refused the same way; either previously left the
+  count at one, so the guard warned and allowed without limit. Shared pack 133.
+- The danger latch counts a batch of queued tool calls once. A call issued in
+  the same model reply as a refused one is refused without a strike, a latch
+  or a process kill, because the agent could not have read the first refusal;
+  previously three queued calls could be denied, latched and killed in
+  sequence. A second opaque inline payload sent after the first refusal now
+  arms the latch; it was refused without limit before. A second
+  capability-risk command queued with the warned one is refused without a
+  latch. Shared pack 134.
+- A failure of the command classifier itself (missing, crashed, or returning
+  a decision the guard does not know) refuses the Bash command and names the
+  fault. It previously armed the danger latch on the first occurrence, which
+  quarantined a session for a fault it did not cause. A command the
+  classifier could not finish analyzing (nesting past its budget) is refused
+  once with the way to restate it and arms the latch only when repeated.
+  Shared pack 135.
+- `duplicate-export-check` returns on a relative Write target. It previously
+  never returned when the target was relative and the hook's working directory
+  had no `package.json`, holding the PostToolUse chain until the harness timed
+  it out. The target is resolved against the payload working directory, so a
+  duplicate export is also reported for a relative target. Shared pack 136.
+- A session's liveness is recorded on every hook event, not only before a tool
+  call. The hook launcher and the heartbeat handler touch
+  `.caws/leases/<session>.active`; lease readers (`caws agents list`, `caws
+status`, message delivery, the peer notice) report the later of that file's
+  time and the lease's recorded `last_active`. A session in a long tool run or
+  at a stop now reads as active at the time of its last event.
+  `agent-heartbeat` no longer starts the CLI on every tool call: the full
+  heartbeat runs when none completed in the last 15 seconds
+  (`CAWS_HEARTBEAT_INTERVAL_SECONDS`) or the lease file was replaced since, and
+  the mailbox is polled on a full heartbeat and whenever `messages.jsonl`
+  changed since the session's last poll. Each CLI call the handler makes is
+  ended after 3 seconds (`CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS`) where `perl`
+  is available, together with any child process it started, and a full
+  heartbeat that fails or is ended is not retried until the interval passes. The peer notice can trail a change in the peer set by up to
+  the heartbeat interval. Deleting or pruning a lease removes its `.active`,
+  `.hb`, `.hb.lease` and `.mail` files. Shared pack 137.
+- The `CLAUDE.md` template `caws init` writes tells an agent how to read a
+  dangerous-command refusal: refused without a latch (restate and continue; a
+  repeat sent afterwards latches), guard or classifier unavailable (stop and
+  report; nothing was counted), or latch armed. It previously told the agent to
+  stop on every `block` or `ask`. `docs/guides/hook-packs.md` documents the
+  guard verdict and refusal contract, session liveness, and the checks to run
+  before merging a guard change.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.
