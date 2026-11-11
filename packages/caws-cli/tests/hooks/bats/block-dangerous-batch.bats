@@ -223,6 +223,28 @@ OPAQUE_TWO='node -e "console.log($Y)"'
   [ ! -e "$(sentinel)" ]
 }
 
+@test "capability: two risk commands whose hooks run at the same time draw one warning between them" {
+  say msg_1 use_a use_b
+  local out_a="$BATS_TEST_TMPDIR/a.out" out_b="$BATS_TEST_TMPDIR/b.out" cmd
+  for cmd in a b; do
+    local use="use_$cmd" text='docker run alpine' out="$BATS_TEST_TMPDIR/$cmd.out"
+    [ "$cmd" = a ] || text='kill -9 1234'
+    env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" CAWS_BATCH_WINDOW_SECONDS=0 \
+      CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" HOOK_CWD="$CAWS_TEST_REPO" \
+      bash -c 'cd "$1" && printf "%s" "$2" | bash "$3"' _ "$CAWS_TEST_REPO" \
+      "$(jq -nc --arg c "$text" --arg s "$SID" --arg t "$TRANSCRIPT" --arg u "$use" \
+        '{tool_name:"Bash",tool_input:{command:$c},session_id:$s,transcript_path:$t,tool_use_id:$u}')" \
+      "$CAWS_TEST_HOOKS_DIR/block-dangerous.sh" >"$out" 2>&1 </dev/null &
+  done
+  wait
+  local warned refused
+  warned="$(cat "$out_a" "$out_b" | grep -c 'WARN, first capability ask')"
+  refused="$(cat "$out_a" "$out_b" | grep -c 'was queued together with another one')"
+  [ "$warned" -eq 1 ]
+  [ "$refused" -eq 1 ]
+  [ ! -e "$(sentinel)" ]
+}
+
 @test "capability: a second risk command in a later reply arms the latch" {
   say msg_1 use_a
   call use_a 'docker run alpine'

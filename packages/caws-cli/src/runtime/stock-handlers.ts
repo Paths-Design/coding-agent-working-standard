@@ -27,7 +27,7 @@ import { qualifiesForNativeSessionEndPrefix } from './session-cache-admission';
 const HANDLERS: Readonly<Record<string, string>> = {
   'agent-stop.sh': 'c94358159f8fd77585bcb8c3679cd81c8d3d5dba0ff0970c50bf91a0f5f5eaa5',
   'agent-heartbeat.sh': 'fb3d05634e974cbf1978a0748c4db59cc84dc87f43072a8b14761f9fc7cc5fed',
-  'block-dangerous.sh': '9120ce849286dcb4c12ce6338b103fab080838cc3afb9134770431b35349ced9',
+  'block-dangerous.sh': 'd5639f8538743973c9a91a23c2cc41b1808e069fed671cec3a40e96fbc664694',
   'hook-utilities.sh': '8a38d1f75df38568566fdfbbc17acec468c1cc2b11b3f02f71705d2c930d56a8',
 };
 const LIBRARIES: Readonly<Record<string, readonly string[]>> = {

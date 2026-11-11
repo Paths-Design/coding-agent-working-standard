@@ -349,7 +349,10 @@ record_danger_latch() {
       tool_use_id: $use,
       armed_epoch: $epoch,
       message: "Dangerous command boundary engaged. User reset required before more Bash commands may run in this session."
-    }' > "$file"
+    }' > "$file.arm.$$" && mv "$file.arm.$$" "$file"
+  # The sentinel appears whole or not at all: a call queued with this one may
+  # read it at any moment, and a half-written record would read as a later
+  # batch and escalate.
   # DANGER-LATCH-QUARANTINE-TRAP-001: stamp the ancestor agent-process
   # identity at arm time so escalation can verify the kill target later —
   # pid drift, PID reuse (start-time mismatch), and comm mismatch all refuse
@@ -970,24 +973,35 @@ case "$DECISION" in
       if [[ "$SOURCE" == "capability" ]]; then
         WARN_FILE="$(danger_warn_file "$SESSION_ID")"
         danger_resolve_batch_key
-        if [[ -f "$WARN_FILE" ]] &&
-            danger_same_batch "$(jq -r '.batch_key // ""' "$WARN_FILE" 2>/dev/null || true)" "$(jq -r '.epoch // ""' "$WARN_FILE" 2>/dev/null || true)" "$(jq -r '.tool_use_id // ""' "$WARN_FILE" 2>/dev/null || true)"; then
-          emit_block_json "CAWS command-safety: $REASON. This capability-risk command was queued together with another one (\`$(jq -r '.command // ""' "$WARN_FILE" 2>/dev/null | head -n 1)\`) that drew this session's one warning, before that warning could be read. It is refused; the session danger latch was NOT armed. Send it alone if you still intend it: a capability-risk command sent after this WILL arm the latch. Command was: $COMMAND"
-          exit 0
-        fi
+        # The warning is claimed by creating its marker, whole, in one step: a
+        # hard link fails when the marker exists. Of several queued calls
+        # exactly one draws the warning, whatever order their hooks run in.
         if [[ ! -f "$WARN_FILE" ]]; then
           mkdir -p "$(dirname "$WARN_FILE")"
-          jq -n \
-            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg reason "$REASON" \
-            --arg command "$COMMAND" \
-            --arg batch "$_DANGER_BATCH_KEY" \
-            --arg use "$_DANGER_USE_ID" \
-            --argjson epoch "$(date +%s)" \
-            '{ts: $ts, hook: "block-dangerous.sh", kind: "capability-warn", reason: $reason, command: $command, batch_key: $batch, tool_use_id: $use, epoch: $epoch}' \
-            > "$WARN_FILE" 2>/dev/null || true
-          printf 'caws command-safety (WARN, first capability ask — not blocked): %s\n' "$REASON" >&2
-          printf '  A SECOND capability-risk command this session will ARM the danger latch. Command was: %s\n' "$COMMAND" >&2
+          if jq -n \
+              --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --arg reason "$REASON" \
+              --arg command "$COMMAND" \
+              --arg batch "$_DANGER_BATCH_KEY" \
+              --arg use "$_DANGER_USE_ID" \
+              --argjson epoch "$(date +%s)" \
+              '{ts: $ts, hook: "block-dangerous.sh", kind: "capability-warn", reason: $reason, command: $command, batch_key: $batch, tool_use_id: $use, epoch: $epoch}' \
+              > "$WARN_FILE.new.$$" 2>/dev/null && ln "$WARN_FILE.new.$$" "$WARN_FILE" 2>/dev/null; then
+            unlink "$WARN_FILE.new.$$" 2>/dev/null || true
+            printf 'caws command-safety (WARN, first capability ask — not blocked): %s\n' "$REASON" >&2
+            printf '  A SECOND capability-risk command this session will ARM the danger latch. Command was: %s\n' "$COMMAND" >&2
+            exit 0
+          fi
+          [[ ! -f "$WARN_FILE.new.$$" ]] || unlink "$WARN_FILE.new.$$" 2>/dev/null || true
+          if [[ ! -f "$WARN_FILE" ]]; then
+            # The warning could not be recorded, so a later command could not
+            # be told from a first one. Refuse without arming the latch.
+            emit_block_json "CAWS command-safety: $REASON. This capability-risk command would normally draw one warning and run, but the warning could not be recorded under $(dirname "$WARN_FILE") (not writable, or jq is unavailable), so it is refused. The session danger latch was NOT armed. Command was: $COMMAND"
+            exit 0
+          fi
+        fi
+        if danger_same_batch "$(jq -r '.batch_key // ""' "$WARN_FILE" 2>/dev/null || true)" "$(jq -r '.epoch // ""' "$WARN_FILE" 2>/dev/null || true)" "$(jq -r '.tool_use_id // ""' "$WARN_FILE" 2>/dev/null || true)"; then
+          emit_block_json "CAWS command-safety: $REASON. This capability-risk command was queued together with another one (\`$(jq -r '.command // ""' "$WARN_FILE" 2>/dev/null | head -n 1)\`) that drew this session's one warning, before that warning could be read. It is refused; the session danger latch was NOT armed. Send it alone if you still intend it: a capability-risk command sent after this WILL arm the latch. Command was: $COMMAND"
           exit 0
         fi
         record_danger_latch "$LATCH_FILE" "ask" "$REASON" "$COMMAND"
