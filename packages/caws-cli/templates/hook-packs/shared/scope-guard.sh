@@ -416,6 +416,7 @@ _scope_original_payload() {
 _scope_target_inventory() {
   python3 -c '
 import json
+import os
 import sys
 
 def fail(message):
@@ -434,7 +435,15 @@ try:
     tool_input = payload["tool_input"]
     paths = []
     if payload.get("tool_name") != "apply_patch":
-        paths.append(target(tool_input.get("file_path")))
+        named = tool_input.get("file_path")
+        # kimi-code names a file tool target in tool_input.path (its parser
+        # adapter maps the same field). No other surface may use that name, and
+        # two names for one target are refused rather than chosen between.
+        if os.environ.get("CAWS_AGENT_SURFACE") == "kimi-code" and "path" in tool_input:
+            if "file_path" in tool_input and tool_input["file_path"] != tool_input["path"]:
+                fail("tool_input.file_path and tool_input.path name different targets")
+            named = tool_input["path"]
+        paths.append(target(named))
     else:
         patch = tool_input.get("command")
         if not isinstance(patch, str):

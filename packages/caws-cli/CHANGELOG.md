@@ -17,6 +17,9 @@
   report every command as unanalyzable, so each Bash call raised a permission
   prompt and every `cp`/`mv` was refused. A `worktree-guard` copy refusal states
   every analyzer issue and the copy-role reason behind it. Shared pack 131.
+- `scope-guard` reads a kimi-code Edit or Write target from `tool_input.path`,
+  the field that surface sends. It previously required `tool_input.file_path`
+  and refused every kimi-code edit. Shared pack 132.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

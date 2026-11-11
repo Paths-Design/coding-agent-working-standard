@@ -669,7 +669,10 @@ import { isAdapterCoveredSurface } from './types';
 // copy refusal states the analyzer issue or copy-role reason behind it.
 // v131: a worktree-guard copy refusal prints every analyzer issue and the
 // copy-role reason together, so one retry can address all of them.
-export const SHARED_PACK_VERSION = 131;
+// v132: scope-guard reads a kimi-code file tool target from tool_input.path,
+// the field that surface sends, rather than refusing the edit for want of
+// tool_input.file_path. Two differing names for one target are refused.
+export const SHARED_PACK_VERSION = 132;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
