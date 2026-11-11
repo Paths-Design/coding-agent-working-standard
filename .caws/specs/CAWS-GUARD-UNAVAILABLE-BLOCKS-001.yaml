@@ -69,5 +69,9 @@ acceptance:
       run_handlers does not return 2, stderr names the advisory handler and its
       fault, and the rest of the chain runs; shortcut-language-check.sh in the same
       state is refused as a guard
+  - id: A9
+    given: 'the enforcing chain, a mutating tool and a crashed guard'
+    when: 'the payload names any event, including Stop, SessionEnd or PostToolUse'
+    then: 'run_handlers returns 2 and later handlers do not run'
 non_functional: {}
 contracts: []
