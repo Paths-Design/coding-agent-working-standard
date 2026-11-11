@@ -148,3 +148,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::the payload's event name cannot disarm the chain its dispatcher selected"
     commit_sha: "538e5d54e"
     test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A10
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'dry-run reports a crashed and a missing guard and blocks neither' at 538e5d54e"
+    recorded_at: "2026-11-11T02:29:00.939Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::dry-run reports a crashed and a missing guard and blocks neither"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
