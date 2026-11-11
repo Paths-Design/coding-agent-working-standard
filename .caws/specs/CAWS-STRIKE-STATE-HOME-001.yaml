@@ -70,3 +70,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats::with neither CAWS_HOME nor HOME the finding is refused with that reason and nothing lands in /tmp"
     commit_sha: c29f650a6
     test_verified_at: c29f650a651b7855e4e0099a3fc7464c80999d40
+  - criterion_id: A4
+    status: pass
+    evidence_ref: exact refusal text naming the unresolved session
+    recorded_at: "2026-11-11T11:43:33.253Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats::an unresolved session is refused with that reason, not reported as a third strike"
+    commit_sha: c29f650a6
+    test_verified_at: c29f650a651b7855e4e0099a3fc7464c80999d40
