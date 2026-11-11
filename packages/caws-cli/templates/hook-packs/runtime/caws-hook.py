@@ -1055,8 +1055,18 @@ if __name__ == '__main__':
     except InvocationError as error:
         print('[caws machine adapter] ' + str(error), file=sys.stderr)
         sys.exit(2)
-    except (ValueError, OSError, KeyError, TypeError, AttributeError) as error:
-        message = 'CAWS machine adapter: ' + str(error)
+    except Exception as error:
+        # Every exception is handled here, not a chosen few. One that escaped
+        # would end the process with status 1, which a harness reads as a
+        # hook error and answers by running the tool call unguarded. A handler
+        # that reached a verdict leaves through SystemExit, which this clause
+        # does not catch, so no verdict is rewritten. A fault this code did
+        # not anticipate is named by its type, so the report says what broke.
+        if isinstance(error, (ValueError, OSError, KeyError, TypeError, AttributeError)):
+            detail = str(error)
+        else:
+            detail = 'unexpected ' + type(error).__name__ + (': ' + str(error) if str(error) else '')
+        message = 'CAWS machine adapter: ' + detail
         # stderr carries the diagnostic on every event, including the ones that
         # do not block: an operator must still be able to see that governance
         # was not applied. Silence would trade one defect for another.
