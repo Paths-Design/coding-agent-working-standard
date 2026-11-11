@@ -1,0 +1,60 @@
+id: CAWS-GUARD-UNAVAILABLE-BLOCKS-001
+title: 'A PreToolUse guard that cannot reach a verdict blocks mutating tools and names the fault'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-11T00:08:00.467Z'
+updated_at: '2026-11-11T00:08:00.467Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'shared hook pack handler runner (lib/run-handlers.sh) and the guards that exit 0 when a dependency is missing'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/worktree-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'On the enforcing PreToolUse chain, a handler that is missing, not executable, or exits with a status other than 0 or 2 without a control decision never lets a mutating tool call proceed.'
+  - 'A refusal produced because a guard could not run names the guard, what it could not do, states that the agent''s command did not cause it, and gives a remedy the blocked party can execute or an explicit instruction to stop and hand the fault to the user.'
+  - 'A guard-unavailable refusal records no strike and arms no latch.'
+  - 'Read, Glob and Grep are never blocked by a guard-unavailable fault; the fault is reported on stderr.'
+  - 'Chains other than the enforcing PreToolUse chain keep their existing exit semantics.'
+acceptance:
+  - id: A1
+    given: 'the enforcing PreToolUse chain and tool_name Bash, Write or Edit'
+    when: 'a handler exits 1 with stderr text and no control JSON'
+    then: 'run_handlers returns 2 and prints one block decision whose reason names the handler, its exit status, the stderr tail, says the command did not cause the fault, and tells the agent to stop and report it'
+  - id: A2
+    given: 'the enforcing PreToolUse chain and a mutating tool'
+    when: 'a listed handler is missing or not executable'
+    then: 'run_handlers returns 2 with a block decision naming the handler and its expected path'
+  - id: A3
+    given: 'the enforcing PreToolUse chain and tool_name Read, Glob or Grep'
+    when: 'a handler exits 1 or is missing'
+    then: 'run_handlers does not return 2, and stderr names the handler and the fault'
+  - id: A4
+    given: 'the enforcing PreToolUse chain with no parsed tool name'
+    when: 'a handler exits 1'
+    then: 'the call is treated as mutating and blocked, because an unidentified tool is not provably read-only'
+  - id: A5
+    given: 'a chain invoked without the enforcing flag (PostToolUse, Stop)'
+    when: 'a handler exits 1'
+    then: 'the return status and output are unchanged from before this change'
+  - id: A6
+    given: 'bash-write-guard, worktree-guard or worktree-write-guard on a mutating call'
+    when: 'node or the claim oracle is unavailable'
+    then: 'the guard exits with the cannot-run status and a stderr reason naming the missing dependency instead of exiting 0'
+  - id: A7
+    given: 'a later handler in the chain'
+    when: 'an earlier handler was unavailable on a mutating call'
+    then: 'the block is returned without running handlers that could record a strike or latch'
+non_functional: {}
+contracts: []
