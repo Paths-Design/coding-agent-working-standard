@@ -63,3 +63,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/leases-activity-stamp.test.js::a stamp later than the recorded value becomes the reported last_active"
     commit_sha: "801efda3b"
     test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "agent-heartbeat-activity.bats cases 2-10: no CLI when nothing is owed, poll only on mailbox change, full heartbeat on a replaced lease; mutants M1-M8 killed"
+    recorded_at: "2026-11-11T21:00:37.144Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/agent-heartbeat-activity.bats::heartbeat-activity: a call soon after a full heartbeat starts no CLI, prints nothing, and advances the stamp"
+    commit_sha: "801efda3b"
+    test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
