@@ -134,3 +134,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::handlers after an unavailable guard do not run on a mutating call"
     commit_sha: "538e5d54e"
     test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'a crashed or missing advisory handler is reported and does not refuse the call' at 538e5d54e"
+    recorded_at: "2026-11-11T02:28:25.288Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a crashed or missing advisory handler is reported and does not refuse the call"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
