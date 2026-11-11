@@ -38,3 +38,8 @@ evidence:
     test_nodeid: packages/caws-cli/tests/runtime/engine-routing.test.js
     commit_sha: "1713a1de5"
     test_verified_at: "1713a1de57e586dca9b89ba84f8f5c480c2d7d8b"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "whole caws-cli jest suite at 1713a1de5, no path filter: 387 suites passed, 10674 tests passed, 12 skipped, 0 failed"
+    recorded_at: "2026-11-11T12:45:18.020Z"
+    commit_sha: "1713a1de5"
