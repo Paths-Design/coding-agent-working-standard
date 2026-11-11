@@ -1,10 +1,11 @@
 id: CAWS-TS7-MODULE-RESOLUTION-001
 title: 'Typecheck configs load under TypeScript 7 resolution modes'
 mode: chore
-lifecycle_state: active
-worktree: ts7-module-resolution
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge ts7-module-resolution at e917a1f83cbf1b1ce25eac9fdd21bd8353318429'
 created_at: '2026-11-11T04:18:20.864Z'
-updated_at: '2026-11-11T04:18:35.938Z'
+updated_at: '2026-11-11T09:16:37.546Z'
 created_by_session: 'ffa00c0e-9de5-4f86-a2af-764bbae875b0'
 blast_radius:
   modules:
