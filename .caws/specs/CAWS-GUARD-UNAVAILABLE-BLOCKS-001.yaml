@@ -85,5 +85,9 @@ acceptance:
     then: >-
       worktree-write-guard reaches a verdict and protected-paths refuses the write
       with BLOCKED, with no guard-unavailable refusal
+  - id: A12
+    given: 'a guard that prints a block decision and exits 1'
+    when: 'the enforcing chain runs'
+    then: 'the guard''s own reason is returned unchanged with status 2'
 non_functional: {}
 contracts: []
