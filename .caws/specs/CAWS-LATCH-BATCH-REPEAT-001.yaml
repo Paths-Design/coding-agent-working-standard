@@ -110,3 +110,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::repeat: the same classification queued in one reply does not arm the latch"
     commit_sha: "380216711"
     test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "second capability command in the warned batch refused without latch; concurrent-hooks case draws exactly one warning"
+    recorded_at: "2026-11-11T13:36:03.861Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-batch.bats::capability: a second risk command queued with the warned one is refused without a latch"
+    commit_sha: "380216711"
+    test_verified_at: "38021671184902698d7d7c2fdc5495e4f260b72a"
