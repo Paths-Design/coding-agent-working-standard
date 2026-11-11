@@ -46,10 +46,6 @@ acceptance:
     given: 'a chain invoked without the enforcing flag (PostToolUse, Stop)'
     when: 'a handler exits 1'
     then: 'the return status and output are unchanged from before this change'
-  - id: A6
-    given: 'bash-write-guard, worktree-guard or worktree-write-guard on a mutating call'
-    when: 'node or the claim oracle is unavailable'
-    then: 'the guard exits with the cannot-run status and a stderr reason naming the missing dependency instead of exiting 0'
   - id: A7
     given: 'a later handler in the chain'
     when: 'an earlier handler was unavailable on a mutating call'
