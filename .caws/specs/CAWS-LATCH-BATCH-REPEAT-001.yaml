@@ -63,6 +63,13 @@ acceptance:
     given: 'a human reset of the latch'
     when: 'reset-danger-latch.sh clears the session'
     then: 'the repeat record is cleared with it'
+  - id: A8
+    given: 'an arming or refused call whose transcript line is written only after its hook started'
+    when: 'a later call is compared with it'
+    then: >-
+      the earlier call's message is looked up from its recorded tool-use id at
+      comparison time, so calls of one message are one batch and calls of different
+      messages are not, whatever the time window says
 rollback:
   - 'Revert the merge commit; shared pack returns to 133'
 non_functional: {}
