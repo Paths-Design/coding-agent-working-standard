@@ -73,5 +73,11 @@ acceptance:
     given: 'the enforcing chain, a mutating tool and a crashed guard'
     when: 'the payload names any event, including Stop, SessionEnd or PostToolUse'
     then: 'run_handlers returns 2 and later handlers do not run'
+  - id: A10
+    given: 'CAWS_HOOK_DRY_RUN=1 on the enforcing chain'
+    when: 'a guard is missing, a guard exits 1, or the payload parser is missing'
+    then: >-
+      run_handlers returns 0 with no decision on stdout and a [DRY-RUN] line naming
+      what would have blocked
 non_functional: {}
 contracts: []
