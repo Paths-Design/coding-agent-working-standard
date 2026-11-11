@@ -156,17 +156,19 @@ _cmd_envelope_sid() {
   refute _latch_exists_for "$sid"
 }
 
-@test "block-dangerous: a SECOND opaque exec in the same session is again block-not-latch (no warn-first escalation) (A2)" {
+@test "block-dangerous: a second opaque exec sent after the first refusal arms the latch (repeat of one classification)" {
   local sid="opaque-a2-$$"
   # first opaque exec
   run_guard block-dangerous.sh "$(_cmd_envelope_sid "$sid" 'python3 -c "print($X)"')"
   assert_output --partial '"decision": "block"'
   refute _latch_exists_for "$sid"
-  # second opaque exec in the SAME session — must STILL block-not-latch, not
-  # escalate to an armed latch the way a non-opaque capability ask would.
+  assert_output --partial 'A second opaque inline payload in this session, sent after this refusal, WILL arm the danger latch.'
+  # A second opaque exec sent after that refusal repeats the same
+  # classification: it is refused and arms the latch.
   run_guard block-dangerous.sh "$(_cmd_envelope_sid "$sid" 'node -e "console.log(require(\"fs\").readFileSync(\"$p\"))"')"
   assert_output --partial '"decision": "block"'
-  refute _latch_exists_for "$sid"
+  assert_output --partial 'this is a repeat of that same classification (opaque_exec), so the session danger latch is NOW ARMED'
+  assert _latch_exists_for "$sid"
 }
 
 @test "block-dangerous: the carve-out does NOT weaken catastrophic deny — rm -rf / still arms the latch (A3)" {

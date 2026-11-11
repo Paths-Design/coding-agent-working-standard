@@ -677,7 +677,14 @@ import { isAdapterCoveredSurface } from './types';
 // fallback to /tmp. A finding whose strike cannot be recorded is refused with
 // the reason (unresolved session, or no machine home) rather than reported as
 // a third strike. reset-strikes.sh lists the same location.
-export const SHARED_PACK_VERSION = 133;
+// v134: block-dangerous.sh identifies the batch a tool call was queued in
+// (the assistant message that carries it, from the transcript; a short time
+// window when none is named). A call queued with a refused one is refused
+// without a strike, latch or kill. A second refusal of one no-latch
+// classification (opaque exec, bare commit over deletions), sent after the
+// first could be read, arms the latch. reset-danger-latch.sh clears the
+// repeat record.
+export const SHARED_PACK_VERSION = 134;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

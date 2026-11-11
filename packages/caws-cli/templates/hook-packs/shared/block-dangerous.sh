@@ -186,6 +186,102 @@ danger_warn_file() {
   printf '%s/danger-warn-%s.json\n' "$(danger_state_dir)" "$safe_session"
 }
 
+# Per-session record of refusals that did not arm the latch, by classification.
+danger_repeat_file() {
+  local safe_session
+  safe_session=$(_danger_safe_session "$1")
+  printf '%s/danger-repeat-%s.json\n' "$(danger_state_dir)" "$safe_session"
+}
+
+# ── Batches of queued tool calls ────────────────────────────────────────────
+# A harness can issue several tool calls from one model reply. They are queued
+# before the model reads any result, so a call queued alongside a refused one
+# is not a retry of it: the agent has not seen the refusal yet. Escalation
+# (strike, latch, process kill) therefore requires a call from a LATER batch.
+# The refused command never runs either way.
+#
+# The batch is the assistant message that carries the tool call, read from the
+# transcript the harness names in the payload. Nothing in tool_input is
+# consulted. When the payload names no transcript or tool-use id, or the
+# message is not on disk yet, calls arriving within CAWS_BATCH_WINDOW_SECONDS
+# (default 5) of the recorded refusal are taken as the same batch.
+_DANGER_BATCH_KEY_RESOLVED=0
+_DANGER_BATCH_KEY=""
+danger_resolve_batch_key() {
+  [[ "$_DANGER_BATCH_KEY_RESOLVED" != 1 ]] || return 0
+  _DANGER_BATCH_KEY_RESOLVED=1
+  local transcript use_id
+  transcript="$(printf '%s' "${INPUT:-}" | jq -r '.transcript_path // ""' 2>/dev/null || true)"
+  use_id="$(printf '%s' "${INPUT:-}" | jq -r '.tool_use_id // .tool_call_id // ""' 2>/dev/null || true)"
+  if [[ -n "$transcript" && -n "$use_id" && -f "$transcript" && -r "$transcript" ]]; then
+    _DANGER_BATCH_KEY="$(tail -n 400 "$transcript" 2>/dev/null |
+      jq -rR --arg id "$use_id" '
+        (fromjson? // empty) | select(.type == "assistant") |
+        select([.message.content[]? | select(.type == "tool_use") | .id] | index($id)) |
+        .message.id // empty' 2>/dev/null | tail -n 1)"
+    [[ "$_DANGER_BATCH_KEY" =~ ^[A-Za-z0-9_.:-]+$ ]] || _DANGER_BATCH_KEY=""
+  fi
+}
+
+# danger_same_batch <recorded-key> <recorded-epoch> — true when this call
+# belongs to the batch that produced the recorded refusal.
+danger_same_batch() {
+  local recorded_key="$1" recorded_epoch="$2" now window
+  danger_resolve_batch_key
+  if [[ -n "$_DANGER_BATCH_KEY" && -n "$recorded_key" ]]; then
+    [[ "$_DANGER_BATCH_KEY" == "$recorded_key" ]]
+    return
+  fi
+  window="${CAWS_BATCH_WINDOW_SECONDS:-5}"
+  [[ "$window" =~ ^[0-9]+$ && "$recorded_epoch" =~ ^[0-9]+$ ]] || return 1
+  now="$(date +%s)"
+  (( now - recorded_epoch < window ))
+}
+
+# True when this call was queued with the command that armed the latch.
+danger_latch_same_batch() {
+  local file="$1" key epoch
+  key="$(jq -r '.batch_key // ""' "$file" 2>/dev/null || true)"
+  epoch="$(jq -r '.armed_epoch // ""' "$file" 2>/dev/null || true)"
+  danger_same_batch "$key" "$epoch"
+}
+
+# trap_same_batch_refusal <latch-file> <session> <what> — refuse a call queued
+# with the arming command, without a strike and without escalation. Returns 1
+# (emitting nothing) when the call is from a later batch.
+trap_same_batch_refusal() {
+  local file="$1" session_id="$2" what="$3" armed_by
+  danger_latch_same_batch "$file" || return 1
+  armed_by="$(jq -r '.command // ""' "$file" 2>/dev/null || true)"
+  trap_log_event "$session_id" "held" "same-batch" "queued with the arming command; no strike, no escalation" "$what"
+  emit_block_json "CAWS command-safety: this call ($what) was queued together with the command that engaged the danger trap (\`${armed_by%%$'\n'*}\`), before that refusal could be read. It is refused, it is NOT counted as a strike and it triggers no escalation. The session is now QUARANTINED: $_LATCH_SCOPE_NOTE Stop here and ask the USER to run, from their own shell: $(danger_recovery_command "$session_id")"
+  return 0
+}
+
+# danger_repeat_escalates <session> <classification> — a refusal that does not
+# arm the latch is recorded once per classification. A command of the same
+# classification from a later batch returns 0: the agent read the first
+# refusal and repeated it. The same batch, or a first occurrence, returns 1.
+danger_repeat_escalates() {
+  local session_id="$1" class="$2" file key epoch tmp
+  file="$(danger_repeat_file "$session_id")"
+  if [[ -f "$file" ]] && jq -e --arg c "$class" 'type == "object" and has($c)' "$file" >/dev/null 2>&1; then
+    key="$(jq -r --arg c "$class" '.[$c].batch_key // ""' "$file" 2>/dev/null || true)"
+    epoch="$(jq -r --arg c "$class" '.[$c].epoch // ""' "$file" 2>/dev/null || true)"
+    if danger_same_batch "$key" "$epoch"; then return 1; fi
+    return 0
+  fi
+  danger_resolve_batch_key
+  tmp="${file}.tmp.$$"
+  if { if [[ -f "$file" ]] && jq -e 'type == "object"' "$file" >/dev/null 2>&1; then cat "$file"; else printf '{}'; fi; } |
+      jq --arg c "$class" --arg k "$_DANGER_BATCH_KEY" --argjson e "$(date +%s)" \
+        '.[$c] = {batch_key: $k, epoch: $e}' > "$tmp" 2>/dev/null; then
+    mv "$tmp" "$file" 2>/dev/null || true
+  fi
+  [[ ! -f "$tmp" ]] || unlink "$tmp" 2>/dev/null || true
+  return 1
+}
+
 # Thin adapters over the canonical lib/emit.sh primitives.
 emit_block_json() { emit_block "$1"; }
 emit_ask_json() { emit_ask "$1"; }
@@ -202,6 +298,7 @@ record_danger_latch() {
   [[ "$generation" =~ ^[0-9a-f]{32}$ ]] || generation=""
 
   mkdir -p "$(dirname "$file")"
+  danger_resolve_batch_key
   jq -n \
     --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg hook "block-dangerous.sh" \
@@ -209,6 +306,8 @@ record_danger_latch() {
     --arg reason "$reason" \
     --arg command "$command" \
     --arg generation "$generation" \
+    --arg batch "$_DANGER_BATCH_KEY" \
+    --argjson epoch "$(date +%s)" \
     '{
       ts: $ts,
       hook: $hook,
@@ -216,6 +315,8 @@ record_danger_latch() {
       reason: $reason,
       command: $command,
       latch_generation: $generation,
+      batch_key: $batch,
+      armed_epoch: $epoch,
       message: "Dangerous command boundary engaged. User reset required before more Bash commands may run in this session."
     }' > "$file"
   # DANGER-LATCH-QUARANTINE-TRAP-001: stamp the ancestor agent-process
@@ -568,6 +669,9 @@ case "$TOOL_NAME" in
       WRITE_LATCH_FILE="$(danger_latch_file "$SESSION_ID" --no-create)"
       if [[ -f "$WRITE_LATCH_FILE" ]]; then
         WRITE_PATH="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // ""')"
+        if trap_same_batch_refusal "$WRITE_LATCH_FILE" "$SESSION_ID" "$TOOL_NAME $WRITE_PATH"; then
+          exit 0
+        fi
         trap_record_strike "$WRITE_LATCH_FILE" "$TOOL_NAME $WRITE_PATH"
         REASON="CAWS command-safety: this session is QUARANTINED (danger trap) and file mutations are refused — the trap covers Bash AND the file tools, so there is no read-only Write/Edit. The attempt to $TOOL_NAME '$WRITE_PATH' was recorded as a strike. $_TRAP_ESCALATION_NOTE This is a human-review boundary: do not retry the write, do not route it through another tool, and do not ask another agent to make it. You, the agent, CANNOT clear this in-band: the reset is human-only by design. Ask the USER to run, from their own shell: $(danger_recovery_command "$SESSION_ID")  (or --all to clear every latch). Sentinel: $WRITE_LATCH_FILE"
         emit_block_json "$REASON"
@@ -594,6 +698,9 @@ if [[ -f "$LATCH_FILE" ]]; then
     exit 0
   fi
   if is_caws_enlist_invocation "$COMMAND"; then
+    if trap_same_batch_refusal "$LATCH_FILE" "$SESSION_ID" "$COMMAND"; then
+      exit 0
+    fi
     trap_record_strike "$LATCH_FILE" "$COMMAND"
     REASON="CAWS command-safety: this session is QUARANTINED (danger trap) and cannot enlist another agent to do what it cannot: caws message send / caws message reply are refused while trapped. The attempt was recorded as a strike. $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run, from their own shell: $RECOVERY_COMMAND  (or --all to clear every latch). Sentinel: $LATCH_FILE. Command was: $COMMAND"
     emit_block_json "$REASON"
@@ -619,6 +726,9 @@ if [[ -f "$LATCH_FILE" ]]; then
     TRAP_INTERSECTION_NOTE=" This command IS read-only in shape and on the fixed allowlist, but the classifier refuses it (decision: ${TRAP_CLS_DECISION:-unavailable}), so the intersection denies it."
   fi
 
+  if trap_same_batch_refusal "$LATCH_FILE" "$SESSION_ID" "$COMMAND"; then
+    exit 0
+  fi
   trap_record_strike "$LATCH_FILE" "$COMMAND"
 
   ORIG_CMD=""
@@ -767,6 +877,12 @@ case "$DECISION" in
         #   detector says cross-repo  -> name the repository, drop the route
         #   detector unavailable      -> drop the route (cannot prove it safe)
         #   detector says not cross-repo -> full remediation, route included
+        if danger_repeat_escalates "$SESSION_ID" opaque_exec; then
+          record_danger_latch "$LATCH_FILE" "ask" "$REASON" "$COMMAND"
+          emit_block_json "CAWS command-safety: $REASON. An opaque inline payload was already refused earlier in this session with the way to rewrite it; this is a repeat of that same classification (opaque_exec), so the session danger latch is NOW ARMED. $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run, from their own shell: $RECOVERY_COMMAND  Command was: $COMMAND"
+          exit 0
+        fi
+        _OPAQUE_REPEAT_NOTE=" A second opaque inline payload in this session, sent after this refusal, WILL arm the danger latch."
         _OPAQUE_XREPO=""
         _OPAQUE_DETECTOR="unavailable"
         if declare -F caws_bash_interpreter_foreign_repo >/dev/null 2>&1 &&
@@ -786,8 +902,17 @@ case "$DECISION" in
         else
           FULL_REASON="$_OPAQUE_HEAD Do this instead: (1) write the probe to a script file in your scope (e.g. a .py or .js file) and run it by path — file payloads are inspectable and are not opaque. A script file's write targets are adjudicated exactly as a direct write, so this makes the payload reviewable; it does not reach anywhere a direct write could not; or (2) $_OPAQUE_READ_ARM; or (3) $_OPAQUE_LITERAL_ARM. $_OPAQUE_TAIL"
         fi
-        emit_block_json "$FULL_REASON"
+        emit_block_json "$FULL_REASON$_OPAQUE_REPEAT_NOTE"
         exit 0
+      fi
+      _COMMIT_REPEAT_NOTE=""
+      if [[ "$SOURCE" == "commit_deletions" ]]; then
+        if danger_repeat_escalates "$SESSION_ID" commit_deletions; then
+          record_danger_latch "$LATCH_FILE" "ask" "$REASON" "$COMMAND"
+          emit_block_json "CAWS command-safety: $REASON. A bare commit over staged deletions was already refused earlier in this session with the path-scoped way to make it; this is a repeat of that same classification (commit_deletions), so the session danger latch is NOW ARMED. $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run, from their own shell: $RECOVERY_COMMAND  Command was: $COMMAND"
+          exit 0
+        fi
+        _COMMIT_REPEAT_NOTE=" A second refusal of this kind in this session, sent after this one, WILL arm the danger latch."
       fi
       # Bare-commit staged-deletions carve-out
       # (CAWS-GUARD-COMMIT-DELETES-UNNAMED-001): a bare `git commit` whose
@@ -807,24 +932,32 @@ case "$DECISION" in
         # rejected by git mid-merge — so print the reason as the single source
         # of truth and do not append the pathspec text.
         # (CAWS-DEFECT-MERGE-MAIN-IN-CONCLUSION-BLOCKED-01)
-        FULL_REASON="CAWS command-safety: $REASON. This command was refused — the session danger latch was NOT armed. Command was: $COMMAND"
+        FULL_REASON="CAWS command-safety: $REASON. This command was refused — the session danger latch was NOT armed.$_COMMIT_REPEAT_NOTE Command was: $COMMAND"
         emit_block_json "$FULL_REASON"
         exit 0
       fi
       if [[ "$SOURCE" == "commit_deletions" ]]; then
-        FULL_REASON="CAWS command-safety: $REASON. This command was refused — the session danger latch was NOT armed. Do this instead: (1) inspect what is actually staged: git status && git diff --cached --stat; (2) if the staged set is exactly what you intend, commit it with the paths named explicitly: git commit -m \"<msg>\" -- <paths>; (3) if the staged set contains work that is NOT yours (another session's files, a half-applied revert), STOP and ask the user before unstaging anything. Do NOT rephrase the same bare commit to evade this. Command was: $COMMAND"
+        FULL_REASON="CAWS command-safety: $REASON. This command was refused — the session danger latch was NOT armed.$_COMMIT_REPEAT_NOTE Do this instead: (1) inspect what is actually staged: git status && git diff --cached --stat; (2) if the staged set is exactly what you intend, commit it with the paths named explicitly: git commit -m \"<msg>\" -- <paths>; (3) if the staged set contains work that is NOT yours (another session's files, a half-applied revert), STOP and ask the user before unstaging anything. Do NOT rephrase the same bare commit to evade this. Command was: $COMMAND"
         emit_block_json "$FULL_REASON"
         exit 0
       fi
       if [[ "$SOURCE" == "capability" ]]; then
         WARN_FILE="$(danger_warn_file "$SESSION_ID")"
+        danger_resolve_batch_key
+        if [[ -f "$WARN_FILE" ]] &&
+            danger_same_batch "$(jq -r '.batch_key // ""' "$WARN_FILE" 2>/dev/null || true)" "$(jq -r '.epoch // ""' "$WARN_FILE" 2>/dev/null || true)"; then
+          emit_block_json "CAWS command-safety: $REASON. This capability-risk command was queued together with another one (\`$(jq -r '.command // ""' "$WARN_FILE" 2>/dev/null | head -n 1)\`) that drew this session's one warning, before that warning could be read. It is refused; the session danger latch was NOT armed. Send it alone if you still intend it: a capability-risk command sent after this WILL arm the latch. Command was: $COMMAND"
+          exit 0
+        fi
         if [[ ! -f "$WARN_FILE" ]]; then
           mkdir -p "$(dirname "$WARN_FILE")"
           jq -n \
             --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg reason "$REASON" \
             --arg command "$COMMAND" \
-            '{ts: $ts, hook: "block-dangerous.sh", kind: "capability-warn", reason: $reason, command: $command}' \
+            --arg batch "$_DANGER_BATCH_KEY" \
+            --argjson epoch "$(date +%s)" \
+            '{ts: $ts, hook: "block-dangerous.sh", kind: "capability-warn", reason: $reason, command: $command, batch_key: $batch, epoch: $epoch}' \
             > "$WARN_FILE" 2>/dev/null || true
           printf 'caws command-safety (WARN, first capability ask — not blocked): %s\n' "$REASON" >&2
           printf '  A SECOND capability-risk command this session will ARM the danger latch. Command was: %s\n' "$COMMAND" >&2
