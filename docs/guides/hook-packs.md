@@ -784,7 +784,12 @@ Each of these has passed a wrong guard or failed a right one.
 - **Bound a case that can hang by its process group.** `alarm` in the outer
   process ends only that process. A looping child keeps the case's output pipe
   open and the suite waits on it. Start the command in its own group and signal
-  the group at the limit; `tests/hooks/bats/duplicate-export-check.bats` has the
-  pattern.
+  the group at the limit; `tests/hooks/bats/export-check-relative-target.bats`
+  has the pattern.
+- **Name a new test file past the shadow-file guard.**
+  `tests/ci/release-path-integrity.test.js` rejects any tracked filename that
+  matches a shadow or duplicate pattern, including one that only contains the
+  word `duplicate`. The commit hook does not run that check; the jest suite
+  does.
 - **Confirm a new case can fail.** Remove the behavior it pins and run it. A
   case that passes against the unfixed handler is testing the fixture.

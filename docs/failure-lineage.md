@@ -5153,7 +5153,7 @@ the looping handler holding the case's output pipe, so the control run hung too.
 
 - The handler resolves a relative target against the payload working directory
   before walking, which also lets it report a duplicate for a relative target.
-- `tests/hooks/bats/duplicate-export-check.bats` runs the handler from a
+- `tests/hooks/bats/export-check-relative-target.bats` runs the handler from a
   directory with no `package.json` in or above it, sends relative and absolute
   targets, and ends the whole process group at a time limit. Against the unfixed
   handler three of its five cases fail by reaching that limit.
