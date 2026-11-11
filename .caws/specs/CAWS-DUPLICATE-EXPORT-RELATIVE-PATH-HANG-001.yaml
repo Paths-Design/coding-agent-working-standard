@@ -1,0 +1,33 @@
+id: CAWS-DUPLICATE-EXPORT-RELATIVE-PATH-HANG-001
+title: 'duplicate-export-check never returns on a relative Write target'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-11T18:25:46.894Z'
+updated_at: '2026-11-11T18:25:46.894Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'shared hook pack: duplicate-export-check.sh'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/duplicate-export-check.sh'
+    - 'packages/caws-cli/tests/hooks/bats/duplicate-export-check.bats'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'The handler always exits 0 and never refuses; it must also always return.'
+acceptance:
+  - id: A1
+    given: 'a PostToolUse Write whose file_path is relative and ends in .ts'
+    when: 'duplicate-export-check runs'
+    then: 'it returns within seconds with exit 0, resolving the target against the payload working directory, and reports a duplicate export found in the enclosing package'
+  - id: A2
+    given: 'a relative or absolute Write target with no package.json in any parent'
+    when: 'the handler runs'
+    then: 'it exits 0 with no output'
+non_functional: {}
+contracts: []
