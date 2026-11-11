@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: guard-unavailable-blocks
 created_at: '2026-11-11T00:08:00.467Z'
-updated_at: '2026-11-11T00:34:20.368Z'
+updated_at: '2026-11-11T01:01:55.733Z'
 created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
 blast_radius:
   modules:
@@ -22,6 +22,7 @@ scope:
     - packages/caws-cli/tests/hooks/bats/run-handlers-advisory-budget.bats
     - packages/caws-cli/tests/hooks/bats/run-handlers-advisory-dedup.bats
     - packages/caws-cli/tests/adapter/system-runtime.test.js
+    - packages/caws-cli/tests/hooks/bats/reprieve.bats
   out: []
 invariants:
   - 'On the enforcing PreToolUse chain, a handler that is missing, not executable, or exits with a status other than 0 or 2 without a control decision never lets a mutating tool call proceed.'
