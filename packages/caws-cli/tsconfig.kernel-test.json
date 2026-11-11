@@ -10,8 +10,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
-    "moduleResolution": "node",
+    "module": "node20",
     "lib": ["ES2022"],
     "strict": true,
     "noImplicitAny": true,
