@@ -1,0 +1,49 @@
+id: CAWS-STRIKE-STATE-HOME-001
+title: 'Strike state follows CAWS_HOME and never falls back to /tmp'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-11T10:54:58.577Z'
+updated_at: '2026-11-11T10:54:58.577Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'hook-packs/shared guard-strikes state location'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/guard-strikes.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/reset-strikes.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/guard-strikes-home.bats'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'Strike state lives under the machine home (CAWS_HOME, else HOME/.caws) and nowhere else; no world-writable fallback'
+  - 'A finding whose strike cannot be recorded is refused, and the refusal names why the strike state is unavailable'
+acceptance:
+  - id: A1
+    given: 'CAWS_HOME set to a directory and HOME set to a different one'
+    when: 'a guard records a strike for a resolved session'
+    then: 'strikes.json is written under CAWS_HOME/state/sessions/<id> and nothing is written under HOME/.caws'
+  - id: A2
+    given: 'CAWS_HOME unset and HOME set'
+    when: 'a strike is recorded'
+    then: 'strikes.json is written under HOME/.caws/state/sessions/<id>'
+  - id: A3
+    given: 'neither CAWS_HOME nor HOME set'
+    when: 'a guard enforces a finding'
+    then: 'nothing is created under /tmp/.caws, the call is refused, and the refusal text says strike state is unavailable because neither CAWS_HOME nor HOME is set'
+  - id: A4
+    given: 'an unresolved session id'
+    when: 'a guard enforces a finding'
+    then: 'the call is refused and the refusal text says the session id is unresolved, instead of reporting strike 3 of 3'
+  - id: A5
+    given: 'the full hook bats suite run with HOME unset in its fixtures'
+    when: 'it finishes'
+    then: 'no /tmp/.caws directory was created by it'
+rollback:
+  - 'Revert the merge commit; shared pack returns to 132'
+non_functional: {}
+contracts: []
