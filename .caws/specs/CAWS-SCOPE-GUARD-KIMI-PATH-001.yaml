@@ -24,9 +24,12 @@ invariants:
   - 'Only the kimi-code surface may name its target in tool_input.path, and only when tool_input.file_path is absent'
 acceptance:
   - id: A1
-    given: 'the kimi-code shim and a PreToolUse Edit payload carrying tool_input.path for a protected hook file, sent from a subdirectory'
-    when: 'the chain runs'
-    then: 'exit 2 and the output names ''.kimi-code/hooks/lib/emit.sh is protected'', with no scope-guard inventory refusal'
+    given: 'the kimi-code shim and PreToolUse Edit payloads carrying only tool_input.path'
+    when: 'the chain runs for a protected hook file from a subdirectory, and for an ordinary file'
+    then: >-
+      the protected file is refused naming '.kimi-code/hooks/lib/emit.sh is
+      protected', the ordinary file is adjudicated by scope-guard under its own
+      name, and neither produces an inventory refusal
   - id: A2
     given: 'the kimi-code surface and an Edit payload carrying both tool_input.file_path and a different tool_input.path'
     when: 'scope-guard builds the inventory'
