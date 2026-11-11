@@ -82,3 +82,8 @@ evidence:
     evidence_ref: "prettier --check on the eight edited files and validate-docs.mjs both exit 0 at 9a16dfa3b; jest tests/docs tests/ci tests/init and three doc-pinning suites: 47 suites, 977 tests passed"
     recorded_at: "2026-11-11T21:05:00.056Z"
     commit_sha: "9a16dfa3b"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "packages/caws-cli/templates/CLAUDE.md dangerous-command section at 9a16dfa3b lists the three refusal kinds; AGENTS.md and CLAUDE.md carry the same split"
+    recorded_at: "2026-11-11T21:05:01.521Z"
+    commit_sha: "9a16dfa3b"
