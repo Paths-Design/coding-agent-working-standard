@@ -680,10 +680,10 @@ import { isAdapterCoveredSurface } from './types';
 // v134: block-dangerous.sh identifies the batch a tool call was queued in
 // (the assistant message that carries it, from the transcript; a short time
 // window when none is named). A call queued with a refused one is refused
-// without a strike, latch or kill. A second refusal of one no-latch
-// classification (opaque exec, bare commit over deletions), sent after the
-// first could be read, arms the latch. reset-danger-latch.sh clears the
-// repeat record.
+// without a strike, latch or kill. A second opaque-exec refusal sent after
+// the first could be read arms the latch. The bare-commit refusal does not
+// count repeats: the native runtime answers it for Codex without this script.
+// reset-danger-latch.sh clears the repeat record.
 export const SHARED_PACK_VERSION = 134;
 
 /**

@@ -18,6 +18,11 @@ load helpers
 
 setup_file() {
   caws_install_pack_once
+  # These envelopes carry no transcript, so the guard cannot tell which calls
+  # were queued together and would fall back to a time window. A zero window
+  # makes each call a later attempt, which is what the escalation tests model.
+  # Batches are covered in block-dangerous-batch.bats.
+  export CAWS_BATCH_WINDOW_SECONDS=0
 }
 teardown_file() {
   caws_teardown_pack

@@ -32,10 +32,10 @@
   the same model reply as a refused one is refused without a strike, a latch
   or a process kill, because the agent could not have read the first refusal;
   previously three queued calls could be denied, latched and killed in
-  sequence. A second opaque inline payload, or a second bare commit over
-  staged deletions, sent after the first refusal now arms the latch; each was
-  refused without limit before. A second capability-risk command queued with
-  the warned one is refused without a latch. Shared pack 134.
+  sequence. A second opaque inline payload sent after the first refusal now
+  arms the latch; it was refused without limit before. A second
+  capability-risk command queued with the warned one is refused without a
+  latch. Shared pack 134.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

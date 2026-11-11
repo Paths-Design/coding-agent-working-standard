@@ -85,6 +85,29 @@ OPAQUE_TWO='node -e "console.log($Y)"'
   [ ! -e "$CAWS_TEST_REPO/notes.txt" ]
 }
 
+@test "batch: a transcript line written after the arming call still identifies its batch" {
+  # The harness writes the line after the hook has started: the arming call
+  # finds nothing on disk and records only its tool-use id.
+  call use_a "$ARM"
+  [ "$(jq -r '.batch_key' "$(sentinel)")" = "" ]
+  [ "$(jq -r '.tool_use_id' "$(sentinel)")" = "use_a" ]
+  say msg_1 use_a use_b
+  # Long past any time window: only the transcript can say these were queued together.
+  CAWS_BATCH_WINDOW_SECONDS=0 call use_b 'git commit -m chore'
+  assert_output --partial 'was queued together with the command that engaged the danger trap'
+  [ "$(strikes)" = "0" ]
+}
+
+@test "batch: a late transcript line does not hide a call from a later reply" {
+  call use_a "$ARM"
+  say msg_1 use_a
+  say msg_2 use_b
+  # Inside the time window, yet the transcript shows a different reply.
+  CAWS_BATCH_WINDOW_SECONDS=60 call use_b 'git commit -m chore'
+  refute_output --partial 'was queued together'
+  [ "$(strikes)" = "1" ]
+}
+
 @test "batch: a call from a later reply is a strike and escalates" {
   say msg_1 use_a
   call use_a "$ARM"

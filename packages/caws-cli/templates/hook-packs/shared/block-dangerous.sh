@@ -205,29 +205,56 @@ danger_repeat_file() {
 # consulted. When the payload names no transcript or tool-use id, or the
 # message is not on disk yet, calls arriving within CAWS_BATCH_WINDOW_SECONDS
 # (default 5) of the recorded refusal are taken as the same batch.
+#
+# The harness writes a tool call's transcript line shortly AFTER its hook
+# starts (observed lag about a quarter of a second), so the message is often
+# not on disk when a refusal is recorded. Each record therefore keeps the
+# tool-use id, and the message is looked up when two calls are compared: by
+# then the earlier line is on disk, and the current call's line is awaited
+# briefly. Only refusal paths pay that wait.
 _DANGER_BATCH_KEY_RESOLVED=0
 _DANGER_BATCH_KEY=""
+_DANGER_USE_ID=""
+_DANGER_TRANSCRIPT=""
+
+# danger_lookup_batch <tool-use-id> — print the id of the assistant message
+# that issued the call, or nothing when the transcript does not hold it.
+danger_lookup_batch() {
+  local use_id="$1" key=""
+  [[ -n "$use_id" && -n "$_DANGER_TRANSCRIPT" && -f "$_DANGER_TRANSCRIPT" && -r "$_DANGER_TRANSCRIPT" ]] || return 0
+  key="$(tail -n 400 "$_DANGER_TRANSCRIPT" 2>/dev/null |
+    jq -rR --arg id "$use_id" '
+      (fromjson? // empty) | select(.type == "assistant") |
+      select([.message.content[]? | select(.type == "tool_use") | .id] | index($id)) |
+      .message.id // empty' 2>/dev/null | tail -n 1)"
+  [[ "$key" =~ ^[A-Za-z0-9_.:-]+$ ]] || return 0
+  printf '%s' "$key"
+}
+
 danger_resolve_batch_key() {
   [[ "$_DANGER_BATCH_KEY_RESOLVED" != 1 ]] || return 0
   _DANGER_BATCH_KEY_RESOLVED=1
-  local transcript use_id
-  transcript="$(printf '%s' "${INPUT:-}" | jq -r '.transcript_path // ""' 2>/dev/null || true)"
-  use_id="$(printf '%s' "${INPUT:-}" | jq -r '.tool_use_id // .tool_call_id // ""' 2>/dev/null || true)"
-  if [[ -n "$transcript" && -n "$use_id" && -f "$transcript" && -r "$transcript" ]]; then
-    _DANGER_BATCH_KEY="$(tail -n 400 "$transcript" 2>/dev/null |
-      jq -rR --arg id "$use_id" '
-        (fromjson? // empty) | select(.type == "assistant") |
-        select([.message.content[]? | select(.type == "tool_use") | .id] | index($id)) |
-        .message.id // empty' 2>/dev/null | tail -n 1)"
-    [[ "$_DANGER_BATCH_KEY" =~ ^[A-Za-z0-9_.:-]+$ ]] || _DANGER_BATCH_KEY=""
-  fi
+  _DANGER_TRANSCRIPT="$(printf '%s' "${INPUT:-}" | jq -r '.transcript_path // ""' 2>/dev/null || true)"
+  _DANGER_USE_ID="$(printf '%s' "${INPUT:-}" | jq -r '.tool_use_id // .tool_call_id // ""' 2>/dev/null || true)"
+  [[ "$_DANGER_USE_ID" =~ ^[A-Za-z0-9_.:-]+$ ]] || _DANGER_USE_ID=""
+  _DANGER_BATCH_KEY="$(danger_lookup_batch "$_DANGER_USE_ID")"
 }
 
-# danger_same_batch <recorded-key> <recorded-epoch> — true when this call
-# belongs to the batch that produced the recorded refusal.
+# danger_same_batch <recorded-key> <recorded-epoch> <recorded-tool-use-id> —
+# true when this call belongs to the batch that produced the recorded refusal.
 danger_same_batch() {
-  local recorded_key="$1" recorded_epoch="$2" now window
+  local recorded_key="$1" recorded_epoch="$2" recorded_use="${3:-}" now window attempt
   danger_resolve_batch_key
+  if [[ -z "$recorded_key" && -n "$recorded_use" ]]; then
+    recorded_key="$(danger_lookup_batch "$recorded_use")"
+  fi
+  if [[ -z "$_DANGER_BATCH_KEY" && -n "$_DANGER_USE_ID" && -n "$_DANGER_TRANSCRIPT" ]]; then
+    for attempt in 1 2 3 4 5; do
+      sleep 0.2 2>/dev/null || break
+      _DANGER_BATCH_KEY="$(danger_lookup_batch "$_DANGER_USE_ID")"
+      [[ -z "$_DANGER_BATCH_KEY" ]] || break
+    done
+  fi
   if [[ -n "$_DANGER_BATCH_KEY" && -n "$recorded_key" ]]; then
     [[ "$_DANGER_BATCH_KEY" == "$recorded_key" ]]
     return
@@ -240,10 +267,11 @@ danger_same_batch() {
 
 # True when this call was queued with the command that armed the latch.
 danger_latch_same_batch() {
-  local file="$1" key epoch
+  local file="$1" key epoch use
   key="$(jq -r '.batch_key // ""' "$file" 2>/dev/null || true)"
   epoch="$(jq -r '.armed_epoch // ""' "$file" 2>/dev/null || true)"
-  danger_same_batch "$key" "$epoch"
+  use="$(jq -r '.tool_use_id // ""' "$file" 2>/dev/null || true)"
+  danger_same_batch "$key" "$epoch" "$use"
 }
 
 # trap_same_batch_refusal <latch-file> <session> <what> — refuse a call queued
@@ -263,19 +291,20 @@ trap_same_batch_refusal() {
 # classification from a later batch returns 0: the agent read the first
 # refusal and repeated it. The same batch, or a first occurrence, returns 1.
 danger_repeat_escalates() {
-  local session_id="$1" class="$2" file key epoch tmp
+  local session_id="$1" class="$2" file key epoch use tmp
   file="$(danger_repeat_file "$session_id")"
   if [[ -f "$file" ]] && jq -e --arg c "$class" 'type == "object" and has($c)' "$file" >/dev/null 2>&1; then
     key="$(jq -r --arg c "$class" '.[$c].batch_key // ""' "$file" 2>/dev/null || true)"
     epoch="$(jq -r --arg c "$class" '.[$c].epoch // ""' "$file" 2>/dev/null || true)"
-    if danger_same_batch "$key" "$epoch"; then return 1; fi
+    use="$(jq -r --arg c "$class" '.[$c].tool_use_id // ""' "$file" 2>/dev/null || true)"
+    if danger_same_batch "$key" "$epoch" "$use"; then return 1; fi
     return 0
   fi
   danger_resolve_batch_key
   tmp="${file}.tmp.$$"
   if { if [[ -f "$file" ]] && jq -e 'type == "object"' "$file" >/dev/null 2>&1; then cat "$file"; else printf '{}'; fi; } |
-      jq --arg c "$class" --arg k "$_DANGER_BATCH_KEY" --argjson e "$(date +%s)" \
-        '.[$c] = {batch_key: $k, epoch: $e}' > "$tmp" 2>/dev/null; then
+      jq --arg c "$class" --arg k "$_DANGER_BATCH_KEY" --arg u "$_DANGER_USE_ID" --argjson e "$(date +%s)" \
+        '.[$c] = {batch_key: $k, tool_use_id: $u, epoch: $e}' > "$tmp" 2>/dev/null; then
     mv "$tmp" "$file" 2>/dev/null || true
   fi
   [[ ! -f "$tmp" ]] || unlink "$tmp" 2>/dev/null || true
@@ -307,6 +336,7 @@ record_danger_latch() {
     --arg command "$command" \
     --arg generation "$generation" \
     --arg batch "$_DANGER_BATCH_KEY" \
+    --arg use "$_DANGER_USE_ID" \
     --argjson epoch "$(date +%s)" \
     '{
       ts: $ts,
@@ -316,6 +346,7 @@ record_danger_latch() {
       command: $command,
       latch_generation: $generation,
       batch_key: $batch,
+      tool_use_id: $use,
       armed_epoch: $epoch,
       message: "Dangerous command boundary engaged. User reset required before more Bash commands may run in this session."
     }' > "$file"
@@ -905,15 +936,10 @@ case "$DECISION" in
         emit_block_json "$FULL_REASON$_OPAQUE_REPEAT_NOTE"
         exit 0
       fi
-      _COMMIT_REPEAT_NOTE=""
-      if [[ "$SOURCE" == "commit_deletions" ]]; then
-        if danger_repeat_escalates "$SESSION_ID" commit_deletions; then
-          record_danger_latch "$LATCH_FILE" "ask" "$REASON" "$COMMAND"
-          emit_block_json "CAWS command-safety: $REASON. A bare commit over staged deletions was already refused earlier in this session with the path-scoped way to make it; this is a repeat of that same classification (commit_deletions), so the session danger latch is NOW ARMED. $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run, from their own shell: $RECOVERY_COMMAND  Command was: $COMMAND"
-          exit 0
-        fi
-        _COMMIT_REPEAT_NOTE=" A second refusal of this kind in this session, sent after this one, WILL arm the danger latch."
-      fi
+      # The bare-commit refusal below does not count repeats. The native runtime
+      # answers the same refusal for Codex without going through this script
+      # (src/runtime/stock-handlers.ts), so a record kept here would miss those
+      # refusals and count unevenly across surfaces.
       # Bare-commit staged-deletions carve-out
       # (CAWS-GUARD-COMMIT-DELETES-UNNAMED-001): a bare `git commit` whose
       # index stages deletions of tracked files — or whose staged state the
@@ -932,12 +958,12 @@ case "$DECISION" in
         # rejected by git mid-merge — so print the reason as the single source
         # of truth and do not append the pathspec text.
         # (CAWS-DEFECT-MERGE-MAIN-IN-CONCLUSION-BLOCKED-01)
-        FULL_REASON="CAWS command-safety: $REASON. This command was refused — the session danger latch was NOT armed.$_COMMIT_REPEAT_NOTE Command was: $COMMAND"
+        FULL_REASON="CAWS command-safety: $REASON. This command was refused — the session danger latch was NOT armed. Command was: $COMMAND"
         emit_block_json "$FULL_REASON"
         exit 0
       fi
       if [[ "$SOURCE" == "commit_deletions" ]]; then
-        FULL_REASON="CAWS command-safety: $REASON. This command was refused — the session danger latch was NOT armed.$_COMMIT_REPEAT_NOTE Do this instead: (1) inspect what is actually staged: git status && git diff --cached --stat; (2) if the staged set is exactly what you intend, commit it with the paths named explicitly: git commit -m \"<msg>\" -- <paths>; (3) if the staged set contains work that is NOT yours (another session's files, a half-applied revert), STOP and ask the user before unstaging anything. Do NOT rephrase the same bare commit to evade this. Command was: $COMMAND"
+        FULL_REASON="CAWS command-safety: $REASON. This command was refused — the session danger latch was NOT armed. Do this instead: (1) inspect what is actually staged: git status && git diff --cached --stat; (2) if the staged set is exactly what you intend, commit it with the paths named explicitly: git commit -m \"<msg>\" -- <paths>; (3) if the staged set contains work that is NOT yours (another session's files, a half-applied revert), STOP and ask the user before unstaging anything. Do NOT rephrase the same bare commit to evade this. Command was: $COMMAND"
         emit_block_json "$FULL_REASON"
         exit 0
       fi
@@ -945,7 +971,7 @@ case "$DECISION" in
         WARN_FILE="$(danger_warn_file "$SESSION_ID")"
         danger_resolve_batch_key
         if [[ -f "$WARN_FILE" ]] &&
-            danger_same_batch "$(jq -r '.batch_key // ""' "$WARN_FILE" 2>/dev/null || true)" "$(jq -r '.epoch // ""' "$WARN_FILE" 2>/dev/null || true)"; then
+            danger_same_batch "$(jq -r '.batch_key // ""' "$WARN_FILE" 2>/dev/null || true)" "$(jq -r '.epoch // ""' "$WARN_FILE" 2>/dev/null || true)" "$(jq -r '.tool_use_id // ""' "$WARN_FILE" 2>/dev/null || true)"; then
           emit_block_json "CAWS command-safety: $REASON. This capability-risk command was queued together with another one (\`$(jq -r '.command // ""' "$WARN_FILE" 2>/dev/null | head -n 1)\`) that drew this session's one warning, before that warning could be read. It is refused; the session danger latch was NOT armed. Send it alone if you still intend it: a capability-risk command sent after this WILL arm the latch. Command was: $COMMAND"
           exit 0
         fi
@@ -956,8 +982,9 @@ case "$DECISION" in
             --arg reason "$REASON" \
             --arg command "$COMMAND" \
             --arg batch "$_DANGER_BATCH_KEY" \
+            --arg use "$_DANGER_USE_ID" \
             --argjson epoch "$(date +%s)" \
-            '{ts: $ts, hook: "block-dangerous.sh", kind: "capability-warn", reason: $reason, command: $command, batch_key: $batch, epoch: $epoch}' \
+            '{ts: $ts, hook: "block-dangerous.sh", kind: "capability-warn", reason: $reason, command: $command, batch_key: $batch, tool_use_id: $use, epoch: $epoch}' \
             > "$WARN_FILE" 2>/dev/null || true
           printf 'caws command-safety (WARN, first capability ask — not blocked): %s\n' "$REASON" >&2
           printf '  A SECOND capability-risk command this session will ARM the danger latch. Command was: %s\n' "$COMMAND" >&2
