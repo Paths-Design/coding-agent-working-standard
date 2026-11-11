@@ -673,7 +673,11 @@ import { isAdapterCoveredSurface } from './types';
 // the field that surface sends, rather than refusing the edit for want of
 // tool_input.file_path. Two differing names for one target are refused.
 // A Write or Edit naming no target is refused with the cause, not passed.
-export const SHARED_PACK_VERSION = 132;
+// v133: strike state is written under CAWS_HOME, else HOME/.caws, with no
+// fallback to /tmp. A finding whose strike cannot be recorded is refused with
+// the reason (unresolved session, or no machine home) rather than reported as
+// a third strike. reset-strikes.sh lists the same location.
+export const SHARED_PACK_VERSION = 133;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
