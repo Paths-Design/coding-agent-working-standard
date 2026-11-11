@@ -22,7 +22,7 @@ scope:
   out: []
 invariants:
   - 'Guides state present-tense behavior verified against source at the documented revision; incident history lives only in failure-lineage entries.'
-  - 'No shipped hook-pack template is edited, so no pack version changes.'
+  - 'A shipped template edited here carries its pack version bump and fingerprint in the same change.'
 acceptance:
   - id: A1
     given: 'the dispatcher, strike and danger-latch sources on main'
