@@ -1,0 +1,40 @@
+id: CAWS-SCOPE-GUARD-KIMI-PATH-001
+title: 'scope-guard reads kimi-code''s tool_input.path instead of refusing every kimi edit'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-11T09:57:26.613Z'
+updated_at: '2026-11-11T09:57:26.613Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'hook-packs/shared scope-guard target inventory'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/scope-guard.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/kimi-surface.bats'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'The target inventory comes from the original payload; a payload whose target cannot be named exactly is refused whole'
+  - 'Only the kimi-code surface may name its target in tool_input.path, and only when tool_input.file_path is absent'
+acceptance:
+  - id: A1
+    given: 'the kimi-code shim and a PreToolUse Edit payload carrying tool_input.path for a protected hook file, sent from a subdirectory'
+    when: 'the chain runs'
+    then: 'exit 2 and the output names ''.kimi-code/hooks/lib/emit.sh is protected'', with no scope-guard inventory refusal'
+  - id: A2
+    given: 'the kimi-code surface and an Edit payload carrying both tool_input.file_path and a different tool_input.path'
+    when: 'scope-guard builds the inventory'
+    then: 'the edit is refused with an inventory message naming the conflict'
+  - id: A3
+    given: 'a surface other than kimi-code and an Edit payload carrying only tool_input.path'
+    when: 'scope-guard builds the inventory'
+    then: 'the edit is refused as before with ''empty or unrepresentable target path'''
+rollback:
+  - 'Revert the merge commit; shared pack returns to 131'
+non_functional: {}
+contracts: []
