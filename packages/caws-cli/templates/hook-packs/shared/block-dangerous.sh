@@ -836,8 +836,12 @@ fi
 # --- Python classifier (preferred path) ---
 CLASSIFIER="$SCRIPT_DIR/classify_command.py"
 if [[ ! -f "$CLASSIFIER" ]] || ! command -v python3 >/dev/null 2>&1; then
-  record_danger_latch "$LATCH_FILE" "ask" "classifier unavailable" "$COMMAND"
-  REASON="CAWS command-safety: command classifier unavailable; dangerous-command safety cannot verify Bash semantics. The session danger latch is NOW ARMED (fail-closed). $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run: $RECOVERY_COMMAND. Command was: $COMMAND"
+  # A classifier that cannot run is a fault of the installation, not of the
+  # command. The command is refused because it was never judged; the latch is
+  # not armed and no strike is recorded, since the agent cannot discharge it.
+  _CLASSIFIER_FAULT="classify_command.py is missing from $SCRIPT_DIR"
+  command -v python3 >/dev/null 2>&1 || _CLASSIFIER_FAULT="python3 is not on the hook PATH"
+  REASON="CAWS command-safety: the command classifier cannot run ($_CLASSIFIER_FAULT), so this Bash command was not judged and is refused. Your command did not cause this, and the refusal adds no strike and does NOT arm the danger latch. Every Bash command will be refused the same way until the classifier is restored; do not retry or rephrase. Tell the USER what is missing. Command was: $COMMAND"
   emit_ask_json "$REASON"
   exit 0
 fi
@@ -851,10 +855,18 @@ CLASSIFIER_STDERR=$(mktemp)
 declare -a _CLASSIFY_ARGS=(--repo-root "$REPO_ROOT")
 [[ -n "${HOME:-}" ]] && _CLASSIFY_ARGS+=(--home "$HOME")
 _CLASSIFY_ARGS+=(--cwd "$(pwd)")
+# The classifier PROCESS failing (a crash, a broken interpreter) is a fault of
+# the installation. It is kept apart from a classifier_error the classifier
+# itself returns, which is a verdict about the command (see below).
+_CLASSIFIER_PROCESS_FAILED=0
 RESULT=$(printf '%s' "$COMMAND" | python3 "$CLASSIFIER" "${_CLASSIFY_ARGS[@]}" 2>"$CLASSIFIER_STDERR") || {
-  DIAG=$(head -c 200 "$CLASSIFIER_STDERR" 2>/dev/null || true)
+  _CLASSIFIER_PROCESS_FAILED=1
+  DIAG=$(head -c 200 "$CLASSIFIER_STDERR" 2>/dev/null | tr '\n' ' ' || true)
   rm -f "$CLASSIFIER_STDERR"
-  RESULT="{\"decision\":\"ask\",\"reason\":\"command classifier failed: ${DIAG:-unknown error}\",\"source\":\"classifier_error\",\"enforcement\":\"confirm\"}"
+  # Built with jq: a traceback carries quotes, and an interpolated string
+  # would not be JSON.
+  RESULT=$(jq -nc --arg reason "command classifier failed: ${DIAG:-unknown error}" \
+    '{decision: "ask", reason: $reason, source: "classifier_error", enforcement: "confirm"}')
 }
 rm -f "$CLASSIFIER_STDERR"
 
@@ -1009,6 +1021,26 @@ case "$DECISION" in
         emit_block_json "$FULL_REASON"
         exit 0
       fi
+      if [[ "$_CLASSIFIER_PROCESS_FAILED" == 1 || "$SOURCE" == "sidecar_error" ]]; then
+        # The classifier process crashed, or its command-adapters sidecar is
+        # invalid. That is a fault of the installation: the command is refused
+        # because it was never judged, with no strike and no latch.
+        emit_block_json "CAWS command-safety: $REASON. The classifier itself failed, so this Bash command was not judged and is refused. Your command did not cause this as far as the guard can tell, and the refusal adds no strike and does NOT arm the danger latch. If every command is refused this way, tell the USER the classifier is broken; do not keep retrying. Command was: $COMMAND"
+        exit 0
+      fi
+      if [[ "$SOURCE" == "classifier_error" ]]; then
+        # The classifier ran and reported it could not finish analyzing THIS
+        # command (nesting past its budget). That is a property of the command,
+        # the same class as an opaque payload: refuse it with the way to
+        # restate it, and arm the latch only when it is repeated after that.
+        if danger_repeat_escalates "$SESSION_ID" classifier_error; then
+          record_danger_latch "$LATCH_FILE" "ask" "$REASON" "$COMMAND"
+          emit_block_json "CAWS command-safety: $REASON. A command the classifier could not analyze was already refused earlier in this session with the way to restate it; this is a repeat of that same classification (classifier_error), so the session danger latch is NOW ARMED. $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run, from their own shell: $RECOVERY_COMMAND  Command was: $COMMAND"
+          exit 0
+        fi
+        emit_block_json "CAWS command-safety: $REASON. This command could not be fully analyzed, so it is refused — the session danger latch was NOT armed. Restate it as plain commands without nested shells (no bash -c inside bash -c, no eval of a built string), or put the steps in a script file in your scope and run that. A second unanalyzable command in this session, sent after this refusal, WILL arm the danger latch. Command was: $COMMAND"
+        exit 0
+      fi
       record_danger_latch "$LATCH_FILE" "ask" "$REASON" "$COMMAND"
       FULL_REASON="CAWS command-safety: $REASON. This requires USER CONFIRMATION before it runs and the session danger latch is NOW ARMED (fail-closed: the classifier could not verify this command). $_LATCH_SCOPE_NOTE — you CANNOT reset it yourself. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command to evade this. Ask the USER to confirm and run: $RECOVERY_COMMAND, then proceed. Command was: $COMMAND"
       emit_block_json "$FULL_REASON"
@@ -1019,8 +1051,7 @@ case "$DECISION" in
     exit 0
     ;;
   *)
-    record_danger_latch "$LATCH_FILE" "ask" "classifier unknown decision: $DECISION" "$COMMAND"
-    FULL_REASON="CAWS command-safety: command classifier returned an unrecognized decision '$DECISION'. The session danger latch is NOW ARMED (fail-closed). $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run: $RECOVERY_COMMAND. Command was: $COMMAND"
+    FULL_REASON="CAWS command-safety: the command classifier returned an unrecognized decision '$DECISION', so this Bash command was not judged and is refused. Your command did not cause this, and the refusal adds no strike and does NOT arm the danger latch. The classifier and this guard are out of step (a partial hook-pack update is the usual cause); tell the USER. Command was: $COMMAND"
     emit_ask_json "$FULL_REASON"
     exit 0
     ;;

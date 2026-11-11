@@ -684,7 +684,12 @@ import { isAdapterCoveredSurface } from './types';
 // the first could be read arms the latch. The bare-commit refusal does not
 // count repeats: the native runtime answers it for Codex without this script.
 // reset-danger-latch.sh clears the repeat record.
-export const SHARED_PACK_VERSION = 134;
+// v135: block-dangerous.sh refuses a command the classifier could not judge
+// (classifier missing, crashed, or returning an unknown decision) without
+// arming the danger latch, and names the fault. A command the classifier ran
+// on but could not finish analyzing is refused once without a latch and arms
+// it when repeated, like an opaque payload.
+export const SHARED_PACK_VERSION = 135;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
