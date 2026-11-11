@@ -78,3 +78,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a copy refusal names every analyzer issue, not only the first"
     commit_sha: f0f136dc9
     test_verified_at: f0f136dc9a275d15c63b5971860cc42e59086db8
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "bats quiet-merge cases in kimi-surface.bats and qwen-surface.bats assert the rewritten command; full bats run at 0045e47cf shows both ok (9 standing reds down to 7)"
+    recorded_at: "2026-11-11T09:56:27.681Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/kimi-surface.bats::quiet-merge: still rewrites under claude-code (regression guard for the gate)"
+    commit_sha: f0f136dc9
+    test_verified_at: f0f136dc9a275d15c63b5971860cc42e59086db8
