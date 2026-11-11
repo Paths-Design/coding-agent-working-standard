@@ -84,3 +84,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/agent-heartbeat-activity.bats::heartbeat-activity: a CLI that never returns is ended at the deadline and the call proceeds"
     commit_sha: "801efda3b"
     test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "system-runtime.test.js activity stamp block (7 cases): stamp advances on pre_tool_use, post_tool_use and stop; created on post_tool_use for a leased session; lease bytes unchanged on post_tool_use; no stamp without a lease; mutants L1-L4 killed"
+    recorded_at: "2026-11-11T21:01:46.643Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::the launcher creates the stamp for a leased session that has none yet"
+    commit_sha: "801efda3b"
+    test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
