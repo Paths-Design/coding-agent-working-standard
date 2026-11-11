@@ -91,3 +91,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::the launcher creates the stamp for a leased session that has none yet"
     commit_sha: "801efda3b"
     test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "application/agent-heartbeat.test.js: fresh stamp with recorded last_active 65s old still writes the lease; mutant A1 killed"
+    recorded_at: "2026-11-11T21:01:58.852Z"
+    test_nodeid: "packages/caws-cli/tests/application/agent-heartbeat.test.js::the throttle reads the recorded last_active, so a fresh stamp cannot suppress a due lease write"
+    commit_sha: "801efda3b"
+    test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
