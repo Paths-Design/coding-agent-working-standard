@@ -1,9 +1,10 @@
 #!/usr/bin/env bats
 # parse-input/runtime-paths — shared hook input parser failure visibility.
 #
-# Malformed vendor hook JSON must remain fail-open (hooks should not wedge the
-# user's tool call because the harness payload was bad), but it must be visible
-# and honest so agents do not confuse "no guard output" with a permitted command.
+# Malformed vendor hook JSON reaches the PreToolUse chain as a payload with no
+# tool name. No guard can inspect such a call, so the chain refuses it, and the
+# refusal carries both the parser's diagnostic and the reason for the block so
+# an agent can tell a broken payload from a finding about its own command.
 
 load helpers
 
@@ -22,17 +23,17 @@ run_pre_tool_dispatcher_raw() {
     bash -c "printf '%s' '$payload' | bash '$CAWS_TEST_HOOKS_DIR/dispatch/pre_tool_use.sh'"
 }
 
-@test "parse-input: malformed dispatcher payload fails open but emits CAWS parse diagnostic" {
+@test "parse-input: malformed dispatcher payload is refused and emits the CAWS parse diagnostic" {
   run_pre_tool_dispatcher_raw '{not json'
 
-  assert_success
+  assert_failure 2
   assert_output --partial '[CAWS hook parse] malformed hook input JSON'
-  assert_output --partial 'failing open with an empty payload'
   assert_output --partial 'Expected vendor hook payload JSON on stdin'
   assert_output --partial 'Parser:'
+  assert_output --partial '{"decision":"block","reason":"CAWS guard unavailable: the guard chain cannot run because the hook payload carried no tool name'
+  assert_output --partial 'Your command did not cause this'
   refute_output --partial '{not json'
   refute_output --partial 'Traceback'
-  refute_output --partial '"decision": "block"'
 }
 
 @test "parse-input: valid dispatcher payload emits no parser diagnostic" {

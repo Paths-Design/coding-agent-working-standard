@@ -306,7 +306,8 @@ test('global registration waits for legacy retirement without duplicating the lo
       cwd: p,
       encoding: 'utf8',
       env: { ...process.env, CAWS_HOME: home },
-      input: JSON.stringify({ cwd: p, session_id: 'transition-test' }),
+      // A PreToolUse payload names its tool; the enforcing chain refuses one that does not.
+      input: JSON.stringify({ cwd: p, session_id: 'transition-test', tool_name: 'Write' }),
     });
   expect(invoke(p).status).toBe(0);
   expect(invoke(p).stdout).toBe('');

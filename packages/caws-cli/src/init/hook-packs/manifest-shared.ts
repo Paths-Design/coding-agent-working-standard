@@ -655,7 +655,15 @@ import { isAdapterCoveredSurface } from './types';
 // while matching token expressions without per-line external processes.
 // v128: the native hook envelope's chat identity takes precedence over a
 // shared live process record in session-id.sh.
-export const SHARED_PACK_VERSION = 128;
+// v129: on the enforcing PreToolUse chain, run-handlers.sh refuses a mutating
+// tool call when a guard is missing, not executable, or exits with a status
+// other than 0 or 2 without a block decision, and when the payload carries no
+// tool name. The refusal names the guard and the fault. Read, Glob and Grep
+// report the fault on stderr and proceed, as does a handler with no refusal
+// path (agent-heartbeat, cwd-guard, scan-secrets, quiet-merge). Other chains
+// are unchanged. worktree-write-guard.sh counts zero git worktrees outside a
+// repository instead of ending without a verdict.
+export const SHARED_PACK_VERSION = 129;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

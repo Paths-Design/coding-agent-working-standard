@@ -2,6 +2,16 @@
 
 ### Behavior and workflow changes since rc.2
 
+- A PreToolUse guard that cannot reach a verdict refuses the tool call. A guard
+  that is missing, not executable, or exits with a status other than 0 or 2
+  without a block decision previously let the call run. Write, Edit, Bash and
+  any tool not known to be read-only are refused with a reason that names the
+  guard and the fault, states that the command did not cause it, and itself
+  adds no strike or latch. A payload with no tool name is refused the same way.
+  Read, Glob and Grep report the fault on stderr and proceed, as does a handler
+  with no refusal path (`agent-heartbeat`, `cwd-guard`, `scan-secrets`,
+  `quiet-merge`). `worktree-write-guard` no longer ends without a verdict in a
+  `.caws` directory that is not a git repository. Shared pack 129.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.
