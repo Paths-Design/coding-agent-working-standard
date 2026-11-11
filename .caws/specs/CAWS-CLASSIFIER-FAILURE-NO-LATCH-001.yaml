@@ -40,6 +40,16 @@ acceptance:
     given: 'a catastrophic deny or a second capability-risk command in a later batch'
     when: 'it is checked'
     then: 'the latch is armed exactly as before this change'
+  - id: A5
+    given: >-
+      a command the classifier ran on but could not finish analyzing (source
+      classifier_error returned by the classifier, such as nesting past its budget)
+    when: 'it is checked for the first time, and again in a later batch'
+    then: >-
+      the first is refused without a latch, with the way to restate it and a notice
+      that a repeat arms the latch; the second arms the latch naming the repeated
+      classification; a classifier process crash in between does not count as the
+      repeat
 rollback:
   - 'Revert the merge commit; shared pack returns to 134'
 non_functional: {}
