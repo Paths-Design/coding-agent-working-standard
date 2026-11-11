@@ -62,3 +62,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats::classifier failure: a missing classifier file refuses, names the file, and does not arm the latch"
     commit_sha: "7d0982be7"
     test_verified_at: "7d0982be7c71a0e1eb50985a8cbba43b01493c69"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "classifier exit error and quoted traceback: refused with the error text, no sentinel"
+    recorded_at: "2026-11-11T14:22:33.705Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/block-dangerous-classifier-failure.bats::classifier failure: a traceback with quotes in it is still reported as the classifier's failure"
+    commit_sha: "7d0982be7"
+    test_verified_at: "7d0982be7c71a0e1eb50985a8cbba43b01493c69"
