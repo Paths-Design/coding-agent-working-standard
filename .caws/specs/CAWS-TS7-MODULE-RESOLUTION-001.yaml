@@ -66,3 +66,8 @@ evidence:
     evidence_ref: "At 39cb6b379, cwd packages/caws-cli, installed typescript 5.9.2: npm run typecheck (tsc -p tsconfig.vnext.test.json, tsconfig.kernel-test.json, tests/transcripts/tsconfig.json --noEmit) exit 0 with no diagnostics. tsc -p tsconfig.vnext.json --noEmit also exit 0."
     recorded_at: "2026-11-11T09:15:56.328Z"
     commit_sha: "39cb6b379"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "parser-types.ts:13 imports from 'unbash', whose package.json exports['.'].types is ./dist/parser.d.ts (which has export type * from ./types.ts). Counterexample run at the lane head with 'unbash/dist/types' temporarily restored: tsc 5.9.2, typescript 7.1.0-beta and tsrs each reported 11 errors including parser-types.ts(13,8) TS2307. Restored before commit."
+    recorded_at: "2026-11-11T09:15:57.857Z"
+    commit_sha: "39cb6b379"
