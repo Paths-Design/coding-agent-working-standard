@@ -41,7 +41,10 @@ acceptance:
   - id: A4
     given: 'the base revision and the lane head built with the installed typescript 5.9 compiler'
     when: 'tsc -p tsconfig.vnext.json emits into separate output directories'
-    then: 'the emitted .js and .d.ts trees are byte-identical'
+    then: >-
+      every emitted .js file is byte-identical, and the only differing declaration
+      output is parser-types.d.ts (with its .d.ts.map), whose sole change is the
+      unbash import specifier
   - id: A5
     given: 'the lane head'
     when: 'the jest projects that compile through these configs run (the kernel ts-jest project and the transcripts foundation test)'
