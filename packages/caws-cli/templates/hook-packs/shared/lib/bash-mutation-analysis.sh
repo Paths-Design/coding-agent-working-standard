@@ -26,6 +26,26 @@ CAWS_AST_COPY_DIRECTORY_MODE=(); CAWS_AST_COPY_CWD=(); CAWS_AST_COPY_START=(); C
 CAWS_AST_COPY_SOURCE_OFFSET=(); CAWS_AST_COPY_SOURCE_COUNT=(); CAWS_AST_COPY_SOURCES=()
 CAWS_BASH_ANALYSIS_READY=0
 
+# The machine dispatcher points BASH_ENV at its own handler-env.sh so handlers
+# load the runtime libraries, and saves the caller's value in
+# CAWS_PRIOR_BASH_ENV. The analyzer models the agent's shell environment and
+# reports an inherited BASH_ENV as unmodeled, so it must be given the caller's
+# value: the dispatcher's own would mark every command as unanalyzable. A
+# BASH_ENV the dispatcher did not set is passed through untouched.
+caws_run_with_agent_bash_env() {
+  if [[ ${CAWS_MACHINE_RUNTIME:-} == 1 && -n ${CAWS_SHARED_LIB_DIR:-} &&
+        ${BASH_ENV:-} == "${CAWS_SHARED_LIB_DIR%/lib}/handler-env.sh" ]] &&
+      declare -p CAWS_PRIOR_BASH_ENV >/dev/null 2>&1; then
+    if [[ -n $CAWS_PRIOR_BASH_ENV ]]; then
+      BASH_ENV="$CAWS_PRIOR_BASH_ENV" "$@"
+    else
+      ( unset BASH_ENV; "$@" )
+    fi
+  else
+    "$@"
+  fi
+}
+
 caws_bash_prepare_analysis() {
   local command="$1" cwd="$2" project="$3" cli="${CAWS_BIN:-caws}" json
   local -a context_args=()
@@ -43,7 +63,7 @@ caws_bash_prepare_analysis() {
   # The original envelope owns execution context. Parsed scalar exports cannot
   # replace its command aliases, dialect, startup choices or working directory.
   if ! json="$(original_payload |
-      "$cli" hooks mutation-view --json --cwd "$cwd" --project "$project" ${context_args[@]+"${context_args[@]}"})"; then
+      caws_run_with_agent_bash_env "$cli" hooks mutation-view --json --cwd "$cwd" --project "$project" ${context_args[@]+"${context_args[@]}"})"; then
     local codes
     codes="$(jq -ser '
       if length==1 and .[0].schema=="caws.shell_mutation_view.v2" and (.[0].issues|type)=="array"

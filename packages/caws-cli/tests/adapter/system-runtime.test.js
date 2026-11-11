@@ -453,6 +453,91 @@ test('unmodified stock guards protect hook paths and the stock renderer records 
   expect(fs.existsSync(path.join(p, '.caws/hooks'))).toBe(false);
 });
 
+// The dispatcher exports its own BASH_ENV for handlers. The command analyzer
+// reports an inherited BASH_ENV as unmodeled, so these run the unmodified guards
+// and the built CLI together through the launcher, the only arrangement in
+// which the two meet.
+// Claude Code is the surface used: the analyzer refuses every Codex native
+// payload on its own execution-contract grounds before environment is considered.
+function bash(p, command, extra = {}) {
+  fs.mkdirSync(path.join(home, 'surfaces/claude-code'), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, 'surfaces/claude-code/settings.json'),
+    JSON.stringify({ version: 1, enabled: true })
+  );
+  const args = [path.join(home, 'bin/caws-hook'), 'claude-code', 'pre_tool_use', '--system'];
+  const input = JSON.stringify({
+    cwd: p,
+    session_id: 'system-test',
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Bash',
+    tool_input: { command },
+  });
+  const environmentOverrides = {
+    CAWS_HOME: home,
+    CAWS_PROJECT_DIR: '',
+    CAWS_BIN: path.resolve(__dirname, '../../dist/index.js'),
+    ...extra,
+  };
+  const result = spawnSync('python3', args, {
+    cwd: p,
+    encoding: 'utf8',
+    env: { ...process.env, ...environmentOverrides },
+    input,
+  });
+  invocations.push({
+    command: ['python3', ...args],
+    cwd: p,
+    input,
+    environmentOverrides,
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  });
+  return result;
+}
+function withoutBashEnv(body) {
+  const saved = process.env.BASH_ENV;
+  delete process.env.BASH_ENV;
+  try {
+    return body();
+  } finally {
+    if (saved !== undefined) process.env.BASH_ENV = saved;
+  }
+}
+
+test('a read-only command is not reported as unanalyzable because of the dispatcher BASH_ENV', () => {
+  const p = repo('analyzer-ls');
+  installMachineRuntime({ home });
+  const result = withoutBashEnv(() => bash(p, 'ls'));
+  expect(result.stdout + result.stderr).not.toContain('inherited-environment');
+  expect(result.stdout).not.toContain('"permissionDecision"');
+  expect(result.status).toBe(0);
+});
+
+test('a plain file copy passes the stock guards through the launcher', () => {
+  const p = repo('analyzer-cp');
+  fs.writeFileSync(path.join(p, 'a.txt'), 'a\n');
+  installMachineRuntime({ home });
+  const result = withoutBashEnv(() => bash(p, 'cp a.txt b.txt'));
+  expect(result.stderr).not.toContain('authority unavailable');
+  expect(result.stdout + result.stderr).not.toContain('inherited-environment');
+  expect(result.status).toBe(0);
+});
+
+test("the agent's own BASH_ENV is still reported, with the cause named in the copy refusal", () => {
+  const p = repo('analyzer-own-env');
+  fs.writeFileSync(path.join(p, 'a.txt'), 'a\n');
+  const startup = path.join(root, 'agent-startup.sh');
+  fs.writeFileSync(startup, '');
+  installMachineRuntime({ home });
+  const result = bash(p, 'cp a.txt b.txt', { BASH_ENV: startup });
+  const output = result.stdout + result.stderr;
+  expect(output).toContain('inherited-environment');
+  expect(output).toContain('BASH_ENV');
+  expect(result.stdout.includes('"permissionDecision"') || result.status === 2).toBe(true);
+});
+
 test('system audit logs are machine-owned and do not dirty either project', () => {
   const a = repo('audit-a'),
     b = repo('audit-b');

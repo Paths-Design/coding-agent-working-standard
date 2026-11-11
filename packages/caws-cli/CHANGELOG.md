@@ -12,6 +12,11 @@
   with no refusal path (`agent-heartbeat`, `cwd-guard`, `scan-secrets`,
   `quiet-merge`). `worktree-write-guard` no longer ends without a verdict in a
   `.caws` directory that is not a git repository. Shared pack 129.
+- Under the machine runtime, command analysis receives the agent's `BASH_ENV`
+  instead of the dispatcher's own. The dispatcher's value made the analyzer
+  report every command as unanalyzable, so each Bash call raised a permission
+  prompt and every `cp`/`mv` was refused. A `worktree-guard` copy refusal states
+  the analyzer issue or copy-role reason behind it. Shared pack 130.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.
