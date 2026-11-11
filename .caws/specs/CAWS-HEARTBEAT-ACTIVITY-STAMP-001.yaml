@@ -70,3 +70,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/agent-heartbeat-activity.bats::heartbeat-activity: a call soon after a full heartbeat starts no CLI, prints nothing, and advances the stamp"
     commit_sha: "801efda3b"
     test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "leases-activity-stamp.test.js: delete removes .active .hb .hb.lease .mail for that session only, also when the lease is already absent; mutant S5 killed"
+    recorded_at: "2026-11-11T21:00:45.735Z"
+    test_nodeid: "packages/caws-cli/tests/store/leases-activity-stamp.test.js::deleting an already absent lease still clears sidecars left behind"
+    commit_sha: "801efda3b"
+    test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
