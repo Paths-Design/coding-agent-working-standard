@@ -55,3 +55,9 @@ non_functional: {}
 contracts:
   - name: 'typecheck-configs'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "At 39cb6b379, cwd packages/caws-cli: tsrs 0.24.0-ts7.1.0-beta and typescript 7.1.0-beta (installed outside the repo in ~/.cache/tsrs-trial) ran -p <cfg> --noEmit on tsconfig.vnext.json, tsconfig.vnext.test.json, tsconfig.kernel-test.json and tests/transcripts/tsconfig.json with no overrides: 8 runs, exit 0, zero output lines. Counterexample: --moduleResolution node10 gave TS5108 on both compilers. Not rederivable in-repo: no TypeScript 7 compiler is a repo dependency."
+    recorded_at: "2026-11-11T09:15:55.018Z"
+    commit_sha: "39cb6b379"
