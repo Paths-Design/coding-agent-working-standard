@@ -39,9 +39,12 @@ acceptance:
     when: 'a handler exits 1 or is missing'
     then: 'run_handlers does not return 2, and stderr names the handler and the fault'
   - id: A4
-    given: 'the enforcing PreToolUse chain with no parsed tool name'
-    when: 'a handler exits 1'
-    then: 'the call is treated as mutating and blocked, because an unidentified tool is not provably read-only'
+    given: 'the enforcing PreToolUse chain with at least one handler and a payload that carries no tool name'
+    when: 'the chain is dispatched'
+    then: >-
+      run_handlers returns 2 with a block decision saying the payload carried no
+      tool name, because an unidentified tool is not provably read-only and every
+      guard filters on the tool name
   - id: A5
     given: 'a chain invoked without the enforcing flag (PostToolUse, Stop)'
     when: 'a handler exits 1'
