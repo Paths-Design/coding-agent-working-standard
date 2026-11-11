@@ -1,10 +1,11 @@
 id: CAWS-DUPLICATE-EXPORT-RELATIVE-PATH-HANG-001
 title: 'duplicate-export-check never returns on a relative Write target'
 mode: fix
-lifecycle_state: active
-worktree: duplicate-export-hang
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge duplicate-export-hang at 678ed568f8562e75e4a2033825bb68a69514506a'
 created_at: '2026-11-11T18:25:46.894Z'
-updated_at: '2026-11-11T19:16:01.427Z'
+updated_at: '2026-11-11T19:16:04.308Z'
 created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
 blast_radius:
   modules:
