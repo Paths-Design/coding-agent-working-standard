@@ -155,3 +155,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::dry-run reports a crashed and a missing guard and blocks neither"
     commit_sha: "538e5d54e"
     test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A12
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'a guard that prints a block decision and then exits 1 keeps its own decision' at 538e5d54e"
+    recorded_at: "2026-11-11T02:29:22.829Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a guard that prints a block decision and then exits 1 keeps its own decision"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
