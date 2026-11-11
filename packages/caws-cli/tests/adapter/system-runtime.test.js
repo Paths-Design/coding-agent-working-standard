@@ -910,3 +910,74 @@ test('the carve-out is by error CLASS, not by one error message', () => {
   expect(exit.stdout).not.toContain('"decision"');
   expect(exit.stderr).toContain('Malformed system project surface');
 });
+
+describe('activity stamp', () => {
+  const OLD = new Date('2020-01-01T00:00:00.000Z');
+  function leased(p, session = 'system-test') {
+    const leases = path.join(p, '.caws/leases');
+    fs.mkdirSync(leases, { recursive: true });
+    fs.writeFileSync(
+      path.join(leases, session + '.json'),
+      JSON.stringify({ session_id: session, status: 'active', last_active: OLD.toISOString() })
+    );
+    return path.join(leases, session + '.active');
+  }
+
+  test.each(['pre_tool_use', 'post_tool_use', 'stop'])(
+    'the launcher advances the session stamp on %s without rewriting the lease',
+    (event) => {
+      const p = repo('stamp-' + event);
+      installMachineRuntime({ home });
+      const stamp = leased(p);
+      fs.writeFileSync(stamp, '');
+      fs.utimesSync(stamp, OLD, OLD);
+      const leaseBefore = fs.readFileSync(path.join(p, '.caws/leases/system-test.json'), 'utf8');
+      const startedMs = Date.now();
+      invoke(p, event);
+      // Whole-second filesystems round down, so allow one second of slack.
+      expect(fs.statSync(stamp).mtimeMs).toBeGreaterThanOrEqual(startedMs - 1000);
+      expect(fs.readFileSync(path.join(p, '.caws/leases/system-test.json'), 'utf8')).toBe(
+        leaseBefore
+      );
+    }
+  );
+
+  test('the launcher creates the stamp for a leased session that has none yet', () => {
+    const p = repo('stamp-create');
+    installMachineRuntime({ home });
+    const stamp = leased(p);
+    invoke(p, 'post_tool_use');
+    expect(fs.statSync(stamp).isFile()).toBe(true);
+  });
+
+  test('a session without a lease gets no stamp and no lease from a non-heartbeat event', () => {
+    const p = repo('stamp-no-lease');
+    installMachineRuntime({ home });
+    invoke(p, 'post_tool_use');
+    const leases = path.join(p, '.caws/leases');
+    const entries = fs.existsSync(leases) ? fs.readdirSync(leases) : [];
+    expect(entries.filter((name) => name.startsWith('system-test'))).toEqual([]);
+  });
+
+  test('a session id that is not a safe filename is never stamped', () => {
+    const p = repo('stamp-unsafe');
+    installMachineRuntime({ home });
+    // A lease-shaped file where the unchecked id would resolve.
+    fs.mkdirSync(path.join(p, '.caws/leases'), { recursive: true });
+    fs.writeFileSync(path.join(p, '.caws/escape.json'), '{}');
+    invoke(p, 'post_tool_use', {}, { file_path: 'x.ts' }, { session_id: '../escape' });
+    expect(fs.existsSync(path.join(p, '.caws/escape.active'))).toBe(false);
+  });
+
+  test('a stamp that is a symbolic link is not followed', () => {
+    const p = repo('stamp-symlink');
+    installMachineRuntime({ home });
+    const stamp = leased(p);
+    const target = path.join(p, 'victim.txt');
+    fs.writeFileSync(target, 'victim');
+    fs.utimesSync(target, OLD, OLD);
+    fs.symlinkSync(target, stamp);
+    invoke(p, 'post_tool_use');
+    expect(fs.statSync(target).mtimeMs).toBe(OLD.getTime());
+  });
+});

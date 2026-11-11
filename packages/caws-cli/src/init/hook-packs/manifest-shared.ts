@@ -689,7 +689,12 @@ import { isAdapterCoveredSurface } from './types';
 // arming the danger latch, and names the fault. A command the classifier ran
 // on but could not finish analyzing is refused once without a latch and arms
 // it when repeated, like an opaque payload.
-export const SHARED_PACK_VERSION = 135;
+// v136: agent-heartbeat.sh stamps <session>.active beside the lease on every
+// call and starts the CLI only when no full heartbeat completed in the last
+// 15 seconds or the lease file was replaced since. The mailbox is polled on a
+// full heartbeat and when messages.jsonl changed since the session's last
+// poll. Each CLI call is ended after 3 seconds.
+export const SHARED_PACK_VERSION = 136;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

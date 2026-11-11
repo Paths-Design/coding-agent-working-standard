@@ -41,6 +41,17 @@
 # FAIL-CLOSED-NON-BLOCKING: if the CLI is absent, fails, or returns
 # malformed JSON, this hook exits 0 silently. Heartbeat is observability
 # and parallel-agent surfacing; a failure must never block the tool call.
+#
+# Cost: the CLI is not started on every tool call. Each call stamps
+# .caws/leases/<session>.active (its mtime is the session's last activity; lease
+# readers report the later of it and the lease's recorded last_active). The full
+# heartbeat, which rewrites the lease and computes the peer summary, runs when
+# none has completed in the last CAWS_HEARTBEAT_INTERVAL_SECONDS (default 15) or
+# the lease file was replaced since (a stop, a claim). The mailbox is polled on
+# every full heartbeat and otherwise only when .caws/messages.jsonl changed since
+# this session's last poll. Each CLI call is ended after
+# CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS (default 3) so a hung CLI cannot hold the
+# guards behind it.
 
 set -uo pipefail
 
@@ -77,6 +88,83 @@ _hb_classify_actor() {
     });
   ' 2>/dev/null
 }
+
+# _hb_plan <session-id>
+#   Stamps activity and decides what this call still owes. Sets
+#   _HB_NEED_HEARTBEAT and _HB_NEED_POLL (1 = owed), _HB_GATE and _HB_MAIL (the
+#   bookkeeping files, empty when the lease directory is unknown). With no
+#   lease yet, or no usable bookkeeping, everything is owed.
+_HB_NEED_HEARTBEAT=1
+_HB_NEED_POLL=1
+_HB_GATE=""
+_HB_MAIL=""
+_HB_PLANNED=0
+_hb_plan() {
+  local session="$1" root="" common="" last="" now="" interval=""
+  _HB_PLANNED=1
+  [[ "$session" =~ ^[A-Za-z0-9._:-]+$ && "$session" != "unknown" ]] || return 0
+  # Leases live in the canonical checkout. The machine adapter names it; a
+  # checkout whose .git is a directory is canonical; a linked worktree asks git.
+  if [[ -n "${CAWS_MACHINE_POLICY_ROOT:-}" ]]; then
+    root="$CAWS_MACHINE_POLICY_ROOT"
+  elif [[ -n "${CAWS_PROJECT_DIR:-}" && -d "$CAWS_PROJECT_DIR/.git" ]]; then
+    root="$CAWS_PROJECT_DIR"
+  elif [[ -n "${CAWS_PROJECT_DIR:-}" && -d "$CAWS_PROJECT_DIR" ]]; then
+    common="$(cd "$CAWS_PROJECT_DIR" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || common=""
+    [[ "$common" == /*/.git ]] && root="${common%/.git}"
+  fi
+  [[ -n "$root" && -f "$root/.caws/leases/$session.json" ]] || return 0
+  local lease="$root/.caws/leases/$session.json"
+  _HB_GATE="$root/.caws/leases/$session.hb"
+  _HB_MAIL="$root/.caws/leases/$session.mail"
+  printf '1' > "$root/.caws/leases/$session.active" 2>/dev/null || true
+  interval="${CAWS_HEARTBEAT_INTERVAL_SECONDS:-15}"
+  [[ "$interval" =~ ^[0-9]+$ ]] || interval=15
+  [[ -f "$_HB_GATE" ]] && read -r last < "$_HB_GATE" 2>/dev/null
+  [[ "$last" =~ ^[0-9]+$ ]] || return 0
+  # A lease rewritten after the last full heartbeat may have changed status.
+  # Lease writes replace the file, so the link taken at that heartbeat stops
+  # naming the same file. File times are not used: bash 3.2 compares them in
+  # whole seconds and would miss a rewrite in the heartbeat's own second.
+  [[ "$lease" -ef "$_HB_GATE.lease" ]] || return 0
+  now="$(date +%s 2>/dev/null)" || now=""
+  [[ "$now" =~ ^[0-9]+$ ]] || return 0
+  (( now >= last && now - last < interval )) || return 0
+  _HB_NEED_HEARTBEAT=0
+  # Skip the poll only when the mark is strictly newer than the mailbox. A
+  # message in the mark's own second polls again; that errs toward delivery.
+  if [[ -f "$_HB_MAIL" && "$_HB_MAIL" -nt "$root/.caws/messages.jsonl" ]]; then
+    _HB_NEED_POLL=0
+  fi
+  return 0
+}
+
+# _hb_cli <args...>
+#   caws_run_cli with a wall-clock limit. Without perl the call is unbounded,
+#   as it was before the limit existed.
+_hb_cli() {
+  local limit="${CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS:-3}" bin="${CAWS_BIN:-caws}"
+  if [[ "$limit" =~ ^[1-9][0-9]*$ ]] && command -v perl >/dev/null 2>&1; then
+    if [[ -n "${CAWS_PROJECT_DIR:-}" && "${CAWS_PROJECT_DIR}" != "." && -d "${CAWS_PROJECT_DIR}" ]]; then
+      ( cd "${CAWS_PROJECT_DIR}" && exec perl -e 'alarm shift; exec @ARGV or exit 127' "$limit" "$bin" "$@" )
+    else
+      perl -e 'alarm shift; exec @ARGV or exit 127' "$limit" "$bin" "$@"
+    fi
+  else
+    caws_run_cli "$@"
+  fi
+}
+
+# A dispatcher has already parsed the payload, so the session is known before
+# stdin is read. When nothing is owed, stop here: no classification, no CLI.
+if [[ -n "${HOOK_TOOL_NAME+set}" && -n "${HOOK_SESSION_ID:-}" ]]; then
+  _hb_plan "$HOOK_SESSION_ID"
+  if [[ "$_HB_NEED_HEARTBEAT" == 0 && "$_HB_NEED_POLL" == 0 ]]; then
+    # Leaving a pipe unread can fail the dispatcher's writer; a file needs nothing.
+    [[ -p /dev/stdin ]] && cat > /dev/null 2>&1
+    exit 0
+  fi
+fi
 
 # Mail custody is decided from the bytes this handler received on stdin, before the
 # parser runs: the parser repairs control bytes and undecodable text, so its output
@@ -136,13 +224,20 @@ if ! command -v "$CAWS_BIN" >/dev/null 2>&1; then
   exit 0
 fi
 
+[[ "$_HB_PLANNED" == 1 ]] || _hb_plan "$HOOK_SESSION_ID"
+if [[ "$_HB_NEED_HEARTBEAT" == 0 && "$_HB_NEED_POLL" == 0 ]]; then
+  exit 0
+fi
+
 # Capture both stdout (JSON) and stderr (diagnostics). On any CLI error,
 # fall through to silent exit.
 # Fork identity passthrough (CAWS-AGENTS-FORK-IDENTITY-001): harnesses that
 # know their session kind set CAWS_SESSION_KIND / CAWS_FORKED_FROM; defaults
 # main/absent so the annotation survives without harness cooperation.
+CLI_OUT=""
+if [[ "$_HB_NEED_HEARTBEAT" == 1 ]]; then
 CLI_OUT="$(
-  caws_run_cli agents heartbeat \
+  _hb_cli agents heartbeat \
     --session-id "$HOOK_SESSION_ID" \
     --platform "$CAWS_PLATFORM_FLAG" \
     --throttle 15000 \
@@ -157,6 +252,20 @@ CLI_OUT="$(
 if [[ -z "$CLI_OUT" ]]; then
   exit 0
 fi
+# The first heartbeat of a session creates its lease, so plan again to learn
+# the bookkeeping paths, then record the completed heartbeat.
+if [[ -z "$_HB_GATE" ]]; then
+  _hb_plan "$HOOK_SESSION_ID"
+fi
+if [[ -n "$_HB_GATE" ]]; then
+  _HB_EPOCH="$(date +%s 2>/dev/null)" || _HB_EPOCH=""
+  if [[ "$_HB_EPOCH" =~ ^[0-9]+$ ]] &&
+     ln -f "${_HB_GATE%.hb}.json" "$_HB_GATE.lease" 2>/dev/null; then
+    printf '%s\n' "$_HB_EPOCH" > "$_HB_GATE" 2>/dev/null
+  fi
+fi
+_HB_NEED_POLL=1
+fi
 
 # Parse the CAWS-native JSON and, when active_agent_count > 1, compose
 # the harness's hookSpecificOutput.additionalContext envelope.
@@ -165,7 +274,8 @@ fi
 PROJECT_DIR_FOR_CACHE="${CAWS_PROJECT_DIR:-.}"
 EMIT_STATE_FILE="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-emit-state.json"
 
-_HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" node -e '
+_HEARTBEAT_CTX=""
+[[ -n "$CLI_OUT" ]] && _HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" node -e '
   let raw = "";
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk) => { raw += chunk; });
@@ -325,11 +435,17 @@ _HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" no
 # Custody: a subagent's hooks carry the parent's session id, so polling there
 # would reserve and settle the parent's mail into a context the parent never
 # reads. Mail stays queued unless the ingress is main-thread (_HB_ACTOR above).
+# The poll mark is written before the poll: a message that lands while the poll
+# runs is newer than the mark and is polled on the next call. Only the main
+# thread writes it, so a subagent's call never hides waiting mail from it.
+if [[ "$_HB_ACTOR" == "main" && -n "$_HB_MAIL" ]]; then
+  printf '1' > "$_HB_MAIL" 2>/dev/null || true
+fi
 if [[ "$_HB_ACTOR" != "main" ]]; then
   _MSG_OUT=""
 elif [[ -n "${CAWS_HANDLER_OFFER_FILE:-}" ]]; then
   _MSG_OUT="$(
-    caws_run_cli message poll \
+    _hb_cli message poll \
       --me "$HOOK_SESSION_ID" \
       --receipt auto \
       --drain 5 \
@@ -340,7 +456,7 @@ elif [[ -n "${CAWS_HANDLER_OFFER_FILE:-}" ]]; then
   )" || _MSG_OUT=""
 else
   _MSG_OUT="$(
-    caws_run_cli message poll \
+    _hb_cli message poll \
       --me "$HOOK_SESSION_ID" \
       --receipt auto \
       --drain 5 \

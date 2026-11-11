@@ -26,7 +26,7 @@ import { qualifiesForNativeSessionEndPrefix } from './session-cache-admission';
 /** Compatibility identities, not trust inferred from a filename or the current template bytes. */
 const HANDLERS: Readonly<Record<string, string>> = {
   'agent-stop.sh': 'c94358159f8fd77585bcb8c3679cd81c8d3d5dba0ff0970c50bf91a0f5f5eaa5',
-  'agent-heartbeat.sh': 'fb3d05634e974cbf1978a0748c4db59cc84dc87f43072a8b14761f9fc7cc5fed',
+  'agent-heartbeat.sh': '811cf764448b4adb694faa3a0dad1fd7dde832157a00dd40cbfad21aa492124c',
   'block-dangerous.sh': 'fc71c5e3347a388877b0af548405f39ad3218318980799e6c61037bbdc32e1da',
   'hook-utilities.sh': '8a38d1f75df38568566fdfbbc17acec468c1cc2b11b3f02f71705d2c930d56a8',
 };

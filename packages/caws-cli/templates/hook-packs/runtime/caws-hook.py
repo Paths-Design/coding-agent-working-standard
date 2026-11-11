@@ -660,6 +660,32 @@ def supplied_context(payload, event):
                                 or {'status': 'unavailable'}}
 
 
+def stamp_activity(canonical, payload):
+    """Record that this session produced a hook event.
+
+    The stamp's mtime is the liveness signal lease readers combine with the
+    lease's recorded last_active. It is written for every event, so activity
+    is visible during a long tool run and at a stop, with no CLI start. A
+    session without a lease gets no stamp: the stamp never creates presence.
+    """
+    session = payload.get('session_id')
+    if (not isinstance(session, str) or session == 'unknown' or
+            not re.fullmatch(r'[A-Za-z0-9._:-]+', session)):
+        return
+    leases = canonical / '.caws' / 'leases'
+    try:
+        if not (leases / (session + '.json')).is_file():
+            return
+        descriptor = os.open(leases / (session + '.active'),
+                             os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        try:
+            os.utime(descriptor)
+        finally:
+            os.close(descriptor)
+    except OSError:
+        pass
+
+
 def append_invocation(path, metadata, stage, **values):
     """Retain one observation before the next stage; no power-loss/delivery claim."""
     if path is None:
@@ -951,6 +977,7 @@ def main():
         except ValueError:
             _STOP_BUDGET_FILE = None
     _DISPATCHED = True
+    stamp_activity(canonical, payload)
     try:
         append_invocation(invocation_file, invocation_metadata, 'dispatch_started')
         result = subprocess.run(['/bin/bash', str(runtime / 'dispatch.sh'), surface, event, str(hooks), *handlers],

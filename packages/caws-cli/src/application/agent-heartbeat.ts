@@ -7,7 +7,12 @@ import {
   type LeaseRegistry,
   type SessionIdentity,
 } from '../kernel';
-import { applyLeasePatch, loadLeases, safeLeaseFilename } from '../store/leases-store';
+import {
+  applyLeasePatch,
+  loadLeases,
+  safeLeaseFilename,
+  touchLeaseActivity,
+} from '../store/leases-store';
 
 export interface ActiveAgentSummaryEntry {
   readonly session_id: string;
@@ -86,8 +91,13 @@ export type HeartbeatApplicationResult =
 export interface HeartbeatApplicationPorts {
   readonly loadLeases: typeof loadLeases;
   readonly applyLeasePatch: typeof applyLeasePatch;
+  readonly touchLeaseActivity?: typeof touchLeaseActivity;
 }
-const productionPorts: HeartbeatApplicationPorts = { loadLeases, applyLeasePatch };
+const productionPorts: HeartbeatApplicationPorts = {
+  loadLeases,
+  applyLeasePatch,
+  touchLeaseActivity,
+};
 
 /** One canonical lease-heartbeat transaction, shared by CLI and hook adapters.
  * Repository/session resolution, caller metadata and presentation stay outside.
@@ -117,9 +127,24 @@ export function heartbeatAgentActivity(
   let throttled = false;
   let wrote = false;
   if (existing !== undefined && throttleMs > 0) {
-    const lastActiveMs = Date.parse(existing.last_active);
+    // The throttle limits lease rewrites, so it reads the value written in the
+    // lease. The reported last_active may come from the activity stamp, which is
+    // refreshed on every hook event and would otherwise throttle forever, leaving
+    // status and checkout context unrefreshed.
+    const recorded =
+      load.value.recordedLastActive?.[input.identity.session_id] ?? existing.last_active;
+    const lastActiveMs = Date.parse(recorded);
     if (Number.isFinite(lastActiveMs) && now.getTime() - lastActiveMs < throttleMs)
       throttled = true;
+  }
+  if (throttled) {
+    // A throttled call is still activity. Record it without rewriting the lease.
+    const stamped = ports.touchLeaseActivity?.(input.cawsDir, input.identity.session_id, now);
+    if (stamped === true && existing !== undefined)
+      leases = {
+        ...leases,
+        [input.identity.session_id]: { ...existing, last_active: now.toISOString() },
+      };
   }
   if (!throttled) {
     const transition = heartbeatAgentSession(
