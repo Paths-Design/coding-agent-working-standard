@@ -50,9 +50,11 @@ acceptance:
       and does not count repeats, because the native runtime answers it for Codex
       outside this guard
   - id: A5
-    given: 'the same earlier refusal'
-    when: 'a command of that classification arrives in the same batch, or a command of a different no-latch classification arrives later'
-    then: 'it is refused without arming the latch'
+    given: 'an opaque-exec refusal earlier in the session'
+    when: >-
+      another opaque-exec command arrives in the same batch, or a command of a
+      different classification arrives later
+    then: 'it is handled without arming the latch on account of the earlier refusal'
   - id: A6
     given: 'a first capability-risk command that was warned and allowed'
     when: 'a second capability-risk command arrives in the same batch'
