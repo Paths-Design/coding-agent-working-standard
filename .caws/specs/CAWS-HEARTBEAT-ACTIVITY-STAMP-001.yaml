@@ -55,3 +55,11 @@ acceptance:
     then: 'each CLI call is ended at the deadline, the handler exits 0 with no output, and the tool call is not refused'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "leases-activity-stamp.test.js: later stamp reported, older and future stamps and lease-less stamps ignored; mutants S1-S4 killed"
+    recorded_at: "2026-11-11T21:00:31.448Z"
+    test_nodeid: "packages/caws-cli/tests/store/leases-activity-stamp.test.js::a stamp later than the recorded value becomes the reported last_active"
+    commit_sha: "801efda3b"
+    test_verified_at: "801efda3b9e9cd538d3a1833032e7f459e974940"
