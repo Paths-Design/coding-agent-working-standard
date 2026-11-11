@@ -49,3 +49,11 @@ rollback:
   - 'Revert the merge commit; shared pack returns to 130'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "launcher test asserts exit 0 and updatedInput.command 'cd <project> && caws worktree merge wt-x'; fails with the quiet-merge wrapper removed"
+    recorded_at: "2026-11-11T09:55:09.790Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a single worktree merge is rerooted to the project through the launcher"
+    commit_sha: f0f136dc9
+    test_verified_at: f0f136dc9a275d15c63b5971860cc42e59086db8
