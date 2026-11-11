@@ -663,7 +663,11 @@ import { isAdapterCoveredSurface } from './types';
 // path (agent-heartbeat, cwd-guard, scan-secrets, quiet-merge). Other chains
 // are unchanged. worktree-write-guard.sh counts zero git worktrees outside a
 // repository instead of ending without a verdict.
-export const SHARED_PACK_VERSION = 129;
+// v130: command analysis under the machine dispatcher is given the agent's
+// BASH_ENV rather than the dispatcher's own handler-env.sh, which the analyzer
+// reported as an unmodeled environment for every command. A worktree-guard
+// copy refusal states the analyzer issue or copy-role reason behind it.
+export const SHARED_PACK_VERSION = 130;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
