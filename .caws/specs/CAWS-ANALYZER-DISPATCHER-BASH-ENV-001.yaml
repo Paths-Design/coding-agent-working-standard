@@ -1,10 +1,11 @@
 id: CAWS-ANALYZER-DISPATCHER-BASH-ENV-001
 title: 'Command analysis under the machine dispatcher sees the agent''s BASH_ENV, not the dispatcher''s'
 mode: fix
-lifecycle_state: active
-worktree: analyzer-dispatcher-env
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge analyzer-dispatcher-env at 95397d1bd1b06d3f18893b5ad27a6b8cb8912b9d'
 created_at: '2026-11-11T04:29:19.884Z'
-updated_at: '2026-11-11T04:29:31.564Z'
+updated_at: '2026-11-11T05:07:14.734Z'
 created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
 blast_radius:
   modules:
