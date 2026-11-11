@@ -42,6 +42,13 @@ acceptance:
     then: >-
       the target is the file_path value; tool_input.path is neither read as a target
       nor treated as a conflict
+  - id: A4
+    given: 'a Write or Edit payload on any surface that names no target the guard can read'
+    when: 'scope-guard runs in a governed project'
+    then: >-
+      exit 2 with a refusal whose text carries the cause 'the payload names no
+      target: tool_input.file_path is missing or empty'; the call is not passed
+      unadjudicated
 rollback:
   - 'Revert the merge commit; shared pack returns to 131'
 non_functional: {}
