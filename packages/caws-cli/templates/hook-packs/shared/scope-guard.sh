@@ -93,10 +93,8 @@ if [[ "$TOOL_NAME" != "Write" && "$TOOL_NAME" != "Edit" && "$TOOL_NAME" != "appl
   exit 0
 fi
 
-if [[ -z "$FILE_PATH" && "$TOOL_NAME" != "apply_patch" &&
-      "${HOOK_ORIGINAL_TOOL_NAME:-}" != "apply_patch" ]]; then
-  exit 0
-fi
+# A Write or Edit whose target cannot be named is not passed here: the target
+# inventory below refuses it and says which field is missing.
 
 # Infrastructure and authority-load failures are hard blocks, never strikes.
 # Define this before governance discovery so missing canonical state cannot
@@ -443,6 +441,8 @@ try:
             if "file_path" in tool_input and tool_input["file_path"] != tool_input["path"]:
                 fail("tool_input.file_path and tool_input.path name different targets")
             named = tool_input["path"]
+        if named is None or named == "":
+            fail("the payload names no target: tool_input.file_path is missing or empty")
         paths.append(target(named))
     else:
         patch = tool_input.get("command")
@@ -502,11 +502,13 @@ try:
     sys.stdout.write("\n".join(dict.fromkeys(paths)))
 except (ValueError, TypeError, UnicodeError) as error:
     print("[scope-guard] invalid target inventory: " + str(error), file=sys.stderr)
+    # The cause also goes to stdout so the refusal itself can carry it.
+    sys.stdout.write(str(error))
     sys.exit(2)
 '
 }
 if ! SCOPE_TARGETS="$(_scope_original_payload | _scope_target_inventory)"; then
-  _scope_env_block "cannot determine a complete target inventory from the original payload. The entire edit is refused."
+  _scope_env_block "cannot determine a complete target inventory from the original payload. The entire edit is refused. Cause: ${SCOPE_TARGETS:-unknown}."
   exit 2
 fi
 

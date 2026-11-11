@@ -19,7 +19,9 @@
   every analyzer issue and the copy-role reason behind it. Shared pack 131.
 - `scope-guard` reads a kimi-code Edit or Write target from `tool_input.path`,
   the field that surface sends. It previously required `tool_input.file_path`
-  and refused every kimi-code edit. Shared pack 132.
+  and refused every kimi-code edit. A Write or Edit whose payload names no
+  target is refused with the missing field named; it previously passed
+  `scope-guard` unexamined. Shared pack 132.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

@@ -672,6 +672,7 @@ import { isAdapterCoveredSurface } from './types';
 // v132: scope-guard reads a kimi-code file tool target from tool_input.path,
 // the field that surface sends, rather than refusing the edit for want of
 // tool_input.file_path. Two differing names for one target are refused.
+// A Write or Edit naming no target is refused with the cause, not passed.
 export const SHARED_PACK_VERSION = 132;
 
 /**

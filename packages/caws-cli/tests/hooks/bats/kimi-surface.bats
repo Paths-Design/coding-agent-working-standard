@@ -228,6 +228,21 @@ _kimi_edit() {
   assert_output --partial '[scope-guard] invalid target inventory: tool_input.file_path and tool_input.path name different targets'
 }
 
+@test "scope-guard: a kimi edit with an empty tool_input.path is refused, naming the missing target" {
+  _kimi_edit '{"path":"","old_string":"a","new_string":"b"}'
+  assert_failure 2
+  assert_output --partial 'The entire edit is refused. Cause: the payload names no target: tool_input.file_path is missing or empty.'
+}
+
+@test "scope-guard: an edit naming its target only in tool_input.path is refused on another surface" {
+  run env -i PATH="$PATH" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    bash -c "cd '$CAWS_TEST_REPO' && printf '%s' '{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"session_bats\",\"cwd\":\"$CAWS_TEST_REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"path\":\"notes.txt\",\"old_string\":\"a\",\"new_string\":\"b\"}}' | bash '$CAWS_TEST_HOOKS_DIR/scope-guard.sh'"
+  assert_failure 2
+  assert_output --partial 'The entire edit is refused. Cause: the payload names no target: tool_input.file_path is missing or empty.'
+}
+
 @test "scope-guard: tool_input.path is not a second target name on another surface" {
   run env -i PATH="$PATH" \
     CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
