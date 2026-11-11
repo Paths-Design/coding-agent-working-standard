@@ -532,10 +532,12 @@ test("the agent's own BASH_ENV is still reported, with the cause named in the co
   fs.writeFileSync(startup, '');
   installMachineRuntime({ home });
   const result = bash(p, 'cp a.txt b.txt', { BASH_ENV: startup });
-  const output = result.stdout + result.stderr;
-  expect(output).toContain('inherited-environment');
-  expect(output).toContain('BASH_ENV');
-  expect(result.stdout.includes('"permissionDecision"') || result.status === 2).toBe(true);
+  expect(result.status).toBe(2);
+  expect(result.stdout).toBe('');
+  expect(result.stderr).toContain(
+    '[worktree-guard] cp/mv refused: the command analyzer reported: inherited-environment: Unmodeled inherited environment BASH_ENV.'
+  );
+  expect(result.stderr).toContain('[worktree-guard] authority unavailable: copy-roles; blocked');
 });
 
 test('system audit logs are machine-owned and do not dirty either project', () => {
