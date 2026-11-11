@@ -184,10 +184,9 @@ run_pretooluse_with_session() {
   broken_repo="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-reprieve-broken-XXXXXX")"
   cp -R "$CAWS_TEST_REPO/.caws" "$broken_repo/.caws"
   cp -R "$CAWS_TEST_REPO/.claude" "$broken_repo/.claude"
-  # The copy must be a repository: outside one, worktree-write-guard stops with
-  # git's status 128, and the enforcing chain refuses the call for that reason
-  # before the guard this test is about is reached.
-  git -C "$broken_repo" init -q -b main
+  # The copy is deliberately not a git repository. Every guard ahead of
+  # protected-paths must reach a verdict there; one that stops without a
+  # verdict is refused by the runner as unavailable, and BLOCKED never appears.
   broken_hooks="$broken_repo/.caws/hooks"
   rm -f "$broken_hooks/lib/reprieve.sh"
   local env_file

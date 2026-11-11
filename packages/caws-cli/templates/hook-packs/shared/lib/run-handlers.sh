@@ -512,6 +512,28 @@ _rh_tool_is_read_only() {
   return 1
 }
 
+# _rh_handler_is_advisory <handler>
+#   True for chain members that warn or rewrite and contain no refusal path
+#   (no exit 2, no block or ask decision). Their absence or crash is reported
+#   and does not refuse the call. Every other chain member is a guard,
+#   including shortcut-language-check.sh, whose strike ramp can refuse. A
+#   handler added to this list must not be relied on to stop anything.
+_rh_handler_is_advisory() {
+  case "${1##*/}" in
+    agent-heartbeat.sh|cwd-guard.sh|scan-secrets.sh|quiet-merge.sh)
+      return 0 ;;
+  esac
+  return 1
+}
+
+# _rh_dry_run_active
+#   The dry-run switch, readable before run_handlers has parsed anything.
+_rh_dry_run_active() {
+  local surface_dry_run=""
+  [[ "${CAWS_AGENT_SURFACE:-}" != codex ]] || surface_dry_run="${CODEX_HOOK_DRY_RUN:-}"
+  _rh_is_truthy "${CAWS_HOOK_DRY_RUN:-${CLAUDE_HOOK_DRY_RUN:-$surface_dry_run}}"
+}
+
 # _rh_json_string <text>
 #   Escape text for a JSON string value without depending on jq or python3,
 #   either of which may be the missing dependency being reported.
@@ -573,6 +595,11 @@ run_handlers() {
     # transform (src/runtime/service-image.ts), so the enforcing chain checks
     # for the parser ahead of it instead of changing its failure branch.
     if (( short_circuit )) && [[ ! -r "${HOOKS_DIR}/lib/parse-input.sh" ]]; then
+      if _rh_dry_run_active; then
+        printf '[DRY-RUN] the hook payload parser is missing at %s and would have blocked\n' \
+          "${HOOKS_DIR}/lib/parse-input.sh" >&2
+        return 0
+      fi
       _rh_guard_unavailable "the hook payload parser" \
         "is missing at ${HOOKS_DIR}/lib/parse-input.sh, so no guard can inspect this call" || return 0
       return 2
@@ -580,6 +607,10 @@ run_handlers() {
     source "${HOOKS_DIR}/lib/parse-input.sh" 2>/dev/null || return 0
     if ! parse_hook_input; then
       (( short_circuit )) || return 0
+      if _rh_dry_run_active; then
+        printf '[DRY-RUN] the hook payload parser could not parse the payload and would have blocked\n' >&2
+        return 0
+      fi
       _rh_guard_unavailable "the hook payload parser (lib/parse-input.sh)" \
         "could not parse the payload, so no guard can inspect this call" || return 0
       return 2
@@ -714,17 +745,12 @@ run_handlers() {
   # out empirically.
   if (( ${#entries[@]} > 0 )); then
 
-  # Guard-unavailable handling applies to the chain that gates a tool call. The
-  # flag marks that chain, but a lifecycle event carries no tool to refuse, so a
-  # dispatcher that passes the flag for one keeps the plain exit semantics. An
-  # unset or unrecognized event name stays enforcing: surfaces name the
-  # pre-tool event differently, and treating an unknown name as exempt would
-  # let a renamed event disarm the chain.
+  # Guard-unavailable handling applies to the chain that gates a tool call, and
+  # the dispatcher declares that chain with --short-circuit-on-block. The
+  # payload's own event name is not consulted: it is input, and a payload that
+  # named a lifecycle event would otherwise disarm the chain its dispatcher
+  # selected. A dispatcher must pass the flag only for a tool-gating event.
   local enforcing="$short_circuit"
-  case "${HOOK_EVENT_NAME:-}" in
-    PostToolUse|Stop|SubagentStop|SessionStart|SessionEnd|PreCompact|UserPromptSubmit|Notification)
-      enforcing=0 ;;
-  esac
 
   # A call the guards cannot identify cannot be cleared by them: every guard
   # filters on the tool name and would exit 0 for an empty one.
@@ -772,7 +798,10 @@ run_handlers() {
     fi
     if [[ ! -x "$handler_path" ]]; then
       _rh_record_execution "$handler" "$handler_path" missing null /dev/null ""
-      if (( enforcing )); then
+      if (( enforcing )) && _rh_handler_is_advisory "$handler"; then
+        printf '[run-handlers] advisory handler unavailable: %s is missing or not executable at %s. It has no block authority, so the tool call is not refused.\n' \
+          "$handler" "$handler_path" >&2
+      elif (( enforcing )); then
         if (( dry_run )); then
           printf '[DRY-RUN] %s is missing or not executable and would have blocked\n' "$handler" >&2
         elif _rh_guard_unavailable "$handler" "is missing or not executable at ${handler_path}, so it cannot run"; then
@@ -868,7 +897,10 @@ run_handlers() {
     # below; anything else it printed is not a verdict.
     if (( enforcing )) && [[ "$exit_code" -ne 0 && "$exit_code" -ne 2 ]] \
        && [[ -z "$stdout_buf" || "$(_rh_stdout_priority "$stdout_buf")" -ne 3 ]]; then
-      if _rh_guard_unavailable "$handler" "exited with status ${exit_code} without reaching a verdict" "$fault_excerpt"; then
+      if _rh_handler_is_advisory "$handler"; then
+        printf '[run-handlers] advisory handler unavailable: %s exited with status %s. It has no block authority, so the tool call is not refused.\n' \
+          "$handler" "$exit_code" >&2
+      elif _rh_guard_unavailable "$handler" "exited with status ${exit_code} without reaching a verdict" "$fault_excerpt"; then
         _rh_record_offer "$handler_offer_file" "released" "$handler" "guard unavailable; dispatch refused"
         [[ -z "$handler_offer_file" ]] || rm -f "$handler_offer_file"
         unset CAWS_HANDLER_OFFER_FILE 2>/dev/null || true

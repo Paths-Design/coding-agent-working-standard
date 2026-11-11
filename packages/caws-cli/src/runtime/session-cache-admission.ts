@@ -120,7 +120,7 @@ const SESSION_END_SOURCES: Readonly<Record<string, string>> = {
 // The runner that refuses an unavailable guard differs from the original only
 // on the chain invoked with --short-circuit-on-block. SessionEnd never passes
 // that flag, so its dispatch, staging and exit status are the original's.
-const guardUnavailableRunner = 'b7ec9a4e63815f2631d921ea84322055700f3f7a8784043ba81070e426c98d51';
+const guardUnavailableRunner = 'e56cd17f6671a6717e8e7450a63126413cf4f2a82c74368aa67b8a14a700bf05';
 
 // SessionEnd accepts only its original profile and the reviewed alternatives
 // named here; do not inherit other session-cache profile alternatives.

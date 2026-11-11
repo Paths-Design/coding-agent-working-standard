@@ -659,7 +659,10 @@ import { isAdapterCoveredSurface } from './types';
 // tool call when a guard is missing, not executable, or exits with a status
 // other than 0 or 2 without a block decision, and when the payload carries no
 // tool name. The refusal names the guard and the fault. Read, Glob and Grep
-// report the fault on stderr and proceed. Other chains are unchanged.
+// report the fault on stderr and proceed, as does a handler with no refusal
+// path (agent-heartbeat, cwd-guard, scan-secrets, quiet-merge). Other chains
+// are unchanged. worktree-write-guard.sh counts zero git worktrees outside a
+// repository instead of ending without a verdict.
 export const SHARED_PACK_VERSION = 129;
 
 /**

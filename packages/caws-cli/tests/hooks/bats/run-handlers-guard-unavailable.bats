@@ -203,24 +203,51 @@ EOF
   [ "$(reason)" = "GUARD-OWN-VERDICT" ] || fail "the guard's verdict was replaced: $output"
 }
 
-@test "a lifecycle event dispatched with the enforcing flag is not refused for lacking a tool" {
+@test "the payload's event name cannot disarm the chain its dispatcher selected" {
+  # The dispatcher chose the enforcing chain; the event name is payload input.
   local event
-  for event in Stop SubagentStop SessionStart SessionEnd PreCompact PostToolUse UserPromptSubmit Notification; do
-    chain "" --short-circuit-on-block ok.sh crash.sh later.sh -- HOOK_EVENT_NAME="$event"
-    [ "$status" -eq 1 ] || fail "$event: status $status, expected the crashed handler's own status"
-    [ -z "$output" ] || fail "$event produced a decision: $output"
-    [[ "$stderr" != *"guard unavailable"* ]] || fail "$event: $stderr"
-    [ -e "$MARKER" ] || fail "$event: the rest of the chain did not run"
+  for event in "" Stop SessionEnd PostToolUse BeforeTool pre_tool_use; do
+    chain Bash --short-circuit-on-block crash.sh later.sh -- HOOK_EVENT_NAME="$event"
+    [ "$status" -eq 2 ] || fail "event '$event' disarmed the chain (status $status)"
+    [ ! -e "$MARKER" ] || fail "event '$event': the chain continued past an unavailable guard"
+  done
+}
+
+@test "a crashed or missing advisory handler is reported and does not refuse the call" {
+  local name
+  for name in agent-heartbeat.sh cwd-guard.sh scan-secrets.sh quiet-merge.sh; do
+    cp "$FAKE_HOOKS/crash.sh" "$FAKE_HOOKS/$name"
+    chain Bash --short-circuit-on-block "$name" later.sh
+    [ "$status" -eq 0 ] || fail "$name crash refused the call (status $status)"
+    [ -z "$output" ] || fail "$name crash produced a decision: $output"
+    [[ "$stderr" == *"advisory handler unavailable: $name exited with status 1"* ]] || fail "$name: $stderr"
+    [ -e "$MARKER" ] || fail "$name crash stopped the chain"
+    rm -f "$MARKER" "$FAKE_HOOKS/$name"
+
+    chain Write --short-circuit-on-block "$name" later.sh
+    [ "$status" -eq 0 ] || fail "missing $name refused the call (status $status)"
+    [[ "$stderr" == *"advisory handler unavailable: $name is missing or not executable"* ]] || fail "$name: $stderr"
+    [ -e "$MARKER" ] || fail "missing $name stopped the chain"
     rm -f "$MARKER"
   done
 }
 
-@test "an unset or unrecognized event name stays enforcing" {
-  local event
-  for event in "" BeforeTool pre_tool_use; do
-    chain Bash --short-circuit-on-block crash.sh -- HOOK_EVENT_NAME="$event"
-    [ "$status" -eq 2 ] || fail "event '$event' disarmed the chain (status $status)"
-  done
+@test "a handler with a refusal path is a guard even though most of its output is advisory" {
+  cp "$FAKE_HOOKS/crash.sh" "$FAKE_HOOKS/shortcut-language-check.sh"
+  chain Write --short-circuit-on-block shortcut-language-check.sh
+  [ "$status" -eq 2 ]
+  [[ "$(reason)" == *"shortcut-language-check.sh exited with status 1"* ]] || fail "$(reason)"
+}
+
+@test "dry-run reports a missing parser and does not block" {
+  run --separate-stderr env -i PATH="$PATH" CAWS_HOME="$BATS_TEST_TMPDIR/caws-home" CAWS_HOOK_DRY_RUN=1 bash -c "
+    source '$CAWS_TEST_HOOKS_DIR/lib/run-handlers.sh'
+    export HOOKS_DIR='$FAKE_HOOKS'
+    run_handlers --short-circuit-on-block ok.sh
+  "
+  [ "$status" -eq 0 ]
+  [ -z "$output" ] || fail "dry-run produced a decision: $output"
+  [[ "$stderr" == *"[DRY-RUN] the hook payload parser is missing at $FAKE_HOOKS/lib/parse-input.sh and would have blocked"* ]] || fail "$stderr"
 }
 
 @test "dry-run reports a crashed and a missing guard and blocks neither" {
