@@ -855,10 +855,18 @@ CLASSIFIER_STDERR=$(mktemp)
 declare -a _CLASSIFY_ARGS=(--repo-root "$REPO_ROOT")
 [[ -n "${HOME:-}" ]] && _CLASSIFY_ARGS+=(--home "$HOME")
 _CLASSIFY_ARGS+=(--cwd "$(pwd)")
+# The classifier PROCESS failing (a crash, a broken interpreter) is a fault of
+# the installation. It is kept apart from a classifier_error the classifier
+# itself returns, which is a verdict about the command (see below).
+_CLASSIFIER_PROCESS_FAILED=0
 RESULT=$(printf '%s' "$COMMAND" | python3 "$CLASSIFIER" "${_CLASSIFY_ARGS[@]}" 2>"$CLASSIFIER_STDERR") || {
-  DIAG=$(head -c 200 "$CLASSIFIER_STDERR" 2>/dev/null || true)
+  _CLASSIFIER_PROCESS_FAILED=1
+  DIAG=$(head -c 200 "$CLASSIFIER_STDERR" 2>/dev/null | tr '\n' ' ' || true)
   rm -f "$CLASSIFIER_STDERR"
-  RESULT="{\"decision\":\"ask\",\"reason\":\"command classifier failed: ${DIAG:-unknown error}\",\"source\":\"classifier_error\",\"enforcement\":\"confirm\"}"
+  # Built with jq: a traceback carries quotes, and an interpolated string
+  # would not be JSON.
+  RESULT=$(jq -nc --arg reason "command classifier failed: ${DIAG:-unknown error}" \
+    '{decision: "ask", reason: $reason, source: "classifier_error", enforcement: "confirm"}')
 }
 rm -f "$CLASSIFIER_STDERR"
 
@@ -1013,11 +1021,24 @@ case "$DECISION" in
         emit_block_json "$FULL_REASON"
         exit 0
       fi
-      if [[ "$SOURCE" == "classifier_error" || "$SOURCE" == "sidecar_error" ]]; then
-        # The classifier (or its capability sidecar) failed while judging this
-        # command. That is a fault of the classifier: the command is refused
+      if [[ "$_CLASSIFIER_PROCESS_FAILED" == 1 || "$SOURCE" == "sidecar_error" ]]; then
+        # The classifier process crashed, or its command-adapters sidecar is
+        # invalid. That is a fault of the installation: the command is refused
         # because it was never judged, with no strike and no latch.
-        emit_block_json "CAWS command-safety: $REASON. The classifier failed, so this Bash command was not judged and is refused. Your command did not cause this as far as the guard can tell, and the refusal adds no strike and does NOT arm the danger latch. If only this command fails, restate it more simply (one command, no nested quoting); if every command fails, tell the USER the classifier is broken. Command was: $COMMAND"
+        emit_block_json "CAWS command-safety: $REASON. The classifier itself failed, so this Bash command was not judged and is refused. Your command did not cause this as far as the guard can tell, and the refusal adds no strike and does NOT arm the danger latch. If every command is refused this way, tell the USER the classifier is broken; do not keep retrying. Command was: $COMMAND"
+        exit 0
+      fi
+      if [[ "$SOURCE" == "classifier_error" ]]; then
+        # The classifier ran and reported it could not finish analyzing THIS
+        # command (nesting past its budget). That is a property of the command,
+        # the same class as an opaque payload: refuse it with the way to
+        # restate it, and arm the latch only when it is repeated after that.
+        if danger_repeat_escalates "$SESSION_ID" classifier_error; then
+          record_danger_latch "$LATCH_FILE" "ask" "$REASON" "$COMMAND"
+          emit_block_json "CAWS command-safety: $REASON. A command the classifier could not analyze was already refused earlier in this session with the way to restate it; this is a repeat of that same classification (classifier_error), so the session danger latch is NOW ARMED. $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run, from their own shell: $RECOVERY_COMMAND  Command was: $COMMAND"
+          exit 0
+        fi
+        emit_block_json "CAWS command-safety: $REASON. This command could not be fully analyzed, so it is refused — the session danger latch was NOT armed. Restate it as plain commands without nested shells (no bash -c inside bash -c, no eval of a built string), or put the steps in a script file in your scope and run that. A second unanalyzable command in this session, sent after this refusal, WILL arm the danger latch. Command was: $COMMAND"
         exit 0
       fi
       record_danger_latch "$LATCH_FILE" "ask" "$REASON" "$COMMAND"

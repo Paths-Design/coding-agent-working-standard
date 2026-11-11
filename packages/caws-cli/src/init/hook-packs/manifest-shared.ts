@@ -686,7 +686,9 @@ import { isAdapterCoveredSurface } from './types';
 // reset-danger-latch.sh clears the repeat record.
 // v135: block-dangerous.sh refuses a command the classifier could not judge
 // (classifier missing, crashed, or returning an unknown decision) without
-// arming the danger latch, and names the fault.
+// arming the danger latch, and names the fault. A command the classifier ran
+// on but could not finish analyzing is refused once without a latch and arms
+// it when repeated, like an opaque payload.
 export const SHARED_PACK_VERSION = 135;
 
 /**

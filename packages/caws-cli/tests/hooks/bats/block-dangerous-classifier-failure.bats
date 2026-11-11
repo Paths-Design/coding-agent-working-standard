@@ -89,9 +89,52 @@ SHIM
   [ ! -e "$(sentinel)" ]
 }
 
-@test "classifier failure: a real catastrophic deny still arms the latch" {
+@test "classifier failure: a traceback with quotes in it is still reported as the classifier's failure" {
+  classifier_shim 'echo "Traceback: File \"classify_command.py\", line 1, in <module>" >&2; exit 1'
+  with_path "$SHIM:$PATH" 'ls -la'
+  assert_success
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'command classifier failed: Traceback: File'
+  assert_output --partial 'does NOT arm the danger latch'
+  [ ! -e "$(sentinel)" ]
+}
+
+@test "classifier failure: a real catastrophic deny still arms the latch after a classifier fault" {
+  classifier_shim 'echo "boom" >&2; exit 3'
+  with_path "$SHIM:$PATH" 'ls -la'
+  [ ! -e "$(sentinel)" ]
   with_path "$PATH" 'rm -rf /'
   assert_output --partial '"decision": "block"'
   assert_output --partial 'the session danger latch is NOW ARMED'
   [ -f "$(sentinel)" ]
+}
+
+# A command nested past the classifier's budget is a verdict about the command,
+# not a fault: the classifier ran and said it could not finish.
+NESTED='bash -c "bash -c \"bash -c \\\"bash -c \\\\\\\"bash -c ls\\\\\\\"\\\"\""'
+
+@test "unanalyzable command: the first is refused with the way to restate it and no latch" {
+  with_path "$PATH" "$NESTED"
+  assert_success
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'recursion budget exceeded'
+  assert_output --partial 'the session danger latch was NOT armed'
+  assert_output --partial 'A second unanalyzable command in this session, sent after this refusal, WILL arm the danger latch.'
+  [ ! -e "$(sentinel)" ]
+}
+
+@test "unanalyzable command: a second one sent after the refusal arms the latch" {
+  with_path "$PATH" "$NESTED"
+  [ ! -e "$(sentinel)" ]
+  with_path "$PATH" "$NESTED"
+  assert_output --partial 'this is a repeat of that same classification (classifier_error), so the session danger latch is NOW ARMED'
+  [ -f "$(sentinel)" ]
+}
+
+@test "unanalyzable command: a classifier crash between two of them does not count as the repeat" {
+  with_path "$PATH" "$NESTED"
+  classifier_shim 'echo "boom" >&2; exit 3'
+  with_path "$SHIM:$PATH" 'ls -la'
+  assert_output --partial 'does NOT arm the danger latch'
+  [ ! -e "$(sentinel)" ]
 }
