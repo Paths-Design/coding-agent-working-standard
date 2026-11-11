@@ -105,18 +105,47 @@ guard_worktree_state_dir() {
   return 1
 }
 
+# The machine home that owns strike state: CAWS_HOME, else HOME/.caws, the same
+# order every other machine record uses. There is no further fallback: a
+# shared temporary directory is writable by anyone and would also plant a
+# .caws marker that makes an unrelated directory look governed.
+guard_strike_home() {
+  if [[ -n "${CAWS_HOME:-}" ]]; then
+    printf '%s\n' "$CAWS_HOME"
+  elif [[ -n "${HOME:-}" ]]; then
+    printf '%s/.caws\n' "$HOME"
+  else
+    return 1
+  fi
+}
+
+# Why a strike cannot be recorded for this session; empty when it can.
+guard_strike_state_unavailable_reason() {
+  local session_id="$1"
+  if [[ -z "$session_id" || "$session_id" == "unknown" ]]; then
+    printf 'the session id is unresolved\n'
+  elif ! guard_strike_home >/dev/null; then
+    printf 'neither CAWS_HOME nor HOME is set\n'
+  fi
+}
+
 guard_global_strikes_file() {
   local session_id="$1"
-  local safe_session
+  local safe_session reason home
 
-  if [[ -z "$session_id" || "$session_id" == "unknown" ]]; then
-    printf 'guard-strikes: refusing to record strikes for an unresolved session (no identity, no wedge state)\n' >&2
+  reason="$(guard_strike_state_unavailable_reason "$session_id")"
+  if [[ -n "$reason" ]]; then
+    printf 'guard-strikes: strike state is unavailable: %s\n' "$reason" >&2
     return 1
   fi
 
+  home="$(guard_strike_home)"
   safe_session=$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9._-' '_')
-  mkdir -p "${HOME:-/tmp}/.caws/state/sessions/${safe_session}"
-  printf '%s/.caws/state/sessions/%s/strikes.json' "${HOME:-/tmp}" "$safe_session"
+  mkdir -p "$home/state/sessions/${safe_session}" || {
+    printf 'guard-strikes: strike state is unavailable: cannot create %s/state/sessions/%s\n' "$home" "$safe_session" >&2
+    return 1
+  }
+  printf '%s/state/sessions/%s/strikes.json' "$home" "$safe_session"
 }
 
 # Legacy repo-local strike files, read ONCE for continuity (never written).
@@ -189,7 +218,15 @@ guard_enforce_progressive_strikes() {
   local first_message="$4"
   local second_message="$5"
   local third_message="$6"
-  local strike
+  local strike unavailable
+
+  # Without a recorded count there is no warn or ask step to offer. Refuse and
+  # say why, so the finding is not mistaken for a third strike.
+  unavailable="$(guard_strike_state_unavailable_reason "$session_id")"
+  if [[ -n "$unavailable" ]]; then
+    guard_emit_block "Strike state is unavailable: $unavailable. This finding is refused outright because it cannot be counted; it is not a strike. Finding: $third_message"
+    return
+  fi
 
   strike=$(guard_record_strike "$session_id" "$guard_name" "$cwd_hint")
 

@@ -101,7 +101,9 @@ mkdir -p "$(dirname "$LOG_FILE")"
 #     never writes them again.
 collect_strike_files() {
   {
-    find "${HOME:-/tmp}/.caws/state/sessions" -maxdepth 2 -name 'strikes.json' 2>/dev/null || true
+    local _strike_home="${CAWS_HOME:-${HOME:+$HOME/.caws}}"
+    [[ -z "$_strike_home" ]] ||
+      find "$_strike_home/state/sessions" -maxdepth 2 -name 'strikes.json' 2>/dev/null || true
     find "$PROJECT_DIR/${CAWS_VENDOR_DIR}/logs" -maxdepth 1 -name 'guard-strikes-*.json' 2>/dev/null || true
     find "$PROJECT_DIR/.git/worktrees" -maxdepth 3 -name 'guard-strikes-*.json' 2>/dev/null || true
     find "$PROJECT_DIR/.caws/worktrees" -maxdepth 3 -name 'guard-strikes-*.json' 2>/dev/null || true
