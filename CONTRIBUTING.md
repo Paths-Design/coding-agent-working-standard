@@ -219,6 +219,20 @@ describe('Working Spec Validation', () => {
   `../../dist/...`. If you must stash, force-rebuild
   (`turbo run build --filter=@paths.design/caws-cli... --force`) both after the
   stash and after the pop — turbo caches by source hash, not working-tree state.
+- **A hook template change needs the whole suite.** Tests under `tests/runtime/`
+  and `tests/tooling/` assert guard bytes and behavior, and the native runtime
+  records the hash of four shell handlers it mirrors. Run all of `npx jest` and
+  all of `tests/hooks/bats` before merging, bump the pack version and
+  fingerprint, and decide each native hash deliberately. The checklist is in
+  [`docs/guides/hook-packs.md`](docs/guides/hook-packs.md#checks-before-merging-a-guard-change).
+- **Run bats with stdin closed:**
+  `env -u GIT_EDITOR -u BATS_TEST_TIMEOUT npx bats tests/hooks/bats </dev/null`.
+  A socket on stdin makes fixture shells source `~/.bashrc`, and the stray
+  output fails cases. This and the other shell traps (bash 3.2 comparing file
+  times in whole seconds, handlers satisfied by this repository's own
+  `package.json`, time limits that leave a looping child) are in the same
+  guide's
+  [test-harness traps](docs/guides/hook-packs.md#shell-and-test-harness-traps).
 - **Babel parse errors point at the wrong line.** A redeclared `const` in a Jest
   test produces a multi-page `parseExpression` trace, not "duplicate
   declaration". First step: `grep -n "const <var> =" path/to/test.js` for two

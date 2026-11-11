@@ -4986,3 +4986,241 @@ with the ingress somewhere. Some tests passed because the heartbeat was never
 executable. The lesson is that custody is decided from the invocation's own raw
 bytes and a doubtful actor retains mail. A delivery boundary is not receipt, and
 a "nothing happened" test proves the code ran.**
+
+## Entry 47: A guard that could not run let the call through, and a refusal that did not name its cause sent the agent searching (November 2026)
+
+**Severity:** High (a guard that crashed or was missing read as "no objection",
+so the governed path had a hole wherever a guard broke; and refusals that named
+a symptom left a blocked session restating commands it had no way to fix)
+**Era:** v12.x **Agents:** Codex session `01a17da0-4d0d-7693-a4e4-45c038d25500`
+(met the refusals) and Claude Code session
+`deaedad6-08fd-476d-aa81-63eb16583115` (audit and repair)
+
+### What happened
+
+Two failures shared one root: the PreToolUse chain treated "no verdict" and "no
+objection" as the same thing, in both directions.
+
+1. **A broken guard allowed the call.** Only exit 2, or a block decision on
+   stdout, stops a tool call. A guard that was missing from the pack, not
+   executable, or exited with any other status produced neither, and the chain
+   moved on. `worktree-write-guard` ended without a verdict in a `.caws`
+   directory that was not a git repository. A payload with no tool name passed
+   every guard that filters on the name. `scope-guard` exited 0 when a Write or
+   Edit named no target. An agent that could break a guard could remove it.
+2. **A working guard refused for a reason it did not state.** Under the machine
+   runtime the dispatcher exported its own `BASH_ENV` to every handler. The
+   command analyzer reports an inherited `BASH_ENV` as unanalyzable, so it
+   reported every command that way: each Bash call raised a permission prompt
+   and every `cp` and `mv` was refused. The copy refusal printed one line that
+   named neither `BASH_ENV` nor the analyzer. On kimi-code, `scope-guard`
+   required `tool_input.file_path` while that surface sends `tool_input.path`,
+   so every edit was refused as unresolvable. Strike state ignored `CAWS_HOME`
+   and fell back to `/tmp/.caws` when `HOME` was unset; a finding whose strike
+   could not be written was reported as "strike 3 of 3", and with `jq` missing
+   or a corrupt record the count stayed at one and the guard warned without
+   limit.
+
+The blocked session had no way to tell an installation fault from a finding
+about its command. It restated commands, changed shapes and retried, which is
+the behavior the latch reads as bypass-seeking.
+
+### What we built
+
+- **A guard that cannot reach a verdict refuses.** `lib/run-handlers.sh` refuses
+  Write, Edit, Bash and any tool not known to be read-only when a guard is
+  missing, not executable, or exits other than 0 or 2 without a block decision.
+  A payload with no tool name is refused the same way. Read, Glob and Grep
+  report the fault and proceed, as does a handler with no refusal path. The
+  refusal names the guard and the fault, says the command did not cause it,
+  records no strike and arms no latch, and tells the agent to stop and report.
+- **The analyzer receives the agent's `BASH_ENV`, not the dispatcher's.**
+- **Refusals carry every cause.** `worktree-guard` prints each analyzer issue
+  and the copy-role reason. `scope-guard` reads the kimi-code field, refuses a
+  payload that names no target with the missing field named, and appends the
+  cause when it cannot inventory a payload.
+- **Strike state follows `CAWS_HOME`**, never `/tmp`, and a finding that cannot
+  be counted is refused with that reason.
+
+The contract is in
+[Guard verdicts and refusals](guides/hook-packs.md#guard-verdicts-and-refusals).
+
+### What it doesn't catch
+
+- **The harness timeout.** When the harness's own PreToolUse timeout expires,
+  the tool call runs with no verdict. No code inside the chain executes on that
+  path, so nothing there can refuse.
+- **A surface whose edit field is unknown.** `scope-guard` refuses a payload
+  that names no target in a field it knows. A new surface that sends its target
+  elsewhere is refused, with the cause, until its field is taught.
+- **A guard that runs and is wrong.** Fail-closed covers the missing verdict. A
+  guard that exits 0 on a call it should refuse is found only by its tests.
+- **Refusal text nobody ran.** The rule that a refusal names its cause is
+  enforced by review and by tests that assert the text. See Entry 44 for the
+  remedy half.
+
+## Entry 48: Calls queued in one reply took a session from its first refusal to a kill before it could read any of them (November 2026)
+
+**Severity:** High (a session could be terminated for a mistake it had not yet
+been told about) **Era:** v12.x **Agents:** Claude Code session
+`deaedad6-08fd-476d-aa81-63eb16583115` (design and implementation); found in
+design review with the maintainer, not from a recorded kill
+
+### What happened
+
+Escalation in `block-dangerous.sh` counted calls. A first refusal warned or
+blocked, a later one armed the latch, and on kill-enabled surfaces the next
+blocked attempt after the latch ended the process. The count assumed the agent
+had read each refusal before sending the next call.
+
+A harness can issue several tool calls from one model reply and run their hooks
+before any result returns to the model. Three calls of the same shape in one
+reply therefore walked the whole ladder: the first refused, the second latched,
+the third killed. The agent had seen none of the three results when it sent
+them. Opaque inline payloads were the common case, since an agent probing a
+problem tends to send several `python3 -c` or `node -e` calls together.
+
+Two neighboring rules made the ladder steeper than intended. A classifier that
+was missing or crashed, or returned an unknown decision, armed the latch for a
+fault the command did not cause. And the first design for detecting a shared
+reply read the call's own transcript line, which Claude Code writes about a
+quarter of a second after the hook starts, so the lookup found nothing.
+
+### What we built
+
+- **Calls from one reply are one occurrence.** The guard records the
+  `tool_use_id` with each refusal and, when two calls are compared, looks up the
+  transcript message id for each. Calls that share a message are refused without
+  escalating, arming or killing. The lookup retries briefly for the current
+  call's line, and falls back to a time window (`CAWS_BATCH_WINDOW_SECONDS`,
+  default 5) where no transcript exists.
+- **A repeat latches only when sent after the earlier refusal.** A second opaque
+  inline payload, or a second command the classifier could not finish analyzing,
+  arms the latch. The first refusal states that.
+- **A classifier fault never latches.** A missing or crashed classifier, an
+  unknown decision and a sidecar error are refused without a latch, with the
+  fault named.
+- **The latch and warning records are written atomically**, so concurrent hooks
+  from one reply cannot both observe "no record yet".
+
+The rules are in
+[Block, strike and latch](guides/hook-packs.md#block-strike-and-latch).
+
+### What it doesn't catch
+
+- **Surfaces without a transcript.** The time window treats a fast retry as part
+  of the same reply. One unescalated retry is the cost.
+- **Subagent and sidechain transcripts.** Their calls are not in the parent
+  transcript, so they use the time window.
+- **A bare commit over staged deletions.** It never counts repeats, because the
+  native runtime answers that refusal for Codex and the two must agree.
+- **Kill on a call issued after the latch was delivered.** That is the intended
+  behavior; the rule only protects calls sent before delivery.
+
+## Entry 49: An advisory handler never returned on a relative path; every test had run it from inside a package (November 2026)
+
+**Severity:** Medium (advisory handler, so no wrong verdict; but it held the
+PostToolUse chain until the harness timed it out on every matching call)
+**Era:** v12.x **Agents:** Claude Code session
+`deaedad6-08fd-476d-aa81-63eb16583115` (found while testing an unrelated change)
+
+### What happened
+
+`duplicate-export-check.sh` finds the enclosing package by walking from the
+written file's directory toward `/`, stopping at the first `package.json`. Its
+loop condition was "not yet `/`". For a relative target such as `x.ts` the
+starting directory is `.`, and `dirname` of `.` is `.`, so the walk never
+reached `/`.
+
+The handler had tests, and they passed. Each ran it with the test runner's
+working directory inside `packages/caws-cli`, where `./package.json` exists, so
+the loop ended on its first step. The fault needed two conditions the suite
+never produced together: a relative target, and a working directory with no
+`package.json` in it. A consumer repository without a root `package.json`, on a
+surface that sends relative paths, met both on every Write of a source file.
+
+It was found by a new launcher test for a different change, which sent a
+PostToolUse Write of `x.ts` in a bare fixture repository. The run did not fail.
+It stopped producing output, and the process tree showed the handler two hours
+into its loop.
+
+The first attempt to pin the fix repeated the original blind spot twice. The new
+cases also ran from inside the package and passed against the unfixed handler.
+Then the time limit meant to catch a hang ended only the outer shell, leaving
+the looping handler holding the case's output pipe, so the control run hung too.
+
+### What we built
+
+- The handler resolves a relative target against the payload working directory
+  before walking, which also lets it report a duplicate for a relative target.
+- `tests/hooks/bats/duplicate-export-check.bats` runs the handler from a
+  directory with no `package.json` in or above it, sends relative and absolute
+  targets, and ends the whole process group at a time limit. Against the unfixed
+  handler three of its five cases fail by reaching that limit.
+
+### What it doesn't catch
+
+- **Other handlers' termination.** No check proves that a handler returns. The
+  harness timeout is the only general bound, and for PreToolUse that timeout
+  lets the call run unguarded.
+- **Other accidents of the test runner's location.** Any handler that searches
+  upward can be satisfied by this repository's own files. The guide's
+  [test-harness traps](guides/hook-packs.md#shell-and-test-harness-traps) state
+  the rule; nothing enforces it.
+
+## Entry 50: Liveness was measured at one hook event, by starting the CLI on every tool call (November 2026)
+
+**Severity:** Medium (wrong liveness is display and delivery drift, never
+authority; the cost was latency in front of every guard) **Era:** v12.x
+**Agents:** Claude Code session `deaedad6-08fd-476d-aa81-63eb16583115`
+
+### What happened
+
+`agent-heartbeat.sh` runs first in the PreToolUse chain. On every tool call it
+started the CLI twice, once to heartbeat the lease and once to poll the mailbox,
+and started `node` up to three more times to classify the caller and format its
+notices. Measured in this repository, with 202 lease files and a 6 MB mailbox,
+each CLI start took about 0.3 seconds. The CLI throttled its lease write to once
+in 15 seconds, but only after it had started.
+
+That cost sat in front of the guards, inside the harness's PreToolUse timeout,
+and an expired timeout lets the tool call run with no verdict (Entry 47).
+
+The measurement was also narrow. The lease's `last_active` moved only at
+PreToolUse. A session inside a ten-minute build, or one that had just finished
+its turn, looked as idle as one that had exited, and peers deciding whether to
+message or wait read that value.
+
+### What we built
+
+- **An activity stamp.** `.caws/leases/<session>.active` is touched by the
+  machine launcher on every hook event and by the heartbeat handler on every
+  call, with no subprocess. The lease store reports the later of the stamp and
+  the recorded `last_active` to every reader.
+- **The CLI runs only when work is owed**: a full heartbeat when none completed
+  in the last 15 seconds or the lease file was replaced since, a mailbox poll
+  when `messages.jsonl` changed since the session's last poll.
+- **A deadline on each CLI call**, so a hung CLI cannot hold the guards.
+- **The throttle reads the recorded value.** With the stamp refreshed on every
+  event, a throttle reading the reported `last_active` would never let the lease
+  be rewritten, and status and checkout context would go stale.
+
+Two details came from failures while building it. "Lease changed since the last
+heartbeat" was first a file-time comparison, and bash 3.2 compares file times in
+whole seconds, so a stop in the same second as a heartbeat was missed; the check
+became a hard link, which a replaced file no longer matches. And the mailbox
+mark is written only by the main thread, because a subagent's call carries the
+parent's session id and would otherwise hide waiting mail from it (Entry 46).
+
+The design is in [Session liveness](guides/hook-packs.md#session-liveness).
+
+### What it doesn't catch
+
+- **A session that is thinking.** No hook fires while a model generates, so a
+  long reply with no tool call still ages.
+- **A session whose payload id is not its lease id.** The launcher stamps the id
+  in the payload. Where a surface's lease is keyed differently the launcher
+  writes nothing and the handler's stamp, at PreToolUse only, is what remains.
+- **The peer notice's delay.** It is computed on a full heartbeat, so it can
+  trail a change in the peer set by the heartbeat interval.
+- **Hosts without `perl`.** The CLI deadline is not applied there.
