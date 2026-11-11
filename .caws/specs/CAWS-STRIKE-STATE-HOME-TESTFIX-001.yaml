@@ -1,10 +1,11 @@
 id: CAWS-STRIKE-STATE-HOME-TESTFIX-001
 title: 'Repair the engine-routing strike-path expectation left red by CAWS-STRIKE-STATE-HOME-001'
 mode: fix
-lifecycle_state: active
-worktree: strike-home-testfix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge strike-home-testfix at 190fc6bdfb63321a376ce397d916b51e19246a3e'
 created_at: '2026-11-11T12:24:50.661Z'
-updated_at: '2026-11-11T12:24:51.951Z'
+updated_at: '2026-11-11T12:45:31.397Z'
 created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
 blast_radius:
   modules:
