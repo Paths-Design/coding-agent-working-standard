@@ -1,0 +1,50 @@
+id: CAWS-ANALYZER-ENV-COVERAGE-001
+title: 'Pin the quiet-merge rewrite and copy refusal messages through the machine launcher'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-11T09:05:42.243Z'
+updated_at: '2026-11-11T09:05:42.243Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'hook-packs/shared worktree-guard copy refusal; machine launcher tests'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/worktree-guard.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/adapter/system-runtime.test.js'
+    - 'packages/caws-cli/tests/hooks/bats/kimi-surface.bats'
+    - 'packages/caws-cli/tests/hooks/bats/qwen-surface.bats'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'A refused cp/mv states every cause the guard holds; no refusal path is weakened'
+  - 'quiet-merge under the machine dispatcher rewrites a single merge/destroy lifecycle command and nothing else'
+acceptance:
+  - id: A1
+    given: 'the machine runtime installed for claude-code with the built CLI'
+    when: 'a PreToolUse Bash payload carrying cwd and the command ''caws worktree merge <name>'' is sent through the launcher'
+    then: 'exit 0 and stdout carries updatedInput.command equal to ''cd <project> && caws worktree merge <name>'''
+  - id: A2
+    given: 'the same arrangement with the agent''s own BASH_ENV set'
+    when: 'the same merge command is sent'
+    then: 'exit 0 and stdout carries no updatedInput'
+  - id: A3
+    given: 'a repo with a directory src'
+    when: '''cp -R src dest'' is sent through the launcher'
+    then: 'exit 2 and stderr carries the worktree-guard line naming the copy-role reason and the instruction to name regular-file sources'
+  - id: A4
+    given: 'a cp command whose analysis reports more than one issue'
+    when: 'worktree-guard refuses it'
+    then: 'stderr names every reported issue, not only the first'
+  - id: A5
+    given: 'the kimi-surface and qwen-surface bats files'
+    when: 'the ''still rewrites under claude-code'' cases run with a payload that carries cwd'
+    then: 'both pass and assert the rewritten command'
+rollback:
+  - 'Revert the merge commit; shared pack returns to 130'
+non_functional: {}
+contracts: []
