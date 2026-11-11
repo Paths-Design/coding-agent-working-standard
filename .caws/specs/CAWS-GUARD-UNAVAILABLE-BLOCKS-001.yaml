@@ -113,3 +113,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::Read, Glob and Grep are not blocked by a crashed guard, and stderr names the fault"
     commit_sha: "538e5d54e"
     test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "bats: run-handlers-guard-unavailable.bats 'a call with no tool name is treated as mutating' at 538e5d54e"
+    recorded_at: "2026-11-11T02:27:35.801Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/bats/run-handlers-guard-unavailable.bats::a call with no tool name is treated as mutating"
+    commit_sha: "538e5d54e"
+    test_verified_at: "538e5d54e257bc7f933ef68aaf5cf437c94820c1"
