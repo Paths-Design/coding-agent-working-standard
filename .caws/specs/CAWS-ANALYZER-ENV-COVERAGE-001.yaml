@@ -71,3 +71,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a directory copy is refused with the copy-role reason and the way to restate it"
     commit_sha: f0f136dc9
     test_verified_at: f0f136dc9a275d15c63b5971860cc42e59086db8
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "launcher test asserts both analyzer issue lines; fails when only the first issue is printed"
+    recorded_at: "2026-11-11T09:56:03.018Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/system-runtime.test.js::a copy refusal names every analyzer issue, not only the first"
+    commit_sha: f0f136dc9
+    test_verified_at: f0f136dc9a275d15c63b5971860cc42e59086db8
