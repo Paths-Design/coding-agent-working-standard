@@ -61,6 +61,26 @@ describe('bootstrap: a driver that fails with an unlisted exception', () => {
     expect(result.stderr).toContain('[caws machine adapter] CAWS machine adapter: ' + named);
   });
 
+  test('a driver raising RuntimeError on PreToolUse is refused, where it used to exit 1', () => {
+    const result = invoke(
+      homeWithDriver(Buffer.from('raise RuntimeError("driver exploded")\n')),
+      'pre_tool_use'
+    );
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stdout)).toEqual({
+      decision: 'block',
+      reason: 'CAWS machine adapter: unexpected RuntimeError: driver exploded',
+    });
+  });
+
+  test("a driver's own refusal, exit 2 with its own output, passes through unchanged", () => {
+    const driver = 'import sys\nsys.stdout.write("refused by a handler")\nsys.exit(2)\n';
+    const result = invoke(homeWithDriver(Buffer.from(driver)), 'pre_tool_use');
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('refused by a handler');
+    expect(result.stderr).toBe('');
+  });
+
   test('a non-enforcing event reports the fault on stderr and does not fail the harness', () => {
     const result = invoke(
       homeWithDriver(Buffer.from('raise RuntimeError("driver exploded")\n')),
