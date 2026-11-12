@@ -1,9 +1,10 @@
 id: CAWS-PYTHON-HEREDOC-TARGETS-001
 title: 'Preserve Python heredoc boundaries in legacy mutation diagnostics'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: python-heredoc-targets
 created_at: '2026-11-12T03:05:47.221Z'
-updated_at: '2026-11-12T03:05:47.221Z'
+updated_at: '2026-11-12T03:08:51.123Z'
 created_by_session: '01a1cdb1-5a83-71f0-a80b-ea63a5a7d566'
 blast_radius:
   modules:
