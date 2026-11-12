@@ -24,3 +24,11 @@ acceptance:
     then: 'the pack fingerprint, stock-handlers and containment suites pass with the shared pack version raised and the typed handlers declining for the new library bytes'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Shared pack 138 with recomputed fingerprint; typed handlers keep the reviewed mutation-target library and decline for the shipped one. Whole jest at 049abebac: 390 of 390 suites, 10731 tests passed (npx jest; npm test refuses this lane's symlinked Rust target). Bats 805 of 811, the six failures being the long-standing claim-oracle-cwd x5 and parse-input A5. Not run: pytest tier, Linux."
+    recorded_at: "2026-11-12T15:10:42.795Z"
+    test_nodeid: "packages/caws-cli/tests/runtime/stock-handlers.test.js::the shipped Bash mutation library keeps the shell route until the typed handlers are reviewed against it"
+    commit_sha: "049abebac"
+    test_verified_at: "049abebacc7d60e366cbc6bcfed0ba0a203efd6c"
