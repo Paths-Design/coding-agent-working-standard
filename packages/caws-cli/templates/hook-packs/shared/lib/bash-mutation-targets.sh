@@ -498,8 +498,11 @@ _caws_emit_operand() {
 # original command. Expanding/unfinished/wrapped forms retain the old view;
 # normal host command lookup remains the legacy envelope's existing assumption.
 _caws_python_heredoc_shell_view() {
-  local input="$1" header line delim offset blanks=''
-  [[ "$input" == *$'\n'* ]] || { printf '%s' "$input"; return; }
+  local input="$1" mode="${2:-shell}" header line delim offset body_start blanks=''
+  if [[ "$input" != *$'\n'* ]]; then
+    [[ "$mode" == python ]] && return 1
+    printf '%s' "$input"; return
+  fi
   header="${input%%$'\n'*}"
   local prefix='^[[:blank:]]*python(3([.][0-9]+)?)?[[:blank:]]+(-[[:blank:]]+)?<<[[:blank:]]*'
   local single="${prefix}'([A-Za-z_][A-Za-z_0-9]*)'[[:blank:]]*$"
@@ -507,17 +510,24 @@ _caws_python_heredoc_shell_view() {
   if [[ "$header" =~ $single || "$header" =~ $double ]]; then
     delim="${BASH_REMATCH[4]}"
   else
+    [[ "$mode" == python ]] && return 1
     printf '%s' "$input"; return
   fi
   offset=$((${#header} + 1))
+  body_start=$offset
   while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" == "$delim" ]]; then
+      if [[ "$mode" == python ]]; then
+        printf '%s' "${input:body_start:offset-body_start}"
+        return
+      fi
       printf '%s\n%s%s' "$header" "$blanks" "${input:offset}"
       return
     fi
     blanks+=$'\n'
     offset=$((offset + ${#line} + 1))
   done <<< "${input:offset}"
+  [[ "$mode" == python ]] && return 1
   printf '%s' "$input"
 }
 
@@ -1331,6 +1341,16 @@ caws_bash_interpreter_write_literals() {
     caws_bash_analysis_interpreter_literals "$cmd"
     return $?
   fi
+  # A complete literal stdin body is a Python program, just like an entry
+  # file. Analyze its write-path dependencies separately from surrounding shell
+  # text so comments and replacement data do not fabricate relative paths.
+  # The projected shell still carries every suffix command for the legacy
+  # interpreter scan; no executable suffix is replaced by the Python program.
+  local literal_python=""
+  if literal_python="$(_caws_python_heredoc_shell_view "$cmd" python)"; then
+    _caws_interp_payload_literals "$literal_python" "$CAWS_PY_WRITE_VERBS" python-file
+    cmd="$(_caws_python_heredoc_shell_view "$cmd")"
+  fi
   # Detect an interpreter as a COMMAND TOKEN, tokenizing the way the verb
   # extractors do, so `node` inside a path (./node_modules/.bin/tsc) never
   # matches and a chained invocation still does.
@@ -1350,8 +1370,8 @@ caws_bash_interpreter_write_literals() {
     esac
     # Payload 1: the command text itself — inline -c/-e code, quoted path
     # arguments, and interpreter heredoc bodies. Deliberately the RAW command
-    # (not the heredoc-BLANKED text the operand extractor reads) so an
-    # interpreter heredoc body stays visible.
+    # (apart from the separately analyzed complete literal Python program)
+    # so all other interpreter heredoc bodies stay visible.
     _caws_interp_payload_literals "$cmd" "$verbs_re"
     # Payload 2: the entry script FILE named on the command line (bounded read).
     local j=$((i+1)) t2 script=""

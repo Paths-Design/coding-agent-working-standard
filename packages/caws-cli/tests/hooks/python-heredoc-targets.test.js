@@ -51,9 +51,23 @@ test.each(["python3 - <<'PY'", 'python3 <<"PY"', "python <<'PY'", "python3.12 - 
 );
 
 test('the raw Python payload retains its actual literal write path', () => {
-  expect(inspect(command(), 'caws_bash_interpreter_write_literals')).toContain(
-    '/tmp/owned/test.cs'
-  );
+  expect(inspect(command(), 'caws_bash_interpreter_write_literals')).toEqual([
+    '/tmp/owned/test.cs',
+  ]);
+});
+
+test('Python comments and replacement data do not fabricate write paths', () => {
+  const payload = body.replace('// The receiver', '// Preserve points/colliders. The receiver');
+  expect(inspect(command(undefined, payload), 'caws_bash_interpreter_write_literals')).toEqual([
+    '/tmp/owned/test.cs',
+  ]);
+});
+
+test('interpreter writes after a literal Python program remain visible', () => {
+  const suffix = `\npython3 -c "from pathlib import Path; Path('/tmp/suffix.txt').write_text('x')"`;
+  expect(
+    [...new Set(inspect(command() + suffix, 'caws_bash_interpreter_write_literals'))].sort()
+  ).toEqual(['/tmp/owned/test.cs', '/tmp/suffix.txt']);
 });
 
 test('a real shell write after the terminator remains visible', () => {
