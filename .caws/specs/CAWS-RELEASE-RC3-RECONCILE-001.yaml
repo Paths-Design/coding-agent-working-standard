@@ -53,3 +53,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/runtime/native-shell-agreement.test.js::the typed file-tool route declines for the shipped handlers on every file payload"
     commit_sha: a7e5875c8
     test_verified_at: a7e5875c82a84f27b49a5b93033843dfbb1d3fa2
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Census on shipped handlers: only the Codex heartbeat on Bash answers natively; it is compared with the shell heartbeat on the same payloads (lease record and the activity a reader sees). Native file authorization for Claude Code and Qwen is off unless the cargo feature is enabled (protocol.rs test native_file_authorization_is_selected_only_by_an_opted_in_build, passed with feature off and on). Not compared: delivery of a waiting message through both routes; .hb/.mail bookkeeping."
+    recorded_at: "2026-11-12T05:51:26.290Z"
+    test_nodeid: "packages/caws-cli/tests/runtime/native-shell-agreement.test.js::census of typed routes that answer for the shipped handlers"
+    commit_sha: a7e5875c8
+    test_verified_at: a7e5875c82a84f27b49a5b93033843dfbb1d3fa2
