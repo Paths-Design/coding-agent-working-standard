@@ -35,9 +35,8 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "Committed d37a6913e source, clean lane, 62 semantic regression tests and five gates cover two actual changed files. Exact original command SHA71fff7b94105b44b42fb36f7c5afa808b30a37e070ad092b4e114a5016d8f6a6: baseline0c338b guard exit2 fabricated0f, installed7e3b11ce guard exit0 with empty output; original program NEVER executed. Actual Codex native canary with apostrophe, >0f and points/colliders executed exit0 and wrote/read expected marker; real foreign Python write refused before dispatch with selected7e3b11ce digest and sentinel absent. Runtime113 members verify; exactly bash-mutation-targets.sh differs from retained baseline, native hooks/config/bootstrap/settings hashes unchanged. Raw receipts validation.json and original-command.json. Bounded legacy normal stdlib/startup profile only; no full effect/custody, general executor or RC registry acceptance."
-    recorded_at: "2026-11-12T04:42:28.951Z"
-    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/python-heredoc-targets/validation.json"
+    evidence_ref: "Behavior manually adjudicated from inspected raw .caws/state/python-heredoc-targets/validation.json; generated runtime receipts stay ignored per repo policy and are not typed tracked-artifact citations. Machine re-derivation below verifies source commit identity only. d37a6913e, merged b0d0227f: 62 tests and five gates pass; exact SHA71fff7b9 command baseline guard2 fake0f to installed7e3b11ce guard0 without RC execution. Actual native positive succeeds, real foreign write refuses before dispatch with7e3b11ce and absent sentinel. Runtime113 members verify, one helper changed, native registration hashes unchanged. Normal legacy stdlib/startup envelope only; general executor/registry open."
+    recorded_at: "2026-11-12T04:49:49.114Z"
     commit_sha: d37a6913e8db4a07e7f9e19a9335249cc88ae356
   - criterion_id: A2
     status: pass
