@@ -1005,13 +1005,17 @@ describe('mutation policy topology contract', () => {
         ]));
         console.log(JSON.stringify({ warnings, observations, expected }));
       `;
-      const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      // The script embeds whole source files. Linux limits one argument to
+      // 128 KiB, so it goes in on standard input rather than after -e.
+      const result = spawnSync(process.execPath, ['--input-type=module'], {
         cwd: dir,
         env: nodeProcessEnv(),
         encoding: 'utf8',
+        input: script,
         timeout: 15000,
       });
       retainChildObservation(single ? single.repoRoot : dir, result);
+      expect(result.error).toBeUndefined();
 
       expect(result.stderr).toBe('');
       expect(result.status).toBe(0);

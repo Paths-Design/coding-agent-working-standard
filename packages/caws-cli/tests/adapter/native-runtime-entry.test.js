@@ -1005,7 +1005,18 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     };
     return { bytes, selection, tar, records, commit };
   }
-  test('portable export refuses a substituted completion marker pair', () => {
+  // A portable image is produced only on macOS arm64; sealing one anywhere
+  // else is refused. These cases need a sealed image, so they run where one
+  // can be produced, and the refusal is checked everywhere else.
+  const portableProducer = process.platform === 'darwin' && process.arch === 'arm64';
+  const portableTest = portableProducer ? test : test.skip;
+  (portableProducer ? test.skip : test)(
+    'sealing a portable image is refused off macOS arm64 before any input is read',
+    () => {
+      expect(() => portableFixture()).toThrow('Unsupported portable producer platform');
+    }
+  );
+  portableTest('portable export refuses a substituted completion marker pair', () => {
     const { tar, records, commit } = portableFixture();
     const pending = path.join(root, 'native-completed.pending.json');
     fs.unlinkSync(pending);
@@ -1014,7 +1025,7 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       /marker pair mismatch/
     );
   });
-  test('retains and verifies the original historical pack receipt', () => {
+  portableTest('retains and verifies the original historical pack receipt', () => {
     const { bytes, selection } = portableFixture(true);
     expect(readPortableNativeImage(bytes, selection).stableEntry).toEqual(stableBytes);
     const carrier = JSON.parse(bytes);
@@ -1024,7 +1035,7 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       readPortableNativeImage(changed, { ...selection, expectedSha256: sha(changed) })
     ).toThrow(/pack provenance/);
   });
-  test('portable carrier revalidates exact members and independent selections', () => {
+  portableTest('portable carrier revalidates exact members and independent selections', () => {
     const { bytes, selection } = portableFixture();
     const image = readPortableNativeImage(bytes, selection);
     expect(image.files.get('native/caws-native')).toEqual(nativeBytes);
@@ -1050,7 +1061,7 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       readPortableNativeImage(changed, { ...selection, expectedSha256: sha(changed) })
     ).toThrow(/member bytes/);
   });
-  test.each([
+  portableTest.each([
     'missing',
     'duplicate',
     'failed',
@@ -1101,7 +1112,7 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       readPortableNativeImage(changed, { ...selection, expectedSha256: sha(changed) })
     ).toThrow(/stable entry/i);
   });
-  test.each([
+  portableTest.each([
     'platform',
     'duplicate',
     'case collision',
@@ -1140,7 +1151,7 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
       readPortableNativeImage(changed, { ...selection, expectedSha256: sha(changed) })
     ).toThrow();
   });
-  test('portable refusal preserves installed pointer and entry bytes', () => {
+  portableTest('portable refusal preserves installed pointer and entry bytes', () => {
     const { bytes, selection } = portableFixture();
     const file = path.join(root, 'portable-image.json');
     fs.writeFileSync(file, bytes);
@@ -1159,56 +1170,62 @@ describe('v2 receipt-derived image component boundaries (mocked receipt loader, 
     expect(fixtureState(home)).toEqual(before);
     expect(() => readNativeImage(file)).toThrow(/requires independent/);
   });
-  test('portable carrier installs the exact selected native bytes into a private home', () => {
-    const { bytes, selection } = portableFixture();
-    const file = path.join(root, 'portable-success.json');
-    fs.writeFileSync(file, bytes);
-    const home = path.join(root, 'portable-home');
-    const result = installMachineRuntime({
-      home,
-      nativeImage: file,
-      nativeImageSha256: selection.expectedSha256,
-      nativeImageCliTarballSha256: selection.expectedCliTarball.sha256,
-      nativeImageCliTarballSizeBytes: selection.expectedCliTarball.sizeBytes,
-      templatesRoot: path.join(__dirname, '../../templates/hook-packs'),
-    });
-    expect(result.digest).toMatch(/^[a-f0-9]{64}$/);
-    const verified = verifyRuntime(home, result.digest);
-    expect(verified['native/caws-native']).toBe(sha(nativeBytes));
-    expect(readRetainedNativeEntryIdentity(home, result.digest).bytes).toEqual(stableBytes);
-  });
-  test('CLI routes all portable pins to private installation and refuses partial pins', () => {
-    const { bytes, selection } = portableFixture();
-    const file = path.join(root, 'portable-cli-image.json');
-    const home = path.join(root, 'portable-cli-home');
-    fs.writeFileSync(file, bytes);
-    const run = (args) =>
-      spawnSync(
-        process.execPath,
-        [path.join(dist, 'index.js'), 'init', 'adapters', 'install', ...args],
-        { cwd: root, env: { ...process.env, CAWS_HOME: home }, encoding: 'utf8' }
-      );
-    const args = [
-      '--native-image',
-      file,
-      '--native-image-sha256',
-      selection.expectedSha256,
-      '--native-image-cli-tarball-sha256',
-      selection.expectedCliTarball.sha256,
-      '--native-image-cli-tarball-size-bytes',
-      String(selection.expectedCliTarball.sizeBytes),
-    ];
-    const installed = run(args);
-    expect({ status: installed.status, stderr: installed.stderr }).toEqual({
-      status: 0,
-      stderr: '',
-    });
-    const before = fixtureState(home);
-    const refused = run(args.slice(0, 4));
-    expect(refused.status).toBe(1);
-    expect(refused.stderr).toMatch(/requires all three independent pins/);
-    expect(fixtureState(home)).toEqual(before);
-  });
+  portableTest(
+    'portable carrier installs the exact selected native bytes into a private home',
+    () => {
+      const { bytes, selection } = portableFixture();
+      const file = path.join(root, 'portable-success.json');
+      fs.writeFileSync(file, bytes);
+      const home = path.join(root, 'portable-home');
+      const result = installMachineRuntime({
+        home,
+        nativeImage: file,
+        nativeImageSha256: selection.expectedSha256,
+        nativeImageCliTarballSha256: selection.expectedCliTarball.sha256,
+        nativeImageCliTarballSizeBytes: selection.expectedCliTarball.sizeBytes,
+        templatesRoot: path.join(__dirname, '../../templates/hook-packs'),
+      });
+      expect(result.digest).toMatch(/^[a-f0-9]{64}$/);
+      const verified = verifyRuntime(home, result.digest);
+      expect(verified['native/caws-native']).toBe(sha(nativeBytes));
+      expect(readRetainedNativeEntryIdentity(home, result.digest).bytes).toEqual(stableBytes);
+    }
+  );
+  portableTest(
+    'CLI routes all portable pins to private installation and refuses partial pins',
+    () => {
+      const { bytes, selection } = portableFixture();
+      const file = path.join(root, 'portable-cli-image.json');
+      const home = path.join(root, 'portable-cli-home');
+      fs.writeFileSync(file, bytes);
+      const run = (args) =>
+        spawnSync(
+          process.execPath,
+          [path.join(dist, 'index.js'), 'init', 'adapters', 'install', ...args],
+          { cwd: root, env: { ...process.env, CAWS_HOME: home }, encoding: 'utf8' }
+        );
+      const args = [
+        '--native-image',
+        file,
+        '--native-image-sha256',
+        selection.expectedSha256,
+        '--native-image-cli-tarball-sha256',
+        selection.expectedCliTarball.sha256,
+        '--native-image-cli-tarball-size-bytes',
+        String(selection.expectedCliTarball.sizeBytes),
+      ];
+      const installed = run(args);
+      expect({ status: installed.status, stderr: installed.stderr }).toEqual({
+        status: 0,
+        stderr: '',
+      });
+      const before = fixtureState(home);
+      const refused = run(args.slice(0, 4));
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toMatch(/requires all three independent pins/);
+      expect(fixtureState(home)).toEqual(before);
+    }
+  );
   test('old diagnostic receipt cannot be stamped as an installed-capable image', () => {
     const old = { ...loaded.build.observedIdentity, schema: 'caws.sqlite_build_identity.v1' };
     delete old.installedInvocation;

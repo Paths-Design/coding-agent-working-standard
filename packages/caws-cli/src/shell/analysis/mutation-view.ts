@@ -590,17 +590,31 @@ export async function projectMutationView(
         const commandOffset = argv[1]?.value === '--' ? 2 : 1;
         const commandWrapper =
           argv[0]?.value === 'command' && argv.length - args.length === commandOffset;
+        // The loader variables that decide which libraries the utility runs
+        // with. Named in the refusal: the command is not what is wrong, and
+        // nothing in it can be restated to fix an inherited variable.
+        const loaderVariables = [
+          ...new Set(
+            [...state.bindings.keys(), ...Object.keys(process.env)].filter((key) =>
+              /^(?:LD_|DYLD_)/.test(key)
+            )
+          ),
+        ].sort();
         if (
           (args !== argv && !commandWrapper) ||
           unwrapped.environment ||
           node.prefix.some((part) => part.type === 'Assignment') ||
           executable !== name ||
           state.bindings.has('PATH') ||
-          [...state.bindings.keys()].some((key) => /^(?:LD_|DYLD_)/.test(key)) ||
-          Object.keys(process.env).some((key) => /^(?:LD_|DYLD_)/.test(key)) ||
+          loaderVariables.length > 0 ||
           process.env[`BASH_FUNC_${name}%%`] !== undefined
         ) {
-          unresolved('Copy or move executable selection and environment are not proven.');
+          unresolved(
+            'Copy or move executable selection and environment are not proven.' +
+              (loaderVariables.length > 0
+                ? ` The environment sets ${loaderVariables.join(', ')}, which can change the libraries ${name} loads; unset ${loaderVariables.length > 1 ? 'them' : 'it'} for this session or ask the user to approve the copy.`
+                : '')
+          );
           return;
         }
         if (

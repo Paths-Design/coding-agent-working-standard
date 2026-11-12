@@ -483,7 +483,15 @@ function bash(p, command, extra = {}) {
   const result = spawnSync('python3', args, {
     cwd: p,
     encoding: 'utf8',
-    env: { ...process.env, ...environmentOverrides },
+    // The copy analysis refuses when a loader variable is inherited. A CI
+    // runner sets LD_LIBRARY_PATH, so the ambient ones are removed here and a
+    // case that is about them passes its own.
+    env: {
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => !/^(?:LD_|DYLD_)/.test(key))
+      ),
+      ...environmentOverrides,
+    },
     input,
   });
   invocations.push({
@@ -524,6 +532,20 @@ test('a plain file copy passes the stock guards through the launcher', () => {
   expect(result.stderr).not.toContain('authority unavailable');
   expect(result.stdout + result.stderr).not.toContain('inherited-environment');
   expect(result.status).toBe(0);
+});
+
+test('a copy refused for an inherited loader variable names that variable and what to do', () => {
+  const p = repo('analyzer-loader-variable');
+  fs.writeFileSync(path.join(p, 'a.txt'), 'a\n');
+  installMachineRuntime({ home });
+  const result = withoutBashEnv(() =>
+    bash(p, 'cp a.txt b.txt', { LD_LIBRARY_PATH: '/opt/hostedtoolcache/lib' })
+  );
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain(
+    'mutation-copy-roles: Copy or move executable selection and environment are not proven. The environment sets LD_LIBRARY_PATH, which can change the libraries cp loads; unset it for this session or ask the user to approve the copy.'
+  );
+  expect(fs.existsSync(path.join(p, 'b.txt'))).toBe(false);
 });
 
 test("the agent's own BASH_ENV is still reported, with the cause named in the copy refusal", () => {
