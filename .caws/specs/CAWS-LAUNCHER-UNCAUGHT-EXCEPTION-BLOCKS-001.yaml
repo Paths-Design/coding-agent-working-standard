@@ -38,3 +38,11 @@ acceptance:
     then: 'the exit status and stdout are unchanged'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "same file: post_tool_use with the same faults exits 0, empty stdout, fault on stderr"
+    recorded_at: "2026-11-12T00:55:30.693Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/launcher-unexpected-exception.test.js::a non-enforcing event reports the fault on stderr and does not fail the harness"
+    commit_sha: "0bb5a2325"
+    test_verified_at: "0bb5a2325caa743420290828033c7c2ab15fec5f"
