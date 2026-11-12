@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -176,7 +176,8 @@ test('filesystem decoding preserves invalid bytes and reports the host filename 
 });
 
 test('path resolution interprets dotdot after symlink resolution and preserves missing tails', t => {
-  const base = fixture(t); mkdirSync(path.join(base, 'real/inner'), { recursive: true }); symlinkSync(path.join(base, 'real/inner'), path.join(base, 'alias'));
+  // The resolver returns physical paths; on macOS the temporary directory is itself reached through a link.
+  const base = realpathSync(fixture(t)); mkdirSync(path.join(base, 'real/inner'), { recursive: true }); symlinkSync(path.join(base, 'real/inner'), path.join(base, 'alias'));
   assert.equal(resolveRoot(`${base}/alias/../consumer`), `${base}/real/consumer`);
   assert.equal(resolveRoot(`${base}/alias/missing/../leaf`), `${base}/real/inner/leaf`);
 });
