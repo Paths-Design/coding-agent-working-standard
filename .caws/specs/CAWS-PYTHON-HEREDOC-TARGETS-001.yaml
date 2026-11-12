@@ -1,0 +1,34 @@
+id: CAWS-PYTHON-HEREDOC-TARGETS-001
+title: 'Preserve Python heredoc boundaries in legacy mutation diagnostics'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-12T03:05:47.221Z'
+updated_at: '2026-11-12T03:05:47.221Z'
+created_by_session: '01a1cdb1-5a83-71f0-a80b-ea63a5a7d566'
+blast_radius:
+  modules:
+    - 'Legacy shell mutation diagnostics'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh'
+    - 'packages/caws-cli/tests/hooks/python-heredoc-targets.test.js'
+  out: []
+invariants:
+  - 'Python data is never treated as shell syntax; genuine shell and interpreter write diagnostics remain visible'
+acceptance:
+  - id: A1
+    given: 'quoted Python heredocs containing C# comparison data'
+    when: 'shell mutation extraction runs'
+    then: 'no fictitious comparison target is emitted and real outer-shell and Python write paths remain observable'
+  - id: A2
+    given: 'malformed, expanding or ambiguous heredocs'
+    when: 'boundary projection cannot prove a complete literal payload'
+    then: 'diagnostics retain conservative visibility'
+observability:
+  - 'Retain parser output and installed-runtime identity with native admission and refusal observations'
+rollback:
+  - 'Use supported adapter rollback if compatibility delivery changes unrelated runtime behavior'
+non_functional: {}
+contracts: []
