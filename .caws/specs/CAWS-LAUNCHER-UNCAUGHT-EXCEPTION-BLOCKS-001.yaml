@@ -1,10 +1,11 @@
 id: CAWS-LAUNCHER-UNCAUGHT-EXCEPTION-BLOCKS-001
 title: 'Hook launcher: an unexpected exception on PreToolUse refuses the call instead of exiting 1'
 mode: fix
-lifecycle_state: active
-worktree: launcher-uncaught-exception
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge launcher-uncaught-exception at 2c1b60345862012ad6c4c6fe2f672421ca4df991'
 created_at: '2026-11-11T22:15:49.486Z'
-updated_at: '2026-11-11T22:15:51.273Z'
+updated_at: '2026-11-12T00:58:25.660Z'
 created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
 blast_radius:
   modules:
@@ -16,8 +17,6 @@ scope:
     - 'packages/caws-cli/templates/hook-packs/runtime/caws-hook.py'
     - 'packages/caws-cli/templates/hook-packs/runtime/bootstrap.py'
     - 'packages/caws-cli/tests/adapter/launcher-unexpected-exception.test.js'
-    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
-    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
     - 'packages/caws-cli/CHANGELOG.md'
   out: []
 invariants:
@@ -38,3 +37,25 @@ acceptance:
     then: 'the exit status and stdout are unchanged'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "same file: post_tool_use with the same faults exits 0, empty stdout, fault on stderr"
+    recorded_at: "2026-11-12T00:55:30.693Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/launcher-unexpected-exception.test.js::a non-enforcing event reports the fault on stderr and does not fail the harness"
+    commit_sha: "0bb5a2325"
+    test_verified_at: "0bb5a2325caa743420290828033c7c2ab15fec5f"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "launcher-unexpected-exception.test.js (15 cases): RuntimeError, ModuleNotFoundError, SyntaxError, AssertionError through the bootstrap and RecursionError through both entries exit 2 with a block naming the type; reverting either handler makes them exit 1"
+    recorded_at: "2026-11-12T00:58:06.707Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/launcher-unexpected-exception.test.js::a driver raising RuntimeError on PreToolUse is refused, where it used to exit 1"
+    commit_sha: "021e65e3d"
+    test_verified_at: "021e65e3d926b8b321a0490e5d555fa4951e6886"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "same file: a driver exiting 0, 2 and 7 with its own stdout passes through unchanged"
+    recorded_at: "2026-11-12T00:58:14.427Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/launcher-unexpected-exception.test.js::a driver's own refusal, exit 2 with its own output, passes through unchanged"
+    commit_sha: "021e65e3d"
+    test_verified_at: "021e65e3d926b8b321a0490e5d555fa4951e6886"

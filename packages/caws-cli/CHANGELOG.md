@@ -74,6 +74,15 @@ status`, message delivery, the peer notice) report the later of that file's
   stop on every `block` or `ask`. `docs/guides/hook-packs.md` documents the
   guard verdict and refusal contract, session liveness, and the checks to run
   before merging a guard change.
+- The machine hook launcher refuses a PreToolUse call for every exception it
+  can catch. It previously turned five exception types into a refusal; any
+  other, such as a `RuntimeError`, a `RecursionError` from a deeply nested
+  payload, or a driver that failed to import, ended the process with status 1,
+  which Claude Code and Codex read as a hook error and answer by running the
+  tool call. The refusal names the exception type. A fault on a non-enforcing
+  event is reported on stderr and exits 0, and a handler's own verdict is
+  unchanged. The fix is in `bootstrap.py` and `caws-hook.py`, so it takes
+  effect when the machine runtime is next installed.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.
