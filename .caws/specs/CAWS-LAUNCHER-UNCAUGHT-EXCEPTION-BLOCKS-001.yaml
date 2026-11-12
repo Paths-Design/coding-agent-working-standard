@@ -46,3 +46,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/launcher-unexpected-exception.test.js::a non-enforcing event reports the fault on stderr and does not fail the harness"
     commit_sha: "0bb5a2325"
     test_verified_at: "0bb5a2325caa743420290828033c7c2ab15fec5f"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "launcher-unexpected-exception.test.js (15 cases): RuntimeError, ModuleNotFoundError, SyntaxError, AssertionError through the bootstrap and RecursionError through both entries exit 2 with a block naming the type; reverting either handler makes them exit 1"
+    recorded_at: "2026-11-12T00:58:06.707Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/launcher-unexpected-exception.test.js::a driver raising RuntimeError on PreToolUse is refused, where it used to exit 1"
+    commit_sha: "021e65e3d"
+    test_verified_at: "021e65e3d926b8b321a0490e5d555fa4951e6886"
