@@ -64,6 +64,9 @@ function shippedFixture(surface = 'codex') {
     HOME: home,
     CAWS_HOME: path.join(home, '.caws'),
     TMPDIR: directory,
+    // The shell heartbeat gives its CLI call three seconds by default, which a
+    // loaded test machine can exceed; the comparison is not about that limit.
+    CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS: '30',
     PATH: [bin, path.dirname(execFileSync('/usr/bin/which', ['git']).toString().trim())]
       .concat(['/usr/bin', '/bin'])
       .join(':'),

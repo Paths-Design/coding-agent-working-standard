@@ -381,9 +381,17 @@ id_guard() {
       payload="$(jq -nc --arg k "$arg" --arg c "$hook_cwd" \
         '{tool_name: "Bash", tool_input: {command: $k}} + (if $c == "" then {} else {cwd: $c} end)')" ;;
   esac
+  # The guards run the selected CLI (CAWS_BIN), not whichever caws is first on
+  # PATH. A case that records scope contention selects the recording shim,
+  # which hands every other subcommand to the CLI under test.
+  local selected_cli="$RP_CLI" delegate_cli="$RP_REAL_CAWS"
+  if [[ -n "${RP_CONTENTION_LOG:-}" ]]; then
+    selected_cli="$CAWS_TEST_HOME/contention-caws/caws"
+    delegate_cli="$RP_CLI"
+  fi
   run env -i \
     HOME="$CAWS_TEST_HOME" CAWS_HOME="$CAWS_TEST_HOME/.caws" PATH="${RP_ID_PATH:-$PATH}" \
-    CAWS_BIN="$RP_CLI" RP_CONTENTION_LOG="${RP_CONTENTION_LOG:-}" RP_REAL_CAWS="$RP_REAL_CAWS" \
+    CAWS_BIN="$selected_cli" RP_CONTENTION_LOG="${RP_CONTENTION_LOG:-}" RP_REAL_CAWS="$delegate_cli" \
     RP_REAL_GIT="$RP_REAL_GIT" ${RP_ID_NODE_PATH:+"NODE_PATH=$RP_ID_NODE_PATH"} \
     CLAUDE_CODE_SESSION_ID="${RP_ID_SESSION:-rp-session-s}" HOOK_SESSION_ID="${RP_ID_SESSION:-rp-session-s}" \
     CLAUDE_PROJECT_DIR="$op" CAWS_PROJECT_DIR="$op" \

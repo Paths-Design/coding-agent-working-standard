@@ -924,7 +924,7 @@ case "$DECISION" in
           emit_block_json "CAWS command-safety: $REASON. An opaque inline payload was already refused earlier in this session, with the two ways to restate it (the Read tool for inspection, finite literal inputs otherwise); this is a repeat of that same classification (opaque_exec), so the session danger latch is NOW ARMED. $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run, from their own shell: $RECOVERY_COMMAND  Command was: $COMMAND"
           exit 0
         fi
-        FULL_REASON="CAWS command-safety: $REASON. This inline payload cannot be verified, so it is refused. The session danger latch was NOT armed. For read-only inspection, use the Read tool / cat / jq against the file directly. For other operations, supply finite literal inputs without shell interpolation and submit them for normal guard review. Executing a script file also requires an admitted execution profile. Do NOT rephrase the same opaque -c/-e to evade this: a second opaque inline payload in this session, sent after this refusal, WILL arm the danger latch. Command was: $COMMAND"
+        FULL_REASON="CAWS command-safety: $REASON. This inline payload cannot be verified, so it is refused. The session danger latch was NOT armed. For read-only inspection, use the Read tool / cat / jq against the file directly. For other operations, supply finite literal inputs without shell interpolation and submit them for normal guard review. Executing a script file also requires an admitted execution profile. Do NOT rephrase the same opaque -c/-e to evade this. A second opaque inline payload in this session, sent after this refusal, WILL arm the danger latch. Command was: $COMMAND"
         emit_block_json "$FULL_REASON"
         exit 0
       fi

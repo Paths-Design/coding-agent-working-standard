@@ -73,6 +73,7 @@ STUB
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$CAWS_TEST_REPO" \
     CAWS_GUARD_NO_ASK=1 \
+    CAWS_BIN="$stubdir/caws" \
     PATH="$stubdir:$PATH" \
     bash -c "printf '%s' '$(hook_envelope Edit "$rel")' | bash '$(GUARD)'"
   rm -rf "$stubdir"
