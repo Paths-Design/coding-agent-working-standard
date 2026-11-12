@@ -1,10 +1,11 @@
 id: CAWS-MAIN-PACK-BUMP-HEREDOC-001
 title: 'Bump the shared pack and reconcile native pins for the bash-mutation-targets change on main'
 mode: fix
-lifecycle_state: active
-worktree: main-pack-bump
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge main-pack-bump at 0bb15f8d2d8887f4829175ee653c51bc2eae2435'
 created_at: '2026-11-12T09:55:00.711Z'
-updated_at: '2026-11-12T09:55:04.768Z'
+updated_at: '2026-11-12T15:11:16.720Z'
 created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
 blast_radius:
   modules:
