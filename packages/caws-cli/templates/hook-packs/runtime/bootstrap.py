@@ -77,8 +77,16 @@ if __name__ == '__main__':
     except InvocationError as error:
         print('[caws machine adapter] ' + str(error), file=sys.stderr)
         sys.exit(2)
-    except (ValueError, OSError, KeyError, TypeError, AttributeError) as error:
-        message = 'CAWS machine adapter: ' + str(error)
+    except Exception as error:
+        # Every exception, including a driver that cannot be imported or that
+        # raises a type nobody listed. Status 1 from an escaped exception is
+        # read by a harness as a hook error, and the tool call then runs with
+        # no guard. An unanticipated fault is named by its type.
+        if isinstance(error, (ValueError, OSError, KeyError, TypeError, AttributeError)):
+            detail = str(error)
+        else:
+            detail = 'unexpected ' + type(error).__name__ + (': ' + str(error) if str(error) else '')
+        message = 'CAWS machine adapter: ' + detail
         # Always loud on stderr. Degrading is not the same as going quiet, and
         # an operator who never hears about a broken pointer cannot repair it.
         print('[caws machine adapter] ' + message, file=sys.stderr)
