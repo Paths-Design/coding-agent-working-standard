@@ -1,0 +1,29 @@
+id: CAWS-CODEX-167-PRODUCER-PROBE-001
+title: 'Observe isolated stock Codex 0.167 hook producer for rc3 adoption'
+mode: chore
+lifecycle_state: active
+created_at: '2026-11-12T16:31:29.385Z'
+updated_at: '2026-11-12T16:31:29.385Z'
+created_by_session: '01a1d088-1963-7e71-9388-c85319487aa4'
+blast_radius:
+  modules:
+    - 'Private Codex hook producer observation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'tmp/codex167-producer-01a1d088'
+  out: []
+invariants:
+  - 'Shared CLI runtime harness configuration and peer lanes remain unchanged'
+acceptance:
+  - id: A1
+    given: 'a private profile and pinned stock Codex 0.167'
+    when: 'a read-only command is requested'
+    then: 'retain actual hook field inventory or the concrete execution blocker without claiming CAWS qualification'
+observability:
+  - 'Retain probe identity field inventory and termination status under ignored tmp'
+rollback:
+  - 'Stop only probe-owned processes and retain evidence without installing shared runtime'
+non_functional: {}
+contracts: []
