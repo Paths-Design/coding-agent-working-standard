@@ -154,6 +154,34 @@ status`, message delivery, the peer notice) report the later of that file's
   explicit reconciliation.
 - Preserve Bash startup facts for downstream analysis and limit record-time
   `caws specs evidence --verify` to the requested acceptance criterion.
+- A lifecycle reclaim marker left by a process that died mid-recovery is cleared
+  once it is old and its owner has provably exited; it previously blocked every
+  later lifecycle command until removed by hand. A live or unidentifiable
+  owner's marker is never taken. A lock refusal names the holder and when the
+  lock becomes reclaimable.
+- Publishing a lifecycle result waits out brief lock contention (five attempts)
+  instead of refusing on the first; it still never reclaims a lock.
+- A commit that landed is reported as "publication requires inspection" when the
+  hook verdict afterwards fails or cannot be read. It was reported as "caws
+  lifecycle refused", which says nothing happened.
+- The release job publishes the tarball the qualification job packed and
+  installed, checked against that job's SHA-256, and builds nothing. After the
+  upload it checks that the registry serves the same integrity. A run without
+  that tarball, or with different bytes, deletes the tag and publishes nothing.
+- The upgrade qualifier performs the protected write whenever a guard admits
+  it. The check that protected bytes are unchanged previously could not fail,
+  because nothing ever attempted the write.
+- The native entry selects native authorization of Claude Code and Qwen file
+  writes only in a build with the `native-file-authorization` feature, which
+  shipped builds do not enable; the shell guards answer those writes. The engine
+  refuses the Claude Code request, and the Qwen plan is stricter than the shell
+  guard (blocks a first out-of-scope write, ignores allow prefixes and
+  reprieves).
+- The typed command classifier answers only for `block-dangerous.sh`. Typed
+  handlers answer only for the shell handler bytes they were reviewed against;
+  for the handlers that ship, the Codex heartbeat on Bash calls is the one typed
+  route that answers, and a test compares it with the shell heartbeat on the
+  same payloads.
 
 Release qualification and publication are separate decisions. See
 `docs/release-readiness.md` in the source repository for acceptance and evidence
