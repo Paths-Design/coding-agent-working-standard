@@ -45,3 +45,11 @@ acceptance:
     then: 'it publishes that tarball by digest, and the upgrade qualifier performs a real guarded write whose refusal leaves the protected bytes unchanged'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Typed file-tool route declines for every shipped file payload (the six handlers main changed differ from the reviewed pins); pack 138 fingerprint recomputed and pinned in tests/init/pack-fingerprints.json; reviewed-bytes admission still exercised in tests/runtime/file-tools.test.js (npm test, 74 suites pass at a7e5875c8)"
+    recorded_at: "2026-11-12T05:50:44.368Z"
+    test_nodeid: "packages/caws-cli/tests/runtime/native-shell-agreement.test.js::the typed file-tool route declines for the shipped handlers on every file payload"
+    commit_sha: a7e5875c8
+    test_verified_at: a7e5875c82a84f27b49a5b93033843dfbb1d3fa2
