@@ -40,7 +40,6 @@ evidence:
     commit_sha: d37a6913e8db4a07e7f9e19a9335249cc88ae356
   - criterion_id: A2
     status: pass
-    evidence_ref: "d37a6913e 62 tests executed exit0. Boundary controls retain conservative visibility for unquoted, tab-stripping, wrapped, redirected, multi-heredoc and unterminated forms; source and private guard controls preserve actual suffix writes, real Path.replace destinations, unknown/custom receivers, reassigned Path receivers and variable-target open write fallback. Real foreign shell and Python writes exit2 under candidate7e3b11ce; actual relative.txt mutation still exits2 unavailable-native-context, so no session-cwd substitution or waiver. Raw validation.json retains earlier exporter corruption, partial fixes, invalid fixture and timeout attempts as failures. No complete arbitrary-Python proof or modern native contract change."
-    recorded_at: "2026-11-12T04:42:45.136Z"
-    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/python-heredoc-targets/validation.json"
+    evidence_ref: "Behavior manually verified in raw .caws/state/python-heredoc-targets/validation.json and 62 executed regression cases; generated receipts remain ignored, not tracked-artifact citations. Source commit identity alone is re-derived below. Unsupported/expanding/wrapped/redirected/multi/unterminated boundaries retain conservative diagnostics; suffix writes, Path.replace, unknown/custom/reassigned receivers and variable open writes remain visible. Candidate foreign shell/Python controls block2; genuine relative.txt still blocks2 unavailable-native-context. No arbitrary-Python effect/custody or modern executor qualification claim."
+    recorded_at: "2026-11-12T04:50:02.034Z"
     commit_sha: d37a6913e8db4a07e7f9e19a9335249cc88ae356
