@@ -15,8 +15,10 @@
 // prevent.
 //
 // Recovery requires an aged file and a demonstrably dead process. A separate
-// exclusive reclaimer serializes inspection and the one unlink; it is never
-// stolen. A crashed reclaimer fails closed pending recovery after quiescence.
+// exclusive reclaimer serializes inspection and the one unlink. A reclaimer
+// that died holding its marker is cleared by the same rule one level up: the
+// marker must be aged and its recorded process dead. A marker with no recorded
+// owner, which only an older writer leaves, must be ten times older.
 // Release belongs to a private handle, never merely to a pathname or fd number.
 
 import * as fs from 'fs';
@@ -34,6 +36,12 @@ const LOCK_FILE_NAME = 'state.lock';
 const LOCK_MAX_ATTEMPTS = 3;
 const LOCK_RETRY_DELAY_MS = 50;
 const LOCK_STALE_MS = 30_000;
+/** A reclaimer holds its marker for milliseconds. One with no recorded owner
+ *  is cleared only after this many stale thresholds. */
+const UNOWNED_RECLAIM_FACTOR = 10;
+/** Publication waits out a neighbor's short critical section. It never
+ *  reclaims: a held lock that outlasts these attempts is reported. */
+const PUBLICATION_ATTEMPTS = 5;
 
 export interface LifecycleLockHandle {
   readonly fd: number;
@@ -82,18 +90,103 @@ export interface AcquireLifecycleLockOptions {
   readonly retryDelayMs?: number;
 }
 
+interface OwnerRecord {
+  readonly pid?: number;
+  readonly hostname?: string;
+}
+
+/** Read a lock or marker's recorded owner. Unreadable or foreign content is
+ *  an unknown owner, never a dead one. */
+function ownerRecord(fd: number): OwnerRecord {
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(fd, 'utf8'));
+    if (parsed === null || typeof parsed !== 'object') return {};
+    const { pid, hostname } = parsed as { pid?: unknown; hostname?: unknown };
+    return {
+      ...(Number.isSafeInteger(pid) && (pid as number) > 0 ? { pid: pid as number } : {}),
+      ...(typeof hostname === 'string' ? { hostname } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+/** True only when the process is known to be gone on this host. */
+function provablyDead(owner: OwnerRecord): boolean {
+  if (owner.pid === undefined) return false;
+  if (owner.hostname !== undefined && owner.hostname !== os.hostname()) return false;
+  try {
+    process.kill(owner.pid, 0);
+    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ESRCH';
+  }
+}
+
+/**
+ * Remove a reclaim marker whose reclaimer died. Returns true when the marker
+ * is gone afterwards. The marker is moved aside by rename, which only one
+ * caller can win for a given file, and the moved file is checked against the
+ * one that was inspected: if a newer reclaimer's marker was displaced instead,
+ * it is put back and nothing is cleared.
+ */
+function clearAbandonedReclaimer(reclaimPath: string, staleThresholdMs: number): boolean {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(
+      reclaimPath,
+      fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | fs.constants.O_NOFOLLOW
+    );
+    const stat = fs.fstatSync(fd, { bigint: true });
+    if (!stat.isFile() || stat.size > 4096n) return false;
+    const ageMs = Date.now() - Number(stat.mtimeMs);
+    const owner = ownerRecord(fd);
+    const abandoned =
+      owner.pid === undefined
+        ? ageMs > staleThresholdMs * UNOWNED_RECLAIM_FACTOR
+        : ageMs > staleThresholdMs && provablyDead(owner);
+    if (!abandoned) return false;
+    const aside = `${reclaimPath}.abandoned-${process.pid}-${Date.now()}`;
+    fs.renameSync(reclaimPath, aside);
+    if (!sameFile(stat, fs.lstatSync(aside, { bigint: true }))) {
+      try {
+        fs.linkSync(aside, reclaimPath);
+      } catch {
+        /* A successor already holds the name; the displaced reclaimer still
+           re-verifies the lock file before its one unlink. */
+      }
+      fs.unlinkSync(aside);
+      return false;
+    }
+    fs.unlinkSync(aside);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT';
+  } finally {
+    if (fd !== undefined) closeQuietly(fd);
+  }
+}
+
 function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolean {
   const reclaimPath = `${lockPath}.reclaim`;
   let reclaimFd: number;
   try {
     reclaimFd = fs.openSync(reclaimPath, 'wx', 0o600);
   } catch {
-    return false;
+    if (!clearAbandonedReclaimer(reclaimPath, staleThresholdMs)) return false;
+    try {
+      reclaimFd = fs.openSync(reclaimPath, 'wx', 0o600);
+    } catch {
+      return false;
+    }
   }
   let reclaimIdentity: LockIdentity | undefined;
   let lockFd: number | undefined;
   try {
     reclaimIdentity = fs.fstatSync(reclaimFd, { bigint: true });
+    // Name this reclaimer, so a marker it leaves behind by dying can be
+    // told from one a live reclaimer is still using.
+    fs.writeFileSync(reclaimFd, JSON.stringify({ pid: process.pid, hostname: os.hostname() }));
     // Re-read after becoming the sole reclaimer. A predecessor may have
     // recovered the old holder and an ordinary caller acquired its successor.
     lockFd = fs.openSync(
@@ -103,22 +196,7 @@ function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolea
     const stat = fs.fstatSync(lockFd, { bigint: true });
     if (!stat.isFile() || stat.size > 4096n) return false;
     if (Date.now() - Number(stat.mtimeMs) <= staleThresholdMs) return false;
-    const metadata = JSON.parse(fs.readFileSync(lockFd, 'utf8')) as {
-      pid?: unknown;
-      hostname?: unknown;
-    };
-    if (
-      !Number.isSafeInteger(metadata.pid) ||
-      (metadata.pid as number) <= 0 ||
-      (metadata.hostname !== undefined && metadata.hostname !== os.hostname())
-    )
-      return false;
-    try {
-      process.kill(metadata.pid as number, 0);
-      return false;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') return false;
-    }
+    if (!provablyDead(ownerRecord(lockFd))) return false;
     if (!sameFile(stat, fs.lstatSync(lockPath, { bigint: true }))) return false;
     // Exactly one unlink. New acquisition may happen immediately afterward;
     // this reclaimer never unlinks the main path again.
@@ -140,8 +218,9 @@ function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolea
  * The lock is held by the existence of `<cawsDir>/state.lock`. Concurrent
  * callers retry up to `maxAttempts` with `retryDelayMs` between attempts.
  * Aged locks are reclaimed only when their recorded local PID is demonstrably dead.
- * Unknown ownership and abandoned reclaimer files fail closed. This protocol
- * assumes no external replacement of the held lock or reclaimer pathname.
+ * Unknown ownership fails closed, and the refusal says who holds the lock and
+ * what, if anything, is blocking its recovery. This protocol assumes no
+ * external replacement of the held lock or reclaimer pathname.
  */
 export function acquireLifecycleLock(
   cawsDir: string,
@@ -198,10 +277,69 @@ export function acquireLifecycleLock(
   return err(
     storeDiagnostic(
       STORE_RULES.LIFECYCLE_LOCK_CONTENTION,
-      `Could not acquire lifecycle lock after ${maxAttempts} attempts.`,
+      `Could not acquire lifecycle lock after ${maxAttempts} attempts: ${describeLockHolder(lockPath, staleThresholdMs, options.recoverStale !== false)}`,
       { subject: lockPath }
     )
   );
+}
+
+/** What is in the way, for the refusal. Never a decision input. A caller that
+ *  does not reclaim also does not probe whether the owner is running. */
+function describeLockHolder(lockPath: string, staleThresholdMs: number, probe: boolean): string {
+  const seconds = (ms: number): string => `${Math.max(0, Math.round(ms / 1000))}s`;
+  const inspect = (file: string): { owner: OwnerRecord; ageMs: number } | null => {
+    let fd: number | undefined;
+    try {
+      fd = fs.openSync(
+        file,
+        fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | fs.constants.O_NOFOLLOW
+      );
+      const stat = fs.fstatSync(fd);
+      if (!stat.isFile() || stat.size > 4096)
+        return { owner: {}, ageMs: Date.now() - stat.mtimeMs };
+      return { owner: ownerRecord(fd), ageMs: Date.now() - stat.mtimeMs };
+    } catch {
+      return null;
+    } finally {
+      if (fd !== undefined) closeQuietly(fd);
+    }
+  };
+  const who = (owner: OwnerRecord): string =>
+    owner.pid === undefined
+      ? 'an unrecorded owner'
+      : `process ${owner.pid}` +
+        (owner.hostname !== undefined && owner.hostname !== os.hostname()
+          ? ` on host ${owner.hostname}`
+          : '');
+  const lock = inspect(lockPath);
+  const reclaim = inspect(`${lockPath}.reclaim`);
+  const parts: string[] = [];
+  if (lock === null) parts.push('the lock was released while this call waited; retry.');
+  else if (!probe)
+    parts.push(
+      `it is held by ${who(lock.owner)} for ${seconds(lock.ageMs)}. Publication waits for the holder and never reclaims a lock. If the holder has exited, the next lifecycle command that takes the lock for itself reclaims it once it is ${seconds(staleThresholdMs)} old; retry after that.`
+    );
+  else if (provablyDead(lock.owner))
+    parts.push(
+      lock.ageMs > staleThresholdMs
+        ? `it is held by ${who(lock.owner)}, which has exited.`
+        : `it is held by ${who(lock.owner)}, which has exited; it is reclaimed once it is ${seconds(staleThresholdMs)} old (now ${seconds(lock.ageMs)}).`
+    );
+  else
+    parts.push(
+      `it is held by ${who(lock.owner)} for ${seconds(lock.ageMs)}; another CAWS lifecycle command is running, or its owner cannot be shown to have exited. Retry when it finishes.`
+    );
+  if (reclaim !== null) {
+    const limit =
+      reclaim.owner.pid === undefined
+        ? staleThresholdMs * UNOWNED_RECLAIM_FACTOR
+        : staleThresholdMs;
+    parts.push(
+      `An interrupted recovery left ${lockPath}.reclaim (${who(reclaim.owner)}, ${seconds(reclaim.ageMs)} old), which is cleared automatically once it is ${seconds(limit)} old` +
+        (reclaim.owner.pid === undefined ? '.' : ' and its owner has exited.')
+    );
+  }
+  return parts.join(' ');
 }
 
 /** Check a genuine live acquisition, refusing structural fd/path copies. */
@@ -290,7 +428,8 @@ export function withLifecycleMutationFence<T>(
   return body();
 }
 
-/** Hold one fail-fast publication fence; never reclaim or release another owner. */
+/** Hold one publication fence. It waits out a neighbor's short critical
+ *  section and never reclaims or releases another owner's lock. */
 export function withLifecyclePublicationFence<T>(
   cawsDir: string,
   body: (current: () => boolean) => Result<T>,
@@ -305,8 +444,7 @@ export function withLifecyclePublicationFence<T>(
     return body(current);
   }
   const acquired = acquireLifecycleLock(cawsDir, {
-    maxAttempts: 1,
-    retryDelayMs: 0,
+    maxAttempts: PUBLICATION_ATTEMPTS,
     recoverStale: false,
   });
   if (!acquired.ok) return acquired;
