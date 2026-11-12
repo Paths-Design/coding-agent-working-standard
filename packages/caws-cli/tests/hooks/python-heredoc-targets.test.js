@@ -63,6 +63,28 @@ test('Python comments and replacement data do not fabricate write paths', () => 
   ]);
 });
 
+test('read-modify-write replacement strings are data rather than rename destinations', () => {
+  const payload = `from pathlib import Path
+p = Path('/tmp/owned/test.cs')
+s = p.read_text().replace('old', 'points/colliders')
+s = s.replace('marker', '''// The receiver's fixture > 0f
+payload/data''')
+p.write_text(s)`;
+  expect(inspect(command(undefined, payload), 'caws_bash_interpreter_write_literals')).toEqual([
+    '/tmp/owned/test.cs',
+  ]);
+});
+
+test.each([
+  `from pathlib import Path\np = Path('/tmp/source.txt')\np.replace('/tmp/foreign/destination.txt')`,
+  `class Writer:\n def replace(self, target):\n  open(target, 'w').write('x')\nWriter().replace('/tmp/foreign/destination.txt')`,
+  `from pathlib import Path\np = Path('/tmp/source.txt')\ns = p.read_text()\ns = p\ns.replace('/tmp/foreign/destination.txt')`,
+])('actual or unproven replacement receivers retain destination diagnostics: %#', (payload) => {
+  expect(inspect(command(undefined, payload), 'caws_bash_interpreter_write_literals')).toContain(
+    '/tmp/foreign/destination.txt'
+  );
+});
+
 test('interpreter writes after a literal Python program remain visible', () => {
   const suffix = `\npython3 -c "from pathlib import Path; Path('/tmp/suffix.txt').write_text('x')"`;
   expect(

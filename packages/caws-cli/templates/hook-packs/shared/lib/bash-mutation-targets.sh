@@ -1049,13 +1049,13 @@ caws_foreign_repo_root() {
 }
 
 # The write verbs that make an interpreter payload a WRITE payload. The open()
-# arm requires a literal first argument AND a literal mode string containing
-# w/a/x/+, so a read-only open does not register.
-CAWS_PY_WRITE_VERBS="\.write_text\(|\.write_bytes\(|os\.(replace|rename|remove|unlink)\(|shutil\.(copyfile|copy|move)\(|open\([^)]*['\"][^'\"]*['\"][[:space:]]*,[[:space:]]*['\"][rwa+bt]*[wax+][rwa+bt]*['\"]"
+# fallback recognizes a literal or simple variable first argument and a literal
+# mode containing w/a/x/+, so a read-only open does not register.
+CAWS_PY_WRITE_VERBS="\.write_text\(|\.write_bytes\(|os\.(replace|rename|remove|unlink)\(|shutil\.(copyfile|copy|move)\(|open\([^)]*['\"][^'\"]*['\"][[:space:]]*,[[:space:]]*['\"][rwa+bt]*[wax+][rwa+bt]*['\"]|open\([^,()]+,[[:space:]]*['\"][rwa+bt]*[wax+][rwa+bt]*['\"]"
 CAWS_NODE_WRITE_VERBS="(writeFileSync|appendFileSync|fs\.(writeFile|appendFile|copyFile)|createWriteStream)\(|fs\.(renameSync|unlinkSync|rmSync)\("
 
 # _caws_interp_payload_literals <payload> <verbs_regex> [python-file]
-#   Python entry files contribute literals in possible write-path dependencies.
+#   Complete Python programs contribute literals in possible write-path dependencies.
 #   Other payloads and unsupported Python provenance use the conservative
 #   write-verb/path co-occurrence observation.
 #
@@ -1068,8 +1068,8 @@ CAWS_NODE_WRITE_VERBS="(writeFileSync|appendFileSync|fs\.(writeFile|appendFile|c
 #   heredoc body, and a nested inline quote.
 _caws_interp_payload_literals() {
   local payload="$1" verbs_re="$2" frag narrowed
-  # Only entry-file bytes are a complete Python program. Inline shell text
-  # retains the legacy conservative scan. This extracts diagnostic literals,
+  # Entry-file bytes and literal stdin bodies supply complete Python programs.
+  # Other inline shell text retains the legacy conservative scan. This extracts diagnostic literals,
   # not a readonly/effect proof or an execution grant: computed targets remain
   # the legacy recognizer's explicit limitation. Modern admission uses the
   # mandatory typed effect contract above, never this compatibility path.
@@ -1229,6 +1229,76 @@ for unused in range(len(bindings) + 1):
     if not changed:
         break
 
+# Prove a narrow straight-line text-edit idiom before distinguishing the
+# immutable str.replace from a filesystem replace method. An unsupported
+# statement/call discards this optimization for the WHOLE program, preserving
+# conservative paths for custom receivers, aliases and namespace mutation.
+def text_replacements():
+    environment = {}
+    replacements = set()
+
+    def infer(node):
+        tick()
+        if isinstance(node, ast.Constant):
+            return "text" if isinstance(node.value, str) else "scalar"
+        if isinstance(node, ast.Name):
+            if node.id not in environment:
+                raise ValueError("unproven expression")
+            return environment[node.id]
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            if infer(node.left) == infer(node.right) == "text":
+                return "text"
+            raise ValueError("unproven addition")
+        if isinstance(node, ast.Compare):
+            if all(infer(item) in ("text", "scalar") for item in [node.left, *node.comparators]):
+                return "scalar"
+            raise ValueError("unproven comparison")
+        if isinstance(node, ast.Call):
+            arguments = [infer(arg) for arg in node.args]
+            arguments.extend(infer(item.value) for item in node.keywords)
+            if any(item.arg is None for item in node.keywords):
+                raise ValueError("expanded arguments")
+            if isinstance(node.func, ast.Name) and environment.get(node.func.id) == "path_constructor":
+                if all(kind in ("text", "path") for kind in arguments):
+                    return "path"
+            if isinstance(node.func, ast.Attribute):
+                receiver = infer(node.func.value)
+                method = node.func.attr
+                if receiver == "path" and method == "read_text":
+                    return "text"
+                if receiver == "path" and method == "write_text":
+                    return "scalar"
+                if receiver == "text" and method in ("replace", "index"):
+                    if method == "replace":
+                        replacements.add(id(node))
+                        return "text"
+                    return "scalar"
+            raise ValueError("unproven call")
+        raise ValueError("unproven expression")
+
+    try:
+        for statement in tree.body:
+            tick()
+            if isinstance(statement, ast.ImportFrom) and statement.module == "pathlib" and statement.level == 0:
+                for item in statement.names:
+                    if item.name != "Path":
+                        raise ValueError("unproven import")
+                    environment[item.asname or item.name] = "path_constructor"
+            elif isinstance(statement, ast.Assign) and all(isinstance(target, ast.Name) for target in statement.targets):
+                kind = infer(statement.value)
+                for target in statement.targets:
+                    environment[target.id] = kind
+            elif isinstance(statement, ast.Expr):
+                infer(statement.value)
+            elif isinstance(statement, ast.Assert) and statement.msg is None:
+                infer(statement.test)
+            else:
+                raise ValueError("unproven statement")
+        return replacements
+    except ValueError:
+        return set()
+
+text_replace_calls = text_replacements()
 pending = []
 for call in calls:
     tick()
@@ -1236,9 +1306,10 @@ for call in calls:
     if method in ("write_text", "write_bytes"):
         pending.append(call.func.value)
     if method in ("replace", "rename", "remove", "unlink", "copyfile", "copy", "move"):
-        pending.extend(call.args)
-        pending.extend(keyword.value for keyword in call.keywords)
-        pending.append(call.func.value)
+        if id(call) not in text_replace_calls:
+            pending.extend(call.args)
+            pending.extend(keyword.value for keyword in call.keywords)
+            pending.append(call.func.value)
     if (isinstance(call.func, ast.Name) and call.func.id == "open") or method == "open":
         receiver = isinstance(call.func, ast.Attribute) and not (
             isinstance(call.func.value, ast.Name) and call.func.value.id in ("io", "builtins", "os"))
