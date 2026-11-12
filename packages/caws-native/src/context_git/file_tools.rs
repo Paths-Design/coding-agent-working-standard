@@ -25,6 +25,11 @@ pub mod operation;
 pub const REQUEST_SCHEMA: &str = "caws.runtime.file-tool-context.request.v1";
 const RESULT_SCHEMA: &str = "caws.runtime.file-tool-context.result.v1";
 pub const NATIVE_CAPABILITY: &str = "caws.runtime.file-tool-context.v2";
+/// Whether this build may select native authorization of file writes. A build
+/// without the feature never advertises it, so the shell guards answer.
+pub const fn native_route_enabled() -> bool {
+    cfg!(feature = "native-file-authorization")
+}
 pub const NATIVE_REQUEST_SCHEMA: &str = "caws.runtime.file-tool-context.request.v2";
 const NATIVE_RESULT_SCHEMA: &str = "caws.runtime.file-tool-context.result.v2";
 pub const MAX_REQUEST: usize = 1024;

@@ -1,4 +1,6 @@
-#![cfg(target_os = "macos")]
+// These cases drive native authorization of file writes, which only a build
+// with the feature selects; without it the binary takes the ordinary route.
+#![cfg(all(target_os = "macos", feature = "native-file-authorization"))]
 
 use serde_json::Value;
 use std::{

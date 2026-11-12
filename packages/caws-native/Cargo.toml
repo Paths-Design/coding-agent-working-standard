@@ -13,6 +13,14 @@ path = "src/installed_entry_main.rs"
 default = []
 # Qualified SQLite builds require the external fresh-target coordinator.
 sqlite-store = ["dep:rusqlite", "dep:libsqlite3-sys"]
+# Selects native authorization of Claude Code and Qwen file writes. Off in
+# shipped builds: the engine refuses the Claude Code request outright, and the
+# Qwen plan blocks a first out-of-scope write where the shell guard warns, drops
+# configured allow prefixes and reprieves, and gives a latched session no reset
+# command. With it off those writes take the ordinary route and the shell
+# guards answer. Turn it on by default only once both surfaces return what the
+# shell guards return for the same payloads.
+native-file-authorization = []
 
 [dependencies]
 base64 = "0.22.1"

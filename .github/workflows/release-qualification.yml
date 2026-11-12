@@ -135,7 +135,7 @@ jobs:
           mkdir -p "$CAWS_NATIVE_TEST_ARTIFACT_ROOT"
           git rev-parse HEAD > "$CAWS_NATIVE_TEST_ARTIFACT_ROOT/source-commit.txt"
           export CAWS_NATIVE_CUSTODY_NODE_PATH="$(command -v node)"
-          cargo +1.90.0 test --release --locked --offline --manifest-path packages/caws-native/Cargo.toml --no-default-features --test native_file_owner --jobs 2 -- --test-threads=1
+          cargo +1.90.0 test --release --locked --offline --manifest-path packages/caws-native/Cargo.toml --no-default-features --features native-file-authorization --test native_file_owner --jobs 2 -- --test-threads=1
       - name: Archive native file observations without following fixture symlinks
         if: ${{ always() && steps.native-file.outcome != 'skipped' }}
         run: tar -czf native-file-observations.tgz -- native-file-observations

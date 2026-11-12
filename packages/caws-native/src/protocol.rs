@@ -514,6 +514,7 @@ impl Request {
         {
             Some(caws_native::context_git::file_tools::CAPABILITY)
         } else if cfg!(target_os = "macos")
+            && caws_native::context_git::file_tools::native_route_enabled()
             && config.configuration == "system"
             && matches!(config.surface.as_str(), "claude-code" | "qwen-code")
             && config.event == "pre_tool_use"
@@ -1295,6 +1296,61 @@ mod tests {
             Instant::now() - std::time::Duration::from_millis(1),
         );
         assert!(expired.is_err());
+    }
+
+    /// Claude Code and Qwen file writes select native authorization only in a
+    /// build that opts in; otherwise the request advertises neither file
+    /// capability and the engine runs the selected shell guards.
+    #[test]
+    fn native_file_authorization_is_selected_only_by_an_opted_in_build() {
+        let make = |surface: &str, text: &str| {
+            let config = Config {
+                engine: "/not-executed/engine.js".into(),
+                node: "/not-executed/node".into(),
+                surface: surface.into(),
+                event: "pre_tool_use".into(),
+                configuration: "system".into(),
+                digest: "a".repeat(64),
+                timeout: std::time::Duration::from_secs(30),
+            };
+            Request::new(
+                &config,
+                RawValue::from_string(text.into()).unwrap(),
+                text.into(),
+                Instant::now() + std::time::Duration::from_secs(30),
+            )
+            .unwrap()
+        };
+        let cases = [
+            (
+                "claude-code",
+                r#"{"session_id":"original","tool_name":"Write","tool_input":{"file_path":"/p/a","content":"x"}}"#,
+            ),
+            (
+                "claude-code",
+                r#"{"session_id":"original","tool_name":"Edit","tool_input":{"file_path":"/p/a","old_string":"x","new_string":"y"}}"#,
+            ),
+            (
+                "qwen-code",
+                r#"{"session_id":"original","tool_name":"write_file","tool_input":{"file_path":"/p/a","content":"x"}}"#,
+            ),
+        ];
+        for (surface, text) in cases {
+            let request = make(surface, text);
+            let selected = cfg!(target_os = "macos") && cfg!(feature = "native-file-authorization");
+            assert_eq!(request.native_file_backend(), selected, "{surface} {text}");
+            if selected {
+                assert_eq!(
+                    request.guard_strikes,
+                    Some(crate::guard_strikes_wire::NATIVE_CAPABILITY)
+                );
+            } else {
+                assert_eq!(request.file_tool_context, None, "{surface} {text}");
+                assert_eq!(request.guard_strikes, None, "{surface} {text}");
+                assert!(request.file_tool_context_input().is_none());
+                assert!(request.guard_strikes_input().is_none());
+            }
+        }
     }
 
     #[test]
