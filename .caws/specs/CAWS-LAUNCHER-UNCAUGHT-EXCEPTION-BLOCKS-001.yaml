@@ -53,3 +53,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/adapter/launcher-unexpected-exception.test.js::a driver raising RuntimeError on PreToolUse is refused, where it used to exit 1"
     commit_sha: "021e65e3d"
     test_verified_at: "021e65e3d926b8b321a0490e5d555fa4951e6886"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "same file: a driver exiting 0, 2 and 7 with its own stdout passes through unchanged"
+    recorded_at: "2026-11-12T00:58:14.427Z"
+    test_nodeid: "packages/caws-cli/tests/adapter/launcher-unexpected-exception.test.js::a driver's own refusal, exit 2 with its own output, passes through unchanged"
+    commit_sha: "021e65e3d"
+    test_verified_at: "021e65e3d926b8b321a0490e5d555fa4951e6886"
