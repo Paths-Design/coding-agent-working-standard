@@ -60,3 +60,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/runtime/native-shell-agreement.test.js::census of typed routes that answer for the shipped handlers"
     commit_sha: a7e5875c8
     test_verified_at: a7e5875c82a84f27b49a5b93033843dfbb1d3fa2
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Reclaim marker with a dead recorded owner is cleared once aged; live, foreign-host and ownerless markers are never taken; publication fence waits five attempts; refusal names holder and marker (tests/store/lifecycle-lock-reclaim.test.js, tests/execution/authority-fence.test.js pass). Residual: a narrow window with a killed reclaimer plus four interleaved commands, described at clearAbandonedReclaimer."
+    recorded_at: "2026-11-12T05:51:45.683Z"
+    test_nodeid: "packages/caws-cli/tests/store/lifecycle-lock-reclaim.test.js::a marker left by a reclaimer that died is cleared and the dead lock is reclaimed"
+    commit_sha: a7e5875c8
+    test_verified_at: a7e5875c82a84f27b49a5b93033843dfbb1d3fa2
