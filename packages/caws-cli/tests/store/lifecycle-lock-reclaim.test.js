@@ -88,18 +88,17 @@ test('a marker recorded on another host is not judged dead from this one', () =>
   expect(fs.existsSync(f.reclaim)).toBe(true);
 });
 
-test.each([
-  ['just past the ordinary threshold', STALE * 5, false],
-  ['past ten thresholds', STALE * 11, true],
-])('a marker with no recorded owner, %s', (_label, msAgo, cleared) => {
+test('a marker with no recorded owner is never taken, and the refusal says to delete it', () => {
   const f = fixture();
   deadOwnerLock(f);
   fs.writeFileSync(f.reclaim, '');
-  age(f.reclaim, msAgo);
+  fs.utimesSync(f.reclaim, new Date(0), new Date(0));
   const result = acquireLifecycleLock(f.directory, options);
-  expect(result.ok).toBe(cleared);
-  expect(fs.existsSync(f.reclaim)).toBe(!cleared);
-  if (result.ok) releaseLifecycleLock(result.value);
+  expect(result.ok).toBe(false);
+  expect(fs.existsSync(f.reclaim)).toBe(true);
+  expect(result.errors[0].message).toContain(
+    'never cleared automatically because it records no owner. Confirm no caws lifecycle command is running, then delete that file.'
+  );
 });
 
 test('a marker that is a symbolic link is not followed or removed', () => {

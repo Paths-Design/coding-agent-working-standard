@@ -36,9 +36,6 @@ const LOCK_FILE_NAME = 'state.lock';
 const LOCK_MAX_ATTEMPTS = 3;
 const LOCK_RETRY_DELAY_MS = 50;
 const LOCK_STALE_MS = 30_000;
-/** A reclaimer holds its marker for milliseconds. One with no recorded owner
- *  is cleared only after this many stale thresholds. */
-const UNOWNED_RECLAIM_FACTOR = 10;
 /** Publication waits out a neighbor's short critical section. It never
  *  reclaims: a held lock that outlasts these attempts is reported. */
 const PUBLICATION_ATTEMPTS = 5;
@@ -141,11 +138,9 @@ function clearAbandonedReclaimer(reclaimPath: string, staleThresholdMs: number):
     if (!stat.isFile() || stat.size > 4096n) return false;
     const ageMs = Date.now() - Number(stat.mtimeMs);
     const owner = ownerRecord(fd);
-    const abandoned =
-      owner.pid === undefined
-        ? ageMs > staleThresholdMs * UNOWNED_RECLAIM_FACTOR
-        : ageMs > staleThresholdMs && provablyDead(owner);
-    if (!abandoned) return false;
+    // A marker that names no owner is never taken on age alone: nothing shows
+    // its reclaimer is gone. The refusal names the file for a person to remove.
+    if (!(ageMs > staleThresholdMs && provablyDead(owner))) return false;
     const aside = `${reclaimPath}.abandoned-${process.pid}-${Date.now()}`;
     // Another caller may have cleared the inspected marker and created its
     // own since it was read. Look again immediately before the move, so a
@@ -339,13 +334,11 @@ function describeLockHolder(lockPath: string, staleThresholdMs: number, probe: b
       `it is held by ${who(lock.owner)} for ${seconds(lock.ageMs)}; another CAWS lifecycle command is running, or its owner cannot be shown to have exited. Retry when it finishes.`
     );
   if (reclaim !== null) {
-    const limit =
-      reclaim.owner.pid === undefined
-        ? staleThresholdMs * UNOWNED_RECLAIM_FACTOR
-        : staleThresholdMs;
     parts.push(
-      `An interrupted recovery left ${lockPath}.reclaim (${who(reclaim.owner)}, ${seconds(reclaim.ageMs)} old), which is cleared automatically once it is ${seconds(limit)} old` +
-        (reclaim.owner.pid === undefined ? '.' : ' and its owner has exited.')
+      `An interrupted recovery left ${lockPath}.reclaim (${who(reclaim.owner)}, ${seconds(reclaim.ageMs)} old), which is ` +
+        (reclaim.owner.pid === undefined
+          ? 'never cleared automatically because it records no owner. Confirm no caws lifecycle command is running, then delete that file.'
+          : `cleared automatically once it is ${seconds(staleThresholdMs)} old and its owner has exited.`)
     );
   }
   return parts.join(' ');

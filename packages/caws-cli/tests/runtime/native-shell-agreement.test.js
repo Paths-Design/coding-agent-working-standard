@@ -13,6 +13,7 @@ const { execFileSync } = require('node:child_process');
 const { tryExecuteStockHandler } = require('../../dist/runtime/stock-handlers');
 const { prepareFileToolHandlers } = require('../../dist/runtime/file-tool-handlers');
 const { createHandlerExecutor } = require('../../dist/runtime/handler-executor');
+const { loadLeases } = require('../../dist/store/leases-store');
 
 const templates = path.resolve(__dirname, '../../templates/hook-packs');
 const digest = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -208,20 +209,18 @@ test('the typed file-tool route declines for the shipped handlers on every file 
 });
 
 /**
- * What the heartbeat promises other sessions: the lease record and the activity
- * stamp. The shell's .hb and .mail files only ration its own CLI calls, which
- * the in-process typed route does not make, so they are not part of the promise.
+ * What the heartbeat promises other sessions: the lease record, and that the
+ * session reads as active now. Readers take the later of the lease's own time
+ * and the .active stamp, so the two routes may record "now" in either place;
+ * what is compared is the time a reader sees. The shell's .hb and .mail files
+ * only ration its own CLI calls, which the in-process typed route does not make.
  */
 function leaseState(f) {
   const directory = path.join(f.project, '.caws/leases');
   if (!fs.existsSync(directory)) return null;
   const state = {};
   for (const name of fs.readdirSync(directory).sort()) {
-    if (/\.(hb|hb\.lease|mail)$/.test(name)) continue;
-    if (name.endsWith('.active')) {
-      state[name] = 'stamped';
-      continue;
-    }
+    if (/\.(hb|hb\.lease|mail|active)$/.test(name)) continue;
     state[name] = JSON.parse(fs.readFileSync(path.join(directory, name), 'utf8'), (key, entry) =>
       /(_at|_active|pid|hostname|_ms)$/.test(key)
         ? '<' + typeof entry + '>'
@@ -230,6 +229,10 @@ function leaseState(f) {
           : entry
     );
   }
+  const read = loadLeases(path.join(f.project, '.caws'));
+  const seen = read.ok ? read.value.leases[SESSION]?.last_active : undefined;
+  const ageMs = Date.now() - Date.parse(seen ?? '');
+  state.activity = ageMs >= 0 && ageMs < 120000 ? 'active now' : 'not active: ' + String(seen);
   return state;
 }
 async function bothRoutes(prepare, run = 1) {
@@ -239,11 +242,13 @@ async function bothRoutes(prepare, run = 1) {
     fs.mkdirSync(path.join(f.project, '.caws'));
     prepare(f);
     const handler = f.select('agent-heartbeat.sh');
-    if (route === 'shell')
-      jest
-        .spyOn(require('../../dist/runtime/stock-handlers'), 'tryExecuteStockHandler')
-        .mockReturnValue(null);
-    else expect(tryExecuteStockHandler(handler, f.context())).not.toBeNull();
+    // The shell route is forced by making the typed entry decline; the typed
+    // route is observed, not called a second time, so each run happens once.
+    const typed = jest.spyOn(
+      require('../../dist/runtime/stock-handlers'),
+      'tryExecuteStockHandler'
+    );
+    if (route === 'shell') typed.mockReturnValue(null);
     const results = [];
     for (let index = 0; index < run; index++) {
       const result = await createHandlerExecutor(f.context())(handler, 0);
@@ -253,6 +258,8 @@ async function bothRoutes(prepare, run = 1) {
         stderr: Buffer.from(result.stderr).toString(),
       });
     }
+    expect(typed.mock.results).toHaveLength(run);
+    for (const answer of typed.mock.results) expect(answer.value === null).toBe(route === 'shell');
     jest.restoreAllMocks();
     outcome[route] = { results, leases: leaseState(f) };
   }
@@ -264,7 +271,7 @@ test('the typed Codex heartbeat and the shipped shell heartbeat keep the same le
   expect(outcome.typed).toEqual(outcome.shell);
   // Both routes did the work, so equality is not two empty results.
   expect(outcome.shell.leases).toEqual({
-    [SESSION + '.active']: 'stamped',
+    activity: 'active now',
     [SESSION + '.json']: expect.objectContaining({
       session_id: SESSION,
       platform: 'codex',
@@ -304,4 +311,6 @@ test('a session that already holds a lease is refreshed the same way by both rou
   });
   expect(outcome.typed).toEqual(outcome.shell);
   expect(outcome.shell.leases[SESSION + '.json'].last_seen_reason).toBe('pre_tool_use');
+  // The seeded lease was last active in January; both routes bring it to now.
+  expect(outcome.typed.leases.activity).toBe('active now');
 });
