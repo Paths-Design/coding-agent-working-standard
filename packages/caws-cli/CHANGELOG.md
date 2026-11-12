@@ -177,6 +177,10 @@ status`, message delivery, the peer notice) report the later of that file's
   refuses the Claude Code request, and the Qwen plan is stricter than the shell
   guard (blocks a first out-of-scope write, ignores allow prefixes and
   reprieves).
+- A `cp` or `mv` refused because the environment sets a loader variable
+  (`LD_LIBRARY_PATH`, `DYLD_*`) names that variable and says to unset it or ask
+  for approval. The refusal previously said only that executable selection was
+  not proven, which gave nothing to act on.
 - The typed command classifier answers only for `block-dangerous.sh`. Typed
   handlers answer only for the shell handler bytes they were reviewed against;
   for the handlers that ship, the Codex heartbeat on Bash calls is the one typed
