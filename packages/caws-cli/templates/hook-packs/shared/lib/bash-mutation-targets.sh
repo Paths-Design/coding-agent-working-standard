@@ -490,6 +490,37 @@ _caws_emit_operand() {
   return 0
 }
 
+# Project a complete, direct, literal Python stdin program out of the legacy
+# OUTER-SHELL view. Python quote rules differ from shell quote rules: an
+# apostrophe in a triple-quoted fixture can otherwise turn `> 0f` into a fake
+# redirect and even swallow real shell commands after the terminator.
+# This is not a read-only classification. Interpreter checks MUST receive the
+# original command. Expanding/unfinished/wrapped forms retain the old view;
+# normal host command lookup remains the legacy envelope's existing assumption.
+_caws_python_heredoc_shell_view() {
+  local input="$1" header line delim offset blanks=''
+  [[ "$input" == *$'\n'* ]] || { printf '%s' "$input"; return; }
+  header="${input%%$'\n'*}"
+  local prefix='^[[:blank:]]*python(3([.][0-9]+)?)?[[:blank:]]+(-[[:blank:]]+)?<<[[:blank:]]*'
+  local single="${prefix}'([A-Za-z_][A-Za-z_0-9]*)'[[:blank:]]*$"
+  local double="${prefix}\"([A-Za-z_][A-Za-z_0-9]*)\"[[:blank:]]*$"
+  if [[ "$header" =~ $single || "$header" =~ $double ]]; then
+    delim="${BASH_REMATCH[4]}"
+  else
+    printf '%s' "$input"; return
+  fi
+  offset=$((${#header} + 1))
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "$delim" ]]; then
+      printf '%s\n%s%s' "$header" "$blanks" "${input:offset}"
+      return
+    fi
+    blanks+=$'\n'
+    offset=$((offset + ${#line} + 1))
+  done <<< "${input:offset}"
+  printf '%s' "$input"
+}
+
 _caws_bash_scan_tokens() {
   local cmd="$1"
   CAWS_REC_FILE=(); CAWS_REC_FILE_ROLE=(); CAWS_REC_BROAD=(); CAWS_REC_DYNAMIC=()
@@ -502,6 +533,7 @@ _caws_bash_scan_tokens() {
     CAWS_REC_UNSUPPORTED=( ${CAWS_AST_ISSUES[@]+"${CAWS_AST_ISSUES[@]}"} )
   else
     # Other consumers retain their declared legacy lexical envelope.
+    cmd="$(_caws_python_heredoc_shell_view "$cmd")"
     if declare -F caws_blank_heredoc_bodies >/dev/null 2>&1; then
       cmd="$(caws_blank_heredoc_bodies "$cmd")"
     fi
