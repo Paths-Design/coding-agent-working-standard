@@ -516,6 +516,9 @@ export function tryExecuteStockHandler(
       ports
     );
   }
+  // What follows is the command classifier, which stands in for block-dangerous.sh
+  // alone. Any other admitted handler keeps its selected shell source.
+  if (handler.name !== 'block-dangerous.sh') return null;
   // The bounded first consumer migration is Codex. Other surface emit/state semantics stay selected shell behavior.
   if (
     selection.surface !== 'codex' ||
