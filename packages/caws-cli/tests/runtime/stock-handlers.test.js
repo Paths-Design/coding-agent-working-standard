@@ -12,6 +12,14 @@ const { createHandlerExecutor } = require('../../dist/runtime/handler-executor')
 const classifier = require('../../dist/runtime/classifier');
 const templates = path.resolve(__dirname, '../../templates/hook-packs');
 const digest = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+// The library as shipped at 8de44e07a, the last revision the typed handlers
+// were reviewed against.
+const reviewedMutationTargets = path.join(
+  __dirname,
+  'fixtures/reviewed-stock/bash-mutation-targets-pre-python-stdin.sh'
+);
+const reviewedMutationTargetsSha256 =
+  '2d6274fb8dcc31fc5d57d4b47a0225676fe10336b7c134466f799eabc672504c';
 let directory, runtime, project, selection, request, environment, controller;
 const artifactRoot = process.env.CAWS_TEST_ARTIFACT_DIR;
 if (artifactRoot && !path.isAbsolute(artifactRoot))
@@ -154,6 +162,12 @@ beforeEach(() => {
   project = path.join(directory, 'project');
   fs.mkdirSync(project);
   fs.cpSync(path.join(templates, 'shared'), runtime, { recursive: true });
+  // The typed handlers answer only for the mutation-target library they were
+  // reviewed against. The shipped library has since changed its Python
+  // heredoc analysis, so these cases install the reviewed bytes; the shipped
+  // bytes are covered by the case that expects the shell route to keep them.
+  expect(digest(reviewedMutationTargets)).toBe(reviewedMutationTargetsSha256);
+  fs.copyFileSync(reviewedMutationTargets, path.join(runtime, 'lib/bash-mutation-targets.sh'));
   fs.copyFileSync(
     path.join(templates, 'runtime/handler-env.sh'),
     path.join(runtime, 'handler-env.sh')
@@ -451,6 +465,19 @@ test.each([
       expect(qualifiesForNativeContainment(handler, context())).toBe(false);
   }
   expect(heartbeat).not.toHaveBeenCalled();
+});
+
+test('the shipped Bash mutation library keeps the shell route until the typed handlers are reviewed against it', () => {
+  useCodexLibraries();
+  command('echo safe');
+  const source = path.join(runtime, 'lib/bash-mutation-targets.sh');
+  fs.copyFileSync(path.join(templates, 'shared/lib/bash-mutation-targets.sh'), source);
+  selection.libraries['bash-mutation-targets.sh'].sha256 = digest(source);
+  expect(digest(source)).not.toBe(reviewedMutationTargetsSha256);
+  const guard = select('block-dangerous.sh');
+  expect(tryExecuteStockHandler(guard, context())).toBeNull();
+  expect(qualifiesForNativeContainment(guard, context())).toBe(false);
+  expect(tryExecuteStockHandler(select('hook-utilities.sh'), context())).toBeNull();
 });
 
 test('reviewed Bash mutation source admits stock routes but changed bytes keep shell ownership', () => {

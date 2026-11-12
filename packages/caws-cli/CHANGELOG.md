@@ -120,6 +120,13 @@ repository for acceptance and evidence requirements.
 
 Second release candidate for the shared machine runtime; publishes to `next`.
 
+- `lib/bash-mutation-targets.sh` analyzes complete literal Python heredoc
+  programs for the files they write, keeps the shell text after the heredoc
+  under shell target scanning, and treats the proven pathlib read, replace and
+  write idiom as an edit of the named file. The typed handlers were not
+  reviewed against this library, so they decline and the shell guards answer.
+  Shared pack 138.
+
 ### Acceptance evidence is re-derived, not trusted
 
 `CAWS-SPECS-VERIFY-ACS-REDERIVE-001`. The five machine-checkable evidence
