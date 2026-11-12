@@ -17,10 +17,10 @@ scope:
     - 'packages/caws-cli/tests/hooks/python-heredoc-targets.test.js'
   out: []
 invariants:
-  - 'Python data is never treated as shell syntax; genuine shell and interpreter write diagnostics remain visible'
+  - 'Complete direct quoted Python stdin bodies are separated from outer-shell syntax; raw interpreter diagnostics and the mandatory modern execution contract remain intact'
 acceptance:
   - id: A1
-    given: 'quoted Python heredocs containing C# comparison data'
+    given: 'complete direct Python stdin heredocs with literal quoted delimiters and C# comparison data'
     when: 'shell mutation extraction runs'
     then: 'no fictitious comparison target is emitted and real outer-shell and Python write paths remain observable'
   - id: A2
