@@ -67,3 +67,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/lifecycle-lock-reclaim.test.js::a marker left by a reclaimer that died is cleared and the dead lock is reclaimed"
     commit_sha: a7e5875c8
     test_verified_at: a7e5875c82a84f27b49a5b93033843dfbb1d3fa2
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "A landed commit is reported as publication requires inspection when the verdict fails or cannot be read; negative control with the fix reverted gave 'caws lifecycle refused' for both cases."
+    recorded_at: "2026-11-12T05:52:21.146Z"
+    test_nodeid: "packages/caws-cli/tests/execution/lifecycle.test.js::a commit that landed is reported for inspection, not as refused, when the hook verdict reports failure"
+    commit_sha: a7e5875c8
+    test_verified_at: a7e5875c82a84f27b49a5b93033843dfbb1d3fa2
