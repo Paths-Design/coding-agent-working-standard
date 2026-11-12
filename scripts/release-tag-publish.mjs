@@ -55,7 +55,8 @@
  */
 
 import { execSync, spawnSync } from 'child_process';
-import { existsSync, readFileSync, mkdtempSync, writeFileSync, rmSync } from 'fs';
+import { existsSync, lstatSync, readFileSync, mkdtempSync, writeFileSync, rmSync } from 'fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -99,8 +100,76 @@ function releaseChannel(version) {
   return version.split('+')[0].includes('-') ? 'next' : 'latest';
 }
 
-export function publicationArgs(version) {
-  return ['publish', '--access', 'public', '--provenance', '--tag', releaseChannel(version)];
+/**
+ * With a qualified tarball, npm publishes those exact bytes and runs no
+ * package script, so nothing is rebuilt between qualification and upload.
+ */
+export function publicationArgs(version, tarball) {
+  return [
+    'publish',
+    ...(tarball ? [tarball, '--ignore-scripts'] : []),
+    '--access',
+    'public',
+    '--provenance',
+    '--tag',
+    releaseChannel(version),
+  ];
+}
+
+/**
+ * Admit the tarball qualification selected, and nothing else: its bytes must
+ * hash to the digest the qualification job reported, and the manifest inside
+ * it must be the package and version the tag names.
+ *
+ * @returns {{ ok: true, file: string, sha256: string, integrity: string, sizeBytes: number } | { ok: false, reason: string }}
+ */
+export function verifyCandidate({ file, expectedSha256, name, version }) {
+  if (!/^[a-f0-9]{64}$/.test(expectedSha256 ?? ''))
+    return {
+      ok: false,
+      reason:
+        'CAWS_RELEASE_TARBALL_SHA256 is missing or is not a sha256 digest; the digest reported by the qualification job is required to publish a tarball',
+    };
+  let bytes;
+  try {
+    const stat = lstatSync(file);
+    if (!stat.isFile()) return { ok: false, reason: `${file} is not a regular file` };
+    bytes = readFileSync(file);
+  } catch (error) {
+    return { ok: false, reason: `cannot read the candidate tarball ${file}: ${error.message}` };
+  }
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  if (sha256 !== expectedSha256)
+    return {
+      ok: false,
+      reason: `candidate tarball ${file} has sha256 ${sha256}, but qualification selected ${expectedSha256}; refusing to publish bytes that were not qualified`,
+    };
+  const listing = spawnSync('tar', ['-xzOf', file, 'package/package.json'], {
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  let manifest;
+  try {
+    if (listing.status !== 0) throw new Error(`tar exited ${listing.status}`);
+    manifest = JSON.parse(listing.stdout);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `cannot read package/package.json from ${file}: ${error.message}`,
+    };
+  }
+  if (manifest.name !== name || manifest.version !== version)
+    return {
+      ok: false,
+      reason: `candidate tarball holds ${manifest.name}@${manifest.version}, but the tag names ${name}@${version}`,
+    };
+  return {
+    ok: true,
+    file,
+    sha256,
+    integrity: 'sha512-' + createHash('sha512').update(bytes).digest('base64'),
+    sizeBytes: bytes.length,
+  };
 }
 
 export function releaseArgs(tag, version, notesFile) {
@@ -359,7 +428,7 @@ function deleteTagFromOrigin(tag, isDryRun) {
 // Registry verification (post-publish).
 // =============================================================================
 
-function verifyRegistry(pkg, version, isDryRun) {
+function verifyRegistry(pkg, version, isDryRun, expectedIntegrity) {
   if (isDryRun) {
     logInfo('registry.verify.dry_run', { pkg: pkg.name, version });
     return { ok: true, dryRun: true };
@@ -371,6 +440,19 @@ function verifyRegistry(pkg, version, isDryRun) {
       encoding: 'utf8',
     });
     if (result.status === 0 && result.stdout.trim() === version) {
+      if (expectedIntegrity) {
+        // The registry must hold the qualified bytes, not merely the version.
+        const served = spawnSync('npm', ['view', `${pkg.name}@${version}`, 'dist.integrity'], {
+          encoding: 'utf8',
+        });
+        const integrity = served.status === 0 ? served.stdout.trim() : '';
+        if (integrity !== expectedIntegrity)
+          return {
+            ok: false,
+            reason: `registry serves ${pkg.name}@${version} with integrity ${integrity || '<unreadable>'}, but the qualified tarball is ${expectedIntegrity}`,
+          };
+        logInfo('registry.verify.integrity_ok', { pkg: pkg.name, version, integrity });
+      }
       logInfo('registry.verify.ok', { pkg: pkg.name, version, attempts: attempt });
       return { ok: true };
     }
@@ -517,33 +599,56 @@ function main() {
   logInfo('validation.ok', {});
 
   // ---------------------------------------------------------------------------
-  // Phase 3: Build + prepublish smoke. Failure -> delete tag, exit 20.
+  // Phase 3: Select what will be published. Failure -> delete tag, exit 20.
+  //
+  // In GitHub Actions the release publishes the tarball the qualification job
+  // packed, installed and upgraded, identified by its digest. Nothing is built
+  // here, so the bytes that were tested are the bytes that are uploaded. A
+  // workflow run without that tarball is refused rather than rebuilt: a second
+  // build is a second artifact that no qualification saw.
+  // Outside Actions (a local or emergency publish) there is no qualification
+  // job to hand a tarball over, so the package is built and smoke-tested here.
   // ---------------------------------------------------------------------------
-  const buildStep = runStep('build', 'npx', ['turbo', 'run', 'build', `--filter=${pkg.name}...`]);
-  if (!buildStep.ok) {
-    logError('build.failed', { exit_code: buildStep.exitCode });
+  const refuseBeforePublish = (event, fields) => {
+    logError(event, fields);
     const del = deleteTagFromOrigin(tag, isDryRun);
     if (!del.ok) {
       logError('tag.delete.failed', { reason: del.reason });
       process.exit(21);
     }
     process.exit(20);
-  }
-
-  const smokeStep = runStep('prepublish_smoke', 'npm', [
-    'run',
-    'smoke:fresh-install',
-    '-w',
-    pkg.name,
-  ]);
-  if (!smokeStep.ok) {
-    logError('smoke.failed', { exit_code: smokeStep.exitCode });
-    const del = deleteTagFromOrigin(tag, isDryRun);
-    if (!del.ok) {
-      logError('tag.delete.failed', { reason: del.reason });
-      process.exit(21);
-    }
-    process.exit(20);
+  };
+  let candidate = null;
+  if (process.env.CAWS_RELEASE_TARBALL) {
+    const checked = verifyCandidate({
+      file: path.resolve(process.env.CAWS_RELEASE_TARBALL),
+      expectedSha256: process.env.CAWS_RELEASE_TARBALL_SHA256,
+      name: pkg.name,
+      version,
+    });
+    if (!checked.ok) refuseBeforePublish('candidate.refused', { reason: checked.reason });
+    candidate = checked;
+    logInfo('candidate.selected', {
+      file: candidate.file,
+      sha256: candidate.sha256,
+      integrity: candidate.integrity,
+      size_bytes: candidate.sizeBytes,
+    });
+  } else if (process.env.GITHUB_ACTIONS === 'true') {
+    refuseBeforePublish('candidate.missing', {
+      reason:
+        'CAWS_RELEASE_TARBALL is not set. The release job publishes the tarball selected by the qualification job; download the candidate artifact and pass its path and CAWS_RELEASE_TARBALL_SHA256.',
+    });
+  } else {
+    const buildStep = runStep('build', 'npx', ['turbo', 'run', 'build', `--filter=${pkg.name}...`]);
+    if (!buildStep.ok) refuseBeforePublish('build.failed', { exit_code: buildStep.exitCode });
+    const smokeStep = runStep('prepublish_smoke', 'npm', [
+      'run',
+      'smoke:fresh-install',
+      '-w',
+      pkg.name,
+    ]);
+    if (!smokeStep.ok) refuseBeforePublish('smoke.failed', { exit_code: smokeStep.exitCode });
   }
 
   // ---------------------------------------------------------------------------
@@ -578,7 +683,7 @@ function main() {
       // rather than silently changing which auth path npm takes.
       credentials_removed: removed,
     });
-    const publishStep = runStep('npm_publish', 'npm', publicationArgs(version), {
+    const publishStep = runStep('npm_publish', 'npm', publicationArgs(version, candidate?.file), {
       cwd: path.join(rootDir, pkg.pkgPath),
       // envExact, not env: the guarantee is that no inherited credential
       // reaches npm, which requires replacing the environment rather than
@@ -605,7 +710,7 @@ function main() {
   // ---------------------------------------------------------------------------
   let postPublishFailures = [];
 
-  const verify = verifyRegistry(pkg, version, isDryRun);
+  const verify = verifyRegistry(pkg, version, isDryRun, candidate?.integrity);
   if (!verify.ok) {
     logError('registry.verify.failed', { reason: verify.reason });
     postPublishFailures.push({

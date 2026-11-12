@@ -6,7 +6,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch: {}
-  workflow_call: {}
+  workflow_call:
+    outputs:
+      # The one tarball this run packed, installed and upgraded. A caller that
+      # publishes must upload these bytes, found in the candidate-<sha> artifact.
+      tarball-sha256:
+        description: sha256 of candidate.tgz in the candidate-<sha> artifact
+        value: ${{ jobs.candidate-package.outputs.tarball-sha256 }}
 
 permissions:
   contents: read

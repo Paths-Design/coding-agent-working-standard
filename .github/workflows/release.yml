@@ -7,9 +7,9 @@ name: Release
 #   1. parses the tag
 #   2. validates packages/caws-cli/package.json version equals the tag
 #   3. validates packages/caws-cli/CHANGELOG.md has a section for the version
-#   4. builds caws-cli
-#   5. runs the prepublish fresh-install smoke
-#   6. runs `npm publish --provenance`
+#   4. downloads the tarball the qualification job packed and tested
+#   5. checks it against the digest that job reported
+#   6. runs `npm publish <that tarball> --provenance` (nothing is rebuilt)
 #   7. polls `npm view` to verify registry has the version
 #   8. creates a GitHub Release with the CHANGELOG section as body
 #
@@ -200,6 +200,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Download the qualified candidate
+        # The tarball the qualification job packed once and every upgrade job
+        # installed. The publish script uploads these bytes and builds nothing.
+        uses: actions/download-artifact@v4
+        with:
+          name: candidate-${{ github.sha }}
+          path: selected-candidate
+
       - name: Run tag-driven publish
         # Auth is OIDC trusted publishing: id-token: write + npm >= 11.5.1 +
         # the trusted publisher configured on npmjs.com for this repo and
@@ -208,6 +216,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CAWS_RELEASE_SCRIPT_MARKER: ${{ runner.temp }}/caws-release-script-ran
+          # The script refuses unless this file hashes to the digest the
+          # qualification job reported, and refuses to run without it.
+          CAWS_RELEASE_TARBALL: ${{ github.workspace }}/selected-candidate/candidate.tgz
+          CAWS_RELEASE_TARBALL_SHA256: ${{ needs.qualification.outputs.tarball-sha256 }}
         run: |
           set -e
           node scripts/release-tag-publish.mjs "${GITHUB_REF_NAME}"

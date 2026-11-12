@@ -10,7 +10,9 @@ import {
   releaseArgs,
   publishEnvironment,
   isRegistryCredential,
+  verifyCandidate,
 } from './release-tag-publish.mjs';
+import crypto from 'node:crypto';
 import { isolatedEnvironment } from '../packages/caws-cli/scripts/runtime-upgrade-smoke.mjs';
 
 test('stable and prerelease publications select distinct npm channels', () => {
@@ -350,5 +352,271 @@ test('an unwritable marker refuses rather than leaving disposition ambiguous', (
     assert.match(result.stdout, /release\.marker_unwritable/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The release publishes the tarball qualification selected, by digest.
+// ---------------------------------------------------------------------------
+
+const PACKAGE = '@paths.design/caws-cli';
+const VERSION = '12.2.0-rc.1';
+const sha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const integrityOf = file =>
+  'sha512-' + crypto.createHash('sha512').update(fs.readFileSync(file)).digest('base64');
+
+/** A real gzip tarball holding package/package.json with the given manifest. */
+function packCandidate(directory, manifest = { name: PACKAGE, version: VERSION }) {
+  const stage = fs.mkdtempSync(path.join(directory, 'stage-'));
+  fs.mkdirSync(path.join(stage, 'package'));
+  fs.writeFileSync(path.join(stage, 'package/package.json'), JSON.stringify(manifest));
+  const file = path.join(directory, `candidate-${path.basename(stage)}.tgz`);
+  const packed = spawnSync('tar', ['-czf', file, '-C', stage, 'package']);
+  assert.equal(packed.status, 0, String(packed.stderr));
+  return file;
+}
+
+/**
+ * A release checkout with recording stand-ins for npm, npx and gh. Every
+ * invocation is appended to calls.jsonl; `npm view ... dist.integrity`
+ * answers with `servedIntegrity`.
+ */
+function releaseFixture(servedIntegrity) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-publish-candidate-')));
+  const write = (name, content) => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, content);
+    return file;
+  };
+  write(
+    'scripts/release-tag-publish.mjs',
+    fs.readFileSync(new URL('./release-tag-publish.mjs', import.meta.url))
+  );
+  write('packages/caws-cli/package.json', JSON.stringify({ name: PACKAGE, version: VERSION }));
+  write('packages/caws-cli/CHANGELOG.md', `## [${VERSION}]\n\nCandidate.\n`);
+  const calls = path.join(root, 'calls.jsonl');
+  for (const command of ['npm', 'npx', 'gh']) {
+    const file = write(
+      `bin/${command}`,
+      `#!${process.execPath}\n` +
+        `const fs = require('node:fs'); const args = process.argv.slice(2);\n` +
+        `fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify({ command: ${JSON.stringify(command)}, args }) + '\\n');\n` +
+        `if (${JSON.stringify(command)} === 'npm' && args[0] === 'view')\n` +
+        `  process.stdout.write((args.includes('dist.integrity') ? ${JSON.stringify(servedIntegrity ?? '')} : ${JSON.stringify(VERSION)}) + '\\n');\n`
+    );
+    fs.chmodSync(file, 0o755);
+  }
+  return {
+    root,
+    run(extra) {
+      const result = spawnSync(
+        process.execPath,
+        [path.join(root, 'scripts/release-tag-publish.mjs'), `caws-cli-v${VERSION}`],
+        {
+          cwd: root,
+          encoding: 'utf8',
+          timeout: 60000,
+          env: {
+            ...isolatedEnvironment(root),
+            PATH: `${path.join(root, 'bin')}:/usr/bin:/bin`,
+            GITHUB_REPOSITORY: 'fixture/repo',
+            GITHUB_ACTIONS: 'true',
+            ACTIONS_ID_TOKEN_REQUEST_URL: 'https://fixture.invalid/token',
+            ...extra,
+          },
+        }
+      );
+      const recorded = fs.existsSync(calls)
+        ? fs
+            .readFileSync(calls, 'utf8')
+            .trim()
+            .split('\n')
+            .map(line => JSON.parse(line))
+        : [];
+      return { result, calls: recorded };
+    },
+    cleanup: () => fs.rmSync(root, { recursive: true, force: true }),
+  };
+}
+const publishes = calls => calls.filter(call => call.command === 'npm' && call.args[0] === 'publish');
+const tagDeletes = calls => calls.filter(call => call.command === 'gh' && call.args.includes('DELETE'));
+
+test('a tarball is published with its path and without package scripts', () => {
+  assert.deepEqual(publicationArgs('12.2.0', '/qualified/candidate.tgz'), [
+    'publish',
+    '/qualified/candidate.tgz',
+    '--ignore-scripts',
+    '--access',
+    'public',
+    '--provenance',
+    '--tag',
+    'latest',
+  ]);
+});
+
+test('the candidate is admitted only with the qualified digest and the tagged manifest', () => {
+  const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-candidate-')));
+  try {
+    const file = packCandidate(directory);
+    const expectedSha256 = sha256(file);
+    assert.deepEqual(verifyCandidate({ file, expectedSha256, name: PACKAGE, version: VERSION }), {
+      ok: true,
+      file,
+      sha256: expectedSha256,
+      integrity: integrityOf(file),
+      sizeBytes: fs.statSync(file).size,
+    });
+    const refusal = input =>
+      verifyCandidate({ file, expectedSha256, name: PACKAGE, version: VERSION, ...input });
+    assert.match(refusal({ expectedSha256: undefined }).reason, /CAWS_RELEASE_TARBALL_SHA256 is missing/);
+    assert.match(refusal({ expectedSha256: 'abc' }).reason, /is not a sha256 digest/);
+    assert.match(
+      refusal({ expectedSha256: 'f'.repeat(64) }).reason,
+      new RegExp(`has sha256 ${expectedSha256}, but qualification selected f{64}`)
+    );
+    assert.match(
+      refusal({ version: '12.2.0' }).reason,
+      /holds @paths\.design\/caws-cli@12\.2\.0-rc\.1, but the tag names @paths\.design\/caws-cli@12\.2\.0$/
+    );
+    assert.match(refusal({ name: 'other' }).reason, /but the tag names other@12\.2\.0-rc\.1$/);
+    assert.match(refusal({ file: directory, expectedSha256 }).reason, /is not a regular file/);
+    assert.match(
+      refusal({ file: path.join(directory, 'absent.tgz') }).reason,
+      /cannot read the candidate tarball/
+    );
+    // Bytes with the right digest that are not a package tarball.
+    const junk = path.join(directory, 'junk.tgz');
+    fs.writeFileSync(junk, 'not a tarball');
+    assert.match(
+      refusal({ file: junk, expectedSha256: sha256(junk) }).reason,
+      /cannot read package\/package\.json/
+    );
+    for (const input of [{ expectedSha256: 'f'.repeat(64) }, { version: '12.2.0' }])
+      assert.equal(refusal(input).ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('the release job uploads the qualified tarball and builds nothing', () => {
+  const fixture = releaseFixture();
+  try {
+    const candidate = packCandidate(fixture.root);
+    // The registry answers with the integrity of the bytes that were uploaded.
+    const { result, calls } = releaseFixtureRun(fixture, candidate, integrityOf(candidate));
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual(
+      publishes(calls).map(call => call.args),
+      [publicationArgs(VERSION, candidate)]
+    );
+    // No build, no smoke: nothing ran between qualification and upload.
+    assert.deepEqual(
+      calls.filter(call => call.command === 'npx'),
+      []
+    );
+    assert.deepEqual(
+      calls.filter(call => call.command === 'npm' && call.args[0] === 'run'),
+      []
+    );
+    assert.deepEqual(tagDeletes(calls), []);
+    assert.match(result.stdout, /"msg":"candidate\.selected"/);
+    assert.match(result.stdout, /"msg":"registry\.verify\.integrity_ok"/);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+/** Runs a fixture whose stand-in registry serves `integrity` for the candidate. */
+function releaseFixtureRun(fixture, candidate, integrity) {
+  const npm = path.join(fixture.root, 'bin/npm');
+  fs.writeFileSync(
+    npm,
+    fs.readFileSync(npm, 'utf8').replace(/args\.includes\('dist\.integrity'\) \? "[^"]*"/, () => {
+      return `args.includes('dist.integrity') ? ${JSON.stringify(integrity)}`;
+    })
+  );
+  return fixture.run({
+    CAWS_RELEASE_TARBALL: candidate,
+    CAWS_RELEASE_TARBALL_SHA256: sha256(candidate),
+  });
+}
+
+test('a release run without the qualified tarball is refused, not rebuilt', () => {
+  const fixture = releaseFixture();
+  try {
+    const { result, calls } = fixture.run({});
+    assert.equal(result.status, 20, result.stdout + result.stderr);
+    assert.match(result.stdout, /"msg":"candidate\.missing"/);
+    assert.deepEqual(publishes(calls), []);
+    assert.deepEqual(
+      calls.filter(call => call.command === 'npx'),
+      []
+    );
+    assert.equal(tagDeletes(calls).length, 1);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('a tarball that differs from the qualified digest is never uploaded', () => {
+  const fixture = releaseFixture();
+  try {
+    const candidate = packCandidate(fixture.root);
+    const qualified = sha256(candidate);
+    fs.appendFileSync(candidate, 'changed after qualification');
+    const { result, calls } = fixture.run({
+      CAWS_RELEASE_TARBALL: candidate,
+      CAWS_RELEASE_TARBALL_SHA256: qualified,
+    });
+    assert.equal(result.status, 20, result.stdout + result.stderr);
+    assert.match(result.stdout, /"msg":"candidate\.refused"/);
+    assert.match(result.stdout, new RegExp(`but qualification selected ${qualified}`));
+    assert.deepEqual(publishes(calls), []);
+    assert.equal(tagDeletes(calls).length, 1);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('a registry serving different bytes fails the run and keeps the tag', () => {
+  const fixture = releaseFixture();
+  try {
+    const candidate = packCandidate(fixture.root);
+    const { result, calls } = releaseFixtureRun(fixture, candidate, 'sha512-somethingelse');
+    assert.equal(result.status, 30, result.stdout + result.stderr);
+    assert.equal(publishes(calls).length, 1);
+    assert.match(
+      result.stdout,
+      /registry serves @paths\.design\/caws-cli@12\.2\.0-rc\.1 with integrity sha512-somethingelse, but the qualified tarball is sha512-/
+    );
+    // The upload happened, so the tag is the provenance anchor and stays.
+    assert.deepEqual(tagDeletes(calls), []);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('outside GitHub Actions the package is built and smoke-tested before publishing', () => {
+  const fixture = releaseFixture();
+  try {
+    const { result, calls } = fixture.run({ GITHUB_ACTIONS: '' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual(
+      calls.filter(call => call.command === 'npx').map(call => call.args.slice(0, 3)),
+      [['turbo', 'run', 'build']]
+    );
+    assert.deepEqual(
+      calls
+        .filter(call => call.command === 'npm' && call.args[0] === 'run')
+        .map(call => call.args[1]),
+      ['smoke:fresh-install']
+    );
+    assert.deepEqual(
+      publishes(calls).map(call => call.args),
+      [publicationArgs(VERSION)]
+    );
+  } finally {
+    fixture.cleanup();
   }
 });

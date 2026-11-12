@@ -55,6 +55,47 @@ test('release qualification requires the same dependency audit as PR CI', () => 
   ).toBe(true);
 });
 
+test('the release job publishes the tarball qualification selected and never builds one', () => {
+  const load = (name) =>
+    yaml.load(fs.readFileSync(path.join(repoRoot, '.github/workflows', name), 'utf8'));
+  const qualification = load('release-qualification.yml');
+  const release = load('release.yml');
+  // The qualification workflow hands its caller the digest of the one tarball
+  // it packed, and uploads that tarball as candidate-<sha>.
+  expect(qualification.on.workflow_call.outputs['tarball-sha256'].value).toBe(
+    '${{ jobs.candidate-package.outputs.tarball-sha256 }}'
+  );
+  expect(qualification.jobs['candidate-package'].outputs['tarball-sha256']).toBe(
+    '${{ steps.selected.outputs.sha256 }}'
+  );
+  const upload = qualification.jobs['candidate-package'].steps.find((step) =>
+    String(step.uses).startsWith('actions/upload-artifact@')
+  );
+  expect(upload.with).toMatchObject({
+    name: 'candidate-${{ github.sha }}',
+    path: 'candidate-package/',
+  });
+  const steps = release.jobs.release.steps;
+  expect(release.jobs.release.needs).toContain('qualification');
+  const download = steps.findIndex((step) =>
+    String(step.uses).startsWith('actions/download-artifact@')
+  );
+  const publish = steps.findIndex((step) => step.name === 'Run tag-driven publish');
+  expect(download).toBeGreaterThan(-1);
+  expect(publish).toBeGreaterThan(download);
+  expect(steps[download].with).toEqual({
+    name: 'candidate-${{ github.sha }}',
+    path: 'selected-candidate',
+  });
+  expect(steps[publish].env).toMatchObject({
+    CAWS_RELEASE_TARBALL: '${{ github.workspace }}/selected-candidate/candidate.tgz',
+    CAWS_RELEASE_TARBALL_SHA256: '${{ needs.qualification.outputs.tarball-sha256 }}',
+  });
+  // No step of the release job builds, packs or smoke-tests a second artifact.
+  const commands = steps.map((step) => step.run || '').join('\n');
+  expect(commands).not.toMatch(/npm run build|turbo run build|npm pack|smoke/);
+});
+
 test.each([0, 17])('real npm routes the workflow audit to root and preserves exit %s', (status) => {
   const root = fixture();
   fs.mkdirSync(path.join(root, 'packages/fixture'), { recursive: true });
