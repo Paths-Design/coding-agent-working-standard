@@ -181,6 +181,17 @@ status`, message delivery, the peer notice) report the later of that file's
   (`LD_LIBRARY_PATH`, `DYLD_*`) names that variable and says to unset it or ask
   for approval. The refusal previously said only that executable selection was
   not proven, which gave nothing to act on.
+- On Linux, `worktree-write-guard` and `reset-strikes` read file times with the
+  GNU `stat` form first. The BSD-first form printed filesystem text there and
+  the guard reported "File: unbound variable" instead of its risk line.
+- zcode, dsh and unrecognized surfaces resolve a relative Bash target against
+  the project again when the payload carries no working directory. A later
+  change had made every surface ask. A working directory that is sent but does
+  not exist is asked about on every surface.
+- When the command analyzer refuses, the guard states the analyzer's reason
+  after the issue code. Under Codex this now reads that the hook payload does
+  not bind the final shell, startup and execution directory.
+- Shared pack 139.
 - The typed command classifier answers only for `block-dangerous.sh`. Typed
   handlers answer only for the shell handler bytes they were reviewed against;
   for the handlers that ship, the Codex heartbeat on Bash calls is the one typed

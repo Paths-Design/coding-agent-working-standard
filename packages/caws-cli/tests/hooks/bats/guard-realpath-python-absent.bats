@@ -297,7 +297,11 @@ bash_payload() {
 # Usage: rp_guard <guard-dir> <guard.sh> <PATH> <session> <payload-json>
 rp_guard() {
   local dir="$1" guard="$2" path_value="$3" session="$4" payload="$5"
-  local tool file cmd
+  local tool file cmd payload_before repo_before
+  # What exists before the guard runs. A case may create its own target; the
+  # guard must not create or remove anything.
+  payload_before="$(ls -a "$RP_REPO/.caws/worktrees/f-wt/src" 2>&1 || true)"
+  repo_before="$(ls -a "$RP_REPO/src" 2>&1 || true)"
   tool="$(jq -r '.tool_name' <<<"$payload")"
   file="$(jq -r '.tool_input.file_path // ""' <<<"$payload")"
   cmd="$(jq -r '.tool_input.command // ""' <<<"$payload")"
@@ -315,9 +319,13 @@ rp_guard() {
     bash -c 'cd "$1" && bash "$2" </dev/null' _ "$RP_SELF" "$dir/$guard"
   printf '# %s session=%s fail_nth=%s status=%s\n# output=%s\n' \
     "$guard" "$session" "${RP_FAIL_NTH:-}" "$status" "$output" >&3
-  # The guards adjudicate and never write: no target directory may appear.
-  [[ ! -e "$RP_REPO/.caws/worktrees/f-wt/src" ]]
-  [[ ! -e "$RP_REPO/src" ]]
+  # The guards adjudicate and never write: the target directories are as they
+  # were. `[ ]`, not `[[ ]]`: under bash 3.2 a false `[[ ]]` that is not the
+  # last statement does not fail the test.
+  [ "$(ls -a "$RP_REPO/.caws/worktrees/f-wt/src" 2>&1 || true)" = "$payload_before" ] ||
+    { printf 'guard changed %s\n' "$RP_REPO/.caws/worktrees/f-wt/src"; return 1; }
+  [ "$(ls -a "$RP_REPO/src" 2>&1 || true)" = "$repo_before" ] ||
+    { printf 'guard changed %s\n' "$RP_REPO/src"; return 1; }
 }
 
 # Usage: rp_sweep <mode> <guard.sh> <session> <payload-json> <expected-pass-status> <label>...

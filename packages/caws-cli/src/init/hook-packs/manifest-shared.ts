@@ -708,7 +708,14 @@ import { isAdapterCoveredSurface } from './types';
 // refusal does not infer write operands from path mentions or recommend an
 // unadmitted script execution route, and it arms the latch on a repeat only
 // when it offered a rewrite the agent can use.
-export const SHARED_PACK_VERSION = 138;
+// v139: worktree-write-guard.sh and reset-strikes.sh read a file's time with
+// the GNU stat form first; the BSD-first chain printed filesystem text on
+// Linux and failed the arithmetic that followed. lib/bash-mutation-analysis.sh
+// leaves the "payload carries cwd" decision to the surface list, so zcode, dsh
+// and unknown surfaces resolve a relative target against the project again
+// instead of asking, and an analyzer failure states the analyzer's reason
+// after the issue code.
+export const SHARED_PACK_VERSION = 139;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

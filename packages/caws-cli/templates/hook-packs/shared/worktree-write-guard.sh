@@ -658,7 +658,11 @@ _guard_throttled_risk() {
   if [[ "$ttl" != "0" ]] && [[ -f "$cache_file" ]]; then
     local now mtime age
     now=$(date +%s 2>/dev/null || echo 0)
-    mtime=$(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo 0)
+    # GNU form first. Under GNU stat, `-f` means filesystem status: it prints
+    # a block of text and fails, and a BSD-first chain then appended the real
+    # value to that text. BSD stat rejects `-c` without printing anything.
+    mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)
+    [[ "$mtime" =~ ^[0-9]+$ ]] || mtime=0
     age=$(( now - mtime ))
     if [[ "$age" -ge 0 ]] && [[ "$age" -lt "$ttl" ]]; then
       cat "$cache_file" 2>/dev/null

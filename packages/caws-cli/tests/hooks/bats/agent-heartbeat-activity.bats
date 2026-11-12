@@ -233,8 +233,12 @@ _hb_prime() {
 @test "heartbeat-activity: a call that owes nothing does not strand a payload larger than a pipe" {
   _hb_prime
   local big="$CAWS_TEST_HOME/big-payload-$BATS_TEST_NUMBER.json"
-  jq -nc --arg s "$HB_SESSION" --arg c "$(head -c 300000 /dev/zero | tr '\0' 'x')" \
-    '{session_id:$s, tool_name:"Write", tool_input:{file_path:"x", content:$c}}' > "$big"
+  # The content goes in on standard input: 300 KB is over Linux's limit for
+  # one argument.
+  head -c 300000 /dev/zero | tr '\0' 'x' |
+    jq -Rsc --arg s "$HB_SESSION" \
+      '{session_id:$s, tool_name:"Write", tool_input:{file_path:"x", content:.}}' > "$big"
+  [ "$(wc -c < "$big" | tr -d ' ')" -gt 300000 ]
   # pipefail reports the writer: 141 if the handler exits with the pipe unread.
   run env \
     CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
