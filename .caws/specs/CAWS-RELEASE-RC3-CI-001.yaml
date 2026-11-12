@@ -1,0 +1,29 @@
+id: CAWS-RELEASE-RC3-CI-001
+title: 'Make release qualification pass on Linux CI for the 12.2.0-rc.3 branch'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-12T07:40:00.974Z'
+updated_at: '2026-11-12T07:40:00.974Z'
+created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
+blast_radius:
+  modules:
+    - 'release lane: Linux CI failures in copy analysis, portable native image tests, hook pytest and mutation contract'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/'
+    - 'packages/caws-native/'
+    - 'scripts/'
+    - '.github/workflows/'
+    - 'docs/'
+  out: []
+invariants:
+  - 'A refusal names what is wrong; a test passes or fails on the code under test, not on the runner''s inherited environment or platform.'
+acceptance:
+  - id: A1
+    given: 'the release branch on a Linux runner with LD_LIBRARY_PATH set'
+    when: 'Release Qualification runs'
+    then: 'the Candidate tests and contracts job passes, with copy refusals naming the inherited variable that caused them and darwin-only native image cases not run as failures on Linux'
+non_functional: {}
+contracts: []
