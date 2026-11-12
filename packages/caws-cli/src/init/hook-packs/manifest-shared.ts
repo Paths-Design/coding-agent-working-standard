@@ -697,7 +697,12 @@ import { isAdapterCoveredSurface } from './types';
 // 15 seconds or the lease file was replaced since. The mailbox is polled on a
 // full heartbeat and when messages.jsonl changed since the session's last
 // poll. Each CLI call is ended after 3 seconds.
-export const SHARED_PACK_VERSION = 137;
+// v138: lib/bash-mutation-targets.sh analyzes complete literal Python heredoc
+// programs with the Python path analysis, keeps the shell text after the
+// heredoc under shell target scanning, and treats the proven straight-line
+// pathlib read/replace/write idiom as an edit of the named file rather than a
+// write to the replacement text.
+export const SHARED_PACK_VERSION = 138;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
