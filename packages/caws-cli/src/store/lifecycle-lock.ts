@@ -147,13 +147,22 @@ function clearAbandonedReclaimer(reclaimPath: string, staleThresholdMs: number):
         : ageMs > staleThresholdMs && provablyDead(owner);
     if (!abandoned) return false;
     const aside = `${reclaimPath}.abandoned-${process.pid}-${Date.now()}`;
+    // Another caller may have cleared the inspected marker and created its
+    // own since it was read. Look again immediately before the move, so a
+    // live successor is displaced only if it appears between these two calls.
+    if (!sameFile(stat, fs.lstatSync(reclaimPath, { bigint: true }))) return false;
     fs.renameSync(reclaimPath, aside);
     if (!sameFile(stat, fs.lstatSync(aside, { bigint: true }))) {
       try {
         fs.linkSync(aside, reclaimPath);
       } catch {
-        /* A successor already holds the name; the displaced reclaimer still
-           re-verifies the lock file before its one unlink. */
+        /* A third caller took the name while it was absent, so two reclaimers
+           now run at once. Each re-verifies the lock (aged, owner dead, same
+           file) before its single unlink, which leaves one remaining window:
+           the second unlink landing after a new holder acquired. Reaching it
+           needs a killed reclaimer plus four lifecycle commands interleaved
+           between adjacent system calls; rename, link and exclusive create
+           cannot close it without a lock that itself needs recovery. */
       }
       fs.unlinkSync(aside);
       return false;

@@ -184,11 +184,15 @@ const rendererProofIds = ['codex-stock', 'codex-custom'];
 
 /**
  * What a harness does with a PreToolUse answer: the tool runs unless the hook
- * exits non-zero or answers with a block, deny or ask. Output that is not a
- * decision does not stop the tool, so it counts as admitted here too.
+ * exits 2 or answers with a block, deny or ask. Claude Code treats every other
+ * non-zero exit, and a hook killed by a signal, as a non-blocking error and
+ * runs the tool, so those count as admitted: a guard that fails that way must
+ * fail this qualification rather than pass as a refusal. Output that is not a
+ * decision does not stop the tool either.
  */
 export function harnessAdmits(result) {
-  if (result.status !== 0) return false;
+  if (result.status === 2) return false;
+  if (result.status !== 0) return true;
   const text = String(result.stdout ?? '').trim();
   if (!text) return true;
   let reply;

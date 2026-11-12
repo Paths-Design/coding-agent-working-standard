@@ -733,8 +733,12 @@ test('a hook answer admits the tool unless it exits non-zero or decides against 
   assert.equal(answer(0, 'plain text'), true);
   assert.equal(answer(0, 'null'), true);
   assert.equal(answer(2), false);
-  assert.equal(answer(1), false);
-  assert.equal(answer(null), false);
+  // Only exit 2 blocks. A guard that crashes with another status, or is
+  // killed, does not stop the tool in the harness, so it does not stop it here.
+  assert.equal(answer(1), true);
+  assert.equal(answer(127), true);
+  assert.equal(answer(null), true);
+  assert.equal(answer(2, JSON.stringify({ hookSpecificOutput: { permissionDecision: 'allow' } })), false);
   assert.equal(answer(0, JSON.stringify({ decision: 'block', reason: 'no' })), false);
   assert.equal(answer(0, decision('deny')), false);
   assert.equal(answer(0, decision('ask')), false);
@@ -748,6 +752,10 @@ test('the forbidden write is performed exactly when the hook admitted it', () =>
     const write = { file_path: target, content: 'forbidden fixture write' };
     assert.equal(applyAdmittedWrite({ status: 2, stdout: '' }, write), false);
     assert.equal(fs.existsSync(target), false);
+    // A guard that exits 1 has not blocked anything: the write is performed.
+    const crashed = { file_path: path.join(root, 'crashed.txt'), content: 'x' };
+    assert.equal(applyAdmittedWrite({ status: 1, stdout: '' }, crashed), true);
+    assert.equal(fs.readFileSync(crashed.file_path, 'utf8'), 'x');
     assert.equal(
       applyAdmittedWrite({ status: 0, stdout: JSON.stringify({ decision: 'block' }) }, write),
       false

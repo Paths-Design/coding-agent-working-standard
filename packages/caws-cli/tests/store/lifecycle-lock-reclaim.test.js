@@ -152,19 +152,28 @@ describe('the refusal says what is in the way', () => {
 describe('publication fence', () => {
   test('a lock released during the wait is acquired instead of refused', () => {
     const f = fixture();
-    // A detached helper removes the lock after 60ms; five attempts 50ms apart outlast it.
+    // A detached helper removes the lock 10ms after it reports that it is
+    // running; five attempts 50ms apart outlast that. The launcher returns only
+    // once the helper has reported, so process start-up time is not in the race.
     fs.writeFileSync(f.lock, owner(process.pid));
+    const ready = path.join(os.tmpdir(), `caws-lock-helper-ready-${process.pid}-${Date.now()}`);
     const helper = spawnSync(
       process.execPath,
       [
         '-e',
-        `require('child_process').spawn(process.execPath, ['-e',
-          'setTimeout(() => require("fs").unlinkSync(process.argv[1]), 60)', process.argv[1]],
-          { detached: true, stdio: 'ignore' }).unref();`,
+        `const fs = require('fs');
+         require('child_process').spawn(process.execPath, ['-e',
+          'require("fs").writeFileSync(process.argv[2], ""); setTimeout(() => require("fs").unlinkSync(process.argv[1]), 10)',
+          process.argv[1], process.argv[2]],
+          { detached: true, stdio: 'ignore' }).unref();
+         const until = Date.now() + 20000;
+         while (!fs.existsSync(process.argv[2])) if (Date.now() > until) process.exit(3);`,
         f.lock,
+        ready,
       ],
       { encoding: 'utf8' }
     );
+    fs.rmSync(ready, { force: true });
     expect(helper.status).toBe(0);
     const result = withLifecyclePublicationFence(f.directory, (current) => ok(current()));
     expect(result).toEqual({ ok: true, value: true });
