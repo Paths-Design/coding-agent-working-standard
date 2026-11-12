@@ -1,10 +1,11 @@
 id: CAWS-PYTHON-HEREDOC-TARGETS-001
 title: 'Preserve Python heredoc boundaries in legacy mutation diagnostics'
 mode: fix
-lifecycle_state: active
-worktree: python-heredoc-targets
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed d37a6913e bounded legacy Python heredoc/str.replace diagnostic repair. 62 regression tests and five gates pass; exact original command SHA71fff7b9 changes guard2 fabricated0f to0 without launch. Installed immutable7e3b11ce via retained normal installer, verified113 members and exactly one changed helper, native positive executes and true foreign write refuses before dispatch. Native registration hashes unchanged, previous0c338b retained. A1/A2 records and events16420/16421 read back. General native-executor qualification, arbitrary Python effect/custody and RC registry repairs remain outside this completed slice.'
 created_at: '2026-11-12T03:05:47.221Z'
-updated_at: '2026-11-12T03:08:51.123Z'
+updated_at: '2026-11-12T04:45:34.570Z'
 created_by_session: '01a1cdb1-5a83-71f0-a80b-ea63a5a7d566'
 blast_radius:
   modules:
