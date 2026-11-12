@@ -83,14 +83,27 @@ Once qualification succeeds, the publish job:
 1. Checks out the tag SHA (not a branch)
 2. Validates `packages/caws-cli/package.json` version equals the tag version
 3. Validates `packages/caws-cli/CHANGELOG.md` has a section for the version
-4. Builds caws-cli via Turbo
-5. Runs prepublish fresh-install smoke
-   (`npm run smoke:fresh-install -w @paths.design/caws-cli`)
-6. Runs `npm publish --access public --provenance --tag <channel>` (`next` for
-   prereleases such as `12.2.0-rc.1`, `latest` for stable versions)
-7. Polls `npm view @paths.design/caws-cli@<version>` to confirm registry has it
+4. Downloads the `candidate-<sha>` artifact: the one tarball the qualification
+   `candidate-package` job packed and every upgrade cell installed
+5. Checks that tarball against the SHA-256 the qualification workflow reported
+   and against the tagged package name and version; a mismatch or a missing
+   tarball deletes the tag and publishes nothing
+6. Runs
+   `npm publish <candidate.tgz> --ignore-scripts --access public --provenance --tag <channel>`
+   (`next` for prereleases such as `12.2.0-rc.1`, `latest` for stable versions)
+7. Polls `npm view @paths.design/caws-cli@<version>` to confirm the registry has
+   the version and that its `dist.integrity` is the qualified tarball's
 8. Creates a GitHub Release with the CHANGELOG section as body, marking
    prereleases with `--prerelease`
+
+The publish job builds nothing. A second build would be a second artifact that
+no qualification job installed, so the bytes that were tested are the bytes that
+are uploaded. Run outside GitHub Actions (a local or emergency publish with a
+token), `scripts/release-tag-publish.mjs` has no qualification job to take a
+tarball from: it builds the package, runs
+`npm run smoke:fresh-install -w @paths.design/caws-cli` and publishes that
+build, unless `CAWS_RELEASE_TARBALL` and `CAWS_RELEASE_TARBALL_SHA256` name a
+qualified tarball.
 
 Qualification also runs on pull requests and pushes to `main`. The existing
 post-publication platform matrix is additional consumer observation; it cannot
@@ -117,24 +130,27 @@ Codex/Claude projects, replaces the package with the selected candidate, then
 tests machine installation, registration and project migration. It verifies
 preview purity, repeat operation stability, exact governance preservation,
 retained custom behavior, mixed migrated/unmigrated projects, linked worktrees,
-lifecycle rendering, delivery of one shared guard/renderer update to two
-projects, corrupt snapshot refusal and verified rollback. It uses disposable
-HOME, CAWS_HOME, Git configuration and npm configuration, with no inherited
-agent identity. The report records the platform, Node version, baseline version,
-candidate tarball SHA-256 and runtime digest. It also audits the detached
-upgraded consumer with `npm audit --omit=dev --audit-level=low`, requires zero
-findings, and records that consumer lockfile's hash. This checks the dependency
-graph actually installed by users, without workspace overrides. CI retains the
-report under a commit-named artifact; generated reports are not committed to the
-source ledger. The `candidate-package` CI job builds and packs the CLI once. All
-six upgrade cells download that artifact and receive its expected SHA-256 from
-the producer job output. The runner stages a private byte-for-byte copy, checks
-the installed npm lockfile's local resolution and SHA-512 integrity, and retains
-the selected tarball. A local invocation without `--tarball` builds its artifact
-selection through `npm pack`; use the pinned form above when comparing cells or
-candidates. These installed subprocess scenarios exercise legacy adapter
-compatibility and preservation. They do not install a compiled native image or
-establish genuine native harness execution.
+refusal of a write to a protected path (after each guard answer the runner
+performs that write exactly when the answer admits it, so an admitting guard
+changes the retained bytes and fails the run; one admitted control write shows
+the write is real), lifecycle rendering, delivery of one shared guard/renderer
+update to two projects, corrupt snapshot refusal and verified rollback. It uses
+disposable HOME, CAWS_HOME, Git configuration and npm configuration, with no
+inherited agent identity. The report records the platform, Node version,
+baseline version, candidate tarball SHA-256 and runtime digest. It also audits
+the detached upgraded consumer with `npm audit --omit=dev --audit-level=low`,
+requires zero findings, and records that consumer lockfile's hash. This checks
+the dependency graph actually installed by users, without workspace overrides.
+CI retains the report under a commit-named artifact; generated reports are not
+committed to the source ledger. The `candidate-package` CI job builds and packs
+the CLI once. All six upgrade cells download that artifact and receive its
+expected SHA-256 from the producer job output. The runner stages a private
+byte-for-byte copy, checks the installed npm lockfile's local resolution and
+SHA-512 integrity, and retains the selected tarball. A local invocation without
+`--tarball` builds its artifact selection through `npm pack`; use the pinned
+form above when comparing cells or candidates. These installed subprocess
+scenarios exercise legacy adapter compatibility and preservation. They do not
+install a compiled native image or establish genuine native harness execution.
 
 Schema-v2 reports name a unique directory under
 `qualification-report.json.artifacts/` containing command inputs, exit statuses,
@@ -278,7 +294,7 @@ Failure handling depends on **when** the failure happens:
 | Release-job step before the publish script (checkout, `npm ci`, `gh` ref read) | DELETED by the `rollback` job                           | Untouched                                                       |
 | Tag refusal (any refused pattern)                                              | DELETED via `gh api`                                    | Untouched                                                       |
 | Pre-publish validation (steps 1–3)                                             | DELETED via `gh api`                                    | Untouched                                                       |
-| Build / smoke (steps 4–5)                                                      | DELETED                                                 | Untouched                                                       |
+| Candidate download or check (steps 4–5)                                        | DELETED                                                 | Untouched                                                       |
 | `npm publish` non-zero exit (step 6)                                           | **PRESERVED**                                           | Unknown; inspect registry and artifact identity before retrying |
 | Registry verify / GitHub Release (steps 7–8)                                   | **PRESERVED**                                           | Registry has the version                                        |
 

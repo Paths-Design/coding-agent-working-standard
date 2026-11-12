@@ -182,6 +182,45 @@ const guardedProofIds = [
 ];
 const rendererProofIds = ['codex-stock', 'codex-custom'];
 
+/**
+ * What a harness does with a PreToolUse answer: the tool runs unless the hook
+ * exits non-zero or answers with a block, deny or ask. Output that is not a
+ * decision does not stop the tool, so it counts as admitted here too.
+ */
+export function harnessAdmits(result) {
+  if (result.status !== 0) return false;
+  const text = String(result.stdout ?? '').trim();
+  if (!text) return true;
+  let reply;
+  try {
+    reply = JSON.parse(text);
+  } catch {
+    return true;
+  }
+  if (reply === null || typeof reply !== 'object') return true;
+  const decision = reply.hookSpecificOutput?.permissionDecision;
+  return !(
+    reply.decision === 'block' ||
+    reply.continue === false ||
+    decision === 'deny' ||
+    decision === 'ask'
+  );
+}
+
+/**
+ * Perform the Write the hook was asked about, exactly when the hook admitted
+ * it. Without this the target can never change, and "the protected bytes are
+ * unchanged" would hold for a guard that admits everything.
+ *
+ * @returns {boolean} whether the write was performed
+ */
+export function applyAdmittedWrite(result, toolInput) {
+  if (!harnessAdmits(result)) return false;
+  fs.mkdirSync(path.dirname(toolInput.file_path), { recursive: true });
+  fs.writeFileSync(toolInput.file_path, toolInput.content);
+  return true;
+}
+
 // Expectations are supplied by the executing scenario independently of its
 // retained manifest. This verifies custody, not native harness enforcement.
 export function verifyQualificationCustody(artifacts, expected) {
@@ -250,6 +289,13 @@ export function verifyQualificationCustody(artifacts, expected) {
     const scenario = expected.guards.find(({ id }) => id === record.id);
     const before = bytes(record.before, scenario.target);
     const after = bytes(record.after, scenario.target);
+    // The write was attempted the way a harness would: performed only if the
+    // guard admitted it. A refusal leaves it unperformed and the bytes intact.
+    assert.equal(
+      record.writeApplied,
+      false,
+      `Guard admitted the forbidden write, which was then performed: ${record.id}`
+    );
     assert.deepEqual(before, Buffer.from(scenario.sentinel));
     assert.deepEqual(after, before, `Protected target changed: ${record.id}`);
     assert.equal(record.before.mode, 0o640);
@@ -652,6 +698,10 @@ export function qualify({
         'hooks/qualification-probe.sh'
       );
     const sentinel = (f) => `qualification-owned-sentinel:${f.name}\n`;
+    const forbiddenWrite = (f) => ({
+      file_path: protectedTarget(f),
+      content: 'forbidden fixture write',
+    });
     // Mixed fleet: user transport defers while baseline native hooks remain.
     const hook = (f, event, extra = {}, runtimeEnv = {}) =>
       observe(
@@ -666,10 +716,7 @@ export function qualify({
             cwd: f.cwd ?? f.repo,
             session_id: `qualification-${f.name}`,
             tool_name: 'Write',
-            tool_input: {
-              file_path: protectedTarget(f),
-              content: 'forbidden fixture write',
-            },
+            tool_input: forbiddenWrite(f),
             ...extra,
           }),
         }
@@ -688,10 +735,12 @@ export function qualify({
       const before = capture(scenario.target, `${id}-before.bin`);
       const runtimeBefore = capture(expectations.pointer, `${id}-runtime-before.json`);
       const result = hook(f, 'pre_tool_use');
+      const writeApplied = applyAdmittedWrite(result, forbiddenWrite(f));
       const after = capture(scenario.target, `${id}-after.bin`);
       const runtimeAfter = capture(expectations.pointer, `${id}-runtime-after.json`);
       custody.guards.push({
         id,
+        writeApplied,
         before,
         after,
         runtimeBefore,
@@ -704,6 +753,16 @@ export function qualify({
     const deferred = hook(fixtures[0], 'pre_tool_use');
     assert.equal(deferred.status, 0, deferred.stderr);
     assert.equal(deferred.stdout, '');
+    // Control for every refusal below: this hook answer admits, and an
+    // admitted write is really performed. The control file is outside the
+    // fixture repositories so governance snapshots are unaffected.
+    const control = {
+      file_path: path.join(root, 'admitted-write-control.txt'),
+      content: 'admitted fixture write',
+    };
+    assert.equal(applyAdmittedWrite(deferred, control), true);
+    assert.equal(fs.readFileSync(control.file_path, 'utf8'), control.content);
+    report.cases.push({ name: 'admitted-write-control', performed: true });
     for (const f of fixtures) {
       step(`migrate ${f.name}, retaining exact governance and reviewed custom behavior`);
       const before = snapshot(f.repo, (rel) => !rel.startsWith('.git'));

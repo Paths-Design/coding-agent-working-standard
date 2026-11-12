@@ -12,6 +12,8 @@ import {
   retainFixtureDiagnostics,
   captureQualificationFile,
   verifyQualificationCustody,
+  harnessAdmits,
+  applyAdmittedWrite,
 } from './runtime-upgrade-smoke.mjs';
 
 test('uncertain command records custody before receipt persistence can fail', () => {
@@ -450,6 +452,7 @@ function custodyFixture() {
     write(pointer, JSON.stringify({ digest: scenario.digest }));
     proof.guards.push({
       id,
+      writeApplied: false,
       before: capture(target, `${id}-before.bin`),
       after: capture(target, `${id}-after.bin`),
       runtimeBefore: capture(pointer, `${id}-runtime-before.json`),
@@ -688,6 +691,18 @@ for (const [name, tamper] of [
     },
   ],
   [
+    'a guard that admitted the forbidden write',
+    (f) => {
+      f.proof.guards[0].writeApplied = true;
+    },
+  ],
+  [
+    'a record that does not say whether the write was attempted',
+    (f) => {
+      delete f.proof.guards[0].writeApplied;
+    },
+  ],
+  [
     'missing scenario',
     (f) => {
       f.proof.guards.pop();
@@ -705,3 +720,64 @@ for (const [name, tamper] of [
     }
   });
 }
+
+test('a hook answer admits the tool unless it exits non-zero or decides against it', () => {
+  const answer = (status, stdout = '') => harnessAdmits({ status, stdout });
+  const decision = (permissionDecision) =>
+    JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision } });
+  assert.equal(answer(0), true);
+  assert.equal(answer(0, '\n'), true);
+  assert.equal(answer(0, JSON.stringify({ hookSpecificOutput: { additionalContext: 'note' } })), true);
+  assert.equal(answer(0, decision('allow')), true);
+  // Output that is not a decision does not stop a harness.
+  assert.equal(answer(0, 'plain text'), true);
+  assert.equal(answer(0, 'null'), true);
+  assert.equal(answer(2), false);
+  assert.equal(answer(1), false);
+  assert.equal(answer(null), false);
+  assert.equal(answer(0, JSON.stringify({ decision: 'block', reason: 'no' })), false);
+  assert.equal(answer(0, decision('deny')), false);
+  assert.equal(answer(0, decision('ask')), false);
+  assert.equal(answer(0, JSON.stringify({ continue: false })), false);
+});
+
+test('the forbidden write is performed exactly when the hook admitted it', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'upgrade-admitted-write-'));
+  try {
+    const target = path.join(root, 'nested/target.txt');
+    const write = { file_path: target, content: 'forbidden fixture write' };
+    assert.equal(applyAdmittedWrite({ status: 2, stdout: '' }, write), false);
+    assert.equal(fs.existsSync(target), false);
+    assert.equal(
+      applyAdmittedWrite({ status: 0, stdout: JSON.stringify({ decision: 'block' }) }, write),
+      false
+    );
+    assert.equal(fs.existsSync(target), false);
+    assert.equal(applyAdmittedWrite({ status: 0, stdout: '' }, write), true);
+    assert.equal(fs.readFileSync(target, 'utf8'), 'forbidden fixture write');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('custody names the guard that admitted a forbidden write', () => {
+  const f = custodyFixture();
+  try {
+    // What a run records when a guard wrongly admits: the write was performed
+    // and the retained after-bytes are the written content.
+    const scenario = f.expected.guards[0];
+    assert.equal(
+      applyAdmittedWrite({ status: 0, stdout: '' }, { file_path: scenario.target, content: 'forbidden fixture write' }),
+      true
+    );
+    f.proof.guards[0].writeApplied = true;
+    f.proof.guards[0].after = f.capture(scenario.target, 'admitted-after.bin');
+    f.save();
+    assert.throws(
+      () => verifyQualificationCustody(f.artifacts, f.expected),
+      new RegExp(`Guard admitted the forbidden write, which was then performed: ${scenario.id}`)
+    );
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
