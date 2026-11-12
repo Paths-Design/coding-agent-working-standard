@@ -1344,7 +1344,28 @@ export function runExecutionLifecycleConsumer(argv: readonly string[]): Executio
     const result = runExecutionLifecycleConsumerInner(argv, bridged);
     if (bridged) {
       verdictAttempted = true;
-      requireValue(bridgeRequest({ operation: 'verdict' }).failed === false, 'authority_changed');
+      // The operation has already run. A verdict that fails or cannot be read
+      // afterwards (Git ignores the exit of post-commit, post-merge and
+      // post-checkout hooks, so a hook can fail after the commit exists) does
+      // not undo it. Reporting a refusal here would tell the caller nothing
+      // happened and invite a retry over an effect that landed.
+      let confirmed = false;
+      try {
+        confirmed = bridgeRequest({ operation: 'verdict' }).failed === false;
+      } catch {
+        confirmed = false;
+      }
+      if (!confirmed)
+        throw new ExecutionLifecyclePublicationFailure(
+          { operation: result.action },
+          result.specId,
+          {
+            headAfter: result.head,
+            exitCode: result.exitCode === 0 ? 1 : result.exitCode,
+            ...(result.stdout !== undefined ? { stdout: result.stdout } : {}),
+            ...(result.stderr !== undefined ? { stderr: result.stderr } : {}),
+          }
+        );
     }
     return result;
   } catch (error) {

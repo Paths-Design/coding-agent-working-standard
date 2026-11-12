@@ -363,7 +363,7 @@ function moveLaneForBridge(f) {
 
 // Component-only Native transport substitute: Git still runs through the real
 // lifecycle runtime with an empty catalog, so no executable hook is skipped.
-function bridgeProbe(f, checkoutRoots) {
+function bridgeProbe(f, checkoutRoots, verdict = 'return {failed: false};') {
   const journal = path.join(f.root, 'runtime-home', 'bridge-requests.jsonl');
   fs.writeFileSync(journal, '');
   const shims = checkoutRoots.map((cwd, index) => {
@@ -379,7 +379,7 @@ function bridgeProbe(f, checkoutRoots) {
       if (request.operation === 'configure') return {
         shimDirectories: request.roots.map((root) => ${JSON.stringify(shims)}.find((row) => row.cwd === root.cwd))
       };
-      if (request.operation === 'verdict') return {failed: false};
+      if (request.operation === 'verdict') { ${verdict} }
       throw new Error('Unexpected component bridge request');
     };`;
   return {
@@ -438,6 +438,47 @@ test('component bridge selects only the explicitly staged and committed source p
     'unrelated untracked\n'
   );
 });
+
+test.each([
+  ['reports failure', 'return {failed: true};'],
+  ['cannot be read', 'throw new Error("bridge closed");'],
+])(
+  'a commit that landed is reported for inspection, not as refused, when the hook verdict %s',
+  (_label, verdict) => {
+    const f = fixture();
+    moveLaneForBridge(f);
+    fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'landed change\n');
+    pinHookPolicy(f, { version: 2 });
+    const before = git(f.lane, ['rev-parse', 'HEAD']);
+    const probe = bridgeProbe(f, [f.root, f.lane]);
+    success(execute(f, ['git-stage', '--', 'src/owned.txt'], { setup: probe.setup, bridge: true }));
+    // Same bridge, with only the verdict after the commit changed.
+    const failingVerdict = probe.setup.replace('return {failed: false};', verdict);
+    expect(failingVerdict).not.toBe(probe.setup);
+    const result = execute(
+      f,
+      ['git-commit', '--message', 'fix: lands before verdict', '--', 'src/owned.txt'],
+      { setup: failingVerdict, bridge: true }
+    );
+    // The commit exists.
+    const after = git(f.lane, ['rev-parse', 'HEAD']);
+    expect(after).not.toBe(before);
+    expect(git(f.lane, ['show', '--format=%s', '--name-only', 'HEAD'])).toContain(
+      'fix: lands before verdict'
+    );
+    // The caller is told so, and told to inspect before any retry.
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('caws lifecycle publication requires inspection');
+    expect(result.stderr).not.toContain('caws lifecycle refused');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      action: 'git-commit',
+      outcome: 'publication-failure',
+      disposition: 'inspect-before-retry',
+      headAfter: after,
+      exitCode: 1,
+    });
+  }
+);
 
 function nestedBaseFixture() {
   const f = fixture();
