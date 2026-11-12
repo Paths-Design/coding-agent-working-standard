@@ -439,12 +439,18 @@ test('component bridge selects only the explicitly staged and committed source p
   );
 });
 
-test.each([
-  ['reports failure', 'return {failed: true};'],
-  ['cannot be read', 'throw new Error("bridge closed");'],
-])(
-  'a commit that landed is reported for inspection, not as refused, when the hook verdict %s',
-  (_label, verdict) => {
+// Statically named so each case can be cited as acceptance evidence.
+for (const [title, verdict] of [
+  [
+    'a commit that landed is reported for inspection, not as refused, when the hook verdict reports failure',
+    'return {failed: true};',
+  ],
+  [
+    'a commit that landed is reported for inspection, not as refused, when the hook verdict cannot be read',
+    'throw new Error("bridge closed");',
+  ],
+])
+  test(title, () => {
     const f = fixture();
     moveLaneForBridge(f);
     fs.writeFileSync(path.join(f.lane, 'src/owned.txt'), 'landed change\n');
@@ -477,8 +483,7 @@ test.each([
       headAfter: after,
       exitCode: 1,
     });
-  }
-);
+  });
 
 function nestedBaseFixture() {
   const f = fixture();
