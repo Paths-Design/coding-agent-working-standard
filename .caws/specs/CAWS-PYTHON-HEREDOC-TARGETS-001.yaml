@@ -33,3 +33,10 @@ rollback:
   - 'Use supported adapter rollback if compatibility delivery changes unrelated runtime behavior'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Committed d37a6913e source, clean lane, 62 semantic regression tests and five gates cover two actual changed files. Exact original command SHA71fff7b94105b44b42fb36f7c5afa808b30a37e070ad092b4e114a5016d8f6a6: baseline0c338b guard exit2 fabricated0f, installed7e3b11ce guard exit0 with empty output; original program NEVER executed. Actual Codex native canary with apostrophe, >0f and points/colliders executed exit0 and wrote/read expected marker; real foreign Python write refused before dispatch with selected7e3b11ce digest and sentinel absent. Runtime113 members verify; exactly bash-mutation-targets.sh differs from retained baseline, native hooks/config/bootstrap/settings hashes unchanged. Raw receipts validation.json and original-command.json. Bounded legacy normal stdlib/startup profile only; no full effect/custody, general executor or RC registry acceptance."
+    recorded_at: "2026-11-12T04:42:28.951Z"
+    artifact_path: "/Users/darianrosebrook/Desktop/Projects/caws/.caws/state/python-heredoc-targets/validation.json"
+    commit_sha: d37a6913e8db4a07e7f9e19a9335249cc88ae356
