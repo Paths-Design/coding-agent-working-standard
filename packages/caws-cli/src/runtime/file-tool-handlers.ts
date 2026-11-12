@@ -39,7 +39,9 @@ interface FileToolHandlerContext extends StockHandlerContext {
 
 /** Exact stock semantics being replaced, independently of the installed generation digest. */
 const HANDLERS: Readonly<Record<string, string>> = {
-  'agent-heartbeat.sh': 'fb3d05634e974cbf1978a0748c4db59cc84dc87f43072a8b14761f9fc7cc5fed',
+  // The heartbeat has one typed implementation, admitted in stock-handlers.ts;
+  // this identity follows that one so the two routes cannot disagree about it.
+  'agent-heartbeat.sh': 'a42ba59f826763dae26818b3b2d624c708f33a6f5ddf9a702c34d124faeecc0f',
   'cwd-guard.sh': '7bbef58ccc698002419ad665191cb095e4da99fb1331c79c8954b11c5657edd0',
   'block-dangerous.sh': '636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5',
   'worktree-guard.sh': 'e58c6b25b4c1de157910cc16523f84070917b5b8a00ab06c80bb97017eeb22a2',

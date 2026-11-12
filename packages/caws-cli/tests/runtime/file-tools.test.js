@@ -549,6 +549,14 @@ describe('complete stock file-tool prewrite handlers', () => {
       'worktree-write-guard.sh': '737ef2a0b6b6a4b4a87ed65cb2a45e56e81b9c95f0b803d6c076dce6e93c41a9',
       'lib/session-id.sh': 'cf662f10e6d3477cecbf5deabd8d2b63284f6f4ac14fa7070725ff8502515c53',
       'scope-guard.sh': '36cd1dc511641035e23b8aff9363d91921d388a8bebaf7fe391be0798457df77',
+      // Authentic sources at 0c3271303f6c21c78361c58a6f420ec0f9c1501f, the last
+      // revision whose shipped bytes the typed handlers were reviewed against.
+      // Later bytes (batch-aware latch, strike home, copy-refusal causes) decline
+      // admission and the shell handler runs. The shipped heartbeat is admitted.
+      'worktree-guard.sh': 'e58c6b25b4c1de157910cc16523f84070917b5b8a00ab06c80bb97017eeb22a2',
+      'quiet-merge.sh': '94581e2f7c87b7bf61c56c2b475c58c057b12abc10a7dbbd978d24d9fe3515a8',
+      'guard-strikes.sh': '8253de9371aadd20c1e441155b4a19487e5ae7887c6da4358d8f7b31b9719e0a',
+      'lib/run-handlers.sh': '90945b5dd70c9c6e223beefab24208603c2c1a822e4ba85d8bd298d430660093',
     };
     for (const [name, expectedSha256] of Object.entries(reviewedSources)) {
       const reviewedSource = fs.readFileSync(path.join(__dirname, 'fixtures/reviewed-stock', name));
@@ -933,7 +941,15 @@ describe('complete stock file-tool prewrite handlers', () => {
     ]) {
       if (!(mask & bit)) continue;
       const file = path.join(runtime, name);
-      fs.copyFileSync(path.join(templates, 'shared', name), file);
+      // The two guards are the authentic sources at
+      // 834a210d6, the revision this cohort was admitted for; shipped guard
+      // bytes have moved on and decline. The SID helper is still shipped.
+      fs.copyFileSync(
+        bit === 4
+          ? path.join(templates, 'shared', name)
+          : path.join(__dirname, 'fixtures/reviewed-file-tools-current', name),
+        file
+      );
       expect(sha(file)).toBe(expected);
       if (bit === 4) selection.libraries['session-id.sh'].sha256 = expected;
       else selection.handlers.find((handler) => handler.name === name).sha256 = expected;
@@ -947,7 +963,7 @@ describe('complete stock file-tool prewrite handlers', () => {
       const handler = selection.handlers.find((entry) => entry.name === 'scope-guard.sh');
       const shipping = fs.readFileSync(path.join(templates, 'shared/scope-guard.sh'));
       const shippingSha = crypto.createHash('sha256').update(shipping).digest('hex');
-      expect(shippingSha).toBe('4e2acd443760b59ab08bbc92831fb9f6e9b8cac8abfc0e54a5567b23887e0cb6');
+      expect(shippingSha).toBe('158afb17ae85781cec050a57565e0b8075ad057057d324f6e8691a58eb527426');
       expect(shippingSha).not.toBe(handler.sha256);
       fs.writeFileSync(handler.path, shipping);
       handler.sha256 = shippingSha;

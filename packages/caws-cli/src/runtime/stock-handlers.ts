@@ -31,7 +31,7 @@ import {
 const HANDLERS: Readonly<Record<string, string>> = {
   'agent-stop.sh': 'c94358159f8fd77585bcb8c3679cd81c8d3d5dba0ff0970c50bf91a0f5f5eaa5',
   'agent-heartbeat.sh': 'a42ba59f826763dae26818b3b2d624c708f33a6f5ddf9a702c34d124faeecc0f',
-  'block-dangerous.sh': 'fc71c5e3347a388877b0af548405f39ad3218318980799e6c61037bbdc32e1da',
+  'block-dangerous.sh': '636f16dba6556cca02782e1df88864dafa920a35c38424afc88457a90cf57bb5',
   'hook-utilities.sh': '8a38d1f75df38568566fdfbbc17acec468c1cc2b11b3f02f71705d2c930d56a8',
 };
 const LIBRARIES: Readonly<Record<string, readonly string[]>> = {
