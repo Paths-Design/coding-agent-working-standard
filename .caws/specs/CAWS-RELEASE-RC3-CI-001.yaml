@@ -1,9 +1,11 @@
 id: CAWS-RELEASE-RC3-CI-001
 title: 'Make release qualification pass on Linux CI for the 12.2.0-rc.3 branch'
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Release Qualification run 43337457843 on caws/release-12-2-rc3 at 634a9929b passed all nine jobs, including the Linux Candidate tests and contracts job. Landed on the release branch, not main.'
 created_at: '2026-11-12T07:40:00.974Z'
-updated_at: '2026-11-12T07:40:25.693Z'
+updated_at: '2026-11-13T01:27:55.029Z'
 created_by_session: 'deaedad6-08fd-476d-aa81-63eb16583115'
 blast_radius:
   modules:
