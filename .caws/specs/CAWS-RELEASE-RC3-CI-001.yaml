@@ -27,3 +27,9 @@ acceptance:
     then: 'the Candidate tests and contracts job passes, with copy refusals naming the inherited variable that caused them and darwin-only native image cases not run as failures on Linux'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Release Qualification run 43337457843 on 634a9929b: job 'Candidate tests and contracts' (ubuntu, LD_LIBRARY_PATH=/opt/hostedtoolcache/Python/3.12.16/x64/lib) success; jest 430/430 suites (13502 passed, 37 skipped incl. darwin-only portable image cases), bats 976 ok / 0 not ok, pytest 454 passed 1 skipped; copy-refusal loader-variable tests passed (explicit LD_LIBRARY_PATH keeps copy roles unresolved). Job log saved outside the repo tree at packages/caws-cli/reports/ci-43337457843-linux.log (ignored)."
+    recorded_at: "2026-11-13T01:27:08.417Z"
+    commit_sha: "634a9929bcb24fd5e400a0d49cde146df638f53d"
