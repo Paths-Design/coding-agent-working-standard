@@ -57,3 +57,11 @@ rollback:
   - 'Revert the slice commit; the prior pack version, fingerprint and handler text return with it'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Real stop-worktree-check.sh run against git fixtures at 72f3058b4: with own lanes mine-a, mine-b and foreign lanes theirs-1, theirs-2 stderr is \"REMINDER: this session owns 2 active worktree(s): mine-a, mine-b. ... caws worktree merge <name>. 2 other active worktree(s) belong to other sessions and are not yours to merge or destroy.\"; no theirs-* name, no \"caws worktree destroy\", no \"cannot commit to the base branch\". Sibling cases in the same file pin foreign-only (count, no names), exact-id ownership, inactive lanes excluded. Mutants killed: inverted owner test (5 fail), name-all-active (2 fail). Not verified: installed ~/.caws runtime 7e3b11ce and repo .caws/hooks copy still carry the old reminder until a runtime refresh."
+    recorded_at: "2026-11-22T05:20:34.315Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/stop-worktree-check-ownership.test.js::names only the stopping session lanes and counts the rest without naming them"
+    commit_sha: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
+    test_verified_at: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
