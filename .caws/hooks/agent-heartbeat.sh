@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 95
+# hook_pack_version: 139
 # caws_min_major: 11
 # lineage_refs: 19
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -41,6 +41,18 @@
 # FAIL-CLOSED-NON-BLOCKING: if the CLI is absent, fails, or returns
 # malformed JSON, this hook exits 0 silently. Heartbeat is observability
 # and parallel-agent surfacing; a failure must never block the tool call.
+#
+# Cost: the CLI is not started on every tool call. Each call stamps
+# .caws/leases/<session>.active (its mtime is the session's last activity; lease
+# readers report the later of it and the lease's recorded last_active). The full
+# heartbeat, which rewrites the lease and computes the peer summary, runs when
+# none has completed in the last CAWS_HEARTBEAT_INTERVAL_SECONDS (default 15) or
+# the lease file was replaced since (a stop, a claim). The mailbox is polled on
+# every full heartbeat and otherwise only when .caws/messages.jsonl changed since
+# this session's last poll. Each CLI call is ended after
+# CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS (default 3) so a hung CLI cannot hold the
+# guards behind it, and a full heartbeat that fails is not retried until the
+# interval has passed.
 
 set -uo pipefail
 
@@ -56,7 +68,160 @@ source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 # Use caws_source_lib so a vendor override (e.g. codex ask->deny) is
 # preferred over the shared default when present.
 caws_source_lib emit.sh 2>/dev/null || true
-parse_hook_input || exit 0
+# Mirrors src/runtime/actor-context.ts; the custody tests compare them row by row.
+_hb_classify_actor() {
+  node -e '
+    const chunks = [];
+    process.stdin.on("data", (c) => { chunks.push(c); });
+    process.stdin.on("end", () => {
+      let payload;
+      try {
+        const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+        payload = JSON.parse(text.decode(Buffer.concat(chunks)));
+      } catch { payload = undefined; }
+      let actor = "uncertain";
+      if (typeof payload === "object" && payload !== null && !Array.isArray(payload)) {
+        const id = payload.agent_id;
+        if (!Object.prototype.hasOwnProperty.call(payload, "agent_id")) actor = "main";
+        else if (typeof id === "string" && /^[A-Za-z0-9_.:-]{1,128}$/.test(id)) actor = "subagent";
+      }
+      process.stdout.write(actor);
+    });
+  ' 2>/dev/null
+}
+
+# _hb_plan <session-id>
+#   Stamps activity and decides what this call still owes. Sets
+#   _HB_NEED_HEARTBEAT and _HB_NEED_POLL (1 = owed), _HB_GATE and _HB_MAIL (the
+#   bookkeeping files, empty when the lease directory is unknown). With no
+#   lease yet, or no usable bookkeeping, everything is owed.
+_HB_NEED_HEARTBEAT=1
+_HB_NEED_POLL=1
+_HB_GATE=""
+_HB_MAIL=""
+_HB_PLANNED=0
+_hb_plan() {
+  local session="$1" root="" common="" last="" now="" interval=""
+  _HB_PLANNED=1
+  [[ "$session" =~ ^[A-Za-z0-9._:-]+$ && "$session" != "unknown" ]] || return 0
+  # Leases live in the canonical checkout. The machine adapter names it; a
+  # checkout whose .git is a directory is canonical; a linked worktree asks git.
+  if [[ -n "${CAWS_MACHINE_POLICY_ROOT:-}" ]]; then
+    root="$CAWS_MACHINE_POLICY_ROOT"
+  elif [[ -n "${CAWS_PROJECT_DIR:-}" && -d "$CAWS_PROJECT_DIR/.git" ]]; then
+    root="$CAWS_PROJECT_DIR"
+  elif [[ -n "${CAWS_PROJECT_DIR:-}" && -d "$CAWS_PROJECT_DIR" ]]; then
+    common="$(cd "$CAWS_PROJECT_DIR" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || common=""
+    [[ "$common" == /*/.git ]] && root="${common%/.git}"
+  fi
+  [[ -n "$root" && -f "$root/.caws/leases/$session.json" ]] || return 0
+  local lease="$root/.caws/leases/$session.json"
+  _HB_GATE="$root/.caws/leases/$session.hb"
+  _HB_MAIL="$root/.caws/leases/$session.mail"
+  printf '1' > "$root/.caws/leases/$session.active" 2>/dev/null || true
+  interval="${CAWS_HEARTBEAT_INTERVAL_SECONDS:-15}"
+  [[ "$interval" =~ ^[0-9]+$ ]] || interval=15
+  [[ -f "$_HB_GATE" ]] && read -r last < "$_HB_GATE" 2>/dev/null
+  [[ "$last" =~ ^[0-9]+$ ]] || return 0
+  # A lease rewritten after the last full heartbeat may have changed status.
+  # Lease writes replace the file, so the link taken at that heartbeat stops
+  # naming the same file. File times are not used: bash 3.2 compares them in
+  # whole seconds and would miss a rewrite in the heartbeat's own second.
+  [[ "$lease" -ef "$_HB_GATE.lease" ]] || return 0
+  now="$(date +%s 2>/dev/null)" || now=""
+  [[ "$now" =~ ^[0-9]+$ ]] || return 0
+  (( now >= last && now - last < interval )) || return 0
+  _HB_NEED_HEARTBEAT=0
+  # Skip the poll only when the mark is strictly newer than the mailbox. A
+  # message in the mark's own second polls again; that errs toward delivery.
+  if [[ -f "$_HB_MAIL" && "$_HB_MAIL" -nt "$root/.caws/messages.jsonl" ]]; then
+    _HB_NEED_POLL=0
+  fi
+  return 0
+}
+
+# _hb_cli <args...>
+#   caws_run_cli with a wall-clock limit. The CLI runs in its own process
+#   group and the whole group is ended at the limit, so a launcher script's
+#   child does not outlive the deadline. Without perl the call is unbounded,
+#   as it was before the limit existed.
+_HB_BOUNDED='setpgrp(0, 0); my $limit = shift; my $pid = fork;
+exit 127 unless defined $pid;
+if (!$pid) { exec @ARGV; exit 127 }
+$SIG{ALRM} = sub { $SIG{TERM} = "IGNORE"; kill("TERM", -$$); exit 124 };
+alarm $limit; waitpid($pid, 0); exit($? >> 8);'
+_hb_cli() {
+  local limit="${CAWS_HEARTBEAT_CLI_DEADLINE_SECONDS:-3}" bin="${CAWS_BIN:-caws}"
+  if [[ "$limit" =~ ^[1-9][0-9]*$ ]] && command -v perl >/dev/null 2>&1; then
+    if [[ -n "${CAWS_PROJECT_DIR:-}" && "${CAWS_PROJECT_DIR}" != "." && -d "${CAWS_PROJECT_DIR}" ]]; then
+      ( cd "${CAWS_PROJECT_DIR}" && exec perl -e "$_HB_BOUNDED" "$limit" "$bin" "$@" )
+    else
+      perl -e "$_HB_BOUNDED" "$limit" "$bin" "$@"
+    fi
+  else
+    caws_run_cli "$@"
+  fi
+}
+
+# A dispatcher has already parsed the payload, so the session is known before
+# stdin is read. When nothing is owed, stop here: no classification, no CLI.
+if [[ -n "${HOOK_TOOL_NAME+set}" && -n "${HOOK_SESSION_ID:-}" ]]; then
+  _hb_plan "$HOOK_SESSION_ID"
+  if [[ "$_HB_NEED_HEARTBEAT" == 0 && "$_HB_NEED_POLL" == 0 ]]; then
+    # Leaving a pipe unread can fail the dispatcher's writer; a file needs nothing.
+    [[ -p /dev/stdin ]] && cat > /dev/null 2>&1
+    exit 0
+  fi
+fi
+
+# Mail custody is decided from the bytes this handler received on stdin, before the
+# parser runs: the parser repairs control bytes and undecodable text, so its output
+# can lack an agent_id the received bytes never validly carried. A preset
+# HOOK_TOOL_NAME means a dispatcher already parsed and piped the payload here, so
+# stdin is classified directly and nothing is written. Without it, the same bytes
+# feed the parser through a trapped capture file. A preset HOOK_INPUT_JSON there
+# would become the parsed identity although this handler never received it; that, a
+# TTY, or a failed capture stays uncertain.
+_HB_FAST_PATH=0
+[[ -n "${HOOK_TOOL_NAME+set}" ]] && _HB_FAST_PATH=1
+_HB_ACTOR=uncertain
+_HB_INGRESS=""
+if [[ -t 0 ]]; then
+  :
+elif [[ "$_HB_FAST_PATH" == 1 ]]; then
+  _HB_ACTOR="$(_hb_classify_actor)"
+elif [[ -z "${HOOK_INPUT_JSON:-}" ]]; then
+  _HB_INGRESS="$(mktemp "${TMPDIR:-/tmp}/caws-heartbeat-ingress-XXXXXX" 2>/dev/null)" || _HB_INGRESS=""
+  if [[ -n "$_HB_INGRESS" ]]; then
+    trap 'rm -f "$_HB_INGRESS"' EXIT
+    cat > "$_HB_INGRESS" 2>/dev/null && _HB_ACTOR="$(_hb_classify_actor < "$_HB_INGRESS")"
+  fi
+fi
+case "$_HB_ACTOR" in
+  main | subagent) ;;
+  *) _HB_ACTOR=uncertain ;;
+esac
+# The parser installs its own EXIT trap, replacing the capture's, so the capture is
+# opened on a descriptor and unlinked before parsing; once unlinked, no interruption can
+# leave it on disk. If it cannot be opened or unlinked, exit while the capture's own
+# trap is still installed rather than parse with the payload still named on disk.
+if [[ -n "$_HB_INGRESS" ]]; then
+  if ! { exec 9<"$_HB_INGRESS"; } 2>/dev/null; then
+    exit 0
+  fi
+  rm -f "$_HB_INGRESS" 2>/dev/null
+  if [[ -e "$_HB_INGRESS" ]]; then
+    exec 9<&-
+    exit 0
+  fi
+  parse_hook_input <&9
+  _HB_PARSED=$?
+  exec 9<&-
+else
+  parse_hook_input
+  _HB_PARSED=$?
+fi
+[[ "$_HB_PARSED" == 0 ]] || exit 0
 
 if [[ -z "${HOOK_SESSION_ID:-}" || "$HOOK_SESSION_ID" == "unknown" ]]; then
   exit 0
@@ -67,13 +232,20 @@ if ! command -v "$CAWS_BIN" >/dev/null 2>&1; then
   exit 0
 fi
 
+[[ "$_HB_PLANNED" == 1 ]] || _hb_plan "$HOOK_SESSION_ID"
+if [[ "$_HB_NEED_HEARTBEAT" == 0 && "$_HB_NEED_POLL" == 0 ]]; then
+  exit 0
+fi
+
 # Capture both stdout (JSON) and stderr (diagnostics). On any CLI error,
 # fall through to silent exit.
 # Fork identity passthrough (CAWS-AGENTS-FORK-IDENTITY-001): harnesses that
 # know their session kind set CAWS_SESSION_KIND / CAWS_FORKED_FROM; defaults
 # main/absent so the annotation survives without harness cooperation.
+CLI_OUT=""
+if [[ "$_HB_NEED_HEARTBEAT" == 1 ]]; then
 CLI_OUT="$(
-  caws_run_cli agents heartbeat \
+  _hb_cli agents heartbeat \
     --session-id "$HOOK_SESSION_ID" \
     --platform "$CAWS_PLATFORM_FLAG" \
     --throttle 15000 \
@@ -83,10 +255,27 @@ CLI_OUT="$(
     ${CAWS_SESSION_KIND:+--session-kind "$CAWS_SESSION_KIND"} \
     ${CAWS_FORKED_FROM:+--forked-from "$CAWS_FORKED_FROM"} \
   2>/dev/null
-)" || exit 0
+)" || CLI_OUT=""
 
+# The first heartbeat of a session creates its lease, so plan again to learn
+# the bookkeeping paths, then record the attempt. A heartbeat that failed or
+# was ended at the deadline is recorded too: the next attempt waits out the
+# interval, so a slow or broken CLI costs its deadline once per interval and
+# not on every call.
+if [[ -z "$_HB_GATE" ]]; then
+  _hb_plan "$HOOK_SESSION_ID"
+fi
+if [[ -n "$_HB_GATE" ]]; then
+  _HB_EPOCH="$(date +%s 2>/dev/null)" || _HB_EPOCH=""
+  if [[ "$_HB_EPOCH" =~ ^[0-9]+$ ]] &&
+     ln -f "${_HB_GATE%.hb}.json" "$_HB_GATE.lease" 2>/dev/null; then
+    printf '%s\n' "$_HB_EPOCH" > "$_HB_GATE" 2>/dev/null
+  fi
+fi
 if [[ -z "$CLI_OUT" ]]; then
   exit 0
+fi
+_HB_NEED_POLL=1
 fi
 
 # Parse the CAWS-native JSON and, when active_agent_count > 1, compose
@@ -96,7 +285,8 @@ fi
 PROJECT_DIR_FOR_CACHE="${CAWS_PROJECT_DIR:-.}"
 EMIT_STATE_FILE="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-emit-state.json"
 
-_HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" node -e '
+_HEARTBEAT_CTX=""
+[[ -n "$CLI_OUT" ]] && _HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" node -e '
   let raw = "";
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk) => { raw += chunk; });
@@ -252,9 +442,21 @@ _HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" no
 # FAIL-CLOSED-NON-BLOCKING: any error (CLI absent/erroring, malformed JSON, no
 # message) emits nothing and never blocks the tool call. Independent of the peer
 # notice above — both can fire on the same call.
-if [[ -n "${CAWS_HANDLER_OFFER_FILE:-}" ]]; then
+#
+# Custody: a subagent's hooks carry the parent's session id, so polling there
+# would reserve and settle the parent's mail into a context the parent never
+# reads. Mail stays queued unless the ingress is main-thread (_HB_ACTOR above).
+# The poll mark is written before the poll: a message that lands while the poll
+# runs is newer than the mark and is polled on the next call. Only the main
+# thread writes it, so a subagent's call never hides waiting mail from it.
+if [[ "$_HB_ACTOR" == "main" && -n "$_HB_MAIL" ]]; then
+  printf '1' > "$_HB_MAIL" 2>/dev/null || true
+fi
+if [[ "$_HB_ACTOR" != "main" ]]; then
+  _MSG_OUT=""
+elif [[ -n "${CAWS_HANDLER_OFFER_FILE:-}" ]]; then
   _MSG_OUT="$(
-    caws_run_cli message poll \
+    _hb_cli message poll \
       --me "$HOOK_SESSION_ID" \
       --receipt auto \
       --drain 5 \
@@ -265,7 +467,7 @@ if [[ -n "${CAWS_HANDLER_OFFER_FILE:-}" ]]; then
   )" || _MSG_OUT=""
 else
   _MSG_OUT="$(
-    caws_run_cli message poll \
+    _hb_cli message poll \
       --me "$HOOK_SESSION_ID" \
       --receipt auto \
       --drain 5 \
@@ -326,7 +528,7 @@ if [[ -n "$_MSG_OUT" ]]; then
         const sender = e.sender || null;
         const bits = [];
         if (sender && sender.worktree) bits.push("worktree " + sender.worktree);
-        if (sender && sender.spec_id) bits.push("spec " + sender.spec_id);
+        if (sender && sender.specId) bits.push("spec " + sender.specId);
         return bits.length > 0 ? " (" + bits.join(", ") + ")" : "";
       };
       let ctx = "";
