@@ -37,3 +37,11 @@ acceptance:
     then: 'doctor.hooks.installed_pack_version_lag and doctor.hooks.pack_body_drift no longer fire for .caws/hooks'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "caws init diff --agent-surface dsh after the refresh reports every shared managed path [managed_clean] installed v139 -> template v139 and the dsh vendor doctrine managed_clean at v4; no managed_drift, managed_old_version, absent, or unmanaged path remains. Installed with caws init --agent-surface dsh --overwrite --force from the canonical checkout; landed in commit 7017d63c2 plus telemetry-row port commits 31811774, 0a321f1a, 39a9bcbf, 65412c83."
+    recorded_at: "2026-11-22T08:52:25.968Z"
+    command: caws init diff --agent-surface dsh
+    exit_code: 0
+    commit_sha: "7017d63c2"
