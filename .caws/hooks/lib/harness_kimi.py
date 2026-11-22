@@ -1,6 +1,6 @@
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 95
+# hook_pack_version: 139
 # caws_min_major: 11
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
 #   to your repo: tune thresholds, add checks, remove what does not fit. Your edits
@@ -12,6 +12,8 @@
 #   edit to avoid: gutting a guard to dodge a block instead of fixing the cause. Grow
 #   everything else freely.
 """Kimi wire normalization, preserving the existing CAWS surface contract."""
+from __future__ import annotations
+
 import json
 from typing import Any
 from harness_common import HarnessModule, TranscriptRowAdapter, parse_timestamp

@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 95
+# hook_pack_version: 139
 # caws_min_major: 11
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
 #   to your repo: tune thresholds, add checks, remove what does not fit. Your edits
@@ -39,6 +39,7 @@ CAWS_TOK_PREFIX_BASIS=() # lexically_proven | none
 # time, before any serialization -- once a record has been split the
 # authority-bearing information is already gone.
 CAWS_TOK_UNREPR=()
+CAWS_TOK_CWD=() # per-token execution cwd, populated only by the required AST view
 
 # A command substitution has TWO simultaneous semantic roles and the recognizer
 # must preserve BOTH: the outer word is runtime-resolved (its value is decided at
@@ -458,50 +459,97 @@ _caws_tok_is_opt() { [[ "${CAWS_TOK_VALUE[$1]}" == -* ]]; }
 # BROAD -- "a directory-scoped operation" and "a file-scoped operation over an
 # unresolved population" are different facts needing different policies.
 _caws_emit_operand() {
-  local i="$1"
-  # Representability is adjudicated FIRST: an operand the record stream cannot
-  # carry must never reach a channel whose consumer would split it.
-  if [[ ${coordinate_changed:-0} -eq 1 && "${CAWS_TOK_VALUE[$i]}" != /* ]]; then
-    CAWS_REC_UNSUPPORTED+=( changed_working_directory )
-    return
+  local i="$1" value="${CAWS_TOK_VALUE[$1]}" role="${2:-referent}" ast=0
+  [[ ${CAWS_BASH_ANALYSIS_REQUIRED:-0} == 1 ]] && ast=1
+  if [[ $ast == 0 && ${coordinate_changed:-0} -eq 1 && "$value" != /* ]]; then
+    CAWS_REC_UNSUPPORTED+=( changed_working_directory ); return 0
   fi
-  if [[ "${CAWS_TOK_UNREPR[$i]}" == "1" ]]; then
-    CAWS_REC_UNREPR+=( "${CAWS_TOK_VALUE[$i]}" )
-    return 0
+  if [[ "${CAWS_TOK_UNREPR[$i]}" == 1 ]]; then
+    CAWS_REC_UNREPR+=( "$value" ); return 0
   fi
-  if [[ "${CAWS_TOK_DYNAMIC[$i]}" == "1" ]]; then
-    # Tab-separated: expression, resolution_kind, static_prefix, prefix_basis.
-    # The guard CONSUMES these; it must never reparse the expression to invent a
-    # prefix, which would restore two interpreters across the shared boundary.
-    printf -v _rec '%s\t%s\t%s\t%s' \
-      "${CAWS_TOK_VALUE[$i]}" "${CAWS_TOK_RESKIND[$i]}" \
+  if [[ "${CAWS_TOK_DYNAMIC[$i]}" == 1 ]]; then
+    if [[ -z "$value" ]]; then
+      CAWS_REC_UNSUPPORTED+=( dynamic_operand_without_source_label ); return 0
+    fi
+    printf -v _rec '%s\t%s\t%s\t%s' "$value" "${CAWS_TOK_RESKIND[$i]}" \
       "${CAWS_TOK_PREFIX[$i]}" "${CAWS_TOK_PREFIX_BASIS[$i]}"
     CAWS_REC_DYNAMIC+=( "$_rec" )
   else
-    CAWS_REC_FILE+=( "${CAWS_TOK_VALUE[$i]}" )
+    [[ -n "$value" ]] || return 0
+    if [[ $ast == 1 && "$value" != /* ]]; then
+      if [[ -n "${CAWS_TOK_CWD[$i]-}" ]]; then
+        value="${CAWS_TOK_CWD[$i]}/$value"
+      fi
+    fi
+    if [[ "$value" == *$'\n'* || "$value" == *$'\t'* ]]; then
+      CAWS_REC_UNREPR+=( "$value" ); return 0
+    fi
+    CAWS_REC_FILE+=( "$value" )
+    CAWS_REC_FILE_ROLE+=( "$role" )
   fi
+  return 0
+}
+
+# Project a complete, direct, literal Python stdin program out of the legacy
+# OUTER-SHELL view. Python quote rules differ from shell quote rules: an
+# apostrophe in a triple-quoted fixture can otherwise turn `> 0f` into a fake
+# redirect and even swallow real shell commands after the terminator.
+# This is not a read-only classification. Interpreter checks MUST receive the
+# original command. Expanding/unfinished/wrapped forms retain the old view;
+# normal host command lookup remains the legacy envelope's existing assumption.
+_caws_python_heredoc_shell_view() {
+  local input="$1" mode="${2:-shell}" header line delim offset body_start blanks=''
+  if [[ "$input" != *$'\n'* ]]; then
+    [[ "$mode" == python ]] && return 1
+    printf '%s' "$input"; return
+  fi
+  header="${input%%$'\n'*}"
+  local prefix='^[[:blank:]]*python(3([.][0-9]+)?)?[[:blank:]]+(-[[:blank:]]+)?<<[[:blank:]]*'
+  local single="${prefix}'([A-Za-z_][A-Za-z_0-9]*)'[[:blank:]]*$"
+  local double="${prefix}\"([A-Za-z_][A-Za-z_0-9]*)\"[[:blank:]]*$"
+  if [[ "$header" =~ $single || "$header" =~ $double ]]; then
+    delim="${BASH_REMATCH[4]}"
+  else
+    [[ "$mode" == python ]] && return 1
+    printf '%s' "$input"; return
+  fi
+  offset=$((${#header} + 1))
+  body_start=$offset
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "$delim" ]]; then
+      if [[ "$mode" == python ]]; then
+        printf '%s' "${input:body_start:offset-body_start}"
+        return
+      fi
+      printf '%s\n%s%s' "$header" "$blanks" "${input:offset}"
+      return
+    fi
+    blanks+=$'\n'
+    offset=$((offset + ${#line} + 1))
+  done <<< "${input:offset}"
+  [[ "$mode" == python ]] && return 1
+  printf '%s' "$input"
 }
 
 _caws_bash_scan_tokens() {
   local cmd="$1"
-  CAWS_REC_FILE=(); CAWS_REC_BROAD=(); CAWS_REC_DYNAMIC=()
+  CAWS_REC_FILE=(); CAWS_REC_FILE_ROLE=(); CAWS_REC_BROAD=(); CAWS_REC_DYNAMIC=()
   CAWS_REC_UNREPR=(); CAWS_REC_UNSUPPORTED=()
-  # CAWS-GUARD-HEREDOC-BODY-READ-AS-COMMAND-01: a heredoc body is a PAYLOAD, not
-  # a command line. Blanking safelisted sinks' bodies is load-bearing and its
-  # loss is a real defect, not a simplification: measured 2026-09-11 over the
-  # frozen A6 population, the unblanked path lexed TypeScript and Python heredoc
-  # payloads as shell, so `const f = () => { g(h) }` produced the operand `{`
-  # (bash really does read `=>` as `=` followed by a redirect) and eight
-  # commands gained fabricated targets that the previous implementation did not
-  # emit. The rewrite dropped this call while the file header kept claiming it,
-  # so the documentation described behavior the code no longer had.
-  # An interpreter heredoc deliberately keeps its body visible (lib/heredoc.sh),
-  # and CAWS_HEREDOC_FILE_SINKS is a safelist both consumers inherit alike.
-  if declare -F caws_blank_heredoc_bodies >/dev/null 2>&1; then
-    cmd="$(caws_blank_heredoc_bodies "$cmd")"
+  if [[ ${CAWS_BASH_ANALYSIS_REQUIRED:-0} == 1 ]]; then
+    if ! declare -F caws_bash_load_analysis_tokens >/dev/null 2>&1 ||
+        ! caws_bash_load_analysis_tokens "$cmd"; then
+      CAWS_REC_UNSUPPORTED+=( mutation_analysis_unavailable ); return 0
+    fi
+    CAWS_REC_UNSUPPORTED=( ${CAWS_AST_ISSUES[@]+"${CAWS_AST_ISSUES[@]}"} )
+  else
+    # Other consumers retain their declared legacy lexical envelope.
+    cmd="$(_caws_python_heredoc_shell_view "$cmd")"
+    if declare -F caws_blank_heredoc_bodies >/dev/null 2>&1; then
+      cmd="$(caws_blank_heredoc_bodies "$cmd")"
+    fi
+    _caws_lex "$cmd"
+    _caws_mutation_argv_view
   fi
-  _caws_lex "$cmd"
-  _caws_mutation_argv_view
   local _u=0
   while [[ $_u -lt ${#CAWS_TOK_VALUE[@]} ]]; do
     [[ "${CAWS_TOK_KIND[$_u]}" == unsupported_nesting ]] && \
@@ -587,23 +635,37 @@ _caws_bash_scan_tokens() {
         fi
         i=$j; continue ;;
       truncate|touch|rm|mv|cp)
-        local j=$((i+1)) options=1 target=-1
+        local j=$((i+1)) options=1 target=-1 operand_role=referent
+        [[ "$t" == rm ]] && operand_role=unlink-entry
         local -a operands=()
         while [[ $j -lt $n ]]; do
           _caws_tok_is_sep "$j" && break
           local arg="${CAWS_TOK_VALUE[$j]}"
+          # Darwin rm stops option parsing at its first operand. A solitary
+          # dash is itself an operand; later dash-prefixed names cannot vanish.
+          if [[ "$t" == rm && ( "$arg" == - || "$arg" != -* ) ]]; then
+            options=0
+          fi
           if [[ $options -eq 1 ]]; then
             case "$arg" in --) options=0; j=$((j+1)); continue ;; esac
+            # An unknown option cannot erase entry ownership. Preserve that
+            # observation and mark the operation unresolved for the consumer.
+            if [[ "$t" == rm && "$arg" == -* ]]; then
+              local remove_flags="${arg#-}"
+              if [[ -z "$remove_flags" || "$remove_flags" == *[!frR]* ]]; then
+                operand_role=unlink-entry-unresolved
+              fi
+            fi
             case "$t:$arg" in
               touch:-d|touch:--date|touch:-t|touch:-r|touch:--reference|truncate:-s|truncate:--size|truncate:-r|truncate:--reference)
                 j=$((j+2)); continue ;;
               cp:-t|cp:--target-directory|mv:-t|mv:--target-directory)
                 target=$((j+1)); j=$((j+2)); continue ;;
             esac
-            case "$arg" in
-              --target-directory=*)
+            case "$t:$arg" in
+              cp:--target-directory=*|mv:--target-directory=*)
                 CAWS_TOK_VALUE[$j]="${arg#*=}"; target=$j; j=$((j+1)); continue ;;
-              -*) j=$((j+1)); continue ;;
+              *:-*) j=$((j+1)); continue ;;
             esac
           fi
           operands+=( "$j" ); j=$((j+1))
@@ -613,8 +675,8 @@ _caws_bash_scan_tokens() {
           elif [[ ${#operands[@]} -gt 1 ]]; then _caws_emit_operand "${operands[$((${#operands[@]}-1))]}"; fi
         else
           local operand
-          for operand in "${operands[@]+"${operands[@]}"}"; do _caws_emit_operand "$operand"; done
-          [[ $target -ge 0 && $target -lt $n ]] && _caws_emit_operand "$target"
+          for operand in "${operands[@]+"${operands[@]}"}"; do _caws_emit_operand "$operand" "$operand_role"; done
+          [[ $target -ge 0 && $target -lt $n ]] && _caws_emit_operand "$target" "$operand_role"
         fi
         i=$j; continue ;;
       dd)
@@ -632,6 +694,10 @@ _caws_bash_scan_tokens() {
         done
         i=$j; continue ;;
       git)
+        if [[ ${CAWS_BASH_ANALYSIS_REQUIRED:-0} == 1 &&
+              "${CAWS_TOK_CWD[$i]-}" != "${AGENT_CWD:-}" ]]; then
+          coordinate_changed=1
+        fi
         local g=$((i+1)) git_coordinate=$coordinate_changed
         while [[ $g -lt $n && "${CAWS_TOK_VALUE[$g]}" == -* ]]; do
           case "${CAWS_TOK_VALUE[$g]}" in
@@ -736,6 +802,18 @@ caws_bash_mutation_candidates() {
   local cmd="$1"
   _caws_bash_scan_tokens "$cmd"
   printf '%s\n' ${CAWS_REC_FILE[@]+"${CAWS_REC_FILE[@]}"}
+}
+
+# Guard-only effect channel. The raw FILE channel remains unchanged for CASR.
+# Retain each observation, including two roles for the same path spelling.
+caws_bash_mutation_effects() {
+  local cmd="$1" index=0
+  _caws_bash_scan_tokens "$cmd"
+  [[ ${#CAWS_REC_FILE[@]} -eq ${#CAWS_REC_FILE_ROLE[@]} ]] || return 2
+  while [[ $index -lt ${#CAWS_REC_FILE[@]} ]]; do
+    printf '%s\t%s\n' "${CAWS_REC_FILE_ROLE[$index]}" "${CAWS_REC_FILE[$index]}"
+    index=$((index+1))
+  done
 }
 
 
@@ -924,35 +1002,62 @@ caws_bash_token_records() {
 #   (`cat > /tmp/patch.py`), which is normal and safe. The harm actually named
 #   is mutating files outside the governing repo, so the predicate is "inside a
 #   DIFFERENT git repository" — which /tmp is not.
+# Assign repository identity without depending on newer shared-state helpers.
+# Sentinels preserve pathnames ending in line feeds in older retained packs.
+_caws_foreign_common_identity() {
+  local common
+  common="$(CDPATH='' cd -- "$1" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null && printf x)" || return 1
+  [[ "$common" == *$'\n'x ]] || return 1
+  common="${common%x}"
+  common="${common%$'\n'}"
+  [[ "$common" == /* ]] || common="$1/$common"
+  (CDPATH='' cd -P -- "$common" 2>/dev/null && printf '%s' "$PWD")
+}
+
 caws_foreign_repo_root() {
   local target="$1" project_dir="${2:-}" dir
+  local project_identity target_identity
   [[ -n "$project_dir" ]] || return 0
   case "$target" in
-    "$project_dir"|"$project_dir"/*) return 0 ;;
     /*) ;;
     *) return 0 ;;
   esac
   dir="$target"
-  [[ -d "$dir" ]] || dir="$(dirname "$dir")"
+  # Taking a parent through command substitution drops a directory name's
+  # trailing line feeds. Keep the lexical bytes until the .git lookup.
+  if [[ ! -d "$dir" ]]; then
+    dir="${dir%/*}"
+    [[ -n "$dir" ]] || dir=/
+  fi
   while [[ -n "$dir" && "$dir" != "/" ]]; do
-    if [[ -e "$dir/.git" ]]; then
+    if [[ -e "$dir/.git" || -L "$dir/.git" ]]; then
+      # Matching Git common directories establish repository membership only.
+      # The ownership oracle must still admit this registered checkout.
+      # Unreadable metadata retains the foreign verdict.
+      if project_identity="$(_caws_foreign_common_identity "$project_dir" && printf x)" &&
+          target_identity="$(_caws_foreign_common_identity "$dir" && printf x)" &&
+          [[ "$project_identity" == "$target_identity" ]]; then
+        return 0
+      fi
       [[ "$dir" != "$project_dir" ]] && printf '%s' "$dir"
       return 0
     fi
-    dir="$(dirname "$dir")"
+    dir="${dir%/*}"
+    [[ -n "$dir" ]] || dir=/
   done
   return 0
 }
 
 # The write verbs that make an interpreter payload a WRITE payload. The open()
-# arm requires a literal first argument AND a literal mode string containing
-# w/a/x/+, so a read-only open does not register.
-CAWS_PY_WRITE_VERBS="\.write_text\(|\.write_bytes\(|os\.(replace|rename|remove|unlink)\(|shutil\.(copyfile|copy|move)\(|open\([^)]*['\"][^'\"]*['\"][[:space:]]*,[[:space:]]*['\"][rwa+bt]*[wax+][rwa+bt]*['\"]"
+# fallback recognizes a literal or simple variable first argument and a literal
+# mode containing w/a/x/+, so a read-only open does not register.
+CAWS_PY_WRITE_VERBS="\.write_text\(|\.write_bytes\(|os\.(replace|rename|remove|unlink)\(|shutil\.(copyfile|copy|move)\(|open\([^)]*['\"][^'\"]*['\"][[:space:]]*,[[:space:]]*['\"][rwa+bt]*[wax+][rwa+bt]*['\"]|open\([^,()]+,[[:space:]]*['\"][rwa+bt]*[wax+][rwa+bt]*['\"]"
 CAWS_NODE_WRITE_VERBS="(writeFileSync|appendFileSync|fs\.(writeFile|appendFile|copyFile)|createWriteStream)\(|fs\.(renameSync|unlinkSync|rmSync)\("
 
-# _caws_interp_payload_literals <payload> <verbs_regex>
-#   Emit slash-bearing path fragments from ONE interpreter payload, when and
-#   only when the payload also contains a write verb for that language.
+# _caws_interp_payload_literals <payload> <verbs_regex> [python-file]
+#   Complete Python programs contribute literals in possible write-path dependencies.
+#   Other payloads and unsupported Python provenance use the conservative
+#   write-verb/path co-occurrence observation.
 #
 #   Co-occurrence is what keeps reads legal: open("<sibling>/x").read() has no
 #   write verb and yields nothing.
@@ -962,8 +1067,325 @@ CAWS_NODE_WRITE_VERBS="(writeFileSync|appendFileSync|fs\.(writeFile|appendFile|c
 #   loses the real literal. A fragment reads the same in a script file, a
 #   heredoc body, and a nested inline quote.
 _caws_interp_payload_literals() {
-  local payload="$1" verbs_re="$2" frag
-  printf '%s' "$payload" | grep -qE "$verbs_re" || return 0
+  local payload="$1" verbs_re="$2" frag narrowed
+  # Entry-file bytes and literal stdin bodies supply complete Python programs.
+  # Other inline shell text retains the legacy conservative scan. This extracts diagnostic literals,
+  # not a readonly/effect proof or an execution grant: computed targets remain
+  # the legacy recognizer's explicit limitation. Modern admission uses the
+  # mandatory typed effect contract above, never this compatibility path.
+  if [[ "${3:-}" == python-file ]]; then
+    if narrowed="$(printf '%s' "$payload" | python3 -c '
+import ast
+import sys
+
+source = sys.stdin.read(524289)
+if len(source.encode("utf-8")) > 524288:
+    raise ValueError("source budget")
+tree = ast.parse(source)
+nodes = list(ast.walk(tree))
+if len(nodes) > 32768:
+    raise ValueError("node budget")
+parents = {id(child): node for node in nodes for child in ast.iter_child_nodes(node)}
+bindings = {}
+parameters = {}
+functions = {}
+calls = [node for node in nodes if isinstance(node, ast.Call)]
+declared = set()
+uncertain_bindings = set()
+steps = 0
+
+def tick():
+    global steps
+    steps += 1
+    if steps > 262144:
+        raise ValueError("work budget")
+
+def scope(node):
+    child = node
+    parent = parents.get(id(node))
+    while parent is not None:
+        if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)) and child in parent.body:
+            return parent
+        if isinstance(parent, ast.Lambda) and child is parent.body:
+            return parent
+        if isinstance(parent, ast.Module):
+            return parent
+        # Defaults, annotations and decorators execute in the defining scope,
+        # rather than the new function scope that receives the arguments.
+        child = parent
+        parent = parents.get(id(parent))
+    return tree
+
+def key(node, name):
+    return (id(scope(node)), name)
+
+def resolve(node):
+    owner = scope(node)
+    while True:
+        candidate = (id(owner), node.id)
+        if candidate in declared or owner is tree:
+            return candidate
+        owner = scope(owner)
+
+def bind(name, value):
+    declared.add(name)
+    bindings.setdefault(name, []).append(value)
+
+def roots(node):
+    if isinstance(node, ast.Name):
+        return [node.id]
+    if isinstance(node, (ast.Attribute, ast.Subscript)):
+        return roots(node.value)
+    if isinstance(node, ast.Starred):
+        return roots(node.value)
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return [name for item in node.elts for name in roots(item)]
+    return []
+
+for node in nodes:
+    tick()
+    if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if node.value is not None:
+            for target in targets:
+                for name in roots(target):
+                    bind(key(target, name), node.value)
+    if isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+        for name in roots(node.target):
+            bind(key(node.target, name), node.iter)
+    if isinstance(node, ast.withitem) and node.optional_vars is not None:
+        for name in roots(node.optional_vars):
+            bind(key(node.optional_vars, name), node.context_expr)
+    if isinstance(node, ast.ClassDef):
+        # A class value may expose any class-body literal through attributes
+        # or construction. Keep the whole body as potential provenance.
+        bind(key(node, node.name), node)
+    if isinstance(node, ast.ExceptHandler) and node.name is not None:
+        name = key(node, node.name)
+        declared.add(name)
+        uncertain_bindings.add(name)
+    if type(node).__name__ == "Match":
+        raise ValueError("unmodeled pattern bindings")
+    if isinstance(node, (ast.Global, ast.Nonlocal)):
+        for name in node.names:
+            declared.add(key(node, name))
+            uncertain_bindings.add(key(node, name))
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in (
+            "eval", "exec", "globals", "locals", "vars", "setattr", "__import__"):
+        raise ValueError("reflective bindings")
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        function = key(node, node.name)
+        functions.setdefault(function, []).append(node)
+        declared.add(function)
+        positional = [*node.args.posonlyargs, *node.args.args]
+        for index, parameter in enumerate(positional):
+            name = (id(node), parameter.arg)
+            declared.add(name)
+            parameters.setdefault(name, []).append((function, index, parameter.arg))
+        for parameter in node.args.kwonlyargs:
+            name = (id(node), parameter.arg)
+            declared.add(name)
+            parameters.setdefault(name, []).append((function, None, parameter.arg))
+        for parameter in (node.args.vararg, node.args.kwarg):
+            if parameter is not None:
+                name = (id(node), parameter.arg)
+                declared.add(name)
+                parameters.setdefault(name, []).append((function, "expanded", parameter.arg))
+        defaults = [*zip(positional[len(positional) - len(node.args.defaults):], node.args.defaults),
+                    *zip(node.args.kwonlyargs, node.args.kw_defaults)]
+        for parameter, value in defaults:
+            if value is not None:
+                bind((id(node), parameter.arg), value)
+        for child in ast.walk(node):
+            tick()
+            if isinstance(child, (ast.Return, ast.Yield, ast.YieldFrom)) and child.value is not None and scope(child) is node:
+                bind(function, child.value)
+    if isinstance(node, ast.Lambda):
+        for parameter in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs,
+                          node.args.vararg, node.args.kwarg]:
+            if parameter is not None:
+                declared.add((id(node), parameter.arg))
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        if node.func.attr in ("append", "extend", "insert", "update", "setdefault", "__setitem__"):
+            for name in roots(node.func.value):
+                for value in [*node.args, *(keyword.value for keyword in node.keywords)]:
+                    owner = next(item for item in ast.walk(node.func.value)
+                                 if isinstance(item, ast.Name) and item.id == name)
+                    bind(key(owner, name), value)
+
+# Direct callable aliases preserve parameter provenance. Any other escape of
+# a relevant local function falls back to the original over-approximation.
+aliases = {name: {name} for name in functions}
+for unused in range(len(bindings) + 1):
+    changed = False
+    for name, values in bindings.items():
+        tick()
+        for value in values:
+            if isinstance(value, ast.Name) and resolve(value) in aliases:
+                previous = aliases.setdefault(name, set())
+                size = len(previous)
+                previous.update(aliases[resolve(value)])
+                changed |= len(previous) != size
+    if not changed:
+        break
+
+# Prove a narrow straight-line text-edit idiom before distinguishing the
+# immutable str.replace from a filesystem replace method. An unsupported
+# statement/call discards this optimization for the WHOLE program, preserving
+# conservative paths for custom receivers, aliases and namespace mutation.
+def text_replacements():
+    environment = {}
+    replacements = set()
+
+    def infer(node):
+        tick()
+        if isinstance(node, ast.Constant):
+            return "text" if isinstance(node.value, str) else "scalar"
+        if isinstance(node, ast.Name):
+            if node.id not in environment:
+                raise ValueError("unproven expression")
+            return environment[node.id]
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            if infer(node.left) == infer(node.right) == "text":
+                return "text"
+            raise ValueError("unproven addition")
+        if isinstance(node, ast.Compare):
+            if all(infer(item) in ("text", "scalar") for item in [node.left, *node.comparators]):
+                return "scalar"
+            raise ValueError("unproven comparison")
+        if isinstance(node, ast.Call):
+            arguments = [infer(arg) for arg in node.args]
+            arguments.extend(infer(item.value) for item in node.keywords)
+            if any(item.arg is None for item in node.keywords):
+                raise ValueError("expanded arguments")
+            if isinstance(node.func, ast.Name) and environment.get(node.func.id) == "path_constructor":
+                if all(kind in ("text", "path") for kind in arguments):
+                    return "path"
+            if isinstance(node.func, ast.Attribute):
+                receiver = infer(node.func.value)
+                method = node.func.attr
+                if receiver == "path" and method == "read_text":
+                    return "text"
+                if receiver == "path" and method == "write_text":
+                    return "scalar"
+                if receiver == "text" and method in ("replace", "index"):
+                    if method == "replace":
+                        replacements.add(id(node))
+                        return "text"
+                    return "scalar"
+            raise ValueError("unproven call")
+        raise ValueError("unproven expression")
+
+    try:
+        for statement in tree.body:
+            tick()
+            if isinstance(statement, ast.ImportFrom) and statement.module == "pathlib" and statement.level == 0:
+                for item in statement.names:
+                    if item.name != "Path":
+                        raise ValueError("unproven import")
+                    environment[item.asname or item.name] = "path_constructor"
+            elif isinstance(statement, ast.Assign) and all(isinstance(target, ast.Name) for target in statement.targets):
+                kind = infer(statement.value)
+                for target in statement.targets:
+                    environment[target.id] = kind
+            elif isinstance(statement, ast.Expr):
+                infer(statement.value)
+            elif isinstance(statement, ast.Assert) and statement.msg is None:
+                infer(statement.test)
+            else:
+                raise ValueError("unproven statement")
+        return replacements
+    except ValueError:
+        return set()
+
+text_replace_calls = text_replacements()
+pending = []
+for call in calls:
+    tick()
+    method = call.func.attr if isinstance(call.func, ast.Attribute) else None
+    if method in ("write_text", "write_bytes"):
+        pending.append(call.func.value)
+    if method in ("replace", "rename", "remove", "unlink", "copyfile", "copy", "move"):
+        if id(call) not in text_replace_calls:
+            pending.extend(call.args)
+            pending.extend(keyword.value for keyword in call.keywords)
+            pending.append(call.func.value)
+    if (isinstance(call.func, ast.Name) and call.func.id == "open") or method == "open":
+        receiver = isinstance(call.func, ast.Attribute) and not (
+            isinstance(call.func.value, ast.Name) and call.func.value.id in ("io", "builtins", "os"))
+        offset = 0 if receiver else 1
+        mode = call.args[offset] if len(call.args) > offset else None
+        mode = next((item.value for item in call.keywords if item.arg == "mode"), mode)
+        writing = mode is not None and (not isinstance(mode, ast.Constant) or
+            not isinstance(mode.value, str) or not set(mode.value) <= set("rwax+bt") or
+            any(flag in mode.value for flag in "wax+"))
+        if writing:
+            if receiver:
+                pending.append(call.func.value)
+                pending.extend(call.args)
+            elif call.args:
+                pending.append(call.args[0])
+            pending.extend(item.value for item in call.keywords if item.arg in ("file", "path"))
+
+seen_nodes = set()
+seen_names = set()
+strings = []
+while pending:
+    node = pending.pop()
+    if id(node) in seen_nodes:
+        continue
+    seen_nodes.add(id(node))
+    if len(seen_nodes) > 32768:
+        raise ValueError("dependency budget")
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        strings.append(node.value)
+    if isinstance(node, ast.Name) and resolve(node) not in seen_names:
+        name = resolve(node)
+        if name in uncertain_bindings:
+            raise ValueError("unsupported target binding: " + name[1])
+        seen_names.add(name)
+        pending.extend(bindings.get(name, []))
+        for function, index, parameter in parameters.get(name, []):
+            if index == "expanded" or function[1].startswith("__"):
+                raise ValueError("unmodeled parameter binding")
+            if any(definition.decorator_list for definition in functions[function]):
+                raise ValueError("decorated parameter binding")
+            names = {name for name, origins in aliases.items() if function in origins}
+            if any(isinstance(call.func, ast.Attribute) and call.func.attr == function[1] for call in calls):
+                raise ValueError("method parameter binding")
+            for reference in nodes:
+                tick()
+                if isinstance(reference, ast.Name) and resolve(reference) in names:
+                    parent = parents.get(id(reference))
+                    direct = isinstance(parent, ast.Call) and parent.func is reference
+                    alias = isinstance(parent, ast.Assign) and parent.value is reference
+                    if not direct and not alias:
+                        raise ValueError("function parameter escapes direct calls")
+            for call in calls:
+                tick()
+                if isinstance(call.func, ast.Name) and resolve(call.func) in names:
+                    if any(isinstance(arg, ast.Starred) for arg in call.args) or any(
+                            item.arg is None for item in call.keywords):
+                        raise ValueError("expanded call arguments")
+                    if index is not None and len(call.args) > index:
+                        pending.append(call.args[index])
+                    pending.extend(item.value for item in call.keywords if item.arg == parameter)
+        # Lambda parameters need an invocation model before their source
+        # literals can be narrowed. Unrelated read-only lambdas are harmless.
+        if isinstance(scope(node), ast.Lambda) and name[0] == id(scope(node)):
+            raise ValueError("lambda parameter binding")
+    pending.extend(ast.iter_child_nodes(node))
+sys.stdout.write("\n".join(strings))
+' 2>/dev/null)"; then
+      payload="$narrowed"
+      # Narrowed strings are path dependencies regardless of the spelling of
+      # the original write verb (including keyword open(file=..., mode=...)).
+      verbs_re='.'
+    fi
+    # Missing Python, malformed/truncated input, unsupported call provenance
+    # and exhausted budgets retain the original conservative observation.
+  fi
+  grep -qE "$verbs_re" <<< "$payload" || return 0
   while IFS= read -r frag; do
     [[ -z "$frag" ]] && continue
     printf '%s\n' "$frag"
@@ -986,6 +1408,20 @@ _caws_interp_payload_literals() {
 #   a real residual; callers must state it rather than imply completeness.
 caws_bash_interpreter_write_literals() {
   local cmd="$1" cwd="${2:-.}" verbs_re=""
+  if [[ ${CAWS_BASH_ANALYSIS_REQUIRED:-0} == 1 ]]; then
+    caws_bash_analysis_interpreter_literals "$cmd"
+    return $?
+  fi
+  # A complete literal stdin body is a Python program, just like an entry
+  # file. Analyze its write-path dependencies separately from surrounding shell
+  # text so comments and replacement data do not fabricate relative paths.
+  # The projected shell still carries every suffix command for the legacy
+  # interpreter scan; no executable suffix is replaced by the Python program.
+  local literal_python=""
+  if literal_python="$(_caws_python_heredoc_shell_view "$cmd" python)"; then
+    _caws_interp_payload_literals "$literal_python" "$CAWS_PY_WRITE_VERBS" python-file
+    cmd="$(_caws_python_heredoc_shell_view "$cmd")"
+  fi
   # Detect an interpreter as a COMMAND TOKEN, tokenizing the way the verb
   # extractors do, so `node` inside a path (./node_modules/.bin/tsc) never
   # matches and a chained invocation still does.
@@ -1005,8 +1441,8 @@ caws_bash_interpreter_write_literals() {
     esac
     # Payload 1: the command text itself — inline -c/-e code, quoted path
     # arguments, and interpreter heredoc bodies. Deliberately the RAW command
-    # (not the heredoc-BLANKED text the operand extractor reads) so an
-    # interpreter heredoc body stays visible.
+    # (apart from the separately analyzed complete literal Python program)
+    # so all other interpreter heredoc bodies stay visible.
     _caws_interp_payload_literals "$cmd" "$verbs_re"
     # Payload 2: the entry script FILE named on the command line (bounded read).
     local j=$((i+1)) t2 script=""
@@ -1029,7 +1465,9 @@ caws_bash_interpreter_write_literals() {
     if [[ -n "$script" ]]; then
       local body=""
       body="$(head -c 524288 "$script" 2>/dev/null || true)"
-      _caws_interp_payload_literals "$body" "$verbs_re"
+      local source_kind=""
+      [[ "$verbs_re" == "$CAWS_PY_WRITE_VERBS" ]] && source_kind=python-file
+      _caws_interp_payload_literals "$body" "$verbs_re" "$source_kind"
     fi
   done
 }

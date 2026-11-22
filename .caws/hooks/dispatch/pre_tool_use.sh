@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 95
+# hook_pack_version: 139
 # caws_min_major: 11
 # lineage_refs: 8,11,17,19,22,23,24,26
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -126,6 +126,7 @@ HANDLERS=(
   # session that merges its own worktree is never bricked). Not wired by
   # default: it is a broad session-level cwd enforcement; uncomment to adopt.
   protected-paths.sh
+  shortcut-language-check.sh
   scan-secrets.sh
   # quiet-merge.sh MUST be the last interceptor: it emits
   # updatedInput which replaces any prior hook's updatedInput.

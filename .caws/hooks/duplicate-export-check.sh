@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 95
+# hook_pack_version: 139
 # caws_min_major: 11
 # lineage_refs: 30
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -52,6 +52,14 @@ esac
 case "$FILE_PATH" in
   */node_modules/*|*/dist/*|*/build/*|*/coverage/*) exit 0 ;;
 esac
+
+# A relative target is the harness's path from the payload working directory.
+# The walk below ends at "/", which only an absolute path reaches.
+if [[ "$FILE_PATH" != /* ]]; then
+  BASE_DIR="${HOOK_CWD:-${CAWS_PROJECT_DIR:-$PWD}}"
+  [[ "$BASE_DIR" == /* ]] || exit 0
+  FILE_PATH="${BASE_DIR%/}/$FILE_PATH"
+fi
 
 # Find the package root (directory containing package.json).
 PKG_ROOT="$(dirname "$FILE_PATH")"

@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 89
+# hook_pack_version: 139
 # caws_min_major: 11
 # lineage_refs: 4,6,11,19,32
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -24,15 +24,16 @@
 
 set -euo pipefail
 
+worktree_authority_unavailable() {
+  printf '[worktree-guard] authority unavailable: %s; blocked\n' "$1" >&2
+  exit 2
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
-source "$SCRIPT_DIR/lib/parse-input.sh"
-# shellcheck source=lib/caws-state.sh
-# Guard the source: a fatal `source <missing>` under `set -euo pipefail` is NOT
-# caught by `|| true`. caws-state.sh is optional here (worktree-guard reads the
-# registry via node), so a missing file is non-fatal but must not abort the
-# guard (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001).
-[[ -f "$SCRIPT_DIR/lib/caws-state.sh" ]] && source "$SCRIPT_DIR/lib/caws-state.sh"
+if [[ ! -f "$SCRIPT_DIR/lib/parse-input.sh" ]] || ! source "$SCRIPT_DIR/lib/parse-input.sh"; then
+  worktree_authority_unavailable hook-input
+fi
 # shellcheck source=lib/agent-surface.sh
 # Provides CAWS_PROJECT_DIR and caws_source_lib — load-bearing (caws_source_lib
 # is called below). Fail CLOSED if absent: a guard that blocks dangerous git ops
@@ -47,7 +48,7 @@ fi
 # shellcheck source=lib/emit.sh
 # Use caws_source_lib so a vendor override is preferred over the shared default.
 caws_source_lib emit.sh 2>/dev/null || true
-parse_hook_input
+parse_hook_input || worktree_authority_unavailable hook-input
 
 TOOL_NAME="$HOOK_TOOL_NAME"
 COMMAND="$HOOK_COMMAND"
@@ -66,9 +67,51 @@ else
   echo "[worktree-guard] command-recognition library unavailable; blocked" >&2
   exit 2
 fi
+# An empty protected-operation view needs no registry authority. This is checked
+# after lexical projection so executable nested Git commands remain visible.
+[[ -n "$COMMAND" ]] || exit 0
 
-# Resolve main repo root (shared helper — HOOK-LIB-CONSOLIDATION-001 T2a).
-PROJECT_DIR="$(resolve_canonical_dir "${CAWS_PROJECT_DIR:-.}")"
+# shellcheck source=lib/caws-state.sh
+if [[ ! -f "$SCRIPT_DIR/lib/caws-state.sh" ]] || ! source "$SCRIPT_DIR/lib/caws-state.sh"; then
+  worktree_authority_unavailable canonical-root
+fi
+
+# Path identity is assigned, never captured through newline-stripping stdout.
+declare -F caws_resolve_canonical_dir_into >/dev/null &&
+  declare -F caws_physical_dir_into >/dev/null &&
+  declare -F caws_git_path_into >/dev/null || worktree_authority_unavailable canonical-root
+PROJECT_DIR=""
+if ! caws_resolve_canonical_dir_into PROJECT_DIR "${CAWS_PROJECT_DIR:-.}" ||
+    ! caws_physical_dir_into PROJECT_DIR "$PROJECT_DIR"; then
+  worktree_authority_unavailable canonical-root
+fi
+[[ -d "$PROJECT_DIR/.caws" ]] || exit 0
+WORKTREES_JSON="$PROJECT_DIR/.caws/worktrees.json"
+
+# The path is data in argv, not interpolated JavaScript. A failed reader must
+# not print an empty registry and thereby remove the guard's authority.
+worktree_registry_read_into() {
+  local _wt_var="$1" _wt_mode="$2" _wt_out
+  command -v node >/dev/null 2>&1 || return 1
+  _wt_out="$(node -e "
+    $CAWS_NODE_ENTRIES_OF
+    try {
+      var reg = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+      if (!reg || typeof reg !== 'object' || Array.isArray(reg)) process.exit(2);
+      var active = entriesOf(reg).filter(function(w) {
+        var s = w.status;
+        return s === 'active' || s === undefined || s === null || s === '';
+      });
+      var mode = process.argv[2];
+      var value = mode === 'count' ? String(active.length) :
+        active.length === 0 ? '' : mode === 'first' ? active[0].name : active[0].baseBranch || '';
+      if (typeof value !== 'string') process.exit(2);
+      process.stdout.write(value);
+    } catch(e) { process.exit(2); }
+  " "$WORKTREES_JSON" "$_wt_mode" 2>/dev/null && printf x0 || printf 'x%s' "$?")"
+  [[ "${_wt_out##*x}" == 0 ]] || return 1
+  printf -v "$_wt_var" '%s' "${_wt_out%x*}"
+}
 
 # Block sparse checkout (runs before "only check git commands" early-exit)
 if echo "$COMMAND" | grep -qE '^caws\s+(worktree\s+create|parallel\s+setup).*--scope'; then
@@ -117,29 +160,240 @@ canonical_guard_emit_block() {
   local first_active="$2"
   echo "BLOCKED: $action from the canonical checkout while CAWS worktrees are active." >&2
   echo "Active worktree(s) detected (e.g. '$first_active' in .caws/worktrees.json)." >&2
+  # A path restore is not a worktree-switching problem: the hint would send the
+  # agent into a lane that does not own the path, so the caller prints its own.
+  [[ "${3:-}" == "no-switch-hint" ]] && return 0
   echo "Switch into your worktree before mutating: cd .caws/worktrees/$first_active" >&2
   echo "Or destroy any worktree that is genuinely abandoned: caws worktree destroy <name>" >&2
 }
 
-CANONICAL_GUARD_CHECK_CWD="${HOOK_CWD:-$PROJECT_DIR}"
-if is_canonical_checkout "$CANONICAL_GUARD_CHECK_CWD"; then
-    WORKTREES_JSON="$PROJECT_DIR/.caws/worktrees.json"
-      if [[ -f "$WORKTREES_JSON" ]] && command -v node >/dev/null 2>&1; then
-        FIRST_ACTIVE_WT=$(node -e "
-          $CAWS_NODE_ENTRIES_OF
-          try {
-            var reg = JSON.parse(require('fs').readFileSync('$WORKTREES_JSON', 'utf8'));
-            var active = entriesOf(reg).filter(function(w) {
-              var s = w.status;
-              return s === 'active' || s === undefined || s === null || s === '';
-            });
-            if (active.length > 0) console.log(active[0].name);
-            else console.log('');
-          } catch(e) { console.log(''); }
-        " 2>/dev/null || echo "")
+# checkout_args_are_pathspec COMMAND DIR — success when `git checkout <args>`
+# restores paths rather than switching to a ref. It is a pathspec when the
+# first argument is not a commit-ish (git resolves a name that is both a ref and
+# a path as the ref) and it names a tracked or existing path, or when more than
+# one non-flag argument is given (`git checkout <tree> <path>`). Anything else,
+# including a remote-tracking name git would turn into a local branch, stays
+# labeled a branch switch, the conservative reading.
+checkout_args_are_pathspec() {
+  local cmd="$1" dir="$2" word arg="" count=0
+  local -a words=()
+  read -r -a words <<<"$cmd" || true
+  for word in "${words[@]:2}"; do
+    case "$word" in
+      '&&' | '||' | ';' | '|' | *';' ) break ;;
+      -*) continue ;;
+    esac
+    word="${word//[\"\']/}"
+    count=$((count + 1))
+    [[ -z "$arg" ]] && arg="$word"
+  done
+  [[ -z "$arg" ]] && return 1
+  [[ "$count" -gt 1 ]] && return 0
+  if git -C "$dir" rev-parse --verify --quiet "${arg}^{commit}" >/dev/null 2>&1; then
+    return 1
+  fi
+  if git -C "$dir" ls-files --error-unmatch -- "$arg" >/dev/null 2>&1 || [[ -e "$dir/$arg" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# ─── Sanctioned path restores ────────────────────────────────────────
+# Two restores have an exit that does not route through another session:
+#   * a path restore whose EVERY target is a package-manager lockfile — the
+#     content is regenerable by the package manager, and no lane owns lockfile
+#     churn in the canonical checkout;
+#   * `git restore --staged [--source=<tree-ish>] <path>`, which only touches the
+#     index and discards no working-tree content.
+# Both are matched word-by-word against a strict path charset, so any shell
+# metacharacter, extra flag, tree-ish or non-lockfile target leaves the command
+# to the refusals below.
+CAWS_LOCKFILE_BASENAMES=" package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml bun.lockb Cargo.lock poetry.lock uv.lock Gemfile.lock composer.lock go.sum "
+
+# restore_command_targets COMMAND — sets RESTORE_SUB (checkout|restore),
+# RESTORE_FLAGS (space-joined flags before any `--`) and RESTORE_TARGETS (array).
+# Returns 1 when COMMAND is not a single plain `git checkout|restore ...` line
+# made only of path-charset words.
+restore_command_targets() {
+  local cmd="$1" word
+  local -a words=()
+  RESTORE_SUB=""
+  RESTORE_FLAGS=""
+  RESTORE_TARGETS=()
+  [[ "$cmd" == *$'\n'* ]] && return 1
+  read -r -a words <<<"$cmd" || return 1
+  [[ "${#words[@]}" -ge 3 && "${words[0]}" == "git" ]] || return 1
+  case "${words[1]}" in
+    checkout | restore) RESTORE_SUB="${words[1]}" ;;
+    *) return 1 ;;
+  esac
+  for word in "${words[@]:2}"; do
+    if [[ "$word" == -- ]]; then
+      continue
+    elif [[ "$word" == -* ]]; then
+      RESTORE_FLAGS="$RESTORE_FLAGS $word"
+      continue
+    fi
+    if [[ "$word" =~ ^\"(.*)\"$ || "$word" =~ ^\'(.*)\'$ ]]; then
+      word="${BASH_REMATCH[1]}"
+    fi
+    [[ "$word" =~ ^[A-Za-z0-9._/@+-]+$ ]] || return 1
+    RESTORE_TARGETS+=("$word")
+  done
+  [[ "${#RESTORE_TARGETS[@]}" -ge 1 ]]
+}
+
+# lockfile_only_restore COMMAND DIR — every target of a flag-free
+# `git checkout|restore [--] <paths>` is a lockfile (matched by basename at any
+# depth). A checkout argument that resolves as a ref is a branch switch, not a
+# restore, and is not admitted.
+lockfile_only_restore() {
+  local cmd="$1" dir="$2" target
+  restore_command_targets "$cmd" || return 1
+  [[ -z "$RESTORE_FLAGS" ]] || return 1
+  for target in "${RESTORE_TARGETS[@]}"; do
+    [[ "$target" != */ ]] || return 1
+    [[ "$CAWS_LOCKFILE_BASENAMES" == *" ${target##*/} "* ]] || return 1
+  done
+  if [[ "$RESTORE_SUB" == "checkout" ]]; then
+    checkout_args_are_pathspec "$cmd" "$dir" || return 1
+  fi
+  return 0
+}
+
+# index_only_restore COMMAND — `git restore --staged [--source=<t> | --source <t>
+# | -s <t>] [--] <paths>`: the index is the only thing it changes. --source
+# without --staged writes the working tree and is not admitted. Any other flag
+# (--worktree/-W, -p, -f, --overlay, --ignore-unmerged, an unknown flag, or a
+# clustered short such as -SW) refuses; the command is read word by word so no
+# shell metacharacter survives the path/tree-ish charsets.
+index_only_restore() {
+  local cmd="$1" word staged=0 targets=0 expect_source=0 past_sep=0
+  local -a words=()
+  [[ "$cmd" == *$'\n'* ]] && return 1
+  read -r -a words <<<"$cmd" || return 1
+  [[ "${#words[@]}" -ge 4 && "${words[0]}" == "git" && "${words[1]}" == "restore" ]] || return 1
+  for word in "${words[@]:2}"; do
+    if [[ "$expect_source" -eq 1 ]]; then
+      [[ "$word" =~ ^[A-Za-z0-9._/@^~+][A-Za-z0-9._/@^~+-]*$ ]] || return 1
+      expect_source=0
+      continue
+    fi
+    if [[ "$past_sep" -eq 0 ]]; then
+      case "$word" in
+        --) past_sep=1; continue ;;
+        --staged | -S) staged=1; continue ;;
+        --source | -s) expect_source=1; continue ;;
+        --source=*)
+          [[ "${word#--source=}" =~ ^[A-Za-z0-9._/@^~+][A-Za-z0-9._/@^~+-]*$ ]] || return 1
+          continue ;;
+        -*) return 1 ;;
+      esac
+    fi
+    if [[ "$word" =~ ^\"(.*)\"$ || "$word" =~ ^\'(.*)\'$ ]]; then
+      word="${BASH_REMATCH[1]}"
+    fi
+    [[ "$word" =~ ^[A-Za-z0-9._/@+-]+$ ]] || return 1
+    targets=$((targets + 1))
+  done
+  [[ "$staged" -eq 1 && "$expect_source" -eq 0 && "$targets" -ge 1 ]]
+}
+
+if index_only_restore "$COMMAND"; then
+  exit 0
+fi
+if lockfile_only_restore "$COMMAND" "${HOOK_CWD:-$PROJECT_DIR}"; then
+  exit 0
+fi
+# ─── /Sanctioned path restores ───────────────────────────────────────────
+
+# Direct copy operations use the same typed roles as the mandatory write guard.
+# That guard also covers finite callees and nested shell source which this
+# lightweight Git policy view does not reconstruct.
+if printf '%s\n' "$COMMAND" | grep -qE '^(cp|mv)[[:space:]]'; then
+  _WG_POLICY_COMMAND="$COMMAND"
+  if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then
+    [[ -f "$HOOK_PAYLOAD_FILE" && -r "$HOOK_PAYLOAD_FILE" ]] || worktree_authority_unavailable copy-original-payload
+  elif [[ -z "${HOOK_INPUT_JSON:-}" ]]; then
+    HOOK_INPUT_JSON="$(cat)" || worktree_authority_unavailable copy-original-payload
+    export -n HOOK_INPUT_JSON 2>/dev/null || true
+  fi
+  original_payload() {
+    if [[ -n "${HOOK_PAYLOAD_FILE:-}" ]]; then cat "$HOOK_PAYLOAD_FILE"
+    else printf '%s' "${HOOK_INPUT_JSON:-}"; fi
+  }
+  _CWD_RESOLVED=0; _CWD_CONTRACT=1
+  CAWS_COPY_FINAL_SYMLINK=''
+  if [[ ! -r "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" || ! -r "$SCRIPT_DIR/lib/copy-roles.sh" ]] ||
+      ! source "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" ||
+      ! source "$SCRIPT_DIR/lib/copy-roles.sh"; then
+    worktree_authority_unavailable copy-role-libraries
+  fi
+  if ! caws_bash_prepare_analysis "$HOOK_COMMAND" "$PROJECT_DIR" "$PROJECT_DIR"; then
+    printf '[worktree-guard] %s\n' "$CAWS_BASH_ANALYSIS_ERROR" >&2
+    worktree_authority_unavailable copy-role-analysis
+  fi
+  caws_copy_role_paths "$PROJECT_DIR" || worktree_authority_unavailable copy-role-paths
+  if [[ "$CAWS_COPY_CANONICAL" == 1 ]]; then
+    echo 'BLOCKED: Copying files from a worktree to the main repo is forbidden.' >&2
+    exit 2
+  fi
+  case "${CAWS_COPY_FINAL_SYMLINK:-}" in
+    0) ;;
+    1) echo '[worktree-guard] BLOCKED: copy final destination symlink entry semantics are unmodeled.' >&2; exit 2 ;;
+    *) worktree_authority_unavailable copy-role-final-entry ;;
+  esac
+  if [[ -n "$CAWS_COPY_UNRESOLVED" || ${#CAWS_AST_COPY_OPERATION[@]} -eq 0 || ${#CAWS_AST_ISSUES[@]} -gt 0 ]]; then
+    # Name the cause: the bare label sends the agent hunting for a fault it
+    # cannot see. Each of these is a property of the command or its environment.
+    # Every held cause is printed, so one retry can address all of them.
+    for _wg_issue in ${CAWS_AST_ISSUES[@]+"${CAWS_AST_ISSUES[@]}"}; do
+      printf '[worktree-guard] cp/mv refused: the command analyzer reported: %s\n' "$_wg_issue" >&2
+    done
+    if [[ -n "$CAWS_COPY_UNRESOLVED" ]]; then
+      printf '[worktree-guard] cp/mv refused: %s. Name each source as an existing regular file and the destination as a literal path.\n' "$CAWS_COPY_UNRESOLVED" >&2
+    elif [[ ${#CAWS_AST_COPY_OPERATION[@]} -eq 0 && ${#CAWS_AST_ISSUES[@]} -eq 0 ]]; then
+      printf '[worktree-guard] cp/mv refused: no copy operation could be identified in the command.\n' >&2
+    fi
+    worktree_authority_unavailable copy-roles
+  fi
+  COMMAND="$_WG_POLICY_COMMAND"
+  # Complete copy-only facts need no Git activity registry. Destination write
+  # ownership is independently checked by the mandatory write guard.
+  printf '%s\n' "$COMMAND" | grep -qE '^git[[:space:]]' || exit 0
+fi
+
+CANONICAL_GUARD_CHECK_CWD=""
+CANONICAL_GUARD_GIT_DIR=""
+CANONICAL_GUARD_COMMON_DIR=""
+if ! caws_physical_dir_into CANONICAL_GUARD_CHECK_CWD "${HOOK_CWD:-$PROJECT_DIR}" ||
+    ! caws_git_path_into CANONICAL_GUARD_GIT_DIR "$CANONICAL_GUARD_CHECK_CWD" --git-dir ||
+    ! caws_git_path_into CANONICAL_GUARD_COMMON_DIR "$CANONICAL_GUARD_CHECK_CWD" --git-common-dir; then
+  worktree_authority_unavailable canonical-root
+fi
+[[ "$CANONICAL_GUARD_GIT_DIR" == /* ]] || CANONICAL_GUARD_GIT_DIR="$CANONICAL_GUARD_CHECK_CWD/$CANONICAL_GUARD_GIT_DIR"
+[[ "$CANONICAL_GUARD_COMMON_DIR" == /* ]] || CANONICAL_GUARD_COMMON_DIR="$CANONICAL_GUARD_CHECK_CWD/$CANONICAL_GUARD_COMMON_DIR"
+if ! caws_physical_dir_into CANONICAL_GUARD_GIT_DIR "$CANONICAL_GUARD_GIT_DIR" ||
+    ! caws_physical_dir_into CANONICAL_GUARD_COMMON_DIR "$CANONICAL_GUARD_COMMON_DIR"; then
+  worktree_authority_unavailable canonical-root
+fi
+if [[ "$CANONICAL_GUARD_GIT_DIR" == "$CANONICAL_GUARD_COMMON_DIR" ]]; then
+      if [[ -e "$WORKTREES_JSON" || -L "$WORKTREES_JSON" ]]; then
+        worktree_registry_read_into FIRST_ACTIVE_WT first || worktree_authority_unavailable worktrees-registry
         if [[ -n "$FIRST_ACTIVE_WT" ]]; then
           if echo "$COMMAND" | grep -qE '^git\s+checkout\s+[^[:space:]-]'; then
-            canonical_guard_emit_block "git checkout (branch switch)" "$FIRST_ACTIVE_WT"
+            # A non-flag argument is a ref (branch switch) or a path (restore
+            # from the index/a tree). Both stay refused from the canonical
+            # checkout; only the label differs. Branch creation (-b/-B) starts
+            # with a flag and never reaches this match.
+            if checkout_args_are_pathspec "$COMMAND" "$CANONICAL_GUARD_CHECK_CWD"; then
+              canonical_guard_emit_block "git checkout <path> (working-tree path restore, not a branch switch)" "$FIRST_ACTIVE_WT" no-switch-hint
+              echo "This overwrites uncommitted changes to the named path(s) — the same work-loss hazard as git checkout -- <path>." >&2
+              echo "No lane owns a path in the canonical checkout. To keep the changes, commit them first; to discard them, ask the user to run this command themselves." >&2
+              echo "Admitted from here: a restore whose every target is a package-manager lockfile, and git restore --staged <path>." >&2
+            else
+              canonical_guard_emit_block "git checkout (branch switch)" "$FIRST_ACTIVE_WT"
+            fi
             exit 2
           fi
           if echo "$COMMAND" | grep -qE '^git\s+switch\s+[^[:space:]-]'; then
@@ -160,37 +414,6 @@ if is_canonical_checkout "$CANONICAL_GUARD_CHECK_CWD"; then
 fi
 # ─── /CANONICAL-CHECKOUT-WORKTREE-GUARD-001 ──────────────────────────
 
-# Block cross-boundary file copies (worktree → main).
-WORKTREE_BASE="$PROJECT_DIR/.caws/worktrees"
-if [[ -d "$WORKTREE_BASE" ]]; then
-  if echo "$COMMAND" | grep -qE '^(cp|mv)[[:space:]]'; then
-    AGENT_IN_WORKTREE=false
-    if [[ -n "$HOOK_CWD" ]] && [[ "$HOOK_CWD" == "$WORKTREE_BASE"/* ]]; then
-      AGENT_IN_WORKTREE=true
-    fi
-
-    if [[ "$AGENT_IN_WORKTREE" != "true" ]]; then
-      if echo "$COMMAND" | grep -qF ".caws/worktrees/" || echo "$COMMAND" | grep -qF "$WORKTREE_BASE"; then
-        HAS_WT_PATH=false
-        HAS_MAIN_PATH=false
-        if echo "$COMMAND" | grep -qE '\.caws/worktrees/|'"$(echo "$WORKTREE_BASE" | sed 's/[\/&]/\\&/g')"''; then
-          HAS_WT_PATH=true
-        fi
-        if echo "$COMMAND" | grep -qE "(^|\s)$PROJECT_DIR/[^.]|core/|src/|tests/|packages/" && [[ "$HAS_WT_PATH" == "true" ]]; then
-          HAS_MAIN_PATH=true
-        fi
-        if [[ "$HAS_WT_PATH" == "true" ]] && [[ "$HAS_MAIN_PATH" == "true" ]]; then
-          echo "BLOCKED: Copying files from a worktree to the main repo is forbidden." >&2
-          echo "This bypasses worktree isolation. Work entirely within your worktree." >&2
-          echo "If tests need the main repo's venv, activate it with:" >&2
-          echo "  source $PROJECT_DIR/.venv/bin/activate" >&2
-          exit 2
-        fi
-      fi
-    fi
-  fi
-fi
-
 # Only check git commands from here on
 if ! echo "$COMMAND" | grep -qE '^git\s'; then
   exit 0
@@ -200,35 +423,33 @@ fi
 WORKTREES_ACTIVE=false
 PARALLEL_BASE=""
 
-if [[ -f "$PROJECT_DIR/.caws/parallel.json" ]] && command -v node >/dev/null 2>&1; then
-  PARALLEL_INFO=$(node -e "
+if [[ -e "$PROJECT_DIR/.caws/parallel.json" || -L "$PROJECT_DIR/.caws/parallel.json" ]]; then
+  command -v node >/dev/null 2>&1 || worktree_authority_unavailable parallel-registry
+  PARALLEL_INFO="$(node -e "
     try {
-      var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/parallel.json', 'utf8'));
+      var reg = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+      if (!reg || typeof reg !== 'object' || Array.isArray(reg) ||
+          (reg.agents !== undefined && !Array.isArray(reg.agents)) ||
+          (reg.baseBranch !== undefined && typeof reg.baseBranch !== 'string')) process.exit(2);
       var agents = (reg.agents || []).length;
-      console.log(agents + ':' + (reg.baseBranch || ''));
-    } catch(e) { console.log('0:'); }
-  " 2>/dev/null || echo "0:")
+      process.stdout.write(agents + ':' + (reg.baseBranch || ''));
+    } catch(e) { process.exit(2); }
+  " "$PROJECT_DIR/.caws/parallel.json" 2>/dev/null && printf x0 || printf 'x%s' "$?")"
+  [[ "${PARALLEL_INFO##*x}" == 0 ]] || worktree_authority_unavailable parallel-registry
+  PARALLEL_INFO="${PARALLEL_INFO%x*}"
 
-  AGENT_COUNT=$(echo "$PARALLEL_INFO" | cut -d: -f1)
-  PARALLEL_BASE=$(echo "$PARALLEL_INFO" | cut -d: -f2)
+  AGENT_COUNT="${PARALLEL_INFO%%:*}"
+  PARALLEL_BASE="${PARALLEL_INFO#*:}"
+  [[ "$AGENT_COUNT" =~ ^[0-9]+$ ]] || worktree_authority_unavailable parallel-registry
 
   if [[ "$AGENT_COUNT" -gt 0 ]] 2>/dev/null; then
     WORKTREES_ACTIVE=true
   fi
 fi
 
-if [[ "$WORKTREES_ACTIVE" != "true" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>&1; then
-  ACTIVE_COUNT=$(node -e "
-    $CAWS_NODE_ENTRIES_OF
-    try {
-      var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      var active = entriesOf(reg).filter(function(w) {
-        var s = w.status;
-        return s === 'active' || s === undefined || s === null || s === '';
-      });
-      console.log(active.length);
-    } catch(e) { console.log('0'); }
-  " 2>/dev/null || echo "0")
+if [[ "$WORKTREES_ACTIVE" != "true" ]] && [[ -e "$WORKTREES_JSON" || -L "$WORKTREES_JSON" ]]; then
+  worktree_registry_read_into ACTIVE_COUNT count || worktree_authority_unavailable worktrees-registry
+  [[ "$ACTIVE_COUNT" =~ ^[0-9]+$ ]] || worktree_authority_unavailable worktrees-registry
 
   if [[ "$ACTIVE_COUNT" -gt 0 ]] 2>/dev/null; then
     WORKTREES_ACTIVE=true
@@ -267,14 +488,14 @@ if echo "$COMMAND" | grep -qE '^git\s+restore\b'; then
   echo "git restore DISCARDS uncommitted changes by path — the same work-loss hazard as git reset --hard." >&2
   echo "This is a path/working-tree restore, NOT a branch switch." >&2
   echo "Commit the work you want to keep first; to intentionally drop a specific file's changes," >&2
-  echo "do it from a session rooted in the owning worktree, not from a shared/foreign checkout." >&2
+  echo "ask the user to run the restore themselves. Admitted: a restore whose every target is a package-manager lockfile, and git restore --staged <path>." >&2
   exit 2
 fi
 
 if echo "$COMMAND" | grep -qE '^git\s+checkout\s+--\s'; then
   echo "BLOCKED: git checkout -- <path> (working-tree discard) is not allowed while worktrees are active." >&2
   echo "This discards uncommitted changes to the named path(s) — a work-loss hazard while parallel work exists." >&2
-  echo "Commit first, or operate from the owning worktree's session." >&2
+  echo "Commit first to keep the changes; to discard them, ask the user to run this command themselves. A lockfile-only restore is admitted." >&2
   exit 2
 fi
 
@@ -296,19 +517,8 @@ AGENT_DIR="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 CURRENT_BRANCH=$(caws_current_branch "$AGENT_DIR")  # HOOK-LIB-CONSOLIDATION-001 T2b
 
 BASE_BRANCH="$PARALLEL_BASE"
-if [[ -z "$BASE_BRANCH" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && command -v node >/dev/null 2>&1; then
-  BASE_BRANCH=$(node -e "
-    $CAWS_NODE_ENTRIES_OF
-    try {
-      var reg = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.caws/worktrees.json', 'utf8'));
-      var active = entriesOf(reg).filter(function(w) {
-        var s = w.status;
-        return s === 'active' || s === undefined || s === null || s === '';
-      });
-      if (active.length > 0) console.log(active[0].baseBranch || '');
-      else console.log('');
-    } catch(e) { console.log(''); }
-  " 2>/dev/null || echo "")
+if [[ -z "$BASE_BRANCH" ]] && [[ -e "$WORKTREES_JSON" || -L "$WORKTREES_JSON" ]]; then
+  worktree_registry_read_into BASE_BRANCH base || worktree_authority_unavailable worktrees-registry
 fi
 
 if [[ -n "$BASE_BRANCH" ]] && [[ "$CURRENT_BRANCH" == "$BASE_BRANCH" ]]; then

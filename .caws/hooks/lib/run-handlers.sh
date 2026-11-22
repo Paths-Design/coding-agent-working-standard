@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 95
+# hook_pack_version: 139
 # caws_min_major: 11
 # lineage_refs: 8,16
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -199,17 +199,17 @@ _rh_truncate_complete_utf8() {
   # Byte-exact, character-safe truncation. Bash cannot express this: substring
   # expansion indexes by CHARACTER in a UTF-8 locale, and assembling the output
   # from printf %b octal escapes re-interprets them. The cut therefore lives in
-  # the pack's shipped helper (advisory_truncate.py), alongside
-  # classify_command.py, which is already required on this path.
+  # the pack's standalone generated typed helper. It shares its algorithm with
+  # the typed composer and requires only the declared Node runtime.
   local total
   total=$(LC_ALL=C printf '%s' "$text" | wc -c | tr -d ' ')
   [[ "$total" =~ ^[0-9]+$ ]] || { printf '%s' "$text"; return 0; }
   (( total <= max_bytes )) && { printf '%s' "$text"; return 0; }
 
   local script out status
-  script="$(_rh_pack_python_helper advisory_truncate.py)"
-  if [[ -n "$script" && -f "$script" && -x "$script" ]] && command -v python3 >/dev/null 2>&1; then
-    out="$(printf '%s' "$text" | python3 "$script" "$max_bytes" 2>/dev/null)"
+  script="$(_rh_pack_helper advisory_truncate.cjs)"
+  if [[ -n "$script" && -f "$script" && -r "$script" ]] && command -v node >/dev/null 2>&1; then
+    out="$(printf '%s' "$text" | node "$script" "$max_bytes" 2>/dev/null)"
     status=$?
     if (( status == 0 )); then
       local out_bytes
@@ -239,7 +239,7 @@ _rh_truncate_complete_utf8() {
 }
 
 # Locate a shipped pack helper next to this library (lib/ -> pack root).
-_rh_pack_python_helper() {
+_rh_pack_helper() {
   local name="$1"
   local here
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -364,9 +364,46 @@ _rh_dedup_flush() {
 # ---------------------------------------------------------------------------
 # run_handlers [--short-circuit-on-block] <handler-entry>...
 # ---------------------------------------------------------------------------
+_rh_record_progress() {
+  # Adapter-owned per-invocation journal. Each write precedes the next stage,
+  # including the next handler. A failed record never changes a guard verdict.
+  [[ -n "${CAWS_HOOK_INVOCATION_FILE:-}" ]] || return 0
+  printf '%s' "$6" | python3 -c '
+import json, os, sys, time
+try:
+    handler, path, status, code, stderr_path, index, sid = sys.argv[1:]
+    row = json.loads(os.environ["CAWS_HOOK_INVOCATION_METADATA"])
+    selected = next((item for item in json.loads(os.environ["CAWS_HOOK_INVOCATION_SELECTION"])
+                     if item["path"] == path), None)
+    if selected is None:
+        raise ValueError("handler selection mismatch")
+    row.update(stage="handler_" + status, timestamp_ms=time.time_ns() // 1000000,
+               handler=handler, path=path, handler_index=int(index),
+               resolved_session_id=sid, source_sha256=selected["sha256"],
+               source_digest_boundary="before_dispatch", exit_code=json.loads(code))
+    stdout = sys.stdin.read()
+    if status != "started":
+        with open(stderr_path, errors="replace") as stream:
+            row.update(stdout=stdout, stderr=stream.read())
+    data = (json.dumps(row, separators=(",", ":")) + "\n").encode()
+    fd = os.open(os.environ["CAWS_HOOK_INVOCATION_FILE"],
+                 os.O_WRONLY | os.O_APPEND | os.O_NOFOLLOW)
+    try:
+        if os.write(fd, data) != len(data):
+            raise OSError("partial invocation record append")
+    finally:
+        os.close(fd)
+except (OSError, ValueError, TypeError, KeyError, IndexError) as error:
+    print("[caws invocation record] incomplete: " + str(error), file=sys.stderr)
+' "$1" "$2" "$3" "$4" "$5" "$_rh_handler_index" "$_rh_session_id" || \
+    printf '[caws invocation record] could not record %s %s\n' "$1" "$3" >&2
+  return 0
+}
+
 _rh_record_execution() {
   # The machine launcher owns this private per-dispatch file. Recording is
   # provenance-only: failure is visible and never changes a guard decision.
+  _rh_record_progress "$@"
   [[ -n "${CAWS_HOOK_EXECUTION_FILE:-}" ]] || return 0
   printf '%s' "$6" | jq -Rsc \
     --arg session_id "$_rh_session_id" --arg handler "$1" --arg path "$2" \
@@ -378,6 +415,163 @@ _rh_record_execution() {
       hook_event:$hook_event,tool_name:$tool_name,tool_use_id:$tool_use_id,
       stdout:.,stderr:$stderr}' >> "$CAWS_HOOK_EXECUTION_FILE" || \
     printf '[caws execution record] could not record %s\n' "$1" >&2
+  return 0
+}
+
+# _rh_exec_staged <handler_path> <stderr_file> [args...]
+# Runs ONLY as the whole body of a handler's command substitution, whose subshell
+# it replaces with the handler. The inline payload is written into a private stage
+# directory this subshell creates (mktemp -d, mode 0700), opened as the subshell's
+# stdin, and unlinked before the handler starts. Unlinking the payload needs write
+# permission only on that private directory, so it still succeeds when TMPDIR
+# itself has stopped accepting removals; only removing the then-empty directory
+# depends on TMPDIR, and a directory that cannot be removed is named on stderr.
+# Each handler opens its own stage, so every reader starts at offset zero and a
+# handler that never reads cannot block a writer. The only paths it removes are the
+# directory its own mktemp -d returned and the payload it wrote inside it; a handler
+# is never skipped to avoid a leftover.
+# The payload unlink is verified before the trap is cleared. If the payload is
+# still present (its directory was altered after creation), it is named on stderr
+# and the handler runs as a child instead of replacing the subshell, so the EXIT
+# trap retries the removal afterwards and reports again if it still fails.
+# Limits, from the order of operations below: a signal delivered while mktemp -d
+# runs, before its name is known, can leave one empty directory. Once the name is
+# known, TERM, INT or HUP before the unlink remove the stage through the EXIT trap.
+# A KILL between the payload write and its unlink can leave the payload file; a
+# KILL after the unlink can leave only the empty directory.
+# If the directory cannot be created, or the payload cannot be written or opened,
+# the payload goes through the historical pipe instead.
+_rh_exec_staged() {
+  local handler_path="$1" stderr_file="$2"
+  shift 2
+  _rh_stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/caws-handler-stdin-XXXXXX" 2>/dev/null) || _rh_stage_dir=""
+  if [[ -n "$_rh_stage_dir" ]]; then
+    _rh_stage="$_rh_stage_dir/payload"
+    trap '_rh_remove_stage' EXIT
+    if printf '%s' "${HOOK_INPUT_JSON-}" > "$_rh_stage" 2>/dev/null \
+      && exec 0<"$_rh_stage"; then
+      _rh_remove_stage
+      if [[ -e "$_rh_stage" ]]; then
+        "$handler_path" "$@" 2>"$stderr_file"
+        exit $?
+      fi
+      trap - EXIT
+      exec "$handler_path" "$@" 2>"$stderr_file"
+    fi
+    _rh_remove_stage
+    trap - EXIT
+  fi
+  printf '%s' "${HOOK_INPUT_JSON-}" | "$handler_path" "$@" 2>"$stderr_file"
+}
+
+# _rh_remove_stage: removes the current subshell's payload and its private
+# directory, and names on stderr whichever of the two is still present afterwards.
+# Both are addressed by pathname, so a directory entry replaced with a symbolic
+# link after creation (possible for the same uid) would make the removal reach a
+# foreign file; a stage whose directory or payload path has become a link is
+# left in place and named instead. The check and the removal are separate
+# operations, so a replacement between them is not excluded.
+_rh_remove_stage() {
+  if [[ -L "$_rh_stage_dir" || -L "$_rh_stage" ]]; then
+    printf '[caws run-handlers] handler stdin stage %s was replaced by a link; left in place\n' "$_rh_stage_dir" >&2
+    return 0
+  fi
+  rm -f -- "$_rh_stage" 2>/dev/null
+  if [[ -e "$_rh_stage" ]]; then
+    printf '[caws run-handlers] could not remove handler stdin stage %s\n' "$_rh_stage" >&2
+  fi
+  rmdir -- "$_rh_stage_dir" 2>/dev/null
+  if [[ -e "$_rh_stage_dir" ]]; then
+    printf '[caws run-handlers] could not remove handler stdin stage directory %s\n' "$_rh_stage_dir" >&2
+  fi
+  return 0
+}
+
+# --- Guard-unavailable handling (enforcing PreToolUse chain only) -------------
+#
+# Only exit 2, or a block decision on stdout, stops a tool call. A guard that
+# crashes with another status, or is absent from the pack, would otherwise read
+# as "no objection" and the call would run with that guard silently missing. On
+# the chain invoked with --short-circuit-on-block such a guard refuses every
+# tool call that can mutate.
+#
+# The refusal is an infrastructure fault, not a finding about the agent's
+# command: it says so, names the guard and what it could not do, itself records
+# no strike and arms no latch (a guard that ran earlier in the same dispatch may
+# have), and tells the blocked party what to do next. Read,
+# Glob and Grep are not refused, because a session that cannot read cannot
+# diagnose the fault either; they report it on stderr and proceed.
+
+# _rh_tool_is_read_only
+#   True only for tool names every surface adapter normalizes to a pure read.
+#   An empty or unrecognized name is not provably read-only.
+_rh_tool_is_read_only() {
+  case "${HOOK_TOOL_NAME:-}" in
+    Read|Glob|Grep) return 0 ;;
+  esac
+  return 1
+}
+
+# _rh_handler_is_advisory <handler>
+#   True for chain members that warn or rewrite and contain no refusal path
+#   (no exit 2, no block or ask decision). Their absence or crash is reported
+#   and does not refuse the call. Every other chain member is a guard,
+#   including shortcut-language-check.sh, whose strike ramp can refuse. A
+#   handler added to this list must not be relied on to stop anything.
+_rh_handler_is_advisory() {
+  case "${1##*/}" in
+    agent-heartbeat.sh|cwd-guard.sh|scan-secrets.sh|quiet-merge.sh)
+      return 0 ;;
+  esac
+  return 1
+}
+
+# _rh_dry_run_active
+#   The dry-run switch, readable before run_handlers has parsed anything.
+_rh_dry_run_active() {
+  local surface_dry_run=""
+  [[ "${CAWS_AGENT_SURFACE:-}" != codex ]] || surface_dry_run="${CODEX_HOOK_DRY_RUN:-}"
+  _rh_is_truthy "${CAWS_HOOK_DRY_RUN:-${CLAUDE_HOOK_DRY_RUN:-$surface_dry_run}}"
+}
+
+# _rh_json_string <text>
+#   Escape text for a JSON string value without depending on jq or python3,
+#   either of which may be the missing dependency being reported.
+_rh_json_string() {
+  local s="${1:-}"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\t'/\\t}"
+  s="${s//$'\r'/\\r}"
+  printf '%s' "$s"
+}
+
+# _rh_fault_excerpt <file>
+#   The last lines of a guard's stderr as one printable-ASCII line, bounded so
+#   the excerpt cannot crowd out the instruction that follows it.
+_rh_fault_excerpt() {
+  [[ -n "${1:-}" && -s "$1" ]] || return 0
+  tail -n 3 "$1" 2>/dev/null | LC_ALL=C tr -c '\040-\176' ' ' | LC_ALL=C cut -c 1-300 \
+    | sed -e 's/  */ /g' -e 's/^ //' -e 's/ $//'
+}
+
+# _rh_guard_unavailable <guard> <what it could not do> [excerpt]
+#   Returns 0 after printing a block decision when the tool call must be
+#   refused. Returns 1 when the call may proceed (a read-only tool), having
+#   reported the fault on stderr.
+_rh_guard_unavailable() {
+  local guard="$1" what="$2" excerpt="${3:-}"
+  if _rh_tool_is_read_only; then
+    printf '[run-handlers] guard unavailable: %s %s. %s is read-only, so it is not blocked; tool calls that can mutate are refused until this is repaired.\n' \
+      "$guard" "$what" "$HOOK_TOOL_NAME" >&2
+    return 1
+  fi
+  local reason="CAWS guard unavailable: ${guard} ${what}."
+  [[ -z "$excerpt" ]] || reason="${reason} Its last output was: ${excerpt}"
+  reason="${reason} Your command did not cause this, and this refusal adds no strike and arms no latch. The ${HOOK_TOOL_NAME:-unidentified} tool call is refused because a guard that cannot run cannot clear it. Retrying or rephrasing the command will not change the result: stop and report this message to the user. For the user: run 'caws doctor' in this project to see the state of the hook runtime."
+  printf '[run-handlers] %s\n' "$reason" >&2
+  printf '{"decision":"block","reason":"%s"}\n' "$(_rh_json_string "$reason")"
   return 0
 }
 
@@ -397,8 +591,30 @@ run_handlers() {
   if [[ -z "${HOOK_INPUT_JSON:-}" ]]; then
     # HOOKS_DIR must be set by the caller (dispatcher boilerplate).
     # shellcheck source=parse-input.sh
+    # The source line below is an exact anchor of the native service-image
+    # transform (src/runtime/service-image.ts), so the enforcing chain checks
+    # for the parser ahead of it instead of changing its failure branch.
+    if (( short_circuit )) && [[ ! -r "${HOOKS_DIR}/lib/parse-input.sh" ]]; then
+      if _rh_dry_run_active; then
+        printf '[DRY-RUN] the hook payload parser is missing at %s and would have blocked\n' \
+          "${HOOKS_DIR}/lib/parse-input.sh" >&2
+        return 0
+      fi
+      _rh_guard_unavailable "the hook payload parser" \
+        "is missing at ${HOOKS_DIR}/lib/parse-input.sh, so no guard can inspect this call" || return 0
+      return 2
+    fi
     source "${HOOKS_DIR}/lib/parse-input.sh" 2>/dev/null || return 0
-    parse_hook_input || return 0
+    if ! parse_hook_input; then
+      (( short_circuit )) || return 0
+      if _rh_dry_run_active; then
+        printf '[DRY-RUN] the hook payload parser could not parse the payload and would have blocked\n' >&2
+        return 0
+      fi
+      _rh_guard_unavailable "the hook payload parser (lib/parse-input.sh)" \
+        "could not parse the payload, so no guard can inspect this call" || return 0
+      return 2
+    fi
   fi
 
   # CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001: resolve the operating session id ONCE
@@ -496,32 +712,22 @@ run_handlers() {
   # dispatch on stderr, and in the command-substitution subshell the SIGPIPE
   # could take the whole dispatch down (exit 141). Feed handlers from a file
   # instead: the parse stage's payload file when transport already moved the
-  # bytes to disk, or a dispatch-scoped stage of the inline payload once it
+  # bytes to disk, or a per-handler stage of the inline payload once it
   # exceeds a pipe-safe bound (32KiB is below every kernel pipe buffer, so
-  # the pipe path never blocks). Small inline payloads keep the historical
-  # pipe: no temp I/O on the common path. Staging failure is fail-open --
-  # the pipe path still delivers, only the noise class remains.
-  # Declared unconditionally (see the bash 3.2 / set -u note above): this is
+  # the pipe path never blocks; see _rh_exec_staged). Small inline payloads
+  # keep the historical pipe: no temp I/O on the common path. Staging failure
+  # is fail-open -- the pipe path still delivers, only the noise class remains.
+  # Declared unconditionally (see the bash 3.2 / set -u note above): these are
   # read inside the handler loop on every path.
   local stdin_file="${HOOK_PAYLOAD_FILE:-}"
+  local stage_inline=0
   if [[ -z "$stdin_file" ]]; then
     # bash 3.2 has no ${#var-} length-with-default form; stage the value
     # first so the length expansion stays unset-safe under set -u.
     local _rh_payload_json="${HOOK_INPUT_JSON-}"
     local _rh_payload_len=${#_rh_payload_json}
     if (( _rh_payload_len > 32768 )); then
-      stdin_file=$(mktemp "${TMPDIR:-/tmp}/caws-handler-stdin-XXXXXX" 2>/dev/null) || stdin_file=""
-      if [[ -n "$stdin_file" ]] \
-        && printf '%s' "$HOOK_INPUT_JSON" > "$stdin_file" 2>/dev/null; then
-        if [[ -n "${CAWS_TEMP_FILES+x}" ]]; then
-          CAWS_TEMP_FILES+=("$stdin_file")
-        else
-          CAWS_TEMP_FILES=("$stdin_file")
-        fi
-      else
-        [[ -n "$stdin_file" ]] && rm -f "$stdin_file" 2>/dev/null
-        stdin_file=""
-      fi
+      stage_inline=1
     fi
   fi
   # Only a readable file may back stdin; anything else degrades to the pipe.
@@ -539,8 +745,26 @@ run_handlers() {
   # out empirically.
   if (( ${#entries[@]} > 0 )); then
 
+  # Guard-unavailable handling applies to the chain that gates a tool call, and
+  # the dispatcher declares that chain with --short-circuit-on-block. The
+  # payload's own event name is not consulted: it is input, and a payload that
+  # named a lifecycle event would otherwise disarm the chain its dispatcher
+  # selected. A dispatcher must pass the flag only for a tool-gating event.
+  local enforcing="$short_circuit"
+
+  # A call the guards cannot identify cannot be cleared by them: every guard
+  # filters on the tool name and would exit 0 for an empty one.
+  if (( enforcing && dry_run == 0 )) && [[ -z "${HOOK_TOOL_NAME:-}" ]]; then
+    _rh_guard_unavailable "the guard chain" \
+      "cannot run because the hook payload carried no tool name (the payload is malformed, or the python3 that parses it is broken)" || true
+    [[ -z "$_dedup_pending" ]] || rm -f "$_dedup_pending" 2>/dev/null || true
+    return 2
+  fi
+
   local entry
+  local _rh_handler_index=-1
   for entry in "${entries[@]}"; do
+    _rh_handler_index=$(( _rh_handler_index + 1 ))
     # Split on whitespace: first token = script, rest = positional args.
     # shellcheck disable=SC2086
     set -- $entry
@@ -574,6 +798,17 @@ run_handlers() {
     fi
     if [[ ! -x "$handler_path" ]]; then
       _rh_record_execution "$handler" "$handler_path" missing null /dev/null ""
+      if (( enforcing )) && _rh_handler_is_advisory "$handler"; then
+        printf '[run-handlers] advisory handler unavailable: %s is missing or not executable at %s. It has no block authority, so the tool call is not refused.\n' \
+          "$handler" "$handler_path" >&2
+      elif (( enforcing )); then
+        if (( dry_run )); then
+          printf '[DRY-RUN] %s is missing or not executable and would have blocked\n' "$handler" >&2
+        elif _rh_guard_unavailable "$handler" "is missing or not executable at ${handler_path}, so it cannot run"; then
+          [[ -z "$_dedup_pending" ]] || rm -f "$_dedup_pending" 2>/dev/null || true
+          return 2
+        fi
+      fi
       continue
     fi
 
@@ -608,12 +843,15 @@ run_handlers() {
       t_start=$(_rh_ms_now)
     fi
 
+    _rh_record_progress "$handler" "$handler_path" started null /dev/null ""
     local stdout_buf
     if [[ -n "$stdin_file" ]]; then
       # Payload staged to disk (CAWS-DEFECT-RUNHANDLERS-STDIN-EPIPE-NOISE-001):
       # stdin comes from the file, so a handler that exits without reading it
       # cannot strand a blocked writer on a pipe.
       stdout_buf=$("$handler_path" "$@" < "$stdin_file" 2>"$stderr_file")
+    elif (( stage_inline )); then
+      stdout_buf=$(_rh_exec_staged "$handler_path" "$stderr_file" "$@")
     else
       stdout_buf=$(printf '%s' "$HOOK_INPUT_JSON" \
                     | "$handler_path" "$@" 2>"$stderr_file")
@@ -636,6 +874,10 @@ run_handlers() {
         printf '[%s] %s\n' "$handler" "$line" >&2
       done < "$stderr_file"
     fi
+    local fault_excerpt=""
+    if (( enforcing )) && [[ "$exit_code" -ne 0 && "$exit_code" -ne 2 ]]; then
+      fault_excerpt="$(_rh_fault_excerpt "$stderr_file")"
+    fi
     rm -f "$stderr_file"
 
     # Timing annotation (after handler stderr so they don't interleave).
@@ -647,6 +889,26 @@ run_handlers() {
     if (( dry_run )) && (( exit_code != 0 )); then
       printf '[DRY-RUN] %s would have exited %d\n' "$handler" "$exit_code" >&2
       exit_code=0
+    fi
+
+    # A status other than 0 or 2 on the enforcing chain is a guard that stopped
+    # before reaching a verdict (a `set -e` abort, a missing interpreter, a
+    # signal). A block decision the guard managed to print is still honored
+    # below; anything else it printed is not a verdict.
+    if (( enforcing )) && [[ "$exit_code" -ne 0 && "$exit_code" -ne 2 ]] \
+       && [[ -z "$stdout_buf" || "$(_rh_stdout_priority "$stdout_buf")" -ne 3 ]]; then
+      if _rh_handler_is_advisory "$handler"; then
+        printf '[run-handlers] advisory handler unavailable: %s exited with status %s. It has no block authority, so the tool call is not refused.\n' \
+          "$handler" "$exit_code" >&2
+      elif _rh_guard_unavailable "$handler" "exited with status ${exit_code} without reaching a verdict" "$fault_excerpt"; then
+        _rh_record_offer "$handler_offer_file" "released" "$handler" "guard unavailable; dispatch refused"
+        [[ -z "$handler_offer_file" ]] || rm -f "$handler_offer_file"
+        unset CAWS_HANDLER_OFFER_FILE 2>/dev/null || true
+        [[ -z "$_dedup_pending" ]] || rm -f "$_dedup_pending" 2>/dev/null || true
+        return 2
+      fi
+      exit_code=0
+      stdout_buf=""
     fi
 
     # Control decisions and advisory membership are independent. Hard blocks
