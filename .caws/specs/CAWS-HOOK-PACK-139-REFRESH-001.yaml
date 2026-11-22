@@ -22,7 +22,10 @@ invariants:
 acceptance:
   - id: A1
     given: 'the installed project hook pack is v95/89 with 38 drifted and 6 absent managed files'
-    when: 'caws init --agent-surface dsh --overwrite --force runs in the bound worktree'
+    when: >-
+      caws init --agent-surface dsh --overwrite --force runs from the canonical repo
+      root under the spec bridge binding (init refuses inside a linked worktree
+      because it installs canonical hooks)
     then: 'caws init diff shows no shared-pack drift and every managed hook carries hook_pack_version 139'
   - id: A2
     given: 'the refresh applied'
