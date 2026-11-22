@@ -72,3 +72,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/stop-worktree-check-ownership.test.js::without a usable session id no lane is named or attributed"
     commit_sha: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
     test_verified_at: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "classify_command.py at 72f3058b4: curl -s -G URL --data-urlencode ... | jq . (the command that armed a live rc latch Nov 21), -sG, --get -d, -G -d, per-transfer -G --next -G, and data after -- are allow; -G -X POST, -X DELETE, -XPUT, -sXPOST, -d, -sd, --data-raw, --data-urlencode, --data -G, --header -G -d, -G ... --next/-:/-s: -d, --no-get, and -G after an unlisted long option are ask/capability/confirm \"state mutation (HTTP_MUTATE)\". Parse cases were checked against real curl 8.7.1 --libcurl (POSTFIELDS \"-G\"; header \"-G\" + POSTFIELDS q=x; second transfer POSTFIELDS q=y; \"-- -v\" became a URL). Through the real block-dangerous.sh (tests/hooks/bats/block-dangerous-readonly-signals.bats): two curl -G calls write no warning or latch file; two body calls warn then arm. Mutant ignoring -G killed (4 pytest + 1 bats). Explicit non-mutating method with data (-X GET -d) keeps the prior non-mutation classification. Not covered: -F/--form, --json, -T (pre-existing), -K config files, curl options newer than 8.7.1 beyond the unlisted-option rule."
+    recorded_at: "2026-11-22T05:21:23.749Z"
+    test_nodeid: packages/caws-cli/tests/hooks/pytest/test_classify_readonly_signals.py
+    commit_sha: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
+    test_verified_at: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
