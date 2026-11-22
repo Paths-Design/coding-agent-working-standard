@@ -28,7 +28,7 @@ scope:
 invariants:
   - 'Worktree ownership is decided by exact equality of the registry owner session id and the stopping session id, the rule the worktree claim oracle applies'
   - 'The git allow-list stays suppress-only and mutating git subcommands keep their prior classification'
-  - 'A curl request with an explicit mutating method, or with a request body sent without -G, remains classified HTTP_MUTATE'
+  - 'A curl transfer with an explicit POST, PUT, PATCH or DELETE method, or with request data, no explicit method and no -G, remains classified HTTP_MUTATE; an explicit non-mutating method with data keeps the prior (non-mutation) classification'
 acceptance:
   - id: A1
     given: 'a worktree registry with active lanes owned by the stopping session and by other sessions'
