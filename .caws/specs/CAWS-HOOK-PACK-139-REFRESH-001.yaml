@@ -45,3 +45,8 @@ evidence:
     command: caws init diff --agent-surface dsh
     exit_code: 0
     commit_sha: "7017d63c2"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "All six libs the v139 pack introduced exist: advisory_truncate.cjs, lib/bash-mutation-analysis.sh, lib/copy-roles.sh, lib/guard-config.cjs, lib/reprieve-reader.cjs, lib/session-render-writer.sh. The four telemetry rows retained for co-installed project-wired surfaces (agent-heartbeat.sh, agent-stop.sh, session-log.sh, session_log_renderer.py) were ported to v139 separately through caws init port, each landing an audit commit. Commit 7017d63c2 contains the 73 shared-pack files; telemetry ports are 31811774/0a321f1a/39a9bcbf/65412c83."
+    recorded_at: "2026-11-22T08:52:27.084Z"
+    commit_sha: "7017d63c2"
