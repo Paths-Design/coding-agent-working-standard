@@ -128,6 +128,13 @@ function payload(command) {
   return command + '; printf executed > ' + quote(fx.marker);
 }
 
+// The fixture lane has no owner, so the Stop reminder reports it as one lane
+// belonging to another session. That text appears only when the reminder found
+// the canonical registry and read exactly one active lane from it; a missed
+// registry prints nothing.
+const ONE_FOREIGN_LANE =
+  'REMINDER: this session owns no active worktrees. 1 active worktree(s) belong to other sessions';
+
 test.each(['project', 'project\n', "project'quoted", 'project[*?]'])(
   'exact canonical registry survives root %p and an ordinary alias',
   (basename) => {
@@ -142,7 +149,7 @@ test.each(['project', 'project\n', "project'quoted", 'project[*?]'])(
         'BLOCKED: git clean (untracked-file deletion) is not allowed while worktrees are active.'
       );
       const reminder = invoke('stop-worktree-check.sh', cwd);
-      check(reminder, 0, 'REMINDER: 1 active worktree(s) remain: linked.');
+      check(reminder, 0, ONE_FOREIGN_LANE);
       expect(reminder.stderr).not.toContain('No active worktrees');
     }
     expect(git(fx.project, 'branch', '--show-current')).toBe('main\n');
@@ -159,11 +166,7 @@ test.each(['project', 'project\n', "project'[*]"])(
       2,
       'BLOCKED: git clean (untracked-file deletion) is not allowed while worktrees are active.'
     );
-    check(
-      invoke('stop-worktree-check.sh', fx.linked),
-      0,
-      'REMINDER: 1 active worktree(s) remain: linked.'
-    );
+    check(invoke('stop-worktree-check.sh', fx.linked), 0, ONE_FOREIGN_LANE);
     expect(git(fx.linked, 'branch', '--show-current')).toBe('worker\n');
   }
 );
@@ -180,11 +183,7 @@ test.each(['map', 'array'])('legacy nested %s registry remains readable', (shape
     2,
     'BLOCKED: git clean (untracked-file deletion) is not allowed while worktrees are active.'
   );
-  check(
-    invoke('stop-worktree-check.sh', fx.project),
-    0,
-    'REMINDER: 1 active worktree(s) remain: linked.'
-  );
+  check(invoke('stop-worktree-check.sh', fx.project), 0, ONE_FOREIGN_LANE);
 });
 
 test('a flat lane named worktrees is an entry rather than a legacy envelope', () => {
@@ -205,10 +204,13 @@ test('a flat lane named worktrees is an entry rather than a legacy envelope', ()
     2,
     'BLOCKED: git clean (untracked-file deletion) is not allowed while worktrees are active.'
   );
+  // Run as the lane's owner so the reminder names it. Misread as a legacy
+  // envelope, the lane's fields would become entries and its owner object
+  // would appear as a lane named "owner", with the same count.
   check(
-    invoke('stop-worktree-check.sh', fx.project),
+    invoke('stop-worktree-check.sh', fx.project, 'git clean -fd', { HOOK_SESSION_ID: 'foreign' }),
     0,
-    'REMINDER: 1 active worktree(s) remain: worktrees.'
+    'REMINDER: this session owns 1 active worktree(s): worktrees.'
   );
   const oracle = spawnSync(
     process.execPath,
