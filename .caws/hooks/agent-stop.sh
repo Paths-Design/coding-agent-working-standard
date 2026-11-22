@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 95
+# hook_pack_version: 139
 # caws_min_major: 11
 # lineage_refs: 19
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -36,9 +36,12 @@ if ! command -v "$CAWS_BIN" >/dev/null 2>&1; then
   exit 0
 fi
 
+# The CLI's human receipt is operational telemetry, not hook context. Preserve
+# it on the original stderr before suppressing CLI diagnostics; forwarding it
+# on stdout would displace an earlier handler's additionalContext envelope.
 caws_run_cli agents stop \
   --session-id "$HOOK_SESSION_ID" \
   --platform "$CAWS_PLATFORM_FLAG" \
-  2>/dev/null || true
+  1>&2 2>/dev/null || true
 
 exit 0
