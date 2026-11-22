@@ -75,11 +75,14 @@ status`, message delivery, the peer notice) report the later of that file's
 - The command classifier admits read-only `git grep` (without
   `-O`/`--open-files-in-pager`), `merge-base`, `ls-tree`, `for-each-ref`,
   `show-ref`, `check-attr` and `diff-tree` (without `--output`); each
-  previously drew an "unknown git subcommand" advisory. It reads curl options
-  the way curl does: `curl -G`/`--get` with request data is a query on a GET
-  and is no longer classified `HTTP_MUTATE`, a capability ask whose second
-  occurrence arms the danger latch, while a body flag inside a short-option
-  cluster (`-sd`) is now classified `HTTP_MUTATE`. Shared pack 139.
+  previously drew an "unknown git subcommand" advisory. curl arguments are read
+  per transfer (`--next`/`-:` resets local options), with each option consuming
+  its value as curl 8.7.1's option list defines. `curl -G`/`--get` with request
+  data is a query on a GET and is no longer classified `HTTP_MUTATE`, a
+  capability ask whose second occurrence arms the danger latch. A transfer that
+  sends a body is still `HTTP_MUTATE`, including one whose apparent `-G` is the
+  value of another option (`--header -G -d q=x`) and a body flag inside a
+  short-option cluster (`-sd`), which was previously missed. Shared pack 139.
 - The `CLAUDE.md` template `caws init` writes tells an agent how to read a
   dangerous-command refusal: refused without a latch (restate and continue; a
   repeat sent afterwards latches), guard or classifier unavailable (stop and

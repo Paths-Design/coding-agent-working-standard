@@ -706,9 +706,10 @@ import { isAdapterCoveredSurface } from './types';
 // and recommends `caws worktree merge` for them; other sessions' lanes are a
 // count with no merge or destroy step. classify_command.py admits read-only
 // git grep (without -O), merge-base, ls-tree, for-each-ref, show-ref,
-// check-attr and diff-tree (without --output), and reads curl argv the way
-// curl does, so -G/--get queries are not HTTP_MUTATE and a clustered -sd body
-// is.
+// check-attr and diff-tree (without --output), and reads curl argv per
+// transfer with curl 8.7.1's option-argument table, so -G/--get queries are
+// not HTTP_MUTATE while any transfer that sends a body, including a clustered
+// -sd, is.
 export const SHARED_PACK_VERSION = 139;
 
 /**
