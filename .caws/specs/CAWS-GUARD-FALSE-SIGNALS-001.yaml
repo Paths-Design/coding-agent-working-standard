@@ -1,0 +1,57 @@
+id: CAWS-GUARD-FALSE-SIGNALS-001
+title: 'Stop reminder names only owned lanes; classifier stops flagging curl -G and read-only git as risky'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-22T02:50:24.425Z'
+updated_at: '2026-11-22T02:50:24.425Z'
+created_by_session: '7cd53bbd-9d23-4b4c-bc29-db8064455ac2'
+blast_radius:
+  modules:
+    - 'Shared Stop worktree reminder (stop-worktree-check.sh)'
+    - 'Shared command classifier: curl capability rule and git read-only allow-list (classify_command.py)'
+    - 'Shared hook-pack version and recorded fingerprint'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/stop-worktree-check.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/classify_command.py'
+    - 'packages/caws-cli/tests/hooks/stop-worktree-check-ownership.test.js'
+    - 'packages/caws-cli/tests/hooks/guard-path-identity.test.js'
+    - 'packages/caws-cli/tests/hooks/pytest/test_classify_readonly_signals.py'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'Worktree ownership is decided by exact equality of the registry owner session id and the stopping session id, the rule the worktree claim oracle applies'
+  - 'The git allow-list stays suppress-only and mutating git subcommands keep their prior classification'
+  - 'A curl request with an explicit mutating method, or with a request body sent without -G, remains classified HTTP_MUTATE'
+acceptance:
+  - id: A1
+    given: 'a worktree registry with active lanes owned by the stopping session and by other sessions'
+    when: 'stop-worktree-check.sh runs for the stopping session'
+    then: 'the reminder names only the stopping session lanes and recommends caws worktree merge for them, reports other sessions lanes only as a count marked not theirs to merge or destroy, and never prints a foreign lane name, a destroy instruction for a foreign lane, or the claim that other agents cannot commit until all worktrees are destroyed'
+  - id: A2
+    given: 'active lanes in the registry and a Stop payload with no usable session id'
+    when: 'stop-worktree-check.sh runs'
+    then: 'it names no lane and prints no destroy instruction, and states that ownership could not be attributed and points to caws worktree list'
+  - id: A3
+    given: 'curl commands that send data with -G or --get and no explicit method, including short-flag clusters such as -sG'
+    when: 'classify_command classifies them'
+    then: 'none is classified HTTP_MUTATE, while curl -G -X POST, curl -X DELETE, curl -d and a clustered -sd data flag are all classified HTTP_MUTATE'
+  - id: A4
+    given: 'git grep, merge-base, ls-tree, for-each-ref, show-ref, check-attr and diff-tree invocations'
+    when: 'classify_command classifies them'
+    then: 'each is allowed with no advisory, while git grep with -O or --open-files-in-pager and git merge, push, fetch, apply and archive keep their prior ask classification'
+  - id: A5
+    given: 'the changed shared hook-pack templates'
+    when: 'the pack fingerprint guard, the classifier pytest suite, the guard path identity suite and the new ownership suite run'
+    then: 'all pass with SHARED_PACK_VERSION bumped and the recorded fingerprint updated, and no existing assertion is weakened beyond rewording the reminder text it observes'
+observability:
+  - 'Stop reminder stderr text for owned, foreign-only, identity-unavailable and empty registries'
+  - 'Classifier JSON decision, reason, source and enforcement per command'
+rollback:
+  - 'Revert the slice commit; the prior pack version, fingerprint and handler text return with it'
+non_functional: {}
+contracts: []
