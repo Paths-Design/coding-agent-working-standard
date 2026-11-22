@@ -1,9 +1,9 @@
 id: CAWS-HOOK-PACK-139-REFRESH-001
 title: 'Refresh installed shared hook pack to v139 so the DSH-executed guard plane carries the guard false-signal fixes'
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-11-22T08:43:05.191Z'
-updated_at: '2026-11-22T08:51:49.869Z'
+updated_at: '2026-11-22T08:52:24.984Z'
 created_by_session: 'session-74b10232-1e29-4980-b55d-f883ef12d18a'
 blast_radius:
   modules:
