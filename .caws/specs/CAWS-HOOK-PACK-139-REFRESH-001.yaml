@@ -50,3 +50,8 @@ evidence:
     evidence_ref: "All six libs the v139 pack introduced exist: advisory_truncate.cjs, lib/bash-mutation-analysis.sh, lib/copy-roles.sh, lib/guard-config.cjs, lib/reprieve-reader.cjs, lib/session-render-writer.sh. The four telemetry rows retained for co-installed project-wired surfaces (agent-heartbeat.sh, agent-stop.sh, session-log.sh, session_log_renderer.py) were ported to v139 separately through caws init port, each landing an audit commit. Commit 7017d63c2 contains the 73 shared-pack files; telemetry ports are 31811774/0a321f1a/39a9bcbf/65412c83."
     recorded_at: "2026-11-22T08:52:27.084Z"
     commit_sha: "7017d63c2"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "After the refresh caws doctor no longer emits doctor.hooks.installed_pack_version_lag or doctor.hooks.pack_body_drift for .caws/hooks. The only remaining doctor.hooks finding is doctor.hooks.system_runtime_invalid (native Claude matcher reconciliation, tracked separately); unrelated cwd_gone/spec backlog findings are out of this slice."
+    recorded_at: "2026-11-22T08:52:28.211Z"
+    commit_sha: "7017d63c2"
