@@ -65,3 +65,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/hooks/stop-worktree-check-ownership.test.js::names only the stopping session lanes and counts the rest without naming them"
     commit_sha: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
     test_verified_at: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Real stop-worktree-check.sh at 72f3058b4 with registry lanes mine-a (owned) and theirs-1 and a Stop payload lacking session_id, run both with dispatcher-exported HOOK_* (HOOK_SESSION_ID=unknown) and with stdin-only parsing: stderr is \"REMINDER: 2 active worktree(s) are registered, but this session's identity is unavailable, so ownership could not be attributed. Check owners with caws worktree list ...\"; neither lane name and no \"caws worktree destroy\" appears. Mutant removing the identity-unavailable branch was killed (1 fail). Not verified: behavior under the installed machine runtime, which still runs the old handler."
+    recorded_at: "2026-11-22T05:20:54.975Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/stop-worktree-check-ownership.test.js::without a usable session id no lane is named or attributed"
+    commit_sha: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
+    test_verified_at: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
