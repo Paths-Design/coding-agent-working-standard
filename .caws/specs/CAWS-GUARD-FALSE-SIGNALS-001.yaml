@@ -79,3 +79,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/hooks/pytest/test_classify_readonly_signals.py
     commit_sha: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
     test_verified_at: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Through the real block-dangerous.sh on an installed pack at 72f3058b4: git grep -n foo, merge-base, ls-tree -r, for-each-ref, show-ref --heads, check-attr -a, diff-tree --name-only exit 0 with no \"advisory\"/\"unknown git subcommand\" output and no warning or latch file; git grep -O vim prints \"caws advisory (non-blocking): git grep --open-files-in-pager (-O) launches an external program\". Classifier matrix (test_classify_readonly_signals.py, re-derived for A3 at the same sha): all seven read-only forms allow/pass; grep -O, -Ovim, -nO, --open-files-in-pager[=less], --open, --op, -e -- -Ovim (real git ran echo for -e -- -Oecho), -n -e p -O keep ask/legacy_family/advisory; -e -O and -f -O are allowed (git reads \"-O\" as the pattern/file); diff-tree --output keeps ask; merge, push, fetch, apply, archive keep \"unknown git subcommand: <sub>\" ask/advisory. Baseline main: all seven read-only forms were ask/advisory. Mutant shortening the -O abbreviation rule killed (1 fail)."
+    recorded_at: "2026-11-22T05:21:54.172Z"
+    test_nodeid: packages/caws-cli/tests/hooks/bats/block-dangerous-readonly-signals.bats
+    commit_sha: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
+    test_verified_at: "72f3058b41f36cdec763dc0f642f5a6cbe43856a"
