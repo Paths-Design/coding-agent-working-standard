@@ -80,9 +80,12 @@ status`, message delivery, the peer notice) report the later of that file's
   its value as curl 8.7.1's option list defines. `curl -G`/`--get` with request
   data is a query on a GET and is no longer classified `HTTP_MUTATE`, a
   capability ask whose second occurrence arms the danger latch. A transfer that
-  sends a body is still `HTTP_MUTATE`, including one whose apparent `-G` is the
-  value of another option (`--header -G -d q=x`) and a body flag inside a
-  short-option cluster (`-sd`), which was previously missed. Shared pack 139.
+  uses POST, PUT, PATCH or DELETE, or sends request data with no explicit
+  method and no `-G`, is still `HTTP_MUTATE`, including one whose apparent `-G`
+  is the value of another option (`--header -G -d q=x`) and a body flag inside
+  a short-option cluster (`-sd`), which was previously missed. An explicit
+  non-mutating method with data (`-X GET -d ...`) is classified as before.
+  Shared pack 139.
 - The `CLAUDE.md` template `caws init` writes tells an agent how to read a
   dangerous-command refusal: refused without a latch (restate and continue; a
   repeat sent afterwards latches), guard or classifier unavailable (stop and

@@ -147,6 +147,18 @@ def test_curl_request_body_or_mutating_method_is_classified_as_mutation(classify
     assert reason == "state mutation (HTTP_MUTATE)", (cmd, reason)
 
 
+def test_curl_explicit_non_mutating_method_with_data_keeps_the_prior_classification(classify):
+    # The prior rule judged an explicit method by name alone, so `-X GET -d`
+    # (a GET with a body, as in read-only search APIs) was not a mutation.
+    # This slice leaves that unchanged; it does not decide the policy.
+    for cmd in (
+        "curl -X GET -d q=x https://example.test/api",
+        "curl -X HEAD -d q=x https://example.test/api",
+    ):
+        decision, reason, _source, _enforcement = classify(cmd)
+        assert decision == "allow", (cmd, reason)
+
+
 def test_curl_transfers_reads_clusters_consumed_arguments_and_transfer_breaks(classify_module):
     transfers = classify_module.curl_transfers
     assert transfers(["-sG", "--data-urlencode", "q=x", "https://e.test"]) == [("", True, True)]
