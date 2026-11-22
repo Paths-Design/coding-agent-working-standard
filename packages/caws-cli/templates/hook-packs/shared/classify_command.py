@@ -426,7 +426,102 @@ ALLOWED_GIT_SUBCOMMANDS: set[str] = {
     # write-tree index write, hash-object -w as an index mutation) is NOT
     # admitted and still falls through to the governed-family "ask".
     "merge-tree", "cat-file", "rev-list", "check-ignore",
+    # CAWS-GUARD-FALSE-SIGNALS-001: read-only ref/tree/attribute inspection.
+    # Each reads refs, trees or .gitattributes and writes nothing. Field data
+    # showed agents drawing an "ask before invoking" advisory on every call.
+    # `grep` and `diff-tree` are admitted by their own rules below because
+    # each has one option that is not read-only.
+    "merge-base", "ls-tree", "for-each-ref", "show-ref", "check-attr",
 }
+
+# git grep options that take an argument; in a short-option cluster the rest
+# of the token is that argument (`-eO` searches for "O", it is not `-O`).
+_GIT_GREP_SHORT_ARG_OPTS = frozenset("ABCefm")
+
+
+def git_grep_opens_program(args: Sequence[str]) -> bool:
+    """True when git grep would launch an external program on its matches.
+
+    `-O[<pager>]` / `--open-files-in-pager[=<pager>]` runs a program with the
+    matching file names. git accepts any unambiguous abbreviation of a long
+    option, so `--op`, `--open` and longer prefixes count; `--o` is ambiguous
+    (`--or`, `--only-matching`) and git rejects it.
+    """
+    for tok in args:
+        if tok == "--":
+            return False
+        if tok.startswith("--"):
+            name = tok[2:].split("=", 1)[0]
+            if len(name) >= 2 and "open-files-in-pager".startswith(name):
+                return True
+            continue
+        if tok.startswith("-") and len(tok) > 1:
+            for ch in tok[1:]:
+                if ch == "O":
+                    return True
+                if ch in _GIT_GREP_SHORT_ARG_OPTS:
+                    break
+    return False
+
+
+def git_diff_tree_writes_file(args: Sequence[str]) -> bool:
+    """True when git diff-tree is told to write its output to a file."""
+    for tok in args:
+        if tok == "--":
+            return False
+        if tok == "--output" or tok.startswith("--output="):
+            return True
+    return False
+
+
+# curl short options that take an argument. In a cluster such as `-sXPOST` or
+# `-sd body` the rest of the token, or else the next token, is that argument.
+_CURL_SHORT_ARG_OPTS = frozenset("AbcCdDeEFHKmoPQrTtuUwXxYyz")
+
+
+def curl_request_shape(argv: Sequence[str]) -> tuple[str, bool, bool]:
+    """Read curl argv as curl does: (explicit_method, sends_data, get_mode).
+
+    `explicit_method` is the last -X/--request value, upper-cased ("" if none).
+    `sends_data` is true for -d and every --data* form. `get_mode` is true for
+    -G/--get, which turns that data into a query string on a GET. An option's
+    argument is consumed, so `-d -G` sends the body "-G" and is not get mode.
+    """
+    method = ""
+    sends_data = False
+    get_mode = False
+    i = 0
+    while i < len(argv):
+        tok = argv[i]
+        if tok.startswith("--"):
+            if tok == "--request":
+                if i + 1 < len(argv):
+                    method = argv[i + 1].upper()
+                i += 2
+                continue
+            if tok == "--get":
+                get_mode = True
+            elif tok.startswith("--data"):
+                sends_data = True
+            i += 1
+            continue
+        if tok.startswith("-") and len(tok) > 1:
+            for j in range(1, len(tok)):
+                ch = tok[j]
+                if ch in _CURL_SHORT_ARG_OPTS:
+                    value = tok[j + 1:]
+                    if not value and i + 1 < len(argv):
+                        i += 1
+                        value = argv[i]
+                    if ch == "X":
+                        method = value.upper()
+                    elif ch == "d":
+                        sends_data = True
+                    break
+                if ch == "G":
+                    get_mode = True
+        i += 1
+    return method, sends_data, get_mode
 
 # Allowed gh top-level groups + subcommands. Format: "group action".
 # Example: "pr view" means `gh pr view ...` is admitted.
@@ -1952,6 +2047,24 @@ def classify_allow_list(segment: str) -> tuple[str, str] | None:
             if wt_sub == "prune" and ("--dry-run" in tokens or "-n" in tokens):
                 return ("allow", "")
             return None
+        # `git grep` and `git diff-tree` read the repository except for one
+        # option each: grep -O/--open-files-in-pager launches a program on the
+        # matches, and diff-tree --output writes a file. Without that option
+        # they are admitted; with it they fall through to the governed ask.
+        if sub in ("grep", "diff-tree"):
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                return None
+            loc = _locate_git_subcommand(tokens)
+            if loc is None:
+                return None
+            args = tokens[loc[1] + 1:]
+            if sub == "grep" and not git_grep_opens_program(args):
+                return ("allow", "")
+            if sub == "diff-tree" and not git_diff_tree_writes_file(args):
+                return ("allow", "")
+            return None
         if sub in ALLOWED_GIT_SUBCOMMANDS:
             return ("allow", "")
         return None
@@ -2078,6 +2191,19 @@ def classify_governed_family_default(segment: str) -> tuple[str, str] | None:
                     "git restore of a path other than a package-manager "
                     "lockfile discards uncommitted work (only `--staged` and "
                     "lockfile-only restores are auto-admitted); ask before invoking",
+                )
+            if sub == "grep":
+                return (
+                    "ask",
+                    "git grep --open-files-in-pager (-O) launches an external "
+                    "program on the matching files; plain git grep is "
+                    "admitted; ask before invoking",
+                )
+            if sub == "diff-tree":
+                return (
+                    "ask",
+                    "git diff-tree --output writes the diff to a file; plain "
+                    "git diff-tree is admitted; ask before invoking",
                 )
             return (
                 "ask",
@@ -2639,7 +2765,7 @@ def strip_quoted_regions(raw: str) -> str:
             if line.strip() == in_heredoc:
                 in_heredoc = None
             else:
-                result.append(' ')  # placeholder
+                result.append(' ')  # one space stands in for the blanked body line
             continue
 
         # Escape handling
@@ -2797,7 +2923,16 @@ def derive_facets(fact: "CommandFact", adapters: dict | None) -> None:
     base: dict | None = None
 
     # 1. curl/http: method from -X/--request, or inferred from -d/--data*.
-    if exe in {"curl", "http", "wget"}:
+    #    curl -G/--get sends the data as a query string on a GET, so a body
+    #    flag implies a mutation only without it (CAWS-GUARD-FALSE-SIGNALS-001).
+    if exe == "curl":
+        method, has_body, get_mode = curl_request_shape(fact.argv)
+        if method in {"POST", "PUT", "PATCH", "DELETE"} or (
+            not method and has_body and not get_mode
+        ):
+            base = {"kind": "MUTATE", "domain": "http", "reversibility": "unknown",
+                    "blast": "single", "trace": "HTTP_MUTATE"}
+    elif exe in {"http", "wget"}:
         method = ""
         for idx, tok in enumerate(fact.argv):
             if tok in {"-X", "--request"} and idx + 1 < len(fact.argv):
