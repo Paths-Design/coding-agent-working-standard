@@ -64,6 +64,28 @@ status`, message delivery, the peer notice) report the later of that file's
   heartbeat that fails or is ended is not retried until the interval passes. The peer notice can trail a change in the peer set by up to
   the heartbeat interval. Deleting or pruning a lease removes its `.active`,
   `.hb`, `.hb.lease` and `.mail` files. Shared pack 137.
+- The Stop worktree reminder names only the lanes the stopping session owns
+  and recommends `caws worktree merge` for them. Lanes owned by other sessions
+  are reported as a count, with no merge or destroy step. It previously listed
+  every active lane in the registry, told the agent to run
+  `caws worktree destroy <name>`, and stated that other agents could not commit
+  to the base branch until all worktrees were destroyed, which is false. When
+  the session id is unavailable it names no lane and points to
+  `caws worktree list`.
+- The command classifier admits read-only `git grep` (without
+  `-O`/`--open-files-in-pager`), `merge-base`, `ls-tree`, `for-each-ref`,
+  `show-ref`, `check-attr` and `diff-tree` (without `--output`); each
+  previously drew an "unknown git subcommand" advisory. curl arguments are read
+  per transfer (`--next`/`-:` resets local options), with each option consuming
+  its value as curl 8.7.1's option list defines. `curl -G`/`--get` with request
+  data is a query on a GET and is no longer classified `HTTP_MUTATE`, a
+  capability ask whose second occurrence arms the danger latch. A transfer that
+  uses POST, PUT, PATCH or DELETE, or sends request data with no explicit
+  method and no `-G`, is still `HTTP_MUTATE`, including one whose apparent `-G`
+  is the value of another option (`--header -G -d q=x`) and a body flag inside
+  a short-option cluster (`-sd`), which was previously missed. An explicit
+  non-mutating method with data (`-X GET -d ...`) is classified as before.
+  Shared pack 139.
 - The `CLAUDE.md` template `caws init` writes tells an agent how to read a
   dangerous-command refusal: refused without a latch (restate and continue; a
   repeat sent afterwards latches), guard or classifier unavailable (stop and

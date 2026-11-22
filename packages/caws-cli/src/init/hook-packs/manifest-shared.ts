@@ -702,7 +702,15 @@ import { isAdapterCoveredSurface } from './types';
 // heredoc under shell target scanning, and treats the proven straight-line
 // pathlib read/replace/write idiom as an edit of the named file rather than a
 // write to the replacement text.
-export const SHARED_PACK_VERSION = 138;
+// v139: stop-worktree-check.sh names only the lanes the stopping session owns
+// and recommends `caws worktree merge` for them; other sessions' lanes are a
+// count with no merge or destroy step. classify_command.py admits read-only
+// git grep (without -O), merge-base, ls-tree, for-each-ref, show-ref,
+// check-attr and diff-tree (without --output), and reads curl argv per
+// transfer with curl 8.7.1's option-argument table, so -G/--get queries are
+// not HTTP_MUTATE while any transfer that sends a body, including a clustered
+// -sd, is.
+export const SHARED_PACK_VERSION = 139;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

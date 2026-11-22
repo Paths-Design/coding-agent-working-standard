@@ -426,7 +426,208 @@ ALLOWED_GIT_SUBCOMMANDS: set[str] = {
     # write-tree index write, hash-object -w as an index mutation) is NOT
     # admitted and still falls through to the governed-family "ask".
     "merge-tree", "cat-file", "rev-list", "check-ignore",
+    # CAWS-GUARD-FALSE-SIGNALS-001: read-only ref/tree/attribute inspection.
+    # Each reads refs, trees or .gitattributes and writes nothing. Field data
+    # showed agents drawing an "ask before invoking" advisory on every call.
+    # `grep` and `diff-tree` are admitted by their own rules below because
+    # each has one option that is not read-only.
+    "merge-base", "ls-tree", "for-each-ref", "show-ref", "check-attr",
 }
+
+# git grep options that take an argument; in a short-option cluster the rest
+# of the token is that argument (`-eO` searches for "O", it is not `-O`).
+_GIT_GREP_SHORT_ARG_OPTS = frozenset("ABCefm")
+
+
+def git_grep_opens_program(args: Sequence[str]) -> bool:
+    """True when git grep would launch an external program on its matches.
+
+    `-O[<pager>]` / `--open-files-in-pager[=<pager>]` runs a program with the
+    matching file names. git accepts any unambiguous abbreviation of a long
+    option, so `--op`, `--open` and longer prefixes count; `--o` is ambiguous
+    (`--or`, `--only-matching`) and git rejects it.
+
+    A short option that takes an argument consumes the rest of its token or,
+    when nothing follows it there, the next token: `-e -- -Ovim` searches for
+    "--" and then opens vim, while `-e -O` searches for "-O". Long options
+    with a separate argument take only numbers, so a following `-O...` makes
+    git reject the command; scanning past it is the conservative reading.
+    """
+    i = 0
+    while i < len(args):
+        tok = args[i]
+        if tok == "--":
+            return False
+        if tok.startswith("--"):
+            name = tok[2:].split("=", 1)[0]
+            if len(name) >= 2 and "open-files-in-pager".startswith(name):
+                return True
+        elif tok.startswith("-") and len(tok) > 1:
+            for j in range(1, len(tok)):
+                ch = tok[j]
+                if ch == "O":
+                    return True
+                if ch in _GIT_GREP_SHORT_ARG_OPTS:
+                    if j == len(tok) - 1:
+                        i += 1
+                    break
+        i += 1
+    return False
+
+
+def git_diff_tree_writes_file(args: Sequence[str]) -> bool:
+    """True when git diff-tree is told to write its output to a file."""
+    for tok in args:
+        if tok == "--":
+            return False
+        if tok == "--output" or tok.startswith("--output="):
+            return True
+    return False
+
+
+# curl option tables, from `curl --help all` (curl 8.7.1). A long option takes
+# its value as the next token (curl does not accept `--opt=value`); a short
+# option takes the rest of its cluster or, failing that, the next token.
+_CURL_SHORT_ARG_OPTS = frozenset("AbcCdDeEFhHKmoPQrtTuUwxXyYz")
+_CURL_ARG_LONG_OPTS = frozenset({
+    "abstract-unix-socket", "alt-svc", "aws-sigv4", "cacert", "capath", "cert",
+    "cert-type", "ciphers", "config", "connect-timeout", "connect-to", "continue-at",
+    "cookie", "cookie-jar", "create-file-mode", "crlfile", "curves", "data",
+    "data-ascii", "data-binary", "data-raw", "data-urlencode", "delegation", "dns-interface",
+    "dns-ipv4-addr", "dns-ipv6-addr", "dns-servers", "doh-url", "dump-header", "egd-file",
+    "engine", "etag-compare", "etag-save", "expect100-timeout", "form", "form-string",
+    "ftp-account", "ftp-alternative-to-user", "ftp-method", "ftp-port", "ftp-ssl-ccc-mode",
+    "happy-eyeballs-timeout-ms", "haproxy-clientip", "header", "help", "hostpubmd5",
+    "hostpubsha256", "hsts", "interface", "ipfs-gateway", "json", "keepalive-time", "key",
+    "key-type", "krb", "libcurl", "limit-rate", "local-port", "login-options", "mail-auth",
+    "mail-from", "mail-rcpt", "max-filesize", "max-redirs", "max-time", "netrc-file",
+    "noproxy", "oauth2-bearer", "output", "output-dir", "parallel-max", "pass",
+    "pinnedpubkey", "preproxy", "proto", "proto-default", "proto-redir", "proxy",
+    "proxy-cacert", "proxy-capath", "proxy-cert", "proxy-cert-type", "proxy-ciphers",
+    "proxy-crlfile", "proxy-header", "proxy-key", "proxy-key-type", "proxy-pass",
+    "proxy-pinnedpubkey", "proxy-service-name", "proxy-tls13-ciphers", "proxy-tlsauthtype",
+    "proxy-tlspassword", "proxy-tlsuser", "proxy-user", "proxy1.0", "pubkey", "quote",
+    "random-file", "range", "rate", "referer", "request", "request-target", "resolve",
+    "retry", "retry-delay", "retry-max-time", "sasl-authzid", "service-name", "socks4",
+    "socks4a", "socks5", "socks5-gssapi-service", "socks5-hostname", "speed-limit",
+    "speed-time", "stderr", "telnet-option", "tftp-blksize", "time-cond", "tls-max",
+    "tls13-ciphers", "tlsauthtype", "tlspassword", "tlsuser", "trace", "trace-ascii",
+    "trace-config", "unix-socket", "upload-file", "url", "url-query", "user",
+    "user-agent", "variable", "write-out",
+})
+_CURL_BOOL_LONG_OPTS = frozenset({
+    "anyauth", "append", "basic", "ca-native", "cert-status", "compressed",
+    "compressed-ssh", "create-dirs", "crlf", "digest", "disable", "disable-eprt",
+    "disable-epsv", "disallow-username-in-url", "doh-cert-status", "doh-insecure", "fail",
+    "fail-early", "fail-with-body", "false-start", "form-escape", "ftp-create-dirs",
+    "ftp-pasv", "ftp-pret", "ftp-skip-pasv-ip", "ftp-ssl-ccc", "ftp-ssl-control", "get",
+    "globoff", "haproxy-protocol", "head", "http0.9", "http1.0", "http1.1", "http2",
+    "http2-prior-knowledge", "http3", "http3-only", "ignore-content-length", "include",
+    "insecure", "ipv4", "ipv6", "junk-session-cookies", "list-only", "location",
+    "location-trusted", "mail-rcpt-allowfails", "manual", "metalink", "negotiate", "netrc",
+    "netrc-optional", "next", "no-alpn", "no-buffer", "no-clobber", "no-keepalive",
+    "no-npn", "no-progress-meter", "no-sessionid", "ntlm", "ntlm-wb", "parallel",
+    "parallel-immediate", "path-as-is", "post301", "post302", "post303", "progress-bar",
+    "proxy-anyauth", "proxy-basic", "proxy-ca-native", "proxy-digest", "proxy-http2",
+    "proxy-insecure", "proxy-negotiate", "proxy-ntlm", "proxy-ssl-allow-beast",
+    "proxy-ssl-auto-client-cert", "proxy-tlsv1", "proxytunnel", "raw", "remote-header-name",
+    "remote-name", "remote-name-all", "remote-time", "remove-on-error", "retry-all-errors",
+    "retry-connrefused", "sasl-ir", "show-error", "silent", "socks5-basic", "socks5-gssapi",
+    "socks5-gssapi-nec", "ssl", "ssl-allow-beast", "ssl-auto-client-cert", "ssl-no-revoke",
+    "ssl-reqd", "ssl-revoke-best-effort", "sslv2", "sslv3", "styled-output",
+    "suppress-connect-headers", "tcp-fastopen", "tcp-nodelay", "tftp-no-options", "tlsv1",
+    "tlsv1.0", "tlsv1.1", "tlsv1.2", "tlsv1.3", "tr-encoding", "trace-ids", "trace-time",
+    "use-ascii", "verbose", "version", "xattr",
+})
+
+
+def curl_transfers(argv: Sequence[str]) -> list[tuple[str, bool, bool]]:
+    """Read curl argv as curl does, one (method, sends_data, get_mode) per transfer.
+
+    `-:`/`--next` starts a new transfer and resets local options, including
+    -G, -d and -X. `method` is the transfer's last -X/--request value,
+    upper-cased ("" if none). `sends_data` is true for -d and every --data*
+    form. `get_mode` is true after -G/--get (and false again after
+    --no-get); it sends that data as a query string on a GET.
+
+    An option's argument is consumed, so `--data -G` and `--header -G` do not
+    enable get mode. The token after a long option in neither table (a newer
+    curl option) may be that option's argument: it cannot enable get mode,
+    though it can still add data or a method. Nothing after `--` is read as
+    an option.
+    """
+    transfers: list[tuple[str, bool, bool]] = []
+    method, sends_data, get_mode = "", False, False
+    ambiguous_next = False
+    i = 0
+    while i < len(argv):
+        tok = argv[i]
+        may_be_argument = ambiguous_next
+        ambiguous_next = False
+        if tok == "--":
+            break
+        if tok.startswith("--"):
+            name, has_eq, value = tok[2:].partition("=")
+            if name == "next":
+                transfers.append((method, sends_data, get_mode))
+                method, sends_data, get_mode = "", False, False
+            elif name == "get":
+                if not may_be_argument:
+                    get_mode = True
+            elif name == "no-get":
+                get_mode = False
+            if name.startswith("data"):
+                sends_data = True
+            if has_eq:
+                # curl rejects `--opt=value`; read a method conservatively.
+                if name == "request":
+                    method = value.upper()
+            elif name in _CURL_ARG_LONG_OPTS:
+                if i + 1 < len(argv):
+                    i += 1
+                    if name == "request":
+                        method = argv[i].upper()
+            elif name not in _CURL_BOOL_LONG_OPTS and not (
+                name.startswith("no-") and name[3:] in _CURL_BOOL_LONG_OPTS
+            ):
+                ambiguous_next = True
+            i += 1
+            continue
+        if tok.startswith("-") and len(tok) > 1:
+            for j in range(1, len(tok)):
+                ch = tok[j]
+                if ch == ":":
+                    transfers.append((method, sends_data, get_mode))
+                    method, sends_data, get_mode = "", False, False
+                    continue
+                if ch in _CURL_SHORT_ARG_OPTS:
+                    value = tok[j + 1:]
+                    if not value and i + 1 < len(argv):
+                        i += 1
+                        value = argv[i]
+                    if ch == "X":
+                        method = value.upper()
+                    elif ch == "d":
+                        sends_data = True
+                    break
+                if ch == "G" and not may_be_argument:
+                    get_mode = True
+        i += 1
+    transfers.append((method, sends_data, get_mode))
+    return transfers
+
+
+def curl_sends_mutation(argv: Sequence[str]) -> bool:
+    """True when any curl transfer uses a mutating method or sends a body.
+
+    A transfer sends a body when it has request data and is not in get mode.
+    """
+    for method, sends_data, get_mode in curl_transfers(argv):
+        if method in {"POST", "PUT", "PATCH", "DELETE"}:
+            return True
+        if not method and sends_data and not get_mode:
+            return True
+    return False
 
 # Allowed gh top-level groups + subcommands. Format: "group action".
 # Example: "pr view" means `gh pr view ...` is admitted.
@@ -1952,6 +2153,24 @@ def classify_allow_list(segment: str) -> tuple[str, str] | None:
             if wt_sub == "prune" and ("--dry-run" in tokens or "-n" in tokens):
                 return ("allow", "")
             return None
+        # `git grep` and `git diff-tree` read the repository except for one
+        # option each: grep -O/--open-files-in-pager launches a program on the
+        # matches, and diff-tree --output writes a file. Without that option
+        # they are admitted; with it they fall through to the governed ask.
+        if sub in ("grep", "diff-tree"):
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                return None
+            loc = _locate_git_subcommand(tokens)
+            if loc is None:
+                return None
+            args = tokens[loc[1] + 1:]
+            if sub == "grep" and not git_grep_opens_program(args):
+                return ("allow", "")
+            if sub == "diff-tree" and not git_diff_tree_writes_file(args):
+                return ("allow", "")
+            return None
         if sub in ALLOWED_GIT_SUBCOMMANDS:
             return ("allow", "")
         return None
@@ -2078,6 +2297,19 @@ def classify_governed_family_default(segment: str) -> tuple[str, str] | None:
                     "git restore of a path other than a package-manager "
                     "lockfile discards uncommitted work (only `--staged` and "
                     "lockfile-only restores are auto-admitted); ask before invoking",
+                )
+            if sub == "grep":
+                return (
+                    "ask",
+                    "git grep --open-files-in-pager (-O) launches an external "
+                    "program on the matching files; plain git grep is "
+                    "admitted; ask before invoking",
+                )
+            if sub == "diff-tree":
+                return (
+                    "ask",
+                    "git diff-tree --output writes the diff to a file; plain "
+                    "git diff-tree is admitted; ask before invoking",
                 )
             return (
                 "ask",
@@ -2639,7 +2871,7 @@ def strip_quoted_regions(raw: str) -> str:
             if line.strip() == in_heredoc:
                 in_heredoc = None
             else:
-                result.append(' ')  # placeholder
+                result.append(' ')  # one space stands in for the blanked body line
             continue
 
         # Escape handling
@@ -2797,7 +3029,13 @@ def derive_facets(fact: "CommandFact", adapters: dict | None) -> None:
     base: dict | None = None
 
     # 1. curl/http: method from -X/--request, or inferred from -d/--data*.
-    if exe in {"curl", "http", "wget"}:
+    #    curl -G/--get sends the data as a query string on a GET, so a body
+    #    flag implies a mutation only without it (CAWS-GUARD-FALSE-SIGNALS-001).
+    if exe == "curl":
+        if curl_sends_mutation(fact.argv):
+            base = {"kind": "MUTATE", "domain": "http", "reversibility": "unknown",
+                    "blast": "single", "trace": "HTTP_MUTATE"}
+    elif exe in {"http", "wget"}:
         method = ""
         for idx, tok in enumerate(fact.argv):
             if tok in {"-X", "--request"} and idx + 1 < len(fact.argv):
