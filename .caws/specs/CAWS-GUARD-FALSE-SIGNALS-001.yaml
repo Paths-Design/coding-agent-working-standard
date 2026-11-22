@@ -1,10 +1,11 @@
 id: CAWS-GUARD-FALSE-SIGNALS-001
 title: 'Stop reminder names only owned lanes; classifier stops flagging curl -G and read-only git as risky'
 mode: fix
-lifecycle_state: active
-worktree: guard-false-signals
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge guard-false-signals at 65e0f86116833f64a0d58ef349754a3b8fea197c'
 created_at: '2026-11-22T02:50:24.425Z'
-updated_at: '2026-11-22T03:26:46.051Z'
+updated_at: '2026-11-22T05:23:39.102Z'
 created_by_session: '7cd53bbd-9d23-4b4c-bc29-db8064455ac2'
 blast_radius:
   modules:
