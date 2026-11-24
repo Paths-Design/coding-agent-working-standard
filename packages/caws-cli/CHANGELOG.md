@@ -96,10 +96,12 @@ status`, message delivery, the peer notice) report the later of that file's
   GNU `stat` form first. The BSD-first form printed filesystem text there and
   the guard reported "File: unbound variable" instead of its risk line.
 - zcode, dsh and unrecognized surfaces resolve a relative Bash target against
-  the project again when the payload carries no working directory. A later
-  change had made every surface ask. A working directory that is sent but does
-  not exist is asked about on every surface. When the command analyzer refuses,
-  the guard states the analyzer's reason after the issue code. Shared pack 140.
+  the project again when the payload carries no working directory and the
+  command does not change directory. A later change had made every surface ask.
+  A relative target in a command that contains `cd`, `pushd` or `popd` is asked
+  about on every surface, and so is a Bash working directory that is sent but
+  does not exist; Codex refuses both. When the command analyzer refuses, the
+  guard states the analyzer's reason after the issue code. Shared pack 140.
 - The `CLAUDE.md` template `caws init` writes tells an agent how to read a
   dangerous-command refusal: refused without a latch (restate and continue; a
   repeat sent afterwards latches), guard or classifier unavailable (stop and

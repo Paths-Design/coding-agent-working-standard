@@ -200,6 +200,40 @@ _assert_cwd_ask() {
   refute_output --partial 'operating cwd could not be resolved'
 }
 
+# The project is the base only while the command stays in it. A command that
+# changes directory first names a file elsewhere, so a relative target after it
+# has no known base on any surface.
+@test "claim-oracle-cwd: a relative target after a directory change asks on surfaces that omit cwd" {
+  local surface command
+  for surface in zcode dsh made-up-surface; do
+    for command in \
+      "cd $WT_ROOT && echo x > scratch.txt" \
+      "cd $WT_ROOT && touch scratch.txt" \
+      "cd $WT_ROOT && rm scratch.txt" \
+      "cd $WT_ROOT; echo x | tee scratch.txt" \
+      "pushd $WT_ROOT && echo x > scratch.txt" \
+      "(cd $WT_ROOT && echo x > scratch.txt)" \
+      "{ cd $WT_ROOT; echo x > scratch.txt; }" \
+      "if cd $WT_ROOT; then echo x > scratch.txt; fi" \
+      "builtin cd $WT_ROOT && echo x > scratch.txt" \
+      "command cd $WT_ROOT && echo x > scratch.txt" \
+      "\\cd $WT_ROOT && echo x > scratch.txt" \
+      "c\"d\" $WT_ROOT && echo x > scratch.txt" \
+      "bash -c \"cd $WT_ROOT && echo x > scratch.txt\"" \
+      "env -C $WT_ROOT touch scratch.txt" \
+      "eval \"cd $WT_ROOT\" && echo x > scratch.txt" \
+      "cd $WT_ROOT && echo x > $CLAIMED_REL"; do
+      BWG_SURFACE="$surface" _bwg other-session - "$command"
+      # An unknown surface prints a warning first, so the decision is matched
+      # in the output. A refusal (2) also holds; a silent pass does not.
+      if [ "$status" -ne 2 ]; then
+        assert_success
+        assert_output --partial '"permissionDecision": "ask"'
+      fi
+    done
+  done
+}
+
 # A cwd that zcode did send, naming a directory that does not exist, is a
 # different case from the cwd it normally omits: the payload states where the
 # command runs and that place is not there. The analyzer reports it and the

@@ -275,7 +275,14 @@ caws_bash_prepare_analysis() {
     # No execution cwd is known. Whether that is asked about is the caller's
     # surface decision (caws_payload_carries_cwd): a surface whose payload
     # carries cwd asks, one that never sends it resolves against the project.
+    # That base holds only while the command stays in it. The analyzer gives no
+    # coordinate to a token without an execution cwd, so a directory change is
+    # recognized by its word, wherever it appears: a relative target in a
+    # command that contains one is asked about on every surface.
     AGENT_CWD="$project"; _CWD_RESOLVED=0
+    for value in ${CAWS_AST_VALUE[@]+"${CAWS_AST_VALUE[@]}"}; do
+      case "$value" in cd|pushd|popd) _CWD_CONTRACT=1; break ;; esac
+    done
   fi
   CAWS_BASH_ANALYSIS_COMMAND="$execution_command"; CAWS_BASH_ANALYSIS_READY=1
   return 0
