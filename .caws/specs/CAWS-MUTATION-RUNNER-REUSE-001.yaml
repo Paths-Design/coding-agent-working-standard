@@ -35,3 +35,11 @@ acceptance:
     then: 'each job finishes inside its 180 minute limit with a per-file verdict'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Full kernel surface at d2014974d, maxTestRunnerReuse 25, Ubuntu 24.04 arm64 container on the maintainer's machine (not the hosted runner): exit 0, Surface verdict PASS, Done in 11 minutes 18 seconds, 1439 killed + 4 timed out + 153 survived + 19 no coverage = all 1615 mutants, per-file counts equal to hosted run 39422963923. Progress log: 120 tested at ~1m, 230 at ~2m, 1191 at ~8m, 1489 at ~10m (about 110 then 150 per minute). Control in the same image with the default 0: 429 of 1615 after ~14m, stopped. Hosted run 45243992038 with the default was cancelled at 180 minutes at 1351 of 1615."
+    recorded_at: "2026-11-24T23:13:49.342Z"
+    command: "npm run mutation:run:kernel -- --summary /out/summary.md --sha d2014974d"
+    exit_code: 0
+    commit_sha: d2014974dd2ecccb0706c0473b0479924ff06cf4
