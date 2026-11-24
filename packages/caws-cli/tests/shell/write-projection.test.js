@@ -988,10 +988,59 @@ for (const command of [
   'index-pack -o x',
 ])
   add('git hazards', 'git ' + command, { codes: ['git-option-unmodeled'], only: 'codes' });
-add('git hazards', 'git log -o x');
-add('git hazards', 'git ls-files --prefix=x');
-add('git hazards', 'git grep --no-color x');
-add('git hazards', 'git cat-file --batch');
+// One subcommand's effect is another's ordinary option or operand.
+for (const command of [
+  'log -o x',
+  'log run',
+  'show foreach',
+  'diff create',
+  'ls-files --prefix=x',
+  'ls-files -x y',
+  'diff -Oorder',
+  'log -c',
+  'log --filters',
+  'archive --format=tar HEAD',
+  'archive HEAD -- -o x',
+  'clone --no-checkout /x',
+  'grep --no-color x',
+  'cat-file --batch',
+  'ls-remote --sort=ext::x',
+])
+  add('git hazards', 'git ' + command);
+for (const command of [
+  'add -u',
+  'fetch -u',
+  'rebase --onto x y',
+  'read-tree -m x',
+  'commit -F --output=x',
+  'commit --file --exec=x',
+  'commit -C --output=x',
+  'commit -c --output=x',
+  'commit --author --output=x',
+  'commit --date --output=x',
+  'commit --trailer --output=x',
+  'tag --message --output=x y',
+  'tag -F --output=x y',
+  'tag --file --output=x y',
+  'notes add -m --output=x',
+  'notes add -F --output=x',
+  'stash push --message --output=x',
+  'merge -m --output=x y',
+  'merge -F --output=x y',
+  'branch -d --contains x',
+  'branch -rD --list x',
+  'tag -d -l x',
+  'tag -am --list x',
+])
+  metadata('git hazards', 'git ' + command, command.split(' ', 1)[0] + ' @');
+for (const command of ['notes get-ref', 'submodule summary', 'rerere diff', 'rerere remaining'])
+  add('git hazards', 'git ' + command);
+add('git hazards', 'git sparse-checkout check-rules');
+add('git hazards', 'git rebase -xcommand', { codes: ['git-execution'], only: 'codes' });
+add('git hazards', 'git fast-import --export-pack-edges=x', {
+  codes: ['git-option-unmodeled'],
+  only: 'codes',
+});
 
 // ── Readers ─────────────────────────────────────────────────────────────────
 
@@ -1009,7 +1058,12 @@ for (const command of [
   'sort -- -o a',
   'sort -S 1M -T o a',
   'sort --reverse --key=1 a',
+  'sort --ignore-nonprinting --version-sort a',
+  'sort -t -o a',
   'sort -',
+  'grep -o x a',
+  'ls -o',
+  'grep --pre=x y',
   'uniq',
   'uniq a',
   'uniq -c a',
@@ -1026,6 +1080,10 @@ for (const command of [
   'sort -ox a',
   'sort --output=x a',
   'sort --ou x a',
+  'sort -f -o x a',
+  'sort -s -o x a',
+  'sort -t, -o x a',
+  'sort -k1 -o x a',
 ])
   held('readers', 'reader-option', command);
 for (const command of [
@@ -1041,6 +1099,7 @@ for (const command of [
   'uniq -- a b',
   'uniq -c a b',
   'uniq -f 1 a b',
+  'uniq -f1 a b',
   'uniq - b',
   'uniq "$X" b',
   'uniq -- a -b',
@@ -1076,6 +1135,12 @@ for (const script of [
   '=',
   'n;N;g;G;h;H;x;D;P;z;F',
   'l 5',
+  'L 5',
+  'R file',
+  's/a/[/',
+  's/[[:space:]]*$//',
+  's/a/b/;s/[^/]*$//',
+  '\\,a,I p',
   'q',
   'q5',
   'Q 1',
@@ -1105,7 +1170,13 @@ for (const script of [
   '/a/{w out\n}',
   's/[/]/x/;w out',
   's/[/b/;w out',
+  's/a/[/w out',
+  's/a/[/;w out;s/]/x/',
+  's/[^]a]/b/;w out',
   'a\\\ntext\nw out',
+  '1,3w out',
+  '$!w out',
+  'b end;w out',
 ])
   held('sed', 'sed-script-unsupported', `sed '${script}' f`);
 for (const script of ['e', 'e ls', '1e ls', 's/a/b/e', 's/a/b/ge', 'p;e', '/a/{e ls\n}'])
@@ -1121,8 +1192,13 @@ for (const script of [
   'pp',
   '\\',
   's\\a\\b\\',
+  's\na\nb\n',
+  '\\\\a\\d',
+  '\\\na\nd',
   'p p',
   '1,',
+  '1,/a',
+  'y/a/b/w out',
 ])
   held('sed', 'sed-script-unsupported', `sed '${script}' f`);
 for (const command of [
