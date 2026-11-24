@@ -75,6 +75,7 @@ function invoke(script, cwd, command = 'git clean -fd', extra = {}) {
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
     if (
+      /^(?:LD_|DYLD_)/.test(key) ||
       key.startsWith('HOOK_') ||
       key.startsWith('_CAWS_') ||
       ['BASH_ENV', 'ENV', 'NODE_OPTIONS', 'NODE_PATH', 'CAWS_HOOKS_DIR'].includes(key)
