@@ -50,3 +50,7 @@ evidence:
     command: npx jest --rootDir packages/caws-cli packages/caws-cli/tests/ci/mutation-contract.test.js
     exit_code: 0
     commit_sha: d2014974dd2ecccb0706c0473b0479924ff06cf4
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Store and analysis have not been run with recycled runners. Needs the hosted Mutation Gate on a revision containing d2014974d; their per-file scores are unknown because neither surface has finished since 2026-10-20."
+    recorded_at: "2026-11-24T23:14:00.709Z"
