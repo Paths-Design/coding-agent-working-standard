@@ -1,0 +1,40 @@
+id: CAWS-MAIN-QUALIFICATION-RED-001
+title: 'Make Release Qualification pass on main'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-24T20:39:40.007Z'
+updated_at: '2026-11-24T20:39:40.007Z'
+created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
+blast_radius:
+  modules:
+    - 'Native reviewed-prefix test oracle'
+    - 'Hook pytest, bats and jest suites that read the runner environment'
+    - 'worktree-write-guard unknown-owner approval and Linux stat order'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-native/src/service_image/prefix/tests.rs'
+    - 'packages/caws-native/tests/fixtures/reviewed-stop-prefix.json'
+    - 'packages/caws-cli/'
+    - '.github/workflows/release-qualification.yml'
+  out: []
+invariants:
+  - 'A test exercises the candidate build and its own declared environment, never an ambient installed caws or runner variable'
+  - 'A shipped shared template never changes without a pack version bump and recomputed fingerprint'
+  - 'Compiled reviewed-prefix digests change only with a source review; template drift keeps the prefix serial'
+acceptance:
+  - id: A1
+    given: 'main with no caws on PATH and LD_LIBRARY_PATH set, as on the Linux runner'
+    when: 'the Candidate tests and contracts job steps run'
+    then: 'each step exits zero, including native service_image, audit, typecheck, lint, jest, node scripts, docs check, bats and pytest'
+  - id: A2
+    given: 'a registered worktree whose owner is unknown'
+    when: 'a Write targets it in default mode and in bypassPermissions mode'
+    then: 'default mode emits a typed ask naming ask_uncertain:worktree-payload-no-owner and bypass mode refuses, while a known foreign owner is refused in both'
+  - id: A3
+    given: 'hook templates that differ from the compiled reviewed prefix'
+    when: 'the native prefix tests run'
+    then: 'the positive control uses authenticated retained source bytes and a changed, missing, duplicate or misbound fixture entry is rejected'
+non_functional: {}
+contracts: []
