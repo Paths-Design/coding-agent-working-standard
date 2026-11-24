@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: main-qualification-red
 created_at: '2026-11-24T20:39:40.007Z'
-updated_at: '2026-11-24T20:39:47.977Z'
+updated_at: '2026-11-24T20:52:29.310Z'
 created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
 blast_radius:
   modules:
@@ -19,6 +19,8 @@ scope:
     - 'packages/caws-native/tests/fixtures/reviewed-stop-prefix.json'
     - 'packages/caws-cli/'
     - '.github/workflows/release-qualification.yml'
+    - package.json
+    - package-lock.json
   out: []
 invariants:
   - 'A test exercises the candidate build and its own declared environment, never an ambient installed caws or runner variable'
