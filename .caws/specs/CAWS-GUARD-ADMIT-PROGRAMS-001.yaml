@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: guard-admit-programs
 created_at: '2026-11-24T20:48:22.952Z'
-updated_at: '2026-11-24T20:48:31.173Z'
+updated_at: '2026-11-24T21:17:25.668Z'
 created_by_session: 'f8d188a4-1b66-4ad5-bda4-86bdf477487b'
 blast_radius:
   modules:
@@ -25,6 +25,8 @@ scope:
     - 'docs/guides/command-analysis.md'
     - 'docs/guides/hook-packs.md'
     - 'packages/caws-cli/CHANGELOG.md'
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
   out: []
 invariants:
   - 'A recognized write whose target belongs to another session''s worktree, an active claim or a different repository is refused exactly as before'
