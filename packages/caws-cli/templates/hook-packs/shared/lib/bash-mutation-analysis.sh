@@ -70,7 +70,16 @@ caws_bash_prepare_analysis() {
       then [.[0].issues[].code | select(type=="string" and length>0 and length<=64 and test("^[a-z0-9_-]+$"))][:8] | unique | join(", ")
       else empty end
     ' <<< "$json" 2>/dev/null)" || codes=''
-    CAWS_BASH_ANALYSIS_ERROR="command mutation analyzer failed${codes:+ ($codes)}"; return 2
+    # The analyzer's own sentence for each issue: the code alone names a class,
+    # not what is wrong or what would change it.
+    local details
+    details="$(jq -ser '
+      if length==1 and .[0].schema=="caws.shell_mutation_view.v2" and (.[0].issues|type)=="array"
+      then [.[0].issues[].message | select(type=="string" and length>0 and length<=400) |
+            gsub("[[:cntrl:]]"; " ")][:3] | unique | join(" ")
+      else empty end
+    ' <<< "$json" 2>/dev/null)" || details=''
+    CAWS_BASH_ANALYSIS_ERROR="command mutation analyzer failed${codes:+ ($codes)}${details:+: ${details%.}}"; return 2
   fi
   CAWS_AST_VALUE=(); CAWS_AST_KIND=(); CAWS_AST_DYNAMIC=(); CAWS_AST_RESOLUTION=()
   CAWS_AST_UNREPR=(); CAWS_AST_CWD=(); CAWS_AST_ISSUES=()
@@ -263,7 +272,10 @@ caws_bash_prepare_analysis() {
   if [[ -n "$execution_cwd" ]]; then
     AGENT_CWD="$execution_cwd"; _CWD_RESOLVED=1
   else
-    AGENT_CWD="$project"; _CWD_RESOLVED=0; _CWD_CONTRACT=1
+    # No execution cwd is known. Whether that is asked about is the caller's
+    # surface decision (caws_payload_carries_cwd): a surface whose payload
+    # carries cwd asks, one that never sends it resolves against the project.
+    AGENT_CWD="$project"; _CWD_RESOLVED=0
   fi
   CAWS_BASH_ANALYSIS_COMMAND="$execution_command"; CAWS_BASH_ANALYSIS_READY=1
   return 0

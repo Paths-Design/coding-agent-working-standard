@@ -110,11 +110,18 @@ collect_strike_files() {
   } | sort -u
 }
 
-# macOS and Linux disagree on stat flags. Try BSD first, fall back to GNU.
+# macOS and Linux disagree on stat flags. GNU first: under GNU stat `-f` means
+# filesystem status and prints text before failing, while BSD stat rejects
+# `-c` without output.
 file_mtime() {
-  stat -f '%Sm' -t '%Y-%m-%d %H:%M' "$1" 2>/dev/null \
-    || stat -c '%y' "$1" 2>/dev/null | cut -d'.' -f1 \
-    || echo "unknown"
+  local out
+  if out="$(stat -c '%y' "$1" 2>/dev/null)" && [[ -n "$out" ]]; then
+    printf '%s\n' "${out%%.*}"
+  elif out="$(stat -f '%Sm' -t '%Y-%m-%d %H:%M' "$1" 2>/dev/null)" && [[ -n "$out" ]]; then
+    printf '%s\n' "$out"
+  else
+    echo "unknown"
+  fi
 }
 
 # The two strike-file shapes encode the session id in different places:
@@ -220,7 +227,8 @@ case "$MODE" in
     latest=0
     while IFS= read -r f; do
       [[ -z "$f" ]] && continue
-      mt=$(stat -f '%m' "$f" 2>/dev/null || stat -c '%Y' "$f" 2>/dev/null || echo 0)
+      mt=$(stat -c '%Y' "$f" 2>/dev/null || stat -f '%m' "$f" 2>/dev/null || echo 0)
+      [[ "$mt" =~ ^[0-9]+$ ]] || mt=0
       if (( mt > latest )); then
         latest=$mt
         target="$f"

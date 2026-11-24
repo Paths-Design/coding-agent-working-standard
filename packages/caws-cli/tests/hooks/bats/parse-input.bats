@@ -82,9 +82,13 @@ with open(sys.argv[1]) as f:
   assert [ -f "$CAWS_TEST_REPO/.caws/sessions/$sid/.session-envelope.json" ]
   [ "$(envelope_platform "$sid")" = "zcode" ]
 
+  # Under codex the Bash command itself is refused for its unbound execution
+  # context (docs/guides/command-analysis.md). The envelope is written while
+  # the payload is parsed, before any guard answers, so it is still recorded.
   sid="bats_a5_codex"
   run_envelope_write "codex" "$sid"
-  assert_success
+  assert_equal "$status" 2
+  assert_output --partial "command mutation analyzer failed (execution-contract)"
   [ "$(envelope_platform "$sid")" = "codex" ]
 
   sid="bats_a5_claude"

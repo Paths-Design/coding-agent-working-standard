@@ -710,7 +710,17 @@ import { isAdapterCoveredSurface } from './types';
 // transfer with curl 8.7.1's option-argument table, so -G/--get queries are
 // not HTTP_MUTATE while any transfer that sends a body, including a clustered
 // -sd, is.
-export const SHARED_PACK_VERSION = 139;
+// v140: worktree-write-guard.sh requests approval for a Write into a registered
+// worktree that has no recorded owner; a known foreign owner, a malformed
+// oracle reply, bypass mode and unavailable approval still refuse. Its scope
+// contention check runs the selected CLI (CAWS_BIN). It and reset-strikes.sh
+// read a file's time with the GNU stat form first; the BSD-first chain printed
+// filesystem text on Linux and failed the arithmetic that followed.
+// lib/bash-mutation-analysis.sh leaves the "payload carries cwd" decision to
+// the surface list, so zcode, dsh and unknown surfaces resolve a relative
+// target against the project, and an analyzer failure states the analyzer's
+// reason after the issue code.
+export const SHARED_PACK_VERSION = 140;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

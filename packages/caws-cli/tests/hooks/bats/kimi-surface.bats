@@ -23,6 +23,13 @@ load helpers
 
 setup_file() {
   caws_install_pack_once kimi-code
+  # These cases run the guards under `env -i PATH="$PATH"`, which drops
+  # CAWS_BIN, so the guards find `caws` on PATH. Put the CLI built from this
+  # checkout first: a machine-wide install would lend the cases an unrelated
+  # CLI, and a machine without one would refuse every scope decision.
+  [ -x "${CAWS_TEST_CLI:-}" ] || { echo "the helper did not build a test CLI" >&2; return 1; }
+  PATH="$(dirname "$CAWS_TEST_CLI"):$PATH"
+  export PATH
   export KIMI_VENDOR_DIR="$CAWS_TEST_REPO/.kimi-code"
   export KIMI_SHIM="$KIMI_VENDOR_DIR/hooks/caws-kimi-hook.sh"
 }

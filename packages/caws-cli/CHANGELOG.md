@@ -86,6 +86,20 @@ status`, message delivery, the peer notice) report the later of that file's
   a short-option cluster (`-sd`), which was previously missed. An explicit
   non-mutating method with data (`-X GET -d ...`) is classified as before.
   Shared pack 139.
+- `worktree-write-guard` asks for approval when a Write targets a registered
+  worktree with no recorded owner. A later ownership check refused it before
+  the approval path was reached. A known foreign owner, a malformed oracle
+  reply, bypass mode and a surface that cannot ask still refuse. Its scope
+  contention check runs the selected CLI (`CAWS_BIN`) rather than whichever
+  `caws` is first on PATH.
+- On Linux, `worktree-write-guard` and `reset-strikes` read file times with the
+  GNU `stat` form first. The BSD-first form printed filesystem text there and
+  the guard reported "File: unbound variable" instead of its risk line.
+- zcode, dsh and unrecognized surfaces resolve a relative Bash target against
+  the project again when the payload carries no working directory. A later
+  change had made every surface ask. A working directory that is sent but does
+  not exist is asked about on every surface. When the command analyzer refuses,
+  the guard states the analyzer's reason after the issue code. Shared pack 140.
 - The `CLAUDE.md` template `caws init` writes tells an agent how to read a
   dangerous-command refusal: refused without a latch (restate and continue; a
   repeat sent afterwards latches), guard or classifier unavailable (stop and
