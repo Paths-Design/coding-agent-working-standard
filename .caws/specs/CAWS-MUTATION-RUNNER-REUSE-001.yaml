@@ -1,0 +1,36 @@
+id: CAWS-MUTATION-RUNNER-REUSE-001
+title: 'Recycle mutation test runners so each surface finishes inside its job limit'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-24T22:32:56.447Z'
+updated_at: '2026-11-24T22:32:56.447Z'
+created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
+blast_radius:
+  modules:
+    - 'Stryker runner configuration for the kernel, store, shell and analysis surfaces'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/stryker-config.cjs'
+    - 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+    - 'packages/caws-cli/reports/'
+  out: []
+invariants:
+  - 'No per-file floor, target, test file, mutator or timeout is lowered or removed to make a surface finish'
+  - 'Every declared target still produces a verdict in one report per surface'
+acceptance:
+  - id: A1
+    given: 'the kernel surface that timed out at 180 minutes on 13133fdb7'
+    when: 'the full surface runs with recycled runners'
+    then: 'every mutant is tested, every per-file floor is evaluated, and the throughput late in the run is within a factor of two of its early rate'
+  - id: A2
+    given: 'the generated Stryker configuration for each surface'
+    when: 'the mutation contract tests inspect it'
+    then: 'it sets a positive finite maxTestRunnerReuse and keeps coverage, floor, concurrency and timeout unchanged'
+  - id: A3
+    given: 'the store and analysis surfaces'
+    when: 'they run on the hosted runner'
+    then: 'each job finishes inside its 180 minute limit with a per-file verdict'
+non_functional: {}
+contracts: []
