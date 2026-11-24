@@ -692,6 +692,19 @@ describe('mutation policy topology contract', () => {
     }
   );
 
+  // A runner process slows with every mutant it has run. One that is never
+  // recycled makes a surface's duration grow with the square of its size.
+  test.each(['kernel', 'store', 'shell', 'analysis'])(
+    '%s recycles its test runner processes',
+    (surface) => {
+      const { maxTestRunnerReuse } = createStrykerConfig(surface);
+      expect(Number.isSafeInteger(maxTestRunnerReuse)).toBe(true);
+      // 0 is Stryker's "never recycle". 1 restarts for every mutant.
+      expect(maxTestRunnerReuse).toBeGreaterThan(1);
+      expect(maxTestRunnerReuse).toBeLessThanOrEqual(100);
+    }
+  );
+
   test('omitting the timestamp mutation target leaves an uncovered mutation obligation', () => {
     const policy = loadPolicy();
     policy.surfaces.store.targets = policy.surfaces.store.targets.filter(
