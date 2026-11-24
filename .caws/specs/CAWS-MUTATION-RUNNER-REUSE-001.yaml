@@ -43,3 +43,10 @@ evidence:
     command: "npm run mutation:run:kernel -- --summary /out/summary.md --sha d2014974d"
     exit_code: 0
     commit_sha: d2014974dd2ecccb0706c0473b0479924ff06cf4
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "tests/ci/mutation-contract.test.js at d2014974d: 89 of 89 pass; the four 'recycles its test runner processes' cases fail with the Stryker default 0 (Expected > 1, Received 0) and pass with 25. The existing coverage, floor and concurrency cases pass unchanged. The diff of scripts/stryker-config.cjs adds only maxTestRunnerReuse and its comment, so timeoutMS is unchanged by inspection; no test asserts timeoutMS."
+    recorded_at: "2026-11-24T23:13:59.347Z"
+    command: npx jest --rootDir packages/caws-cli packages/caws-cli/tests/ci/mutation-contract.test.js
+    exit_code: 0
+    commit_sha: d2014974dd2ecccb0706c0473b0479924ff06cf4
