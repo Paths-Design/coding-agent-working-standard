@@ -613,7 +613,9 @@ test.each(['{}', '{"schema":"caws.shell_mutation_view.v2","tokens":[]}'])(
   'invalid CLI response refuses without lexical fallback: %s',
   (response) => {
     const broken = path.join(fx.root, 'broken-caws');
-    fs.writeFileSync(broken, '#!/bin/sh\nprintf %s ' + quote(response) + '\n', { mode: 0o755 });
+    fs.writeFileSync(broken, '#!/bin/sh\ncat > /dev/null\nprintf %s ' + quote(response) + '\n', {
+      mode: 0o755,
+    });
     const result = guard('echo safe', { CAWS_BIN: broken });
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('invalid or incomplete contract');
@@ -631,9 +633,12 @@ test('missing analyzer and bridge each fail closed', () => {
 
 function protocolBackend(response, exitCode = 0) {
   const cli = path.join(fx.root, 'protocol-caws');
-  fs.writeFileSync(cli, '#!/bin/sh\nprintf %s ' + quote(response) + '\nexit ' + exitCode + '\n', {
-    mode: 0o755,
-  });
+  // Read the request first, as the real CLI does: the guard pipes it in.
+  fs.writeFileSync(
+    cli,
+    '#!/bin/sh\ncat > /dev/null\nprintf %s ' + quote(response) + '\nexit ' + exitCode + '\n',
+    { mode: 0o755 }
+  );
   return { CAWS_BIN: cli };
 }
 function protocolToken(value, kind = 'word') {

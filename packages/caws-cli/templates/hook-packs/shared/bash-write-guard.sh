@@ -30,10 +30,10 @@
 #                    git reset -- FILE   git clean
 #   interpreter      Proven write operands from a bounded Node profile reach
 #                    both repository and worktree ownership checks. Literals in
-#                    other inline source, and in an untracked Python or Node
-#                    script the command names, are weak evidence: they reach the
-#                    foreign-repository check, and inline ones the foreign
-#                    worktree check.
+#                    other inline source, and uncommitted ones in a Python or
+#                    Node script the command names, are weak evidence: they
+#                    reach the foreign-repository check, and inline ones the
+#                    foreign worktree check.
 #   git              Every subcommand that writes refs, the index or a working
 #                    tree names the repository metadata it writes.
 #
@@ -553,8 +553,22 @@ done <<< "$_BWG_EFFECTS"
 if ! caws_bash_interpreter_evidence "$PROJECT_DIR"; then
   _bwg_normalize_refuse 'interpreter evidence' "$COMMAND"
 fi
+_EVIDENCE_SEEN=$'\n'; _EVIDENCE_COUNT=0
 for _EVIDENCE in ${CAWS_INTERPRETER_EVIDENCE[@]+"${CAWS_INTERPRETER_EVIDENCE[@]}"}; do
-  abspath_into _EVIDENCE_PATH "${_EVIDENCE#*$'\t'}" || continue
+  # Ownership belongs to a directory that exists. Literals that share their
+  # nearest one share its answer, so each directory is asked about once.
+  _EVIDENCE_PATH="${_EVIDENCE#*$'\t'}"
+  while [[ "$_EVIDENCE_PATH" == */* && ! -d "$_EVIDENCE_PATH" ]]; do
+    _EVIDENCE_PATH="${_EVIDENCE_PATH%/*}"
+  done
+  _EVIDENCE_KEY="${_EVIDENCE%%$'\t'*}"$'\t'"${_EVIDENCE_PATH:-/}"
+  [[ "$_EVIDENCE_SEEN" != *$'\n'"$_EVIDENCE_KEY"$'\n'* ]] || continue
+  _EVIDENCE_SEEN+="$_EVIDENCE_KEY"$'\n'; _EVIDENCE_COUNT=$((_EVIDENCE_COUNT + 1))
+  if [[ $_EVIDENCE_COUNT -gt 64 ]]; then
+    escalate ask 'interpreter source names paths in more than 64 directories' ask_unsupported_nesting
+    break
+  fi
+  abspath_into _EVIDENCE_PATH "${_EVIDENCE_PATH:-/}" || continue
   _FOREIGN_REPO="$(foreign_repo_root "$_EVIDENCE_PATH"; printf x)"
   _FOREIGN_REPO="${_FOREIGN_REPO%x}"
   if [[ -n "$_FOREIGN_REPO" ]]; then
@@ -564,7 +578,7 @@ for _EVIDENCE in ${CAWS_INTERPRETER_EVIDENCE[@]+"${CAWS_INTERPRETER_EVIDENCE[@]}
   [[ "${_EVIDENCE%%$'\t'*}" == inline ]] || continue
   out="$(CAWS_ORACLE_OPERATION=file CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
     CAWS_ORACLE_REMOVE_TREE=0 CAWS_ORACLE_CURRENT_BRANCH="" \
-    CAWS_ORACLE_REL_PATH="$_EVIDENCE_PATH" CAWS_ORACLE_CWD_UNRESOLVED="" \
+    CAWS_ORACLE_REL_PATH="${_EVIDENCE_PATH%/}/interpreter-evidence" CAWS_ORACLE_CWD_UNRESOLVED="" \
     CAWS_ORACLE_SESSION_ID="$CAWS_ORACLE_SESSION_ID" \
     node "$CAWS_CLAIM_ORACLE" 2>&1 || true)"
   case "${out%%$'\n'*}" in

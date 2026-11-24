@@ -55,12 +55,17 @@ beforeAll(() => {
     path.join(project, 'scripts/lint_docs.py'),
     'from pathlib import Path\nPath("tmp/report.json").write_text("{}")\n'
   );
-  // A tracked project script that mentions another repository and writes is
+  // A committed project script that mentions another repository and writes is
   // the project's own reviewed code, like a Makefile target.
   fs.writeFileSync(
     path.join(project, 'scripts/tracked_sync.py'),
     `open("${sibling}/published.md", "w").write("x")\n`
   );
+  fs.writeFileSync(
+    path.join(project, 'scripts/edited_sync.py'),
+    `open("${sibling}/published.md", "w").write("x")\n`
+  );
+  fs.writeFileSync(path.join(project, 'scripts/retargeted.py'), 'print("report")\n');
   fs.writeFileSync(path.join(project, 'scripts/task.mjs'), "console.log('task')\n");
   fs.writeFileSync(path.join(project, 'docs/guide.md'), '# Guide\n');
   fs.writeFileSync(path.join(project, 'src/app.txt'), 'app\n');
@@ -119,6 +124,18 @@ beforeAll(() => {
     path.join(root, 'outside_write.py'),
     `open("${sibling}/x.md", "w").write("x")\n`
   );
+  // Only what is committed was reviewed. An edit adds what it adds.
+  fs.appendFileSync(path.join(project, 'scripts/edited_sync.py'), 'print("done")\n');
+  fs.writeFileSync(
+    path.join(project, 'scripts/retargeted.py'),
+    `open("${sibling}/x.md", "w").write("x")\n`
+  );
+  fs.writeFileSync(
+    path.join(project, 'scripts/staged_sync.py'),
+    `open("${sibling}/x.md", "w").write("x")\n`
+  );
+  git(['add', '--', 'scripts/staged_sync.py']);
+  fx.before = [project, own, foreign].map((cwd) => git(['status', '--porcelain'], cwd));
   const cli = path.join(root, 'caws');
   fs.writeFileSync(
     cli,
@@ -193,6 +210,7 @@ const PROGRAMS = [
   '.venv/bin/python scripts/lint_docs.py 2>&1 | tail -30',
   '.venv/bin/python scripts/lint_docs.py 2>&1 | tail -15; .venv/bin/python scripts/tracked_sync.py 2>&1 | tail -4',
   'python3 scripts/tracked_sync.py',
+  'python3 scripts/edited_sync.py',
   'python3 -m pytest -q tests',
   'python3 -W ignore -X utf8 scripts/lint_docs.py',
   'python3 --version',
@@ -320,6 +338,17 @@ const INLINE = [
   "node -e \"const fs = require('fs'); console.log(fs.readdirSync('.').filter(f => f.endsWith('.md')))\"",
   "node - <<'EOF'\nconst fs = require('fs');\nfor (const f of fs.readdirSync('docs')) console.log(f.length);\nEOF",
   'node -e "unknownCall()"',
+  'node -e "process.stdout.write(String(1 + 1))"',
+  "node -e \"console.log(require('child_process').execSync('git status --short').toString())\"",
+  'python3 -c "import sys; sys.stdout.write(\'x\')"',
+  "python3 -c \"import subprocess; print(subprocess.check_output(['git', 'status']))\"",
+  "python3 -c \"open('Makefile', 'w').write('x')\"",
+  "python3 -c \"from pathlib import Path; Path('LICENSE').write_text('x')\"",
+  'cd "$SOMEWHERE" && python3 -c "print(1)"',
+  'cd "$SOMEWHERE" && python3 -c "open(\'/tmp/everyday.txt\', \'w\')"',
+  "python3 - <<'EOF'\npaths = [" +
+    Array.from({ length: 300 }, (_, i) => `'docs/part${i}/page.md'`).join(', ') +
+    "]\nfor p in paths:\n    open(p, 'w').write('x')\nEOF",
   'bash -c \'for f in a b; do echo "$f"; done\'',
   "bash -lc 'git log --oneline -3'",
 ];
@@ -393,7 +422,16 @@ const FOREIGN_WRITES = [
   'python3 {{ROOT}}/outside_write.py',
   '.venv/bin/python -u tmp/write_sibling.py',
   'cd tmp && python3 write_sibling.py',
+  'python3 scripts/staged_sync.py',
+  'python3 scripts/retargeted.py',
   "python3 -c \"open('{{SIBLING}}/x.md','w').write('x')\"",
+  'python3 -c "import shutil; shutil.rmtree(\'{{SIBLING}}/x\')"',
+  'python3 -c "import os; os.system(\'touch {{SIBLING}}/x\')"',
+  "python3 -c \"import subprocess; subprocess.run(['touch', '{{SIBLING}}/x'])\"",
+  'python3 -c "from pathlib import Path; Path(\'{{SIBLING}}/x\').unlink()"',
+  'python3 -c "from pathlib import Path; Path(\'{{FOREIGN}}/x\').touch()"',
+  "python3 -c \"import shutil; open('a.txt','w'); shutil.rmtree('{{SIBLING}}/x')\"",
+  "cd {{SIBLING}} && python3 -c \"open('x.md','w').write('x')\"",
   "python3 - <<'EOF'\nfrom pathlib import Path\nPath('{{SIBLING}}/y.md').write_text('x')\nEOF",
   "python3 - <<'EOF'\nfrom pathlib import Path\nPath('{{FOREIGN}}/src/app.txt').write_text('x')\nEOF",
   "node -e \"require('fs').writeFileSync('{{SIBLING}}/x.md','x')\"",
@@ -438,6 +476,8 @@ const UNPROVED = [
   ["NODE_OPTIONS='--require /tmp/preload.cjs' node -e '1'", 'mutation-interpreter-effects'],
   // Unknown coordinates still hold a recognized write that depends on them.
   ['cd "$SOMEWHERE" && echo x > relative', 'cwd-unresolved'],
+  ['cd "$SOMEWHERE" && python3 -c "open(\'a/rel.txt\', \'w\')"', 'cwd-unresolved'],
+  ['cd "$SOMEWHERE" && python3 -c "open(\'rel.txt\', \'w\')"', 'cwd-unresolved'],
   ['source scripts/run_gates.sh; touch relative', 'cwd-unresolved'],
   ['pushd docs; popd; touch relative', 'cwd-unresolved'],
   ['source ./activate; touch relative', 'cwd-unresolved'],
@@ -476,9 +516,9 @@ describe('a write owned elsewhere is refused behind every admitted construct', (
   });
   test('no submitted command ran: neither foreign tree changed', () => {
     expect(fs.readdirSync(fx.sibling)).toEqual(['.git']);
-    expect(git(['status', '--porcelain'], fx.foreign)).toBe('');
-    expect(git(['status', '--porcelain'], fx.own)).toBe('');
-    expect(git(['status', '--porcelain'])).toBe('');
+    expect(
+      [fx.project, fx.own, fx.foreign].map((cwd) => git(['status', '--porcelain'], cwd))
+    ).toEqual(fx.before);
   });
 });
 

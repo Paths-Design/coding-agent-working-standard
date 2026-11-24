@@ -346,19 +346,25 @@ Python programs and file-based entry points have no effect profile.
 
 Unresolved source is scanned for evidence of a write that crosses a boundary.
 Inline source and here-documents are scanned as submitted. An entry file is read
-before launch, up to 512 KiB, when the project does not track it; a tracked file
-is the project's own reviewed code, like a build target, and an entry file that
-does not exist is scanned from the command text that may create it. A literal
-counts when the source holds a write verb of its language and the literal is not
-merely the operand of a read. Python source is examined through its syntax tree,
-so only literals that can reach a write count. A literal that resolves into
-another repository refuses, and one in inline source that resolves into another
-session's worktree refuses. Evidence never authorizes a write and never consults
-`scope.in` claims, because a path that source mentions is not a path it writes.
-Inline source that writes without naming any target literally is unresolved. A
-target computed at run time, a module, a tracked script and a program in another
-language leave no evidence; that is the recognizer's stated limit, and reading a
-file before execution does not bind those bytes to the eventual launch.
+before launch, up to 512 KiB. What the project has committed is its own reviewed
+code, like a build target, so only literals its committed version lacks count;
+staging a file does not review it. An entry file that does not exist is scanned
+from the command text that may create it. A literal counts when the source holds
+a write verb of its language and the literal is not merely the operand of a
+read. Python programs are examined through their syntax tree, so only literals
+that can reach a write count. Inline source also counts where it can delete,
+create or start a program by a call the tree does not follow, such as
+`shutil.rmtree` or `subprocess`. A literal that resolves into another repository
+refuses, and one in inline source that resolves into another session's worktree
+refuses. Literals that share their nearest existing directory are asked about
+once, and more than 64 such directories are unresolved. Evidence never
+authorizes a write and never consults `scope.in` claims, because a path that
+source mentions is not a path it writes. Inline source that writes without
+naming any target literally is unresolved, as is a relative write after a
+directory change that cannot be established. A target computed at run time, a
+module, committed source and a program in another language leave no evidence;
+that is the recognizer's stated limit, and reading a file before execution does
+not bind those bytes to the eventual launch.
 
 The profile assumes ordinary Node builtins and controlled startup; it is a
 source-analysis contract, not runtime confinement. Preloads selected by the

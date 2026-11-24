@@ -269,11 +269,13 @@ add('directories', 'cd "$X" && sed s/a/b/ o');
 add('directories', 'cd "$X" && perl -ne print o');
 add('directories', 'cd "$X" && node -e \'require("fs").writeFileSync("o", "x")\'', {
   codes: ['cwd-unresolved'],
-  run: ['node:inline::finite-writes'],
+  run: ['node:inline::finite-writes anywhere'],
 });
 add('directories', 'cd "$X" && node -e \'require("fs").writeFileSync("/abs/o", "x")\'', {
-  run: ['node:inline::finite-writes'],
+  run: ['node:inline::finite-writes anywhere'],
 });
+launches('directories', 'cd "$X" && python3 x.py', 'python:program:x.py:unresolved anywhere');
+launches('directories', 'cd s1 && python3 -c 1', 'python:inline::unresolved in @/s1');
 // A failed pushd leaves the old directory and its name in place.
 held('directories', 'cwd-unresolved', 'pushd s1; touch "$PWD/o"', '?', '@/o');
 held('directories', 'cwd-unresolved', 'pushd s1 && touch "$PWD/o"', '?');
@@ -1503,8 +1505,9 @@ describe('write projection', () => {
       .sort(),
     run: view.interpreters
       .map(
-        ({ language, launch, entry, effects }) =>
-          `${language}:${launch}:${entry ?? ''}:${effects.kind}`
+        ({ language, launch, entry, effects, cwd }) =>
+          `${language}:${launch}:${entry ?? ''}:${effects.kind}` +
+          (cwd === null ? ' anywhere' : cwd === locations['@'] ? '' : ' in ' + contract(cwd))
       )
       .sort(),
     copies: view.copyOperations.map((row) => row.knowledge),

@@ -243,15 +243,35 @@ describe('bash-write-guard: interpreter-mediated writes', () => {
     expect(fs.readFileSync(path.join(fx.sibling, 'README.md'), 'utf8')).toBe('sibling\n');
   });
 
-  test('a script the project tracks is reviewed code and is not scanned', () => {
-    const script = writeScript(fx, 'scripts/sync.js', [
-      `require('node:fs').writeFileSync('${fx.sibling}/x.md', 'x');`,
-    ]);
-    const untracked = runGuard('node ' + script, fx);
-    expect(untracked.exit).toBe(2);
-    expect(untracked.stderr).toMatch(/DIFFERENT repository/);
-    execFileSync('git', ['add', '--', script], { cwd: fx.projectDir });
-    expect(runGuard('node ' + script, fx)).toEqual({ exit: 0, stdout: '', stderr: '' });
+  test('only what the project has committed is reviewed code', () => {
+    const git = (...args) =>
+      execFileSync(
+        'git',
+        ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...args],
+        { cwd: fx.projectDir }
+      );
+    const refused = () => {
+      const res = runGuard('node scripts/sync.js', fx);
+      expect(res.exit).toBe(2);
+      expect(res.stderr).toMatch(/DIFFERENT repository/);
+      expect(res.stderr).toContain(fx.sibling);
+    };
+    const admitted = () =>
+      expect(runGuard('node scripts/sync.js', fx)).toEqual({ exit: 0, stdout: '', stderr: '' });
+    const lines = [`require('node:fs').writeFileSync('${fx.sibling}/x.md', 'x');`];
+    writeScript(fx, 'scripts/sync.js', lines);
+    refused();
+    git('add', '--', 'scripts/sync.js');
+    refused();
+    git('commit', '-q', '-m', 'reviewed');
+    admitted();
+    // An edit keeps what was reviewed and answers for what it adds.
+    lines.push("console.log('done');");
+    writeScript(fx, 'scripts/sync.js', lines);
+    admitted();
+    lines.push(`require('node:fs').writeFileSync('${fx.sibling}/y.md', 'y');`);
+    writeScript(fx, 'scripts/sync.js', lines);
+    refused();
   });
 
   test('the observed bypass blocks: node runs a scratch script whose body writes a sibling repo', () => {

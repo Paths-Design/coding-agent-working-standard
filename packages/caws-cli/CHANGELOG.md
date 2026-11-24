@@ -109,7 +109,7 @@ status`, message delivery, the peer notice) report the later of that file's
   read positions, `command -v` and most shell builtins run without a prompt.
   Every Git subcommand that writes is checked for metadata ownership, where only
   `add` and `commit` were. A path literal that inline interpreter source or an
-  untracked entry script may write to refuses when it is in another repository.
+  uncommitted entry script may write to refuses when it is in another repository.
   Output and execution options, opaque shell source, and recognized writes whose
   target or directory is unknown stay held, and a held command names its remedy.
   Shared pack 140.

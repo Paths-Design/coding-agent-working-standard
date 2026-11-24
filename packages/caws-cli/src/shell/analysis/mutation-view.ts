@@ -917,7 +917,7 @@ export async function projectMutationView(
           effects,
           launch: program ? 'program' : 'inline',
           entry: program ? selected.entry : null,
-          cwd: request.cwd === null ? null : state.cwd,
+          cwd: request.cwd === null || state.cwdUnknown === true ? null : state.cwd,
           start: original.pos,
           end: original.end,
         });

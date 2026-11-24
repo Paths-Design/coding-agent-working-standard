@@ -233,7 +233,8 @@ caws_bash_prepare_analysis() {
       (if (.issues|length)==0 then
         ([.interpreterInvocations[]|[.language,.start,.end]]==[.interpreters[]|[.language,.start,.end]])
         else true end) and
-      all(.interpreters[]; language and coordinate($document.execution.cwd==null) and bounded($document.execution.command|source_length) and
+      # A directory the command changed into can be unknown on its own row.
+      all(.interpreters[]; language and coordinate(true) and bounded($document.execution.command|source_length) and
         (.argv|type)=="array" and (.argv|length)>0 and all(.argv[]; .==null or type=="string") and
         (.argv[0]|type)=="string" and
         (if .language=="node" then (.argv[0]|split("/")|last|.=="node" or .=="nodejs")
@@ -318,28 +319,44 @@ caws_bash_analysis_interpreter_writes() {
   return 0
 }
 
-# Names that give inline Node source a way to write or to start a program.
+# Names that give inline source a way to write or to start a program. Source in
+# the command is fully visible, so these reach past the verbs that mark a file
+# as a writer.
 CAWS_NODE_WRITE_MENTIONS='(^|[^A-Za-z0-9_])(writeFile|appendFile|createWriteStream|copyFile|cp|truncate|ftruncate|rename|unlink|rm|rmdir|symlink|link|open|write|exec|execFile|spawn)(Sync)?[[:space:]]*(\(|[^A-Za-z0-9_[:space:]]|$)|child_process|\][[:space:]]*\('
+CAWS_PY_WRITE_MENTIONS="\.(unlink|rename|rmdir|mkdir|touch|symlink_to|hardlink_to|symlink|link|truncate|extractall|system|popen|exec[lv]p?e?|spawn[lv]p?e?|rmtree|copytree|copy2|makedirs)\(|(^|[^A-Za-z0-9_.])(unlink|rmtree|copytree|copy2|makedirs|system|popen)\(|(^|[^A-Za-z0-9_])subprocess([^A-Za-z0-9_]|$)|\.open\([[:space:]]*['\"][rwabtx+]*[wax+]"
+# Calls that write a file, and the same calls with a literal first operand.
+CAWS_NODE_FILE_WRITES='(writeFile|appendFile|createWriteStream|copyFile|rename|unlink|truncate)(Sync)?[[:space:]]*\('
+CAWS_NODE_NAMED_TARGET="(writeFile|appendFile|createWriteStream|copyFile|rename|unlink|truncate|open)(Sync)?\([[:space:]]*['\"\`]"
+CAWS_PY_NAMED_TARGET="((^|[^A-Za-z0-9_])(open|Path)|os\.(replace|rename|remove|unlink)|shutil\.(copyfile|copy|move))\([[:space:]]*['\"]"
 
-# _caws_interpreter_evidence <origin> <language> <coordinate> <source> <verbs>
-#   Record the path literals <source> may write to. A relative literal resolves
-#   against the invocation directory and, because programs compose paths from
-#   the home directory, against HOME when that names something that exists.
-#   Returns 1 when <source> yields no literal.
-_caws_interpreter_evidence() {
-  local origin="$1" language="$2" coordinate="$3" source="$4" verbs="$5"
-  local literal found=1 kind='' quoted="(\"[^\"]*\"|'[^']*')"
+# _caws_interpreter_literals <language> <source> <verbs>
+#   Print the path literals <source> may write to. The operand of a read names
+#   something the source reads, so it is dropped; a complete Python program gets
+#   that distinction from its syntax tree.
+_caws_interpreter_literals() {
+  local language="$1" source="$2" verbs="$3" kind='' quoted="(\"[^\"]*\"|'[^']*')"
   case "$language" in
     python) kind=python-file ;;
-    # The operand of a read names something the source reads. Python source gets
-    # the same distinction from its syntax tree.
+    python-text) source="$(sed -E \
+      -e "s/open\([[:space:]]*$quoted[[:space:]]*(,[[:space:]]*['\"]r[bt]*['\"])?[[:space:]]*\)/open()/g" \
+      -e "s/Path\([[:space:]]*$quoted[[:space:]]*\)\.(read_text|read_bytes|exists|is_file|is_dir|iterdir|glob|rglob|stat)/\2/g" <<< "$source")" ;;
     node) source="$(sed -E \
       -e "s/(readFile|readdir|exists|lstat|stat|access|createReadStream)(Sync)?\([[:space:]]*$quoted/\1\2(/g" \
       -e "s/(require\(|import\(|from|import)[[:space:]]*$quoted/\1/g" <<< "$source")" ;;
   esac
+  _caws_interp_payload_literals "$source" "$verbs" "$kind"
+}
+
+# _caws_record_evidence <origin> <coordinate> <literals> [reviewed-literals]
+#   Record each literal a reviewed version of the source does not already hold.
+#   A relative literal resolves against the invocation directory and, because
+#   programs compose paths from the home directory, against HOME when that names
+#   something that exists.
+_caws_record_evidence() {
+  local origin="$1" coordinate="$2" literal
   while IFS= read -r literal; do
     [[ -n "$literal" ]] || continue
-    found=0
+    [[ -z "${4:-}" || $'\n'"$4"$'\n' != *$'\n'"$literal"$'\n'* ]] || continue
     case "$literal" in
       # Installed tools are programs a script runs, not repositories it edits.
       /opt/homebrew/*|/usr/*|/bin/*|/sbin/*) continue ;;
@@ -351,8 +368,41 @@ _caws_interpreter_evidence() {
           CAWS_INTERPRETER_EVIDENCE+=( "$origin"$'\t'"$HOME/$literal" )
         fi ;;
     esac
-  done < <(_caws_interp_payload_literals "$source" "$verbs" "$kind")
-  return "$found"
+  done <<< "$3"
+}
+
+# _caws_inline_evidence <language> <coordinate> <source>
+#   Source in the command. A write there must name its target, and a relative
+#   target needs a directory.
+_caws_inline_evidence() {
+  local language="$1" coordinate="$2" source="$3" literals='' writes="$CAWS_PY_WRITE_VERBS"
+  local named="$CAWS_PY_NAMED_TARGET" found=0
+  if [[ "$language" == python ]]; then
+    if grep -qE "$CAWS_PY_WRITE_VERBS" <<< "$source"; then
+      found=1; literals="$(_caws_interpreter_literals python "$source" "$CAWS_PY_WRITE_VERBS")"
+    fi
+    if grep -qE "$CAWS_PY_WRITE_MENTIONS" <<< "$source"; then
+      found=1
+      literals+=$'\n'"$(_caws_interpreter_literals python-text "$source" "$CAWS_PY_WRITE_MENTIONS")"
+    fi
+  elif grep -qE "$CAWS_NODE_WRITE_MENTIONS" <<< "$source"; then
+    found=1; writes="$CAWS_NODE_FILE_WRITES"; named="$CAWS_NODE_NAMED_TARGET"
+    literals="$(_caws_interpreter_literals node "$source" "$CAWS_NODE_WRITE_MENTIONS")"
+  fi
+  [[ $found == 1 ]] || return 0
+  _caws_record_evidence inline "$coordinate" "$literals"
+  if [[ -n "$coordinate" ]]; then
+    # A relative write lands in the directory the program starts in.
+    CAWS_INTERPRETER_EVIDENCE+=( inline$'\t'"$coordinate/relative-target" )
+  fi
+  grep -qE "$writes" <<< "$source" || return 0
+  if [[ "$literals" != *[!$'\n']* ]] &&
+      ! grep -qE "['\"][^'\"/[:space:]]+\.[A-Za-z0-9]+['\"]" <<< "$source" &&
+      ! grep -qE "$named" <<< "$source"; then
+    CAWS_AST_ISSUES+=( 'mutation-interpreter-effects: inline source writes to a target it does not name literally' )
+  elif [[ -z "$coordinate" ]] && { [[ "$literals" != *[!$'\n']* ]] || grep -qvE '^(/|~/|$)' <<< "$literals"; }; then
+    CAWS_AST_ISSUES+=( 'cwd-unresolved: inline source writes relative to a directory that could not be established' )
+  fi
 }
 
 # caws_bash_interpreter_evidence <project>
@@ -363,10 +413,10 @@ _caws_interpreter_evidence() {
 #   that is the limited-recognizer residual every launched program has.
 #
 #   Source in the command is fully visible, so a write there that names no
-#   target at all is held. A file the project tracks is its own reviewed code,
-#   like a build target, and is not scanned.
+#   target at all is held. What the project has committed is its own reviewed
+#   code, like a build target, so only the literals an edit adds are evidence.
 caws_bash_interpreter_evidence() {
-  local project="$1" i=0 kind language coordinate source verbs script body
+  local project="$1" i=0 kind language coordinate source verbs script body committed
   CAWS_INTERPRETER_EVIDENCE=()
   [[ ${CAWS_BASH_ANALYSIS_READY:-0} == 1 ]] || return 2
   declare -F _caws_interp_payload_literals >/dev/null 2>&1 &&
@@ -376,15 +426,7 @@ caws_bash_interpreter_evidence() {
     coordinate="${CAWS_AST_PROGRAM_CWD[$i]}"; source="${CAWS_AST_PROGRAM_SOURCE[$i]}"
     i=$((i+1))
     if [[ "$kind" == inline ]]; then
-      verbs="$CAWS_PY_WRITE_VERBS"
-      [[ "$language" == python ]] || verbs="$CAWS_NODE_WRITE_MENTIONS"
-      grep -qE "$verbs" <<< "$source" || continue
-      # A relative write lands in the directory the program starts in.
-      [[ -z "$coordinate" ]] || CAWS_INTERPRETER_EVIDENCE+=( inline$'\t'"$coordinate/relative-target" )
-      if ! _caws_interpreter_evidence inline "$language" "$coordinate" "$source" "$verbs" &&
-          ! grep -qE "['\"][^'\"/[:space:]]+\.[A-Za-z0-9]+['\"]" <<< "$source"; then
-        CAWS_AST_ISSUES+=( 'mutation-interpreter-effects: inline source writes to a target it does not name literally' )
-      fi
+      _caws_inline_evidence "$language" "$coordinate" "$source"
       continue
     fi
     verbs="$CAWS_PY_WRITE_VERBS"
@@ -397,17 +439,20 @@ caws_bash_interpreter_evidence() {
       # The command may create the file it goes on to run. Shell text around the
       # source is not a Python program, so it gets the co-occurrence scan.
       [[ -e "$script" ]] ||
-        _caws_interpreter_evidence entry "${language/python/text}" "$coordinate" \
-          "${COMMAND:-}" "$verbs" || true
-      continue
-    fi
-    if [[ -z "$(caws_foreign_repo_root "$script" "$project")" ]] &&
-        git -C "${script%/*}" ls-files --error-unmatch -- "${script##*/}" >/dev/null 2>&1; then
+        _caws_record_evidence entry "$coordinate" \
+          "$(_caws_interpreter_literals "${language/python/text}" "${COMMAND:-}" "$verbs")"
       continue
     fi
     body="$(head -c 524289 "$script" 2>/dev/null || true)"
     [[ ${#body} -le 524288 ]] || continue
-    _caws_interpreter_evidence entry "$language" "$coordinate" "$body" "$verbs" || true
+    committed=''
+    if [[ -z "$(caws_foreign_repo_root "$script" "$project")" ]]; then
+      committed="$(git -C "${script%/*}" show "HEAD:./${script##*/}" 2>/dev/null || true)"
+      [[ "$committed" != "$body" ]] || continue
+    fi
+    _caws_record_evidence entry "$coordinate" \
+      "$(_caws_interpreter_literals "$language" "$body" "$verbs")" \
+      "$(_caws_interpreter_literals "$language" "$committed" "$verbs")"
   done
   return 0
 }
