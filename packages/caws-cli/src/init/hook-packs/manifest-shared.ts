@@ -710,7 +710,14 @@ import { isAdapterCoveredSurface } from './types';
 // transfer with curl 8.7.1's option-argument table, so -G/--get queries are
 // not HTTP_MUTATE while any transfer that sends a body, including a clustered
 // -sd, is.
-export const SHARED_PACK_VERSION = 139;
+// v140: bash-write-guard.sh holds an unproved write target or unreadable shell
+// source, not a program, option or construct without a profile. Interpreter
+// source in the command, and an untracked entry script it names, are scanned
+// for literals that write into another repository or foreign worktree. Every
+// Git subcommand that writes metadata reaches the ownership check. A held
+// command names its remedy. lib/bash-mutation-analysis.sh carries the launch
+// kind and entry file, and holds an unresolved row that states neither.
+export const SHARED_PACK_VERSION = 140;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

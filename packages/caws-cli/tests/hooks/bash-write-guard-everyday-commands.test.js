@@ -304,6 +304,8 @@ const WRITES = [
   'source .venv/bin/activate && pytest -q && git add -A && git commit -q -m "test: x"',
   'mapfile -t files < <(git ls-files); printf "%s\\n" "${files[@]}" > tmp/files.txt',
   '(cd docs && ls; exit 0); git add -A',
+  'npm test > >(tee tmp/test.log) 2>&1',
+  'printf "%d%%\\n" 50; env FOO=1 git add -A',
 ];
 
 const INLINE = [
@@ -351,6 +353,7 @@ const FOREIGN_WRITES = [
   'arr=($(touch {{FOREIGN}}/out))',
   'export X=$(touch {{SIBLING}}/out)',
   'diff <(touch {{FOREIGN}}/out) docs/guide.md',
+  'npm test > >(tee {{SIBLING}}/out) 2>&1',
   'cat <<< "$(touch {{SIBLING}}/out)"',
   'x=$(echo y 2>/dev/null; touch {{FOREIGN}}/out)',
   'sleep 0 & touch {{SIBLING}}/out',

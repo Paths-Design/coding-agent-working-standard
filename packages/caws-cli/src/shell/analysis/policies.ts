@@ -403,6 +403,7 @@ function projectGitEnvironment(
   let known = true;
   const targets: { name: string; value: string }[] = [];
   for (const [name, values] of env) {
+    if (!name.startsWith('GIT_') && name !== 'PAGER') continue;
     if (GIT_ROUTING.includes(name)) {
       if (values) for (const value of values) targets.push({ name, value });
       else {
@@ -826,8 +827,11 @@ function projectInvocation(
           if (!projectionSensitiveBinding(target)) return { ...state, bindings };
         }
       }
-      // %n assigns to the variable its argument names.
-      if (typeof format === 'string' && (format.startsWith('-v') || /%[^%a-zA-Z]*n/.test(format)))
+      // %n assigns to the variable its argument names; %% is a literal percent.
+      if (
+        typeof format === 'string' &&
+        (format.startsWith('-v') || /%[-+ #'0-9.*]*[hjlLtz]*n/.test(format.replace(/%%/g, '')))
+      )
         ctx.reason(
           node,
           'printf-format',

@@ -102,6 +102,17 @@ status`, message delivery, the peer notice) report the later of that file's
   event is reported on stderr and exits 0, and a handler's own verdict is
   unchanged. The fix is in `bootstrap.py` and `caws-hook.py`, so it takes
   effect when the machine runtime is next installed.
+- `bash-write-guard` holds a command for a write it cannot establish, and no
+  longer for a program, option or shell construct it has no profile for. Scripts
+  run by path, Python and Node entry files and modules, `git log -8`, `grep -A`,
+  `sed` substitutions, loops, functions, `[[ ]]`, arithmetic, arrays, globs in
+  read positions, `command -v` and most shell builtins run without a prompt.
+  Every Git subcommand that writes is checked for metadata ownership, where only
+  `add` and `commit` were. A path literal that inline interpreter source or an
+  untracked entry script may write to refuses when it is in another repository.
+  Output and execution options, opaque shell source, and recognized writes whose
+  target or directory is unknown stay held, and a held command names its remedy.
+  Shared pack 140.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

@@ -96,13 +96,49 @@ verdict. Existing utility operand rules and the claim oracle determine whether a
 recognized write is authorized. A missing or malformed backend fails closed
 without falling back to the legacy lexer.
 
-Every recognized interpreter invocation has an independent coverage entry and an
-effect result: `readonly`, `finite-writes`, or `unresolved`. Issue-free
-responses require ordered coverage to match every interpreter row. The v2 bridge
-rejects missing knowledge, malformed results and incompatible v1 responses;
-older consumers reject the v2 schema. These checks establish the trusted
-backend's structural contract, not authentication of an arbitrary replacement
-backend.
+### What the write guard holds
+
+The projection and the optional worktree-pin guard share one evaluator and ask
+different questions. The pin guard admits only what it can prove, so a program
+or option without a profile is `unresolved` there. The write guard asks which
+files a command names as write targets and who owns them. A program or option it
+has no profile for names no target, and is not by itself an issue.
+
+Launching a program is the limited-recognizer residual however it is spelled: by
+bare name, by path, or as an interpreter's script, module or query. No extracted
+write is not proof that the program writes nothing. An issue means one of three
+things:
+
+- a recognized write has a target, or depends on a directory, that the source
+  does not establish;
+- the shell would run source the projection cannot read, such as `eval`, a
+  `trap` body, `bash -c "$CODE"`, or a program piped into a shell;
+- an argument of a recognized utility writes a file or runs a program that the
+  target extraction does not see, such as `git diff --output`, `sort -o`,
+  `rg --pre`, a sed `w` or `e` command, or a Git setting that selects a program.
+
+Every reachable command is visited: loops, conditionals, `case`, `[[ ]]`,
+arithmetic, functions, subshells, background jobs, coprocesses, pipelines,
+process and command substitutions, parameter operations, arrays and declaration
+arguments. Alternatives are kept while they can be listed, at most eight values
+for one binding, and otherwise become unknown. A loop whose values keep changing
+forgets them and its directory. An unknown value matters where it is a write
+target or selects one, and nowhere else: `ls $X` runs and `rm $X` is held. After
+a directory change that cannot be established, an absolute target is checked as
+usual and a relative one raises `cwd-unresolved`. Sourcing a file makes bindings
+and the directory unknown, except for a path ending in `bin/activate`, which
+virtual environments generate to change which programs are found.
+
+Every recognized interpreter invocation has an independent coverage entry, an
+effect result (`readonly`, `finite-writes` or `unresolved`) and a `launch` kind.
+`inline` source is part of the command. A `program` is a file, module or query
+launched without being read; its `entry` is the file when the command names one
+literally. Issue-free responses require ordered coverage to match every
+interpreter row. The v2 bridge rejects missing knowledge, malformed results,
+contradictory launches and incompatible v1 responses; older consumers reject the
+v2 schema. An unresolved row that does not state its launch has not been read
+and is held. These checks establish the trusted backend's structural contract,
+not authentication of an arbitrary replacement backend.
 
 Every recognized `cp` or `mv` invocation also has an ordered `copyInvocations`
 coverage entry and a `copyOperations` row. A row records `finite`, `readonly` or
@@ -257,34 +293,41 @@ JavaScript and Python heredoc bodies remain interpreter data, so an arrow or
 object literal does not become a shell redirect or brace expansion. Only actual
 interpreter invocations produce payload records; quoted search text mentioning
 an interpreter does not. Literal Bash heredoc and `-c` programs receive bounded
-recursive shell inspection. Other shell semantics, opaque executable stdin,
-unmodeled state-changing builtins and known execution-bearing options remain
-unresolved. Source changes to interpreter preload/import environments also
-remain unresolved.
+recursive shell inspection. A Bash or `sh` script file is a program. `sh -c`
+source, opaque executable stdin, and builtins that run or define code the
+projection cannot read remain unresolved. So does literal interpreter source
+whose preload or import environment the same command replaces.
 
-Known `git add` and `git commit` operations carry their actual Git directory,
-common directory and working tree in a distinct metadata channel. A constant
-read-only Git query resolves these coordinates; the submitted operation is never
-executed. Discovery caches at most eight contexts per projection, including
-failures, with a 500 ms deadline and 64 KiB output limit per query and no retry.
-Unprofiled application effects invalidate later filesystem observations. Nested
-command substitutions keep bindings and cwd local while carrying shared
-filesystem effects into later analysis, including command-local prefix
-assignments. Nested shell jobs also inherit parent effects; another unmodeled
-invocation or output redirection anywhere in the enclosing source conservatively
-invalidates nested metadata coordinates, including concurrent pipeline siblings.
-A sole inspected literal Bash invocation is exempt from its own enclosing
-invocation's opacity; mixed finite callees at that source position cannot borrow
-the exemption. Unproven cwd, prior filesystem effects, redirected index files
-and failed or bare-repository discovery remain unresolved. Both metadata
-directories receive the foreign-repository check. External metadata layouts
-without an established project boundary remain unresolved. The oracle separately
-matches the physical working tree, derived from reciprocal metadata pointers, to
-a unique registry entry and its stamped owner. An independently overridden
-`--work-tree` cannot lend its identity to another worktree's metadata. Canonical
-metadata is admitted; unknown identity, missing ownership and duplicate matches
-cannot grant admission for a linked working tree. A namespaced response prevents
-an older file-only oracle from silently accepting a metadata operation.
+Git subcommands that only inspect need no ownership answer. Every other
+subcommand, including one the projection does not know, carries its actual Git
+directory, common directory and working tree in a distinct metadata channel. A
+constant read-only Git query resolves these coordinates; the submitted operation
+is never executed. Discovery caches at most eight contexts per projection,
+including failures, with a 500 ms deadline and 64 KiB output limit per query and
+no retry. A subcommand that is not literal is unresolved.
+
+An effect that can replace a repository mapping invalidates later metadata
+coordinates: a write, link, move or removal that names a `.git` component, the
+removal or replacement of the directory the shell is in, and `caws worktree`
+lifecycle commands. Other file writes and programs leave those coordinates
+established, because they do not select which repository Git finds. Command
+substitutions, subshells, pipelines and background jobs keep bindings and cwd
+local while carrying filesystem effects into later analysis, including when they
+end by exiting. Nested shell jobs inherit parent mapping effects, and a mapping
+effect anywhere in the enclosing source invalidates nested coordinates. Copy
+roles keep the stricter rule that any preceding filesystem effect, including an
+unprofiled program, leaves their operands unresolved; a sole inspected literal
+Bash invocation is exempt from its own enclosing invocation's opacity. Unproven
+cwd, redirected index files and failed or bare-repository discovery remain
+unresolved. Both metadata directories receive the foreign-repository check.
+External metadata layouts without an established project boundary remain
+unresolved. The oracle separately matches the physical working tree, derived
+from reciprocal metadata pointers, to a unique registry entry and its stamped
+owner. An independently overridden `--work-tree` cannot lend its identity to
+another worktree's metadata. Canonical metadata is admitted; unknown identity,
+missing ownership and duplicate matches cannot grant admission for a linked
+working tree. A namespaced response prevents an older file-only oracle from
+silently accepting a metadata operation.
 
 Mapping uncertainty applies to recognized metadata writes in this consumer;
 read-only Git invocations do not acquire an ownership requirement from the
@@ -298,18 +341,32 @@ filesystem APIs produce effect knowledge. Only proven write operands enter
 foreign-repository and worktree ownership checks; a path used by a read API does
 not become a write target because a write occurs elsewhere in the payload.
 Unrecognized calls, unsafe aliasing, dynamic targets, unsupported syntax and
-exhausted budgets remain unresolved even when no write verb appears. Python
-programs and file-based interpreter entry points remain unresolved. Reading a
-script before execution would not bind those bytes to the eventual launch.
+exhausted budgets have unresolved effects even when no write verb appears.
+Python programs and file-based entry points have no effect profile.
+
+Unresolved source is scanned for evidence of a write that crosses a boundary.
+Inline source and here-documents are scanned as submitted. An entry file is read
+before launch, up to 512 KiB, when the project does not track it; a tracked file
+is the project's own reviewed code, like a build target, and an entry file that
+does not exist is scanned from the command text that may create it. A literal
+counts when the source holds a write verb of its language and the literal is not
+merely the operand of a read. Python source is examined through its syntax tree,
+so only literals that can reach a write count. A literal that resolves into
+another repository refuses, and one in inline source that resolves into another
+session's worktree refuses. Evidence never authorizes a write and never consults
+`scope.in` claims, because a path that source mentions is not a path it writes.
+Inline source that writes without naming any target literally is unresolved. A
+target computed at run time, a module, a tracked script and a program in another
+language leave no evidence; that is the recognizer's stated limit, and reading a
+file before execution does not bind those bytes to the eventual launch.
 
 The profile assumes ordinary Node builtins and controlled startup; it is a
 source-analysis contract, not runtime confinement. Preloads selected by the
-submitted source and assignments to tracked startup bindings remain unresolved.
-Ordinary application bindings, such as `NODE_ENV` or `NODE_OPTIONS_DATA`, do not
-by themselves invalidate this profile. Weak path-literal co-occurrence
-observations remain separate legacy diagnostics and confer no write permission
-or mutation finding in the mandatory v2 consumer. Arbitrary external
-applications retain the explicitly limited recognizer boundary.
+submitted source and assignments to tracked startup bindings remain unresolved
+beside inline source, which would not be the program that runs. Startup settings
+the shell inherited leave effects unresolved without refusing the command: they
+are the host's, not the command's. Ordinary application bindings, such as
+`NODE_ENV` or `NODE_OPTIONS_DATA`, do not by themselves invalidate this profile.
 
 `caws.node-source-effects.v1` uses Acorn 8.15.0 to parse complete script source
 with ECMAScript 2022 grammar. It admits `const` bindings, plain own-data arrays
@@ -336,11 +393,13 @@ the launcher must own the actual child's environment and qualify the runtime
 version and its startup contract before using these effects to admit execution.
 
 Node option validation continues after the selected code operand until `--`,
-`-`, or the first positional argument. Trailing preloads and other unmodeled
-options remain unresolved. Repeated code selectors also remain unresolved; they
-cannot lend the first payload's effects to a later program. Arguments after the
-option boundary remain data. Print operands with empty or leading-dash values,
-escape transformations and `--print=value` are outside this profile. The
+`-`, or the first positional argument. Beside inline code, trailing preloads and
+other unmodeled options remain unresolved, because an option can change which
+source runs. Beside an entry file they do not, because a program launch claims
+nothing about the source it runs. Repeated code selectors remain unresolved;
+they cannot lend the first payload's effects to a later program. Arguments after
+the option boundary remain data. Print operands with empty or leading-dash
+values, escape transformations and `--print=value` are outside this profile. The
 [pinned Node option parser](https://github.com/nodejs/node/blob/v22.19.0/src/node_options-inl.h)
 and its
 [option definitions](https://github.com/nodejs/node/blob/v22.19.0/src/node_options.cc)
@@ -352,7 +411,8 @@ the complete AST at 8,192 nodes and depth 64, abstract values at 4,096, and
 evaluation at 32,768 steps. Exceeded limits return unresolved. It does not read
 entry scripts or execute submitted functions to learn their effects.
 
-The projection shares the expansion engine's limits and adds shared limits of
+The projection evaluates at most 16,384 visits and 48 levels of nesting, because
+it visits constructs the pin guard refuses on sight. It adds shared limits of
 4,096 emitted tokens, eight nested shell levels, 32 source jobs, 64 KiB
 cumulative source and 256 KiB carried text. It stops projecting on exhaustion
 and retains an unresolved issue. Original source is never executed to obtain an
@@ -364,11 +424,12 @@ worktree-pin policy below is a separate consumer with a narrower admission
 profile. Handler fixture checks do not establish live machine deployment or
 custody through later native interceptors.
 
-The admitted subset leaves unmodeled build tools such as `npm test` unresolved.
-Enabling this optional guard for a full development workflow requires additional
-program profiles or a separately defined runtime policy. Unknown effects do not
-silently acquire permission. Jev, if used, classifies retained examples offline
-to inform the design; it has no role in future-command admission.
+The optional guard's admitted subset leaves unmodeled build tools such as
+`npm test` unresolved. Enabling it for a full development workflow requires
+additional program profiles or a separately defined runtime policy. Unknown
+effects do not silently acquire permission. Jev, if used, classifies retained
+examples offline to inform the design; it has no role in future-command
+admission.
 
 Git uses native physical path resolution. Bash `cd` keeps a failure alternative,
 invalidates PWD/OLDPWD, and leaves logical parent traversal unresolved unless
@@ -689,14 +750,19 @@ producing admission, but does not qualify a rollout that blocks benign commands.
 Native adoption requires demonstrated execution-contract support and an isolated
 canary before replacing the deployed runtime.
 
-The declared analysis topology contains three suites:
+The declared analysis topology contains four suites:
 `tests/shell/command-analysis.test.js`,
-`tests/shell/interpreter-effects.test.js` and
-`tests/shell/mutation-view.test.js`. Together they check bounded decisions,
-effect profiles, deterministic traces, source spans, projection semantics and
-absent submitted side effects. The public CLI transport and mandatory guard
-consumer have separate checks. From the repository root, run the candidate's
-normal emission and these focused consumers:
+`tests/shell/interpreter-effects.test.js`, `tests/shell/mutation-view.test.js`
+and `tests/shell/write-projection.test.js`. Together they check bounded
+decisions, effect profiles, deterministic traces, source spans, projection
+semantics and absent submitted side effects. `write-projection.test.js` asserts
+the complete answer for each command: every named write target, Git row,
+interpreter launch and hold. The public CLI transport and mandatory guard
+consumer have separate checks;
+`tests/hooks/bash-write-guard-everyday-commands.test.js` runs the real guard
+over everyday commands that must run silently and hostile neighbors that must
+not. From the repository root, run the candidate's normal emission and these
+focused consumers:
 
 ```bash
 cd packages/caws-cli
@@ -706,7 +772,9 @@ node ../../node_modules/jest/bin/jest.js --config jest.config.js \
   tests/shell/command-analysis.test.js \
   tests/shell/interpreter-effects.test.js \
   tests/shell/mutation-view.test.js \
+  tests/shell/write-projection.test.js \
   tests/shell/hooks-analysis.test.js \
+  tests/hooks/bash-write-guard-everyday-commands.test.js \
   tests/hooks/bash-write-guard-analysis.test.js \
   tests/hooks/bash-write-guard-interpreter-cross-repo.test.js \
   tests/hooks/worktree-claim-oracle.test.js \
@@ -716,11 +784,11 @@ node ../../node_modules/jest/bin/jest.js --config jest.config.js \
 npm run mutation:run:analysis
 ```
 
-The mutation command uses `mutation-policy.json` and the declared three-suite
-topology through `stryker.analysis.conf.js`. It must cover all six registered
+The mutation command uses `mutation-policy.json` and the declared four-suite
+topology through `stryker.analysis.conf.js`. It must cover all seven registered
 sources: `analyze.ts`, `git-context.ts`, `interpreter-effects.ts`,
-`mutation-view.ts`, `policies.ts` and `words.ts`. The runner applies the
-unchanged 80% floor separately to every file through
+`mutation-view.ts`, `policies.ts`, `words.ts` and `write-hazards.ts`. The runner
+applies the unchanged 80% floor separately to every file through
 `scripts/assert-mutation-report.mjs`; zero valid mutants, invalid/pending
 verdicts and unallowed exclusions do not pass. A single-file diagnostic,
 aggregate score, narrowed test configuration or Stryker process exit zero does

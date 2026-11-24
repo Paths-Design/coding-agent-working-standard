@@ -248,6 +248,8 @@ export function expandWord(
           if (projection) {
             choices = [[{ text: null, split: false }]];
             if (part.type === 'ProcessSubstitution') {
+              // The word names a descriptor, which like /dev/null is no file.
+              choices = [[{ text: '/dev/null', split: false }]];
               const nested = part.script;
               if (!nested || nested.source !== undefined) decoded(part);
               else inspect(nested, state, depth + 1);
