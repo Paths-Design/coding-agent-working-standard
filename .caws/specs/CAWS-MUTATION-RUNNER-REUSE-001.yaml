@@ -2,7 +2,6 @@ id: CAWS-MUTATION-RUNNER-REUSE-001
 title: 'Recycle mutation test runners so each surface finishes inside its job limit'
 mode: fix
 lifecycle_state: active
-worktree: mutation-runner-reuse
 created_at: '2026-11-24T22:32:56.447Z'
 updated_at: '2026-11-24T22:33:06.724Z'
 created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
