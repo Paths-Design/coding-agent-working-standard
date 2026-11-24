@@ -19,12 +19,16 @@ CAWS_AST_UNREPR=(); CAWS_AST_CWD=(); CAWS_AST_ISSUES=()
 CAWS_AST_INTERPRETER_TARGET=(); CAWS_AST_INTERPRETER_OPERATION=()
 CAWS_AST_INTERPRETER_START=(); CAWS_AST_INTERPRETER_END=(); CAWS_AST_INTERPRETER_CWD=()
 CAWS_AST_INTERPRETER_PAYLOAD_START=(); CAWS_AST_INTERPRETER_PAYLOAD_END=()
+CAWS_AST_PROGRAM_KIND=(); CAWS_AST_PROGRAM_LANGUAGE=(); CAWS_AST_PROGRAM_CWD=(); CAWS_AST_PROGRAM_SOURCE=()
 CAWS_AST_GIT_SUBCOMMAND=(); CAWS_AST_GIT_DIRECTORY=(); CAWS_AST_GIT_COMMON=()
 CAWS_AST_GIT_WORKTREE=(); CAWS_AST_GIT_START=(); CAWS_AST_GIT_END=()
 CAWS_AST_COPY_OPERATION=(); CAWS_AST_COPY_KNOWLEDGE=(); CAWS_AST_COPY_DESTINATION=()
 CAWS_AST_COPY_DIRECTORY_MODE=(); CAWS_AST_COPY_CWD=(); CAWS_AST_COPY_START=(); CAWS_AST_COPY_END=()
 CAWS_AST_COPY_SOURCE_OFFSET=(); CAWS_AST_COPY_SOURCE_COUNT=(); CAWS_AST_COPY_SOURCES=()
 CAWS_BASH_ANALYSIS_READY=0
+# "<origin>\t<absolute path>" evidence from interpreter source; origin is inline
+# for source in the command and entry for a file it names.
+CAWS_INTERPRETER_EVIDENCE=()
 
 # The machine dispatcher points BASH_ENV at its own handler-env.sh so handlers
 # load the runtime libraries, and saves the caller's value in
@@ -77,6 +81,7 @@ caws_bash_prepare_analysis() {
   CAWS_AST_INTERPRETER_TARGET=(); CAWS_AST_INTERPRETER_OPERATION=()
   CAWS_AST_INTERPRETER_START=(); CAWS_AST_INTERPRETER_END=(); CAWS_AST_INTERPRETER_CWD=()
   CAWS_AST_INTERPRETER_PAYLOAD_START=(); CAWS_AST_INTERPRETER_PAYLOAD_END=()
+  CAWS_AST_PROGRAM_KIND=(); CAWS_AST_PROGRAM_LANGUAGE=(); CAWS_AST_PROGRAM_CWD=(); CAWS_AST_PROGRAM_SOURCE=()
   CAWS_AST_GIT_SUBCOMMAND=(); CAWS_AST_GIT_DIRECTORY=(); CAWS_AST_GIT_COMMON=()
   CAWS_AST_GIT_WORKTREE=(); CAWS_AST_GIT_START=(); CAWS_AST_GIT_END=()
   CAWS_AST_COPY_OPERATION=(); CAWS_AST_COPY_KNOWLEDGE=(); CAWS_AST_COPY_DESTINATION=()
@@ -129,6 +134,11 @@ caws_bash_prepare_analysis() {
         if [[ "$value" != /* && -z "$coordinate" ]]; then
           CAWS_AST_ISSUES+=( interpreter_target_cwd_unresolved )
         fi ;;
+      interpreter_source)
+        IFS= read -r -d '' kind && IFS= read -r -d '' value &&
+        IFS= read -r -d '' coordinate && IFS= read -r -d '' operation || { malformed=1; break; }
+        CAWS_AST_PROGRAM_KIND+=( "$kind" ); CAWS_AST_PROGRAM_LANGUAGE+=( "$value" )
+        CAWS_AST_PROGRAM_CWD+=( "$coordinate" ); CAWS_AST_PROGRAM_SOURCE+=( "$operation" ) ;;
       copy)
         IFS= read -r -d '' operation && IFS= read -r -d '' knowledge &&
           IFS= read -r -d '' value && IFS= read -r -d '' directory_mode &&
@@ -211,7 +221,7 @@ caws_bash_prepare_analysis() {
       all(.copyInvocations[]; (keys==["end","operation","start"]) and
         (.operation=="cp" or .operation=="mv") and bounded($document.execution.command|source_length) and .end>.start) and
       all(.copyOperations[]; copy_operation($document)) and
-      ([.copyInvocations[]|{operation,start,end}]==[.copyOperations[]|{operation,start,end}]) and
+      ([.copyInvocations[]|[.operation,.start,.end]]==[.copyOperations[]|[.operation,.start,.end]]) and
       all(.tokens[]; (.value|type)=="string" and
         (.kind as $k | ["word","op","redirect","input_redirect","unsupported_nesting"]|index($k))!=null and
         (.dynamic|type)=="boolean" and (.resolution=="" or .resolution=="runtime") and
@@ -221,7 +231,7 @@ caws_bash_prepare_analysis() {
       all(.issues[]; (.code|type)=="string" and (.message|type)=="string" and bounded($document.execution.command|source_length)) and
       all(.interpreterInvocations[]; language and bounded($document.execution.command|source_length)) and
       (if (.issues|length)==0 then
-        ([.interpreterInvocations[]|{language,start,end}]==[.interpreters[]|{language,start,end}])
+        ([.interpreterInvocations[]|[.language,.start,.end]]==[.interpreters[]|[.language,.start,.end]])
         else true end) and
       all(.interpreters[]; language and coordinate($document.execution.cwd==null) and bounded($document.execution.command|source_length) and
         (.argv|type)=="array" and (.argv|length)>0 and all(.argv[]; .==null or type=="string") and
@@ -230,8 +240,10 @@ caws_bash_prepare_analysis() {
           else (.argv[0]|split("/")|last|test("^python([0-9]+(\\.[0-9]+)*)?$")) end) and
         (.payloads|type)=="array" and (.payloads|length)<=1 and all(.payloads[];
           (.text|type)=="string" and (.origin=="argument" or .origin=="heredoc") and
-          bounded($document.execution.command|source_length)) and effects) and
-      all(.gitMetadata[]; (.subcommand=="add" or .subcommand=="commit") and
+          bounded($document.execution.command|source_length)) and
+        (.launch==null or .launch=="inline" or (.launch=="program" and .effects.kind=="unresolved" and (.payloads|length)==0)) and
+        (.entry==null or ((.entry|type)=="string" and .launch=="program")) and effects) and
+      all(.gitMetadata[]; (.subcommand|type)=="string" and (.subcommand|test("^[A-Za-z0-9][A-Za-z0-9._-]*$")) and
         (.directory|absolute) and (.common|absolute) and (.worktree|absolute) and bounded($document.execution.command|source_length)) and
       all(..|strings; contains("\u0000")|not);
     def frame: .[] | tostring + "\u0000";
@@ -241,8 +253,13 @@ caws_bash_prepare_analysis() {
       (.tokens[] | ["token",.value,.kind,(if .dynamic then 1 else 0 end),.resolution,
         (if .unrepresentable then 1 else 0 end),(.cwd//""),.start,.end] | frame),
       (.issues[] | ["issue",(.code+": "+.message)] | frame),
+      # A backend that does not say how source was launched has not read it.
       (.interpreters[] | . as $row |
-        if .effects.kind=="unresolved" then
+        if .launch=="program" then
+          (select(.entry!=null) | ["interpreter_source","entry",.language,(.cwd//""),.entry]|frame)
+        elif .effects.kind=="unresolved" and .launch=="inline" and (.payloads|length)==1 then
+          (["interpreter_source","inline",.language,(.cwd//""),.payloads[0].text]|frame)
+        elif .effects.kind=="unresolved" then
           (["issue",("mutation-interpreter-effects: "+.effects.reason)]|frame)
         else .effects.writes[] |
           ["interpreter_write",.target,.operation,.start,.end,($row.cwd//""),
@@ -297,6 +314,100 @@ caws_bash_analysis_interpreter_writes() {
       *) [[ -z "$coordinate" ]] || printf '%s/%s\n' "$coordinate" "$target" ;;
     esac
     i=$((i+1))
+  done
+  return 0
+}
+
+# Names that give inline Node source a way to write or to start a program.
+CAWS_NODE_WRITE_MENTIONS='(^|[^A-Za-z0-9_])(writeFile|appendFile|createWriteStream|copyFile|cp|truncate|ftruncate|rename|unlink|rm|rmdir|symlink|link|open|write|exec|execFile|spawn)(Sync)?[[:space:]]*(\(|[^A-Za-z0-9_[:space:]]|$)|child_process|\][[:space:]]*\('
+
+# _caws_interpreter_evidence <origin> <language> <coordinate> <source> <verbs>
+#   Record the path literals <source> may write to. A relative literal resolves
+#   against the invocation directory and, because programs compose paths from
+#   the home directory, against HOME when that names something that exists.
+#   Returns 1 when <source> yields no literal.
+_caws_interpreter_evidence() {
+  local origin="$1" language="$2" coordinate="$3" source="$4" verbs="$5"
+  local literal found=1 kind='' quoted="(\"[^\"]*\"|'[^']*')"
+  case "$language" in
+    python) kind=python-file ;;
+    # The operand of a read names something the source reads. Python source gets
+    # the same distinction from its syntax tree.
+    node) source="$(sed -E \
+      -e "s/(readFile|readdir|exists|lstat|stat|access|createReadStream)(Sync)?\([[:space:]]*$quoted/\1\2(/g" \
+      -e "s/(require\(|import\(|from|import)[[:space:]]*$quoted/\1/g" <<< "$source")" ;;
+  esac
+  while IFS= read -r literal; do
+    [[ -n "$literal" ]] || continue
+    found=0
+    case "$literal" in
+      # Installed tools are programs a script runs, not repositories it edits.
+      /opt/homebrew/*|/usr/*|/bin/*|/sbin/*) continue ;;
+      /*) CAWS_INTERPRETER_EVIDENCE+=( "$origin"$'\t'"$literal" ) ;;
+      '~'/*) CAWS_INTERPRETER_EVIDENCE+=( "$origin"$'\t'"${HOME:-/nonexistent-home}/${literal#\~/}" ) ;;
+      *)
+        [[ -z "$coordinate" ]] || CAWS_INTERPRETER_EVIDENCE+=( "$origin"$'\t'"$coordinate/$literal" )
+        if [[ -n "${HOME:-}" && -e "$HOME/${literal%%/*}" ]]; then
+          CAWS_INTERPRETER_EVIDENCE+=( "$origin"$'\t'"$HOME/$literal" )
+        fi ;;
+    esac
+  done < <(_caws_interp_payload_literals "$source" "$verbs" "$kind")
+  return "$found"
+}
+
+# caws_bash_interpreter_evidence <project>
+#   Fill CAWS_INTERPRETER_EVIDENCE. A literal says a program may write there,
+#   not that it will, so evidence reaches the foreign-repository and
+#   foreign-payload checks and never becomes a FILE operand. A target computed
+#   at run time, a module and a program in another language leave no evidence;
+#   that is the limited-recognizer residual every launched program has.
+#
+#   Source in the command is fully visible, so a write there that names no
+#   target at all is held. A file the project tracks is its own reviewed code,
+#   like a build target, and is not scanned.
+caws_bash_interpreter_evidence() {
+  local project="$1" i=0 kind language coordinate source verbs script body
+  CAWS_INTERPRETER_EVIDENCE=()
+  [[ ${CAWS_BASH_ANALYSIS_READY:-0} == 1 ]] || return 2
+  declare -F _caws_interp_payload_literals >/dev/null 2>&1 &&
+    declare -F caws_foreign_repo_root >/dev/null 2>&1 || return 2
+  while [[ $i -lt ${#CAWS_AST_PROGRAM_KIND[@]} ]]; do
+    kind="${CAWS_AST_PROGRAM_KIND[$i]}"; language="${CAWS_AST_PROGRAM_LANGUAGE[$i]}"
+    coordinate="${CAWS_AST_PROGRAM_CWD[$i]}"; source="${CAWS_AST_PROGRAM_SOURCE[$i]}"
+    i=$((i+1))
+    if [[ "$kind" == inline ]]; then
+      verbs="$CAWS_PY_WRITE_VERBS"
+      [[ "$language" == python ]] || verbs="$CAWS_NODE_WRITE_MENTIONS"
+      grep -qE "$verbs" <<< "$source" || continue
+      # A relative write lands in the directory the program starts in.
+      [[ -z "$coordinate" ]] || CAWS_INTERPRETER_EVIDENCE+=( inline$'\t'"$coordinate/relative-target" )
+      if ! _caws_interpreter_evidence inline "$language" "$coordinate" "$source" "$verbs" &&
+          ! grep -qE "['\"][^'\"/[:space:]]+\.[A-Za-z0-9]+['\"]" <<< "$source"; then
+        CAWS_AST_ISSUES+=( 'mutation-interpreter-effects: inline source writes to a target it does not name literally' )
+      fi
+      continue
+    fi
+    verbs="$CAWS_PY_WRITE_VERBS"
+    [[ "$language" == python ]] || verbs="$CAWS_NODE_WRITE_VERBS"
+    case "$source" in
+      /*) script="$source" ;;
+      *) [[ -n "$coordinate" ]] || continue; script="$coordinate/$source" ;;
+    esac
+    if [[ ! -f "$script" ]]; then
+      # The command may create the file it goes on to run. Shell text around the
+      # source is not a Python program, so it gets the co-occurrence scan.
+      [[ -e "$script" ]] ||
+        _caws_interpreter_evidence entry "${language/python/text}" "$coordinate" \
+          "${COMMAND:-}" "$verbs" || true
+      continue
+    fi
+    if [[ -z "$(caws_foreign_repo_root "$script" "$project")" ]] &&
+        git -C "${script%/*}" ls-files --error-unmatch -- "${script##*/}" >/dev/null 2>&1; then
+      continue
+    fi
+    body="$(head -c 524289 "$script" 2>/dev/null || true)"
+    [[ ${#body} -le 524288 ]] || continue
+    _caws_interpreter_evidence entry "$language" "$coordinate" "$body" "$verbs" || true
   done
   return 0
 }

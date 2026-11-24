@@ -54,36 +54,44 @@ const RUNNER = String(async function main() {
   }
   process.stdout.write(JSON.stringify(output));
 });
-// These Bash builtin names have no admitted projection profile. A name in a
-// data operand must not create an invocation with unmodeled effects.
-const BUILTINS = [
-  '.',
+// A copy role refuses an inherited loader setting. Some runners export one.
+const hostEnvironment = () =>
+  Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(?:LD_|DYLD_)/.test(name)));
+// These Bash builtins can run or define code the projection cannot read.
+const HELD_BUILTINS = [
   'alias',
-  'bg',
   'bind',
-  'break',
   'builtin',
-  'caller',
   'compgen',
   'complete',
   'compopt',
+  'enable',
+  'eval',
+  'fc',
+  'getopts',
+  'hash',
+  'history',
+  'let',
+  'shopt',
+  'trap',
+  'unalias',
+];
+// What these leave behind is known, so later source stays readable.
+const MODELED_BUILTINS = [
+  '.',
+  'bg',
+  'break',
+  'caller',
   'continue',
   'declare',
   'dirs',
   'disown',
-  'enable',
-  'eval',
   'exit',
   'export',
-  'fc',
   'fg',
-  'getopts',
-  'hash',
   'help',
-  'history',
   'jobs',
   'kill',
-  'let',
   'local',
   'logout',
   'mapfile',
@@ -94,19 +102,18 @@ const BUILTINS = [
   'return',
   'set',
   'shift',
-  'shopt',
   'source',
   'suspend',
   'times',
-  'trap',
   'type',
   'typeset',
   'ulimit',
   'umask',
-  'unalias',
   'unset',
   'wait',
 ];
+// A name in a data operand must not create an invocation.
+const BUILTINS = [...HELD_BUILTINS, ...MODELED_BUILTINS];
 const CODE_CASES = [
   [
     'node-eval-mode',
@@ -190,7 +197,7 @@ const CASES = [
   ['node-submission-is-inert', 'node -e \'require("node:fs").writeFileSync("{{MARKER}}", "bad")\''],
   ['builtin-unset', 'OUT=\'{{PROJECT}}/owned\'; unset OUT; touch "$OUT"'],
   ['builtin-eval', 'OUT=\'{{PROJECT}}/owned\'; eval \'OUT="{{FOREIGN}}/eval"\'; touch "$OUT"'],
-  ['builtin-source', "source '{{FOREIGN}}/script.sh'"],
+  ['builtin-source', 'OUT=\'{{PROJECT}}/owned\'; source script.sh; touch "$OUT"'],
   ['builtin-dispatch', 'builtin unset OUT'],
   ['sed-execution-visible', "sed 'e printf x' file"],
   ['sed-write-script-visible', "sed 'w {{FOREIGN}}/sed-out' file"],
@@ -399,7 +406,6 @@ describe('mutation view uses shared traversal without granting scope', () => {
         plan: [],
         queries: [],
         rows: [],
-        code: 'mutation-interpreter-effects',
       },
       {
         id: 'metadata-read-after-application',
@@ -408,14 +414,25 @@ describe('mutation view uses shared traversal without granting scope', () => {
         queries: [],
         rows: [],
       },
-      {
-        id: 'metadata-write-after-node',
-        command: "node -e 'const fn = x => x;'; git add -- file",
-        plan: [],
-        queries: [],
-        rows: [],
+      ...[
+        ['metadata-after-node-mapping', `node -e 'fs.writeFileSync(".git", "x")'; git add -- file`],
+        [
+          'metadata-before-node-mapping',
+          `git add -- file; node -e 'fs.writeFileSync(".git", "x")'`,
+        ],
+        [
+          'metadata-nested-node-mapping',
+          `node -e 'require("fs").writeFileSync(".git", "x")'; bash -c 'git add -- file'`,
+        ],
+        ['metadata-sibling-mapping', "bash -c 'git add -- file'; bash -c 'ln -s elsewhere .git'"],
+      ].map(([id, command]) => ({
+        id,
+        command: command.replace("-e 'fs.", `-e 'require("fs").`),
+        plan: [metadataContext],
+        queries: [query],
+        rows: ['add'],
         code: 'metadata-coordinate-unresolved',
-      },
+      })),
       ...[
         ['metadata-after-copy', "cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git'; git add -- file"],
         [
@@ -434,8 +451,6 @@ describe('mutation view uses shared traversal without granting scope', () => {
           'metadata-after-substitution-nested',
           "X=$(cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git'); bash -c 'git add -- file'",
         ],
-        ['metadata-after-opaque-app', 'application-without-a-profile data; git add -- file'],
-        ['metadata-after-opaque-argv-app', 'application-without-a-profile "$ARG"; git add -- file'],
         [
           'metadata-after-subshell-copy',
           "(cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git'); git add -- file",
@@ -457,13 +472,9 @@ describe('mutation view uses shared traversal without granting scope', () => {
           'metadata-nested-pipeline-right',
           "bash -c 'git add -- file' | cp '{{FOREIGN}}/.git' '{{PROJECT}}/.git'",
         ],
-        ['metadata-parent-redirect', "printf x > mapping; bash -c 'git add -- file'"],
-        ['metadata-later-parent-redirect', "bash -c 'git add -- file'; printf x > mapping"],
-        ['metadata-sibling-shell', "bash -c 'git add -- file'; bash -c 'printf x'"],
-        [
-          'metadata-mixed-callee',
-          'for RUNNER in bash application-without-a-profile; do "$RUNNER" -c \'git add -- file\'; done',
-        ],
+        ['metadata-parent-mapping', "ln -s elsewhere .git; bash -c 'git add -- file'"],
+        ['metadata-later-parent-mapping', "bash -c 'git add -- file'; ln -s elsewhere .git"],
+        ['metadata-deep-mapping', 'ln -s x .git; bash -c \'bash -c "git add -- file"\''],
       ].map(([id, command]) => ({
         id,
         command,
@@ -473,6 +484,18 @@ describe('mutation view uses shared traversal without granting scope', () => {
         code: 'metadata-coordinate-unresolved',
       })),
       ...[
+        // An ordinary program or file write leaves the repository mapping alone.
+        ['metadata-write-after-node', "node -e 'const fn = x => x;'; git add -- file"],
+        ['metadata-after-opaque-app', 'application-without-a-profile data; git add -- file'],
+        ['metadata-after-opaque-argv-app', 'application-without-a-profile "$ARG"; git add -- file'],
+        ['metadata-earlier-effects', 'printf x > note; git add -- file'],
+        ['metadata-parent-redirect', "printf x > mapping; bash -c 'git add -- file'"],
+        ['metadata-later-parent-redirect', "bash -c 'git add -- file'; printf x > mapping"],
+        ['metadata-sibling-shell', "bash -c 'git add -- file'; bash -c 'printf x'"],
+        [
+          'metadata-mixed-callee',
+          'for RUNNER in bash application-without-a-profile; do "$RUNNER" -c \'git add -- file\'; done',
+        ],
         ['metadata-after-prose', "printf '%s' 'cp foreign/.git owned/.git'; git add -- file"],
         ['metadata-after-reader', 'cat /dev/null; git add -- file'],
         ['metadata-after-reader-substitution', 'X=$(cat /dev/null); git add -- file'],
@@ -507,6 +530,13 @@ describe('mutation view uses shared traversal without granting scope', () => {
       {
         id: 'metadata-opaque-argv',
         command: 'git add "$FILE"',
+        plan: [metadataContext],
+        queries: [query],
+        rows: ['add'],
+      },
+      {
+        id: 'metadata-opaque-subcommand',
+        command: 'git "$SUBCOMMAND" -- file',
         plan: [],
         queries: [],
         rows: [],
@@ -540,14 +570,6 @@ describe('mutation view uses shared traversal without granting scope', () => {
       {
         id: 'metadata-redirected-index',
         command: "GIT_INDEX_FILE='{{INDEX}}' git add -- file",
-        plan: [],
-        queries: [],
-        rows: [],
-        code: 'metadata-coordinate-unresolved',
-      },
-      {
-        id: 'metadata-earlier-effects',
-        command: 'printf x > note; git add -- file',
         plan: [],
         queries: [],
         rows: [],
@@ -669,7 +691,7 @@ describe('mutation view uses shared traversal without granting scope', () => {
       ],
       {
         // Carry the setup-isolated Jest environment across the native process boundary.
-        env: { ...process.env },
+        env: hostEnvironment(),
         input: JSON.stringify(requests),
         shell: false,
         encoding: 'utf8',
@@ -812,12 +834,13 @@ describe('mutation view uses shared traversal without granting scope', () => {
   test.each(['node-arrow-argument', 'node-arrow-heredoc', 'wrapped-node'])(
     '%s keeps actual interpreter code separate from shell redirections',
     (id) => {
-      expect(codes(id)).toEqual(['mutation-interpreter-effects']);
+      expect(codes(id)).toEqual([]);
       expect(view(id).tokens.filter((token) => token.kind === 'redirect')).toEqual([]);
       expect(view(id).interpreters).toHaveLength(1);
       expect(view(id).interpreters[0].language).toBe('node');
       expect(view(id).interpreters[0].argv[0]).toBe('node');
       expect(view(id).interpreters[0].effects.kind).toBe('unresolved');
+      expect(view(id).interpreters[0]).toMatchObject({ launch: 'inline', entry: null });
       expect(view(id).interpreters[0].payloads.map((payload) => payload.text)).toEqual([
         id === 'node-arrow-heredoc' ? 'const fn = x => x;\n' : 'const fn = x => x;',
       ]);
@@ -828,10 +851,11 @@ describe('mutation view uses shared traversal without granting scope', () => {
     (id, _source, language, code, original) => {
       const actual = view(id);
       const source = requests.find((item) => item.id === id).input.command;
-      expect(codes(id)).toEqual(language === 'python' ? ['mutation-interpreter-effects'] : []);
+      expect(codes(id)).toEqual([]);
       expect(actual.tokens.filter((token) => token.kind === 'redirect')).toEqual([]);
       expect(actual.interpreters).toHaveLength(1);
       expect(actual.interpreters[0].language).toBe(language);
+      expect(actual.interpreters[0]).toMatchObject({ launch: 'inline', entry: null });
       expect(actual.interpreters[0].effects.kind).toBe(
         language === 'python' ? 'unresolved' : 'readonly'
       );
@@ -888,12 +912,13 @@ describe('mutation view uses shared traversal without granting scope', () => {
       expect(view(id).interpreters[0].argv).toEqual(['node', '-e', '1']);
       expect(view(id).interpreters[0].payloads.map((payload) => payload.text)).toEqual(['1']);
     }
-    for (const [id, code] of [
-      ['wrapper-query', 'mutation-wrapper-option'],
-      ['wrapper-nine', 'mutation-wrapper-budget'],
+    for (const [id, expected] of [
+      ['wrapper-query', []],
+      ['wrapper-nine', ['mutation-wrapper-budget']],
     ]) {
-      expect(codes(id)).toContain(code);
+      expect(codes(id)).toEqual(expected);
       expect(view(id).interpreters).toEqual([]);
+      expect(view(id).interpreterInvocations).toEqual([]);
     }
   });
   test('shared source, byte and token limits stop projection with concrete lower controls', () => {
@@ -957,7 +982,7 @@ describe('mutation view uses shared traversal without granting scope', () => {
   });
   test('nested shell expansions are inspected while heredoc data stays data', () => {
     expect(words('nested-heredoc-write')).toContain(locations.FOREIGN + '/nested');
-    expect(codes('nested-heredoc-write')).toContain('substitution-effects');
+    expect(codes('nested-heredoc-write')).toEqual([]);
     expect(view('quoted-heredoc-prose').issues).toEqual([]);
     expect(words('quoted-heredoc-prose')).not.toContain('rm');
     expect(view('quoted-heredoc-prose').interpreters).toEqual([]);
@@ -1002,23 +1027,34 @@ describe('mutation view uses shared traversal without granting scope', () => {
     ['nested-budget', 'mutation-view-budget'],
     ['opaque-node-stdin', 'mutation-interpreter-source'],
     ['opaque-python-stdin', 'mutation-interpreter-source'],
-    ['builtin-unset', 'mutation-shell-builtin'],
     ['builtin-eval', 'mutation-shell-builtin'],
-    ['builtin-source', 'mutation-shell-builtin'],
     ['builtin-dispatch', 'mutation-shell-builtin'],
     ['sed-execution-visible', 'sed-execution'],
     ['sed-write-script-visible', 'sed-script-unsupported'],
     ['reader-execution-visible', 'reader-execution'],
     ['git-execution-visible', 'git-execution'],
     ['posix-shell', 'mutation-shell-dialect'],
-    ['node-preload', 'environment-change'],
-    ['python-import-path', 'environment-change'],
+    ['node-preload', 'mutation-interpreter-effects'],
+    ['python-import-path', 'mutation-interpreter-effects'],
     ['sed-combined-edit', 'sed-option'],
     ['uniq-output', 'reader-output'],
     ['sort-output', 'reader-option'],
     ['git-source-pager', 'git-environment'],
     ['git-source-pager-env', 'git-environment'],
   ])('%s exposes unresolved facts', (id, code) => expect(codes(id)).toContain(code));
+  test.each(['builtin-unset', 'builtin-source'])(
+    '%s forgets a value the builtin can change',
+    (id) => {
+      // A sourced file can be missing, which leaves the old value in place.
+      expect(words(id).includes(locations.PROJECT + '/owned')).toBe(id === 'builtin-source');
+      expect(
+        view(id)
+          .tokens.filter((token) => token.dynamic)
+          .map((token) => token.value)
+      ).toEqual(['"$OUT"']);
+      expect(codes(id)).toEqual(id === 'builtin-source' ? ['cwd-unresolved'] : []);
+    }
+  );
   test.each(['git-source-pager-cat', 'git-source-pager-data'])(
     '%s retains no execution issue',
     (id) => {
@@ -1085,8 +1121,7 @@ describe('mutation view uses shared traversal without granting scope', () => {
     'effects-entry-file',
     'effects-source-startup',
     'wrapped-node',
-  ])('%s cannot turn absent proven write facts into permission', (id) => {
-    expect(codes(id)).toContain('mutation-interpreter-effects');
+  ])('%s cannot turn absent proven write facts into a proven effect', (id) => {
     const interpreter = view(id).interpreters[0];
     expect(interpreter.effects).toEqual({
       kind: 'unresolved',
@@ -1097,11 +1132,23 @@ describe('mutation view uses shared traversal without granting scope', () => {
     expect(view(id).interpreterInvocations).toEqual([
       { language: interpreter.language, start: interpreter.start, end: interpreter.end },
     ]);
-    const issue = view(id).issues.find((entry) => entry.code === 'mutation-interpreter-effects');
-    expect({ start: issue.start, end: issue.end }).toEqual({
-      start: interpreter.start,
-      end: interpreter.end,
-    });
+    expect(interpreter).toMatchObject(
+      id === 'effects-entry-file'
+        ? { launch: 'program', entry: 'entry.js', payloads: [] }
+        : { launch: 'inline', entry: null, payloads: [expect.any(Object)] }
+    );
+    // Only startup this command replaces makes its literal source untrue.
+    expect(view(id).issues.map(({ code, start, end }) => ({ code, start, end }))).toEqual(
+      id === 'effects-source-startup'
+        ? [
+            {
+              code: 'mutation-interpreter-effects',
+              start: interpreter.start,
+              end: interpreter.end,
+            },
+          ]
+        : []
+    );
   });
   test('unknown coordinates survive nested source and interpreter rows', () => {
     expect(words('unknown-cwd-nested')).toContain('relative');
@@ -1110,8 +1157,14 @@ describe('mutation view uses shared traversal without granting scope', () => {
     expect(view('unknown-cwd-node').interpreters[0].cwd).toBe(null);
     expect(view('unknown-cwd-node').issues).toEqual([]);
   });
-  test.each(BUILTINS)('%s keeps its unprofiled builtin limitation explicit', (name) => {
-    expect(codes('builtin-profile-' + name)).toContain('mutation-shell-builtin');
+  test.each(HELD_BUILTINS)('%s keeps its unreadable source explicit', (name) => {
+    expect(codes('builtin-profile-' + name)).toEqual(['mutation-shell-builtin']);
+  });
+  test.each(MODELED_BUILTINS)('%s leaves later source readable', (name) => {
+    expect(view('builtin-profile-' + name).issues).toEqual([]);
+    expect(words('builtin-profile-' + name)).toEqual([name, 'fixture']);
+  });
+  test('builtin names in data create no invocation', () => {
     expect(view('all-builtins-as-data').issues).toEqual([]);
     expect(words('all-builtins-as-data')).toContain(BUILTINS.join(' '));
   });
@@ -1437,7 +1490,7 @@ describe('mutation projection preserves program roles and source custody', () =>
         active,
       ],
       {
-        env: { ...process.env },
+        env: hostEnvironment(),
         input: JSON.stringify(requests),
         shell: false,
         encoding: 'utf8',
@@ -1465,15 +1518,18 @@ describe('mutation projection preserves program roles and source custody', () =>
       (name) => 'rebound-startup-' + name
     ),
   ])('%s cannot borrow the literal payload effects', (id) => {
-    expect(issueCodes(id)).toContain('mutation-interpreter-effects');
+    // The host's own startup is not this command's to prove or to answer for.
+    expect(issueCodes(id)).toEqual(
+      id.startsWith('rebound-') ? ['mutation-interpreter-effects'] : []
+    );
     expect(result(id).interpreters).toHaveLength(1);
+    expect(result(id).interpreters[0]).toMatchObject({ launch: 'inline', entry: null });
     expect(result(id).interpreters[0].effects).toEqual({
       kind: 'unresolved',
       profile: null,
       reason: 'Interpreter environment or startup effects are not proven.',
       writes: [],
     });
-    if (id.startsWith('rebound-')) expect(issueCodes(id)).toContain('environment-change');
   });
   test.each([
     'inherited-empty-coverage',
@@ -1513,7 +1569,7 @@ describe('mutation projection preserves program roles and source custody', () =>
   );
   test('Python and Bash code options keep following arguments as data', () => {
     expect(result('python-option-tail-data').interpreters[0].payloads[0].text).toBe('1');
-    expect(issueCodes('python-option-tail-data')).toEqual(['mutation-interpreter-effects']);
+    expect(issueCodes('python-option-tail-data')).toEqual([]);
     expect(result('bash-option-tail-data').issues).toEqual([]);
     expect(result('bash-option-tail-data').interpreters).toEqual([]);
     expect(fs.existsSync(locations.MARKER)).toBe(false);
@@ -1522,12 +1578,21 @@ describe('mutation projection preserves program roles and source custody', () =>
     '%s keeps the actual finite executable payload',
     (id, _command, language, code, original) => {
       const actual = result(id);
-      const unsupportedEffects = language === 'python' || id.startsWith('env-');
-      expect(issueCodes(id)).toEqual(unsupportedEffects ? ['mutation-interpreter-effects'] : []);
+      expect(issueCodes(id)).toEqual([]);
       expect(actual.interpreters).toHaveLength(1);
       const interpreter = actual.interpreters[0];
       expect(interpreter.language).toBe(language);
-      expect(interpreter.effects.kind).toBe(unsupportedEffects ? 'unresolved' : 'readonly');
+      expect(interpreter).toMatchObject({ launch: 'inline', entry: null });
+      expect({
+        kind: interpreter.effects.kind,
+        targets: interpreter.effects.writes.map((write) => write.target),
+      }).toEqual(
+        language === 'python'
+          ? { kind: 'unresolved', targets: [] }
+          : id === 'env-assignment-identity'
+            ? { kind: 'finite-writes', targets: [locations.MARKER] }
+            : { kind: 'readonly', targets: [] }
+      );
       expect(interpreter.cwd).toBe(fs.realpathSync.native(locations.PROJECT));
       expect(interpreter.payloads).toHaveLength(1);
       const payload = interpreter.payloads[0];
@@ -1549,13 +1614,13 @@ describe('mutation projection preserves program roles and source custody', () =>
     expect(actual.interpreters[0].payloads[0].text).toBe(
       'require("fs").readFileSync("input", "utf8")'
     );
-    expect(issueCodes('inherited-node-path-nonbuiltin')).toEqual(['mutation-interpreter-effects']);
+    expect(issueCodes('inherited-node-path-nonbuiltin')).toEqual([]);
     expect(result('inherited-node-path-nonbuiltin').interpreters[0].effects.kind).toBe(
       'unresolved'
     );
   });
   test('nonempty inherited startup options remain unresolved and empty options preserve the profile', () => {
-    expect(issueCodes('inherited-node-options')).toEqual(['mutation-interpreter-effects']);
+    expect(issueCodes('inherited-node-options')).toEqual([]);
     expect(result('inherited-node-options').interpreters[0].effects.kind).toBe('unresolved');
     expect(result('inherited-empty-node-options').issues).toEqual([]);
     expect(result('inherited-empty-node-options').interpreters[0].effects).toEqual({
@@ -1600,10 +1665,14 @@ describe('mutation projection preserves program roles and source custody', () =>
         .map((token) => token.value)
     ).toEqual(['bash', '-s', 'printf', '%s', 'selected']);
     for (const id of ['node-entry-stops-options', 'node-end-stops-options']) {
-      expect(issueCodes(id)).toEqual(['mutation-interpreter-effects']);
+      expect(issueCodes(id)).toEqual([]);
       expect(result(id).interpreters).toHaveLength(1);
-      expect(result(id).interpreters[0].payloads).toEqual([]);
-      expect(result(id).interpreters[0].effects.kind).toBe('unresolved');
+      expect(result(id).interpreters[0]).toMatchObject({
+        launch: 'program',
+        entry: 'entry.js',
+        payloads: [],
+        effects: { kind: 'unresolved' },
+      });
     }
     for (const id of ['python-prefix-is-data', 'python-suffix-is-data']) {
       expect(result(id).issues).toEqual([]);
@@ -1981,7 +2050,7 @@ describe('copy operand role observations', () => {
         active,
       ],
       {
-        env: { ...process.env },
+        env: hostEnvironment(),
         input: JSON.stringify(requests),
         encoding: 'utf8',
         timeout: 30000,
