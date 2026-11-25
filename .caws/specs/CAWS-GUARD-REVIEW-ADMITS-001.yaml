@@ -2,6 +2,7 @@ id: CAWS-GUARD-REVIEW-ADMITS-001
 title: 'Write guard refuses the foreign writes a second review found it admits'
 mode: fix
 lifecycle_state: active
+worktree: guard-node-paths
 created_at: '2026-11-25T03:12:14.765Z'
 updated_at: '2026-11-25T04:11:16.737Z'
 created_by_session: 'f8d188a4-1b66-4ad5-bda4-86bdf477487b'
