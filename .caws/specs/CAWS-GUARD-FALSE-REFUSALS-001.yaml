@@ -46,3 +46,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/shell/write-projection.test.js
     commit_sha: "4fca023d5142f6be84cbdcddfcc8fdcb0d2b1d61"
     test_verified_at: "1b78f2f54c13becd33a9603469aa4a874a4e222c"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "An unset GIT_ variable or PAGER is absent from later Git commands; read-only (plain, quoted, wrapped, expanded), conditional, scoped, prefixed and failed-redirect unsets, and a nested shell after an inherited one, stay held. Foreign writes after an unset exit 2 in the real guard. Not covered: an unexported GIT_ assignment, which CAWS-GUARD-REVIEW-ADMITS-001 owns."
+    recorded_at: "2026-11-25T04:10:27.834Z"
+    test_nodeid: packages/caws-cli/tests/shell/write-projection.test.js
+    commit_sha: "4fca023d5142f6be84cbdcddfcc8fdcb0d2b1d61"
+    test_verified_at: "10175376d2a0d8527ecd161c2b57f9e3e6e47b59"
