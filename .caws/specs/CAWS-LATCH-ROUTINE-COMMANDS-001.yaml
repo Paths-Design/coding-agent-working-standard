@@ -1,0 +1,57 @@
+id: CAWS-LATCH-ROUTINE-COMMANDS-001
+title: 'Danger latch does not lock a session for a kill by process ID or for reboot as data'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-25T05:21:19.455Z'
+updated_at: '2026-11-25T05:21:19.455Z'
+created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
+blast_radius:
+  modules:
+    - 'Shared command classifier and the block-dangerous latch decision'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/classify_command.py'
+    - 'packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh'
+    - 'packages/caws-cli/templates/CLAUDE.md'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/hooks/'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/CHANGELOG.md'
+    - 'docs/guides/hook-packs.md'
+    - 'docs/architecture/command-capability-taxonomy.md'
+    - 'CLAUDE.md'
+    - 'AGENTS.md'
+  out: []
+invariants:
+  - 'A command refused before this change is still refused; only whether the session is locked changes'
+  - 'A kill whose targets are not all explicit process IDs, or that shares a command with another risky operation, arms the latch as before'
+  - 'A shell that would run reboot or shutdown is denied and arms the latch, in every spelling denied before'
+acceptance:
+  - id: A1
+    given: 'a session that already drew its one capability warning'
+    when: 'the agent kills processes named by explicit IDs above 1, or by a variable the same command set from the last background job, with any signal and through /bin/kill'
+    then: 'the command is refused with the reason and a remedy, no latch or strike is recorded, and the next ordinary command runs, however often it is repeated'
+  - id: A2
+    given: 'the same session'
+    when: 'the agent runs kill -1, kill 0, a process group, a job spec, kill over a command substitution or xargs, pkill, killall, or a kill by ID alongside another capability-risk operation in either order'
+    then: 'the latch arms as it did before'
+  - id: A3
+    given: 'a command that only names reboot or shutdown, in a file name, as an argument to a program that does not launch it, such as last, grep, git log, man or node with a script path'
+    when: 'the classifier reads it'
+    then: 'it is not denied as a system reboot'
+  - id: A4
+    given: 'a command that runs reboot or shutdown, directly, by path, after an assignment or wrapper, in a compound statement, group, function, substitution or nested shell, or through a launcher such as xargs, find -exec, ssh, systemctl, launchctl, docker exec or timeout'
+    when: 'the classifier reads it'
+    then: 'it is denied and the latch arms'
+  - id: A5
+    given: 'the 31 commands behind the danger-latch resets recorded between 2026-10-26 and 2026-11-25'
+    when: 'each is replayed through the changed classifier and latch'
+    then: 'the two reboot filenames are no longer denied, the sixteen kills by process ID no longer lock the session, and every other verdict is unchanged'
+  - id: A6
+    given: 'the changed classifier and guard'
+    when: 'the classifier, latch and pack-fingerprint suites run'
+    then: 'all pass with SHARED_PACK_VERSION bumped'
+non_functional: {}
+contracts: []
