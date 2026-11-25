@@ -729,12 +729,13 @@ import { isAdapterCoveredSurface } from './types';
 // targets. A held command names its remedy. lib/bash-mutation-analysis.sh
 // carries the launch kind, entry file and submitted source, and holds an
 // unresolved row that states none of them.
-// v143: lib/bash-mutation-analysis.sh reads a Python path built from the working
+// v144: lib/bash-mutation-analysis.sh reads a Python path built from the working
 // directory's parents, percent or brace formatting, a changed directory, a
 // subprocess directory, io.FileIO and a function handed to another call, and a
-// Node path built by join or resolved after process.chdir, inline and in the
-// scripts a command runs.
-export const SHARED_PACK_VERSION = 143;
+// Node path built by a literal join or resolved after process.chdir, inline and
+// in the scripts a command runs. A program a Python source starts, and the
+// script it gives an interpreter, are run rather than written.
+export const SHARED_PACK_VERSION = 144;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
