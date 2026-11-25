@@ -25,9 +25,10 @@ scope:
     - 'AGENTS.md'
   out: []
 invariants:
-  - 'A command refused before this change is still refused; only whether the session is locked changes'
   - 'A kill whose targets are not all explicit process IDs, or that shares a command with another risky operation, arms the latch as before'
   - 'A shell that would run reboot or shutdown is denied and arms the latch, in every spelling denied before'
+  - 'A kill refused before this change is still refused; only whether the session is locked changes'
+  - 'The only commands admitted by this change name reboot or shutdown without running it'
 acceptance:
   - id: A1
     given: 'a session that already drew its one capability warning'
