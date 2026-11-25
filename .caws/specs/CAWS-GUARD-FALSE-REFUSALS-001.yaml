@@ -1,0 +1,38 @@
+id: CAWS-GUARD-FALSE-REFUSALS-001
+title: 'Write guard admits a globbed script operand and Git after a GIT_ variable is unset'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-25T02:18:27.349Z'
+updated_at: '2026-11-25T02:18:27.349Z'
+created_by_session: 'f8d188a4-1b66-4ad5-bda4-86bdf477487b'
+blast_radius:
+  modules:
+    - 'Bash mutation projection (src/shell/analysis) as consumed by bash-write-guard'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/analysis/'
+    - 'packages/caws-cli/tests/shell/'
+    - 'packages/caws-cli/tests/hooks/'
+    - 'packages/caws-cli/CHANGELOG.md'
+    - 'docs/guides/command-analysis.md'
+  out: []
+invariants:
+  - 'A script operand that could expand to an option or to inline code stays held'
+  - 'An unset that may not have taken effect, and a nested shell whose Git environment is not established, stay held'
+acceptance:
+  - id: A1
+    given: 'a governed project in bypassPermissions mode'
+    when: 'the guard receives bash, python or node with an unquoted glob under a literal directory as its script operand, such as bash -n scripts/*.sh'
+    then: 'it exits 0, while an operand whose text can expand to an option, a here-document beside it, or a later code-selecting option is still held'
+  - id: A2
+    given: 'an inherited or assigned GIT_ variable'
+    when: 'the command unsets it and then runs Git'
+    then: 'the Git command is checked as if the variable were absent, so a foreign repository is still refused, and a read-only or conditional unset, or a nested shell after one, stays held'
+  - id: A3
+    given: 'the changed analyzer'
+    when: 'the analysis and guard suites and the per-file mutation floor run'
+    then: 'all pass with no declared floor lowered'
+non_functional: {}
+contracts: []
