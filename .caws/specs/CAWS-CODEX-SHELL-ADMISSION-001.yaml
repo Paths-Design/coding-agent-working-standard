@@ -33,9 +33,15 @@ invariants:
   - 'The Codex command directory is the host''s execution_workdir, or its payload cwd when the session header names a host release that reports the command''s own directory there (0.166.0 or later); otherwise it is unknown and writes that depend on it are refused'
 acceptance:
   - id: A1
-    given: 'a codex PreToolUse Bash payload carrying only tool_input.command and cwd'
-    when: 'the installed write guard evaluates commands with no write or with absolute targets the session may write'
-    then: 'it exits 0 with empty output, so a Codex session can run caws status, read files and commit'
+    given: >-
+      a codex PreToolUse Bash payload carrying only tool_input.command, cwd and
+      transcript_path from a host at 0.166.0 or later
+    when: >-
+      the write guard evaluates reads, a plain git commit, and relative or absolute
+      targets the session may write
+    then: >-
+      it exits 0 with empty output, so a Codex session can run caws status, read
+      files, edit its own worktree and commit
   - id: A2
     given: 'the same payload naming an absolute target owned by another session, claimed by an active worktree, or in another repository'
     when: 'the write guard evaluates it'
