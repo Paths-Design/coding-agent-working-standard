@@ -73,7 +73,9 @@ acceptance:
   - id: A5
     given: 'real Codex commands recorded in this repository'
     when: 'they are replayed without execution through the last Codex-admitting guard and this guard'
-    then: 'every newly refused command is listed with its cause and none is a read-only or absolute-target command the session may run'
+    then: >-
+      every newly refused command is listed with its cause, none is a read or a
+      write the session may make, and every newly admitted one is inspected
   - id: A6
     given: 'the installed runtime built from the merged candidate'
     when: 'a live Codex session runs an inert read, a foreign write and a bound in-scope write with a governed commit'
