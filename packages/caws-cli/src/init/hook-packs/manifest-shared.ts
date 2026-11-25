@@ -729,7 +729,10 @@ import { isAdapterCoveredSurface } from './types';
 // targets. A held command names its remedy. lib/bash-mutation-analysis.sh
 // carries the launch kind, entry file and submitted source, and holds an
 // unresolved row that states none of them.
-export const SHARED_PACK_VERSION = 141;
+// v142: lib/bash-mutation-analysis.sh looks for a NUL in an analyzer response by
+// code point. jq 1.6 answers contains with a NUL needle as true of any string,
+// so bash-write-guard refused every command it analyzed on that version.
+export const SHARED_PACK_VERSION = 142;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
