@@ -476,11 +476,15 @@ trail shows when and why a guard was skipped. A foreign session is never covered
   `block-dangerous.sh` gave; the message states it.
   - _Refused, latch not armed._ An opaque inline payload (`python3 -c`,
     `node -e` with shell interpolation), a command the classifier could not
-    finish analyzing, or a bare commit over staged deletions. Restate it the way
-    the message says and continue. Do not send the same shape again: a repeat of
-    an opaque or unanalyzable command sent after this refusal arms the latch.
-    Calls queued in the same reply as the refused one count with it, not as
-    repeats. The bare commit never latches, however often it is repeated.
+    finish analyzing, a bare commit over staged deletions, or a plain `kill` of
+    literal process IDs after the session's one warning. Restate it the way the
+    message says and continue. Do not send the same shape again: a repeat of an
+    opaque or unanalyzable command sent after this refusal arms the latch. Calls
+    queued in the same reply as the refused one count with it, not as repeats.
+    The bare commit and the plain kill never latch, however often they are
+    repeated. Any other kill does: one with a variable, `&`, an `if`, or another
+    program beside it that does more than wait, look or print. Stop your own
+    background task with the harness instead.
   - _Guard or classifier unavailable._ The message says your command did not
     cause it and that no strike or latch was added. Retrying cannot help. Stop
     and report the message to the user.

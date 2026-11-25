@@ -170,7 +170,8 @@ DENY_SEGMENT_PATTERNS: list[tuple[str, str]] = [
     # Permission escalation
     (r"\bchmod\b.*\+s\b", "setuid/setgid bit"),
     (r"\bchmod\b.*\b777\b", "chmod 777"),
-    # System control
+    # System control. A plain command that only names reboot or shutdown as data
+    # is excepted (names_power_as_data).
     (r"\b(shutdown|reboot)\b", "system shutdown/reboot"),
     (r"\binit\s+[06]\b", "system runlevel change"),
     # CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001: catastrophic git/shell ops
@@ -2909,6 +2910,266 @@ def strip_quoted_regions(raw: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Plain commands (CAWS-LATCH-ROUTINE-COMMANDS-001)
+#
+# Two routine shapes lock sessions: a file name containing "reboot", and a kill
+# of explicit process IDs. Both are excepted only in a command that is plain
+# from end to end, so that what it runs can be read from its words, and only
+# beside programs named here. Anything else keeps the verdict it had.
+# ---------------------------------------------------------------------------
+
+SYSTEM_POWER_REASON = "system shutdown/reboot"
+_POWER_MENTION = re.compile(r"(?:shutdown|reboot)", re.IGNORECASE)
+_PLAIN_SEPARATOR = re.compile(r"&&|\|\||;(?!;)|\|(?!&)|\n")
+# One digit at most: zsh reads a longer number before a redirection as a word.
+_PLAIN_REDIRECT = re.compile(r"[0-9]?>{1,2}(?![>&(|!])")
+_PLAIN_DUPLICATE = re.compile(r"[0-9]?>&[0-9](?=[ \t\n;|]|$)")
+_PLAIN_CHARACTERS = re.compile(r"[A-Za-z0-9_@%+=:,./~-]+")
+_PLAIN_DOUBLE_QUOTED = re.compile(r'"[^"$`\\!]*"')
+_PLAIN_SINGLE_QUOTED = re.compile(r"'[^']*'")
+_PLAIN_ASSIGNMENT = re.compile(r"[A-Za-z_]\w*\+?=")
+_PLAIN_END_OF_WORD = re.compile(r"(?=[ \t\n;|>]|&&|$)")
+_RESERVED_WORDS: set[str] = {
+    "if", "then", "elif", "else", "fi", "for", "foreach", "while", "until", "do", "done",
+    "case", "esac", "select", "repeat", "function", "time", "coproc", "always", "end", "in",
+    "noglob", "nocorrect",
+}
+# Print or compare what they are given, and neither run nor write any of it.
+_INSPECTS_OPERANDS: set[str] = {
+    "last", "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "which", "type",
+    "whereis", "file", "stat", "jq", "cut", "nl", "diff", "cmp", "echo", "true", "pwd",
+    "basename", "dirname",
+}
+# rg is the one of them that can be told to run a program (--pre, --hostname-bin).
+_RUNS_A_PROGRAM_OPTION = re.compile(r"--(?:pr|ho).*")
+# Their operands are files, branches and revisions.
+_GIT_NAMES_FILES: set[str] = {
+    "add", "commit", "diff", "log", "show", "blame", "status", "checkout", "switch", "branch",
+}
+# None of these writes a file or runs a program; --output and --ext-diff do.
+_GIT_OPTION = re.compile(
+    r"-(?:[ABSGabmnpsuv]|[0-9]+)|--(?:all|cached|follow|grep|name-only|name-status|oneline|patch"
+    r"|short|staged|stat)?"
+)
+_SCRIPT_INTERPRETERS: set[str] = {"node", "python3", "python"}
+_SCRIPT_FILE = re.compile(r"[A-Za-z0-9_.][A-Za-z0-9_./-]*\.(?:js|mjs|cjs|py)|/[A-Za-z0-9_./-]+\.(?:js|mjs|cjs|py)")
+_DATA_FILE = re.compile(
+    r"[A-Za-z0-9_./][A-Za-z0-9_./-]*\."
+    r"(?:json|jsonl|ndjson|md|txt|log|csv|tsv|diff|patch|html|xml|svg|png|jpg|jpeg|gif|pdf)"
+)
+# Wait, look or print; none of them starts, stops or changes anything.
+_BESIDE_A_KILL: set[str] = {
+    "sleep", "ps", "pgrep", "lsof", "grep", "egrep", "rg", "echo", "cat", "head", "tail", "wc",
+    "ls", "true", "cd", "pwd",
+}
+_READ_ONLY_CAWS: set[tuple[str, ...]] = {
+    ("status",), ("doctor",), ("specs", "show"), ("specs", "list"), ("worktree", "list"),
+    ("scope", "show"), ("scope", "check"), ("scope", "contention"), ("agents", "list"),
+    ("agents", "show"), ("evidence", "list"),
+}
+
+
+@dataclass
+class _PlainWord:
+    text: str
+    quoted: bool = False
+
+
+@dataclass
+class _PlainCommand:
+    words: list[_PlainWord] = field(default_factory=list)
+    files: list[str] = field(default_factory=list)
+
+
+def _read_plain_word(raw: str, at: int) -> tuple[_PlainWord, int] | None:
+    """A word of literal text, with any quotes removed, and where it ends."""
+    text, quoted, i = "", False, at
+    while not _PLAIN_END_OF_WORD.match(raw, i):
+        for part in (_PLAIN_CHARACTERS, _PLAIN_SINGLE_QUOTED, _PLAIN_DOUBLE_QUOTED):
+            match = part.match(raw, i)
+            if match:
+                literal = part is _PLAIN_CHARACTERS
+                text += match.group() if literal else match.group()[1:-1]
+                quoted = quoted or not literal
+                i = match.end()
+                break
+        else:
+            return None
+    # zsh reads an unquoted leading = as a program's path.
+    return None if i == at or raw[at] == "=" else (_PlainWord(text, quoted), i)
+
+
+def read_plain_command(raw: str) -> list[list[_PlainCommand]] | None:
+    """The pipelines of a command made only of literal words, `;`, `&&`, `||`, `|`,
+    newlines and output redirections. None when it holds anything else."""
+    pipelines = [[_PlainCommand()]]
+    i = 0
+    while i < len(raw):
+        if raw[i] in " \t":
+            i += 1
+            continue
+        current = pipelines[-1][-1]
+        duplicate = _PLAIN_DUPLICATE.match(raw, i)
+        redirect = None if duplicate else _PLAIN_REDIRECT.match(raw, i)
+        separator = _PLAIN_SEPARATOR.match(raw, i)
+        if duplicate:
+            i = duplicate.end()
+        elif redirect:
+            i = redirect.end()
+            while i < len(raw) and raw[i] in " \t":
+                i += 1
+            target = _read_plain_word(raw, i)
+            if target is None:
+                return None
+            current.files.append(target[0].text)
+            i = target[1]
+        elif separator:
+            if separator.group() == "|":
+                pipelines[-1].append(_PlainCommand())
+            elif separator.group() != "\n" or current.words or len(pipelines[-1]) == 1:
+                pipelines.append([_PlainCommand()])
+            # A newline after a pipe continues the pipeline.
+            i = separator.end()
+        else:
+            word = _read_plain_word(raw, i)
+            if word is None:
+                return None
+            if not current.words and (
+                word[0].quoted or word[0].text in _RESERVED_WORDS
+                or _PLAIN_ASSIGNMENT.match(word[0].text)
+            ):
+                return None
+            current.words.append(word[0])
+            i = word[1]
+    # A redirection alone runs a program of the shell's choosing in zsh.
+    if any(command.files and not command.words for pipeline in pipelines for command in pipeline):
+        return None
+    return pipelines
+
+
+def _is_one_of(command: _PlainCommand, names: set[str]) -> bool:
+    return command.words[0].text in names and not any(
+        _RUNS_A_PROGRAM_OPTION.fullmatch(word.text) for word in command.words
+    )
+
+
+def _only_looks(command: _PlainCommand) -> bool:
+    if _is_one_of(command, _BESIDE_A_KILL):
+        return True
+    words = [word.text for word in command.words]
+    return words[0] == "caws" and (
+        tuple(words[1:2]) in _READ_ONLY_CAWS or tuple(words[1:3]) in _READ_ONLY_CAWS
+    )
+
+
+def _names_files_to_git(command: _PlainCommand) -> bool:
+    words = command.words
+    return (
+        words[0].text == "git" and len(words) > 1
+        and not words[1].quoted and words[1].text in _GIT_NAMES_FILES
+        and all(_GIT_OPTION.fullmatch(word.text) for word in words[2:] if word.text.startswith("-"))
+    )
+
+
+def _gives_a_script_a_data_file(command: _PlainCommand) -> bool:
+    words = command.words
+    return (
+        words[0].text in _SCRIPT_INTERPRETERS and len(words) > 2
+        and not words[1].quoted and bool(_SCRIPT_FILE.fullmatch(words[1].text))
+        and not _POWER_MENTION.search(words[1].text)
+        and all(
+            not word.quoted and bool(_DATA_FILE.fullmatch(word.text))
+            and not any(_POWER_MENTION.fullmatch(part.split(".")[0]) for part in word.text.split("/"))
+            for word in words[2:] if _POWER_MENTION.search(word.text)
+        )
+    )
+
+
+def names_power_as_data(raw_command: str) -> bool:
+    """Whether a plain command only names reboot or shutdown.
+
+    Each pipeline that carries the word, quoted or not, must write no file and be
+    made of programs that only inspect their operands or of git subcommands that
+    take files and branches, or be one script given a longer name of a data file.
+    Every other pipeline must be listed programs too, so that nothing in the
+    command changes what a later command word means.
+    """
+    pipelines = read_plain_command(raw_command)
+    if pipelines is None:
+        return False
+    for pipeline in pipelines:
+        commands = [command for command in pipeline if command.words]
+        if any(_POWER_MENTION.search(command.words[0].text) for command in commands):
+            return False
+        if not any(
+            _POWER_MENTION.search(text)
+            for command in commands
+            for text in [word.text for word in command.words] + command.files
+        ):
+            if not all(
+                _is_one_of(command, _INSPECTS_OPERANDS) or _only_looks(command)
+                or _names_files_to_git(command) or command.words[0].text in _SCRIPT_INTERPRETERS
+                for command in commands
+            ):
+                return False
+            continue
+        if any(set(command.files) - {"/dev/null"} for command in commands):
+            return False
+        if all(
+            _is_one_of(command, _INSPECTS_OPERANDS) or _names_files_to_git(command)
+            for command in commands
+        ):
+            continue
+        if len(commands) == 1 and _gives_a_script_a_data_file(commands[0]):
+            continue
+        return False
+    return True
+
+
+_KILL_SIGNAL = re.compile(r"(?:[0-9]{1,2}|(?:SIG)?[A-Z][A-Z0-9+]{1,9})")
+_PROCESS_ID = re.compile(r"[1-9][0-9]{0,6}")
+_MAX_PROCESS_ID = 4194304
+
+
+def _kills_explicit_processes(command: _PlainCommand) -> bool:
+    operands = [word.text for word in command.words[1:]]
+    if len(operands) > 1 and operands[0] in {"-s", "-n"}:
+        if not _KILL_SIGNAL.fullmatch(operands[1]):
+            return False
+        operands = operands[2:]
+    elif operands and operands[0].startswith("-") and _KILL_SIGNAL.fullmatch(operands[0][1:]):
+        operands = operands[1:]
+    if operands and operands[0] == "--":
+        operands = operands[1:]
+    return bool(operands) and all(
+        _PROCESS_ID.fullmatch(text) and 1 < int(text) <= _MAX_PROCESS_ID for text in operands
+    )
+
+
+def is_plain_pid_kill(raw_command: str) -> bool:
+    """Whether a plain command does nothing but kill explicit process IDs, beside
+    programs that only wait, look or print. Process groups, job specs, every
+    process, and targets read from anywhere are not explicit."""
+    pipelines = read_plain_command(raw_command)
+    if pipelines is None:
+        return False
+    kills = False
+    for pipeline in pipelines:
+        for command in pipeline:
+            if not command.words:
+                continue
+            if set(command.files) - {"/dev/null"}:
+                return False
+            if command.words[0].text in {"kill", "/bin/kill", "/usr/bin/kill"}:
+                if not _kills_explicit_processes(command):
+                    return False
+                kills = True
+            elif not _only_looks(command):
+                return False
+    return kills
+
+
+# ---------------------------------------------------------------------------
 # Main classifier
 # ---------------------------------------------------------------------------
 
@@ -3074,6 +3335,8 @@ def derive_facets(fact: "CommandFact", adapters: dict | None) -> None:
     #     HOOK-ASK-ENFORCEMENT-001 a kill is confirm (single-command), and the
     #     warn-first grace lets a first kill warn rather than freeze. This is a
     #     documented corpus-vs-floor adjudication — the floor is authoritative.
+    #     A kill of explicit process IDs stays an ask; its source (pid_kill) tells
+    #     block-dangerous.sh to refuse it without arming the latch.
     #     sysctl only mutates with -w / a key=value assignment; bare queries read.
     if base is None and exe == "sysctl":
         if "-w" in fact.flags or any("=" in t for t in fact.targets):
@@ -3242,7 +3505,7 @@ def classify_command(
     HOOK-ASK-ENFORCEMENT-001 — enforcement provenance, NOT a flipped ask. Two
     additive fields ride alongside the unchanged decision/reason:
       source      — diagnostic provenance of the WINNING decision: capability |
-                    legacy_family | regex | rm_classifier | find_delete |
+                    pid_kill | legacy_family | regex | rm_classifier | find_delete |
                     commit_deletions | classifier_error | sidecar_error | unknown.
       enforcement — the wrapper contract block-dangerous.sh branches on:
                     pass | advisory | confirm | block.
@@ -3251,7 +3514,9 @@ def classify_command(
     carrying structured semantic evidence) or a classifier_error/budget ask ->
     confirm (current-command human approval at the hook boundary); a
     commit_deletions ask carries EXPLICIT confirm enforcement (block-dangerous.sh
-    refuses the command with remediation but never arms the latch); every other
+    refuses the command with remediation but never arms the latch); a pid_kill
+    ask (a plain command whose only flagged operation is a kill of explicit IDs)
+    -> confirm, refused after the session's one warning without arming; every other
     ask (legacy governed-family default, CONFIRM regex, rm/find) -> advisory,
     preserving CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001. Bare `ask -> block` is
     explicitly rejected.
@@ -3271,6 +3536,9 @@ def classify_command(
     worst_reason = ""
     worst_source = "unknown"
     worst_enforcement = "pass"
+    flagged_otherwise = False
+    only_names_power: bool | None = None
+    plain_pid_kill: bool | None = None
 
     # Load the user adapter sidecar once and thread it through recursion.
     adapters = _adapters if _adapters is not None else load_command_adapters(repo_root)
@@ -3285,14 +3553,19 @@ def classify_command(
             return "pass"
         # ask: capability-derived and fail-closed asks confirm; everything else
         # (legacy_family / regex / rm_classifier / find_delete / unknown) is advisory.
-        if source in {"capability", "classifier_error", "sidecar_error"}:
+        if source in {"capability", "pid_kill", "classifier_error", "sidecar_error"}:
             return "confirm"
         return "advisory"
 
     def escalate(decision: str, reason: str, source: str = "unknown",
                  enforcement: str | None = None) -> None:
         nonlocal worst_decision, worst_reason, worst_source, worst_enforcement
+        nonlocal flagged_otherwise
         priority = {"allow": 0, "ask": 1, "deny": 2}
+        # A kill by process ID beside anything else this classifier flags is an
+        # ordinary capability ask, whichever comes first.
+        if decision != "allow" and source != "pid_kill":
+            flagged_otherwise = True
         if priority.get(decision, 0) > priority.get(worst_decision, 0):
             worst_decision = decision
             worst_reason = reason
@@ -3369,6 +3642,13 @@ def classify_command(
         # --- Hard-block patterns (segment-level) ---
         for pattern, desc in DENY_SEGMENT_PATTERNS:
             if re.search(pattern, segment_surface, re.IGNORECASE):
+                # A nested shell's or a substitution's text is never excepted:
+                # what surrounds it can run what it prints.
+                if desc == SYSTEM_POWER_REASON and _depth == 0:
+                    if only_names_power is None:
+                        only_names_power = names_power_as_data(raw_command)
+                    if only_names_power:
+                        continue
                 escalate("deny", desc, "regex")
 
         # --- Hard-block patterns over RAW argument values (Entry 40) ---
@@ -3481,8 +3761,13 @@ def classify_command(
                 # any ask/deny it returns is facet-derived (lattice / opaque-exec /
                 # sidecar-fail-closed), so a capability ask routes to current-
                 # command human confirmation at the hook boundary (A1). A capability
-                # deny still derives to block. source=capability.
-                escalate(cap_result[0], cap_result[1], "capability")
+                # deny still derives to block. source=capability, or pid_kill when
+                # the ask is a kill and the whole command is a plain one.
+                kill_ask = cap_result[0] == "ask" and fact.executable == "kill" and _depth == 0
+                if kill_ask and plain_pid_kill is None:
+                    plain_pid_kill = is_plain_pid_kill(raw_command)
+                escalate(cap_result[0], cap_result[1],
+                         "pid_kill" if kill_ask and plain_pid_kill else "capability")
 
         if allow_result is None and not git_segment_allowed:
             # git_segment_allowed: an authoritative git-semantics allow for this
@@ -3496,6 +3781,8 @@ def classify_command(
                 # LEGACY uncertainty -> advisory, preserving CATASTROPHIC-ONLY-001 (A2).
                 escalate(family_result[0], family_result[1], "legacy_family")
 
+    if worst_source == "pid_kill" and flagged_otherwise:
+        worst_source = "capability"
     return worst_decision, worst_reason, worst_source, worst_enforcement
 
 

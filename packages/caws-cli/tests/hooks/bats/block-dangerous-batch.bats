@@ -216,7 +216,7 @@ OPAQUE_TWO='node -e "console.log($Y)"'
   call use_a 'docker run alpine'
   assert_output --partial 'WARN, first capability ask'
   refute_output --partial '"decision": "block"'
-  call use_b 'kill -9 1234'
+  call use_b 'pkill -f worker'
   assert_output --partial '"decision": "block"'
   assert_output --partial 'was queued together with another one (`docker run alpine`) that drew this session'
   assert_output --partial 'the session danger latch was NOT armed'
@@ -228,7 +228,7 @@ OPAQUE_TWO='node -e "console.log($Y)"'
   local out_a="$BATS_TEST_TMPDIR/a.out" out_b="$BATS_TEST_TMPDIR/b.out" cmd
   for cmd in a b; do
     local use="use_$cmd" text='docker run alpine' out="$BATS_TEST_TMPDIR/$cmd.out"
-    [ "$cmd" = a ] || text='kill -9 1234'
+    [ "$cmd" = a ] || text='pkill -f worker'
     env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" CAWS_BATCH_WINDOW_SECONDS=0 \
       CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" HOOK_CWD="$CAWS_TEST_REPO" \
       bash -c 'cd "$1" && printf "%s" "$2" | bash "$3"' _ "$CAWS_TEST_REPO" \
@@ -249,7 +249,7 @@ OPAQUE_TWO='node -e "console.log($Y)"'
   say msg_1 use_a
   call use_a 'docker run alpine'
   say msg_2 use_b
-  call use_b 'kill -9 1234'
+  call use_b 'pkill -f worker'
   assert_output --partial '"decision": "block"'
   assert_output --partial 'SECOND capability-risk command this session'
   [ -f "$(sentinel)" ]

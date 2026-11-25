@@ -493,11 +493,11 @@ When adding a refusal, test its remedy as well as its verdict
 
 A refusal is one of three weights. Choose the lightest that holds the boundary.
 
-| Weight | Effect on the session                                                                                                               | Used for                                                                                                       |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Block  | This call is refused. Nothing is recorded against the session.                                                                      | Guard faults; a first opaque inline payload; a first unanalyzable command; a bare commit over staged deletions |
-| Strike | The finding is counted for the session, across every repo. The first warns and allows, the second asks, the third and later refuse. | Findings a guard wants corrected over repetition: `scope-guard`, `shortcut-language-check`                     |
-| Latch  | The session is quarantined until a human resets it. On kill-enabled surfaces the next blocked attempt ends the process.             | Catastrophic or bypass-shaped commands, and a repeat of a blocked classification                               |
+| Weight | Effect on the session                                                                                                               | Used for                                                                                                                             |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Block  | This call is refused. Nothing is recorded against the session.                                                                      | Guard faults; a first opaque inline payload; a first unanalyzable command; a bare commit over staged deletions; a kill by process ID |
+| Strike | The finding is counted for the session, across every repo. The first warns and allows, the second asks, the third and later refuse. | Findings a guard wants corrected over repetition: `scope-guard`, `shortcut-language-check`                                           |
+| Latch  | The session is quarantined until a human resets it. On kill-enabled surfaces the next blocked attempt ends the process.             | Catastrophic or bypass-shaped commands, and a repeat of a blocked classification                                                     |
 
 Rules that hold across guards:
 
@@ -520,6 +520,21 @@ Rules that hold across guards:
 - **Capability-risk commands warn once.** The first such command in a session
   draws a warning; a later one arms the latch. A second one queued with the
   first is refused without a latch.
+- **A plain kill by process ID never latches.** Once the session has drawn its
+  one warning, a `kill` whose targets are all literal IDs from 2 to 4194304 is
+  refused and the session continues. The command must be plain (literal words,
+  `;`, `&&`, `||`, `|`, newlines and output redirections, which go only to
+  `/dev/null`), and everything beside the kill must be a listed program that
+  only waits, looks or prints. Any other kill, `pkill` and `killall` arm the
+  latch.
+- **`reboot` and `shutdown` are denied wherever they appear unquoted**, except
+  in a plain command that only names them. Each pipeline that carries the word
+  must write no file and be made of programs that inspect their operands
+  (`last`, `ls`, `cat`, `grep`, `rg` and the like) or of `git add`, `commit`,
+  `diff`, `log`, `show`, `blame`, `status`, `checkout`, `switch` or `branch`; or
+  be one `node` or `python3` script given a longer data-file name such as
+  `after-reboot.json`. The command's other pipelines must be listed programs
+  too. Quote a search term to keep it out of the check.
 - **A bare commit over staged deletions never latches**, however often it is
   repeated. The native runtime answers that refusal for Codex without the shell
   guard, and both must agree.

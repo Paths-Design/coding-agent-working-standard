@@ -732,6 +732,9 @@ import { isAdapterCoveredSurface } from './types';
 // v142: lib/bash-mutation-analysis.sh looks for a NUL in an analyzer response by
 // code point. jq 1.6 answers contains with a NUL needle as true of any string,
 // so bash-write-guard refused every command it analyzed on that version.
+// v143: block-dangerous.sh does not arm the latch for a kill of explicit process
+// IDs in a plain command, and classify_command.py does not deny a plain command
+// that only names reboot or shutdown. Every other verdict is unchanged.
 // v144: lib/bash-mutation-analysis.sh reads a Python path built from the working
 // directory's parents, percent or brace formatting, a changed directory, a
 // subprocess directory, io.FileIO and a function handed to another call, and a
