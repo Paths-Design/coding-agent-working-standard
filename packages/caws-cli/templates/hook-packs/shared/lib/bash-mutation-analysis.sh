@@ -173,13 +173,15 @@ caws_bash_prepare_analysis() {
       .start>=0 and .end>=.start and .start==(.start|floor) and .end==(.end|floor);
     def coordinate($unknown_cwd): (.cwd==null and $unknown_cwd) or ((.cwd|type)=="string" and (.cwd|startswith("/")) and (.cwd|test("[\\r\\n\\t]")|not));
     def absolute: type=="string" and startswith("/");
+    # jq 1.6 searches C strings, so contains with a NUL needle is true of any string.
+    def has_nul: explode|any(.==0);
     # Source offsets use JavaScript UTF-16 indices, including astral codepoints.
     def source_length: [explode[] | if .>65535 then 2 else 1 end] | add // 0;
     def bounded($length): span and .end<=$length;
     def language: .language=="node" or .language=="python";
     def transport_path:
       type=="string" and length>0 and
-      (contains("\u0000")|not) and (contains("\r")|not) and
+      (has_nul|not) and (contains("\r")|not) and
       (contains("\n")|not) and (contains("\t")|not) and
       (startswith("__INTERP__")|not);
     def effects:
@@ -257,7 +259,7 @@ caws_bash_prepare_analysis() {
         (.entry==null or ((.entry|type)=="string" and .launch=="program")) and effects) and
       all(.gitMetadata[]; (.subcommand|type)=="string" and (.subcommand|test("^[A-Za-z0-9][A-Za-z0-9._-]*$")) and
         (.directory|absolute) and (.common|absolute) and (.worktree|absolute) and bounded($document.execution.command|source_length)) and
-      all(..|strings; contains("\u0000")|not);
+      all(..|strings; has_nul|not);
     def frame: .[] | tostring + "\u0000";
     if length!=1 then error("one mutation-view document required") else .[0] end |
     if valid then
