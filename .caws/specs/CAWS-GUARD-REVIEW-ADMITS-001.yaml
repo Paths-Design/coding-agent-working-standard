@@ -1,0 +1,59 @@
+id: CAWS-GUARD-REVIEW-ADMITS-001
+title: 'Write guard refuses the foreign writes a second review found it admits'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-25T03:12:14.765Z'
+updated_at: '2026-11-25T03:12:14.765Z'
+created_by_session: 'f8d188a4-1b66-4ad5-bda4-86bdf477487b'
+blast_radius:
+  modules:
+    - 'Bash mutation projection and interpreter evidence scanner as consumed by bash-write-guard'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/analysis/'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-analysis.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/shell/'
+    - 'packages/caws-cli/tests/hooks/'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/CHANGELOG.md'
+    - 'docs/guides/command-analysis.md'
+    - 'docs/guides/hook-packs.md'
+  out: []
+invariants:
+  - 'A recognized write whose target belongs to another session''s worktree, an active claim or a different repository is refused'
+  - 'The everyday, read and inline command corpora stay admitted'
+acceptance:
+  - id: A1
+    given: 'a here-document whose unquoted delimiter lets the shell remove escapes, such as an escaped dollar'
+    when: 'its text is run as a script or standard input'
+    then: 'the text the shell would write is what is checked, or the command is held'
+  - id: A2
+    given: 'Git write commands spelled with clustered, abbreviated or unlisted options, such as clone -qb, init -qb, worktree add -fb, clone -qu, config --fil=, config --glob, push --repo=, send-pack and fsck --lost-found'
+    when: 'they name a foreign repository'
+    then: 'the guard exits 2, and clone -qb main from a sibling into this project exits 0'
+  - id: A3
+    given: 'a GIT_ variable assigned without export'
+    when: 'Git runs'
+    then: 'the guard checks the repository Git would really use, so a plain GIT_SHA or GIT_ROOT variable is admitted and an unexported GIT_DIR cannot hide a foreign directory'
+  - id: A4
+    given: 'inline Python or Node that builds a foreign path from the working directory, percent formatting, a changed directory, io.FileIO, a subprocess cwd, an executor or path.join'
+    when: 'it writes there'
+    then: 'the guard exits 2 naming the owner'
+  - id: A5
+    given: 'a directory reached through a link made earlier in the command, a brace list with an empty member, or the zsh forms chdir, noglob cd, clobbering redirection, a current-shell last pipeline member and a leading equals'
+    when: 'a write follows into a foreign repository'
+    then: 'the guard exits 2'
+  - id: A6
+    given: 'env -u NAME, set -a around source, unset IFS or CDPATH, and ordinary GIT_TRACE and GIT_CONFIG_GLOBAL settings'
+    when: 'an agent runs them'
+    then: 'each exits 0 unless it redirects Git'
+  - id: A7
+    given: 'the changed analyzer and shared pack'
+    when: 'the analysis, guard and pack-fingerprint suites and the per-file mutation floor run'
+    then: 'all pass with SHARED_PACK_VERSION bumped and no declared floor lowered'
+non_functional: {}
+contracts: []
