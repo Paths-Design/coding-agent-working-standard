@@ -481,6 +481,10 @@ for (const [command, ...targets] of [
 for (const [code, command, ...targets] of [
   ['redirect-target', 'echo x > "$X"', '?'],
   ['redirect-target', 'cat <> "$X"', '?'],
+  // Zsh reads these as overwriting the file that follows.
+  ['redirect-target', 'echo x >! ^/a', '@/!'],
+  ['redirect-target', 'echo x >>! ^/a', '@/!'],
+  ['redirect-target', 'echo x >!a', '@/!a'],
   ['redirect-variable', 'exec {fd}> a'],
   ['redirect-descriptor', 'echo x >&"$X"'],
   ['repository-mapping-write', 'echo x > .git', '@/.git'],
@@ -574,6 +578,7 @@ for (const command of [
   'export; export -p; export A B',
   'declare -x A; declare -ra A; typeset -A B; local -r C; readonly D',
   'unset A; unset -v A B',
+  'ls !(node_modules|dist) *(a|b)',
   'type x; wait; jobs; kill -9 1; umask 022; shift 2; times; ulimit -n',
   'mapfile; mapfile -t; readarray -t lines',
   'command -v x; command -V x; env; exec',
@@ -599,9 +604,9 @@ for (const command of [
   'declare -f',
   'declare "$X"',
   'readonly IFS',
-  'unset IFS',
+  'unset BASH_ENV',
   'unset "$X"',
-  'unset -f f',
+  'unset -f "$X"',
   'unset A B-C',
   'mapfile -C cb lines',
   'mapfile "$X"',
@@ -638,6 +643,42 @@ writes('wrappers', 'command cd s1 && touch o', '@/s1/o');
 writes('wrappers', '/usr/bin/env touch a', '@/a');
 metadata('wrappers', 'env A=1 git add a', 'add @');
 metadata('wrappers', 'command git add a', 'add @');
+for (const option of ['-u GIT_DIR', '-uGIT_DIR', '--unset=GIT_DIR', '-u GIT_DIR -u PAGER'])
+  add('wrappers', `env ${option} git add a`, {
+    environment: { GIT_DIR: '/usr' },
+    git: ['add @'],
+  });
+metadata('wrappers', 'env -u GIT_DIR GIT_WORK_TREE=@/s1 git add a', 'add @/s1 in @/.git');
+// These hide who is asking, and every other name is held with them.
+for (const name of ['CLAUDE_CODE_SESSION_ID', 'CAWS_SESSION_ID', 'A', '"$X"'])
+  held('wrappers', ['mutation-wrapper-option', 'wrapper-option'], `env -u ${name} ls -l`);
+writes('wrappers', 'noglob touch a', '@/a');
+writes('wrappers', 'nocorrect cd s1 && touch o', '@/s1/o');
+writes('wrappers', 'noglob command cd s1 && touch o', '@/s1/o');
+writes('wrappers', 'chdir s1 && touch o', '@/s1/o');
+writes('wrappers', 'chdir s1; touch o', '@/o', '@/s1/o');
+writes('builtins', 'set -a; source .env; set +a; npm start');
+writes('builtins', 'unset IFS CDPATH; unset -f f; touch a', '@/a');
+// Bash drops an empty brace member and zsh keeps it.
+for (const command of ["ls *(e:'touch a':)", 'ls *(.e{x}N)', 'ls *(+run)', 'ls *(oe[x])'])
+  held('braces', 'glob-qualifier', command);
+held('wrappers', 'mutation-executable-unknown', '=touch ^/a');
+metadata('braces', 'git {,-C} s1 add a', 'add @/s1');
+writes('braces', "bash {,-c} 'touch a'", '@/a');
+// Zsh runs the last member of a pipeline in the shell itself.
+writes('pipelines', 'ls | while read -r d; do cd @/s1; done; touch o', '@/o', '@/s1/o');
+writes('pipelines', 'D=@/a; echo x | read D; touch "$D/o"', '?');
+writes('pipelines', 'D=@/a; echo x | read E; touch "$D/o"', '@/a/o');
+writes('pipelines', 'D=@/a; read D | cat; touch "$D/o"', '@/a/o');
+writes('pipelines', 'cd s1 | cat; touch o', '@/o');
+add('pipelines', 'GIT_DIR=@/meta; ls | export GIT_DIR; git add a', {
+  codes: ['git-environment', 'metadata-coordinate-unresolved'],
+  only: 'codes',
+});
+add('pipelines', 'mv y d; mkdir -p d/e; cd d/e; touch a', {
+  codes: ['cwd-unresolved'],
+  only: 'codes',
+});
 for (const command of ['env -i ls', 'exec -a x ls', 'env -u A ls', 'env 9A=x ls', 'command -p ls'])
   held('wrappers', ['mutation-wrapper-option', 'wrapper-option'], command);
 held('wrappers', ['mutation-executable-unknown', 'executable-unknown'], 'env A=1');
@@ -1896,6 +1937,8 @@ for (const [command, ...targets] of [
   ['mkdir -p d/e && cd d && touch a', '@/d/a'],
   ['mkdir d && cd d && mkdir e && cd e && touch a', '@/d/e/a'],
   ['mkdir d; cd d; touch a', '@/a', '@/d/a'],
+  ['ln -s ^/x l; mkdir d && cd d && touch a', '@/d/a'],
+  ['bash -c "true"; mkdir d && cd d && touch a', '@/d/a'],
   // What a list skips has the status that skipped it.
   ['x && cd s1 && touch a', '@/s1/a'],
   ['x || cd s1 || touch a', '@/a'],
@@ -1919,6 +1962,17 @@ for (const [code, command, ...targets] of [
   [NOWHERE, 'mkdir d; (rm -r d; ln -s ^/x d); cd d; touch a', '@/a', '@/d'],
   [NOWHERE, 'cd d; mkdir d; touch a', '@/a'],
   [NOWHERE, 'mkdir "$X"; cd d; touch a', '@/a'],
+  [NOWHERE, 'ln -s ^/x d; mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'ln -s ^/x/d; mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'ln -s ^/x s1; mkdir -p s1/x/e; cd s1/x/e; touch a', '@/a'],
+  [NOWHERE, 'ln -s ^/x "$X"; mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'ln -st . ^/d; mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'tar xf y; mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'env ln -s ^/x d; mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'mkdir d; env rm -r d; env ln -s ^/x d; cd d; touch a', '@/a', '@/d'],
+  [NOWHERE, "mkdir d; bash -c 'rm -r d; ln -s ^/x d'; cd d; touch a", '@/a', '@/d'],
+  [NOWHERE, '(ln -s ^/x d); mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'if y; then ln -s ^/x d; fi; mkdir -p d/e; cd d/e; touch a', '@/a', '@/d/e/a'],
   [NOWHERE, 'mkdir d/../e; cd e; touch a', '@/a'],
   [NOWHERE, 'mkdir d; cd d/e; touch a', '@/a'],
   [NOWHERE, 'if x; then mkdir d; fi; cd d; touch a', '@/a', '@/d/a'],

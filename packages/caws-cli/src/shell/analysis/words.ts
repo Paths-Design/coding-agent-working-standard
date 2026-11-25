@@ -34,6 +34,8 @@ function reevaluates(values: readonly string[] | null | undefined): boolean {
   return values?.some((value) => /[$`[]/.test(value)) === true;
 }
 
+/** A zsh glob qualifier that names code: e and a delimiter, or a function. */
+const QUALIFIER_CODE = /e[^\w|.*?)-]|\+/;
 /** The words of a literal brace expansion, or null when it is not all literal. */
 export function expandBraces(text: string): string[] | null {
   if (!/^\{[\w./,@%+:=^{}-]*\}$/.test(text)) return null;
@@ -182,21 +184,26 @@ export function expandWord(
       let combined: Argument[][] = [[]];
       for (const option of options) {
         const offset = part.pos - word.pos;
-        const variants = expandWord(
-          {
-            ...word,
-            text: word.text.slice(0, offset) + option + word.text.slice(offset + part.text.length),
-            parts: word.parts!.map((item, index) =>
-              index === brace
-                ? { type: 'Literal', pos: part.pos, end: part.end, value: option, text: option }
-                : item
-            ),
-          },
-          state,
-          ctx,
-          inspect,
-          depth
-        );
+        // Bash drops a word that is wholly empty here, and zsh keeps it.
+        const empty = option === '' && part.text === word.text;
+        const variants = empty
+          ? [[], [{ value: '' }]]
+          : expandWord(
+              {
+                ...word,
+                text:
+                  word.text.slice(0, offset) + option + word.text.slice(offset + part.text.length),
+                parts: word.parts!.map((item, index) =>
+                  index === brace
+                    ? { type: 'Literal', pos: part.pos, end: part.end, value: option, text: option }
+                    : item
+                ),
+              },
+              state,
+              ctx,
+              inspect,
+              depth
+            );
         if (combined.length * variants.length > LIMIT) {
           ctx.reason(
             word,
@@ -399,6 +406,8 @@ export function expandWord(
             } else if (part.type === 'AnsiCQuoted')
               choices = [[{ text: part.value, split: false }]];
             else {
+              if (part.type === 'ExtendedGlob' && QUALIFIER_CODE.test(part.pattern))
+                ctx.reason(part, 'glob-qualifier', 'Zsh can run code in a glob qualifier.');
               // Pathname and brace expansion change how many arguments exist.
               parts(part.parts ?? [], quoted);
               if (split)

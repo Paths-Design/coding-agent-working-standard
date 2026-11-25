@@ -81,6 +81,7 @@ function widen(states: readonly State[]): State {
     if (state.cwd !== merged.cwd || state.cwdUnknown === true) merged.cwdUnknown = true;
     if (state.logical !== merged.logical) delete merged.logical;
     keepMade(merged, state);
+    addLinks(merged, state);
     for (const name of new Set([
       ...(merged.exports?.keys() ?? []),
       ...(state.exports?.keys() ?? []),
@@ -96,6 +97,11 @@ const exportFacts = (state: State): unknown =>
   [...(state.exports ?? [])].sort(([a], [b]) => a.localeCompare(b));
 function exporting(state: State, name: string, value: boolean | null): void {
   state.exports = new Map(state.exports).set(name, value);
+}
+/** A path any alternative can have made a link may be one. */
+function addLinks(target: State, other: State): void {
+  const links = new Set([...(target.linked ?? []), ...(other.linked ?? [])]);
+  if (links.size > 0) target.linked = [...links];
 }
 /** A directory counts as made only while every alternative still has it. */
 function keepMade(target: State, other: State): void {
@@ -133,6 +139,7 @@ function forget(state: State): State {
     exporting(next, name, null);
   }
   delete next.made;
+  next.linked = [null];
   return { ...next, cwdUnknown: true, filesystemChanged: true, mappingChanged: true };
 }
 /** Filesystem effects outlive the subshell, pipeline or substitution that had them. */
@@ -141,6 +148,7 @@ function carryEffects(target: State, sources: readonly State[]): void {
     if (source.filesystemChanged === true) target.filesystemChanged = true;
     if (source.mappingChanged === true) target.mappingChanged = true;
     keepMade(target, source);
+    addLinks(target, source);
   }
 }
 interface TestOperand {
@@ -389,6 +397,7 @@ export async function analyzeCommand(
         state.mappingChanged === true,
         state.outcome ?? null,
         state.made ?? null,
+        state.linked ?? null,
         exportFacts(state),
       ]);
       unique.set(key, state);
@@ -417,6 +426,7 @@ export async function analyzeCommand(
       item.filesystemChanged === true,
       item.mappingChanged === true,
       item.made ?? null,
+      item.linked ?? null,
       exportFacts(item),
     ];
     let entry = [state];
@@ -613,6 +623,9 @@ export async function analyzeCommand(
     }
     const values = word(node.target, state, depth);
     dependencies.observers?.redirection?.({ node, targets: values, state: clone(state), reader });
+    // Zsh overwrites the file after the mark, which Bash makes an argument.
+    if (projection && node.target.text.startsWith('!'))
+      reason(node, 'redirect-target', 'Redirection has no proven target.');
     if (['>&', '<&'].includes(node.operator)) {
       if (values.some((args) => args.length !== 1 || !/^(?:[0-9]+|-)$/.test(args[0]?.value ?? '')))
         reason(node, 'redirect-descriptor', 'Only literal descriptor duplication is modeled.');
@@ -867,9 +880,10 @@ export async function analyzeCommand(
             : outputs;
         }
         const firstGit = ctx.gitInvocations.length;
-        const outputs = node.commands.flatMap((next) =>
+        const members = node.commands.map((next) =>
           contained(() => walk(next, clone(state), reader, depth + 1))
         );
+        const outputs = members.flat();
         const next: State = { ...state, filesystemChanged: state.filesystemChanged === true };
         carryEffects(next, outputs);
         // Pipeline members run concurrently. A sibling's effects invalidate
@@ -881,8 +895,15 @@ export async function analyzeCommand(
               'git-context-changed',
               'Concurrent pipeline effects invalidate the filesystem context used for Git admission.'
             );
-        // Declared host contract: Bash lastpipe is disabled.
-        return [next];
+        // Declared host contract: Bash lastpipe is disabled. Zsh runs the last
+        // member in the shell itself, so the projection keeps both.
+        if (!projection) return [next];
+        const last = members.at(-1)!.map((item) => {
+          const current = clone(item);
+          carryEffects(current, [next]);
+          return current;
+        });
+        return join([next, ...last]);
       }
       case 'Subshell': {
         const outputs = contained(() =>

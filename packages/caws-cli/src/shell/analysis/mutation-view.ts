@@ -6,6 +6,7 @@ import { resolveGitContext } from './git-context';
 import type { GitContext, GitContextResolver } from './git-context';
 import type { Command, Redirection } from './parser-types';
 import {
+  envUnset,
   exported,
   isShellBuiltin,
   namesGitMetadata,
@@ -417,7 +418,8 @@ export async function projectMutationView(
       const environment: string[] = [];
       for (let wrappers = 0; wrappers <= 8; wrappers++) {
         const executable = args[0]?.value;
-        if (!executable) {
+        // Zsh replaces a leading equals sign with the path of what follows it.
+        if (!executable || executable.startsWith('=')) {
           issue(
             'mutation-executable-unknown',
             'Executable identity is not a finite value.',
@@ -441,6 +443,14 @@ export async function projectMutationView(
         let offset = 1;
         if (args[offset]?.value === '--') offset++;
         if (name === 'env') {
+          for (
+            let dropped = envUnset(args[offset]?.value, args[offset + 1]?.value);
+            dropped;
+            dropped = envUnset(args[offset]?.value, args[offset + 1]?.value)
+          ) {
+            environment.push(dropped.name);
+            offset += dropped.width;
+          }
           while (/^[A-Za-z_][A-Za-z_0-9]*=/.test(args[offset]?.value ?? '')) {
             environment.push(args[offset]!.value!.split('=', 1)[0]!);
             offset++;
@@ -909,8 +919,11 @@ export async function projectMutationView(
         );
       }
     };
-    const observeInvocation = ({ node, argv, state }: Invocation): void => {
+    const observeInvocation = ({ node, argv: given, state }: Invocation): void => {
       if (exhausted) return;
+      // These zsh modifiers leave the command after them as it is.
+      const modifiers = given.findIndex(({ value }) => !/^no(?:glob|correct)$/.test(value ?? ''));
+      const argv = given.slice(Math.max(modifiers, 0));
       words(argv, node, state.cwd);
       if (exhausted) return;
       const unwrapped = unwrap(argv, node);

@@ -61,7 +61,18 @@ export function namesGitMetadata(path: string): boolean {
   return /(?:^|\/)\.git(?:\/|$)/i.test(path);
 }
 const TARGET_UTILITIES = ['tee', 'truncate', 'touch', 'rm', 'mv', 'cp', 'dd'];
-const WRAPPERS = ['command', 'builtin', 'env', 'exec'];
+const WRAPPERS = ['command', 'builtin', 'env', 'exec', 'noglob', 'nocorrect'];
+/** Variables `env` may drop: none of them says who is asking. */
+const ENV_UNSET = /^(?:-u|--unset=)(GIT_[A-Z_]+|(?:GIT_)?PAGER)$/;
+/** A variable an `env` option drops, and how many arguments say so. */
+export function envUnset(
+  option: string | null | undefined,
+  next: string | null | undefined
+): { name: string; width: number } | null {
+  const separate = option === '-u';
+  const name = ENV_UNSET.exec(separate ? `-u${next ?? ''}` : (option ?? ''))?.[1];
+  return name === undefined ? null : { name, width: separate ? 2 : 1 };
+}
 /** The executable an argument vector runs, past its wrappers and their options. */
 function invoked(argv: readonly Argument[]): { name: string | null; args: readonly Argument[] } {
   let index = 0;
@@ -639,10 +650,39 @@ function opaque(
   const next: State = { ...state, filesystemChanged: true };
   if (name === 'mkdir') next.made = [...(state.made ?? []), ...directoriesMade(args, state)];
   // A directory that can have become a link is no longer known to be one.
-  else if (['ln', 'mv', 'rm', 'cp', 'tar', 'unzip'].includes(name)) delete next.made;
+  else if (replacesPaths(name, args)) delete next.made;
+  const links = linksMade(name, args, state);
+  if (links.length > 0) next.linked = [...(state.linked ?? []), ...links];
   if (!args.some(rewritesMapping)) return next;
   ctx.mapping?.(node);
   return { ...next, mappingChanged: true };
+}
+const SHELL = /^(?:ba|z|da|k)?sh$/;
+const REPLACING = ['ln', 'mv', 'rm', 'cp', 'tar', 'unzip', 'rsync'];
+/** Whether a program, or the source given to a shell, can replace a directory. */
+function replacesPaths(name: string, args: readonly Argument[]): boolean {
+  const words = new RegExp(`\\b(?:${REPLACING.join('|')})\\b`);
+  return (
+    REPLACING.includes(name) ||
+    (SHELL.test(name) && args.some(({ value }) => value !== null && words.test(value)))
+  );
+}
+/** Paths an invocation can have made a link; null is any path. */
+function linksMade(name: string, args: readonly Argument[], state: State): (string | null)[] {
+  if (name === 'rm' || !replacesPaths(name, args)) return [];
+  const values = args.map(({ value }) => value);
+  const operands = values.filter((value) => value === null || !value.startsWith('-'));
+  const last = operands.at(-1);
+  if (
+    !['ln', 'mv', 'cp'].includes(name) ||
+    state.cwdUnknown === true ||
+    operands.includes(null) ||
+    !last ||
+    values.some((value) => /^(?:-[A-Za-z]*t|--t)/.test(value ?? ''))
+  )
+    return [null];
+  const at = resolve(state.cwd, operands.length > 1 ? last : basename(last));
+  return [at, ...operands.map((value) => resolve(at, basename(value!)))].map(physicalPath);
 }
 /** A path with every existing component resolved, whether or not all of it exists. */
 function physicalPath(path: string): string {
@@ -665,7 +705,7 @@ function directoriesMade(args: readonly Argument[], state: State): string[] {
       resolveDirectory(path, '/') === null && path !== '/';
       path = dirname(path)
     )
-      made.push(path);
+      if (!state.linked?.some((link) => link === null || inside(path, link))) made.push(path);
   }
   return made;
 }
@@ -800,7 +840,13 @@ export function projectBuiltin(
     case 'readonly':
       return unbind(values.filter((value) => value === null || !/^-[xraAp]+$/.test(value)));
     case 'unset': {
-      const names = values.filter((value) => value !== '-v');
+      // A removed function is one a call may or may not find, and the shell
+      // splits and changes directory as usual without these two.
+      if (values[0] === '-f')
+        return values.slice(1).every((value) => value !== null && identifier.test(value))
+          ? state
+          : null;
+      const names = values.filter((value) => !['-v', 'IFS', 'CDPATH'].includes(value ?? ''));
       const next = unbind(names);
       // Git reads these from the environment, where the name is now absent.
       for (const value of next ? names : [])
@@ -919,6 +965,14 @@ function projectInvocation(
     if (name === 'command' && /^-[vV]$/.test(args[0]?.value ?? '')) return state;
     if (name === 'env' && args.length === 0) return state;
     if (args[offset]?.value === '--') offset++;
+    for (
+      let dropped = name === 'env' ? envUnset(args[offset]?.value, args[offset + 1]?.value) : null;
+      dropped;
+      dropped = envUnset(args[offset]?.value, args[offset + 1]?.value)
+    ) {
+      childEnv.delete(dropped.name);
+      offset += dropped.width;
+    }
     if (name === 'env')
       for (; /^[A-Za-z_][A-Za-z_0-9]*=/.test(args[offset]?.value ?? ''); offset++) {
         const value = args[offset]!.value!;
@@ -934,20 +988,25 @@ function projectInvocation(
     }
     if (offset >= args.length && name === 'exec') return state;
     const next = projectInvocation(args.slice(offset), state, childEnv, ctx, node);
-    if (name === 'command') return next;
+    if (name === 'command' || name === 'noglob' || name === 'nocorrect') return next;
     // env and exec run a program, so a builtin's name changes nothing here.
-    const { filesystemChanged, mappingChanged } = next;
-    return {
+    const { filesystemChanged, mappingChanged, made, linked } = next;
+    const kept: State = {
       ...state,
       ...(filesystemChanged === undefined ? {} : { filesystemChanged }),
       ...(mappingChanged === undefined ? {} : { mappingChanged }),
+      ...(linked === undefined ? {} : { linked }),
     };
+    if (made === undefined) delete kept.made;
+    else kept.made = made;
+    return kept;
   }
   if (executable !== name && changesShellState(name)) return opaque(name, args, state, ctx, node);
   switch (name) {
     case 'git':
       return projectGit(args, state, env, ctx, node);
     case 'cd':
+    case 'chdir':
       return projectDirectory(args, state, env);
     case 'sed':
       projectSed(args, ctx, node);

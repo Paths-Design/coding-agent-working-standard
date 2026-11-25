@@ -100,6 +100,8 @@ export interface State {
   logical?: string;
   /** Projection only: an earlier effect can have replaced a Git mapping. */
   mappingChanged?: boolean;
+  /** Projection only: paths this source can have made a link, null for anywhere. */
+  linked?: readonly (string | null)[];
   /** Projection only: directories this source makes before any link could replace them. */
   made?: readonly string[];
   /**
