@@ -1,0 +1,61 @@
+id: CAWS-CODEX-SHELL-ADMISSION-001
+title: 'Codex shell calls reach the write guard instead of a blanket execution-contract refusal'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-25T07:07:26.606Z'
+updated_at: '2026-11-25T07:07:26.606Z'
+created_by_session: 'ebebd82b-c28c-44a4-afb0-26acfbbcdd42'
+blast_radius:
+  modules:
+    - 'Native execution decoder for caws hooks mutation-view on the codex surface'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/hooks.ts'
+    - 'packages/caws-cli/tests/shell/hooks-analysis.test.js'
+    - 'packages/caws-cli/tests/hooks/bash-write-guard-analysis.test.js'
+    - 'packages/caws-cli/tests/hooks/codex-bash-write-execution-context.test.js'
+    - 'packages/caws-cli/tests/hooks/bats/claim-oracle-cwd-relative.bats'
+    - 'packages/caws-cli/tests/hooks/bats/parse-input.bats'
+    - 'packages/caws-cli/tests/fixtures/command-analysis/packaged-smoke.cjs'
+    - 'docs/guides/command-analysis.md'
+    - 'docs/architecture/hook-pack-shared-core.md'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'A Codex session or tool directory never stands in for the command directory: only a validated top-level execution_workdir resolves it, and relative write targets without one are refused'
+  - 'An absolute write target owned by another session, claimed by an active worktree or in another repository is refused for Codex exactly as for other surfaces'
+  - 'Codex receives no lifecycle rewrite fact, and caws hooks analyze never admits a Codex native envelope'
+  - 'Shell, startup, alias and directory fields that conflict with the declared Bash subset stay refused'
+acceptance:
+  - id: A1
+    given: 'a codex PreToolUse Bash payload carrying only tool_input.command and cwd'
+    when: 'the installed write guard evaluates commands with no write or with absolute targets the session may write'
+    then: 'it exits 0 with empty output, so a Codex session can run caws status, read files and commit'
+  - id: A2
+    given: 'the same payload naming an absolute target owned by another session, claimed by an active worktree, or in another repository'
+    when: 'the write guard evaluates it'
+    then: 'it exits 2 naming the owner or repository and the target is unchanged'
+  - id: A3
+    given: 'a relative write target and no validated execution_workdir, including caller-added workdir, cwd or lookalike status fields'
+    when: 'the write guard evaluates it'
+    then: 'it is refused as unavailable-native-context and names an absolute target as the remedy'
+  - id: A4
+    given: 'codex native envelopes, native tool aliases and lifecycle commands'
+    when: 'caws hooks analyze or the lifecycle rewrite consumes them'
+    then: 'analyze stays execution-contract unresolved, aliases stay refused, and singleLifecycle is null'
+  - id: A5
+    given: 'real Codex commands recorded in this repository'
+    when: 'they are replayed without execution through the last Codex-admitting guard and this guard'
+    then: 'every newly refused command is listed with its cause and none is a read-only or absolute-target command the session may run'
+  - id: A6
+    given: 'the installed runtime built from the merged candidate'
+    when: 'a live Codex session runs an inert read, a foreign write and a bound in-scope write with a governed commit'
+    then: 'the read and commit run, the foreign write is refused with bytes unchanged, and hook-events records show the digest and verdicts'
+observability:
+  - 'bash-write-guard hook-events records per Codex call with runtime digest and exit status'
+rollback:
+  - 'Revert the merge and reinstall the CLI snapshot; the refusal returns'
+non_functional: {}
+contracts: []
