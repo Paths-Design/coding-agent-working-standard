@@ -2146,6 +2146,7 @@ describe('write projection', () => {
       fs.writeFileSync(path.join(root, 'project/globs', file), '');
     fs.symlinkSync(path.join(root, 'project/real/deep'), path.join(root, 'project/link'));
     fs.symlinkSync(path.join(root, 'project'), path.join(root, 'links/project'));
+    for (const row of rows) row.expanded = expand(row.command);
     const requests = rows.map(({ command, facts }) => ({
       environment: facts.environment ?? {},
       input: {
@@ -2258,6 +2259,13 @@ describe('write projection', () => {
       copies: facts.copies ?? [],
     };
     const actual = summarize(results.get(name));
+    // A position outside the command makes the guard reject the whole view.
+    const { length } = rows.find((row) => row.name === name).expanded;
+    for (const { start, end } of [...results.get(name).tokens, ...results.get(name).issues]) {
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(end).toBeGreaterThanOrEqual(start);
+      expect(end).toBeLessThanOrEqual(length);
+    }
     if (facts.submitted) {
       const { interpreters, interpreterInvocations } = results.get(name);
       expect(

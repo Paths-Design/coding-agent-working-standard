@@ -399,7 +399,7 @@ FIRST = set("os.remove os.unlink os.rmdir os.removedirs os.mkdir os.makedirs os.
 SECOND = set("shutil.copy shutil.copy2 shutil.copyfile shutil.copytree os.link os.symlink "
              "urllib.request.urlretrieve".split())
 BOTH = set("os.rename os.replace os.renames shutil.move".split())
-OPENERS = set("open builtins.open io.open codecs.open gzip.open bz2.open lzma.open tarfile.open "
+OPENERS = set("open builtins.open io.open io.FileIO codecs.open gzip.open bz2.open lzma.open tarfile.open "
               "zipfile.ZipFile tarfile.TarFile".split())
 METHODS = set("write_text write_bytes unlink rmdir mkdir touch symlink_to hardlink_to chmod".split())
 SAVERS = set("to_csv to_json to_excel to_parquet to_pickle to_markdown to_html savefig tofile".split())
@@ -601,8 +601,69 @@ def prefixes(values):
 
 
 def parents(values):
-    return limited([(None if text is None else posixpath.dirname(text.rstrip("/")) or ".", exact, strong)
-                    for text, exact, strong in values])
+    out = []
+    for text, exact, strong in values:
+        if text is None:
+            out.append((None, exact, strong))
+            continue
+        bare = text.rstrip("/") or text
+        # The working directory has a parent once it is resolved, and none before.
+        if bare in ("", "."):
+            out.append((".", exact, strong))
+        if bare in ("", ".", "..") or bare.endswith("/.."):
+            out.append((posixpath.normpath(bare + "/.."), exact, strong))
+        else:
+            out.append((posixpath.dirname(bare) or ".", exact, strong))
+    return limited(out)
+
+
+def supplied_to(name):
+    """What a call that is handed a function can apply it to."""
+    out = []
+    for call in calls:
+        given = [*call.args, *[item.value for item in call.keywords]]
+        handed = [item for item in given if isinstance(item, (ast.Name, ast.Attribute))
+                  and (item.id if isinstance(item, ast.Name) else item.attr) == name]
+        if handed:
+            out += [item for item in given if item not in handed]
+    return out
+
+
+def filled(values, pieces, cells, seen):
+    """Text with each gap between pieces filled by what its cell can hold."""
+    for piece, cell in zip(pieces, cells):
+        held = evaluate(cell, seen) if cell is not None else []
+        values = added(added(values, held or UNKNOWN), [(piece, True, True)])
+    return values
+
+
+def percent(left, right, seen):
+    out = []
+    for text, exact, strong in left:
+        if text is None or not exact or re.search(r"%[%(]", text):
+            out.append((None if text is None else text.split("%")[0] or None, False, strong))
+            continue
+        pieces = re.split(r"%[-#0 +]*[0-9]*(?:[.][0-9]+)?[a-zA-Z]", text)
+        cells = right.elts if isinstance(right, ast.Tuple) else [right]
+        cells = [*cells, *[None] * len(pieces)]
+        out += filled([(pieces[0], True, strong)], pieces[1:], cells, seen)
+    return limited(out)
+
+
+def braces(left, call, seen):
+    out = []
+    named = {item.arg: item.value for item in call.keywords}
+    for text, exact, strong in left:
+        if text is None or not exact or "{{" in text or "}}" in text:
+            out.append((None if text is None else text.split("{")[0] or None, False, strong))
+            continue
+        parts = re.split(r"[{]([0-9A-Za-z_]*)(?:![rsa])?(?::[^{}]*)?[}]", text)
+        cells = []
+        for index, name in enumerate(parts[1::2]):
+            at = index if name == "" else int(name) if name.isdigit() else None
+            cells.append(named.get(name) if at is None else call.args[at] if at < len(call.args) else None)
+        out += filled([(parts[0], True, strong)], parts[2::2], cells, seen)
+    return limited(out)
 
 
 def fold(values, rest, seen):
@@ -684,7 +745,7 @@ def evaluate(node, seen=()):
             return joined(left, right or UNKNOWN)
         if isinstance(node.op, ast.Add):
             return added(left, right or UNKNOWN) if left else right
-        return prefixes(left) if isinstance(node.op, ast.Mod) else UNKNOWN
+        return percent(left, node.right, seen) if isinstance(node.op, ast.Mod) else UNKNOWN
     if isinstance(node, ast.Name):
         key = lookup(node)
         if key is None:
@@ -703,7 +764,10 @@ def evaluate(node, seen=()):
                     values += evaluate(item, seen)
                 if spread or any(item.arg is None for item in call.keywords):
                     values += UNKNOWN
-            if not supplied and not values:
+            handed = supplied_to(name)
+            for item in handed:
+                values += evaluate(item, seen) or UNKNOWN
+            if not supplied and not handed and not values:
                 return UNKNOWN
         return limited(values)
     if isinstance(node, ast.Attribute):
@@ -727,7 +791,14 @@ def evaluate(node, seen=()):
         if qualified(node.value) == "os.environ":
             return environment(node.slice)
         if isinstance(node.value, ast.Attribute) and node.value.attr == "parents":
-            return prefixes(parents(evaluate(node.value.value, seen)))
+            level = getattr(node.slice, "value", node.slice)
+            level = level.value if isinstance(level, ast.Constant) else level
+            values = parents(evaluate(node.value.value, seen))
+            if not isinstance(level, int) or not 0 <= level < 16:
+                return prefixes(values)
+            for _ in range(level):
+                values = parents(values)
+            return values
         if qualified(node.value) == "sys.argv":
             return UNKNOWN
         return evaluate(node.value, seen) or UNKNOWN
@@ -809,8 +880,7 @@ def called(node, seen):
                     out += [(piece, True, strong) for piece in pieces]
             return limited(out)
         if attribute == "format":
-            return limited([(None if text is None else text.split("{")[0] or None, False, strong)
-                            for text, exact, strong in evaluate(receiver, seen)])
+            return braces(evaluate(receiver, seen), node, seen)
         if attribute == "replace" and len(node.args) == 2:
             return prefixes(evaluate(receiver, seen)) + mentions(node)
     local = functions.get(node.func.id if isinstance(node.func, ast.Name) else
@@ -893,6 +963,12 @@ def started(call):
     if words is not None and reading(words):
         return
     found.add("X")
+    built = [item.value for item in call.keywords if item.arg == "cwd"]
+    built += command.elts if isinstance(command, (ast.List, ast.Tuple)) else [command]
+    for item in built:
+        if item is not None and not isinstance(item, ast.Constant):
+            emit([(text, exact, False) for text, exact, strong in evaluate(item)
+                  if text and ("/" in text or text[0] in "~.")], False)
     for item in ast.walk(call):
         if isinstance(item, ast.Constant) and isinstance(item.value, str):
             for piece in re.split(r"[\s\x27\x22<>|;&()=]+", item.value):
@@ -966,6 +1042,14 @@ for call in calls:
 for call in changed:
     for text, exact, strong in evaluate(argument(call, 0, "path")) or UNKNOWN:
         found.add("C" if text is None or re.search(r"[\x00-\x1f]", text) else "C " + text)
+# A relative write lands in whichever directory the program has changed into.
+bases = [line[2:] for line in sorted(found) if line.startswith("C ")][:32]
+bases += [posixpath.join(first, then) for first in bases for then in bases
+          if first != then and then[:1] not in ("/", "~")]
+for line in sorted(found):
+    if line[:2] in ("T ", "W ") and line[2:3] not in ("/", "~"):
+        for base in bases[:64]:
+            found.add(line[:2] + posixpath.join(base, line[2:]))
 lines = sorted(found)
 if len(lines) > 2048:
     sys.exit(3)
@@ -1009,22 +1093,42 @@ _caws_node_text() {
     -e "s/require\(['\"](node:)?child_process['\"]\)\.run\(/run(/g" <<< "$1"
 }
 
+# _caws_node_joined
+#   Print each path join on standard input as one quoted literal.
+_caws_node_joined() {
+  local call
+  while IFS= read -r call; do
+    printf "'%s'\\n" "$(grep -oE "['\"\`][^'\"\`]*['\"\`]" <<< "${call#*join(}" |
+      tr -d "'\"\`" | tr '\n' '/' | sed 's|/$||')"
+  done
+}
+
 # _caws_node_named_targets <source>
 #   Print literals that are the operand of a file write, directly or through one
-#   name or path join.
+#   name or path join, from each directory the program changes into.
 _caws_node_named_targets() {
   local -x LC_ALL=C
-  local text name operand="[[:space:]]*(path\.)?(join\(|resolve\()?[[:space:]]*"
+  local text name targets dirs directory operand="[[:space:]]*(path\.)?(join\(|resolve\()?[[:space:]]*"
+  local joined='[[:space:]]*(path\.)?(join|resolve)\([^()]*\)'
   local first='(writeFile|appendFile|createWriteStream|unlink|rm|rmdir|mkdir|truncate|rename|outputFile|writeJson)(Sync)?\('
   local second='(copyFile|cp|rename|symlink|link|copy|move)(Sync)?\([^(),]*(\([^()]*\))?[^(),]*,'
   text="$(tr '\n' ' ' <<< "$1")"
-  {
+  dirs="$(grep -oE "process\.chdir\([[:space:]]*['\"\`][^'\"\`]+" <<< "$text" |
+    sed -E "s/.*['\"\`]//")"
+  targets="$({
+    grep -oE "($first|$second)$joined" <<< "$text" | _caws_node_joined
     grep -oE "($first|$second)$operand['\"\`][^'\"\`]+['\"\`]" <<< "$text"
     grep -oE "($first|$second)$operand[A-Za-z_\$][A-Za-z0-9_\$]*[[:space:]]*[,)+]" <<< "$text" |
       sed -E 's/[[:space:]]*[,)+]$//; s/.*[^A-Za-z0-9_$]//' | sort -u | while IFS= read -r name; do
+        grep -oE "(const|let|var)[[:space:]]+${name//\$/\\\$}[[:space:]]*=$joined" <<< "$text" |
+          _caws_node_joined
         grep -oE "(const|let|var)[[:space:]]+${name//\$/\\\$}[[:space:]]*=$operand['\"\`][^'\"\`]+['\"\`]" <<< "$text"
       done
-  } | sed -E "s/.*['\"\`]([^'\"\`]+)['\"\`]\$/\1/; s/\\\$\{.*//" | grep '[/~]' | sort -u
+  } | sed -E "s/.*['\"\`]([^'\"\`]+)['\"\`]\$/\1/; s/\\\$\{.*//" | sort -u)"
+  grep '[/~]' <<< "$targets"
+  while IFS= read -r directory; do
+    [[ -z "$directory" ]] || grep -vE '^(/|~|$)' <<< "$targets" | sed "s|^|${directory//|/}/|"
+  done <<< "$dirs"
   return 0
 }
 
@@ -1114,6 +1218,7 @@ _caws_inline_evidence() {
     if grep -qE "$CAWS_NODE_WRITE_MENTIONS" <<< "$source"; then
       found=1; writes="$CAWS_NODE_FILE_WRITES"; named="$CAWS_NODE_NAMED_TARGET"
       literals="$(_caws_interpreter_literals node "$source" "$CAWS_NODE_WRITE_MENTIONS")"
+      literals+=$'\n'"$(_caws_node_named_targets "$source")"
     fi
   fi
   [[ $found == 1 ]] || return 0

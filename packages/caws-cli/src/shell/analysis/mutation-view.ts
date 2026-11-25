@@ -1174,9 +1174,13 @@ export async function projectMutationView(
                 body,
                 state.cwd,
                 job.depth + 1,
-                suppliedMap(last, (location) =>
-                  span({ pos: last.body.pos + location.pos, end: last.body.pos + location.end })
-                ),
+                supplied(last) === last.body.text
+                  ? (location) =>
+                      span({
+                        pos: last.body.pos + location.pos,
+                        end: last.body.pos + location.end,
+                      })
+                  : () => original,
                 parent(node, state)
               );
             else if (text(body, original))
