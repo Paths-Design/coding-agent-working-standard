@@ -61,14 +61,11 @@ acceptance:
       in those directories still run
   - id: A3
     given: >-
-      a host older than 0.166.0, or a session header that is missing, malformed,
-      oversized, not a regular file or a 0.166 prerelease, and any caller-added
-      workdir or lookalike field
-    when: 'the write guard evaluates a relative write target or a Git write with no literal directory'
-    then: >-
-      the directory is unknown and the command is refused without an ownership
-      conclusion, while reads and absolute targets keep their own verdicts; a
-      tool_input.cwd is refused as unsupported-execution-context
+      a session header that names an earlier release or a 0.166 prerelease, or is
+      missing, malformed, oversized, unterminated, relative or not a regular file,
+      and any caller-added workdir or lookalike field
+    when: 'a Codex command is judged'
+    then: 'it is refused as execution-contract with the remedy named, and no caller field supplies a directory'
   - id: A4
     given: 'codex native envelopes, native tool aliases and lifecycle commands'
     when: 'caws hooks analyze or the lifecycle rewrite consumes them'
