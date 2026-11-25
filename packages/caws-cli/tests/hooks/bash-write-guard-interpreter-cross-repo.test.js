@@ -243,7 +243,30 @@ describe('bash-write-guard: interpreter-mediated writes', () => {
     expect(fs.readFileSync(path.join(fx.sibling, 'README.md'), 'utf8')).toBe('sibling\n');
   });
 
-  test('only what the project has committed is reviewed code', () => {
+  test.each([
+    ['sync.js', (dir) => `require('node:fs').writeFileSync('${dir}/x.md', 'x');`],
+    ['sync.js', (dir) => `const out = '${dir}/x.md'; require('fs').writeFileSync(out, 'x');`],
+    ['sync.js', (dir) => `require('fs').copyFileSync('a', path.join('${dir}', 'x.md'));`],
+    ['sync.py', (dir) => `open('${dir}/x.md', 'w')`],
+    ['sync.py', (dir) => `import os; open(os.path.join('${dir}', 'x.md'), mode='w')`],
+  ])('committing %s does not excuse a write it names', (name, body) => {
+    writeScript(fx, `scripts/${name}`, [body(fx.sibling)]);
+    const git = (...args) =>
+      execFileSync(
+        'git',
+        ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...args],
+        { cwd: fx.projectDir }
+      );
+    git('add', '--', `scripts/${name}`);
+    git('commit', '-q', '-m', 'reviewed');
+    const runner = name.endsWith('.py') ? 'python3' : 'node';
+    const res = runGuard(`${runner} scripts/${name}`, fx);
+    expect(res.exit).toBe(2);
+    expect(res.stderr).toMatch(/DIFFERENT repository/);
+    expect(res.stderr).toContain(fx.sibling);
+  });
+
+  test('what a committed script only mentions is reviewed code', () => {
     const git = (...args) =>
       execFileSync(
         'git',
@@ -258,7 +281,10 @@ describe('bash-write-guard: interpreter-mediated writes', () => {
     };
     const admitted = () =>
       expect(runGuard('node scripts/sync.js', fx)).toEqual({ exit: 0, stdout: '', stderr: '' });
-    const lines = [`require('node:fs').writeFileSync('${fx.sibling}/x.md', 'x');`];
+    const lines = [
+      `const inputs = load('${fx.sibling}/a.json');`,
+      "require('node:fs').writeFileSync(inputs.out, 'x');",
+    ];
     writeScript(fx, 'scripts/sync.js', lines);
     refused();
     git('add', '--', 'scripts/sync.js');
@@ -269,7 +295,7 @@ describe('bash-write-guard: interpreter-mediated writes', () => {
     lines.push("console.log('done');");
     writeScript(fx, 'scripts/sync.js', lines);
     admitted();
-    lines.push(`require('node:fs').writeFileSync('${fx.sibling}/y.md', 'y');`);
+    lines.push(`const more = load('${fx.sibling}/b.json');`);
     writeScript(fx, 'scripts/sync.js', lines);
     refused();
   });

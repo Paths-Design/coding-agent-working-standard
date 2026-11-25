@@ -107,12 +107,15 @@ status`, message delivery, the peer notice) report the later of that file's
   run by path, Python and Node entry files and modules, `git log -8`, `grep -A`,
   `sed` substitutions, loops, functions, `[[ ]]`, arithmetic, arrays, globs in
   read positions, `command -v` and most shell builtins run without a prompt.
-  Every Git subcommand that writes is checked for metadata ownership, where only
-  `add` and `commit` were. A path literal that inline interpreter source or an
-  uncommitted entry script may write to refuses when it is in another repository.
-  Output and execution options, opaque shell source, and recognized writes whose
-  target or directory is unknown stay held, and a held command names its remedy.
-  Shared pack 140.
+  Any Git subcommand that is not a known inspection is checked for metadata
+  ownership, where only `add` and `commit` were, and the paths `git rm`, `mv`,
+  `clone`, `worktree` and a push to a directory write are targets. A path that
+  Python or Node source names as a write refuses when it is in another
+  repository, inline or in a script the command runs. A program the command
+  writes in a literal here-document and then runs is read like any other source.
+  Output and execution options, `--no-verify` and other hook bypasses, opaque
+  shell source, and recognized writes whose target or directory is unknown stay
+  held, and a held command names its remedy. Shared pack 140.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

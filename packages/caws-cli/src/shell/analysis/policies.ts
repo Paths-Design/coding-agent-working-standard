@@ -9,6 +9,7 @@ import {
   inspectSedArguments,
 } from './inspection-profiles';
 import {
+  SSH_CONNECTION,
   gitHazard,
   gitLeavesWorkingTree,
   gitWriteOperands,
@@ -444,7 +445,8 @@ function projectGitEnvironment(
         values?.length === 1 &&
         values[0] === process.env[name]) ||
       (/^(?:GIT_)?PAGER$/.test(name) && disabled(values, /^(?:cat)?$/)) ||
-      (/^GIT_(?:SEQUENCE_)?EDITOR$/.test(name) && disabled(values, /^(?:true|:|cat)$/))
+      (/^GIT_(?:SEQUENCE_)?EDITOR$/.test(name) && disabled(values, /^(?:true|:|cat)$/)) ||
+      (name === 'GIT_SSH_COMMAND' && disabled(values, SSH_CONNECTION))
     )
       continue;
     known = false;

@@ -122,7 +122,11 @@ arithmetic, functions, subshells, background jobs, coprocesses, pipelines,
 process and command substitutions, parameter operations, arrays and declaration
 arguments. Alternatives are kept while they can be listed, at most eight values
 for one binding, and otherwise become unknown. A loop whose values keep changing
-forgets them and its directory. An unknown value matters where it is a write
+forgets them and its directory. A recursive call runs its body once more from an
+arbitrary state. A function that takes the name of a builtin later source
+depends on, such as `cd` or `exit`, is held, because nothing after it means what
+it says. A directory the source makes with `mkdir` can be changed into until
+something could have replaced it. An unknown value matters where it is a write
 target or selects one, and nowhere else: `ls $X` runs and `rm $X` is held. After
 a directory change that cannot be established, an absolute target is checked as
 usual and a relative one raises `cwd-unresolved`. Sourcing a file makes bindings
@@ -293,10 +297,14 @@ JavaScript and Python heredoc bodies remain interpreter data, so an arrow or
 object literal does not become a shell redirect or brace expansion. Only actual
 interpreter invocations produce payload records; quoted search text mentioning
 an interpreter does not. Literal Bash heredoc and `-c` programs receive bounded
-recursive shell inspection. A Bash or `sh` script file is a program. `sh -c`
-source, opaque executable stdin, and builtins that run or define code the
-projection cannot read remain unresolved. So does literal interpreter source
-whose preload or import environment the same command replaces.
+recursive shell inspection. A Bash or `sh` script file is a program, unless the
+command itself writes that file from a literal here-document with `cat` or
+`tee`; its text is then inspected where the command runs or sources it. `sh -c`
+source, opaque executable stdin, a process substitution run as a script, and
+builtins that run or define code the projection cannot read remain unresolved.
+So does literal interpreter source whose preload or import environment the same
+command replaces. One unknown operand, as in `python3 "$f"`, names a program
+when nothing beside it could be code.
 
 Git subcommands that only inspect need no ownership answer. Every other
 subcommand, including one the projection does not know, carries its actual Git
@@ -304,7 +312,16 @@ directory, common directory and working tree in a distinct metadata channel. A
 constant read-only Git query resolves these coordinates; the submitted operation
 is never executed. Discovery caches at most eight contexts per projection,
 including failures, with a 500 ms deadline and 64 KiB output limit per query and
-no retry. A subcommand that is not literal is unresolved.
+no retry. A subcommand that is not literal is unresolved. An inspection is
+recognized by its exact options, because Git accepts any unambiguous
+abbreviation of a long option that writes.
+
+A path Git is given to write is a target of its own, beside the metadata: the
+operands of `git rm` and `git mv`, the directory of `clone`, `init` and
+`worktree add`, `remove` or `move`, the first file of `merge-file`, a push to a
+local path, and path restores that `-C` moves to another working tree. Options
+that skip the repository's hooks, and configuration that selects other ones, are
+held.
 
 An effect that can replace a repository mapping invalidates later metadata
 coordinates: a write, link, move or removal that names a `.git` component, the
@@ -345,26 +362,34 @@ exhausted budgets have unresolved effects even when no write verb appears.
 Python programs and file-based entry points have no effect profile.
 
 Unresolved source is scanned for evidence of a write that crosses a boundary.
-Inline source and here-documents are scanned as submitted. An entry file is read
-before launch, up to 512 KiB. What the project has committed is its own reviewed
-code, like a build target, so only literals its committed version lacks count;
-staging a file does not review it. An entry file that does not exist is scanned
-from the command text that may create it. A literal counts when the source holds
-a write verb of its language and the literal is not merely the operand of a
-read. Python programs are examined through their syntax tree, so only literals
-that can reach a write count. Inline source also counts where it can delete,
-create or start a program by a call the tree does not follow, such as
-`shutil.rmtree` or `subprocess`. A literal that resolves into another repository
-refuses, and one in inline source that resolves into another session's worktree
-refuses. Literals that share their nearest existing directory are asked about
-once, and more than 64 such directories are unresolved. Evidence never
-authorizes a write and never consults `scope.in` claims, because a path that
-source mentions is not a path it writes. Inline source that writes without
-naming any target literally is unresolved, as is a relative write after a
+Inline source and here-documents are scanned as submitted, including one the
+command writes to the entry file it then runs. Any other entry file is read
+before launch, up to 512 KiB. An entry file that does not exist, or that the
+command also writes some other way, is scanned from the command text.
+
+Python is examined through its syntax tree. A write operand is followed back
+through names, joins, iteration and local calls to the literals it can hold, and
+those are paths the source names as writes; arguments of a started program that
+is not a known reader are mentions. Node and Python without a readable tree are
+scanned as text: the direct operand of a file write, or the name or path join it
+uses, is named, and any other path literal beside a write verb that is not the
+operand of a read is a mention. A named write counts wherever the source lives.
+A mention counts in the command's own text, and in an entry file only where its
+committed version does not already hold it: what the project has committed is
+its own reviewed code, like a build target, and staging a file does not review
+it.
+
+Evidence that resolves into another repository refuses, and evidence in the
+command's own text that resolves into another session's worktree refuses. A link
+counts as what it points to. Paths that share their nearest existing directory
+are asked about once, and more than 64 such directories are unresolved. Evidence
+never authorizes a write and never consults `scope.in` claims, because a path
+that source mentions is not a path it writes. Inline source with a write whose
+target no literal reaches is unresolved, as is a relative write after a
 directory change that cannot be established. A target computed at run time, a
-module, committed source and a program in another language leave no evidence;
-that is the recognizer's stated limit, and reading a file before execution does
-not bind those bytes to the eventual launch.
+module and a program in another language leave no evidence; that is the
+recognizer's stated limit, and reading a file before execution does not bind
+those bytes to the eventual launch.
 
 The profile assumes ordinary Node builtins and controlled startup; it is a
 source-analysis contract, not runtime confinement. Preloads selected by the
@@ -437,10 +462,11 @@ effects do not silently acquire permission. Jev, if used, classifies retained
 examples offline to inform the design; it has no role in future-command
 admission.
 
-Git uses native physical path resolution. Bash `cd` keeps a failure alternative,
-invalidates PWD/OLDPWD, and leaves logical parent traversal unresolved unless
-`-P` is explicit. Execution cwd metadata must come from the tool, not an assumed
-session-root fallback.
+Git uses native physical path resolution. Bash `cd` keeps a failure alternative.
+In the pin guard it invalidates PWD and OLDPWD and leaves logical parent
+traversal unresolved unless `-P` is explicit; the write projection follows the
+logical directory, starting from the physical one the tool reports. Execution
+cwd metadata must come from the tool, not an assumed session-root fallback.
 
 `caws hooks analyze` inspects command source without running it. It returns
 `allow` (exit 0), `deny` (1), or `unresolved` (2), with reasons and an expansion

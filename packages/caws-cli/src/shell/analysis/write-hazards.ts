@@ -71,10 +71,17 @@ const GIT_DATA_CONFIGURATION =
   /^(?:(?:advice|blame|color|column|feature|fetch|grep|log|maintenance|rebase|status|tag|versionsort)\.[a-z.]+|user\.(?:name|email)|branch\.sort|core\.(?:quotepath|abbrev|autocrlf|safecrlf|ignorecase|filemode|longpaths|commentchar|untrackedcache|preloadindex)|diff\.(?:algorithm|renames|renamelimit|noprefix|mnemonicprefix|colormoved|colormovedws|wserrorhighlight|context|interhunkcontext|ignoresubmodules|indentheuristic|submodule|statgraphwidth)|commit\.gpgsign|gc\.auto|init\.defaultbranch|(?:push|pull)\.[a-z]+|merge\.(?:conflictstyle|renames|ff|stat)|submodule\.(?:recurse|fetchjobs)|protocol\.version|safe\.directory|http\.(?:lowspeedlimit|lowspeedtime|postbuffer|version))$/i;
 const GIT_DISABLED_CONFIGURATION =
   /^(?:core\.(?:pager|editor)=(?:cat|true|:|)|pager\.[a-z-]+=(?:cat|false|0|)|core\.fsmonitor=(?:false|0|)|credential\.helper=)$/i;
+/** The usual ssh, told only how long to wait and how often to check the link. */
+export const SSH_CONNECTION =
+  /^ssh(?: -[46qvC]| -o ?(?:ServerAliveInterval|ServerAliveCountMax|ConnectTimeout|ConnectionAttempts|TCPKeepAlive|BatchMode)=[A-Za-z0-9]+)*$/;
 /** A command-line configuration value that cannot select a program. */
 export function isGitDataConfiguration(assignment: string): boolean {
   const key = assignment.split('=', 1)[0]!;
-  return GIT_DATA_CONFIGURATION.test(key) || GIT_DISABLED_CONFIGURATION.test(assignment);
+  return (
+    GIT_DATA_CONFIGURATION.test(key) ||
+    GIT_DISABLED_CONFIGURATION.test(assignment) ||
+    (/^core\.sshcommand$/i.test(key) && SSH_CONNECTION.test(assignment.slice(key.length + 1)))
+  );
 }
 
 /** The effect of one Git invocation's options and operands, when it has one. */

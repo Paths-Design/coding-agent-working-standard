@@ -971,10 +971,14 @@ _caws_interpreter_literals() {
 _caws_node_text() {
   local -x LC_ALL=C
   local reads='(ls|cat|head|tail|wc|grep|rg|stat|git( -C [^ ]+)?( --no-pager)? (log|show|diff|status|rev-parse|rev-list|ls-files|ls-tree|grep|cat-file|blame|merge-base))'
+  reads="$reads( [^'\"\`<>|;&\$()]*)?"
   sed -E \
     -e 's/(process\.)?(stdout|stderr)\.write\(/print(/g' \
     -e "s/import[[:space:]]*\{[[:space:]]*(execSync|exec)[[:space:]]*\}[[:space:]]*from[[:space:]]*['\"](node:)?child_process['\"]//g" \
-    -e "s/(execSync|exec)\([[:space:]]*(['\"\`])$reads( [^'\"\`<>|;&\$()-][^'\"\`<>|;&\$()]*)?\2/run(/g" \
+    -e 's/--(ou|ext|textc)/;--\1/g' \
+    -e "s/(execSync|exec)\([[:space:]]*'$reads'/run(/g" \
+    -e "s/(execSync|exec)\([[:space:]]*\"$reads\"/run(/g" \
+    -e "s/(execSync|exec)\([[:space:]]*\`$reads\`/run(/g" \
     -e "s/(const|let|var)[[:space:]]*\{[[:space:]]*(execSync|exec)[[:space:]]*\}[[:space:]]*=[[:space:]]*require\(['\"](node:)?child_process['\"]\)//g" \
     -e "s/require\(['\"](node:)?child_process['\"]\)\.run\(/run(/g" <<< "$1"
 }
@@ -990,11 +994,11 @@ _caws_node_named_targets() {
   text="$(tr '\n' ' ' <<< "$1")"
   {
     grep -oE "($first|$second)$operand['\"\`][^'\"\`]+['\"\`]" <<< "$text"
-    grep -oE "($first|$second)$operand[A-Za-z_\$][A-Za-z0-9_\$]*" <<< "$text" |
-      sed -E 's/.*[^A-Za-z0-9_$]//' | sort -u | while IFS= read -r name; do
-        grep -E "(const|let|var)[[:space:]]+${name//\$/\\\$}[[:space:]]*=[^=]" <<< "$1"
+    grep -oE "($first|$second)$operand[A-Za-z_\$][A-Za-z0-9_\$]*[[:space:]]*[,)+]" <<< "$text" |
+      sed -E 's/[[:space:]]*[,)+]$//; s/.*[^A-Za-z0-9_$]//' | sort -u | while IFS= read -r name; do
+        grep -oE "(const|let|var)[[:space:]]+${name//\$/\\\$}[[:space:]]*=$operand['\"\`][^'\"\`]+['\"\`]" <<< "$text"
       done
-  } | grep -oE "['\"\`][^'\"\`]+['\"\`]" | sed -E "s/^.//; s/.\$//; s/\\\$\{.*//" | grep '[/~]' | sort -u
+  } | sed -E "s/.*['\"\`]([^'\"\`]+)['\"\`]\$/\1/; s/\\\$\{.*//" | grep '[/~]' | sort -u
   return 0
 }
 

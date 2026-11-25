@@ -28,14 +28,16 @@
 #   remove/move/copy rm FILE   mv SRC DST   cp SRC DST   dd of=FILE
 #   git path-restore git restore FILE   git checkout -- FILE
 #                    git reset -- FILE   git clean
+#   git operands     git rm/mv FILE, clone/init/worktree DIR, push PATH
 #   interpreter      Proven write operands from a bounded Node profile reach
-#                    both repository and worktree ownership checks. Literals in
-#                    other inline source, and uncommitted ones in a Python or
-#                    Node script the command names, are weak evidence: they
-#                    reach the foreign-repository check, and inline ones the
-#                    foreign worktree check.
-#   git              Every subcommand that writes refs, the index or a working
-#                    tree names the repository metadata it writes.
+#                    both repository and worktree ownership checks. A path that
+#                    other Python or Node source names as a write, inline or in
+#                    a script the command runs, reaches the foreign-repository
+#                    check, and one in the command's own text the foreign
+#                    worktree check. A path a script only mentions beside a
+#                    write counts where its committed version does not hold it.
+#   git              A subcommand that is not a known inspection names the
+#                    repository metadata it writes.
 #
 # A program is not refused for lacking an argument profile. Launching one by
 # name, by path or through an interpreter is the same limited-recognizer

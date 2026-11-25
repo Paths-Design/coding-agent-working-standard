@@ -55,15 +55,25 @@ beforeAll(() => {
     path.join(project, 'scripts/lint_docs.py'),
     'from pathlib import Path\nPath("tmp/report.json").write_text("{}")\n'
   );
-  // A committed project script that mentions another repository and writes is
-  // the project's own reviewed code, like a Makefile target.
+  // A committed script that hands another repository to a program is the
+  // project's own reviewed code, like a Makefile target. One that names a write
+  // there is refused whoever committed it.
+  const synchronize = `import subprocess\nsubprocess.run(["rsync", "tmp/", "${sibling}/pub"])\n`;
+  fs.writeFileSync(path.join(project, 'scripts/tracked_sync.py'), synchronize);
+  fs.writeFileSync(path.join(project, 'scripts/edited_sync.py'), synchronize);
+  fs.writeFileSync(path.join(project, 'scripts/widened_sync.py'), 'import subprocess\n');
   fs.writeFileSync(
-    path.join(project, 'scripts/tracked_sync.py'),
+    path.join(project, 'scripts/publish.py'),
     `open("${sibling}/published.md", "w").write("x")\n`
   );
   fs.writeFileSync(
-    path.join(project, 'scripts/edited_sync.py'),
-    `open("${sibling}/published.md", "w").write("x")\n`
+    path.join(project, 'scripts/publish.mjs'),
+    `import fs from 'node:fs';\nconst out = '${sibling}/published.md';\nfs.writeFileSync(out, 'x');\n`
+  );
+  fs.writeFileSync(
+    path.join(project, 'scripts/compare.mjs'),
+    `import fs from 'node:fs';\nconst from = '${sibling}/package.json';\n` +
+      "fs.writeFileSync('tmp/report.json', fs.readFileSync(from));\n"
   );
   fs.writeFileSync(path.join(project, 'scripts/retargeted.py'), 'print("report")\n');
   fs.writeFileSync(path.join(project, 'scripts/task.mjs'), "console.log('task')\n");
@@ -124,8 +134,16 @@ beforeAll(() => {
     path.join(root, 'outside_write.py'),
     `open("${sibling}/x.md", "w").write("x")\n`
   );
+  // A link in this project to a file in another repository.
+  fs.symlinkSync(path.join(sibling, 'linked.md'), path.join(project, 'tmp/linked.md'));
+  // A repository whose name under HOME matches one of this project's directories.
+  execFileSync('git', ['init', '-q', path.join(root, 'scripts')]);
   // Only what is committed was reviewed. An edit adds what it adds.
   fs.appendFileSync(path.join(project, 'scripts/edited_sync.py'), 'print("done")\n');
+  fs.appendFileSync(
+    path.join(project, 'scripts/widened_sync.py'),
+    `subprocess.run(["rsync", "tmp/", "${sibling}/pub"])\n`
+  );
   fs.writeFileSync(
     path.join(project, 'scripts/retargeted.py'),
     `open("${sibling}/x.md", "w").write("x")\n`
@@ -228,6 +246,12 @@ const PROGRAMS = [
   'P=.venv/bin/python; for s in lint_docs tracked_sync; do $P scripts/$s.py > tmp/$s.log 2>&1; echo "$s exit $?"; done',
   'python3 tmp/analyze.py',
   'python3 tmp/read_sibling.py',
+  'node scripts/compare.mjs',
+  'for f in scripts/*.py; do python3 "$f"; done',
+  'for f in scripts/*.sh; do bash "$f" --quick || exit 1; done',
+  'find scripts -name "*.sh" | while read -r f; do bash -n "$f"; done',
+  "cat > tmp/report.py <<'EOF'\ntext = open('{{SIBLING}}/README.md').read()\nopen('tmp/copy.md', 'w').write(text)\nEOF\npython3 tmp/report.py",
+  "cat > tmp/check.sh <<'EOF'\nset -e\ngrep -c x docs/guide.md > tmp/count\nEOF\nbash tmp/check.sh && ./tmp/check.sh",
   'source .venv/bin/activate && pytest -q',
   '"$PWD/scripts/run_gates.sh" --quick',
   'B=/Applications/Tool.app/Contents/MacOS/Tool; $B --background "$PWD/tmp/x.blend" --python tmp/analyze.py > tmp/render.log 2>&1',
@@ -262,6 +286,9 @@ const READS = [
   'grep -h "TIRE-HEX" .caws/events.jsonl | cut -c 1-420 | tail -14',
   `grep -rlE '"lod": 0,[^{}]*"source": 19008' src --include=kit-manifest.json`,
   'grep -rn x . --exclude-dir=node_modules',
+  'grep -n -A3 "remote \\"origin\\"" .git/config; sed -n 60,140p .husky/pre-push',
+  "grep -rlE 'inherited|red on main' .caws/specs --include='*.yaml' | xargs ls -t | head -12",
+  'git log --oneline -n 8 main && git merge-base HEAD main && caws message inbox 2>&1 | tail -20',
   'grep -o -m 1 -C 3 x docs/guide.md',
   "rg -n --glob '!dist' -A3 needle src",
   'rg --json needle src',
@@ -312,6 +339,8 @@ const WRITES = [
   'git add -A && git commit -q -m "chore: x" 2>&1 | tail -3',
   'git fetch origin main 2>&1 | tail -2',
   'git push origin main',
+  'GIT_SSH_COMMAND="ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=120" git push origin main',
+  'git fetch --dry-run . main 2>&1 | head -2; git log --oneline -n 12 main',
   'git checkout -b feature',
   'git -C {{OWN}} merge main',
   'cd {{OWN}} && git rebase --abort',
@@ -324,6 +353,12 @@ const WRITES = [
   '(cd docs && ls; exit 0); git add -A',
   'npm test > >(tee tmp/test.log) 2>&1',
   'printf "%d%%\\n" 50; env FOO=1 git add -A',
+  'mkdir -p tmp/scratch && cd tmp/scratch && echo x > note.txt',
+  '{ npm test; echo "exit $?"; } > tmp/test.log 2>&1; touch tmp/done',
+  'git rm -q --cached src/app.txt; git mv src/app.txt src/renamed.txt',
+  'git rm docs/guide.md && git commit -q -m "docs: drop the guide"',
+  'git clone -q . tmp/copy && ls tmp/copy',
+  'files=(src/app.txt docs/guide.md); git add "${files[@]}"; wc -l "${files[@]}"',
 ];
 
 const INLINE = [
@@ -351,6 +386,18 @@ const INLINE = [
     "]\nfor p in paths:\n    open(p, 'w').write('x')\nEOF",
   'bash -c \'for f in a b; do echo "$f"; done\'',
   "bash -lc 'git log --oneline -3'",
+  // Reading another repository is legal however the source spells it.
+  "python3 -c \"import subprocess; print(subprocess.run(['git', '-C', '{{SIBLING}}', 'log']))\"",
+  'python3 -c "import os; os.system(\'git -C {{SIBLING}} status --short\')"',
+  "python3 - <<'EOF'\nimport json\nfor src, out in [('{{SIBLING}}/a.json', 'tmp/a.json')]:\n    json.dump(json.load(open(src)), open(out, 'w'))\nEOF",
+  "python3 - <<'EOF'\nimport os\nfor root, _, names in os.walk('{{SIBLING}}'):\n    for name in names:\n        print(open(os.path.join(root, name)).read())\nopen('tmp/out', 'w').write('x')\nEOF",
+  "python3 - <<'EOF'\nimport tempfile, os\nd = tempfile.mkdtemp()\nopen(os.path.join(d, 'x'), 'w').write('y')\nEOF",
+  "python3 - <<'EOF'\nimport re\np = 'src/app.txt'\ns = open(p).read()\ns = re.sub('{{SIBLING}}/x', 'y', s)\nopen(p, 'w').write(s)\nEOF",
+  "python3 -c \"import glob; [open(f, 'a') for f in glob.glob('src/*.txt')]\"",
+  "python3 -c \"open('scripts/x.txt', 'w')\"",
+  "node -e \"const w = require('fs').writeFileSync; w('scripts/x.txt', 'x')\"",
+  "node -e \"const f = '{{SIBLING}}/package.json'; process.stdout.write(require('fs').readFileSync(f, 'utf8'))\"",
+  "node -e \"console.log(require('child_process').execSync('git -C {{SIBLING}} log -1').toString())\"",
 ];
 
 describe('everyday commands run without a refusal', () => {
@@ -437,6 +484,75 @@ const FOREIGN_WRITES = [
   "node -e \"require('fs').writeFileSync('{{SIBLING}}/x.md','x')\"",
   "node -e \"const fs = require('fs'); for (const f of ['a']) fs.writeFileSync('{{SIBLING}}/' + f, 'x')\"",
   "node -e \"const write = require('fs').writeFileSync; write('{{SIBLING}}/x','x')\"",
+  // A committed script that names the write, and an edit that adds a mention.
+  'python3 scripts/publish.py',
+  'node scripts/publish.mjs',
+  'python3 scripts/widened_sync.py',
+  // A program the command writes for itself, whatever the file held before.
+  "cat > tmp/new.py <<'EOF'\nopen('{{SIBLING}}/x', 'w')\nEOF\npython3 tmp/new.py",
+  "cat > tmp/analyze.py <<'EOF'\nopen('{{SIBLING}}/x', 'w')\nEOF\npython3 tmp/analyze.py",
+  "cat > tmp/new.py <<'EOF'\nopen('{{FOREIGN}}/x', 'w')\nEOF\npython3 tmp/new.py",
+  "echo \"open('{{SIBLING}}/x','w')\" > tmp/analyze.py; python3 tmp/analyze.py",
+  "cat > tmp/new.sh <<'EOF'\ntouch {{SIBLING}}/out\nEOF\nbash tmp/new.sh",
+  "cat > tmp/new.sh <<'EOF'\ntouch {{FOREIGN}}/out\nEOF\nchmod +x tmp/new.sh && ./tmp/new.sh",
+  "tee tmp/new <<'EOF'\n#!/usr/bin/env python3\nopen('{{SIBLING}}/x', 'w')\nEOF\ntmp/new",
+  // Functions: recursion, redefinition, prefix assignments and local names.
+  'f() { f() { touch {{SIBLING}}/out; }; f; }; f',
+  'f() { touch tmp/m; cd {{FOREIGN}} && f; }; f',
+  'f() { echo x > ~/out; }; HOME={{SIBLING}} f',
+  'f() { touch "$D/o"; }; D=tmp; D={{SIBLING}} f',
+  'f() { git add -A; }; GIT_DIR={{SIBLING}}/.git GIT_WORK_TREE={{SIBLING}} f',
+  '{ exit 0; } > /nonexistent/x; touch {{SIBLING}}/out',
+  'for i in 1; do exit 0; done > /nonexistent/x; touch {{FOREIGN}}/out',
+  'HOME={{FOREIGN}} cd; touch out',
+  'HOME={{FOREIGN}} command cd; touch out',
+  'HOME={{FOREIGN}} "cd"; touch out',
+  // Source and options behind other quoting and other ways to supply them.
+  "bash /dev/stdin <<'EOF'\ntouch {{SIBLING}}/out\nEOF",
+  "python3 /dev/stdin <<'EOF'\nopen('{{SIBLING}}/x', 'w')\nEOF",
+  "python3 --check-hash-based-pycs never -c \"open('{{SIBLING}}/x', 'w')\"",
+  "node --input-type module - <<'EOF'\nimport { writeFileSync } from 'node:fs';\nwriteFileSync('{{SIBLING}}/x', 'x');\nEOF",
+  "sed $'-i' '' s/a/b/ {{SIBLING}}/README.md",
+  "dd if=/dev/null $'of={{SIBLING}}/x'",
+  'touch {tmp/a,{{SIBLING}}/out}',
+  // Paths Git itself writes.
+  'git clone -q . {{SIBLING}}/v',
+  'git worktree add {{SIBLING}}/wt',
+  'git worktree remove --force {{FOREIGN}}',
+  'git merge-file {{SIBLING}}/a b c',
+  'git push {{SIBLING}} HEAD:refs/heads/x',
+  'git mv src/app.txt {{SIBLING}}/app.txt',
+  'cd {{OWN}} && git -C {{FOREIGN}} rm src/app.txt',
+  'git -C {{SIBLING}} init --separate-git-dir={{SIBLING}}/g',
+  'git -C {{SIBLING}} config --unset-a user.name',
+  'git -C {{SIBLING}} symbolic-ref -qd refs/remotes/origin/HEAD',
+  'git -C {{FOREIGN}} branch --unset-up',
+  'git -C {{FOREIGN}} stash -m list',
+  'git -C {{FOREIGN}} notes --ref list add -m x',
+  // Python writes whatever spelling names the target.
+  "python3 -c \"open('{{SIBLING}}/x.md', mode='w')\"",
+  "python3 -c \"import os; open(os.path.join('{{SIBLING}}', 'out.md'), 'w')\"",
+  'python3 -c "import os; os.open(\'{{SIBLING}}/x\', os.O_WRONLY | os.O_CREAT)"',
+  "python3 -c \"from shutil import move; move('a', '{{SIBLING}}/a')\"",
+  "python3 -c \"import os; os.chdir('{{SIBLING}}'); open('x.md', 'w')\"",
+  "python3 -c \"from pathlib import Path; [p.unlink() for p in Path('{{SIBLING}}').glob('*.md')]\"",
+  'python3 -c "import os; list(map(os.remove, [\'{{SIBLING}}/x\']))"',
+  "python3 - <<'EOF'\nD = '{{SIBLING}}'\ndef save(name):\n    with open(f'{D}/{name}', 'w') as out:\n        out.write('x')\nsave('y')\nEOF",
+  "python3 - <<'EOF'\nfor src, out in [('tmp/a.json', '{{SIBLING}}/a.json')]:\n    open(out, 'w').write(open(src).read())\nEOF",
+  "python3 -c \"open('tmp/linked.md', 'w')\"",
+];
+
+const CLAIMED = [
+  'touch src/claimed.txt',
+  'scripts/run_gates.sh; echo x > src/claimed.txt',
+  'for i in $(ls); do touch src/claimed.txt; done',
+  'env cd {{OWN}} && touch src/claimed.txt',
+  '/usr/bin/cd {{OWN}} && touch src/claimed.txt',
+  'git rm src/claimed.txt',
+  'git mv src/claimed.txt src/other.txt',
+  'cd {{OWN}} && git -C {{PROJECT}} restore src/claimed.txt',
+  'cd {{OWN}} && git -C {{PROJECT}} checkout main -- src/claimed.txt',
+  "cat > tmp/new.sh <<'EOF'\ntouch src/claimed.txt\nEOF\nbash tmp/new.sh",
 ];
 
 const UNPROVED = [
@@ -483,7 +599,51 @@ const UNPROVED = [
   ['source ./activate; touch relative', 'cwd-unresolved'],
   ['pushd {{FOREIGN}}; touch "$PWD/out"', 'ask_dynamic_unconfined'],
   ['D=tmp; read -r "$NAME" < docs/guide.md; touch "$D/out"', 'ask_dynamic_unconfined'],
-  ['HOME={{FOREIGN}} cd; touch out', 'environment-change'],
+  ['D=tmp; printf "$O" x; touch "$D/out"', 'ask_dynamic_unconfined'],
+  [
+    'f() { touch "$D/out"; [ "$D" = {{SIBLING}} ] && return; D={{SIBLING}}; f; }; D=tmp; f',
+    'ask_dynamic_unconfined',
+  ],
+  ['f() { D={{SIBLING}}; local D=tmp; }; D=tmp; f; touch "$D/out"', 'ask_dynamic_unconfined'],
+  ['readonly D={{SIBLING}}\nD=tmp\ntouch "$D/out"', 'ask_dynamic_unconfined'],
+  ['f() { touch m; cd "$SOMEWHERE" && f; }; f', 'cwd-unresolved'],
+  ['exit() { :; }; exit 0; touch {{SIBLING}}/out', 'function-shadow'],
+  ['cd() { :; }; cd {{OWN}} && touch src/claimed.txt', 'function-shadow'],
+  ['X=a1{{SIBLING}}/out; ((IFS=1)); touch $X', 'environment-change'],
+  [': "${CDPATH:={{SIBLING}}}"; cd docs && touch out', 'environment-change'],
+  ["read 'a[$(touch {{SIBLING}}/o)]' <<< x", 'read-options'],
+  ["X='a[$(touch {{SIBLING}}/o)]'; echo $((X))", 'arithmetic-source'],
+  ['cd "$SOMEWHERE" && perl -0pi -e s/a/b/ README.md', 'cwd-unresolved'],
+  ['cd "$SOMEWHERE" && touch -- -f', 'cwd-unresolved'],
+  ["bash <(echo 'touch {{SIBLING}}/out')", 'mutation-code-source'],
+  ["source <(echo 'touch {{SIBLING}}/out')", 'mutation-shell-builtin'],
+  ["source /dev/stdin <<'EOF'\ntouch {{SIBLING}}/out\nEOF", 'mutation-shell-builtin'],
+  ["bash -O extglob -c 'touch {{SIBLING}}/out'", 'mutation-interpreter-option'],
+  ["node --import tsx - <<'EOF'\n1\nEOF", 'mutation-interpreter-option'],
+  ["node -r x <<'EOF'\n1\nEOF", 'mutation-interpreter-option'],
+  ['node "$FLAG" -e 1', 'mutation-code-source'],
+  ["sed $'w {{SIBLING}}/x' docs/guide.md", 'sed-script-unsupported'],
+  ["sort $'-o' {{SIBLING}}/x docs/guide.md", 'reader-option'],
+  ['sort {-o,{{SIBLING}}/x} docs/guide.md', 'reader-option'],
+  ["git diff $'--output={{SIBLING}}/x'", 'git-option'],
+  ['a=(-i \'\' s/a/b/ {{SIBLING}}/f); sed "${a[@]}"', 'positional-spread'],
+  ['git config -f {{SIBLING}}/.git/config a.b c', 'git-option'],
+  ['git archive -vo {{SIBLING}}/x.tar HEAD', 'git-option'],
+  ['git checkout-index -a --prefix {{SIBLING}}/', 'git-option'],
+  ['git format-patch -no {{SIBLING}} -1', 'git-option'],
+  ['git rebase -ix evil main', 'git-execution'],
+  ['git init --separate-git-dir=tmp/g', 'git-execution'],
+  ['git commit --no-verify -m x', 'git-hooks'],
+  ['git commit -anm x', 'git-hooks'],
+  ['git -c core.hooksPath=/dev/null commit -m x', 'git-global-option'],
+  [
+    "cd \"$SOMEWHERE\" && python3 -c \"open('/tmp/a', 'w'); open('rel.txt', 'w')\"",
+    'cwd-unresolved',
+  ],
+  [
+    "python3 -c \"import os; os.chdir(os.sep.join(x)); open('rel.txt', 'w')\"",
+    'mutation-interpreter-effects',
+  ],
   ['mapfile -C evil -c 1 lines < docs/guide.md', 'mutation-shell-builtin'],
   // An exit ends its own subshell; what that subshell did has still happened.
   ['(ln -sfn elsewhere .git; exit 0); git add -A', 'metadata-coordinate-unresolved'],
@@ -505,7 +665,23 @@ describe('a write owned elsewhere is refused behind every admitted construct', (
     const result = guard(command);
     expect(result.error).toBeUndefined();
     expect({ command, status: result.status }).toEqual({ command, status: 2 });
-    expect(result.stderr).toMatch(/DIFFERENT (?:repository|session)/);
+    // The refusal names the owner this command crosses into, not another one.
+    if (/foreign/i.test(source)) {
+      expect(result.stderr).toContain("worktree 'foreign'");
+      expect(result.stderr).toContain('owned by a DIFFERENT session');
+    } else {
+      expect(result.stderr).toContain('DIFFERENT repository');
+      expect(result.stderr).toContain(fx.sibling);
+    }
+  });
+  test.each(CLAIMED)('refuses a claimed path: %s', (source) => {
+    const command = expand(source);
+    const result = guard(command);
+    expect(result.error).toBeUndefined();
+    expect({ command, status: result.status }).toEqual({ command, status: 2 });
+    expect(result.stderr).toContain(
+      "mutates 'foreign:src/claimed.txt', claimed by an active worktree's scope.in"
+    );
   });
   test.each(UNPROVED)('holds: %s', (source, reason) => {
     const command = expand(source);

@@ -746,11 +746,22 @@ for (const command of [
   'PAGER=less git log',
   'GIT_PAGER="$X" git log',
   'GIT_SSH_COMMAND=x git ls-remote',
+  'GIT_SSH_COMMAND="ssh -o ProxyCommand=x" git ls-remote',
+  'GIT_SSH_COMMAND="ssh -o ServerAliveInterval=15 -o ProxyCommand=x" git ls-remote',
+  'GIT_SSH_COMMAND="ssh -F x" git ls-remote',
+  'GIT_SSH_COMMAND="ssh -o BatchMode=yes; x" git ls-remote',
+  'GIT_SSH_COMMAND="./ssh -v" git ls-remote',
+  'GIT_SSH_COMMAND="$X" git ls-remote',
   'GIT_EDITOR=vi git log',
   'GIT_EXTERNAL_DIFF=x git diff',
   'GIT_DIR="$X" git log',
 ])
   add('git routing', command, { codes: ['git-environment'], only: 'codes' });
+const KEEPALIVE = 'ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=120';
+metadata('git routing', `GIT_SSH_COMMAND="${KEEPALIVE}" git push origin main`, 'push @');
+metadata('git routing', `git -c core.sshCommand="${KEEPALIVE}" push origin main`, 'push @');
+add('git routing', 'GIT_SSH_COMMAND="ssh -4 -v -oConnectTimeout=5" git ls-remote');
+held('git routing', 'git-global-option', 'git -c core.sshCommand="ssh -o ProxyCommand=x" log');
 add('git routing', 'git log', {
   label: 'git log with an inherited pager',
   environment: { GIT_PAGER: 'less' },
