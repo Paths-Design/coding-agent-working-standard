@@ -62,6 +62,9 @@ evidence:
     command: "cargo +1.90.0 test --locked --offline --manifest-path packages/caws-native/Cargo.toml --no-default-features --lib service_image"
     commit_sha: "9c5f42e7cb2f9454a7a029c2c62aeb18ae8b1815"
   - criterion_id: A1
-    status: unchecked
-    evidence_ref: "Ubuntu 26.04 arm64 container at 9c5f42e7c, LD_LIBRARY_PATH set, no caws on PATH, tool-cache node 0777 normalized to 0755, depth-1 clone: audit, build, typecheck, lint, jest 391 of 391 suites (10764 passed, 14 skipped), scripts, docs, bats 817 of 817, scope smoke, pytest 511 passed all exit 0. Native service_image exits 101 there (1 of 43, retained_stage_custody), attributed to a coarse kernel timestamp tick and logged ok on the hosted runner. Needs the hosted Candidate tests and contracts job on a landed revision."
-    recorded_at: "2026-11-25T00:23:46.613Z"
+    status: pass
+    evidence_ref: "GitHub Release Qualification run 45557661378 on pushed main 4aa381ea8 (created 2026-11-25T06:02:11Z): all 8 jobs succeeded. Candidate tests and contracts: native service_image 43 passed 0 failed, jest 393 of 393 suites (12722 passed, 14 skipped), pytest 511 passed 1 skipped, and every other step exit 0. 4aa381ea8 contains merge 74e24809f and other sessions' later merges, so it shows the landed main, not this spec's commits alone."
+    recorded_at: "2026-11-25T06:28:50.009Z"
+    command: gh run view 45557661378
+    exit_code: 0
+    commit_sha: "4aa381ea8517fa3ff12c4eabbe28f79fed1302da"
