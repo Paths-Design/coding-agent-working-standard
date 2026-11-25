@@ -98,3 +98,8 @@ evidence:
     evidence_ref: "Observed on the installed build: env -u SOME_OTHER_NAME ls is refused. Only GIT_ variables and the pager are admitted, because dropping a session identity variable would hide who is asking; the criterion says any NAME. set -a around source, unset IFS and CDPATH, GIT_TRACE and GIT_CONFIG_GLOBAL run. source /dev/null is refused."
     recorded_at: "2026-11-25T07:49:45.152Z"
     commit_sha: "1d735feeb160e52bf649eb8ad68e2d2524f2a5e4"
+  - criterion_id: A7
+    status: unchecked
+    evidence_ref: "Full Jest 393 of 393 suites and bats 817 of 817 on 3b167a98a; 274 of 274 guard suites and bats 817 of 817 after merging pack 142; targeted suites after merging 143; shared pack 144. The per-file mutation floor has not been run on this version."
+    recorded_at: "2026-11-25T07:49:46.147Z"
+    commit_sha: "1d735feeb160e52bf649eb8ad68e2d2524f2a5e4"
