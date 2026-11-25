@@ -47,7 +47,11 @@ acceptance:
     when: 'the agent runs kill -1, kill 0, a process group, a job spec, kill over a command substitution or xargs, pkill, killall, or a kill by ID alongside another capability-risk operation in either order'
     then: 'the latch arms as it did before'
   - id: A3
-    given: 'a command that only names reboot or shutdown, in a file name, as an argument to a program that does not launch it, such as last, grep, git log, man or node with a script path'
+    given: >-
+      a plain command (literal words, separators, if/then/else/fi and file
+      redirections) in which reboot or shutdown appears only as an operand of
+      inspection programs that write nothing, in file or branch names given to a
+      listed git subcommand, or within a longer data-file name
     when: 'the classifier reads it'
     then: 'it is not denied as a system reboot'
   - id: A4
