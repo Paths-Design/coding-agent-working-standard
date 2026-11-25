@@ -56,7 +56,6 @@ evidence:
     test_verified_at: "16cfda199dc12fae60db7513b730e5911437a8cd"
   - criterion_id: A3
     status: pass
-    evidence_ref: "At e0c88d87c from a clean clone as a non-root user: Debian 12, jq 1.6, Python 3.11: bats 817 ok 0 not ok, pytest 511 passed 1 skipped. Ubuntu 24.04, jq 1.7, Python 3.12: bats 817 ok 0 not ok, pytest 511 passed 1 skipped. arm64 containers; not run on the merged tree."
-    recorded_at: "2026-11-25T06:24:50.603Z"
-    artifact_path: "/Users/darianrosebrook/.claude/artifacts/0c999360-f616-4408-bc93-2a97c4a374fe/jq16/logs/ubuntu2404/summary.log"
-    commit_sha: e0c88d87c0e598ab54400c07f0a54202c68fbb85
+    evidence_ref: "At e0c88d87c from a clean clone as a non-root user: Debian 12, jq 1.6, Python 3.11: bats 817 ok 0 not ok, pytest 511 passed 1 skipped. Ubuntu 24.04, jq 1.7, Python 3.12: bats 817 ok 0 not ok, pytest 511 passed 1 skipped. arm64 containers; not run on the merged tree. Logs are kept in the session's artifacts directory under jq16/logs."
+    recorded_at: "2026-11-25T06:28:36.310Z"
+    commit_sha: d7e3cc86010a8699dae7b102b330a168acf0ac3f
