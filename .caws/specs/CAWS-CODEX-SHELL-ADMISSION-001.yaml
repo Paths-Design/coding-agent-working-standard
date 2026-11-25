@@ -41,14 +41,13 @@ invariants:
 acceptance:
   - id: A1
     given: >-
-      a codex PreToolUse Bash payload carrying only tool_input.command, cwd and
-      transcript_path from a host at 0.166.0 or later
+      a Codex PreToolUse Bash call through the launcher, from a host at 0.166.0 or
+      later, with the session and command directories in one governed project
+      including a linked worktree the session owns
     when: >-
-      the write guard evaluates reads, a plain git commit, and relative or absolute
-      targets the session may write
-    then: >-
-      it exits 0 with empty output, so a Codex session can run caws status, read
-      files, edit its own worktree and commit
+      reads, relative and absolute writes the session may make, cp, and a plain git
+      commit are judged by the whole installed chain
+    then: 'every handler runs, the call exits 0 with no decision and no rewrite'
   - id: A2
     given: >-
       the same payload naming a relative or absolute target owned by another
