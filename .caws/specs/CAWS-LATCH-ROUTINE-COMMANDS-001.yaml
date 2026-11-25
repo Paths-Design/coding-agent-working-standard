@@ -95,3 +95,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/hooks/pytest/test_classify_routine_commands.py
     commit_sha: "95101eca71a0a9016d11b2f804db0c34291e87af"
     test_verified_at: "4a5ca78ddcdac78784e2d2241b2e43c0e243d679"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "RUNS_IT holds the spellings three adversarial reviews and a real-shell oracle used. Oracle (bash 5.2 container, stub programs): 12000 generated commands, 6949 ran a stub, none denied before is admitted, none admitted before is denied. On 5958 reviewer, test and recorded inputs every verdict is the base's or a reviewed exception and none is newly denied. Quoted or escaped command words were never denied and still are not. zsh forms rest on tests and review, not on the oracle. An earlier command can shadow an inspection program on PATH; one command cannot show that."
+    recorded_at: "2026-11-25T07:25:17.324Z"
+    test_nodeid: packages/caws-cli/tests/hooks/pytest/test_classify_routine_commands.py
+    commit_sha: "95101eca71a0a9016d11b2f804db0c34291e87af"
+    test_verified_at: "2a88565db9172b92d6d38fe70bfe5b8f99c8afa7"
