@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs';
 import { basename, isAbsolute, resolve } from 'node:path';
 import { analyzeCommand } from './analyze';
 import { classifyInterpreterEffects } from './interpreter-effects';
@@ -154,7 +155,7 @@ type HereDoc = Extract<Redirection, { type: 'HereDoc' }>;
 type Selection =
   | { kind: 'code'; argument: Argument; code: string }
   | { kind: 'stdin' }
-  | { kind: 'program'; entry: string | null };
+  | { kind: 'program'; entry: string | null; unknown?: Argument };
 const MAX_TOKENS = 4096,
   MAX_DEPTH = 8,
   MAX_SCRIPTS = 32;
@@ -174,7 +175,17 @@ const DESCRIPTOR_PATH = /^\/(?:dev\/(?:stdin|fd\/|tty)|proc\/(?:self|[0-9]+)\/fd
  * Text every expansion of a word begins with, which no option or descriptor
  * path can. A leading tilde is a variable's value, so it is not such text.
  */
-const LITERAL_START = /^(?:\w|\.{1,2}\/|\/(?!dev\/|proc\/)\w[\w.-]*\/)/;
+const LITERAL_START = /^["']?(?:\.?\w|\.{1,2}\/|\/(?!dev\/|proc\/)\w[\w.-]*\/)/;
+/** A glob, every field of which begins as it does. */
+const PLAIN_GLOB = /^[^$`]*$/;
+/** A glob in a literal directory, which can be listed. */
+const LISTED_GLOB = /^((?:[\w.@%+:,=-]+\/|\/)*)([\w.@%+:,=*?[\]!^-]+)$/;
+/** Names a written file has when a launch of each kind would run it. */
+const RUNNABLE = {
+  shell: /(?:\.(?:ba|z|k|da)?sh|\/[^./]+)$/,
+  python: /(?:\.pyw?|\/[^./]+)$/,
+  node: /(?:\.[cm]?[jt]sx?|\/[^./]+)$/,
+};
 /** An argument that neither selects code nor is code that could write. */
 const PLAIN_OPERAND = /^(?!-[A-Za-z]*[ceps]|--(?:eval|print))[\w@%+:,./=-]*$/;
 const PYTHON_QUERIES = /^(?:-V+|-h|-\?|--version|--help(?:-[a-z]+)?)$/;
@@ -518,15 +529,21 @@ export async function projectMutationView(
      * one too when their text starts literally, which makes the first a path and
      * the others its arguments; with nullglob there may be no first field.
      */
+    const literalStart = (arg: Argument): boolean =>
+      !vanishingGlobs && LITERAL_START.test(raw(arg));
+    const plainGlob = (arg: Argument): boolean =>
+      arg.several === true && literalStart(arg) && PLAIN_GLOB.test(raw(arg));
     const operand = (args: Argument[], index: number, node: Command): Selection | null => {
       const arg = args[index];
       if (!arg || arg.value === '-') return { kind: 'stdin' };
       if (arg.value === null) {
         const rest = args.slice(index + 1);
-        return (arg.several !== true || (LITERAL_START.test(raw(arg)) && !vanishingGlobs)) &&
+        return (arg.several !== true || literalStart(arg)) &&
           stdinRedirect(node) === undefined &&
-          rest.every(({ value }) => value !== null && PLAIN_OPERAND.test(value))
-          ? { kind: 'program', entry: null }
+          rest.every((item) =>
+            item.value === null ? plainGlob(item) : PLAIN_OPERAND.test(item.value)
+          )
+          ? { kind: 'program', entry: null, unknown: arg }
           : opaqueSelection(arg, node);
       }
       if (STDIN_PATH.test(arg.value)) return { kind: 'stdin' };
@@ -555,7 +572,7 @@ export async function projectMutationView(
           // Past a possible entry file this is that program's own argument.
           if (!selected && candidates.length) continue;
           // A mode takes files alone, and an option may take the first field.
-          if (selected || (arg.several === true ? ambiguous : mode))
+          if (selected || (arg.several === true ? ambiguous && !plainGlob(arg) : mode))
             return opaqueSelection(arg, node);
           return settle(operand(args, index, node));
         }
@@ -665,7 +682,8 @@ export async function projectMutationView(
           }
           if (letter === 'm') return { kind: 'program', entry: null };
           if (letter === 'W' || letter === 'X') {
-            if (rest === '') index++;
+            if (rest === '' && args[++index]?.several === true)
+              return opaqueSelection(args[index]!, node);
             break;
           }
           if (!'bBdEIOPqRsSuv'.includes(letter)) unmodeled ??= arg;
@@ -709,6 +727,7 @@ export async function projectMutationView(
             if (args[++index]?.value === null) return opaqueSelection(args[index]!, node);
           } else if (letter === 'o') {
             const name = args[++index];
+            if (name?.several === true) return opaqueSelection(name, node);
             if (!name || name.value === null || !BASH_NEUTRAL_NAMES.test(name.value))
               unmodeled ??= arg;
           } else if (!BASH_NEUTRAL.test(letter)) unmodeled ??= arg;
@@ -748,10 +767,54 @@ export async function projectMutationView(
         complete: file.before?.complete !== false && output?.operator !== '>>',
       });
     };
-    /** Read a shell program this command wrote for itself; a loop runs it once. */
-    const queueSubmitted = (entry: string | null, node: Command, state: State): void => {
+    /** What this command wrote into the file a launch runs: any of its kind, if unknown. */
+    const submittedBy = (
+      { entry, unknown }: { entry: string | null; unknown?: Argument },
+      kind: keyof typeof RUNNABLE,
+      state: State
+    ): SubmittedFile => {
       const file = submittedFiles.get(located(entry, state) ?? '');
-      for (const document of file?.documents ?? []) {
+      if (!unknown) return file ?? { documents: [], complete: true };
+      const files = [...submittedFiles].filter(([path]) => RUNNABLE[kind].test(path));
+      return { documents: files.flatMap(([, { documents }]) => documents), complete: true };
+    };
+    /**
+     * The entry files a launch can have. A listed glob puts its first match
+     * there, in whichever order the locale sorts; any other unknown is unread.
+     */
+    const entriesOf = (
+      { entry, unknown }: { entry: string | null; unknown?: Argument },
+      state: State
+    ): (string | null)[] => {
+      const [, directory, pattern] =
+        (unknown?.several === true && LISTED_GLOB.exec(raw(unknown))) || [];
+      const path = pattern === undefined ? null : located(directory || '.', state);
+      if (path === null) return [entry];
+      try {
+        const matcher = new RegExp(
+          `^${pattern!
+            .replace(/[.+]/g, '\\$&')
+            .replaceAll('*', '.*')
+            .replaceAll('?', '.')
+            .replaceAll('[!', '[^')}$`
+        );
+        const names = readdirSync(path).filter(
+          (name) => matcher.test(name) && name.startsWith('.') === pattern!.startsWith('.')
+        );
+        const first = [names.sort()[0], names.sort((a, b) => a.localeCompare(b))[0]];
+        const found = [...new Set(first)].flatMap((name) => (name ? [directory + name] : []));
+        return found.length ? found : [entry];
+      } catch {
+        return [entry];
+      }
+    };
+    /** Read a shell program this command wrote for itself; a loop runs it once. */
+    const queueSubmitted = (
+      launch: { entry: string | null; unknown?: Argument },
+      node: Command,
+      state: State
+    ): void => {
+      for (const document of submittedBy(launch, 'shell', state).documents) {
         if (/^#!/.test(document.text) && !/^#!.*\b(?:ba|z|da|k)?sh\b/.test(document.text)) continue;
         const context = parent(node, state);
         const key = JSON.stringify([
@@ -808,13 +871,13 @@ export async function projectMutationView(
     const launched = (
       language: 'node' | 'python',
       args: readonly Argument[],
-      entry: string | null,
+      launch: { entry: string | null; unknown?: Argument },
       node: Command,
       state: State
     ): void => {
-      const file = submittedFiles.get(located(entry, state) ?? '');
+      const file = submittedBy(launch, language, state);
       const payloads: InterpreterPayload[] = [];
-      for (const document of file?.documents ?? []) {
+      for (const document of file.documents) {
         const original = document.map(document);
         if (!text(document.text, original)) return;
         payloads.push({
@@ -825,13 +888,16 @@ export async function projectMutationView(
         });
       }
       const effects = unresolvedEffects('The launched program is not read by this projection.');
-      const rewritten = file?.complete === false;
-      interpreter(
-        { language, payloads, effects, launch: 'program', entry, rewritten },
-        args,
-        node,
-        state
-      );
+      const rewritten = !file.complete;
+      for (const entry of entriesOf(launch, state)) {
+        invokes(language, node);
+        interpreter(
+          { language, payloads, effects, launch: 'program', entry, rewritten },
+          args,
+          node,
+          state
+        );
+      }
     };
     const observeInvocation = ({ node, argv, state }: Invocation): void => {
       if (exhausted) return;
@@ -1007,11 +1073,11 @@ export async function projectMutationView(
             'sh execution does not establish the declared non-POSIX Bash model.',
             span(node)
           );
-        else queueSubmitted(selection.entry, node, state);
+        else queueSubmitted(selection, node, state);
         return;
       }
       if (executable === '.' || executable === 'source') {
-        queueSubmitted(args[1]?.value ?? null, node, state);
+        queueSubmitted({ entry: args[1]?.value ?? null }, node, state);
         return;
       }
       const shell = name === 'bash';
@@ -1027,14 +1093,12 @@ export async function projectMutationView(
         const first = submittedFiles.get(located(executable, state) ?? '')?.documents.at(-1)?.text;
         const runner = /^#!.*?\b(python|node)/.exec(first ?? '')?.[1];
         if (runner !== 'python' && runner !== 'node') {
-          queueSubmitted(executable, node, state);
+          queueSubmitted({ entry: executable }, node, state);
           return;
         }
-        invokes(runner, node);
-        launched(runner, [{ value: runner }, ...args], executable, node, state);
+        launched(runner, [{ value: runner }, ...args], { entry: executable }, node, state);
         return;
       }
-      if (language) invokes(language, node);
       const submitted = [
         ...unwrapped.environment,
         ...node.prefix.flatMap((part) => (part.type === 'Assignment' ? [part.name] : [])),
@@ -1043,6 +1107,7 @@ export async function projectMutationView(
         args,
         node
       );
+      if (language && selected?.kind !== 'program') invokes(language, node);
       if (!selected) return;
       if (shell && selected.kind !== 'program' && submitted.length > 0)
         issue(
@@ -1051,8 +1116,8 @@ export async function projectMutationView(
           span(node)
         );
       if (selected.kind === 'program') {
-        if (language) launched(language, args, selected.entry, node, state);
-        else queueSubmitted(selected.entry, node, state);
+        if (language) launched(language, args, selected, node, state);
+        else queueSubmitted(selected, node, state);
         return;
       }
       const payloads: InterpreterPayload[] = [];

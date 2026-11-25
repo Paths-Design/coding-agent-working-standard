@@ -134,8 +134,10 @@ status`, message delivery, the peer notice) report the later of that file's
   held, and a held command names its remedy. Shared pack 141.
 - `bash-write-guard` admits a globbed script operand under a literal directory,
   such as `bash -n scripts/*.sh`, and Git after the command unsets a `GIT_`
-  variable. A declaration with a redirection, such as `export D=x > log`, keeps
-  the earlier value as a possibility, because a failed redirection skips it.
+  variable. A declaration with a redirection that can fail, such as
+  `export D=x > log`, keeps the earlier value as a possibility. A quoted or
+  wrapped `readonly` counts, and a launch whose file name is unknown is read as
+  any script of its kind the command wrote.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

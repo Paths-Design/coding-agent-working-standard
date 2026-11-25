@@ -306,7 +306,9 @@ So does literal interpreter source whose preload or import environment the same
 command replaces. One unknown operand, as in `python3 "$f"`, names a program
 when nothing beside it could be code. So does a glob or split word whose text
 starts with a literal name or directory, as in `bash -n scripts/*.sh`, unless
-`nullglob` could remove it.
+`nullglob` could remove it. Its entry file is then the first match when the glob
+is in a literal directory. A launch whose file name is unknown also runs any
+script of its kind that the same command wrote.
 
 A `GIT_` variable or `PAGER` that the command unsets is absent from later Git
 commands in that shell. An unset that may not have run, or that a read-only name

@@ -57,6 +57,14 @@ const SHELL_STATE_COMMANDS =
 const clone = (state: State): State => ({ ...state, bindings: new Map(state.bindings) });
 const same = (left: unknown, right: unknown): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
+/** Whether a redirection can fail, which skips the builtin or assignment it accompanies. */
+function canFail(redirects: readonly Redirection[]): boolean {
+  return redirects.some((redirection) => {
+    if (redirection.type !== 'Redirect' || redirection.target?.parts?.length) return true;
+    const target = redirection.target?.value ?? '';
+    return redirection.operator === '>&' ? !/^[12-]$/.test(target) : target !== '/dev/null';
+  });
+}
 /** Every value either alternative can hold, while there are few enough to list. */
 function either(left: Value | undefined, right: Value | undefined): Value {
   if (!left || !right) return null;
@@ -676,18 +684,22 @@ export async function analyzeCommand(
         redirect(suffix, state, reader, depth + 1);
     let declaring = clone(state);
     for (const assignment of declared) declaring = assign(assignment, declaring, depth + 1);
-    if (projection && /^(?:declare|local|readonly|typeset)$/.test(program ?? '')) {
-      const plain = words.slice(1).flatMap((item) => (item.parts?.length ? [] : [item.value]));
-      const names = [...declared.map((item) => item.name), ...plain];
-      if (program === 'readonly' || plain.some((value) => /^-[A-Za-z]*r/.test(value)))
+    // Quoting, a wrapper or an expansion can supply the builtin and its names.
+    for (const argv of projection ? vectors : []) {
+      const values = argv.map(({ value }) => value ?? '');
+      const at = values.findIndex((value) => !/^(?:command|--)$/.test(value));
+      const [builtin, ...rest] = values.slice(at);
+      if (!/^(?:declare|local|readonly|typeset)$/.test(builtin ?? '')) continue;
+      const names = [...declared.map((item) => item.name), ...rest];
+      if (builtin === 'readonly' || rest.some((value) => /^-[A-Za-z]*r/.test(value)))
         for (const name of names) frozen.add(name);
-      if (program !== 'readonly') for (const name of names) activeCalls.at(-1)?.localized.add(name);
+      if (builtin !== 'readonly') for (const name of names) activeCalls.at(-1)?.localized.add(name);
     }
     carryEffects(state, [assigned, declaring]);
     assigned.filesystemChanged = state.filesystemChanged === true;
     if (projection) assigned.mappingChanged = state.mappingChanged === true;
     // A failed redirection skips the assignments it accompanies.
-    if (!node.name) return projection && node.redirects.length ? [state, assigned] : [assigned];
+    if (!node.name) return projection && canFail(node.redirects) ? [state, assigned] : [assigned];
     const env = new Map<string, Value>();
     for (const [name, value] of assigned.bindings)
       if (name.startsWith('GIT_') || name === 'PAGER' || (projection && name === 'HOME'))
@@ -713,7 +725,7 @@ export async function analyzeCommand(
       // a failed cd as a successful repair of a preceding foreign directory.
       if (!projection) return next.cwd !== before.cwd ? [before, next] : [next];
       // A failed redirection skips the builtin it accompanies.
-      const skippable = node.redirects.length > 0;
+      const skippable = canFail(node.redirects);
       for (const assignment of declared) {
         const value = declaring.bindings.get(assignment.name) ?? null;
         next.bindings.set(
