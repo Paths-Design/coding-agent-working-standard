@@ -721,9 +721,11 @@ export async function analyzeCommand(
           skippable ? either(before.bindings.get(assignment.name), value) : value
         );
       }
-      // Unsetting fails for a read-only name, which keeps what it held.
+      // Unsetting fails for a read-only name, which keeps what it held. Behind a
+      // prefix assignment or in a call it can uncover the variable that one hid.
+      const layered = skippable || temporary.size > 0 || activeCalls.length > 0;
       for (const variable of before.bindings.keys())
-        if (!next.bindings.has(variable) && (skippable || frozen.has(variable)))
+        if (!next.bindings.has(variable) && (layered || frozen.has(variable)))
           next.bindings.set(variable, null);
       const name = argv[0]?.value;
       // Nothing after this point runs on the path that exits. A redirection

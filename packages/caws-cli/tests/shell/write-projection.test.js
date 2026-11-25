@@ -805,6 +805,12 @@ for (const command of [
   'f() { local GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; }; GIT_EXTERNAL_DIFF=x; f; git diff',
   'GIT_EXTERNAL_DIFF=x; while y; do unset GIT_EXTERNAL_DIFF; done; git diff',
   'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF > log; git diff',
+  // Bash uncovers the variable an inner scope hid.
+  'GIT_EXTERNAL_DIFF=x; f() { unset GIT_EXTERNAL_DIFF; git diff; }; GIT_EXTERNAL_DIFF=y f',
+  'f() { local GIT_EXTERNAL_DIFF=y; g; }; g() { unset GIT_EXTERNAL_DIFF; git diff; }; GIT_EXTERNAL_DIFF=x; f',
+  'f() { (unset GIT_EXTERNAL_DIFF; git diff); }; GIT_EXTERNAL_DIFF=x; GIT_EXTERNAL_DIFF=y f',
+  'GIT_EXTERNAL_DIFF=x; GIT_EXTERNAL_DIFF=y unset GIT_EXTERNAL_DIFF; git diff',
+  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; read -r GIT_EXTERNAL_DIFF; git diff',
 ])
   add('git environment', command, { codes: ['git-environment'], only: 'codes' });
 add('git environment', "unset GIT_DIR; bash -c 'git add a'", {
@@ -1475,7 +1481,6 @@ for (const [command, ...run] of [
   ['python3 scripts/*.py', 'python:program::unresolved'],
   ['python3 -u ./*.py', 'python:program::unresolved'],
   ['python3 scripts/$X', 'python:program::unresolved'],
-  ['python3 ~/x/*.py --check', 'python:program::unresolved'],
   ['python3 /x/*.py', 'python:program::unresolved'],
   ['node --check scripts/*.mjs', 'node:program::unresolved'],
   ['node scripts/*.mjs', 'node:program::unresolved'],
@@ -1533,6 +1538,13 @@ for (const [code, command, ...run] of [
   ['mutation-code-source', 'python3 ?.py'],
   ['mutation-code-source', 'python3 [a-z]*.py'],
   ['mutation-code-source', 'python3 $D/*.py'],
+  // The shell reads the home directory from a variable, so it can be anything.
+  ['mutation-code-source', "HOME='-cprint(1)#'; python3 ~/*.py"],
+  ['mutation-code-source', 'python3 ~/x/*.py --check'],
+  ['mutation-code-source', 'python3 //dev/fd/*'],
+  ['mutation-code-source', 'python3 /./dev/fd/*'],
+  ['mutation-code-source', 'python3 /d?v/stdin'],
+  ['mutation-code-source', 'python3 /*/stdin'],
   ['mutation-code-source', 'python3 "$D"/*.py'],
   ['mutation-code-source', 'python3 $(ls)'],
   ['mutation-code-source', 'python3 {-c,1}*'],
@@ -1544,6 +1556,8 @@ for (const [code, command, ...run] of [
   ['mutation-code-source', "python3 scripts/*.py 'print(1)'"],
   ['mutation-code-source', "python3 scripts/*.py <<'EOF'\n1\nEOF"],
   ['mutation-code-source', 'shopt -s nullglob; python3 scripts/*.py'],
+  ['mutation-code-source', 'setopt null_glob; python3 scripts/*.py'],
+  ['mutation-code-source', 'setopt NULL_GLOB; python3 scripts/*.py'],
   ['mutation-code-source', 'node --foo scripts/$X'],
   ['mutation-code-source', 'python3 "$X" -c 1'],
   ['mutation-code-source', 'python3 "$X" "print(1)"'],

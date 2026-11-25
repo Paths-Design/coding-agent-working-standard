@@ -170,8 +170,11 @@ const NODE_OPERANDS =
 /** Source a command supplies to itself through an open descriptor. */
 const STDIN_PATH = /^\/(?:dev\/(?:stdin|fd\/0)|proc\/self\/fd\/0)$/;
 const DESCRIPTOR_PATH = /^\/(?:dev\/(?:stdin|fd\/|tty)|proc\/(?:self|[0-9]+)\/fd\/)/;
-/** Text every expansion of a word begins with, which no option can. */
-const LITERAL_START = /^(?:~\/|\.{0,2}\/(?!dev\/|proc\/)|[A-Za-z0-9_])/;
+/**
+ * Text every expansion of a word begins with, which no option or descriptor
+ * path can. A leading tilde is a variable's value, so it is not such text.
+ */
+const LITERAL_START = /^(?:\w|\.{1,2}\/|\/(?!dev\/|proc\/)\w[\w.-]*\/)/;
 /** An argument that neither selects code nor is code that could write. */
 const PLAIN_OPERAND = /^(?!-[A-Za-z]*[ceps]|--(?:eval|print))[\w@%+:,./=-]*$/;
 const PYTHON_QUERIES = /^(?:-V+|-h|-\?|--version|--help(?:-[a-z]+)?)$/;
@@ -217,7 +220,10 @@ export async function projectMutationView(
   /** Files this command has written so far, and the literal text it gave them. */
   const submittedFiles = new Map<string, SubmittedFile>();
   const redirectWrites = new Map<Redirection, WrittenFile | null>();
-  const vanishingGlobs = /nullglob/.test(request.command + (process.env.BASHOPTS ?? ''));
+  // Zsh ignores case and underscores in an option's name.
+  const vanishingGlobs = /nullglob/i.test(
+    `${request.command} ${process.env.BASHOPTS ?? ''}`.replaceAll('_', '')
+  );
   const issueKeys = new Set<string>();
   const jobs: ScriptJob[] = [];
   let exhausted = false,
