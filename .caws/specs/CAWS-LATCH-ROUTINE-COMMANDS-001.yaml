@@ -36,7 +36,11 @@ invariants:
 acceptance:
   - id: A1
     given: 'a session that already drew its one capability warning'
-    when: 'the agent kills processes named by explicit IDs above 1, or by a variable the same command set from the last background job, with any signal and through /bin/kill'
+    when: >-
+      the agent runs a plain command whose only flagged operation is a kill of
+      process IDs from 2 to 4194304, or of the same command's last background job
+      through a variable named for a PID, with any literal signal and through kill,
+      /bin/kill or /usr/bin/kill
     then: 'the command is refused with the reason and a remedy, no latch or strike is recorded, and the next ordinary command runs, however often it is repeated'
   - id: A2
     given: 'the same session'
