@@ -1,9 +1,11 @@
 id: CAWS-GUARD-JQ-16-COMPAT-001
 title: 'bash-write-guard runs on jq 1.6'
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'bash-write-guard runs on jq 1.6; verified on Debian 12 and Ubuntu 24.04'
 created_at: '2026-11-24T22:04:08.647Z'
-updated_at: '2026-11-25T06:27:52.716Z'
+updated_at: '2026-11-25T06:28:48.556Z'
 created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
 blast_radius:
   modules:
