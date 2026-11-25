@@ -98,8 +98,12 @@ evidence:
     recorded_at: "2026-11-25T07:49:44.171Z"
     commit_sha: "1d735feeb160e52bf649eb8ad68e2d2524f2a5e4"
   - criterion_id: A6
-    status: unchecked
-    recorded_at: "2026-11-25T08:00:45.580Z"
+    status: pass
+    evidence_ref: "env -u of a GIT_ or pager variable, set -a around a sourced file, unset IFS and CDPATH, GIT_TRACE and GIT_CONFIG_GLOBAL run; env -u of CLAUDE_CODE_SESSION_ID, CAWS_SESSION_ID and an ordinary name is held. Live on the installed build: env -u GIT_DIR, set -a and unset IFS CDPATH run, and env -u SOME_OTHER_NAME is refused. source /dev/null is refused, which is a device and not an ordinary file."
+    recorded_at: "2026-11-25T08:01:02.343Z"
+    test_nodeid: packages/caws-cli/tests/shell/write-projection.test.js
+    commit_sha: "1d735feeb160e52bf649eb8ad68e2d2524f2a5e4"
+    test_verified_at: "87d72e7edc89b1ee1facff9f98b8c30b03de6a91"
   - criterion_id: A7
     status: unchecked
     evidence_ref: "Full Jest 393 of 393 suites and bats 817 of 817 on 3b167a98a; 274 of 274 guard suites and bats 817 of 817 after merging pack 142; targeted suites after merging 143; shared pack 144. The per-file mutation floor has not been run on this version."
