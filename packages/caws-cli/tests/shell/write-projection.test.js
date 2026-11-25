@@ -365,6 +365,14 @@ for (const [command, ...targets] of [
   ['D+=$(touch a)', '@/a'],
   ['D=@/a; D=@/b > log; touch "$D/o"', '@/log', '@/a/o', '@/b/o'],
   ['export D=@/b; touch "$D/o"', '@/b/o'],
+  ['D=@/a; export D=@/b > log; touch "$D/o"', '@/log', '@/a/o', '@/b/o'],
+  ['D=@/a; export D=@/b 2>&5; touch "$D/o"', '@/a/o', '@/b/o'],
+  ['D=@/a; export D=@/b 2>&1; touch "$D/o"', '@/b/o'],
+  ['export D=@/b 2>/dev/null; touch "$D/o"', '/dev/null', '@/b/o'],
+  ['export D=@/b > /dev/null 2>&1; touch "$D/o"', '/dev/null', '@/b/o'],
+  ['D=@/a; readonly "D"; export D=@/b; touch "$D/o"', '?'],
+  ['D=@/a; command readonly D; export D=@/b; touch "$D/o"', '?'],
+  ['D=@/a; declare D=@/b 2> log; touch "$D/o"', '@/log', '@/a/o', '@/b/o'],
   ['D=@/a; readonly D=@/b; touch "$D/o"', '@/b/o'],
   ['declare -x D=@/b; touch "$D/o"', '@/b/o'],
   ['D=@/a; export E=$D/x; touch "$E/o"', '@/a/x/o'],
@@ -770,6 +778,66 @@ add('git routing', 'GIT_PAGER=other git log', {
   environment: { GIT_PAGER: 'less' },
   codes: ['git-environment'],
 });
+// A variable the command unsets is absent, wherever it came from.
+for (const [command, ...git] of [
+  ['unset GIT_EDITOR PAGER; git status'],
+  ['GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; git diff'],
+  ['unset -v GIT_DIR; git add a', 'add @'],
+  ['GIT_DIR=^/x/.git; unset GIT_DIR; git add a', 'add @'],
+  ['export GIT_DIR=^/x/.git; unset GIT_DIR GIT_WORK_TREE; git add a', 'add @'],
+  ['unset GIT_DIR; GIT_DIR=@/meta git add a', 'add @ in @/meta'],
+])
+  metadata('git environment', command, ...git);
+writes(
+  'git environment',
+  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF 2>/dev/null; git diff',
+  '/dev/null'
+);
+add('git environment', 'unset GIT_DIR; git add a', {
+  label: 'an inherited variable is unset',
+  environment: { GIT_DIR: '/usr' },
+  git: ['add @'],
+});
+add('git environment', 'unset GIT_CONFIG_PARAMETERS; git status', {
+  environment: { GIT_CONFIG_PARAMETERS: "'a.b'='c'" },
+});
+add('git environment', '(unset GIT_DIR); git add a', {
+  label: 'a subshell unsets its own copy',
+  environment: { GIT_DIR: '/usr' },
+  git: ['add @ in /usr'],
+});
+// It may not have been unset, or a nested shell may not have seen it.
+for (const command of [
+  'GIT_EXTERNAL_DIFF=x; if y; then unset GIT_EXTERNAL_DIFF; fi; git diff',
+  'GIT_EXTERNAL_DIFF=x; y && unset GIT_EXTERNAL_DIFF; git diff',
+  'readonly GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; git diff',
+  'GIT_EXTERNAL_DIFF=x; readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
+  'f() { unset GIT_EXTERNAL_DIFF; }; GIT_EXTERNAL_DIFF=x; f; git diff',
+  'f() { local GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; }; GIT_EXTERNAL_DIFF=x; f; git diff',
+  'GIT_EXTERNAL_DIFF=x; while y; do unset GIT_EXTERNAL_DIFF; done; git diff',
+  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF > log; git diff',
+  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF 2>&5; git diff',
+  // Quoting, a wrapper or an expansion names the same builtin and variable.
+  'GIT_EXTERNAL_DIFF=x; readonly "GIT_EXTERNAL_DIFF"; unset GIT_EXTERNAL_DIFF; git diff',
+  'GIT_EXTERNAL_DIFF=x; command readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
+  'GIT_EXTERNAL_DIFF=x; command -- readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
+  'GIT_EXTERNAL_DIFF=x; N=GIT_EXTERNAL_DIFF; readonly $N; unset GIT_EXTERNAL_DIFF; git diff',
+  'GIT_EXTERNAL_DIFF=x; F=-r; declare $F GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
+  // Bash uncovers the variable an inner scope hid.
+  'GIT_EXTERNAL_DIFF=x; f() { unset GIT_EXTERNAL_DIFF; git diff; }; GIT_EXTERNAL_DIFF=y f',
+  'f() { local GIT_EXTERNAL_DIFF=y; g; }; g() { unset GIT_EXTERNAL_DIFF; git diff; }; GIT_EXTERNAL_DIFF=x; f',
+  'f() { (unset GIT_EXTERNAL_DIFF; git diff); }; GIT_EXTERNAL_DIFF=x; GIT_EXTERNAL_DIFF=y f',
+  'GIT_EXTERNAL_DIFF=x; GIT_EXTERNAL_DIFF=y unset GIT_EXTERNAL_DIFF; git diff',
+  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; read -r GIT_EXTERNAL_DIFF; git diff',
+])
+  add('git environment', command, { codes: ['git-environment'], only: 'codes' });
+add('git environment', "unset GIT_DIR; bash -c 'git add a'", {
+  label: 'a nested shell after an inherited variable is unset',
+  environment: { GIT_DIR: '/usr' },
+  codes: ['mutation-shell-environment', 'metadata-coordinate-unresolved'],
+  only: 'codes',
+});
+metadata('git environment', "unset GIT_DIR; bash -c 'git add a'", 'add @');
 
 // ── Git configuration ───────────────────────────────────────────────────────
 
@@ -1427,6 +1495,36 @@ for (const [command, ...run] of [
   ['node --inspect "$X"', 'node:program::unresolved'],
   ['node -- "$X"', 'node:program::unresolved'],
   ['for f in *.py; do python3 "$f"; done', 'python:program::unresolved'],
+  // Every field of a glob under a literal directory begins with that directory.
+  ['python3 scripts/*.py', 'python:program::unresolved'],
+  ['python3 -u ./*.py', 'python:program::unresolved'],
+  ['python3 scripts/$X', 'python:program::unresolved'],
+  ['python3 /x/*.py', 'python:program::unresolved'],
+  ['node --check scripts/*.mjs', 'node:program::unresolved'],
+  ['node scripts/*.mjs', 'node:program::unresolved'],
+  ['python3 "scripts"/*.py', 'python:program::unresolved'],
+  ['python3 .tools/*.py', 'python:program::unresolved'],
+  ['python3 x{1,2}*.py', 'python:program::unresolved'],
+  ['python3 scripts/*.py tests/*.py', 'python:program::unresolved'],
+  ['node --test tests/unit/*.mjs tests/int/*.mjs', 'node:program::unresolved'],
+  ['node --test --experimental-test-coverage tests/*.mjs', 'node:program::unresolved'],
+  // The file that runs is the first in whichever order the locale sorts.
+  ['python3 globs/*.py', 'python:program:globs/a.py:unresolved'],
+  ['python3 ./globs/?.py', 'python:program:./globs/a.py:unresolved'],
+  ['python3 globs/[!a]*.py', 'python:program:globs/b.py:unresolved'],
+  [
+    'cd globs; python3 ./b*',
+    'python:program:./b.py:unresolved in @/globs',
+    'python:program::unresolved',
+  ],
+  ['node globs/*.mjs', 'node:program:globs/c.mjs:unresolved'],
+  ['python3 globs/none*.py', 'python:program::unresolved'],
+  ['python3 globs/[z-a]*.py', 'python:program::unresolved'],
+  [
+    'python3 globs/mixed/*.py',
+    'python:program:globs/mixed/B.py:unresolved',
+    'python:program:globs/mixed/a.py:unresolved',
+  ],
   ["python3 /dev/stdin <<'EOF'\n1\nEOF", 'python:inline::unresolved'],
   ["node /dev/stdin <<'EOF'\n1\nEOF", 'node:inline::readonly'],
   ["node --input-type module - <<'EOF'\n1\nEOF", 'node:inline::readonly'],
@@ -1476,6 +1574,37 @@ for (const [command, ...run] of [
   launches('interpreters', command, ...run);
 for (const [code, command, ...run] of [
   ['mutation-code-source', 'python3 $X'],
+  // Not a literal directory: an option, another program's text, or nothing.
+  ['mutation-code-source', 'python3 *.py'],
+  ['mutation-code-source', 'python3 ?.py'],
+  ['mutation-code-source', 'python3 [a-z]*.py'],
+  ['mutation-code-source', 'python3 $D/*.py'],
+  ['mutation-code-source', 'python3 ""*.py'],
+  ['mutation-code-source', "python3 '-c'*"],
+  ['mutation-code-source', 'python3 scripts/*.py $X'],
+  ['mutation-code-source', 'python3 scripts/*.py *.txt'],
+  ['mutation-code-source', 'python3 -W $(ls) x.py'],
+  ['mutation-code-source', 'python3 -X $(ls) x.py'],
+  // The shell reads the home directory from a variable, so it can be anything.
+  ['mutation-code-source', "HOME='-cprint(1)#'; python3 ~/*.py"],
+  ['mutation-code-source', 'python3 ~/x/*.py --check'],
+  ['mutation-code-source', 'python3 //dev/fd/*'],
+  ['mutation-code-source', 'python3 /./dev/fd/*'],
+  ['mutation-code-source', 'python3 /d?v/stdin'],
+  ['mutation-code-source', 'python3 /*/stdin'],
+  ['mutation-code-source', 'python3 "$D"/*.py'],
+  ['mutation-code-source', 'python3 $(ls)'],
+  ['mutation-code-source', 'python3 {-c,1}*'],
+  ['mutation-code-source', 'python3 /dev/fd/*'],
+  ['mutation-code-source', 'python3 /proc/self/fd/*'],
+  ['mutation-code-source', 'python3 scripts/*.py -c 1'],
+  ['mutation-code-source', 'python3 scripts/*.py "$Y"'],
+  ['mutation-code-source', "python3 scripts/*.py 'print(1)'"],
+  ['mutation-code-source', "python3 scripts/*.py <<'EOF'\n1\nEOF"],
+  ['mutation-code-source', 'shopt -s nullglob; python3 scripts/*.py'],
+  ['mutation-code-source', 'setopt null_glob; python3 scripts/*.py'],
+  ['mutation-code-source', 'setopt NULL_GLOB; python3 scripts/*.py'],
+  ['mutation-code-source', 'node --foo scripts/$X'],
   ['mutation-code-source', 'python3 "$X" -c 1'],
   ['mutation-code-source', 'python3 "$X" "print(1)"'],
   ['mutation-code-source', 'python3 "$X" "$Y"'],
@@ -1561,6 +1690,13 @@ for (const [command, ...targets] of [
   ['bash "$X"'],
   ['bash -x "$X"'],
   ['bash "$X" -v out.txt'],
+  ['bash -n scripts/*.sh'],
+  ['bash -n scripts/*.sh tests/*.sh'],
+  ['bash -n .hooks/*.sh .githooks/*'],
+  ['bash -n "scripts"/*.sh'],
+  ["bash -n 'scripts/'*.sh"],
+  ['sh -n scripts/*.sh'],
+  ['bash scripts/*.sh --quick'],
   ['bash -O extglob x.sh'],
   ['bash x.sh'],
   ['bash ./x.sh -c y'],
@@ -1586,6 +1722,13 @@ for (const [code, command] of [
   ['mutation-code-source', 'bash -c "$X"'],
   ['mutation-code-source', 'bash -c'],
   ['mutation-code-source', 'bash $X'],
+  ['mutation-code-source', 'bash *.sh'],
+  ['mutation-code-source', "bash -o $(ls) 'touch a'"],
+  ['mutation-code-source', 'bash $D/*.sh'],
+  ['mutation-code-source', "bash scripts/*.sh 'touch a'"],
+  ['mutation-code-source', "bash scripts/*.sh -c 'touch a'"],
+  ['mutation-code-source', "bash scripts/*.sh <<'EOF'\ntouch a\nEOF"],
+  ['mutation-code-source', 'shopt -s nullglob; bash scripts/*.sh'],
   ['mutation-code-source', 'bash "$X" \'touch a\''],
   ['mutation-code-source', 'bash "$X" <<\'EOF\'\ntouch a\nEOF'],
   ['mutation-code-source', 'bash "$@"'],
@@ -1744,6 +1887,12 @@ for (const [command, ...targets] of [
   [`tee x.sh <<'EOF'\ntouch a\nEOF\nbash x.sh`, '@/x.sh', '@/a'],
   [`tee x.sh <<'EOF' > /dev/null\ntouch a\nEOF\nbash x.sh`, '@/x.sh', '/dev/null', '@/a'],
   [SCRIPT('x.sh', 'touch a', SCRIPT('x.sh', 'touch b', 'bash x.sh')), '@/x.sh', '@/a', '@/b'],
+  // A name the projection cannot read can be any script this command wrote.
+  [SCRIPT('x.sh', 'touch a', 'bash ./*.sh'), '@/x.sh', '@/a'],
+  [SCRIPT('x', 'touch a', 'sh ./*'), '@/x', '@/a'],
+  [SCRIPT('x.sh', 'touch a', 'for f in ./*.sh; do bash "$f"; done'), '@/x.sh', '@/a'],
+  [SCRIPT('x.md', 'touch "$X"', 'bash ./*.sh'), '@/x.md'],
+  [SCRIPT('x.sh', 'touch "$X"', 'bash --version'), '@/x.sh'],
   // A different file, or one in another language, is not shell source.
   [SCRIPT('x.sh', 'touch a', 'bash y.sh'), '@/x.sh'],
   [SCRIPT('x.rb', '#!/usr/bin/env ruby\nputs(', './x.rb'), '@/x.rb'],
@@ -1766,6 +1915,12 @@ for (const [command, payloads, rewritten] of [
   ['cp y.py x.py; python3 x.py', [], true],
   ['cp s1/x.py .; python3 x.py', [], true],
   ['echo 1 > y.py; python3 x.py', [], false],
+  [SCRIPT('x.py', '1', 'python3 ./new*.py'), ['1\n'], false],
+  [SCRIPT('x.py', '1', 'python3 "$f"'), ['1\n'], false],
+  [SCRIPT('x.mjs', '1', 'node "$f"'), ['1\n'], false],
+  [SCRIPT('x.py', '1', 'node "$f"'), [], false],
+  [SCRIPT('x.py', '1', 'python3 -m x'), [], false],
+  ['echo 1 > x.py; python3 "$f"', [], false],
   ['for i in 1 2 3; do python3 x.py; done', [], false],
 ])
   add('submitted programs', command, { submitted: { payloads, rewritten } });
@@ -1830,11 +1985,14 @@ describe('write projection', () => {
       'project/s2',
       'project/meta',
       'project/real/deep',
+      'project/globs/mixed',
       'home/h1',
       'links',
       'tmpdir',
     ])
       fs.mkdirSync(path.join(root, directory), { recursive: true });
+    for (const file of ['b.py', 'a.py', '.hidden.py', 'c.mjs', 'mixed/a.py', 'mixed/B.py'])
+      fs.writeFileSync(path.join(root, 'project/globs', file), '');
     fs.symlinkSync(path.join(root, 'project/real/deep'), path.join(root, 'project/link'));
     fs.symlinkSync(path.join(root, 'project'), path.join(root, 'links/project'));
     const requests = rows.map(({ command, facts }) => ({

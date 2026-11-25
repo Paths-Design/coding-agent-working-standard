@@ -249,6 +249,11 @@ const PROGRAMS = [
   'node scripts/compare.mjs',
   'for f in scripts/*.py; do python3 "$f"; done',
   'for f in scripts/*.sh; do bash "$f" --quick || exit 1; done',
+  'bash -n scripts/*.sh',
+  'bash -n scripts/*.sh .githooks/*',
+  'export OUT=tmp/out 2>/dev/null; echo x > "$OUT"',
+  'python3 -m py_compile scripts/*.py && python3 scripts/lint_*.py',
+  'unset GIT_EDITOR PAGER; git status --short; node scripts/task.mjs',
   'find scripts -name "*.sh" | while read -r f; do bash -n "$f"; done',
   "cat > tmp/report.py <<'EOF'\ntext = open('{{SIBLING}}/README.md').read()\nopen('tmp/copy.md', 'w').write(text)\nEOF\npython3 tmp/report.py",
   "cat > tmp/check.sh <<'EOF'\nset -e\ngrep -c x docs/guide.md > tmp/count\nEOF\nbash tmp/check.sh && ./tmp/check.sh",
@@ -487,6 +492,8 @@ const FOREIGN_WRITES = [
   // A committed script that names the write, and an edit that adds a mention.
   'python3 scripts/publish.py',
   'node scripts/publish.mjs',
+  'python3 scripts/publ*.py',
+  'node scripts/publ*.mjs',
   'python3 scripts/widened_sync.py',
   // A program the command writes for itself, whatever the file held before.
   "cat > tmp/new.py <<'EOF'\nopen('{{SIBLING}}/x', 'w')\nEOF\npython3 tmp/new.py",
@@ -494,6 +501,8 @@ const FOREIGN_WRITES = [
   "cat > tmp/new.py <<'EOF'\nopen('{{FOREIGN}}/x', 'w')\nEOF\npython3 tmp/new.py",
   "echo \"open('{{SIBLING}}/x','w')\" > tmp/analyze.py; python3 tmp/analyze.py",
   "cat > tmp/new.sh <<'EOF'\ntouch {{SIBLING}}/out\nEOF\nbash tmp/new.sh",
+  "cat > tmp/new.sh <<'EOF'\ntouch {{SIBLING}}/out\nEOF\nbash tmp/*.sh",
+  "cat > tmp/new.py <<'EOF'\nopen('{{SIBLING}}/x', 'w')\nEOF\npython3 tmp/*.py",
   "cat > tmp/new.sh <<'EOF'\ntouch {{FOREIGN}}/out\nEOF\nchmod +x tmp/new.sh && ./tmp/new.sh",
   "tee tmp/new <<'EOF'\n#!/usr/bin/env python3\nopen('{{SIBLING}}/x', 'w')\nEOF\ntmp/new",
   // Functions: recursion, redefinition, prefix assignments and local names.
@@ -515,6 +524,11 @@ const FOREIGN_WRITES = [
   "sed $'-i' '' s/a/b/ {{SIBLING}}/README.md",
   "dd if=/dev/null $'of={{SIBLING}}/x'",
   'touch {tmp/a,{{SIBLING}}/out}',
+  'bash -n scripts/*.sh; touch {{SIBLING}}/out',
+  // Without the variable, Git finds the repository its directory is in.
+  'GIT_DIR={{PROJECT}}/.git; unset GIT_DIR; cd {{FOREIGN}} && git add -A',
+  'unset GIT_DIR GIT_WORK_TREE; git -C {{SIBLING}} branch new',
+  'D={{SIBLING}}; export D=tmp > /nonexistent/x; touch "$D/out"',
   // Paths Git itself writes.
   'git clone -q . {{SIBLING}}/v',
   'git worktree add {{SIBLING}}/wt',
@@ -606,6 +620,7 @@ const UNPROVED = [
   ],
   ['f() { D={{SIBLING}}; local D=tmp; }; D=tmp; f; touch "$D/out"', 'ask_dynamic_unconfined'],
   ['readonly D={{SIBLING}}\nD=tmp\ntouch "$D/out"', 'ask_dynamic_unconfined'],
+  ['D={{SIBLING}}; readonly "D"; export D=tmp; touch "$D/out"', 'ask_dynamic_unconfined'],
   ['f() { touch m; cd "$SOMEWHERE" && f; }; f', 'cwd-unresolved'],
   ['exit() { :; }; exit 0; touch {{SIBLING}}/out', 'function-shadow'],
   ['cd() { :; }; cd {{OWN}} && touch src/claimed.txt', 'function-shadow'],
