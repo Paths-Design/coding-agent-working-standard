@@ -56,3 +56,9 @@ evidence:
     command: npx jest tests/hooks/worktree-claim-oracle.test.js
     exit_code: 0
     commit_sha: "9c5f42e7cb2f9454a7a029c2c62aeb18ae8b1815"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "service_image::prefix tests at 9c5f42e7c: 9 of 9 pass on macOS and Ubuntu 26.04, including retained_fixture_rejects_changed_missing_duplicate_and_misbound_inputs. prefix-profile.json is unchanged (sha256 95d7e3f2). Three fixture entries were compared with git at 58ed781a8 and matched. Limit: no test asserts that current templates stay serial; that is by inspection of derive_prefix_concurrency."
+    recorded_at: "2026-11-25T00:23:45.699Z"
+    command: "cargo +1.90.0 test --locked --offline --manifest-path packages/caws-native/Cargo.toml --no-default-features --lib service_image"
+    commit_sha: "9c5f42e7cb2f9454a7a029c2c62aeb18ae8b1815"
