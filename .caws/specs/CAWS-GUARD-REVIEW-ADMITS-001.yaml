@@ -3,7 +3,7 @@ title: 'Write guard refuses the foreign writes a second review found it admits'
 mode: fix
 lifecycle_state: draft
 created_at: '2026-11-25T03:12:14.765Z'
-updated_at: '2026-11-25T03:12:14.765Z'
+updated_at: '2026-11-25T04:11:14.664Z'
 created_by_session: 'f8d188a4-1b66-4ad5-bda4-86bdf477487b'
 blast_radius:
   modules:
@@ -23,6 +23,8 @@ scope:
     - 'docs/guides/command-analysis.md'
     - 'docs/guides/hook-packs.md'
   out: []
+  support:
+    - tmp/
 invariants:
   - 'A recognized write whose target belongs to another session''s worktree, an active claim or a different repository is refused'
   - 'The everyday, read and inline command corpora stay admitted'
