@@ -170,8 +170,8 @@ DENY_SEGMENT_PATTERNS: list[tuple[str, str]] = [
     # Permission escalation
     (r"\bchmod\b.*\+s\b", "setuid/setgid bit"),
     (r"\bchmod\b.*\b777\b", "chmod 777"),
-    # System control
-    (r"\b(shutdown|reboot)\b", "system shutdown/reboot"),
+    # System control. reboot and shutdown are decided by runs_system_power:
+    # both are ordinary words in file names and search terms.
     (r"\binit\s+[06]\b", "system runlevel change"),
     # CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001: catastrophic git/shell ops
     # promoted here from CONFIRM (ask) so they HARD-BLOCK. These are the
@@ -2909,6 +2909,318 @@ def strip_quoted_regions(raw: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# reboot and shutdown (CAWS-LATCH-ROUTINE-COMMANDS-001)
+# ---------------------------------------------------------------------------
+
+SYSTEM_POWER_REASON = "system shutdown/reboot"
+_POWER_MENTION = re.compile(r"(?:shutdown|reboot)", re.IGNORECASE)
+_POWER_NAME = re.compile(r"(?:shutdown|reboot)(?:\.\w+)?", re.IGNORECASE)
+_POWER_BARE = re.compile(r"(?:shutdown|reboot)", re.IGNORECASE)
+_POWER_PATH = re.compile(r"(?:^|/)s?bin/(?:shutdown|reboot)$", re.IGNORECASE)
+
+# Run their operands as a command, define one, or hold one to run later.
+_COMMAND_LAUNCHERS: set[str] = {
+    "env", "command", "builtin", "exec", "nohup", "time", "nice", "ionice", "timeout",
+    "gtimeout", "setsid", "stdbuf", "caffeinate", "watch", "xargs", "parallel", "sudo",
+    "doas", "su", "runuser", "chroot", "nsenter", "unshare", "flock", "script", "coproc",
+    "trap", "alias", "export", "declare", "typeset", "local", "readonly", "set",
+    "busybox", "toybox", "ssh", "mosh", "docker", "podman", "nerdctl", "kubectl", "lxc",
+    "incus", "vagrant", "expect", "osascript",
+}
+# Run text as a program: their operands, their input or a file.
+_TEXT_RUNNERS: set[str] = {
+    "sh", "bash", "zsh", "dash", "ksh", "fish", "eval", "source", ".", "at", "batch",
+    "crontab", "parallel", "ssh", "mosh", "su", "expect", "osascript",
+    "python", "python3", "node", "ruby", "perl",
+}
+# Take shell text after an option such as -c, where a quoted operand is a command.
+_SHELL_TEXT_OPTION = re.compile(r"-\w*c|-S|--command|--split-string")
+_SHELL_TEXT_TAKERS: set[str] = {
+    "sh", "bash", "zsh", "dash", "ksh", "fish", "su", "runuser", "script", "env", "flock",
+}
+# Take reboot or shutdown as an operation on this or another machine.
+_POWER_CONTROLLERS: set[str] = {
+    "systemctl", "loginctl", "launchctl", "telinit", "virsh", "adb", "fastboot",
+    "ipmitool", "qm", "pct", "multipass", "govc", "hcloud", "linode-cli",
+    "aws", "az", "gcloud", "doctl",
+}
+_GIT_RUNS_OPERAND: set[str] = {
+    "bisect", "foreach", "--exec", "-x", "filter-branch", "difftool", "mergetool",
+}
+_FIND_RUNS_OPERAND: set[str] = {"-exec", "-execdir", "-ok", "-okdir"}
+_RESERVED_BEFORE_COMMAND: set[str] = {
+    "if", "then", "elif", "else", "while", "until", "do", "!", "{", "}", "function",
+}
+_REDIRECT = re.compile(r"\d*(?:<<<|<<-?|>>|<>|[<>]\||&>>|&>|[<>]&|[<>])(?!\()")
+_ASSIGNMENT = re.compile(r"[A-Za-z_]\w*\+?=")
+
+
+@dataclass
+class _Word:
+    """A shell word with its quotes removed; `quoted` when any part had them."""
+
+    text: str
+    quoted: bool
+
+
+@dataclass
+class _SimpleCommand:
+    assignments: list[_Word] = field(default_factory=list)
+    words: list[_Word] = field(default_factory=list)
+    files: list[str] = field(default_factory=list)
+    # The command word is the output of a backquoted substitution.
+    substituted: bool = False
+
+
+def _read_word(text: str, i: int) -> tuple[_Word, int]:
+    """The word starting at i, and where it ends."""
+    out: list[str] = []
+    quoted = False
+    while i < len(text) and text[i] not in " \t\r\n;|&()`<>":
+        ch = text[i]
+        if ch == "\\" and i + 1 < len(text):
+            if text[i + 1] != "\n":
+                out.append(text[i + 1])
+                quoted = True
+            i += 2
+        elif ch in "'\"":
+            quoted = True
+            i += 1
+            while i < len(text) and text[i] != ch:
+                if ch == '"' and text[i] == "\\" and i + 1 < len(text):
+                    i += 1
+                out.append(text[i])
+                i += 1
+            i += 1
+        else:
+            out.append(ch)
+            i += 1
+    return _Word("".join(out), quoted), i
+
+
+def _simple_commands(text: str) -> list[_SimpleCommand]:
+    """The simple commands in shell text, read for what runs.
+
+    Reserved words, comments and here-document bodies are dropped, so the first
+    word of each is its command. Reading errs toward more command positions: a
+    closing parenthesis starts one, and so does the text inside a substitution.
+    """
+    commands = [_SimpleCommand()]
+    delimiters: list[str] = []
+    skip_name = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch in " \t\r":
+            i += 1
+            continue
+        if ch == "\n":
+            i += 1
+            for delimiter in delimiters:
+                while i < len(text):
+                    stop = text.find("\n", i)
+                    stop = len(text) if stop < 0 else stop
+                    line, i = text[i:stop], min(stop + 1, len(text))
+                    if line.strip() == delimiter:
+                        break
+            delimiters = []
+            commands.append(_SimpleCommand())
+            skip_name = False
+            continue
+        if ch == "#":
+            stop = text.find("\n", i)
+            i = len(text) if stop < 0 else stop
+            continue
+        redirect = _REDIRECT.match(text, i)
+        if redirect:
+            operator, i = redirect.group(), redirect.end()
+            while i < len(text) and text[i] in " \t":
+                i += 1
+            operand, i = _read_word(text, i)
+            if "<<<" in operator:
+                # A here-string is input text, not a file name.
+                if commands[-1].words:
+                    commands[-1].words.append(operand)
+            elif "<<" in operator:
+                delimiters.append(operand.text)
+            else:
+                commands[-1].files.append(operand.text)
+            continue
+        if ch in ";|&()`<>":
+            if ch == "`" and not commands[-1].words and text[i - 1:i] != "=":
+                commands[-1].substituted = True
+            commands.append(_SimpleCommand())
+            skip_name = False
+            i += 1
+            continue
+        start = i
+        word, i = _read_word(text, i)
+        if i == start:
+            i += 1
+            continue
+        current = commands[-1]
+        if skip_name:
+            skip_name = False
+        elif current.words:
+            current.words.append(word)
+        elif _ASSIGNMENT.match(text, start):
+            current.assignments.append(word)
+        elif not word.quoted and word.text in _RESERVED_BEFORE_COMMAND:
+            skip_name = word.text == "function"
+        else:
+            current.words.append(word)
+    return commands
+
+
+def _command_name(word: str) -> str:
+    """The basename a word names; `.` is the source builtin, not a directory."""
+    return "." if word == "." else command_basename(word).lower()
+
+
+def _names_power(word: str, separators: str = r"[{},!]") -> bool:
+    """Whether a word, or a brace part of it, is the program or a script of that name."""
+    return any(
+        _POWER_NAME.fullmatch(part.rsplit("/", 1)[-1])
+        for part in re.split(separators, word)
+    )
+
+
+def command_runs_text(raw_command: str) -> bool:
+    """Whether any part of a command runs text that another part could supply."""
+    commands = _simple_commands(raw_command)
+    mentioned = [
+        name.rsplit("/", 1)[-1]
+        for command in commands
+        for name in [word.text for word in command.words[1:]] + command.files
+    ]
+    for command in commands:
+        if command.substituted:
+            return True
+        if not command.words:
+            continue
+        first = command.words[0].text
+        names = [_command_name(word.text) for word in command.words]
+        if first.startswith("$") or names[0] in _TEXT_RUNNERS:
+            return True
+        if names[0] in _COMMAND_LAUNCHERS and _TEXT_RUNNERS & set(names[1:]):
+            return True
+        if names[0] == "xargs":
+            # Without a plain program of its own, xargs runs what it reads.
+            operands = [
+                name for name in names[1:]
+                if not name.startswith("-") and not re.fullmatch(r"[\d{}%]+", name)
+            ]
+            if not operands or operands[0] in _COMMAND_LAUNCHERS:
+                return True
+        # A file this command also names elsewhere, then runs by path.
+        if "/" in first and first.rsplit("/", 1)[-1] in mentioned:
+            return True
+    return False
+
+
+def runs_system_power(text: str, text_runs: bool) -> bool:
+    """Whether shell text runs reboot or shutdown, rather than only naming it.
+
+    True where either is the command word or the value of an assignment, quoted
+    or not; an unquoted operand of a program that launches its operands or
+    controls machine power; shell text handed to eval, trap or a -c option; or a
+    path to the system program. Where some part of the whole command runs text
+    (`text_runs`), any unquoted bare mention counts, because it may be what runs.
+    """
+    if not _POWER_MENTION.search(re.sub(r"[\\'\"]", "", text)):
+        return False
+    for command in _simple_commands(text):
+        if any(_names_power(word.text.split("=", 1)[1]) for word in command.assignments):
+            return True
+        if not command.words:
+            continue
+        if _names_power(command.words[0].text):
+            return True
+        name = _command_name(command.words[0].text)
+        operands = command.words[1:]
+        bare = [word.text for word in operands if not word.quoted]
+        if any(_POWER_PATH.search(word) for word in bare):
+            return True
+        if name in {"eval", "trap"} and any(runs_system_power(w.text, False) for w in operands):
+            return True
+        if name in _SHELL_TEXT_TAKERS and any(
+            _SHELL_TEXT_OPTION.fullmatch(option.text) and runs_system_power(payload.text, False)
+            for option, payload in zip(operands, operands[1:])
+        ):
+            return True
+        lookup = name == "command" and bool(bare) and bare[0] in {"-v", "-V"}
+        launches = not lookup and (
+            name in _COMMAND_LAUNCHERS
+            or name in _TEXT_RUNNERS
+            or (name == "find" and bool(_FIND_RUNS_OPERAND & set(bare)))
+            or (name == "git" and bool(_GIT_RUNS_OPERAND & set(bare)))
+        )
+        if launches and any(_names_power(word, r"[{},!=:]") for word in bare):
+            return True
+        if name in _POWER_CONTROLLERS and any(
+            _POWER_BARE.fullmatch(part) for word in bare for part in re.split(r"[-_/=.:,]", word)
+        ):
+            return True
+        if text_runs and any(_POWER_BARE.fullmatch(word.rsplit("/", 1)[-1]) for word in bare):
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# kill by process ID (CAWS-LATCH-ROUTINE-COMMANDS-001)
+# ---------------------------------------------------------------------------
+
+_KILL_SIGNAL = re.compile(r"-(?:\d{1,2}|(?:SIG)?[A-Z][A-Z0-9+]+)")
+_DISCARDING_REDIRECT = re.compile(r"(?:\d*|&)>>?(?:/dev/null|&\d)")
+
+
+def background_pid_variables(raw_command: str) -> set[str]:
+    """Names whose only appearance as a name in the command is NAME=$!."""
+    names = set(re.findall(r"(?:^|[\s;&|({])([A-Za-z_]\w*)=\$!(?=$|[\s;&|)}])", raw_command))
+    return {
+        name for name in names
+        if len(re.findall(r"(?<![\w$])(?<!\$\{)" + name + r"(?!\w)", raw_command)) == 1
+    }
+
+
+def is_explicit_pid_kill(fact: "CommandFact", background: set[str]) -> bool:
+    """Whether a kill names every target as one process: an ID above 1, or the
+    last background job of the same command. Process groups, job specs, every
+    process, and targets read from anywhere else are not explicit."""
+    if fact.executable != "kill":
+        return False
+    words: list[str] = []
+    pending = list(fact.argv)
+    while pending:
+        word = pending.pop(0)
+        if _DISCARDING_REDIRECT.fullmatch(word):
+            continue
+        if re.fullmatch(r"(?:\d*|&)>>?", word) and pending and pending[0] == "/dev/null":
+            pending.pop(0)
+            continue
+        words.append(word)
+    if len(words) > 1 and words[0] in {"-s", "-n"}:
+        words = words[2:]
+    elif words and _KILL_SIGNAL.fullmatch(words[0]):
+        words = words[1:]
+    if words and words[0] == "--":
+        words = words[1:]
+    if not words:
+        return False
+    for word in words:
+        if re.fullmatch(r"[1-9][0-9]*", word) and int(word) > 1:
+            continue
+        variable = re.fullmatch(r"\$(?:(!)|\{(!)\}|\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))", word)
+        if variable and (
+            variable.group(1) or variable.group(2)
+            or (variable.group(3) or variable.group(4)) in background
+        ):
+            continue
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Main classifier
 # ---------------------------------------------------------------------------
 
@@ -3074,6 +3386,8 @@ def derive_facets(fact: "CommandFact", adapters: dict | None) -> None:
     #     HOOK-ASK-ENFORCEMENT-001 a kill is confirm (single-command), and the
     #     warn-first grace lets a first kill warn rather than freeze. This is a
     #     documented corpus-vs-floor adjudication — the floor is authoritative.
+    #     A kill of explicit process IDs stays an ask; its source (pid_kill) tells
+    #     block-dangerous.sh to refuse it without arming the latch.
     #     sysctl only mutates with -w / a key=value assignment; bare queries read.
     if base is None and exe == "sysctl":
         if "-w" in fact.flags or any("=" in t for t in fact.targets):
@@ -3233,6 +3547,7 @@ def classify_command(
     *,
     _depth: int = 0,
     _adapters: dict | None = None,
+    _text_runs: bool = False,
 ) -> tuple[str, str, str, str]:
     """Classify a full command string.
 
@@ -3242,7 +3557,7 @@ def classify_command(
     HOOK-ASK-ENFORCEMENT-001 — enforcement provenance, NOT a flipped ask. Two
     additive fields ride alongside the unchanged decision/reason:
       source      — diagnostic provenance of the WINNING decision: capability |
-                    legacy_family | regex | rm_classifier | find_delete |
+                    pid_kill | legacy_family | regex | rm_classifier | find_delete |
                     commit_deletions | classifier_error | sidecar_error | unknown.
       enforcement — the wrapper contract block-dangerous.sh branches on:
                     pass | advisory | confirm | block.
@@ -3251,7 +3566,9 @@ def classify_command(
     carrying structured semantic evidence) or a classifier_error/budget ask ->
     confirm (current-command human approval at the hook boundary); a
     commit_deletions ask carries EXPLICIT confirm enforcement (block-dangerous.sh
-    refuses the command with remediation but never arms the latch); every other
+    refuses the command with remediation but never arms the latch); a pid_kill
+    ask (every risky operation in the command is a kill of explicit process IDs)
+    -> confirm, refused after the session's one warning without arming; every other
     ask (legacy governed-family default, CONFIRM regex, rm/find) -> advisory,
     preserving CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001. Bare `ask -> block` is
     explicitly rejected.
@@ -3285,7 +3602,7 @@ def classify_command(
             return "pass"
         # ask: capability-derived and fail-closed asks confirm; everything else
         # (legacy_family / regex / rm_classifier / find_delete / unknown) is advisory.
-        if source in {"capability", "classifier_error", "sidecar_error"}:
+        if source in {"capability", "pid_kill", "classifier_error", "sidecar_error"}:
             return "confirm"
         return "advisory"
 
@@ -3293,6 +3610,13 @@ def classify_command(
                  enforcement: str | None = None) -> None:
         nonlocal worst_decision, worst_reason, worst_source, worst_enforcement
         priority = {"allow": 0, "ask": 1, "deny": 2}
+        # A kill by process ID beside another operation that needs confirmation
+        # is an ordinary capability ask, whichever comes first.
+        if (
+            worst_source == "pid_kill" and decision == "ask" and source != "pid_kill"
+            and derive_enforcement(decision, source, enforcement) == "confirm"
+        ):
+            worst_source = "capability"
         if priority.get(decision, 0) > priority.get(worst_decision, 0):
             worst_decision = decision
             worst_reason = reason
@@ -3314,6 +3638,9 @@ def classify_command(
                 continue
             escalate("deny", desc, "regex")
 
+    segments = segment_command(raw_command)
+    text_runs = _text_runs or command_runs_text(raw_command)
+
     # --- Recursively classify command substitutions ---
     # Bash executes `$(...)` and backtick substitutions even inside double
     # quotes; single-quoted bodies are skipped by extract_command_substitutions.
@@ -3323,7 +3650,7 @@ def classify_command(
             continue
         sub_decision, sub_reason, sub_source, sub_enforcement = classify_command(
             body, repo_root, home, cwd, caws_worktree,
-            _depth=_depth + 1, _adapters=adapters,
+            _depth=_depth + 1, _adapters=adapters, _text_runs=text_runs,
         )
         if sub_decision != "allow":
             # Propagate the inner source + enforcement: a capability ask inside
@@ -3332,7 +3659,14 @@ def classify_command(
             escalate(sub_decision, f"command substitution: {sub_reason}",
                      sub_source, sub_enforcement)
 
-    segments = segment_command(raw_command)
+    background_pids = background_pid_variables(executable_surface)
+
+    # --- reboot and shutdown ---
+    # Read over the whole command, not per segment: a segment that holds a
+    # nested shell is classified by its payload, and a here-document keeps the
+    # commands after it in the same segment.
+    if runs_system_power(raw_command, text_runs):
+        escalate("deny", SYSTEM_POWER_REASON, "regex")
 
     for segment in segments:
         nested_result = classify_nested_shell(
@@ -3481,8 +3815,11 @@ def classify_command(
                 # any ask/deny it returns is facet-derived (lattice / opaque-exec /
                 # sidecar-fail-closed), so a capability ask routes to current-
                 # command human confirmation at the hook boundary (A1). A capability
-                # deny still derives to block. source=capability.
-                escalate(cap_result[0], cap_result[1], "capability")
+                # deny still derives to block. source=capability, or pid_kill when
+                # the ask is a kill of explicit process IDs.
+                pid_kill = cap_result[0] == "ask" and is_explicit_pid_kill(fact, background_pids)
+                escalate(cap_result[0], cap_result[1],
+                         "pid_kill" if pid_kill else "capability")
 
         if allow_result is None and not git_segment_allowed:
             # git_segment_allowed: an authoritative git-semantics allow for this
