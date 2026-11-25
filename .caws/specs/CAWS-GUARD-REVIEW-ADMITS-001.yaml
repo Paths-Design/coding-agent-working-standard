@@ -88,3 +88,8 @@ evidence:
     test_nodeid: packages/caws-cli/tests/shell/write-projection.test.js
     commit_sha: "1d735feeb160e52bf649eb8ad68e2d2524f2a5e4"
     test_verified_at: ceb353e960cdcb7062fbf15c7dcc31d6d1349e7c
+  - criterion_id: A4
+    status: fail
+    evidence_ref: "Observed on the installed build: node -e with ROOT = path.resolve(process.cwd(), '..') and writeFileSync(path.join(ROOT, ...)) is admitted, as is inline mkdirSync(path.join('..', ...)). The other listed forms exit 2 naming the owner: Python working-directory parents, percent and brace formatting, chdir, io.FileIO, subprocess cwd, executors, and one literal Node join. A Python path with an unknown first field is held without naming an owner."
+    recorded_at: "2026-11-25T07:49:44.171Z"
+    commit_sha: "1d735feeb160e52bf649eb8ad68e2d2524f2a5e4"
