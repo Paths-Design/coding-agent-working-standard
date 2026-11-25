@@ -3,7 +3,7 @@ title: 'bash-write-guard runs on jq 1.6'
 mode: fix
 lifecycle_state: draft
 created_at: '2026-11-24T22:04:08.647Z'
-updated_at: '2026-11-24T22:04:08.647Z'
+updated_at: '2026-11-25T04:12:10.676Z'
 created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
 blast_radius:
   modules:
@@ -17,6 +17,8 @@ scope:
     - 'packages/caws-cli/tests/'
     - 'packages/caws-cli/CHANGELOG.md'
   out: []
+  support:
+    - tmp/
 invariants:
   - 'A shipped shared template never changes without a pack version bump and recomputed fingerprint'
   - 'Compatibility work never turns a refused write into an admitted one'
