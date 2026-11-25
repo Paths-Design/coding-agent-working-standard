@@ -35,7 +35,7 @@ function reevaluates(values: readonly string[] | null | undefined): boolean {
 }
 
 /** A zsh glob qualifier that names code: e and a delimiter, or a function. */
-const QUALIFIER_CODE = /e[^\w|.*?)-]|\+/;
+const QUALIFIER_CODE = /e[:'"{[<(]|\+[A-Za-z_]/;
 /** The words of a literal brace expansion, or null when it is not all literal. */
 export function expandBraces(text: string): string[] | null {
   if (!/^\{[\w./,@%+:=^{}-]*\}$/.test(text)) return null;
@@ -406,7 +406,7 @@ export function expandWord(
             } else if (part.type === 'AnsiCQuoted')
               choices = [[{ text: part.value, split: false }]];
             else {
-              if (part.type === 'ExtendedGlob' && QUALIFIER_CODE.test(part.pattern))
+              if (split && part.type === 'ExtendedGlob' && QUALIFIER_CODE.test(part.pattern))
                 ctx.reason(part, 'glob-qualifier', 'Zsh can run code in a glob qualifier.');
               // Pathname and brace expansion change how many arguments exist.
               parts(part.parts ?? [], quoted);

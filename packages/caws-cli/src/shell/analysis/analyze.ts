@@ -81,7 +81,6 @@ function widen(states: readonly State[]): State {
     if (state.cwd !== merged.cwd || state.cwdUnknown === true) merged.cwdUnknown = true;
     if (state.logical !== merged.logical) delete merged.logical;
     keepMade(merged, state);
-    addLinks(merged, state);
     for (const name of new Set([
       ...(merged.exports?.keys() ?? []),
       ...(state.exports?.keys() ?? []),
@@ -95,13 +94,15 @@ function widen(states: readonly State[]): State {
 }
 const exportFacts = (state: State): unknown =>
   [...(state.exports ?? [])].sort(([a], [b]) => a.localeCompare(b));
-function exporting(state: State, name: string, value: boolean | null): void {
-  state.exports = new Map(state.exports).set(name, value);
+/** Under `set -a`, a name that has just been bound is exported. */
+function exportBound(state: State, name: string): void {
+  const every = exported(state, '*');
+  if (every !== false && exported(state, name) !== true) exporting(state, name, every);
 }
-/** A path any alternative can have made a link may be one. */
-function addLinks(target: State, other: State): void {
-  const links = new Set([...(target.linked ?? []), ...(other.linked ?? [])]);
-  if (links.size > 0) target.linked = [...links];
+function exporting(state: State, name: string, value: boolean | null): void {
+  // Git reads no other variable, and no other consumer needs the fact.
+  if (name !== '*' && name !== 'PAGER' && !name.startsWith('GIT_')) return;
+  state.exports = new Map(state.exports).set(name, value);
 }
 /** A directory counts as made only while every alternative still has it. */
 function keepMade(target: State, other: State): void {
@@ -115,7 +116,7 @@ function declaration(
   declared: readonly Assignment[]
 ): { builtin: string; options: string; names: string[] } {
   const values = argv.map(({ value }) => value ?? '');
-  const at = values.findIndex((value) => !/^(?:command|--)$/.test(value));
+  const at = values.findIndex((value) => !/^(?:command|--|no(?:glob|correct))$/.test(value));
   const [builtin = '', ...rest] = values.slice(at);
   return {
     builtin,
@@ -139,7 +140,6 @@ function forget(state: State): State {
     exporting(next, name, null);
   }
   delete next.made;
-  next.linked = [null];
   return { ...next, cwdUnknown: true, filesystemChanged: true, mappingChanged: true };
 }
 /** Filesystem effects outlive the subshell, pipeline or substitution that had them. */
@@ -148,7 +148,6 @@ function carryEffects(target: State, sources: readonly State[]): void {
     if (source.filesystemChanged === true) target.filesystemChanged = true;
     if (source.mappingChanged === true) target.mappingChanged = true;
     keepMade(target, source);
-    addLinks(target, source);
   }
 }
 interface TestOperand {
@@ -236,6 +235,7 @@ export async function analyzeCommand(
     outside: !inside(cwd, worktree),
     visits: 0,
     gitInvocations: [],
+    links: dependencies.links ?? { leads: new Map(), anywhere: false, removed: new Set() },
     ...(dependencies.observers?.gitMetadata
       ? { gitMetadata: dependencies.observers.gitMetadata }
       : {}),
@@ -321,7 +321,8 @@ export async function analyzeCommand(
   const subshells: State[][] = [];
   // Zsh names this option without regard to case or underscores.
   if (
-    (/\bsetopt\b/.test(request.command) && /all_*export/i.test(request.command)) ||
+    (/\bsetopt\b/.test(request.command) &&
+      /all_*export|\bsetopt\s+-[A-Za-z]*a/i.test(request.command)) ||
     process.env.SHELLOPTS?.includes('allexport')
   )
     exporting(initial, '*', null);
@@ -397,7 +398,6 @@ export async function analyzeCommand(
         state.mappingChanged === true,
         state.outcome ?? null,
         state.made ?? null,
-        state.linked ?? null,
         exportFacts(state),
       ]);
       unique.set(key, state);
@@ -426,7 +426,6 @@ export async function analyzeCommand(
       item.filesystemChanged === true,
       item.mappingChanged === true,
       item.made ?? null,
-      item.linked ?? null,
       exportFacts(item),
     ];
     let entry = [state];
@@ -489,7 +488,7 @@ export async function analyzeCommand(
     for (const result of results)
       for (const variable of localized) {
         result.bindings.set(variable, null);
-        exporting(result, variable, null);
+        exporting(result, variable, exported(state, variable));
       }
     return results;
   }
@@ -561,6 +560,7 @@ export async function analyzeCommand(
           visit(value, next, depth);
       }
       next.bindings.set(node.name, null);
+      exportBound(next, node.name);
       return next;
     }
     // Expansion can itself assign (${x:=y}, $((x=1))); keep those in this state.
@@ -575,8 +575,7 @@ export async function analyzeCommand(
     }
     if (frozen.has(node.name)) unknown = true;
     next.bindings.set(node.name, unknown ? null : [...new Set(values)]);
-    const every = exported(next, '*');
-    if (every !== false && exported(next, node.name) !== true) exporting(next, node.name, every);
+    exportBound(next, node.name);
     ctx.trace(
       node,
       'assignment',
@@ -679,6 +678,8 @@ export async function analyzeCommand(
       'command',
       'Inspect executable, argument roles, prefix environment, and redirections.'
     );
+    const unchanged =
+      projection && exported(state, '*') !== false ? new Map(state.bindings) : undefined;
     // argv is expanded using the old shell state, before prefix assignments.
     let vectors: Argument[][] = [[]];
     const words: Word[] = node.name ? [node.name] : [];
@@ -729,6 +730,9 @@ export async function analyzeCommand(
         vector.map((arg) => (covers(arg) ? { ...arg, several: true as const } : arg))
       );
     }
+    // An expansion can bind a name too.
+    for (const [variable, value] of unchanged ? state.bindings : [])
+      if (unchanged!.get(variable) !== value) exportBound(state, variable);
     const program = node.name && !node.name.parts?.length ? node.name.value : undefined;
     let assigned = clone(state);
     for (const prefix of node.prefix) {
@@ -799,7 +803,7 @@ export async function analyzeCommand(
       const { builtin, options, names } = declaration(argv, declared);
       if (
         builtin === 'export' ||
-        (/^(?:declare|local|typeset)$/.test(builtin) && /x/.test(options))
+        (/^(?:declare|local|readonly|typeset)$/.test(builtin) && /x/.test(options))
       ) {
         for (const variable of names)
           if (exported(next, variable) !== true) exporting(next, variable, skippable ? null : true);
@@ -808,6 +812,10 @@ export async function analyzeCommand(
         for (const variable of names)
           if (exported(next, variable) !== false) exporting(next, variable, null);
       }
+      // A sourced file can export what it finds assigned.
+      if (builtin === 'source' || builtin === '.')
+        for (const variable of next.bindings.keys())
+          if (exported(next, variable) === false) exporting(next, variable, null);
       if (exported(before, '*') !== false)
         for (const [variable, value] of next.bindings)
           if (before.bindings.get(variable) !== value && exported(next, variable) === false)
@@ -901,6 +909,13 @@ export async function analyzeCommand(
         const last = members.at(-1)!.map((item) => {
           const current = clone(item);
           carryEffects(current, [next]);
+          // A loop that enters directories and returns ends where it began.
+          if (current.cwdUnknown === true && next.cwdUnknown !== true) {
+            current.cwd = next.cwd;
+            delete current.cwdUnknown;
+            if (next.logical === undefined) delete current.logical;
+            else current.logical = next.logical;
+          }
           return current;
         });
         return join([next, ...last]);
@@ -968,7 +983,10 @@ export async function analyzeCommand(
             ))
         )
           return loop(state, node, (entry) => {
-            for (const item of entry) item.bindings.set(name, null);
+            for (const item of entry) {
+              item.bindings.set(name, null);
+              exportBound(item, name);
+            }
             const next = list(node.body.commands, entry.map(clone), reader, depth + 1);
             return { exits: [...entry, ...next], next };
           });
@@ -983,6 +1001,7 @@ export async function analyzeCommand(
             states = states.map((previous) => {
               const next = clone(previous);
               next.bindings.set(node.name.value, [item.value!]);
+              exportBound(next, node.name.value);
               return next;
             });
             const step = jumping(() => list(node.body.commands, states, reader, depth + 1));

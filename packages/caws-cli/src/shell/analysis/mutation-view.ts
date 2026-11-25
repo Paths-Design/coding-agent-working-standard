@@ -12,12 +12,14 @@ import {
   namesGitMetadata,
   nodeStartupBinding,
   projectBuiltin,
+  throughLinks,
   writesRelativeTarget,
 } from './policies';
 import type {
   Argument,
   GitMetadataObservation,
   GitWriteObservation,
+  Links,
   Location,
   State,
   Value,
@@ -233,6 +235,7 @@ export async function projectMutationView(
   /** Files this command has written so far, and the literal text it gave them. */
   const submittedFiles = new Map<string, SubmittedFile>();
   const redirectWrites = new Map<Redirection, WrittenFile | null>();
+  const links: Links = { leads: new Map(), anywhere: false, removed: new Set() };
   // Zsh ignores case and underscores in an option's name.
   const vanishingGlobs = /nullglob/i.test(
     `${request.command} ${process.env.BASHOPTS ?? ''}`.replaceAll('_', '')
@@ -961,6 +964,12 @@ export async function projectMutationView(
           span(node)
         );
       recordDocument(node, name, args, state);
+      if (['tee', 'truncate', 'touch', 'rm', 'mv', 'cp'].includes(name))
+        for (const arg of args.slice(1)) {
+          // Removing a link leaves what it leads to.
+          const own = name === 'rm' && links.leads.has(located(arg.value, state) ?? '');
+          if (!own && arg.value?.startsWith('-') === false) follow(arg, node, state);
+        }
       if (name === 'cp' || name === 'mv') {
         const original = span(node);
         const identity: CopyInvocation = {
@@ -1242,6 +1251,23 @@ export async function projectMutationView(
         );
       }
     };
+    /** A write through a link this command made lands where the link leads. */
+    const follow = (arg: Argument, node: Location, state: State): void => {
+      const path = located(arg.value, state);
+      const target = path === null ? undefined : throughLinks(path, links);
+      if (target === undefined) return;
+      if (target === null) {
+        issue(
+          'cwd-unresolved',
+          'A write passes through a link whose target could not be established.',
+          span(node)
+        );
+        return;
+      }
+      token('touch', 'word', false, span(node), state.cwd);
+      token(target, 'word', false, argSpan(arg, node), state.cwd);
+      token(';', 'op', false, span({ pos: node.end, end: node.end }), state.cwd);
+    };
     const observeRedirect = ({ node, targets, state }: RedirectObservation): void => {
       if (exhausted || node.type === 'HereDoc') return;
       if (node.operator === '>&' || node.operator === '<&') {
@@ -1282,6 +1308,7 @@ export async function projectMutationView(
         for (const arg of fields)
           token(arg.value ?? raw(arg), 'word', arg.value === null, argSpan(arg, node), state.cwd);
         token(';', 'op', false, span({ pos: node.end, end: node.end }), state.cwd);
+        if (kind === 'redirect') for (const arg of fields) follow(arg, node, state);
       }
     };
     /** A path Git writes is a target like any other utility's. */
@@ -1403,6 +1430,7 @@ export async function projectMutationView(
       {
         context: { canonical: request.project, worktree: request.project },
         gitContext: () => null,
+        links,
         projection: {
           ...(job.cwd === null || job.parent?.cwdUnknown === true ? { cwdUnknown: true } : {}),
           ...(job.parent?.logical === undefined ? {} : { logical: job.parent.logical }),

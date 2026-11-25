@@ -579,6 +579,8 @@ for (const command of [
   'declare -x A; declare -ra A; typeset -A B; local -r C; readonly D',
   'unset A; unset -v A B',
   'ls !(node_modules|dist) *(a|b)',
+  '[[ $x == @(name=*|type=*) ]]',
+  'ls s1/*(m+7) s1/*(.Lk+10)',
   'type x; wait; jobs; kill -9 1; umask 022; shift 2; times; ulimit -n',
   'mapfile; mapfile -t; readarray -t lines',
   'command -v x; command -V x; env; exec',
@@ -671,12 +673,11 @@ writes('pipelines', 'D=@/a; echo x | read D; touch "$D/o"', '?');
 writes('pipelines', 'D=@/a; echo x | read E; touch "$D/o"', '@/a/o');
 writes('pipelines', 'D=@/a; read D | cat; touch "$D/o"', '@/a/o');
 writes('pipelines', 'cd s1 | cat; touch o', '@/o');
+writes('pipelines', 'ls | while read -r f; do cd s1; ls; cd ..; done; touch o', '@/o');
+writes('pipelines', 'ls | while read -r d; do cd "$d"; ls; cd -; done; touch o', '@/o');
+writes('pipelines', 'ls | while read -r d; do pushd "$d"; popd; done; touch o', '@/o');
 add('pipelines', 'GIT_DIR=@/meta; ls | export GIT_DIR; git add a', {
   codes: ['git-environment', 'metadata-coordinate-unresolved'],
-  only: 'codes',
-});
-add('pipelines', 'mv y d; mkdir -p d/e; cd d/e; touch a', {
-  codes: ['cwd-unresolved'],
   only: 'codes',
 });
 for (const command of ['env -i ls', 'exec -a x ls', 'env -u A ls', 'env 9A=x ls', 'command -p ls'])
@@ -896,6 +897,9 @@ for (const [command, ...git] of [
   ['set -o allexport; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
   ['set -a; set +a; GIT_DIR=@/meta; git add a', 'add @'],
   ['set -a; GIT_DIR=@/meta; set +o allexport; git add a', 'add @ in @/meta'],
+  ['noglob export GIT_DIR; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['f() { local GIT_BRANCH=main; git add "$GIT_BRANCH"; }; f; git add a', 'add @', 'add @'],
+  ['source ./x; GIT_SHA=a; git log "$GIT_SHA"'],
   ['set -- -a; GIT_DIR=@/meta; git add a', 'add @'],
   ['export GIT_DIR=^/x; unset GIT_DIR; GIT_DIR=@/meta; git add a', 'add @'],
   ['(export GIT_DIR=@/meta); GIT_DIR=@/meta; git add a', 'add @'],
@@ -925,6 +929,12 @@ for (const command of [
   'f() { local GIT_DIR=@/meta; git log; }; export GIT_DIR=@/meta; f',
   'f() { git log; export GIT_DIR; GIT_DIR=@/meta; f; }; f',
   'setopt all_export; GIT_DIR=@/meta; git log',
+  'setopt -a; GIT_DIR=@/meta; git log',
+  'GIT_DIR=@/meta; source ./x; git log',
+  'GIT_DIR=@/meta; . ./x; git log',
+  'set -a; GIT_DIR+=@/meta; git log',
+  'set -a; : "${GIT_DIR:=@/meta}"; git log',
+  'set -a; for GIT_DIR in $(ls); do git log; done',
   'GIT_TRACE=/x git status',
   'GIT_CONFIG_GLOBAL=x git status',
 ])
@@ -933,6 +943,13 @@ add('git exports', "export GIT_SHA=x; bash -c 'git add a'", {
   codes: ['mutation-shell-environment', 'metadata-coordinate-unresolved'],
   only: 'codes',
 });
+
+const REPEATED = Array.from({ length: 10 }, (_, index) => `echo ${index} >> log`).join('\n');
+for (const [label, command] of [
+  ['links in a loop', 'for f in a b c d e; do [ -e "t/$f" ] || ln -s "../s/$f" "t/$f"; done'],
+  ['conditional exports', [1, 2, 3, 4, 5].map((n) => `[ -n "$X${n}" ] && export X${n}`).join('\n')],
+])
+  add('budget', `${command}\n${REPEATED}`, { label, targets: ['@/log'] });
 
 // ── Git configuration ───────────────────────────────────────────────────────
 
@@ -1176,6 +1193,7 @@ for (const [command, git, ...targets] of [
   ['-C s1 clean -fde k x', 'clean @/s1', '@/s1/x'],
   ['fsck --lost-found', 'fsck @'],
   ['fsck --lost', 'fsck @'],
+  ['fsck --l', 'fsck @'],
   ['--git-dir=meta init -q', 'init @ in @/meta', '@/clone'],
   ['worktree remove --force ^/x', 'worktree @', '^/x'],
   ['worktree move a b', 'worktree @', '@/a', '@/b'],
@@ -1938,6 +1956,27 @@ for (const [command, ...targets] of [
   ['mkdir d && cd d && mkdir e && cd e && touch a', '@/d/e/a'],
   ['mkdir d; cd d; touch a', '@/a', '@/d/a'],
   ['ln -s ^/x l; mkdir d && cd d && touch a', '@/d/a'],
+  // A write through a link this command made lands where it leads.
+  ['ln -s ^/home/h1 d; touch d/a', '@/d/a', '~/h1/a'],
+  ['ln -s ../home/h1 d; echo x > d/a', '@/d/a', '~/h1/a'],
+  ['ln -s ^/home/h1/f d; echo x > d', '@/d', '~/h1/f'],
+  ['ln ^/home/h1/f d; tee d', '@/d', '~/h1/f'],
+  ['ln -s ^/home/h1 .; touch h1/a', '@/h1/a', '~/h1/a'],
+  ['ln -s ^/home/h1/d; touch d', '@/d', '~/h1/d'],
+  ['ln -s ^/home/h1 s1; touch s1/h1/a', '@/s1/h1/a', '~/h1/a'],
+  ['ln -sfn ^/home/h1 s1; touch s1/a', '@/s1/a', '~/h1/a'],
+  ['ln -s ^/home/h1 d && cd d && touch a', '~/h1/a'],
+  ['rm -rf s1 && ln -s ^/home/h1 s1 && cd s1 && touch a', '@/s1', '~/h1/a'],
+  ['env ln -s ^/home/h1 d; touch d/a', '@/d/a', '~/h1/a'],
+  ['(ln -s ^/home/h1 d); touch d/a', '@/d/a', '~/h1/a'],
+  ["ln -s ^/home/h1 d; bash -c 'touch d/a'", '@/d/a', '~/h1/a'],
+  ['ln -s ^/home/h1 d; rm d; touch e', '@/d', '@/e'],
+  ['ln -s s1 d; touch d/a', '@/d/a', '@/s1/a'],
+  // Copies, archives and links elsewhere leave what mkdir makes a directory.
+  ['tar czf o.tgz s1 && mkdir -p d && cd d && touch a', '@/d/a'],
+  ['tar tzf o.tgz | head; mkdir -p d && cd d && touch a', '@/d/a'],
+  ['ln -s ../no . && mkdir -p d && cd d && touch a', '@/d/a'],
+  ['bash tools/cp-assets.sh --rm && mkdir -p d && cd d && touch a', '@/d/a'],
   ['bash -c "true"; mkdir d && cd d && touch a', '@/d/a'],
   // What a list skips has the status that skipped it.
   ['x && cd s1 && touch a', '@/s1/a'],
@@ -1958,21 +1997,19 @@ for (const [code, command, ...targets] of [
   ['function-shadow', 'export() { :; }'],
   ['mutation-shell-builtin', 'f() { declare -g D=@/b; }; f'],
   // It may have become a link, or never have been made.
-  [NOWHERE, 'mkdir d; rm -r d; ln -s ^/x d; cd d; touch a', '@/a', '@/d'],
-  [NOWHERE, 'mkdir d; (rm -r d; ln -s ^/x d); cd d; touch a', '@/a', '@/d'],
+  [NOWHERE, 'mkdir d; rm -r d; ln -s ^/no d; cd d; touch a', '@/a', '@/d'],
+  [NOWHERE, 'mkdir d; (rm -r d; ln -s ^/no d); cd d; touch a', '@/a', '@/d'],
+  [NOWHERE, 'mkdir d; env rm -r d; env ln -s ^/no d; cd d; touch a', '@/a', '@/d'],
+  [NOWHERE, 'ln -s ^/no d; mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'ln -s ^/no/d; mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'if y; then ln -s ^/no d; fi; mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'ln -s "$X" d; touch d/a', '@/d/a'],
+  [NOWHERE, "bash -c 'ln -s ^/no d'; mkdir -p d/e; cd d/e; touch a", '@/a'],
   [NOWHERE, 'cd d; mkdir d; touch a', '@/a'],
   [NOWHERE, 'mkdir "$X"; cd d; touch a', '@/a'],
-  [NOWHERE, 'ln -s ^/x d; mkdir -p d/e; cd d/e; touch a', '@/a'],
-  [NOWHERE, 'ln -s ^/x/d; mkdir -p d/e; cd d/e; touch a', '@/a'],
-  [NOWHERE, 'ln -s ^/x s1; mkdir -p s1/x/e; cd s1/x/e; touch a', '@/a'],
   [NOWHERE, 'ln -s ^/x "$X"; mkdir -p d/e; cd d/e; touch a', '@/a'],
   [NOWHERE, 'ln -st . ^/d; mkdir -p d/e; cd d/e; touch a', '@/a'],
-  [NOWHERE, 'tar xf y; mkdir -p d/e; cd d/e; touch a', '@/a'],
-  [NOWHERE, 'env ln -s ^/x d; mkdir -p d/e; cd d/e; touch a', '@/a'],
-  [NOWHERE, 'mkdir d; env rm -r d; env ln -s ^/x d; cd d; touch a', '@/a', '@/d'],
   [NOWHERE, "mkdir d; bash -c 'rm -r d; ln -s ^/x d'; cd d; touch a", '@/a', '@/d'],
-  [NOWHERE, '(ln -s ^/x d); mkdir -p d/e; cd d/e; touch a', '@/a'],
-  [NOWHERE, 'if y; then ln -s ^/x d; fi; mkdir -p d/e; cd d/e; touch a', '@/a', '@/d/e/a'],
   [NOWHERE, 'mkdir d/../e; cd e; touch a', '@/a'],
   [NOWHERE, 'mkdir d; cd d/e; touch a', '@/a'],
   [NOWHERE, 'if x; then mkdir d; fi; cd d; touch a', '@/a', '@/d/a'],
@@ -2246,6 +2283,17 @@ describe('write projection', () => {
     copies: view.copyOperations.map((row) => row.knowledge),
   });
 
+  // The guard walks every token, so alternatives that differ in nothing it
+  // checks must not multiply them.
+  test.each([
+    ['links in a loop', 'for f in a b c d e; do [ -e "t/$f" ] || ln -s "../s/$f" "t/$f"; done'],
+    [
+      'conditional exports',
+      [1, 2, 3, 4, 5].map((n) => `[ -n "$X${n}" ] && export X${n}`).join('\n'),
+    ],
+  ])('tokens stay bounded: %s', (label) => {
+    expect(results.get(`budget: ${label}`).tokens.length).toBeLessThan(220);
+  });
   test('every case is distinct', () => {
     const names = rows.map((row) => row.name);
     expect(names.filter((name, index) => names.indexOf(name) !== index)).toEqual([]);

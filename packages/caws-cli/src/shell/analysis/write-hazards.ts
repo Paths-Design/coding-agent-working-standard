@@ -310,7 +310,7 @@ const GIT_INSPECTION_FORMS: Readonly<Record<string, (args: Arguments) => boolean
       'get-url'
     ),
   config: readsConfiguration,
-  fsck: (args) => !some(args, /^--lo/),
+  fsck: (args) => !args.some((value) => value === null || abbreviates(value, ['lost-found'], [])),
   stash: (args) => begins(args, 'list', 'show'),
   worktree: (args) => begins(args, 'list'),
   reflog: (args) =>

@@ -20,7 +20,7 @@ import {
 } from './write-hazards';
 import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
-import type { AnalysisContext, Argument, Location, State, Value } from './types';
+import type { AnalysisContext, Argument, Links, Location, State, Value } from './types';
 
 export function inside(path: string, root: string): boolean {
   const rel = relative(root, path);
@@ -503,8 +503,8 @@ function projectGit(
       const target = value === '-C' ? (args[++index]?.value ?? null) : value.slice(2);
       if (target === null) cwd = null;
       else if (target !== '') {
-        if (isAbsolute(target)) cwd = resolveDirectory(target, '/');
-        else cwd = cwd === null ? null : resolveDirectory(target, cwd);
+        if (isAbsolute(target)) cwd = enterDirectory(target, '/', ctx.links);
+        else cwd = cwd === null ? null : enterDirectory(target, cwd, ctx.links);
       }
       continue;
     }
@@ -648,41 +648,81 @@ function opaque(
     );
   };
   const next: State = { ...state, filesystemChanged: true };
-  if (name === 'mkdir') next.made = [...(state.made ?? []), ...directoriesMade(args, state)];
+  if (name === 'mkdir')
+    next.made = [...(state.made ?? []), ...directoriesMade(args, state, ctx.links)];
   // A directory that can have become a link is no longer known to be one.
-  else if (replacesPaths(name, args)) delete next.made;
-  const links = linksMade(name, args, state);
-  if (links.length > 0) next.linked = [...(state.linked ?? []), ...links];
+  else if (REPLACING.includes(name) || shellRuns(name, args, 'ln|mv|rm')) delete next.made;
+  recordLinks(name, args, state, ctx.links);
   if (!args.some(rewritesMapping)) return next;
   ctx.mapping?.(node);
   return { ...next, mappingChanged: true };
 }
-const SHELL = /^(?:ba|z|da|k)?sh$/;
-const REPLACING = ['ln', 'mv', 'rm', 'cp', 'tar', 'unzip', 'rsync'];
-/** Whether a program, or the source given to a shell, can replace a directory. */
-function replacesPaths(name: string, args: readonly Argument[]): boolean {
-  const words = new RegExp(`\\b(?:${REPLACING.join('|')})\\b`);
-  return (
-    REPLACING.includes(name) ||
-    (SHELL.test(name) && args.some(({ value }) => value !== null && words.test(value)))
-  );
+const REPLACING = ['ln', 'mv', 'rm', 'cp', 'tar', 'unzip'];
+/** Whether the source an option gives a shell runs one of these programs. */
+function shellRuns(name: string, args: readonly Argument[], programs: string): boolean {
+  if (!/^(?:ba|z|da|k)?sh$/.test(name)) return false;
+  const at = args.findIndex(({ value }) => /^-[A-Za-z]*c$/.test(value ?? ''));
+  const code = at < 0 ? null : (args[at + 1]?.value ?? null);
+  return code !== null && new RegExp(`(?:^|[\\s;&|(])(?:${programs})\\s`).test(code);
 }
-/** Paths an invocation can have made a link; null is any path. */
-function linksMade(name: string, args: readonly Argument[], state: State): (string | null)[] {
-  if (name === 'rm' || !replacesPaths(name, args)) return [];
+/** The links an invocation makes, and where each of them leads. */
+function recordLinks(name: string, args: readonly Argument[], state: State, links: Links): void {
+  if (name !== 'ln') {
+    if (shellRuns(name, args, 'ln')) links.anywhere = true;
+    for (const { value } of name === 'rm' || name === 'mv' ? args : [])
+      if (value !== null && state.cwdUnknown !== true) links.removed.add(resolve(state.cwd, value));
+    return;
+  }
   const values = args.map(({ value }) => value);
-  const operands = values.filter((value) => value === null || !value.startsWith('-'));
+  const options = values.filter((value) => value?.startsWith('-') === true).join('');
+  const operands = values.filter((value) => value?.startsWith('-') !== true);
   const last = operands.at(-1);
-  if (
-    !['ln', 'mv', 'cp'].includes(name) ||
-    state.cwdUnknown === true ||
-    operands.includes(null) ||
-    !last ||
-    values.some((value) => /^(?:-[A-Za-z]*t|--t)/.test(value ?? ''))
-  )
-    return [null];
-  const at = resolve(state.cwd, operands.length > 1 ? last : basename(last));
-  return [at, ...operands.map((value) => resolve(at, basename(value!)))].map(physicalPath);
+  if (state.cwdUnknown === true || !last || /t/.test(options.replace(/--[a-z-]+/g, ''))) {
+    links.anywhere = true;
+    return;
+  }
+  const sources = operands.length > 1 ? operands.slice(0, -1) : operands;
+  const directory =
+    operands.length === 1
+      ? '.'
+      : /[nhT]/.test(options) ||
+          links.removed.has(resolve(state.cwd, last)) ||
+          !resolveDirectory(last, state.cwd)
+        ? null
+        : last;
+  for (const source of sources) {
+    if (source === null && directory !== null) {
+      links.anywhere = true;
+      continue;
+    }
+    const link = resolve(
+      state.cwd,
+      directory === null ? last : `${directory}/${basename(source!)}`
+    );
+    const base = /s/.test(options) ? dirname(link) : state.cwd;
+    links.leads.set(
+      `${physicalPath(dirname(link)).replace(/\/$/, '')}/${basename(link)}`,
+      source === null ? null : physicalPath(resolve(base, source))
+    );
+  }
+}
+/**
+ * Where a path leads through a link this source made: undefined when it passes
+ * through none, and null when the link leads somewhere unknown.
+ */
+export function throughLinks(path: string, links: Links): string | null | undefined {
+  if (links.leads.size === 0) return undefined;
+  const places = [path, physicalPath(dirname(path)).replace(/\/$/, '') + `/${basename(path)}`];
+  for (const place of places)
+    for (const [link, target] of links.leads)
+      if (inside(place, link))
+        return target === null ? null : resolve(target, relative(link, place));
+  return undefined;
+}
+/** The directory a path names, through any link this source made. */
+function enterDirectory(path: string, cwd: string, links: Links): string | null {
+  const led = throughLinks(resolve(cwd, path), links);
+  return led === undefined ? resolveDirectory(path, cwd) : led && resolveDirectory(led, '/');
 }
 /** A path with every existing component resolved, whether or not all of it exists. */
 function physicalPath(path: string): string {
@@ -694,7 +734,7 @@ function physicalPath(path: string): string {
   }
 }
 /** Directories mkdir makes, with the parents -p makes on the way. */
-function directoriesMade(args: readonly Argument[], state: State): string[] {
+function directoriesMade(args: readonly Argument[], state: State, links: Links): string[] {
   const made: string[] = [];
   for (const { value } of args) {
     if (value === null || value === '' || value.startsWith('-')) continue;
@@ -705,7 +745,7 @@ function directoriesMade(args: readonly Argument[], state: State): string[] {
       resolveDirectory(path, '/') === null && path !== '/';
       path = dirname(path)
     )
-      if (!state.linked?.some((link) => link === null || inside(path, link))) made.push(path);
+      if (!links.anywhere && throughLinks(path, links) === undefined) made.push(path);
   }
   return made;
 }
@@ -896,7 +936,8 @@ export function isShellBuiltin(name: string): boolean {
 function projectDirectory(
   args: readonly Argument[],
   state: State,
-  env: ReadonlyMap<string, Value>
+  env: ReadonlyMap<string, Value>,
+  links: Links
 ): State {
   const unknown = (): State => unknownDirectory(state);
   let physical = false;
@@ -926,7 +967,7 @@ function projectDirectory(
   const nominal = physical ? target : resolve(base ?? state.cwd, target);
   const promised = physicalPath(resolve(state.cwd, nominal));
   const resolved =
-    resolveDirectory(nominal, state.cwd) ??
+    enterDirectory(nominal, state.cwd, links) ??
     (state.made?.includes(promised) === true ? promised : null);
   if (!resolved) return unknown();
   const next: State = {
@@ -990,12 +1031,11 @@ function projectInvocation(
     const next = projectInvocation(args.slice(offset), state, childEnv, ctx, node);
     if (name === 'command' || name === 'noglob' || name === 'nocorrect') return next;
     // env and exec run a program, so a builtin's name changes nothing here.
-    const { filesystemChanged, mappingChanged, made, linked } = next;
+    const { filesystemChanged, mappingChanged, made } = next;
     const kept: State = {
       ...state,
       ...(filesystemChanged === undefined ? {} : { filesystemChanged }),
       ...(mappingChanged === undefined ? {} : { mappingChanged }),
-      ...(linked === undefined ? {} : { linked }),
     };
     if (made === undefined) delete kept.made;
     else kept.made = made;
@@ -1007,7 +1047,7 @@ function projectInvocation(
       return projectGit(args, state, env, ctx, node);
     case 'cd':
     case 'chdir':
-      return projectDirectory(args, state, env);
+      return projectDirectory(args, state, env, ctx.links);
     case 'sed':
       projectSed(args, ctx, node);
       return state;

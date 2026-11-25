@@ -60,12 +60,23 @@ export interface ProjectionMode {
   logical?: string;
 }
 /** Trusted in-process instrumentation; never populated from submitted JSON. */
+/** What the source does to links, which no state can undo. */
+export interface Links {
+  /** Where each link it makes leads, null when unknown. */
+  leads: Map<string, string | null>;
+  /** It can make a link at a path that is not known. */
+  anywhere: boolean;
+  /** Paths it removes, which are no longer the directories they were. */
+  removed: Set<string>;
+}
 export interface AnalysisDependencies {
   /** Proven inherited scalar values for trusted nested-source consumers. */
   inheritedBindings?: ReadonlyMap<string, Value>;
   gitContext?: GitContextResolver;
   context?: { canonical: string; worktree: string };
   projection?: ProjectionMode;
+  /** Links the source makes, shared with the sources nested in it. */
+  links?: Links;
   observers?: {
     gitMetadata?: (observation: GitMetadataObservation) => void;
     /** A path a Git operand names as a write; projection mode only. */
@@ -100,8 +111,6 @@ export interface State {
   logical?: string;
   /** Projection only: an earlier effect can have replaced a Git mapping. */
   mappingChanged?: boolean;
-  /** Projection only: paths this source can have made a link, null for anywhere. */
-  linked?: readonly (string | null)[];
   /** Projection only: directories this source makes before any link could replace them. */
   made?: readonly string[];
   /**
@@ -123,6 +132,7 @@ export interface AnalysisContext {
   outside: boolean;
   visits: number;
   gitInvocations: Location[];
+  links: Links;
   gitContext: GitContextResolver;
   gitMetadata?: (observation: GitMetadataObservation) => void;
   gitWrite?: (observation: GitWriteObservation) => void;
