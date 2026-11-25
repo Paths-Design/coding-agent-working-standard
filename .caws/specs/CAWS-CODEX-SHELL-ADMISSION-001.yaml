@@ -36,7 +36,8 @@ invariants:
   - 'An absolute write target owned by another session, claimed by an active worktree or in another repository is refused for Codex exactly as for other surfaces'
   - 'Codex receives no lifecycle rewrite fact, and caws hooks analyze never admits a Codex native envelope'
   - 'Shell, startup, alias and directory fields that conflict with the declared Bash subset stay refused'
-  - 'The Codex command directory is the host''s execution_workdir, or its payload cwd when the session header names a host release that reports the command''s own directory there (0.166.0 or later); otherwise it is unknown and writes that depend on it are refused'
+  - 'The launcher restates a Codex Bash payload as session cwd plus execution_workdir only when the session header names a release that reports the command directory as hook cwd (0.166.0 or later); any other Codex command is refused with the remedy named'
+  - 'The session anchor is the hook process directory, which no tool call can choose: a per-call directory cannot switch governance off or move it to another project'
 acceptance:
   - id: A1
     given: >-
