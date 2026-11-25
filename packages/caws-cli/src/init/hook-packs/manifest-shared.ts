@@ -729,6 +729,9 @@ import { isAdapterCoveredSurface } from './types';
 // targets. A held command names its remedy. lib/bash-mutation-analysis.sh
 // carries the launch kind, entry file and submitted source, and holds an
 // unresolved row that states none of them.
+// v142: lib/bash-mutation-analysis.sh looks for a NUL in an analyzer response by
+// code point. jq 1.6 answers contains with a NUL needle as true of any string,
+// so bash-write-guard refused every command it analyzed on that version.
 // v144: lib/bash-mutation-analysis.sh reads a Python path built from the working
 // directory's parents, percent or brace formatting, a changed directory, a
 // subprocess directory, io.FileIO and a function handed to another call, and a

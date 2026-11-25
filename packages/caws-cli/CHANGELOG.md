@@ -132,6 +132,9 @@ status`, message delivery, the peer notice) report the later of that file's
   Output and execution options, `--no-verify` and other hook bypasses, opaque
   shell source, and recognized writes whose target or directory is unknown stay
   held, and a held command names its remedy. Shared pack 141.
+- `bash-write-guard` runs on jq 1.6, the version Debian 12 installs. It
+  previously refused every command it analyzed there, as an invalid or
+  incomplete analyzer contract. Shared pack 142.
 - `bash-write-guard` admits a globbed script operand under a literal directory,
   such as `bash -n scripts/*.sh`, and Git after the command unsets a `GIT_`
   variable. A declaration with a redirection that can fail, such as

@@ -1,0 +1,73 @@
+id: CAWS-LATCH-ROUTINE-COMMANDS-001
+title: 'Danger latch does not lock a session for a kill by process ID or for reboot as data'
+mode: fix
+lifecycle_state: active
+worktree: latch-routine
+created_at: '2026-11-25T05:21:19.455Z'
+updated_at: '2026-11-25T05:42:24.552Z'
+created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
+blast_radius:
+  modules:
+    - 'Shared command classifier and the block-dangerous latch decision'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/classify_command.py'
+    - 'packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh'
+    - 'packages/caws-cli/templates/CLAUDE.md'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/hooks/'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/CHANGELOG.md'
+    - 'docs/guides/hook-packs.md'
+    - 'docs/architecture/command-capability-taxonomy.md'
+    - 'CLAUDE.md'
+    - 'AGENTS.md'
+    - packages/caws-cli/src/runtime/stock-handlers.ts
+  out: []
+  support:
+    - tmp/
+invariants:
+  - 'A shell that would run reboot or shutdown is denied and arms the latch, in every spelling denied before'
+  - 'A kill refused before this change is still refused; only whether the session is locked changes'
+  - 'The only commands admitted by this change name reboot or shutdown without running it'
+  - 'A kill that is not in a plain command, whose targets are not all explicit process IDs, or that shares a command with another operation the classifier flags, arms the latch as before'
+acceptance:
+  - id: A1
+    given: 'a session that already drew its one capability warning'
+    when: >-
+      the agent runs a plain command whose only flagged operation is a kill of
+      process IDs from 2 to 4194304, or of the same command's last background job
+      through a variable named for a PID, with any literal signal and through kill,
+      /bin/kill or /usr/bin/kill
+    then: 'the command is refused with the reason and a remedy, no latch or strike is recorded, and the next ordinary command runs, however often it is repeated'
+  - id: A2
+    given: 'the same session'
+    when: 'the agent runs kill -1, kill 0, a process group, a job spec, kill over a command substitution or xargs, pkill, killall, or a kill by ID alongside another capability-risk operation in either order'
+    then: 'the latch arms as it did before'
+  - id: A3
+    given: >-
+      a plain command (literal words, separators, if/then/else/fi and file
+      redirections) in which reboot or shutdown appears only as an operand of
+      inspection programs that write nothing, in file or branch names given to a
+      listed git subcommand, or within a longer data-file name
+    when: 'the classifier reads it'
+    then: 'it is not denied as a system reboot'
+  - id: A4
+    given: >-
+      any other command the previous rule denied for naming reboot or shutdown,
+      including in nested shells, substitutions, line continuations, expansions, zsh
+      forms and launchers, and any command it admitted
+    when: 'the classifier reads it'
+    then: 'a command denied before is denied and arms the latch, and a command admitted before is not denied'
+  - id: A5
+    given: 'the 31 commands behind the danger-latch resets recorded between 2026-10-26 and 2026-11-25'
+    when: 'each is replayed through the changed classifier and latch'
+    then: 'the two reboot filenames are no longer denied, the sixteen kills by process ID no longer lock the session, and every other verdict is unchanged'
+  - id: A6
+    given: 'the changed classifier and guard'
+    when: 'the classifier, latch and pack-fingerprint suites run'
+    then: 'all pass with SHARED_PACK_VERSION bumped'
+non_functional: {}
+contracts: []
