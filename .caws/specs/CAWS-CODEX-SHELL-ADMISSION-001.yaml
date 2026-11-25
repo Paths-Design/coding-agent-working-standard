@@ -43,7 +43,9 @@ acceptance:
       it exits 0 with empty output, so a Codex session can run caws status, read
       files, edit its own worktree and commit
   - id: A2
-    given: 'the same payload naming an absolute target owned by another session, claimed by an active worktree, or in another repository'
+    given: >-
+      the same payload naming a relative or absolute target owned by another
+      session, claimed by an active worktree, or in another repository
     when: 'the write guard evaluates it'
     then: 'it exits 2 naming the owner or repository and the target is unchanged'
   - id: A3
