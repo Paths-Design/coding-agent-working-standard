@@ -102,3 +102,8 @@ evidence:
     test_nodeid: packages/caws-cli/tests/hooks/pytest/test_classify_routine_commands.py
     commit_sha: "95101eca71a0a9016d11b2f804db0c34291e87af"
     test_verified_at: "2a88565db9172b92d6d38fe70bfe5b8f99c8afa7"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Replay of the 31 recorded commands through the base and the landed classifier: 15 change, 2 reboot filenames from deny to allow and 13 kills to pid_kill; 16 are identical, including the variable kill, the if-block kill and the kill beside caws specs amend-scope. The replay reads private transcripts and is not committed; sanitized copies are test cases. Latch behavior for the kills is the A1 bats."
+    recorded_at: "2026-11-25T07:27:15.065Z"
+    commit_sha: "95101eca71a0a9016d11b2f804db0c34291e87af"
