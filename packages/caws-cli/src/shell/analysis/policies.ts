@@ -503,8 +503,8 @@ function projectGit(
       const target = value === '-C' ? (args[++index]?.value ?? null) : value.slice(2);
       if (target === null) cwd = null;
       else if (target !== '') {
-        if (isAbsolute(target)) cwd = enterDirectory(target, '/', ctx.links);
-        else cwd = cwd === null ? null : enterDirectory(target, cwd, ctx.links);
+        if (isAbsolute(target)) cwd = enterDirectory(target, '/', state, ctx.links);
+        else cwd = cwd === null ? null : enterDirectory(target, cwd, state, ctx.links);
       }
       continue;
     }
@@ -651,78 +651,93 @@ function opaque(
   if (name === 'mkdir')
     next.made = [...(state.made ?? []), ...directoriesMade(args, state, ctx.links)];
   // A directory that can have become a link is no longer known to be one.
-  else if (REPLACING.includes(name) || shellRuns(name, args, 'ln|mv|rm')) delete next.made;
-  recordLinks(name, args, state, ctx.links);
+  else if (REPLACING.includes(name)) delete next.made;
+  const kept = recordLinks(name, args, state, ctx.links)
+    ? state.made?.filter((path) => throughLinks(path, ctx.links).length === 0)
+    : undefined;
+  if (kept?.length) next.made = kept;
   if (!args.some(rewritesMapping)) return next;
   ctx.mapping?.(node);
   return { ...next, mappingChanged: true };
 }
 const REPLACING = ['ln', 'mv', 'rm', 'cp', 'tar', 'unzip'];
-/** Whether the source an option gives a shell runs one of these programs. */
-function shellRuns(name: string, args: readonly Argument[], programs: string): boolean {
-  if (!/^(?:ba|z|da|k)?sh$/.test(name)) return false;
-  const at = args.findIndex(({ value }) => /^-[A-Za-z]*c$/.test(value ?? ''));
-  const code = at < 0 ? null : (args[at + 1]?.value ?? null);
-  return code !== null && new RegExp(`(?:^|[\\s;&|(])(?:${programs})\\s`).test(code);
-}
-/** The links an invocation makes, and where each of them leads. */
-function recordLinks(name: string, args: readonly Argument[], state: State, links: Links): void {
-  if (name !== 'ln') {
-    if (shellRuns(name, args, 'ln')) links.anywhere = true;
-    for (const { value } of name === 'rm' || name === 'mv' ? args : [])
-      if (value !== null && state.cwdUnknown !== true) links.removed.add(resolve(state.cwd, value));
-    return;
-  }
+const LINK_FLAGS: Readonly<Record<string, string>> = {
+  '--symbolic': 's',
+  '--relative': 'r',
+  '--no-dereference': 'n',
+  '--no-target-directory': 'T',
+};
+/** Record the links `ln` makes and where each can lead; false when it is not known. */
+function recordLinks(name: string, args: readonly Argument[], state: State, links: Links): boolean {
+  if (state.cwdUnknown === true) return false;
   const values = args.map(({ value }) => value);
-  const options = values.filter((value) => value?.startsWith('-') === true).join('');
-  const operands = values.filter((value) => value?.startsWith('-') !== true);
-  const last = operands.at(-1);
-  if (state.cwdUnknown === true || !last || /t/.test(options.replace(/--[a-z-]+/g, ''))) {
-    links.anywhere = true;
-    return;
+  for (const value of name === 'rm' || name === 'mv' ? values : [])
+    if (value !== null) links.removed.add(resolve(state.cwd, value));
+  if (name !== 'ln') return false;
+  const operands: (string | null)[] = [];
+  let into: string | null | undefined;
+  let flags = '';
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index]!;
+    const attached = /^--target-directory=([\s\S]*)$/.exec(value ?? '')?.[1];
+    if (attached !== undefined) into = attached;
+    else if (/^(?:-[A-Za-z]*t|--target-directory)$/.test(value ?? '')) {
+      into = values[++index] ?? null;
+      flags += value!.startsWith('--') ? '' : value!;
+    } else if (value === null || !value.startsWith('-')) operands.push(value);
+    else flags += value.startsWith('--') ? (LINK_FLAGS[value] ?? '') : value;
   }
-  const sources = operands.length > 1 ? operands.slice(0, -1) : operands;
-  const directory =
-    operands.length === 1
-      ? '.'
-      : /[nhT]/.test(options) ||
-          links.removed.has(resolve(state.cwd, last)) ||
-          !resolveDirectory(last, state.cwd)
-        ? null
-        : last;
+  const last = operands.at(-1) ?? null;
+  if (into === null || (into === undefined && last === null)) return false;
+  const sources = into !== undefined || operands.length === 1 ? operands : operands.slice(0, -1);
+  const named = into ?? (operands.length === 1 ? '.' : last!);
+  const inside =
+    into !== undefined ||
+    operands.length === 1 ||
+    (!/[nhT]/.test(flags) &&
+      !links.removed.has(resolve(state.cwd, named)) &&
+      resolveDirectory(named, state.cwd) !== null);
   for (const source of sources) {
-    if (source === null && directory !== null) {
-      links.anywhere = true;
-      continue;
-    }
-    const link = resolve(
-      state.cwd,
-      directory === null ? last : `${directory}/${basename(source!)}`
-    );
-    const base = /s/.test(options) ? dirname(link) : state.cwd;
-    links.leads.set(
-      `${physicalPath(dirname(link)).replace(/\/$/, '')}/${basename(link)}`,
-      source === null ? null : physicalPath(resolve(base, source))
-    );
+    if (source === null && inside) continue;
+    const link = resolve(state.cwd, inside ? `${named}/${basename(source!)}` : named);
+    const from = flags.includes('s') && !flags.includes('r') ? dirname(link) : state.cwd;
+    const target = source === null ? null : physicalPath(resolve(from, source));
+    const key = linkKey(link);
+    links.leads.set(key, [...new Set([...(links.leads.get(key) ?? []), target])]);
   }
+  return true;
 }
-/**
- * Where a path leads through a link this source made: undefined when it passes
- * through none, and null when the link leads somewhere unknown.
- */
-export function throughLinks(path: string, links: Links): string | null | undefined {
-  if (links.leads.size === 0) return undefined;
-  const places = [path, physicalPath(dirname(path)).replace(/\/$/, '') + `/${basename(path)}`];
-  for (const place of places)
-    for (const [link, target] of links.leads)
-      if (inside(place, link))
-        return target === null ? null : resolve(target, relative(link, place));
-  return undefined;
+/** A link's own path: its directory resolved, and its name as it is. */
+function linkKey(path: string): string {
+  return `${physicalPath(dirname(path)).replace(/\/$/, '')}/${basename(path)}`;
+}
+export function isMadeLink(path: string, links: Links): boolean {
+  return links.leads.size > 0 && (links.leads.has(path) || links.leads.has(linkKey(path)));
+}
+const LINK_DEPTH = 4;
+/** Where a path can lead through links this source made; null is an unknown place. */
+export function throughLinks(path: string, links: Links, depth = 0): (string | null)[] {
+  if (links.leads.size === 0 || depth > LINK_DEPTH) return [];
+  const found = new Set<string | null>();
+  for (const place of new Set([path, linkKey(path)]))
+    for (const [link, targets] of links.leads)
+      for (const target of inside(place, link) ? targets : []) {
+        const led = target === null ? null : resolve(target, relative(link, place));
+        const further = led === null || led === place ? [] : throughLinks(led, links, depth + 1);
+        for (const end of further.length > 0 ? further : [led]) found.add(end);
+      }
+  return [...found];
 }
 /** The directory a path names, through any link this source made. */
-function enterDirectory(path: string, cwd: string, links: Links): string | null {
+function enterDirectory(path: string, cwd: string, state: State, links: Links): string | null {
   const led = throughLinks(resolve(cwd, path), links);
-  return led === undefined ? resolveDirectory(path, cwd) : led && resolveDirectory(led, '/');
+  const place = led.length === 0 ? resolve(cwd, path) : led.length === 1 ? led[0]! : null;
+  if (place === null) return null;
+  const promised = physicalPath(place);
+  return (
+    resolveDirectory(led.length === 0 ? path : place, cwd) ??
+    (state.made?.includes(promised) === true ? promised : null)
+  );
 }
 /** A path with every existing component resolved, whether or not all of it exists. */
 function physicalPath(path: string): string {
@@ -745,7 +760,7 @@ function directoriesMade(args: readonly Argument[], state: State, links: Links):
       resolveDirectory(path, '/') === null && path !== '/';
       path = dirname(path)
     )
-      if (!links.anywhere && throughLinks(path, links) === undefined) made.push(path);
+      if (throughLinks(path, links).length === 0) made.push(path);
   }
   return made;
 }
@@ -965,10 +980,7 @@ function projectDirectory(
   const base = physical || isAbsolute(target) ? state.cwd : (state.logical ?? null);
   if (base === null && target.split('/').includes('..')) return unknown();
   const nominal = physical ? target : resolve(base ?? state.cwd, target);
-  const promised = physicalPath(resolve(state.cwd, nominal));
-  const resolved =
-    enterDirectory(nominal, state.cwd, links) ??
-    (state.made?.includes(promised) === true ? promised : null);
+  const resolved = enterDirectory(nominal, state.cwd, state, links);
   if (!resolved) return unknown();
   const next: State = {
     ...state,

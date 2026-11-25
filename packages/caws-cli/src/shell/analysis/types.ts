@@ -62,10 +62,8 @@ export interface ProjectionMode {
 /** Trusted in-process instrumentation; never populated from submitted JSON. */
 /** What the source does to links, which no state can undo. */
 export interface Links {
-  /** Where each link it makes leads, null when unknown. */
-  leads: Map<string, string | null>;
-  /** It can make a link at a path that is not known. */
-  anywhere: boolean;
+  /** Where each link it makes can lead, null when unknown. */
+  leads: Map<string, (string | null)[]>;
   /** Paths it removes, which are no longer the directories they were. */
   removed: Set<string>;
 }

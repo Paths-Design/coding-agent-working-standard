@@ -39,6 +39,8 @@ import type {
 } from './types';
 export type { AnalysisRequest, AnalysisResult } from './types';
 
+/** A zsh glob qualifier that names code: e and a delimiter, or a function. */
+const QUALIFIER_CODE = /e[:'"{[<(]|\+[A-Za-z_]/;
 const MAX_BYTES = 65536;
 const MAX_STATES = 32;
 const MAX_DEPTH = 16;
@@ -235,7 +237,7 @@ export async function analyzeCommand(
     outside: !inside(cwd, worktree),
     visits: 0,
     gitInvocations: [],
-    links: dependencies.links ?? { leads: new Map(), anywhere: false, removed: new Set() },
+    links: dependencies.links ?? { leads: new Map(), removed: new Set() },
     ...(dependencies.observers?.gitMetadata
       ? { gitMetadata: dependencies.observers.gitMetadata }
       : {}),
@@ -733,6 +735,10 @@ export async function analyzeCommand(
     // An expansion can bind a name too.
     for (const [variable, value] of unchanged ? state.bindings : [])
       if (unchanged!.get(variable) !== value) exportBound(state, variable);
+    for (const part of words)
+      for (const piece of projection ? (part.parts ?? []) : [])
+        if (piece.type === 'ExtendedGlob' && QUALIFIER_CODE.test(piece.pattern))
+          reason(piece, 'glob-qualifier', 'Zsh can run code in a glob qualifier.');
     const program = node.name && !node.name.parts?.length ? node.name.value : undefined;
     let assigned = clone(state);
     for (const prefix of node.prefix) {

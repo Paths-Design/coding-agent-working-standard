@@ -580,6 +580,7 @@ for (const command of [
   'unset A; unset -v A B',
   'ls !(node_modules|dist) *(a|b)',
   '[[ $x == @(name=*|type=*) ]]',
+  'case "$x" in @(name:*|type:*)) ls;; esac',
   'ls s1/*(m+7) s1/*(.Lk+10)',
   'type x; wait; jobs; kill -9 1; umask 022; shift 2; times; ulimit -n',
   'mapfile; mapfile -t; readarray -t lines',
@@ -1972,6 +1973,21 @@ for (const [command, ...targets] of [
   ["ln -s ^/home/h1 d; bash -c 'touch d/a'", '@/d/a', '~/h1/a'],
   ['ln -s ^/home/h1 d; rm d; touch e', '@/d', '@/e'],
   ['ln -s s1 d; touch d/a', '@/d/a', '@/s1/a'],
+  ['if y; then ln -s ^/home/h1 d; else ln -s s1 d; fi; touch d/a', '@/d/a', '@/s1/a', '~/h1/a'],
+  ['ln -s ^/home/h1 a; ln -s a b; touch b/x', '@/b/x', '~/h1/x'],
+  ['ln -st s1 ^/home/h1; touch s1/h1/a', '@/s1/h1/a', '~/h1/a'],
+  ['ln -s --target-directory=s1 ^/home/h1; touch s1/h1/a', '@/s1/h1/a', '~/h1/a'],
+  ['ln -sr ../home/h1 s1/d; touch s1/d/a', '@/s1/d/a', '~/h1/a'],
+  ['ln -s ^/home/h1 d; sed -i s/a/b/ d/f', '~/h1/f'],
+  ['ln -s ^/home/h1 d; dd if=a of=d/f', '~/h1/f'],
+  ['ln -s ^/home/h1 d; git clone ^/x d/y', '@/d/y', '~/h1/y'],
+  // What reads through a link, or removes it, writes nothing there.
+  ['ln -s ^/home/h1 d; touch -r d/a b', '@/d/a', '@/b'],
+  ['ln -s ^/home/h1 d; sed s/a/b/ d/f > o', '@/o'],
+  ['ln -s ^/home/h1 link/d; rm link/d', '@/link/d'],
+  ['mkdir r2 && ln -sfn r2 s1 && cd s1 && touch a', '@/r2/a'],
+  ['ln -s "$X" .; mkdir d && cd d && touch a', '@/d/a'],
+  ["mkdir d; bash -c 'rm -f x'; cd d && touch a", '@/x', '@/d/a'],
   // Copies, archives and links elsewhere leave what mkdir makes a directory.
   ['tar czf o.tgz s1 && mkdir -p d && cd d && touch a', '@/d/a'],
   ['tar tzf o.tgz | head; mkdir -p d && cd d && touch a', '@/d/a'],
@@ -2004,12 +2020,12 @@ for (const [code, command, ...targets] of [
   [NOWHERE, 'ln -s ^/no/d; mkdir -p d/e; cd d/e; touch a', '@/a'],
   [NOWHERE, 'if y; then ln -s ^/no d; fi; mkdir -p d/e; cd d/e; touch a', '@/a'],
   [NOWHERE, 'ln -s "$X" d; touch d/a', '@/d/a'],
-  [NOWHERE, "bash -c 'ln -s ^/no d'; mkdir -p d/e; cd d/e; touch a", '@/a'],
+
   [NOWHERE, 'cd d; mkdir d; touch a', '@/a'],
   [NOWHERE, 'mkdir "$X"; cd d; touch a', '@/a'],
-  [NOWHERE, 'ln -s ^/x "$X"; mkdir -p d/e; cd d/e; touch a', '@/a'],
+
   [NOWHERE, 'ln -st . ^/d; mkdir -p d/e; cd d/e; touch a', '@/a'],
-  [NOWHERE, "mkdir d; bash -c 'rm -r d; ln -s ^/x d'; cd d; touch a", '@/a', '@/d'],
+
   [NOWHERE, 'mkdir d/../e; cd e; touch a', '@/a'],
   [NOWHERE, 'mkdir d; cd d/e; touch a', '@/a'],
   [NOWHERE, 'if x; then mkdir d; fi; cd d; touch a', '@/a', '@/d/a'],
@@ -2080,6 +2096,9 @@ for (const [command, ...targets] of [
   [SCRIPT('x.sh', 'touch a', 'for f in ./*.sh; do bash "$f"; done'), '@/x.sh', '@/a'],
   [SCRIPT('x.md', 'touch "$X"', 'bash ./*.sh'), '@/x.md'],
   [SCRIPT('x.sh', 'touch "$X"', 'bash --version'), '@/x.sh'],
+  // A script that loops over scripts does not run itself forever.
+  [SCRIPT('q.sh', 'for f in s1/*.sh; do bash "$f"; done; touch a', 'bash q.sh'), '@/q.sh', '@/a'],
+  [SCRIPT('q.sh', 'touch a; bash q.sh', 'bash q.sh'), '@/q.sh', '@/a'],
   // A different file, or one in another language, is not shell source.
   [SCRIPT('x.sh', 'touch a', 'bash y.sh'), '@/x.sh'],
   [SCRIPT('x.rb', '#!/usr/bin/env ruby\nputs(', './x.rb'), '@/x.rb'],

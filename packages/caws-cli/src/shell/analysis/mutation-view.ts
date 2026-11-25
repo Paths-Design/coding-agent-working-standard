@@ -8,6 +8,7 @@ import type { Command, Redirection } from './parser-types';
 import {
   envUnset,
   exported,
+  isMadeLink,
   isShellBuiltin,
   namesGitMetadata,
   nodeStartupBinding,
@@ -184,6 +185,29 @@ const LITERAL_START = /^["']?(?:\.?\w|\.{1,2}\/|\/(?!dev\/|proc\/)\w[\w.-]*\/)/;
 const PLAIN_GLOB = /^[^$`]*$/;
 /** A glob in a literal directory, which can be listed. */
 const LISTED_GLOB = /^((?:[\w.@%+:,=-]+\/|\/)*)([\w.@%+:,=*?[\]!^-]+)$/;
+/** Options of a writer whose next argument is not a path it writes. */
+const UNWRITTEN: Readonly<Record<string, RegExp>> = {
+  touch: /^(?:-[A-Za-z]*[rdt]|--reference|--date)$/,
+  truncate: /^(?:-[A-Za-z]*[rs]|--reference|--size)$/,
+};
+/** The arguments that name what a recognized writer writes. */
+function writtenOperands(name: string, args: readonly Argument[]): Argument[] {
+  if (name === 'dd')
+    return args.flatMap((arg) =>
+      arg.value?.startsWith('of=') === true ? [{ ...arg, value: arg.value.slice(3) }] : []
+    );
+  const inPlace = args.some(({ value }) => /^(?:-[A-Za-z0-9]*i|--in-place)/.test(value ?? ''));
+  if (!['tee', 'truncate', 'touch', 'rm', 'mv', 'cp'].includes(name))
+    return (name === 'sed' || name === 'perl') && inPlace ? args.slice(1) : [];
+  const operands = args.filter(
+    ({ value }, index) =>
+      index > 0 &&
+      value !== null &&
+      !value.startsWith('-') &&
+      UNWRITTEN[name]?.test(args[index - 1]!.value ?? '') !== true
+  );
+  return name === 'cp' ? operands.slice(-1) : operands;
+}
 /** Names a written file has when a launch of each kind would run it. */
 const RUNNABLE = {
   shell: /(?:\.(?:ba|z|k|da)?sh|\/[^./]+)$/,
@@ -235,7 +259,7 @@ export async function projectMutationView(
   /** Files this command has written so far, and the literal text it gave them. */
   const submittedFiles = new Map<string, SubmittedFile>();
   const redirectWrites = new Map<Redirection, WrittenFile | null>();
-  const links: Links = { leads: new Map(), anywhere: false, removed: new Set() };
+  const links: Links = { leads: new Map(), removed: new Set() };
   // Zsh ignores case and underscores in an option's name.
   const vanishingGlobs = /nullglob/i.test(
     `${request.command} ${process.env.BASHOPTS ?? ''}`.replaceAll('_', '')
@@ -839,6 +863,10 @@ export async function projectMutationView(
     ): void => {
       for (const document of submittedBy(launch, 'shell', state).documents) {
         if (/^#!/.test(document.text) && !/^#!.*\b(?:ba|z|da|k)?sh\b/.test(document.text)) continue;
+        // A script that can launch itself says nothing new the second time.
+        let running: ScriptJob | undefined = job;
+        while (running && running.command !== document.text) running = running.parent?.job;
+        if (running) continue;
         const context = parent(node, state);
         const key = JSON.stringify([
           { ...context, job: jobs.indexOf(job), bindings: [...context.bindings] },
@@ -964,12 +992,12 @@ export async function projectMutationView(
           span(node)
         );
       recordDocument(node, name, args, state);
-      if (['tee', 'truncate', 'touch', 'rm', 'mv', 'cp'].includes(name))
-        for (const arg of args.slice(1)) {
-          // Removing a link leaves what it leads to.
-          const own = name === 'rm' && links.leads.has(located(arg.value, state) ?? '');
-          if (!own && arg.value?.startsWith('-') === false) follow(arg, node, state);
-        }
+      for (const arg of links.leads.size > 0 ? writtenOperands(name, args) : []) {
+        const path = located(arg.value, state);
+        // Removing a link leaves what it leads to.
+        if (path !== null && !(name === 'rm' && isMadeLink(path, links)))
+          follow(path, argSpan(arg, node), node, state.cwd);
+      }
       if (name === 'cp' || name === 'mv') {
         const original = span(node);
         const identity: CopyInvocation = {
@@ -1252,21 +1280,20 @@ export async function projectMutationView(
       }
     };
     /** A write through a link this command made lands where the link leads. */
-    const follow = (arg: Argument, node: Location, state: State): void => {
-      const path = located(arg.value, state);
-      const target = path === null ? undefined : throughLinks(path, links);
-      if (target === undefined) return;
-      if (target === null) {
-        issue(
-          'cwd-unresolved',
-          'A write passes through a link whose target could not be established.',
-          span(node)
-        );
-        return;
+    const follow = (path: string, place: Location, node: Location, cwd: string): void => {
+      for (const target of throughLinks(path, links)) {
+        if (target === null) {
+          issue(
+            'cwd-unresolved',
+            'A write passes through a link whose target could not be established.',
+            span(node)
+          );
+          continue;
+        }
+        token('touch', 'word', false, span(node), cwd);
+        token(target, 'word', false, place, cwd);
+        token(';', 'op', false, span({ pos: node.end, end: node.end }), cwd);
       }
-      token('touch', 'word', false, span(node), state.cwd);
-      token(target, 'word', false, argSpan(arg, node), state.cwd);
-      token(';', 'op', false, span({ pos: node.end, end: node.end }), state.cwd);
     };
     const observeRedirect = ({ node, targets, state }: RedirectObservation): void => {
       if (exhausted || node.type === 'HereDoc') return;
@@ -1308,7 +1335,10 @@ export async function projectMutationView(
         for (const arg of fields)
           token(arg.value ?? raw(arg), 'word', arg.value === null, argSpan(arg, node), state.cwd);
         token(';', 'op', false, span({ pos: node.end, end: node.end }), state.cwd);
-        if (kind === 'redirect') for (const arg of fields) follow(arg, node, state);
+        for (const arg of kind === 'redirect' ? fields : []) {
+          const path = located(arg.value, state);
+          if (path !== null) follow(path, argSpan(arg, node), node, state.cwd);
+        }
       }
     };
     /** A path Git writes is a target like any other utility's. */
@@ -1331,6 +1361,8 @@ export async function projectMutationView(
       token('touch', 'word', false, original, job.cwd ?? request.project);
       token(target ?? raw, 'word', target === null, place, job.cwd ?? request.project);
       token(';', 'op', false, span({ pos: node.end, end: node.end }), job.cwd ?? request.project);
+      if (target !== null && isAbsolute(target))
+        follow(target, place, node, job.cwd ?? request.project);
     };
     const observeGitMetadata = ({ node, subcommand, input }: GitMetadataObservation): void => {
       metadataInvocations.add(JSON.stringify([node.pos, node.end]));

@@ -408,6 +408,8 @@ SAME = set("str os.fspath os.fsdecode os.path.abspath os.path.realpath os.path.n
            "os.path.expanduser os.path.expandvars sorted list tuple set reversed iter next".split())
 KEEP = set("resolve absolute expanduser strip rstrip lstrip as_posix decode encode get pop items "
            "keys values copy setdefault".split())
+APPLIERS = set("map imap imap_unordered starmap map_async starmap_async submit apply apply_async "
+               "run_in_executor to_thread partial Thread Process Timer".split())
 WORDS = r"[\s\x27\x22<>|;&()=]+"
 READERS = set("ls cat head tail wc grep rg stat file diff du pwd echo which basename dirname".split())
 GIT_READERS = set("log show diff status rev-parse rev-list ls-files ls-tree grep cat-file blame "
@@ -537,11 +539,13 @@ for node in nodes:
 named_calls = {}
 handed_calls = {}
 for call in calls:
+    called_as = ""
     if isinstance(call.func, (ast.Name, ast.Attribute)):
         called_as = call.func.id if isinstance(call.func, ast.Name) else call.func.attr
         named_calls.setdefault(called_as, []).append(call)
     for at, item in [*enumerate(call.args), *[(None, item.value) for item in call.keywords]]:
-        own = isinstance(item, ast.Attribute) and getattr(item.value, "id", "") in ("self", "cls")
+        own = isinstance(item, ast.Attribute) and (
+            called_as in APPLIERS or getattr(item.value, "id", "") in ("self", "cls"))
         held = item.id if isinstance(item, ast.Name) else item.attr if own else None
         if held in functions:
             handed_calls.setdefault(held, []).append((call, at))
@@ -639,6 +643,8 @@ def passed(call, position, index, keyword):
     rows = [rest[0]] if verb in ("apply", "apply_async") and rest else []
     if verb in ("starmap", "starmap_async") and rest:
         rows = [row for item in literals(rest[0]) for row in getattr(item, "elts", [])]
+        if not rows and index is not None:
+            return [Field(rest[0], index, -1, True)]
     if rows and all(isinstance(row, (ast.Tuple, ast.List)) for row in rows):
         out += [row.elts[index] for row in rows if index is not None and index < len(row.elts)]
     elif index is not None and index < len(rest):
@@ -671,8 +677,8 @@ def percent(left, right, seen):
         pieces = re.split(r"%(?:[(][^)]*[)])?[-#0 +]*[0-9]*(?:[.][0-9]+)?[a-zA-Z]", text)
         cells = right.elts if isinstance(right, ast.Tuple) else [right]
         if "%(" in text:
-            table = {key.value: cell for key, cell in zip(right.keys, right.values)
-                     if isinstance(key, ast.Constant)} if isinstance(right, ast.Dict) else {}
+            table = {key.value: cell for item in literals(right) if isinstance(item, ast.Dict)
+                     for key, cell in zip(item.keys, item.values) if isinstance(key, ast.Constant)}
             cells = [table.get(name) for name in re.findall(r"%[(]([^)]*)[)]", text)]
         cells = [*cells, *[None] * len(pieces)]
         out += filled([(pieces[0], True, strong)], pieces[1:], cells, seen)
@@ -999,18 +1005,37 @@ def started(call):
                 words = shlex.split(command.value)
             except ValueError:
                 words = None
+    elif command is not None:
+        # A string built from parts reads when everything it can be reads.
+        texts = evaluate(command)
+        if texts and all(text and exact and not re.search(r"[<>|;&$`\n(]", text) and reading(text.split())
+                         for text, exact, strong in texts):
+            return
     if words is not None and reading(words):
         return
     found.add("X")
+    # The program, and the script an interpreter is given, are run rather than written.
+    executed = set()
+    if isinstance(command, (ast.List, ast.Tuple)) and command.elts:
+        program = command.elts[0]
+        ran = [program]
+        name = program.value if isinstance(program, ast.Constant) else ""
+        if qualified(program) == "sys.executable" or re.match(
+                r"(?:python[0-9.]*|node|bash|sh|zsh)$", posixpath.basename(str(name))):
+            ran += [item for item in command.elts[1:]
+                    if not (isinstance(item, ast.Constant) and str(item.value).startswith("-"))][:1]
+        executed = {id(part) for item in ran for part in ast.walk(item)}
     built = [item.value for item in call.keywords if item.arg == "cwd"]
     built += command.elts if isinstance(command, (ast.List, ast.Tuple)) else [command]
     for item in built:
-        if item is None or isinstance(item, ast.Constant):
+        if item is None or isinstance(item, ast.Constant) or id(item) in executed:
             continue
         for text, exact, strong in evaluate(item):
             pieces = re.split(WORDS, text or "") if item is command else [text or ""]
             emit([(piece, exact, False) for piece in pieces if "/" in piece or piece[:1] in ("~", ".")], False)
     for item in ast.walk(call):
+        if id(item) in executed:
+            continue
         if isinstance(item, ast.Constant) and isinstance(item.value, str):
             for piece in re.split(WORDS, item.value):
                 if "/" in piece or piece.startswith("~"):
@@ -1148,7 +1173,7 @@ _caws_node_joined() {
 #   Print the directories a literal join gives a program the source starts.
 _caws_node_directories() {
   local -x LC_ALL=C
-  tr '\n' ' ' <<< "$1" | grep -oE "cwd:[[:space:]]*(path\.)?(join|resolve)\([^()]*\)" |
+  tr '\n' ' ' <<< "$1" | sed "s/process\.cwd()/'.'/g" | grep -oE "cwd:[[:space:]]*(path\.)?(join|resolve)\([^()]*\)" |
     grep -vE '\([^)]*[A-Za-z_$][A-Za-z0-9_$.]*[[:space:]]*[,)]' | _caws_node_joined | tr -d "'"
   return 0
 }
