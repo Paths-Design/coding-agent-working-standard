@@ -84,10 +84,11 @@ evidence:
     test_verified_at: f7a475cc1025f87835e02c359ddc18b1a57a5533
   - criterion_id: A2
     status: pass
-    evidence_ref: "Same bats file arms the latch for kill -1, 0, group, job spec, substitution, pkill, killall, kill beside pkill in both orders, docker, timeout, bash -c, & and a variable. KEEPS_THE_LATCH in test_classify_routine_commands.py holds the wider list, including zsh redirect numbers and caws commands that change state. Not established: a program outside the reviewed list cannot stand beside a kill, but programs earlier in the session can change PATH."
-    recorded_at: "2026-11-25T07:20:14.810Z"
-    test_nodeid: packages/caws-cli/tests/hooks/bats/block-dangerous-routine-commands.bats
+    evidence_ref: "KEEPS_THE_LATCH in test_classify_routine_commands.py: kill -1, 0, groups, job specs, substitutions, xargs, pkill, killall, variables, &, zsh redirect numbers, and a kill beside another operation in either order are not marked pid_kill, and those that led with a visible kill keep source capability. That the latch then arms is block-dangerous-routine-commands.bats (other kills: each still locks after the warning), executed and passed when A1 was recorded; the run for this criterion exceeded its time bound under load. A program earlier in the session can change PATH."
+    recorded_at: "2026-11-25T07:30:49.583Z"
+    test_nodeid: packages/caws-cli/tests/hooks/pytest/test_classify_routine_commands.py
     commit_sha: "95101eca71a0a9016d11b2f804db0c34291e87af"
+    test_verified_at: e9edc0617ecf91def08a621f4cadd0e228cc1708
   - criterion_id: A3
     status: pass
     evidence_ref: "NAMES_IT in test_classify_routine_commands.py: both recorded filenames, last reboot, grep/rg/cat/ls/jq/diff operands, cd then grep, git file and branch names, and node or python3 given a data file are not denied as a reboot."
