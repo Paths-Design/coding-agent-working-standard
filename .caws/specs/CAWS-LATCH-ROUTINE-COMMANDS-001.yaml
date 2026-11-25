@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: latch-routine
 created_at: '2026-11-25T05:21:19.455Z'
-updated_at: '2026-11-25T05:22:18.133Z'
+updated_at: '2026-11-25T05:42:24.552Z'
 created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
 blast_radius:
   modules:
@@ -24,6 +24,7 @@ scope:
     - 'docs/architecture/command-capability-taxonomy.md'
     - 'CLAUDE.md'
     - 'AGENTS.md'
+    - packages/caws-cli/src/runtime/stock-handlers.ts
   out: []
   support:
     - tmp/
