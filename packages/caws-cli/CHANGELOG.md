@@ -135,6 +135,12 @@ status`, message delivery, the peer notice) report the later of that file's
 - `bash-write-guard` runs on jq 1.6, the version Debian 12 installs. It
   previously refused every command it analyzed there, as an invalid or
   incomplete analyzer contract. Shared pack 142.
+- The danger latch no longer locks a session for two routine commands. A `kill`
+  of explicit process IDs in a plain command is refused after the session's one
+  capability warning, without a latch or a strike. A plain command that only
+  names `reboot` or `shutdown`, in a data-file name, a file or branch given to a
+  listed git subcommand, or an operand of an inspection program, is not denied.
+  A command the reader cannot read through keeps its verdict. Shared pack 143.
 - `bash-write-guard` admits a globbed script operand under a literal directory,
   such as `bash -n scripts/*.sh`, and Git after the command unsets a `GIT_`
   variable. A declaration with a redirection that can fail, such as
