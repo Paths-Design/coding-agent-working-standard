@@ -193,8 +193,9 @@ asks (`HTTP_MUTATE`, `PROC_KILL_BROAD`, `DESTROY`). This is the
 protected-paths.sh pattern — refuse the specific command with a self-service
 alternative — minus the latch.
 
-A `kill` whose targets are all explicit process IDs, or the last background job
-of the same command, carries `source` `pid_kill`. The first capability ask in a
+In a plain command that starts no launcher and holds nothing else flagged, a
+`kill` whose targets are all explicit process IDs, or the last background job of
+the same command, carries `source` `pid_kill`. The first capability ask in a
 session is still warned and run; after it, the kill is refused without arming
 the latch. A process group, job spec, every process, a target read from anywhere
 else, `pkill`, `killall`, and a kill beside another capability ask keep `source`

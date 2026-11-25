@@ -520,17 +520,19 @@ Rules that hold across guards:
 - **Capability-risk commands warn once.** The first such command in a session
   draws a warning; a later one arms the latch. A second one queued with the
   first is refused without a latch.
-- **A kill by process ID never latches.** Once the session has drawn its one
-  warning, a `kill` whose targets are all explicit IDs, or the last background
-  job of the same command, is refused and the session continues. A process
-  group, job spec, every process, a target read from anywhere else, `pkill`,
-  `killall`, or a kill beside another risky operation arms the latch.
-- **`reboot` and `shutdown` are denied where they run**: as a command word, an
-  assigned value, shell text handed to `eval`, `trap` or a `-c` option, an
-  operand of a program that launches its operands or controls machine power, or
-  any bare mention in a command that runs text. A file name or a search term is
-  not a command. Text handed to another language, to a here-document or to a
-  quoted here-string is not read.
+- **A plain kill by process ID never latches.** Once the session has drawn its
+  one warning, a `kill` whose targets are all IDs from 2 to 4194304, or the last
+  background job of the same command, is refused and the session continues. The
+  command must be plain (literal words, separators, `if`/`then`/`else`/`fi` and
+  file redirections), start no launcher, shell or interpreter, and hold nothing
+  else the classifier flags. Any other kill, `pkill` and `killall` arm the
+  latch.
+- **`reboot` and `shutdown` are denied wherever they appear unquoted**, except
+  in a plain command that only names them: as operands of programs that inspect
+  and write nothing (`last`, `ls`, `cat`, `grep`, `rg` and the like), in file or
+  branch names given to `git add`, `commit`, `diff`, `log`, `show`, `blame`,
+  `status`, `checkout`, `switch` or `branch`, or inside a longer data-file name
+  such as `after-reboot.json`. Quote a search term to keep it out of the check.
 - **A bare commit over staged deletions never latches**, however often it is
   repeated. The native runtime answers that refusal for Codex without the shell
   guard, and both must agree.

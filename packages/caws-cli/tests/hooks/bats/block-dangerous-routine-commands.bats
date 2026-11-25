@@ -64,6 +64,20 @@ assert_usable() {
   assert_usable
 }
 
+@test "kill by process ID: each recorded spelling is refused without locking" {
+  use_the_warning
+  local command
+  for command in '/bin/kill -INT 90559' 'kill -TERM 64436 70156' 'kill -CONT 77081' \
+    $'server > out.log 2>&1 &\nPID=$!\nsleep 30\nkill "$PID" 2>/dev/null' \
+    $'ps -p 97774 -o pid,command\nkill -INT 97774' 'kill -TERM 33060 && caws status'; do
+    call "$command"
+    assert_output --partial '"decision": "block"'
+    assert_output --partial 'the session danger latch was NOT armed'
+    [ ! -e "$(sentinel)" ]
+  done
+  assert_usable
+}
+
 @test "kill by process ID: repeating it never locks" {
   use_the_warning
   local n
@@ -99,7 +113,8 @@ assert_usable() {
   local command
   for command in 'kill -9 -1' 'kill 0' 'kill -- -1234' 'kill %1' 'kill $(pgrep node)' \
     'pkill -f worker' 'killall node' 'kill 1234; pkill -f worker' 'pkill -f worker; kill 1234' \
-    'kill 1234 && docker run alpine'; do
+    'kill 1234 && docker run alpine' 'kill 4294967295' 'kill -s {TERM,-1} 1234' './kill 1234' \
+    'kill 1234; timeout 5 pkill -f worker' "bash -c 'kill 1234'"; do
     SID="routine-$$-$BATS_TEST_NUMBER-${command//[^a-z0-9]/_}"
     use_the_warning
     call "$command"
@@ -121,7 +136,8 @@ assert_usable() {
 
 @test "reboot: running it locks the session" {
   local command
-  for command in 'reboot' 'true; shutdown now' 'if true; then reboot; fi' 'x=reboot; $x' 'ssh host reboot'; do
+  for command in 'reboot' 'true; shutdown now' 'if true; then reboot; fi' 'x=reboot; $x' 'ssh host reboot' \
+    $'true && \\\n  reboot' 'echo $(date)#; reboot' 'noglob reboot' 'echo reboot > s.sh; ./s.sh'; do
     SID="routine-$$-$BATS_TEST_NUMBER-${command//[^a-z0-9]/_}"
     call "$command"
     assert_output --partial '"decision": "block"'
