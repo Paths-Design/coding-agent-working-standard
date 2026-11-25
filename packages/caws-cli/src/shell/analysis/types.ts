@@ -27,6 +27,19 @@ export interface AnalysisResult {
 export interface Argument {
   value: string | null;
   source?: Location;
+  /** Projection only: a process substitution, whose content is source elsewhere. */
+  descriptor?: true;
+  /** Projection only: splitting, globbing or a spread can make this several fields. */
+  several?: true;
+}
+/** A path one Git invocation writes, beside the repository metadata it changes. */
+export interface GitWriteObservation {
+  node: Location;
+  /** Absolute when its directory is known; null when the operand is not. */
+  target: string | null;
+  source?: Location;
+  /** Whether the directory a relative target depends on is known. */
+  located: boolean;
 }
 export interface GitMetadataObservation {
   node: Location;
@@ -55,6 +68,8 @@ export interface AnalysisDependencies {
   projection?: ProjectionMode;
   observers?: {
     gitMetadata?: (observation: GitMetadataObservation) => void;
+    /** A path a Git operand names as a write; projection mode only. */
+    gitWrite?: (observation: GitWriteObservation) => void;
     /** A program or option without an admission profile; projection mode only. */
     unprofiled?: (observation: { node: Location; code: string }) => void;
     /** An effect that can replace a repository mapping; projection mode only. */
@@ -85,6 +100,8 @@ export interface State {
   logical?: string;
   /** Projection only: an earlier effect can have replaced a Git mapping. */
   mappingChanged?: boolean;
+  /** Projection only: directories this source makes before any link could replace them. */
+  made?: readonly string[];
   /** Projection only: known exit status, selecting the following && or || branch. */
   outcome?: 'success' | 'failure';
 }
@@ -101,6 +118,7 @@ export interface AnalysisContext {
   gitInvocations: Location[];
   gitContext: GitContextResolver;
   gitMetadata?: (observation: GitMetadataObservation) => void;
+  gitWrite?: (observation: GitWriteObservation) => void;
   projection?: ProjectionMode;
   /** Function bodies by name; a call visits every body defined under its name. */
   functions?: Map<string, PipelineNode[]>;

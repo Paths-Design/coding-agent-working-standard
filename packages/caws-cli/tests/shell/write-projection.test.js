@@ -346,8 +346,11 @@ for (const [command, ...targets] of [
   ['D=@/a; echo $((-D + 1)); touch "$D/o"', '@/a/o'],
   ['D=@/a; E=@/b; echo $((E = D)); touch "$D/o"', '@/a/o'],
   ['D=@/a; (( D++ )); touch "$D/o"', '?'],
-  ["touch $'a\\tb'", '?'],
-  ['touch $"a"', '?'],
+  ["touch $'a b'", '@/a b'],
+  ["touch $'a'b", '@/ab'],
+  ["touch $''a", '@/a'],
+  ['touch $"a"', '@/a'],
+  ['touch $"a$(ls)"', '?'],
   ['echo $"$(touch a)"', '@/a'],
   ['echo {a,$(touch b)}', '@/b'],
   ['echo *$(touch a)*', '@/a'],
@@ -421,9 +424,21 @@ for (const [code, command, ...targets] of [
   [['unknown-splitting', 'sed-option'], 'sed -n -I x s/a/b/ $X'],
   ['unknown-splitting', 'perl --in-place $X'],
   ['pathname-expansion', 'touch *.log', '?'],
-  ['pathname-expansion', 'rm {a,b}', '?'],
+  ['pathname-expansion', 'rm {a,"b"}', '?'],
+  ['pathname-expansion', 'rm {01..03}', '?'],
+  ['pathname-expansion', 'rm {1..65}', '?'],
+  ['pathname-expansion', 'rm {a,*}', '?'],
   ['pathname-expansion', 'X="*.log"; touch $X', '?'],
   ['positional-spread', 'touch "$@"', '?'],
+  ['positional-spread', 'a=(x y); touch "${a[@]}"', '?'],
+  ['positional-spread', 'touch "${@}"', '?'],
+  ['positional-spread', 'touch "${@:2}"', '?'],
+  [['positional-spread', 'unknown-splitting'], 'touch $*', '?'],
+  ['positional-spread', 'a=(-i \'\' s/a/b/ f); sed "${a[@]}"'],
+  ['positional-spread', 'a=(-o x f); sort "${a[@]}"'],
+  ['positional-spread', 'a=(--pre x); rg "${a[@]}" y'],
+  ['positional-spread', 'a=(a x); uniq "${a[@]}"'],
+  ['positional-spread', 'a=(--output=x); git diff "${a[@]}"'],
   [['redirect-target', 'unknown-splitting'], 'echo x > $X', '?'],
   ['redirect-target', 'X="a b"; echo x > $X', '@/a', '@/b'],
   [['executable-unknown', 'mutation-executable-unknown'], '$X touch'],
@@ -495,9 +510,24 @@ for (const command of [
   'export IFS=,',
   'IFS=, cd s1',
   'CDPATH=x cd s1',
-  'HOME=@/s1 cd',
+  'f() { :; }; IFS=, f',
+  'f() { :; }; CDPATH=x f',
+  'X=1; ((IFS = 1)); echo $X',
+  'echo $((IFS = 1))',
+  ': "${CDPATH:=x}"',
 ])
   held('environment', 'environment-change', command);
+// Each directory change reads the HOME its own command sees.
+for (const [command, ...targets] of [
+  ['HOME=@/s1 cd; touch o', '@/o', '@/s1/o'],
+  ['HOME=@/s1 cd && touch o', '@/s1/o'],
+  ['HOME=@/s1 "cd" && touch o', '@/s1/o'],
+  ['HOME=@/s1 command cd && touch o', '@/s1/o'],
+  ['HOME=@/s1 env cd && touch o', '@/o'],
+  ['HOME=@/s1 ls; cd && touch o', '~/o'],
+])
+  writes('environment', command, ...targets);
+held('environment', 'cwd-unresolved', 'HOME="$X" cd && touch o', '@/o');
 for (const [command, program] of [
   ['IFS=, eval x', 'mutation-shell-builtin'],
   ['IFS=, builtin x', 'mutation-shell-builtin'],
@@ -741,7 +771,6 @@ for (const setting of [
   'core.pager=',
   'core.editor=true',
   'core.fsmonitor=false',
-  'core.hooksPath=/dev/null',
   'pager.log=false',
   'credential.helper=',
   'diff.renames=copies',
@@ -757,6 +786,9 @@ for (const setting of [
   'core.editor=vi',
   'core.fsmonitor=/x',
   'core.hooksPath=/x',
+  // Turning a repository's hooks off selects what runs as much as another path.
+  'core.hooksPath=/dev/null',
+  'core.hooksPath=',
   'core.sshCommand=x',
   'core.bare=true',
   'core.worktree=/x',
@@ -798,7 +830,6 @@ for (const command of [
   'cat-file -p HEAD',
   'check-ignore f',
   'cherry main',
-  'clone /x y',
   'commit-tree HEAD',
   'config --get a.b',
   'config --get-all a.b',
@@ -807,10 +838,13 @@ for (const command of [
   'config a.b',
   'config get a.b',
   'config list',
-  'config --global a.b c',
-  'config --system a.b c',
-  'config -f x a.b c',
-  'config --file=x a.b c',
+  'config --global a.b',
+  'config --global --get a.b',
+  'config --system --list',
+  'config -f x a.b',
+  'config -f x --get a.b',
+  'config --file=x --list --show-origin',
+  'config --type=bool --default false a.b',
   'describe --tags',
   'diff --stat',
   'diff --no-index a b',
@@ -819,7 +853,6 @@ for (const command of [
   'grep -n -e -O x',
   'grep -A1 O x',
   'grep -nfO x',
-  'init x',
   'log --oneline -8',
   'log --grep --output=x',
   'log -S --output=x',
@@ -836,6 +869,7 @@ for (const command of [
   'reflog show',
   'remote',
   'remote -v',
+  'remote --verbose show origin',
   'remote show origin',
   'remote get-url origin',
   'rerere status',
@@ -878,7 +912,11 @@ for (const command of [
   'branch --delete x --list',
   'branch --edit-description',
   'branch --set-upstream-to=x',
+  // Git accepts an abbreviation of any long option.
+  'branch --unset-up',
+  'branch --del x --list',
   'branch "$X"',
+  'branch --list "$X"',
   'checkout x',
   'cherry-pick x',
   'commit -m --output=x',
@@ -893,12 +931,15 @@ for (const command of [
   'config -e',
   'config --edit',
   'config "$X" y',
+  'config --unset-a a.b',
+  'config --remove-s a',
   'fetch',
   'gc',
   'merge x',
-  'mv a b',
   'notes add x',
   'notes "$X"',
+  // An option's own operand is not the action.
+  'notes --ref list add -m x',
   'pull',
   'push',
   'rebase x',
@@ -911,16 +952,17 @@ for (const command of [
   'reset x',
   'restore f',
   'revert x',
-  'rm f',
   'sparse-checkout set x',
   'stash',
   'stash push -m --output=x',
   'stash pop',
   'stash "$X"',
+  'stash -m list',
   'submodule update',
   'switch x',
   'symbolic-ref HEAD x',
   'symbolic-ref -d HEAD',
+  'symbolic-ref -qd HEAD',
   'tag x',
   'tag -d x',
   'tag -a x',
@@ -930,12 +972,71 @@ for (const command of [
   'tag "$X"',
   'update-index x',
   'update-ref x y',
-  'worktree add x',
   'worktree "$X"',
   'bundle unbundle x',
   'constructor',
 ])
   metadata('git writes', 'git ' + command, command.split(' ', 1)[0] + ' @');
+// A path Git is given to write is a target, beside the metadata it changes.
+for (const [command, git, ...targets] of [
+  ['mv a b', 'mv @', '@/a', '@/b'],
+  ['mv -k a b s1', 'mv @', '@/a', '@/b', '@/s1'],
+  ['rm f', 'rm @', '@/f'],
+  ['rm -r -- -f', 'rm @', '@/-f'],
+  ['rm --cached f', 'rm @'],
+  ['-C s1 rm f', 'rm @/s1', '@/s1/f'],
+  ['-C s1 mv a ^/b', 'mv @/s1', '@/s1/a', '^/b'],
+  ['worktree add ^/x', 'worktree @', '^/x'],
+  ['worktree add -b n x HEAD', 'worktree @', '@/x'],
+  ['worktree add --reason r x', 'worktree @', '@/x'],
+  ['worktree remove --force ^/x', 'worktree @', '^/x'],
+  ['worktree move a b', 'worktree @', '@/a', '@/b'],
+  ['worktree repair a', 'worktree @', '@/a'],
+  ['worktree prune', 'worktree @'],
+  ['worktree lock x', 'worktree @'],
+  ['push ^/x HEAD', 'push @', '^/x'],
+  ['push file://^/x HEAD', 'push @', '^/x'],
+  ['push ./x HEAD', 'push @', '@/x'],
+  ['push -o a ^/x', 'push @', '^/x'],
+  ['push origin HEAD', 'push @'],
+  ['push https://x/y', 'push @'],
+  ['-C s1 restore f', 'restore @/s1', '@/s1/f'],
+  ['-C s1 restore -s HEAD f', 'restore @/s1', '@/s1/f'],
+  ['-C s1 restore --staged f', 'restore @/s1'],
+  ['-C s1 restore -S -W f', 'restore @/s1', '@/s1/f'],
+  ['-C s1 checkout x -- f', 'checkout @/s1', '@/s1/f'],
+  ['-C s1 checkout x', 'checkout @/s1'],
+  ['-C s1 clean -fd -e k x', 'clean @/s1', '@/s1/x'],
+  ['checkout -- f', 'checkout @'],
+  ['restore f', 'restore @'],
+])
+  add('git targets', 'git ' + command, { git: [git], targets });
+for (const [command, ...targets] of [
+  ['clone ^/x', '@/clone'],
+  ['clone ^/x y', '@/y'],
+  ['clone -b main --depth 1 ^/x ^/y', '^/y'],
+  ['clone --no-checkout ^/x', '@/clone'],
+  ['-C s1 clone ^/x y', '@/s1/y'],
+  ['init', '@/clone'],
+  ['init x', '@/x'],
+  ['init -b main x', '@/x'],
+  ['merge-file a b c', '@/a'],
+  ['merge-file -L x ^/a b c', '^/a'],
+  ['merge-file -p a b c'],
+])
+  writes('git targets', 'git ' + command, ...targets);
+for (const [command, ...targets] of [
+  ['git rm "$X"', '?'],
+  ['git clone ^/x "$X"', '?'],
+  ['git worktree remove "$X"', '?'],
+])
+  add('git targets', command, { targets, only: 'targets' });
+add('git targets', 'cd "$X"; git rm f', {
+  codes: ['cwd-unresolved', 'metadata-coordinate-unresolved'],
+  git: ['rm @'],
+  targets: ['@/f'],
+});
+writes('git targets', 'cd "$X"; git clone ^/x ^/y', '^/y');
 for (const command of [
   'diff --ext-diff',
   'diff --ext',
@@ -949,13 +1050,19 @@ for (const command of [
   'ls-remote --exec=x y',
   'ls-remote ext::x',
   'archive --exec=x',
+])
+  held('git hazards', 'git-execution', 'git ' + command);
+for (const command of [
   'clone -c a=b /x',
   'clone -u x /x',
   'clone --config a=b /x',
   'clone --template=x /x',
   'clone --separate-git-dir=x /x',
+  'init --template=x',
+  'init --separate-git-dir=x',
+  'rebase -ix y',
 ])
-  held('git hazards', 'git-execution', 'git ' + command);
+  add('git hazards', 'git ' + command, { codes: ['git-execution'], only: 'codes' });
 for (const command of [
   'filter-branch x',
   'difftool',
@@ -986,8 +1093,32 @@ for (const command of [
   'bugreport -ox',
   'diagnose -o x',
   'index-pack -o x',
+  'archive -vo x',
+  'format-patch -no x',
+  'checkout-index -a --prefix x',
+  'config --global a.b c',
+  'config --system a.b c',
+  'config -f x a.b c',
+  'config --file=x a.b c',
+  'config --file x --unset a.b',
 ])
   add('git hazards', 'git ' + command, { codes: ['git-option-unmodeled'], only: 'codes' });
+// A commit that skips the repository's hooks is not the commit they admit.
+for (const command of [
+  'commit --no-verify -m x',
+  'commit --no-ver -m x',
+  'commit -n -m x',
+  'commit -anm x',
+  'merge --no-verify x',
+  'push --no-verify',
+  'rebase --no-verify x',
+  'am --no-verify x',
+  'am -n x',
+  'cherry-pick --no-verify x',
+  'revert --no-verify x',
+  'pull --no-verify',
+])
+  add('git hazards', 'git ' + command, { codes: ['git-hooks'], only: 'codes' });
 // One subcommand's effect is another's ordinary option or operand.
 for (const command of [
   'log -o x',
@@ -1001,8 +1132,8 @@ for (const command of [
   'log --filters',
   'archive --format=tar HEAD',
   'archive HEAD -- -o x',
-  'clone --no-checkout /x',
   'grep --no-color x',
+  'log -n 3',
   'cat-file --batch',
   'ls-remote --sort=ext::x',
 ])
@@ -1031,6 +1162,16 @@ for (const command of [
   'branch -rD --list x',
   'tag -d -l x',
   'tag -am --list x',
+  'commit -m --no-verify',
+  'commit -amn',
+  'commit -F n -S',
+  'commit --no-edit',
+  'merge -n x',
+  'merge --no-verify-signatures x',
+  'push -n',
+  'revert -n x',
+  'cherry-pick -n x',
+  'rebase -n x',
 ])
   metadata('git hazards', 'git ' + command, command.split(' ', 1)[0] + ' @');
 for (const command of ['notes get-ref', 'submodule summary', 'rerere diff', 'rerere remaining'])
@@ -1265,7 +1406,21 @@ for (const [command, ...run] of [
   ['python3 -W ignore -X utf8 x.py', 'python:program:x.py:unresolved'],
   ['python3 -Wignore x.py', 'python:program:x.py:unresolved'],
   ['python3 -uW ignore x.py', 'python:program:x.py:unresolved'],
-  ['python3 --check-hash-based-pycs never x.py', 'python:program:never:unresolved'],
+  ['python3 --check-hash-based-pycs never x.py', 'python:program:x.py:unresolved'],
+  ['python3 --check-hash-based-pycs never -c 1', 'python:inline::unresolved'],
+  // One unknown field names a program; nothing beside it is code.
+  ['python3 "$X"', 'python:program::unresolved'],
+  ['python3 "$X" --check out.txt -v', 'python:program::unresolved'],
+  ['python3 -- "$X"', 'python:program::unresolved'],
+  ['node "$X"', 'node:program::unresolved'],
+  ['node --inspect "$X"', 'node:program::unresolved'],
+  ['node -- "$X"', 'node:program::unresolved'],
+  ['for f in *.py; do python3 "$f"; done', 'python:program::unresolved'],
+  ["python3 /dev/stdin <<'EOF'\n1\nEOF", 'python:inline::unresolved'],
+  ["node /dev/stdin <<'EOF'\n1\nEOF", 'node:inline::readonly'],
+  ["node --input-type module - <<'EOF'\n1\nEOF", 'node:inline::readonly'],
+  ['node --import tsx x -e 1', 'node:program:x:unresolved'],
+  ["node x.js <<'EOF'\n1\nEOF", 'node:program:x.js:unresolved'],
   ['python3 -c 1', 'python:inline::unresolved'],
   ['python3 -c1', 'python:inline::unresolved'],
   ['python3 -Bc 1', 'python:inline::unresolved'],
@@ -1290,7 +1445,8 @@ for (const [command, ...run] of [
   ['node --max-old-space-size=4096 x.mjs', 'node:program:x.mjs:unresolved'],
   ['node --import tsx x.ts', 'node:program:x.ts:unresolved'],
   ['node -r dotenv/config x.cjs "$X"', 'node:program:x.cjs:unresolved'],
-  ['node --require dotenv/config run', 'node:program::unresolved'],
+  ['node --require dotenv/config run', 'node:program:run:unresolved'],
+  ['node --foo run', 'node:program::unresolved'],
   ['node --enable-source-maps -- x.js', 'node:program:x.js:unresolved'],
   ['node --no-warnings x.js', 'node:program:x.js:unresolved'],
   ['node -e 1', 'node:inline::readonly'],
@@ -1308,22 +1464,40 @@ for (const [command, ...run] of [
 ])
   launches('interpreters', command, ...run);
 for (const [code, command, ...run] of [
-  ['mutation-code-source', 'python3 "$X"'],
+  ['mutation-code-source', 'python3 $X'],
+  ['mutation-code-source', 'python3 "$X" -c 1'],
+  ['mutation-code-source', 'python3 "$X" "print(1)"'],
+  ['mutation-code-source', 'python3 "$X" "$Y"'],
+  ['mutation-code-source', 'python3 "$@"'],
+  ['mutation-code-source', 'a=(-c 1); python3 "${a[@]}"'],
+  ['mutation-code-source', 'python3 "$X" <<\'EOF\'\n1\nEOF'],
+  ['mutation-code-source', 'python3 <(echo 1)'],
+  ['mutation-code-source', 'python3 /dev/fd/3'],
   ['mutation-code-source', 'python3 -c "$X"'],
   ['mutation-code-source', 'python3 -c'],
-  ['mutation-code-source', 'python3 -- "$X"'],
   ['mutation-interpreter-option', 'python3 -i -c 1'],
   ['mutation-interpreter-option', 'python3 --unknown -c 1'],
   ['mutation-interpreter-option', "python3 --unknown - <<'EOF'\n1\nEOF"],
-  ['mutation-code-source', 'node "$X"'],
+  ['mutation-code-source', 'node $X'],
+  ['mutation-code-source', 'node "$X" -e 1'],
+  ['mutation-code-source', 'node "$X" -pe 1'],
+  ['mutation-code-source', 'node "$X" --eval=1'],
+  ['mutation-code-source', 'node "$X" --print 1'],
+  ['mutation-code-source', 'node <(echo 1)'],
+  ['mutation-code-source', 'node --inspect <(echo 1)'],
+  ['mutation-code-source', 'node -r $X y'],
   ['mutation-code-source', 'node -e "$X"'],
   ['mutation-code-source', 'node -e'],
   ['mutation-code-source', 'node -e 1 "$X"'],
-  ['mutation-code-source', 'node --inspect "$X"'],
-  ['mutation-code-source', 'node -- "$X"'],
+  ['mutation-code-source', 'node --test "$X"'],
   ['mutation-interpreter-option', 'node --import tsx -e 1'],
-  ['mutation-interpreter-option', 'node --import=tsx x.js -e 1'.replace(' x.js', '')],
-  ['mutation-interpreter-option', 'node --import tsx x -e 1'],
+  ['mutation-interpreter-option', 'node --import=tsx -e 1'],
+  ['mutation-interpreter-option', "node --import tsx - <<'EOF'\n1\nEOF"],
+  ['mutation-interpreter-option', "node -r x <<'EOF'\n1\nEOF"],
+  ['mutation-interpreter-option', "node --input-type other - <<'EOF'\n1\nEOF"],
+  ['mutation-interpreter-option', "node --foo x - <<'EOF'\n1\nEOF"],
+  ['mutation-interpreter-option', "node --foo x <<'EOF'\n1\nEOF"],
+  ['mutation-interpreter-option', 'node --foo x <<< 1'],
   ['mutation-interpreter-option', 'node -e 1 --test'],
   ['mutation-interpreter-option', "node --inspect - <<'EOF'\n1\nEOF"],
   ['mutation-interpreter-option', "node --inspect <<'EOF'\n1\nEOF"],
@@ -1372,6 +1546,11 @@ for (const [command, ...targets] of [
   ["bash -s x y <<'EOF'\ntouch a\nEOF", '@/a'],
   ["bash - <<'EOF'\ntouch a\nEOF", '@/a'],
   ["bash <<'EOF'\ntouch a\nEOF", '@/a'],
+  ["bash /dev/stdin <<'EOF'\ntouch a\nEOF", '@/a'],
+  ['bash "$X"'],
+  ['bash -x "$X"'],
+  ['bash "$X" -v out.txt'],
+  ['bash -O extglob x.sh'],
   ['bash x.sh'],
   ['bash ./x.sh -c y'],
   ['bash -x x.sh "$X"'],
@@ -1395,8 +1574,18 @@ for (const [command, ...targets] of [
 for (const [code, command] of [
   ['mutation-code-source', 'bash -c "$X"'],
   ['mutation-code-source', 'bash -c'],
-  ['mutation-code-source', 'bash "$X"'],
-  ['mutation-code-source', 'bash -x "$X"'],
+  ['mutation-code-source', 'bash $X'],
+  ['mutation-code-source', 'bash "$X" \'touch a\''],
+  ['mutation-code-source', 'bash "$X" <<\'EOF\'\ntouch a\nEOF'],
+  ['mutation-code-source', 'bash "$@"'],
+  ['mutation-code-source', "bash <(echo 'touch a')"],
+  ['mutation-code-source', 'bash -O "$X"'],
+  ['mutation-shell-builtin', "source <(echo 'touch a')"],
+  ['mutation-shell-builtin', "source /dev/stdin <<'EOF'\ntouch a\nEOF"],
+  ['mutation-shell-builtin', "source /dev/fd/0 <<'EOF'\ntouch a\nEOF"],
+  ['mutation-interpreter-option', "bash -O extglob -c 'touch a'"],
+  ['mutation-interpreter-option', "bash -Oc extglob 'touch a'"],
+  ['mutation-interpreter-option', "bash +O extglob <<'EOF'\ntouch a\nEOF"],
   ['mutation-interpreter-option', "bash -i -c ':'"],
   ['mutation-interpreter-option', "bash -a -c ':'"],
   ['mutation-interpreter-option', "bash -p -c ':'"],
@@ -1421,7 +1610,154 @@ writes('nested shells', 'A=1 bash x.sh');
 writes('nested shells', 'bash -p x.sh');
 held('nested shells', ['mutation-code-source', 'mutation-shell-dialect'], 'sh -c "$X"');
 
+// ── Functions ───────────────────────────────────────────────────────────────
+
+const NOWHERE = 'cwd-unresolved';
+for (const [command, ...targets] of [
+  // A recursive call reaches what its body defines and what it has changed.
+  ['f() { f() { touch @/a; }; f; }; f', '@/a'],
+  ['f() { h; g() { h() { touch @/a; }; }; g; f; }; f', '@/a'],
+  ['f() { a; b; b() { a() { touch @/a; }; }; f; }; f', '@/a'],
+  ['f() { touch @/a; f; }; f', '@/a'],
+  // A prefix assignment is visible inside the function and ends with it.
+  ['f() { touch ~/o; }; HOME=@/s1 f', '@/s1/o'],
+  ['f() { touch "$D/o"; }; D=@/a; D=@/b f', '@/b/o'],
+  ['f() { :; }; D=@/a; D=@/b f; touch "$D/o"', '?'],
+  // Returning uncovers the name a local declaration covered.
+  ['f() { D=@/b; local D=@/a; }; D=@/a; f; touch "$D/o"', '?'],
+  ['f() { local D=@/b; touch "$D/o"; }; f', '@/b/o'],
+  ['f() { declare D; }; D=@/a; f; touch "$D/o"', '?'],
+  ['f() { typeset -x D=@/b; }; D=@/a; f; touch "$D/o"', '?'],
+  ['f() { D=@/b; }; D=@/a; f; touch "$D/o"', '@/a/o', '@/b/o'],
+  // Assigning a read-only name fails and leaves what it held.
+  ['readonly D=@/b\nD=@/a\ntouch "$D/o"', '?'],
+  ['declare -r D=@/b\nD=@/a\ntouch "$D/o"', '?'],
+  ['D=@/b; readonly D\nD=@/a\ntouch "$D/o"', '?'],
+  ['readonly D=@/a; touch "$D/o"', '@/a/o'],
+  ['readonly E=x; D=@/a; touch "$D/o"', '@/a/o'],
+  // A failed redirection skips a body, and any exit it holds.
+  ['{ exit 0; } > log; touch a', '@/a', '@/log'],
+  ['for i in 1; do exit 0; done > log; touch a', '@/a', '@/log'],
+  ['{ cd s1; } > log; touch a', '@/a', '@/s1/a', '@/log'],
+  ['{ cd s1 && touch a; } > log', '@/s1/a', '@/log'],
+  // Another program's name changes nothing in this shell.
+  ['env cd s1 && touch a', '@/a'],
+  ['/usr/bin/cd s1 && touch a', '@/a'],
+  ['exec cd s1 && touch a', '@/a'],
+  ['command cd s1 && touch a', '@/s1/a'],
+  ['./export x'],
+  ['bin/source x'],
+  ['help() { touch a; }; help', '@/a'],
+  // A directory this source makes is one it can change into.
+  ['mkdir d && cd d && touch a', '@/d/a'],
+  ['mkdir -p d/e && cd d/e && touch a', '@/d/e/a'],
+  ['mkdir -p d/e && cd d && touch a', '@/d/a'],
+  ['mkdir d && cd d && mkdir e && cd e && touch a', '@/d/e/a'],
+  ['mkdir d; cd d; touch a', '@/a', '@/d/a'],
+  // What a list skips has the status that skipped it.
+  ['x && cd s1 && touch a', '@/s1/a'],
+  ['x || cd s1 || touch a', '@/a'],
+  ['x && cd s1 || touch a', '@/a'],
+  ['x || cd s1 && touch a', '@/a', '@/s1/a'],
+])
+  writes('functions', command, ...targets);
+for (const [code, command, ...targets] of [
+  [NOWHERE, 'f() { touch a; cd s1 && f; }; f', '@/a', '@/s1/a'],
+  ['function-shadow', 'cd() { :; }; cd s1'],
+  [NOWHERE, 'f() { f() { touch a; }; f; }; f', '@/a'],
+  [NOWHERE, 'f() { touch "$D/o"; [ "$D" = @/b ] && return; D=@/b; f; }; D=@/a; f', '?', '@/a/o'],
+  [NOWHERE, 'f() { f; }; D=@/a; f; touch "$D/o"', '?', '@/a/o'],
+  ['function-shadow', 'exit() { :; }'],
+  ['function-shadow', 'command() { touch a; }; command x'],
+  ['function-shadow', 'function return { :; }'],
+  ['function-shadow', 'export() { :; }'],
+  ['mutation-shell-builtin', 'f() { declare -g D=@/b; }; f'],
+  // It may have become a link, or never have been made.
+  [NOWHERE, 'mkdir d; rm -r d; ln -s ^/x d; cd d; touch a', '@/a', '@/d'],
+  [NOWHERE, 'mkdir d; (rm -r d; ln -s ^/x d); cd d; touch a', '@/a', '@/d'],
+  [NOWHERE, 'cd d; mkdir d; touch a', '@/a'],
+  [NOWHERE, 'mkdir "$X"; cd d; touch a', '@/a'],
+  [NOWHERE, 'mkdir d/../e; cd e; touch a', '@/a'],
+  [NOWHERE, 'mkdir d; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'if x; then mkdir d; fi; cd d; touch a', '@/a', '@/d/a'],
+  [NOWHERE, 'cd "$X"; perl -0pi -e s/a/b/ f'],
+  [NOWHERE, 'cd "$X"; perl -l012i -e s/a/b/ f'],
+  [NOWHERE, 'cd "$X"; touch -- -f'],
+  [NOWHERE, 'cd "$X"; dd of=f'],
+])
+  held('functions', code, command, ...targets);
+for (const command of [
+  'cd "$X"; perl -pe s/a/b/ f',
+  'cd "$X"; perl -ne print f',
+  'cd "$X"; dd if=f of=/x',
+  'cd "$X"; touch -c /x',
+])
+  add('functions', command, { codes: [], only: 'codes' });
+// Text Bash would evaluate again is source, not data.
+for (const [code, command] of [
+  ['read-options', "read 'a[$(touch a)]' <<< x"],
+  ['test-source', "[[ -v 'a[$(touch a)]' ]]"],
+  ['test-source', "[[ 'a[$(touch a)]' -eq 0 ]]"],
+  ['test-source', "test -v 'a[$(touch a)]'"],
+  ['test-source', "[ -v 'a[`touch a`]' ]"],
+  ['arithmetic-source', "X='a[$(touch a)]'; echo $((X))"],
+  ['arithmetic-source', "X='a[$(touch a)]'; ((X++))"],
+  ['parameter-operation', 'X=\'a[$(touch a)]\'; echo "${!X}"'],
+  ['substitution-source', 'echo "${ touch a; }"'],
+])
+  add('functions', command, { codes: [code], only: 'codes' });
+for (const command of [
+  "[[ 'a[$x]' = y ]]",
+  "[ 'a[$x]' = y ]",
+  'X=3; echo $((X + 1))',
+  "X='a[$(touch a)]'; ((X = 1))",
+  'X=Y; echo "${!X}"',
+  'printf "%s" x',
+])
+  add('functions', command);
+writes('functions', 'printf "$O" x; D=@/a; touch "$D/o"', '@/a/o');
+writes('functions', 'D=@/a; printf "$O" x; touch "$D/o"', '?');
+
 // ── Programs ────────────────────────────────────────────────────────────────
+
+// A program this command writes for itself is read like any other source.
+const SCRIPT = (file, body, run) => `cat > ${file} <<'EOF'\n${body}\nEOF\n${run}`;
+for (const [command, ...targets] of [
+  [SCRIPT('x.sh', 'touch a', 'bash x.sh'), '@/x.sh', '@/a'],
+  [SCRIPT('x.sh', 'touch a', 'sh x.sh'), '@/x.sh', '@/a'],
+  [SCRIPT('x.sh', 'touch a', './x.sh'), '@/x.sh', '@/a'],
+  [SCRIPT('x.sh', 'touch a', '. ./x.sh'), '@/x.sh', '@/a'],
+  [SCRIPT('x.sh', '#!/bin/bash\ntouch a', 'chmod +x x.sh; @/x.sh'), '@/x.sh', '@/a'],
+  [SCRIPT('x.sh', 'touch a', 'cd s1; bash ^/project/x.sh'), '@/x.sh', '@/a', '@/s1/a'],
+  [SCRIPT('x.sh', 'touch a', 'for i in 1 2 3; do bash x.sh; done'), '@/x.sh', '@/a'],
+  [`tee x.sh <<'EOF'\ntouch a\nEOF\nbash x.sh`, '@/x.sh', '@/a'],
+  [`tee x.sh <<'EOF' > /dev/null\ntouch a\nEOF\nbash x.sh`, '@/x.sh', '/dev/null', '@/a'],
+  [SCRIPT('x.sh', 'touch a', SCRIPT('x.sh', 'touch b', 'bash x.sh')), '@/x.sh', '@/a', '@/b'],
+  // A different file, or one in another language, is not shell source.
+  [SCRIPT('x.sh', 'touch a', 'bash y.sh'), '@/x.sh'],
+  [SCRIPT('x.rb', '#!/usr/bin/env ruby\nputs(', './x.rb'), '@/x.rb'],
+  ['echo "touch a" > x.sh; bash x.sh', '@/x.sh'],
+  [`bash x.sh; cat > x.sh <<'EOF'\ntouch a\nEOF`, '@/x.sh'],
+])
+  writes('submitted programs', command, ...targets);
+for (const [command, payloads, rewritten] of [
+  [SCRIPT('x.py', 'print(1)', 'python3 x.py'), ['print(1)\n'], false],
+  [SCRIPT('x.py', 'print(1)', 'python3 ./s1/../x.py'), ['print(1)\n'], false],
+  [SCRIPT('x.mjs', 'let a', 'node x.mjs'), ['let a\n'], false],
+  [SCRIPT('x', '#!/usr/bin/env python3\n1', './x'), ['#!/usr/bin/env python3\n1\n'], false],
+  [SCRIPT('x', '#!/usr/bin/env node\n1', './x'), ['#!/usr/bin/env node\n1\n'], false],
+  [SCRIPT('x.py', '1', SCRIPT('x.py', '2', 'python3 x.py')), ['1\n', '2\n'], false],
+  [`cat >> x.py <<'EOF'\n1\nEOF\npython3 x.py`, ['1\n'], true],
+  [SCRIPT('x.py', '1', 'echo 2 >> x.py; python3 x.py'), ['1\n'], true],
+  [`cat > x.py <<EOF\n$X\nEOF\npython3 x.py`, [], true],
+  ['echo 1 > x.py; python3 x.py', [], true],
+  ['echo 1 | tee x.py; python3 x.py', [], true],
+  ['cp y.py x.py; python3 x.py', [], true],
+  ['cp s1/x.py .; python3 x.py', [], true],
+  ['echo 1 > y.py; python3 x.py', [], false],
+  ['for i in 1 2 3; do python3 x.py; done', [], false],
+])
+  add('submitted programs', command, { submitted: { payloads, rewritten } });
 
 for (const command of [
   './scripts/x.sh --quick',
@@ -1602,7 +1938,18 @@ describe('write projection', () => {
       copies: facts.copies ?? [],
     };
     const actual = summarize(results.get(name));
-    if (facts.only)
+    if (facts.submitted) {
+      const { interpreters, interpreterInvocations } = results.get(name);
+      expect(
+        interpreters.map(({ launch, payloads, rewritten }) => ({
+          launch,
+          payloads: payloads.map((payload) => payload.text),
+          rewritten,
+        }))
+      ).toEqual([{ launch: 'program', ...facts.submitted }]);
+      expect(interpreterInvocations).toHaveLength(1);
+      expect(actual.codes).toEqual([]);
+    } else if (facts.only)
       expect({ [facts.only]: actual[facts.only] }).toEqual({ [facts.only]: expected[facts.only] });
     else expect(actual).toEqual(expected);
   });

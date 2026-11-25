@@ -1,4 +1,4 @@
-import { basename, isAbsolute } from 'node:path';
+import { basename, isAbsolute, resolve } from 'node:path';
 import { analyzeCommand } from './analyze';
 import { classifyInterpreterEffects } from './interpreter-effects';
 import { resolveGitContext } from './git-context';
@@ -11,7 +11,14 @@ import {
   projectBuiltin,
   writesRelativeTarget,
 } from './policies';
-import type { Argument, GitMetadataObservation, Location, State, Value } from './types';
+import type {
+  Argument,
+  GitMetadataObservation,
+  GitWriteObservation,
+  Location,
+  State,
+  Value,
+} from './types';
 
 export interface MutationViewRequest {
   command: string;
@@ -46,6 +53,7 @@ export interface InterpreterPayload {
 export interface MutationInterpreter {
   language: 'node' | 'python';
   argv: (string | null)[];
+  /** Inline source, or what this command writes to a program's entry file. */
   payloads: InterpreterPayload[];
   effects: ReturnType<typeof classifyInterpreterEffects>;
   /**
@@ -55,6 +63,8 @@ export interface MutationInterpreter {
   launch: 'inline' | 'program';
   /** A program's entry file, when the command names one literally. */
   entry: string | null;
+  /** The command also writes the entry file in a way its payloads do not show. */
+  rewritten: boolean;
   cwd: string | null;
   start: number;
   end: number;
@@ -130,6 +140,15 @@ type ScriptJob = {
   unmodeledInvocations: Set<string>;
   nonShellInvocations: Set<string>;
 };
+interface SubmittedFile {
+  documents: (Location & { text: string; map: Mapping })[];
+  /** The documents are everything this command puts in the file. */
+  complete: boolean;
+}
+interface WrittenFile {
+  path: string;
+  before: SubmittedFile | undefined;
+}
 type HereDoc = Extract<Redirection, { type: 'HereDoc' }>;
 /** How an interpreter or shell invocation selects the source it runs. */
 type Selection =
@@ -145,6 +164,14 @@ const NODE_QUERIES = /^(?:-[vh]|--version|--help|--v8-options)$/;
 /** Node modes that take files or nothing, and never a program from stdin. */
 const NODE_PROGRAM_MODES = /^(?:-c|--check|--test|--run(?:=.*)?|--build-snapshot)$/;
 const NODE_NEUTRAL = /^(?:--no-warnings|--input-type=(?:module|commonjs))$/;
+/** Node options that take the next argument when no value is attached. */
+const NODE_OPERANDS =
+  /^(?:-r|--require|--import|--loader|--experimental-loader|-C|--conditions|--env-file(?:-if-exists)?|--title|--disable-warning|--watch-path|--test-(?:name-pattern|skip-pattern|reporter|reporter-destination|concurrency|shard|timeout))$/;
+/** Source a command supplies to itself through an open descriptor. */
+const STDIN_PATH = /^\/(?:dev\/(?:stdin|fd\/0)|proc\/self\/fd\/0)$/;
+const DESCRIPTOR_PATH = /^\/(?:dev\/(?:stdin|fd\/|tty)|proc\/(?:self|[0-9]+)\/fd\/)/;
+/** An argument that neither selects code nor is code that could write. */
+const PLAIN_OPERAND = /^(?!-[A-Za-z]*[ceps]|--(?:eval|print))[\w@%+:,./=-]*$/;
 const PYTHON_QUERIES = /^(?:-V+|-h|-\?|--version|--help(?:-[a-z]+)?)$/;
 const SCRIPT_FILE = /\.(?:py|[cm]?[jt]sx?)$/;
 /** Single-letter Bash options that leave how source is read unchanged. */
@@ -183,6 +210,11 @@ export async function projectMutationView(
   };
   const metadataCache = new Map<string, MetadataResult>();
   const metadataRows = new Set<string>();
+  const interpreterRows = new Set<string>();
+  const submittedJobs = new Set<string>();
+  /** Files this command has written so far, and the literal text it gave them. */
+  const submittedFiles = new Map<string, SubmittedFile>();
+  const redirectWrites = new Map<Redirection, WrittenFile | null>();
   const issueKeys = new Set<string>();
   const jobs: ScriptJob[] = [];
   let exhausted = false,
@@ -416,34 +448,35 @@ export async function projectMutationView(
             ['<', '<>', '<&', '<<<', '<<', '<<-'].includes(part.operator)
         )
         .at(-1);
-    const documentText = (document: HereDoc): string | null => {
-      if (!document.delimiter || !document.closing) {
-        issue('mutation-heredoc-source', 'Here-document source is incomplete.', span(document));
-        return null;
-      }
+    /** Why a here-document's body is not exactly the text it supplies. */
+    const documentProblem = (document: HereDoc): [string, string, Location] | null => {
+      if (!document.delimiter || !document.closing)
+        return ['mutation-heredoc-source', 'Here-document source is incomplete.', document];
       if (
         document.operator === '<<-' ||
         job.command.slice(document.body.pos, document.body.end) !== document.body.text
-      ) {
-        issue(
+      )
+        return [
           'mutation-heredoc-source',
           'Here-document transformations lack an exact source map.',
-          span(document.body)
-        );
-        return null;
-      }
+          document.body,
+        ];
       if (
         !document.delimiter.quoted &&
         document.body.parts?.some((part) => part.type !== 'Literal')
-      ) {
-        issue(
+      )
+        return [
           'mutation-code-expanded',
           'Expanded interpreter input is not proven literal code.',
-          span(document.body)
-        );
-        return null;
-      }
-      return document.body.text;
+          document.body,
+        ];
+      return null;
+    };
+    const documentText = (document: HereDoc): string | null => {
+      const problem = documentProblem(document);
+      if (!problem) return document.body.text;
+      issue(problem[0], problem[1], span(problem[2]));
+      return null;
     };
     const opaqueSelection = (arg: Argument, node: Location): null => {
       issue('mutation-code-source', 'Interpreter source selection is opaque.', argSpan(arg, node));
@@ -465,10 +498,25 @@ export async function projectMutationView(
       );
       return null;
     };
-    /** The operand after an option boundary: a program, or executable stdin. */
-    const operand = (arg: Argument | undefined, node: Location): Selection | null => {
+    /**
+     * An operand that names a program, or source the command supplies through a
+     * descriptor. A single unknown field is a program: beside nothing that could
+     * be code, it cannot make this command's own text one.
+     */
+    const operand = (args: Argument[], index: number, node: Command): Selection | null => {
+      const arg = args[index];
       if (!arg || arg.value === '-') return { kind: 'stdin' };
-      if (arg.value === null) return opaqueSelection(arg, node);
+      if (arg.value === null) {
+        const rest = args.slice(index + 1);
+        return arg.several !== true &&
+          stdinRedirect(node) === undefined &&
+          rest.every(({ value }) => value !== null && PLAIN_OPERAND.test(value))
+          ? { kind: 'program', entry: null }
+          : opaqueSelection(arg, node);
+      }
+      if (STDIN_PATH.test(arg.value)) return { kind: 'stdin' };
+      if (arg.descriptor === true || DESCRIPTOR_PATH.test(arg.value))
+        return opaqueSelection(arg, node);
       return { kind: 'program', entry: arg.value };
     };
     /**
@@ -476,25 +524,36 @@ export async function projectMutationView(
      * literal code it would let that code stand in for another program, so it
      * is held there; a program launch claims nothing about the source it runs.
      */
-    const selectNode = (args: Argument[], node: Location): Selection | null => {
+    const selectNode = (args: Argument[], node: Command): Selection | null => {
       let selected: Selection | undefined;
       let unmodeled: Argument | undefined;
       let mode: Argument | undefined;
       // Without an attached value, the next argument may be the option's own.
       let ambiguous = false;
       const candidates: string[] = [];
+      const settle = (chosen: Selection | null): Selection | null =>
+        chosen?.kind === 'stdin' && unmodeled ? unmodeledOption(unmodeled, node) : chosen;
       for (let index = 1; index < args.length; index++) {
         const arg = args[index]!,
           value = arg.value;
         if (value === null) {
           // Past a possible entry file this is that program's own argument.
           if (!selected && candidates.length) continue;
-          return opaqueSelection(arg, node);
+          if (selected || mode) return opaqueSelection(arg, node);
+          return settle(operand(args, index, node));
         }
         if (value === '-' || value === '--') {
-          if (selected || candidates.length || mode) break;
-          const chosen = operand(value === '-' ? arg : args[index + 1], node);
-          return chosen?.kind === 'stdin' && unmodeled ? unmodeledOption(unmodeled, node) : chosen;
+          if (selected || mode) break;
+          if (candidates.length && value === '-') return unmodeledOption(unmodeled!, node);
+          if (candidates.length) break;
+          return settle(operand(args, value === '-' ? index : index + 1, node));
+        }
+        if (NODE_OPERANDS.test(value) || value === '--input-type') {
+          const given = args[++index];
+          if (given?.several === true) return opaqueSelection(given, node);
+          if (value !== '--input-type' || !/^(?:module|commonjs)$/.test(given?.value ?? ''))
+            unmodeled ??= arg;
+          continue;
         }
         const attached = value.startsWith('--eval=');
         if (attached || /^(?:-e|-p|-pe|--eval|--print)$/.test(value)) {
@@ -528,7 +587,9 @@ export async function projectMutationView(
         }
         if (!value.startsWith('-')) {
           if (selected) break;
-          if (!ambiguous) return { kind: 'program', entry: value };
+          if (!ambiguous) return settle(operand(args, index, node));
+          if (arg.descriptor === true || DESCRIPTOR_PATH.test(value))
+            return opaqueSelection(arg, node);
           candidates.push(value);
           continue;
         }
@@ -541,6 +602,10 @@ export async function projectMutationView(
       }
       const conflicting = unmodeled ?? mode;
       if (selected) return conflicting ? unmodeledOption(conflicting, node) : selected;
+      // Its only candidate may be the option's own, leaving stdin the program.
+      const input = stdinRedirect(node);
+      if (candidates.length === 1 && !mode && input !== undefined && input.type !== 'Redirect')
+        return unmodeledOption(unmodeled!, node);
       if (candidates.length || mode)
         return {
           kind: 'program',
@@ -548,17 +613,23 @@ export async function projectMutationView(
         };
       return unmodeled ? unmodeledOption(unmodeled, node) : { kind: 'stdin' };
     };
-    const selectPython = (args: Argument[], node: Location): Selection | null => {
+    const selectPython = (args: Argument[], node: Command): Selection | null => {
       let unmodeled: Argument | undefined;
       const settle = (chosen: Selection | null): Selection | null =>
-        unmodeled && chosen?.kind !== 'program' ? unmodeledOption(unmodeled, node) : chosen;
+        unmodeled && chosen !== null && chosen.kind !== 'program'
+          ? unmodeledOption(unmodeled, node)
+          : chosen;
       for (let index = 1; index < args.length; index++) {
         const arg = args[index]!,
           value = arg.value;
-        if (value === null) return opaqueSelection(arg, node);
+        if (value === null) return settle(operand(args, index, node));
         if (PYTHON_QUERIES.test(value)) return { kind: 'program', entry: null };
-        if (value === '--') return settle(operand(args[index + 1], node));
-        if (value === '-' || !value.startsWith('-')) return settle(operand(arg, node));
+        if (value === '--') return settle(operand(args, index + 1, node));
+        if (value === '-' || !value.startsWith('-')) return settle(operand(args, index, node));
+        if (value === '--check-hash-based-pycs') {
+          index++;
+          continue;
+        }
         if (value.startsWith('--')) {
           unmodeled ??= arg;
           continue;
@@ -585,42 +656,165 @@ export async function projectMutationView(
       }
       return settle({ kind: 'stdin' });
     };
-    const selectShell = (args: Argument[], node: Location): Selection | null => {
+    const selectShell = (args: Argument[], node: Command): Selection | null => {
       let code = false,
         stdin = false;
       let unmodeled: Argument | undefined;
-      const choose = (arg: Argument | undefined): Selection | null => {
-        if (arg && arg.value === null) return opaqueSelection(arg, node);
-        if (code && (!arg || arg.value === null)) return missingCode(arg, node);
-        if (code || stdin || !arg) {
+      const choose = (index: number): Selection | null => {
+        const arg = args[index];
+        if (code) {
+          if (!arg || arg.value === null) return missingCode(arg, node);
           if (unmodeled) return unmodeledOption(unmodeled, node);
-          return code ? { kind: 'code', argument: arg!, code: arg!.value! } : { kind: 'stdin' };
+          return { kind: 'code', argument: arg, code: arg.value };
         }
-        return { kind: 'program', entry: arg.value };
+        const chosen: Selection | null =
+          stdin || !arg ? { kind: 'stdin' } : operand(args, index, node);
+        return chosen?.kind === 'stdin' && unmodeled ? unmodeledOption(unmodeled, node) : chosen;
       };
       for (let index = 1; index < args.length; index++) {
         const arg = args[index]!,
           value = arg.value;
-        if (value === null) return choose(arg);
+        if (value === null) return choose(index);
         // A lone dash ends options exactly as a double dash does.
-        if (value === '--' || value === '-') return choose(args[index + 1]);
+        if (value === '--' || value === '-') return choose(index + 1);
         if (value.startsWith('--')) {
           if (BASH_QUERIES.test(value)) return { kind: 'program', entry: null };
           if (!BASH_NEUTRAL_LONG.test(value)) return unmodeledOption(arg, node);
           continue;
         }
-        if (!/^[-+]/.test(value)) return choose(arg);
+        if (!/^[-+]/.test(value)) return choose(index);
         for (const letter of value.slice(1)) {
           if (letter === 'c') code = true;
           else if (letter === 's') stdin = true;
-          else if (letter === 'o') {
+          else if (letter === 'O') {
+            // A shopt name follows, and can change how the source is parsed.
+            unmodeled ??= arg;
+            if (args[++index]?.value === null) return opaqueSelection(args[index]!, node);
+          } else if (letter === 'o') {
             const name = args[++index];
             if (!name || name.value === null || !BASH_NEUTRAL_NAMES.test(name.value))
               unmodeled ??= arg;
           } else if (!BASH_NEUTRAL.test(letter)) unmodeled ??= arg;
         }
       }
-      return choose(undefined);
+      return choose(args.length);
+    };
+    /** Where a written file is, when the directory it depends on is known. */
+    const located = (target: string | null, state: State): string | null =>
+      target === null || request.cwd === null || (state.cwdUnknown === true && !isAbsolute(target))
+        ? null
+        : resolve(state.cwd, target);
+    /** Note that this command writes a file; its text is unread until recorded. */
+    const written = (target: string | null, state: State): WrittenFile | null => {
+      const path = located(target, state);
+      if (path === null) return null;
+      const before = submittedFiles.get(path);
+      submittedFiles.set(path, { documents: before?.documents ?? [], complete: false });
+      return { path, before };
+    };
+    /** Literal text `cat` or `tee` copies from a here-document into one file. */
+    const recordDocument = (node: Command, name: string, args: Argument[], state: State): void => {
+      const operands = args.slice(1).map(({ value }) => value);
+      const outputs = node.redirects.filter((part) => redirectWrites.has(part));
+      const output = outputs[0];
+      let file: WrittenFile | null | undefined;
+      if (name === 'tee' && operands.length === 1 && operands[0]?.startsWith('-') === false)
+        file = written(operands[0], state);
+      else if (name === 'cat' && outputs.length === 1 && operands.every((value) => value === '-'))
+        file = redirectWrites.get(output!);
+      const input = stdinRedirect(node);
+      if (!file || input?.type !== 'HereDoc' || documentProblem(input)) return;
+      const { body } = input;
+      const documents = (file.before?.documents ?? []).filter((item) => item.text !== body.text);
+      submittedFiles.set(file.path, {
+        documents: [...documents, { text: body.text, pos: body.pos, end: body.end, map: job.map }],
+        complete: file.before?.complete !== false && output?.operator !== '>>',
+      });
+    };
+    /** Read a shell program this command wrote for itself; a loop runs it once. */
+    const queueSubmitted = (entry: string | null, node: Command, state: State): void => {
+      const file = submittedFiles.get(located(entry, state) ?? '');
+      for (const document of file?.documents ?? []) {
+        if (/^#!/.test(document.text) && !/^#!.*\b(?:ba|z|da|k)?sh\b/.test(document.text)) continue;
+        const context = parent(node, state);
+        const key = JSON.stringify([
+          { ...context, job: jobs.indexOf(job), bindings: [...context.bindings] },
+          document.text,
+          state.cwd,
+        ]);
+        if (submittedJobs.has(key)) continue;
+        submittedJobs.add(key);
+        queue(
+          document.text,
+          state.cwd,
+          job.depth + 1,
+          (location) =>
+            document.map({ pos: document.pos + location.pos, end: document.pos + location.end }),
+          context
+        );
+      }
+    };
+    /** Report one interpreter; a loop that repeats it adds nothing. */
+    const interpreter = (
+      row: Pick<
+        MutationInterpreter,
+        'language' | 'payloads' | 'effects' | 'launch' | 'entry' | 'rewritten'
+      >,
+      args: readonly Argument[],
+      node: Command,
+      state: State
+    ): void => {
+      const original = span(node);
+      const complete: MutationInterpreter = {
+        ...row,
+        argv: args.map((arg) => arg.value),
+        cwd: request.cwd === null || state.cwdUnknown === true ? null : state.cwd,
+        start: original.pos,
+        end: original.end,
+      };
+      const key = JSON.stringify(complete);
+      if (interpreterRows.has(key)) view.interpreterInvocations.pop();
+      else view.interpreters.push(complete);
+      interpreterRows.add(key);
+    };
+    const unresolvedEffects = (reason: string): MutationInterpreter['effects'] => ({
+      kind: 'unresolved',
+      profile: null,
+      reason,
+      writes: [],
+    });
+    const invokes = (language: 'node' | 'python', node: Command): void => {
+      const original = span(node);
+      view.interpreterInvocations.push({ language, start: original.pos, end: original.end });
+    };
+    /** Report a program launch, with the text this command gave its entry file. */
+    const launched = (
+      language: 'node' | 'python',
+      args: readonly Argument[],
+      entry: string | null,
+      node: Command,
+      state: State
+    ): void => {
+      const file = submittedFiles.get(located(entry, state) ?? '');
+      const payloads: InterpreterPayload[] = [];
+      for (const document of file?.documents ?? []) {
+        const original = document.map(document);
+        if (!text(document.text, original)) return;
+        payloads.push({
+          text: document.text,
+          origin: 'heredoc',
+          start: original.pos,
+          end: original.end,
+        });
+      }
+      const effects = unresolvedEffects('The launched program is not read by this projection.');
+      const rewritten = file?.complete === false;
+      interpreter(
+        { language, payloads, effects, launch: 'program', entry, rewritten },
+        args,
+        node,
+        state
+      );
     };
     const observeInvocation = ({ node, argv, state }: Invocation): void => {
       if (exhausted) return;
@@ -638,7 +832,11 @@ export async function projectMutationView(
           span(node)
         );
       if (name !== 'bash') job.nonShellInvocations.add(JSON.stringify([node.pos, node.end]));
-      if (isShellBuiltin(name) && projectBuiltin(name, args.slice(1), state) === null) {
+      if (
+        executable === name &&
+        isShellBuiltin(name) &&
+        projectBuiltin(name, args.slice(1), state) === null
+      ) {
         issue(
           'mutation-shell-builtin',
           'This shell builtin can run or define code the projection cannot read.',
@@ -656,6 +854,7 @@ export async function projectMutationView(
           'A relative write follows a directory change that could not be established.',
           span(node)
         );
+      recordDocument(node, name, args, state);
       if (name === 'cp' || name === 'mv') {
         const original = span(node);
         const identity: CopyInvocation = {
@@ -764,6 +963,9 @@ export async function projectMutationView(
           return;
         }
         const destination = directory ?? operands.pop()!;
+        for (const source of operands)
+          for (const target of [destination, `${destination}/${basename(source)}`])
+            written(target, state);
         if (!operands.every((value) => text(value, original)) || !text(destination, original)) {
           unresolved('Copy or move path observations exceeded the projection budget.');
           return;
@@ -781,12 +983,18 @@ export async function projectMutationView(
       if (name === 'sh') {
         // A script file is a program in any dialect. Source in this command is
         // read as Bash, which sh does not promise to be.
-        if (selectShell(args, node)?.kind !== 'program')
+        const selection = selectShell(args, node);
+        if (selection?.kind !== 'program')
           issue(
             'mutation-shell-dialect',
             'sh execution does not establish the declared non-POSIX Bash model.',
             span(node)
           );
+        else queueSubmitted(selection.entry, node, state);
+        return;
+      }
+      if (executable === '.' || executable === 'source') {
+        queueSubmitted(args[1]?.value ?? null, node, state);
         return;
       }
       const shell = name === 'bash';
@@ -796,11 +1004,20 @@ export async function projectMutationView(
           : /^python(?:[0-9]+(?:\.[0-9]+)*)?$/.test(name)
             ? 'python'
             : null;
-      if (!shell && !language) return;
-      if (language) {
-        const original = span(node);
-        view.interpreterInvocations.push({ language, start: original.pos, end: original.end });
+      if (!shell && !language) {
+        // A program this command wrote runs as what its first line says it is.
+        if (!executable.includes('/')) return;
+        const first = submittedFiles.get(located(executable, state) ?? '')?.documents.at(-1)?.text;
+        const runner = /^#!.*?\b(python|node)/.exec(first ?? '')?.[1];
+        if (runner !== 'python' && runner !== 'node') {
+          queueSubmitted(executable, node, state);
+          return;
+        }
+        invokes(runner, node);
+        launched(runner, [{ value: runner }, ...args], executable, node, state);
+        return;
       }
+      if (language) invokes(language, node);
       const submitted = [
         ...unwrapped.environment,
         ...node.prefix.flatMap((part) => (part.type === 'Assignment' ? [part.name] : [])),
@@ -816,6 +1033,11 @@ export async function projectMutationView(
           'Shell prefix environment is not a proven nested binding state.',
           span(node)
         );
+      if (selected.kind === 'program') {
+        if (language) launched(language, args, selected.entry, node, state);
+        else queueSubmitted(selected.entry, node, state);
+        return;
+      }
       const payloads: InterpreterPayload[] = [];
       if (selected.kind === 'code') {
         const original = argSpan(selected.argument, node);
@@ -863,7 +1085,6 @@ export async function projectMutationView(
       }
       if (language && !exhausted) {
         const original = span(node);
-        const program = selected.kind === 'program';
         // Source profiles establish effects only under the declared controlled
         // interpreter host. Submitted environment/startup changes and script
         // files cannot borrow the profile of a literal payload.
@@ -884,22 +1105,15 @@ export async function projectMutationView(
               key !== 'NODE_PATH' &&
               !(['NODE_OPTIONS', 'NODE_V8_COVERAGE'].includes(key) && process.env[key] === '')
           );
-        const unresolved = (reason: string): MutationInterpreter['effects'] => ({
-          kind: 'unresolved',
-          profile: null,
-          reason,
-          writes: [],
-        });
-        const effects = program
-          ? unresolved('The launched program is not read by this projection.')
-          : submittedStartup || inheritedStartup
-            ? unresolved('Interpreter environment or startup effects are not proven.')
+        const effects =
+          submittedStartup || inheritedStartup
+            ? unresolvedEffects('Interpreter environment or startup effects are not proven.')
             : payloads.length !== 1
-              ? unresolved('Exactly one literal inline or here-document source is required.')
+              ? unresolvedEffects('Exactly one literal inline or here-document source is required.')
               : classifyInterpreterEffects(language, payloads[0]!.text);
         // Literal source whose startup the command itself replaces is not the
         // program that runs, and missing source cannot be read at all.
-        if (!program && (submittedStartup || payloads.length !== 1))
+        if (submittedStartup || payloads.length !== 1)
           issue('mutation-interpreter-effects', (effects as { reason: string }).reason, original);
         for (const write of effects.writes) {
           if (namesGitMetadata(write.target)) job.interpreterMapping = true;
@@ -910,17 +1124,12 @@ export async function projectMutationView(
               original
             );
         }
-        view.interpreters.push({
-          language,
-          argv: args.map((arg) => arg.value),
-          payloads,
-          effects,
-          launch: program ? 'program' : 'inline',
-          entry: program ? selected.entry : null,
-          cwd: request.cwd === null || state.cwdUnknown === true ? null : state.cwd,
-          start: original.pos,
-          end: original.end,
-        });
+        interpreter(
+          { language, payloads, effects, launch: 'inline', entry: null, rewritten: false },
+          args,
+          node,
+          state
+        );
       }
     };
     const observeRedirect = ({ node, targets, state }: RedirectObservation): void => {
@@ -940,7 +1149,13 @@ export async function projectMutationView(
       }
       const kind =
         node.type === 'HereString' || node.operator === '<' ? 'input_redirect' : 'redirect';
-      if (kind === 'redirect') job.writeRedirect = true;
+      if (kind === 'redirect') {
+        job.writeRedirect = true;
+        const files = targets.map((fields) =>
+          written(fields.length === 1 ? fields[0]!.value : null, state)
+        );
+        redirectWrites.set(node, files.length === 1 ? files[0]! : null);
+      }
       if (
         kind === 'redirect' &&
         state.cwdUnknown === true &&
@@ -958,6 +1173,27 @@ export async function projectMutationView(
           token(arg.value ?? raw(arg), 'word', arg.value === null, argSpan(arg, node), state.cwd);
         token(';', 'op', false, span({ pos: node.end, end: node.end }), state.cwd);
       }
+    };
+    /** A path Git writes is a target like any other utility's. */
+    const observeGitWrite = ({
+      node,
+      target,
+      source,
+      located: known,
+    }: GitWriteObservation): void => {
+      if (exhausted) return;
+      const original = span(node);
+      if (!known && request.cwd !== null && target !== null && !isAbsolute(target))
+        issue(
+          'cwd-unresolved',
+          'A relative write follows a directory change that could not be established.',
+          original
+        );
+      const place = source ? span(source) : original;
+      const raw = source ? job.command.slice(source.pos, source.end) : '';
+      token('touch', 'word', false, original, job.cwd ?? request.project);
+      token(target ?? raw, 'word', target === null, place, job.cwd ?? request.project);
+      token(';', 'op', false, span({ pos: node.end, end: node.end }), job.cwd ?? request.project);
     };
     const observeGitMetadata = ({ node, subcommand, input }: GitMetadataObservation): void => {
       metadataInvocations.add(JSON.stringify([node.pos, node.end]));
@@ -1066,6 +1302,7 @@ export async function projectMutationView(
           invocation: observeInvocation,
           redirection: observeRedirect,
           gitMetadata: observeGitMetadata,
+          gitWrite: observeGitWrite,
           unprofiled: ({ node, code }) => {
             if (code === 'utility-unsupported')
               job.unmodeledInvocations.add(JSON.stringify([node.pos, node.end]));

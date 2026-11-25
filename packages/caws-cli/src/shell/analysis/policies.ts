@@ -10,6 +10,8 @@ import {
 } from './inspection-profiles';
 import {
   gitHazard,
+  gitLeavesWorkingTree,
+  gitWriteOperands,
   isGitDataConfiguration,
   isGitInspection,
   readerHazard,
@@ -70,27 +72,48 @@ function invoked(argv: readonly Argument[]): { name: string | null; args: readon
   }
   return { name: '', args: [] };
 }
+/** An option that makes sed or perl edit its operands; perl's -0 and -l take digits. */
+function editsInPlace(name: string | null, args: readonly Argument[]): boolean {
+  const option =
+    name === 'sed'
+      ? /^(?:-[A-Za-z]*[iI]|--in-place)/
+      : name === 'perl'
+        ? /^(?:-(?:[acdfnpsStTuUvwWX]|0[0-9xXa-fA-F]*|l[0-7]*)*i|--in-place)/
+        : null;
+  return option !== null && args.some((arg) => arg.value !== null && option.test(arg.value));
+}
 /** Whether a recognized utility writes through a path its directory decides. */
 export function writesRelativeTarget(name: string, args: readonly Argument[]): boolean {
-  const relative = (arg: Argument): boolean =>
-    arg.value === null || (!isAbsolute(arg.value) && !arg.value.startsWith('-'));
-  if (TARGET_UTILITIES.includes(name)) return args.some(relative);
-  return (
-    (name === 'sed' || name === 'perl') &&
-    args.some((arg) => arg.value !== null && /^-[A-Za-z]*i|^--in-place/.test(arg.value)) &&
-    args.slice(1).some(relative)
-  );
+  const separator = args.findIndex((arg) => arg.value === '--');
+  const relative = (arg: Argument, index: number): boolean =>
+    arg.value === null ||
+    (!isAbsolute(arg.value) &&
+      (!arg.value.startsWith('-') || (separator >= 0 && index > separator)));
+  if (name === 'dd')
+    return args.some(
+      ({ value }) =>
+        value === null || (value.startsWith('of=') && !isAbsolute(value.slice('of='.length)))
+    );
+  return (TARGET_UTILITIES.includes(name) || editsInPlace(name, args)) && args.some(relative);
 }
 /** Arguments whose number of fields decides which files an invocation writes. */
 export function exactOperands(argv: readonly Argument[]): readonly Argument[] {
   const { name, args } = invoked(argv);
   if (name !== null && TARGET_UTILITIES.includes(name)) return args;
   if (name !== 'sed' && name !== 'perl') return [];
-  if (args.some((arg) => arg.value !== null && /^(?:-[A-Za-z]*[iI]|--in-place)/.test(arg.value)))
-    return args;
+  if (editsInPlace(name, args)) return args;
   // Up to its script, an unknown argument may be the in-place option.
   const script = args.findIndex((arg) => arg.value === null || !arg.value.startsWith('-'));
   return args.slice(0, script + 1);
+}
+/** Arguments that can carry an option whose effect is a write or a program. */
+export function optionOperands(argv: readonly Argument[]): readonly Argument[] {
+  const { name, args } = invoked(argv);
+  if (name !== 'git' && !['sort', 'uniq', 'rg'].includes(name ?? '')) return [];
+  // git add takes paths and no option of that kind.
+  if (name === 'git' && args[0]?.value === 'add') return [];
+  const separator = args.findIndex((arg) => arg.value === '--');
+  return separator < 0 ? args : args.slice(0, separator);
 }
 
 /** Git's reciprocal linked-worktree files bind metadata to this exact pin. */
@@ -390,11 +413,14 @@ const GIT_PROJECTED_FLAGS = [
 const GIT_QUERIES = /^(?:-v|-h|--version|--help|--html-path|--man-path|--info-path|--exec-path)$/;
 const GIT_DATA_ENVIRONMENT =
   /^GIT_(?:(?:AUTHOR|COMMITTER)_(?:NAME|EMAIL|DATE)|TERMINAL_PROMPT|OPTIONAL_LOCKS|(?:LITERAL|GLOB|NOGLOB|ICASE)_PATHSPECS|MERGE_AUTOEDIT|ADVICE|NO_LAZY_FETCH|FLUSH)$/;
+/** Programs a launcher configures for the whole session, not for one command. */
+const GIT_LAUNCHER_ENVIRONMENT =
+  /^(?:GIT_(?:ASKPASS|SSH|SSH_COMMAND|SSH_VARIANT|EDITOR|SEQUENCE_EDITOR|PAGER)|PAGER)$/;
 const GIT_ROUTING = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR'];
 const disabled = (values: Value, pattern: RegExp): boolean =>
   values !== null && values.length > 0 && values.every((value) => pattern.test(value));
 
-/** Submitted Git environment; a value the shell inherited unchanged is not submitted. */
+/** Git environment that selects a repository, configuration or a program. */
 function projectGitEnvironment(
   env: Map<string, Value>,
   ctx: AnalysisContext,
@@ -414,7 +440,9 @@ function projectGitEnvironment(
     }
     if (
       GIT_DATA_ENVIRONMENT.test(name) ||
-      (values?.length === 1 && values[0] === process.env[name]) ||
+      (GIT_LAUNCHER_ENVIRONMENT.test(name) &&
+        values?.length === 1 &&
+        values[0] === process.env[name]) ||
       (/^(?:GIT_)?PAGER$/.test(name) && disabled(values, /^(?:cat)?$/)) ||
       (/^GIT_(?:SEQUENCE_)?EDITOR$/.test(name) && disabled(values, /^(?:true|:|cat)$/))
     )
@@ -435,20 +463,22 @@ function projectGit(
   env: Map<string, Value>,
   ctx: AnalysisContext,
   node: Location
-): void {
+): State {
   ctx.gitInvocations.push(node);
   const { known, targets } = projectGitEnvironment(env, ctx, node);
   let routed = known;
+  let moved = targets.length > 0;
   let cwd: string | null = state.cwdUnknown === true ? null : state.cwd;
   let index = 0;
   for (; index < args.length; index++) {
     const value = args[index]!.value;
     if (value === null) {
       ctx.reason(node, 'git-unknown-argument', 'The Git subcommand must be statically known.');
-      return;
+      return state;
     }
     if (!value.startsWith('-')) break;
     if (value.startsWith('-C')) {
+      moved = true;
       const target = value === '-C' ? (args[++index]?.value ?? null) : value.slice(2);
       if (target === null) cwd = null;
       else if (target !== '') {
@@ -459,6 +489,7 @@ function projectGit(
     }
     const routing = /^--(git-dir|work-tree)(?:=([\s\S]*))?$/.exec(value);
     if (routing) {
+      moved = true;
       const target = routing[2] ?? args[++index]?.value ?? null;
       if (target === null) routed = false;
       else
@@ -472,22 +503,41 @@ function projectGit(
       const setting = value === '-c' ? (args[++index]?.value ?? null) : value.slice(2);
       if (setting !== null && isGitDataConfiguration(setting)) continue;
       ctx.reason(node, 'git-global-option', 'Git configuration can select a program to run.');
-      return;
+      return state;
     }
     if (GIT_PROJECTED_FLAGS.includes(value)) continue;
-    if (GIT_QUERIES.test(value)) return;
+    if (GIT_QUERIES.test(value)) return state;
     ctx.reason(node, 'git-global-option', `Unmodeled Git global option ${value}.`);
-    return;
+    return state;
   }
   const subcommand = args[index]?.value;
-  if (!subcommand) return;
-  const rest = args.slice(index + 1).map((arg) => arg.value);
+  if (!subcommand) return state;
+  const operands = args.slice(index + 1);
+  const rest = operands.map((arg) => arg.value);
   const hazard = gitHazard(subcommand, rest);
   if (hazard === 'execution')
     ctx.reason(node, 'git-execution', 'This Git argument runs another program.', true);
   if (hazard === 'output')
     ctx.reason(node, 'git-option-unmodeled', 'This Git argument writes a file.');
-  if (!ctx.gitMetadata || isGitInspection(subcommand, rest)) return;
+  if (hazard === 'hooks')
+    ctx.reason(node, 'git-hooks', "This Git argument skips the repository's own hooks.");
+  const writes = gitWriteOperands(subcommand, rest, moved);
+  for (const position of writes) {
+    const operand = position < 0 ? { value: 'clone' } : operands[position]!;
+    const target = operand.value?.replace(/^file:\/\//, '') ?? null;
+    ctx.gitWrite?.({
+      node,
+      target: target === null || isAbsolute(target) || cwd === null ? target : `${cwd}/${target}`,
+      ...(operand.source ? { source: operand.source } : {}),
+      located: cwd !== null,
+    });
+  }
+  const inspection = isGitInspection(subcommand, rest);
+  const next: State =
+    writes.length > 0 || !(inspection || gitLeavesWorkingTree(subcommand))
+      ? { ...state, filesystemChanged: true }
+      : state;
+  if (!ctx.gitMetadata || inspection) return next;
   let located = routed && cwd !== null && state.mappingChanged !== true;
   const overrides: Record<string, string> = {};
   for (const target of targets) {
@@ -497,6 +547,7 @@ function projectGit(
     else overrides[target.name] = resolved;
   }
   ctx.gitMetadata({ node, subcommand, input: located && cwd ? { cwd, overrides } : null });
+  return next;
 }
 
 /** sed is a reader unless it edits in place or its script writes or executes. */
@@ -573,9 +624,38 @@ function opaque(
       inside(state.cwd, resolve(state.cwd, arg.value))
     );
   };
-  if (!args.some(rewritesMapping)) return { ...state, filesystemChanged: true };
+  const next: State = { ...state, filesystemChanged: true };
+  if (name === 'mkdir') next.made = [...(state.made ?? []), ...directoriesMade(args, state)];
+  // A directory that can have become a link is no longer known to be one.
+  else if (['ln', 'mv', 'rm', 'cp', 'tar', 'unzip'].includes(name)) delete next.made;
+  if (!args.some(rewritesMapping)) return next;
   ctx.mapping?.(node);
-  return { ...state, filesystemChanged: true, mappingChanged: true };
+  return { ...next, mappingChanged: true };
+}
+/** A path with every existing component resolved, whether or not all of it exists. */
+function physicalPath(path: string): string {
+  let missing = '';
+  for (let existing = path; ; existing = dirname(existing)) {
+    const resolved = resolveDirectory(existing, '/');
+    if (resolved !== null || existing === '/') return `${resolved ?? ''}${missing}` || '/';
+    missing = `/${basename(existing)}${missing}`;
+  }
+}
+/** Directories mkdir makes, with the parents -p makes on the way. */
+function directoriesMade(args: readonly Argument[], state: State): string[] {
+  const made: string[] = [];
+  for (const { value } of args) {
+    if (value === null || value === '' || value.startsWith('-')) continue;
+    if (!isAbsolute(value) && state.cwdUnknown === true) continue;
+    if (value.split('/').includes('..')) continue;
+    for (
+      let path = physicalPath(resolve(state.cwd, value));
+      resolveDirectory(path, '/') === null && path !== '/';
+      path = dirname(path)
+    )
+      made.push(path);
+  }
+  return made;
 }
 function forgetBindings(state: State): State {
   const bindings = new Map(state.bindings);
@@ -622,6 +702,11 @@ const SHELL_FLAGS = /^[-+][befhmuvxBCEHT]+$/;
 const SHELL_OPTION_NAMES =
   /^(?:braceexpand|emacs|errexit|errtrace|functrace|hashall|histexpand|history|ignoreeof|monitor|noclobber|noglob|notify|nounset|onecmd|pipefail|verbose|vi|xtrace)$/;
 const identifier = /^[A-Za-z_][A-Za-z_0-9]*$/;
+/** An array reference whose subscript Bash expands again when it reads the name. */
+const SUBSCRIPT_SOURCE = /^[A-Za-z_][A-Za-z_0-9]*\[[^\]]*[$`]/;
+export function holdsSubscriptSource(arg: Argument): boolean {
+  return arg.value !== null && SUBSCRIPT_SOURCE.test(arg.value);
+}
 
 /** Operands of a flag-style option list, or null when a flag is not modeled. */
 function shellOptions(args: readonly Argument[]): readonly Argument[] | null {
@@ -687,7 +772,7 @@ export function projectBuiltin(
     case 'typeset':
     case 'local':
     case 'readonly':
-      return unbind(values.filter((value) => value === null || !/^-[xrgaAp]+$/.test(value)));
+      return unbind(values.filter((value) => value === null || !/^-[xraAp]+$/.test(value)));
     case 'unset':
       return unbind(values.filter((value) => value !== '-v'));
     case 'mapfile':
@@ -699,7 +784,8 @@ export function projectBuiltin(
     case '.':
     case 'source': {
       const path = values[0];
-      if (typeof path !== 'string' || path.startsWith('-')) return null;
+      // A descriptor holds source this command supplies, which is not read here.
+      if (typeof path !== 'string' || /^(?:-|\/dev\/|\/proc\/)/.test(path)) return null;
       return ENVIRONMENT_SCRIPT.test(path)
         ? unbind(['PATH', 'VIRTUAL_ENV', 'PS1'])
         : sourced(state);
@@ -711,6 +797,14 @@ export function projectBuiltin(
       return null;
   }
 }
+/** A name whose builtin meaning later source depends on, so no function may take it. */
+export function changesShellState(name: string): boolean {
+  return (
+    WRAPPERS.includes(name) ||
+    ['break', 'cd', 'continue', 'exit', 'printf', 'read', 'return'].includes(name) ||
+    (isShellBuiltin(name) && !INERT_BUILTINS.includes(name))
+  );
+}
 /** Builtins that change this shell rather than run a program in another. */
 export function isShellBuiltin(name: string): boolean {
   return (
@@ -721,7 +815,11 @@ export function isShellBuiltin(name: string): boolean {
   );
 }
 
-function projectDirectory(args: readonly Argument[], state: State): State {
+function projectDirectory(
+  args: readonly Argument[],
+  state: State,
+  env: ReadonlyMap<string, Value>
+): State {
   const unknown = (): State => unknownDirectory(state);
   let physical = false;
   let index = 0;
@@ -731,7 +829,8 @@ function projectDirectory(args: readonly Argument[], state: State): State {
     else if (value === '-L') physical = false;
     else if (value !== '--' && value !== '-e') break;
   }
-  const home = state.bindings.get('HOME');
+  // A bare cd goes to the HOME its own prefix assigns.
+  const home = env.has('HOME') ? env.get('HOME') : state.bindings.get('HOME');
   const target =
     index === args.length
       ? home?.length === 1
@@ -747,7 +846,10 @@ function projectDirectory(args: readonly Argument[], state: State): State {
   const base = physical || isAbsolute(target) ? state.cwd : (state.logical ?? null);
   if (base === null && target.split('/').includes('..')) return unknown();
   const nominal = physical ? target : resolve(base ?? state.cwd, target);
-  const resolved = resolveDirectory(nominal, state.cwd);
+  const promised = physicalPath(resolve(state.cwd, nominal));
+  const resolved =
+    resolveDirectory(nominal, state.cwd) ??
+    (state.made?.includes(promised) === true ? promised : null);
   if (!resolved) return unknown();
   const next: State = {
     ...state,
@@ -757,7 +859,8 @@ function projectDirectory(args: readonly Argument[], state: State): State {
   };
   if (base === null) delete next.logical;
   delete next.cwdUnknown;
-  next.bindings.set('PWD', [resolved]);
+  // PWD holds the logical name, which is what a later "$PWD/.." starts from.
+  next.bindings.set('PWD', next.logical === undefined ? null : [next.logical]);
   next.bindings.set('OLDPWD', null);
   return next;
 }
@@ -798,14 +901,22 @@ function projectInvocation(
       return state;
     }
     if (offset >= args.length && name === 'exec') return state;
-    return projectInvocation(args.slice(offset), state, childEnv, ctx, node);
+    const next = projectInvocation(args.slice(offset), state, childEnv, ctx, node);
+    if (name === 'command') return next;
+    // env and exec run a program, so a builtin's name changes nothing here.
+    const { filesystemChanged, mappingChanged } = next;
+    return {
+      ...state,
+      ...(filesystemChanged === undefined ? {} : { filesystemChanged }),
+      ...(mappingChanged === undefined ? {} : { mappingChanged }),
+    };
   }
+  if (executable !== name && changesShellState(name)) return opaque(name, args, state, ctx, node);
   switch (name) {
     case 'git':
-      projectGit(args, state, env, ctx, node);
-      return state;
+      return projectGit(args, state, env, ctx, node);
     case 'cd':
-      return projectDirectory(args, state);
+      return projectDirectory(args, state, env);
     case 'sed':
       projectSed(args, ctx, node);
       return state;
@@ -837,13 +948,16 @@ function projectInvocation(
           'printf-format',
           'printf requires a known data-only format without variable writes.'
         );
-      return state;
+      // An unknown first word can be the option that assigns a variable.
+      return format === null ? forgetBindings(state) : state;
     }
     case 'read': {
       // An unknown argument can name any variable.
       const known = args.every((arg) => arg.value !== null);
       const bindings = new Map((known ? state : forgetBindings(state)).bindings);
       for (const arg of args) {
+        if (holdsSubscriptSource(arg))
+          ctx.reason(node, 'read-options', 'read evaluates source held in a subscript.');
         if (arg.value === null || !identifier.test(arg.value)) continue;
         if (projectionSensitiveBinding(arg.value))
           ctx.reason(node, 'read-options', 'read changes how later source is split.');
@@ -852,13 +966,16 @@ function projectInvocation(
       bindings.set('REPLY', null);
       return { ...state, bindings };
     }
+    case 'test':
+    case '[':
+      if (args.some((arg, index) => args[index - 1]?.value === '-v' && holdsSubscriptSource(arg)))
+        ctx.reason(node, 'test-source', 'A test evaluates source held in a subscript.');
+      return state;
     case 'echo':
     case 'pwd':
     case 'true':
     case 'false':
     case ':':
-    case 'test':
-    case '[':
       return state;
   }
   if (isShellBuiltin(name)) return projectBuiltin(name, args, state) ?? state;

@@ -7,6 +7,7 @@
  * missing from this file is not a reason to refuse the command.
  */
 export type Hazard = 'execution' | 'output';
+type Arguments = readonly (string | null)[];
 
 /** A long option matches a hazard by exact name or unambiguous abbreviation. */
 function abbreviates(value: string, names: readonly string[], exact: readonly string[]): boolean {
@@ -31,8 +32,29 @@ const GIT_EXECUTION_OPTION_NAMES = [
 const GIT_EXACT_OPTIONS = ['text'];
 const GIT_OUTPUT_SHORT = ['archive', 'format-patch', 'bugreport', 'diagnose', 'index-pack'];
 const GIT_PROGRAM_SUBCOMMANDS = ['filter-branch', 'difftool', 'mergetool', 'send-email'];
-/** Subcommand short options whose next or attached text is data. */
+/** Short options whose attached text is data, ending a cluster. */
 const GIT_GREP_OPERANDS = 'efABCm';
+const GIT_COMMIT_OPERANDS = 'mFCctuS';
+/** Subcommands whose --no-verify skips the repository's own hooks. */
+const GIT_HOOK_SUBCOMMANDS = [
+  'commit',
+  'merge',
+  'push',
+  'rebase',
+  'am',
+  'cherry-pick',
+  'revert',
+  'pull',
+];
+/** Whether a short-option cluster sets a flag before any option that takes text. */
+function clusterSets(value: string, flag: string, operands: string): boolean {
+  if (!/^-[^-]/.test(value)) return false;
+  for (const letter of value.slice(1)) {
+    if (letter === flag) return true;
+    if (operands.includes(letter)) return false;
+  }
+  return false;
+}
 /** Options that take the next argument as data, whatever it looks like. */
 const GIT_DATA_OPERANDS: Readonly<Record<string, readonly string[]>> = {
   commit: ['-m', '--message', '-F', '--file', '-C', '-c', '--author', '--date', '--trailer'],
@@ -48,7 +70,7 @@ const GIT_DATA_OPERANDS: Readonly<Record<string, readonly string[]>> = {
 const GIT_DATA_CONFIGURATION =
   /^(?:(?:advice|blame|color|column|feature|fetch|grep|log|maintenance|rebase|status|tag|versionsort)\.[a-z.]+|user\.(?:name|email)|branch\.sort|core\.(?:quotepath|abbrev|autocrlf|safecrlf|ignorecase|filemode|longpaths|commentchar|untrackedcache|preloadindex)|diff\.(?:algorithm|renames|renamelimit|noprefix|mnemonicprefix|colormoved|colormovedws|wserrorhighlight|context|interhunkcontext|ignoresubmodules|indentheuristic|submodule|statgraphwidth)|commit\.gpgsign|gc\.auto|init\.defaultbranch|(?:push|pull)\.[a-z]+|merge\.(?:conflictstyle|renames|ff|stat)|submodule\.(?:recurse|fetchjobs)|protocol\.version|safe\.directory|http\.(?:lowspeedlimit|lowspeedtime|postbuffer|version))$/i;
 const GIT_DISABLED_CONFIGURATION =
-  /^(?:core\.(?:pager|editor)=(?:cat|true|:|)|pager\.[a-z-]+=(?:cat|false|0|)|core\.fsmonitor=(?:false|0|)|core\.hookspath=(?:\/dev\/null|)|credential\.helper=)$/i;
+  /^(?:core\.(?:pager|editor)=(?:cat|true|:|)|pager\.[a-z-]+=(?:cat|false|0|)|core\.fsmonitor=(?:false|0|)|credential\.helper=)$/i;
 /** A command-line configuration value that cannot select a program. */
 export function isGitDataConfiguration(assignment: string): boolean {
   const key = assignment.split('=', 1)[0]!;
@@ -56,7 +78,7 @@ export function isGitDataConfiguration(assignment: string): boolean {
 }
 
 /** The effect of one Git invocation's options and operands, when it has one. */
-export function gitHazard(subcommand: string, args: readonly (string | null)[]): Hazard | null {
+export function gitHazard(subcommand: string, args: Arguments): Hazard | 'hooks' | null {
   if (
     GIT_PROGRAM_SUBCOMMANDS.includes(subcommand) ||
     (subcommand === 'bisect' && action(args) === 'run') ||
@@ -64,6 +86,13 @@ export function gitHazard(subcommand: string, args: readonly (string | null)[]):
   )
     return 'execution';
   if (subcommand === 'bundle' && action(args) === 'create') return 'output';
+  // A configuration file outside this repository is a file of its own.
+  if (
+    subcommand === 'config' &&
+    some(args, /^(?:--global|--system|--file(?:=|$)|-f)/) &&
+    !readsConfiguration(args)
+  )
+    return 'output';
   for (let index = 0; index < args.length; index++) {
     const value = args[index]!;
     if (value === '--') break;
@@ -77,26 +106,113 @@ export function gitHazard(subcommand: string, args: readonly (string | null)[]):
     if (!value.startsWith('-')) continue;
     if (abbreviates(value, GIT_OUTPUT_OPTIONS, GIT_EXACT_OPTIONS)) return 'output';
     if (abbreviates(value, GIT_EXECUTION_OPTION_NAMES, GIT_EXACT_OPTIONS)) return 'execution';
-    if (GIT_OUTPUT_SHORT.includes(subcommand) && value.startsWith('-o')) return 'output';
+    if (GIT_OUTPUT_SHORT.includes(subcommand) && /^-[^-]*o/.test(value)) return 'output';
     if (subcommand === 'cat-file' && value === '--filters') return 'execution';
-    if (subcommand === 'rebase' && value.startsWith('-x')) return 'execution';
+    if (subcommand === 'rebase' && /^-[A-Za-z]*x/.test(value)) return 'execution';
     if (
       (subcommand === 'checkout-index' || subcommand === 'read-tree') &&
-      value.startsWith('--prefix=')
+      abbreviates(value, ['prefix'], [])
     )
       return 'output';
+    if (subcommand === 'clone' && (/^-[cu]/.test(value) || abbreviates(value, ['config'], [])))
+      return 'execution';
     if (
-      subcommand === 'clone' &&
-      (/^-[cu]/.test(value) || abbreviates(value, ['config', 'template', 'separate-git-dir'], []))
+      (subcommand === 'clone' || subcommand === 'init') &&
+      abbreviates(value, ['template', 'separate-git-dir'], [])
     )
       return 'execution';
-    if (subcommand === 'grep' && /^-[^-]/.test(value))
-      for (const flag of value.slice(1)) {
-        if (flag === 'O') return 'execution';
-        if (GIT_GREP_OPERANDS.includes(flag)) break;
-      }
+    if (subcommand === 'grep' && clusterSets(value, 'O', GIT_GREP_OPERANDS)) return 'execution';
+    if (GIT_HOOK_SUBCOMMANDS.includes(subcommand) && abbreviates(value, ['no-verify'], []))
+      return 'hooks';
+    if (
+      (subcommand === 'commit' || subcommand === 'am') &&
+      clusterSets(value, 'n', GIT_COMMIT_OPERANDS)
+    )
+      return 'hooks';
   }
   return null;
+}
+
+/** Options that take the next argument, where an operand can follow them. */
+const GIT_OPERAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
+  clone: [
+    ...['-b', '--branch', '--depth', '-o', '--origin', '-j', '--jobs', '--filter'],
+    ...['--reference', '--reference-if-able', '--shallow-since', '--shallow-exclude'],
+    ...['--server-option', '--bundle-uri'],
+  ],
+  init: ['-b', '--initial-branch', '--object-format', '--ref-format'],
+  worktree: ['-b', '-B', '--reason'],
+  push: ['-o', '--push-option', '--repo'],
+  'merge-file': ['-L', '--marker-size'],
+  restore: ['-s', '--source', '--conflict'],
+  config: ['-f', '--file', '--blob', '--default', '--type'],
+  clean: ['-e', '--exclude'],
+};
+/** Positions of the operands, past options and the arguments they take. */
+function operandPositions(subcommand: string, args: Arguments): number[] {
+  const taking = GIT_OPERAND_OPTIONS[subcommand] ?? [];
+  const found: number[] = [];
+  let options = true;
+  for (let index = 0; index < args.length; index++) {
+    const value = args[index]!;
+    if (options && value === '--') options = false;
+    else if (!options || value === null || !value.startsWith('-') || value === '-')
+      found.push(index);
+    else if (taking.includes(value)) index++;
+  }
+  return found;
+}
+const LOCAL_REPOSITORY = /^(?:file:\/\/|\/|~|\.{1,2}(?:\/|$))/;
+/**
+ * Arguments that name a path the invocation writes outside the repository's own
+ * metadata; -1 is the directory it runs in. `routed` says the working tree is
+ * not the one the shell is in, where operand extraction cannot resolve them.
+ */
+export function gitWriteOperands(subcommand: string, args: Arguments, routed: boolean): number[] {
+  const found = operandPositions(subcommand, args);
+  const [first, second] = found;
+  const separator = args.indexOf('--');
+  switch (subcommand) {
+    case 'rm':
+      return args.includes('--cached') ? [] : found;
+    case 'mv':
+      return found;
+    case 'clone':
+      return [second ?? -1];
+    case 'init':
+      return [first ?? -1];
+    case 'merge-file':
+      return first === undefined || some(args, /^(?:-p|--stdout)$/) ? [] : [first];
+    case 'worktree':
+      return first === undefined || !['add', 'remove', 'move', 'repair'].includes(args[first] ?? '')
+        ? []
+        : args[first] === 'add'
+          ? found.slice(1, 2)
+          : found.slice(1);
+    case 'push':
+      return first !== undefined && LOCAL_REPOSITORY.test(args[first] ?? '') ? [first] : [];
+    case 'restore':
+      return routed && (!some(args, /^(?:-S|--staged)$/) || some(args, /^(?:-W|--worktree)$/))
+        ? found
+        : [];
+    case 'clean':
+      return routed ? found : [];
+    case 'checkout':
+    case 'reset':
+      return routed && separator >= 0 ? found.filter((index) => index > separator) : [];
+    default:
+      return [];
+  }
+}
+/** Subcommands that write refs, configuration or the index and no working tree. */
+const GIT_METADATA_ONLY = new Set(
+  (
+    'add branch commit config fetch gc maintenance notes pack-refs prune push reflog remote ' +
+    'repack replace rerere symbolic-ref tag update-index update-ref'
+  ).split(' ')
+);
+export function gitLeavesWorkingTree(subcommand: string): boolean {
+  return GIT_METADATA_ONLY.has(subcommand);
 }
 
 const GIT_INSPECTION = new Set(
@@ -109,59 +225,74 @@ const GIT_INSPECTION = new Set(
     'stripspace var verify-commit verify-pack verify-tag version whatchanged write-tree'
   ).split(' ')
 );
-type Arguments = readonly (string | null)[];
-const operands = (args: Arguments): (string | null)[] =>
-  args.filter((value) => value === null || !value.startsWith('-'));
-/** The selected action; an unknown one matches no inspecting form. */
+/** The selected action, whatever options precede it; an unknown one is no action. */
 const action = (args: Arguments): string => {
-  const [first] = operands(args);
+  const first = args.find((value) => value === null || !value.startsWith('-'));
   return first === undefined ? '' : (first ?? 'unknown');
 };
 const some = (args: Arguments, pattern: RegExp): boolean =>
   args.some((value) => value !== null && pattern.test(value));
+/** Every argument is known, and every option is one that only inspects. */
+const only = (args: Arguments, options: RegExp): boolean =>
+  args.every((value) => value !== null && (!value.startsWith('-') || options.test(value)));
+/** An action this form reads must come first, where no option can take it as text. */
+const begins = (args: Arguments, ...actions: string[]): boolean =>
+  args.length > 0 ? actions.includes(args[0] ?? 'unknown') : actions.includes('');
+const REFERENCE_LISTING =
+  '(?:no-)?(?:color|column|abbrev)(?:=.*)?|(?:no-)?(?:contains|merged)(?:=.*)?|points-at(?:=.*)?|sort=.*|format=.*|ignore-case|omit-empty';
+const BRANCH_OPTIONS = new RegExp(
+  `^(?:-[arvli]+|--(?:all|remotes|verbose|list|show-current|${REFERENCE_LISTING}))$`
+);
+const TAG_OPTIONS = new RegExp(`^(?:-[lvi]|-n\\d*|--(?:list|verify|${REFERENCE_LISTING}))$`);
+const CONFIG_OPTIONS =
+  /^(?:-[lz]|-f.*|--(?:get|get-all|get-regexp|get-urlmatch|get-color|get-colorbool|list|null|name-only|show-origin|show-scope|show-names|(?:no-)?includes|local|worktree|global|system|file(?:=.*)?|blob(?:=.*)?|type(?:=.*)?|bool|int|bool-or-int|path|expiry-date|default(?:=.*)?|all|regexp|fixed-value|value=.*|url=.*))$/;
+function readsConfiguration(args: Arguments): boolean {
+  return (
+    only(args, CONFIG_OPTIONS) &&
+    (some(args, /^(?:-l|--list|--get(?:-all|-regexp|-urlmatch|-color|-colorbool)?)$/) ||
+      begins(args, 'get', 'list') ||
+      operandPositions('config', args).length === 1)
+  );
+}
 /** Subcommands that inspect only in some forms. */
 const GIT_INSPECTION_FORMS: Readonly<Record<string, (args: Arguments) => boolean>> = {
   branch: (args) =>
-    !some(
-      args,
-      /^(?:-[^-]*[dDmMcCfu]|--(?:delete|move|copy|force|set-upstream-to|unset-upstream|edit-description|track|create-reflog))/
-    ) &&
-    (operands(args).length === 0 ||
-      some(
-        args,
-        /^(?:-l|--list|--contains|--no-contains|--merged|--no-merged|--points-at)(?:=|$)/
-      )),
+    only(args, BRANCH_OPTIONS) &&
+    (action(args) === '' ||
+      some(args, /^(?:-[a-z]*l[a-z]*|--(?:list|(?:no-)?(?:contains|merged)|points-at)(?:=.*)?)$/)),
   tag: (args) =>
-    !some(args, /^(?:-[^-]*[dafsu]|--delete)/) &&
-    (operands(args).length === 0 ||
+    only(args, TAG_OPTIONS) &&
+    (action(args) === '' ||
       some(
         args,
-        /^(?:-l|-n[0-9]*|-v|--list|--verify|--contains|--no-contains|--merged|--no-merged|--points-at)(?:=|$)/
+        /^(?:-[lv]|-n\d*|--(?:list|verify|(?:no-)?(?:contains|merged)|points-at)(?:=.*)?)$/
       )),
-  remote: (args) => ['', 'show', 'get-url'].includes(action(args)),
-  config: (args) =>
-    // User, system and named files are not this repository's metadata.
-    some(args, /^(?:--global|--system|-f|--file(?:=.*)?)$/) ||
-    (!some(
-      args,
-      /^(?:--unset(?:-all)?|--(?:remove|rename)-section|--replace-all|--add|--edit|-e)$/
-    ) &&
-      (some(args, /^(?:-l|--list|--get(?:-all|-regexp|-urlmatch|-color|-colorbool)?)$/) ||
-        ['get', 'list'].includes(action(args)) ||
-        operands(args).length === 1)),
-  stash: (args) => ['list', 'show'].includes(action(args)),
-  worktree: (args) => action(args) === 'list',
-  reflog: (args) => !['expire', 'delete', 'drop', 'unknown'].includes(action(args)),
-  notes: (args) => ['', 'list', 'show', 'get-ref'].includes(action(args)),
-  submodule: (args) => ['', 'status', 'summary'].includes(action(args)),
-  bisect: (args) => ['log', 'terms'].includes(action(args)),
-  'sparse-checkout': (args) => ['list', 'check-rules'].includes(action(args)),
-  'symbolic-ref': (args) => operands(args).length === 1 && !some(args, /^(?:-d|--delete)$/),
-  bundle: (args) => ['verify', 'list-heads'].includes(action(args)),
-  rerere: (args) => ['status', 'diff', 'remaining'].includes(action(args)),
-  // These make a repository elsewhere; they do not write this one's metadata.
+  remote: (args) =>
+    begins(
+      args.filter((value) => value !== '-v' && value !== '--verbose'),
+      '',
+      'show',
+      'get-url'
+    ),
+  config: readsConfiguration,
+  stash: (args) => begins(args, 'list', 'show'),
+  worktree: (args) => begins(args, 'list'),
+  reflog: (args) =>
+    args.length === 0 ||
+    (typeof args[0] === 'string' && !['expire', 'delete', 'drop', 'write'].includes(args[0])),
+  notes: (args) => begins(args, '', 'list', 'show', 'get-ref'),
+  submodule: (args) => begins(args, '', 'status', 'summary'),
+  bisect: (args) => begins(args, 'log', 'terms'),
+  'sparse-checkout': (args) => begins(args, 'list', 'check-rules'),
+  'symbolic-ref': (args) =>
+    only(args, /^(?:-q|--(?:quiet|short|(?:no-)?recurse))$/) &&
+    operandPositions('symbolic-ref', args).length === 1,
+  bundle: (args) => begins(args, 'verify', 'list-heads'),
+  rerere: (args) => begins(args, 'status', 'diff', 'remaining'),
+  // These write another path, which gitWriteOperands names, and no metadata here.
   clone: () => true,
   init: () => true,
+  'merge-file': () => true,
 };
 /**
  * Whether an invocation leaves the repository's refs, index and working tree

@@ -5,15 +5,84 @@ import type {
   Word,
   WordPart,
 } from './parser-types';
+import { projectionSensitiveBinding } from './policies';
 import type { AnalysisContext, Argument, State } from './types';
 
 interface Piece {
   text: string | null;
   split: boolean;
+  descriptor?: true;
 }
 type Pieces = Piece[];
 export type InspectSubstitution = (script: ParsedScript, state: State, depth: number) => void;
 const LIMIT = 32;
+const BRACE_LIMIT = 64;
+
+/** A name an expansion assigns, rather than an assignment word or a builtin. */
+function expansionAssigns(
+  name: string,
+  state: State,
+  ctx: AnalysisContext,
+  node: { pos: number; end: number }
+): void {
+  if (projectionSensitiveBinding(name))
+    ctx.reason(node, 'environment-change', `Unmodeled shell environment change ${name}.`);
+  state.bindings.set(name, null);
+}
+/** A value Bash would evaluate again, as an arithmetic or indirect reference. */
+function reevaluates(values: readonly string[] | null | undefined): boolean {
+  return values?.some((value) => /[$`[]/.test(value)) === true;
+}
+
+/** The words of a literal brace expansion, or null when it is not all literal. */
+export function expandBraces(text: string): string[] | null {
+  if (!/^\{[\w./,@%+:=^{}-]*\}$/.test(text)) return null;
+  const body = text.slice(1, -1);
+  const sequence =
+    /^(?:(-?\d{1,9})\.\.(-?\d{1,9})|([a-zA-Z])\.\.([a-zA-Z]))(?:\.\.(-?\d{1,9}))?$/.exec(body);
+  if (sequence) {
+    const letters = sequence[3] !== undefined;
+    // Bash pads every member to the width of a zero-padded edge.
+    if (!letters && [sequence[1]!, sequence[2]!].some((edge) => /^-?0\d/.test(edge))) return null;
+    const from = letters ? sequence[3]!.charCodeAt(0) : Number(sequence[1]);
+    const to = letters ? sequence[4]!.charCodeAt(0) : Number(sequence[2]);
+    const step = Math.abs(Number(sequence[5] ?? 1)) || 1;
+    const count = Math.floor(Math.abs(to - from) / step) + 1;
+    if (count > BRACE_LIMIT) return null;
+    return Array.from({ length: count }, (_, index) => {
+      const value = from + (to < from ? -1 : 1) * step * index;
+      return letters ? String.fromCharCode(value) : String(value);
+    });
+  }
+  const options: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index <= body.length; index++) {
+    const character = body[index];
+    if (character === '{') depth++;
+    else if (character === '}') depth--;
+    if (depth < 0) return null;
+    if (character !== undefined && (character !== ',' || depth > 0)) continue;
+    const option = body.slice(start, index);
+    start = index + 1;
+    const open = option.indexOf('{');
+    if (open < 0) {
+      options.push(option);
+      continue;
+    }
+    let level = 0;
+    let close = open;
+    for (; close < option.length; close++) {
+      if (option[close] === '{') level++;
+      else if (option[close] === '}' && --level === 0) break;
+    }
+    const nested = close < option.length ? expandBraces(option.slice(open, close + 1)) : null;
+    const rest = option.slice(close + 1);
+    if (!nested || rest.includes('{')) return null;
+    options.push(...nested.map((value) => option.slice(0, open) + value + rest));
+  }
+  return depth === 0 && options.length > 1 && options.length <= BRACE_LIMIT ? options : null;
+}
 
 /**
  * Visit the commands nested in an arithmetic expression. Arithmetic can assign,
@@ -29,18 +98,20 @@ export function inspectArithmetic(
   function forget(node: ArithmeticExpression): void {
     if (node.type !== 'ArithmeticWord') return;
     for (const [name] of node.value.matchAll(/[A-Za-z_][A-Za-z_0-9]*/g))
-      state.bindings.set(name, null);
+      expansionAssigns(name, state, ctx, node);
   }
   function visit(node: ArithmeticExpression): void {
     switch (node.type) {
       case 'ArithmeticBinary':
-        if (/^(?:[-+*/%&|^]|<<|>>)?=$/.test(node.operator)) forget(node.left);
+        // Plain assignment reads only its right side; the others read both.
+        if (node.operator === '=') forget(node.left);
         visit(node.left);
         visit(node.right);
+        if (/^(?:[-+*/%&|^]|<<|>>)=$/.test(node.operator)) forget(node.left);
         return;
       case 'ArithmeticUnary':
-        if (node.operator === '++' || node.operator === '--') forget(node.operand);
         visit(node.operand);
+        if (node.operator === '++' || node.operator === '--') forget(node.operand);
         return;
       case 'ArithmeticTernary':
         visit(node.test);
@@ -60,6 +131,14 @@ export function inspectArithmetic(
         else inspect(node.script, state, depth + 1);
         return;
       case 'ArithmeticWord':
+        // A name's value is itself an arithmetic expression, subscripts included.
+        for (const [name] of node.value.matchAll(/[A-Za-z_][A-Za-z_0-9]*/g))
+          if (reevaluates(state.bindings.get(name)))
+            ctx.reason(
+              node,
+              'arithmetic-source',
+              'Arithmetic evaluates source held in a variable, which is not read here.'
+            );
         if (node.parts?.length)
           expandWord(
             {
@@ -91,6 +170,46 @@ export function expandWord(
   assignment = false
 ): Argument[][] {
   const projection = ctx.projection !== undefined;
+  // Brace expansion happens first and makes each alternative a word of its own.
+  const brace =
+    projection && !assignment
+      ? (word.parts ?? []).findIndex((part) => part.type === 'BraceExpansion')
+      : -1;
+  if (brace >= 0) {
+    const part = word.parts![brace]!;
+    const options = expandBraces(part.text);
+    if (options) {
+      let combined: Argument[][] = [[]];
+      for (const option of options) {
+        const offset = part.pos - word.pos;
+        const variants = expandWord(
+          {
+            ...word,
+            text: word.text.slice(0, offset) + option + word.text.slice(offset + part.text.length),
+            parts: word.parts!.map((item, index) =>
+              index === brace
+                ? { type: 'Literal', pos: part.pos, end: part.end, value: option, text: option }
+                : item
+            ),
+          },
+          state,
+          ctx,
+          inspect,
+          depth
+        );
+        if (combined.length * variants.length > LIMIT) {
+          ctx.reason(
+            word,
+            'pathname-expansion',
+            'Expanded glob requires filesystem-dependent shell expansion.'
+          );
+          return [[{ value: null }]];
+        }
+        combined = combined.flatMap((left) => variants.map((right) => [...left, ...right]));
+      }
+      return combined;
+    }
+  }
   // Bash expands literal tilde prefixes before parameter expansion, including
   // assignment-shaped command arguments and colon-separated assignment values.
   // Inspect only unquoted literal source; quoted/escaped tildes remain data.
@@ -131,9 +250,23 @@ export function expandWord(
     if (nested) expandWord(nested, state, ctx, inspect, depth, true);
   }
   /** A parameter operation's nested words are visited; most values stay unknown. */
-  function parameter(part: ParameterExpansionPart): readonly (string | null)[] {
+  function parameter(part: ParameterExpansionPart, split: boolean): readonly (string | null)[] {
     const operation = part.operation;
     visit(part.index);
+    // Every element or positional becomes a field of its own.
+    const spread = [part.parameter, part.index?.value ?? ''];
+    if (part.prefix !== '#' && (spread.includes('@') || (split && spread.includes('*'))))
+      ctx.reason(
+        part,
+        'positional-spread',
+        'Quoted positional spread does not have a proven argument count.'
+      );
+    if (part.prefix === '!' && reevaluates(state.bindings.get(part.parameter)))
+      ctx.reason(
+        part,
+        'parameter-operation',
+        'This parameter operation can run commands the projection cannot read.'
+      );
     if (!operation) return [null];
     switch (operation.type) {
       case 'Default': {
@@ -141,7 +274,7 @@ export function expandWord(
         const simple = !part.prefix && !part.index;
         const values = simple ? state.bindings.get(part.parameter) : null;
         if (operation.operator === '=' || operation.operator === ':=')
-          state.bindings.set(part.parameter, null);
+          expansionAssigns(part.parameter, state, ctx, part);
         // A value known to be present is the result of every default operator
         // except the alternate form, which selects the operand instead.
         if (
@@ -204,7 +337,7 @@ export function expandWord(
           break;
         case 'SimpleExpansion': {
           const name = part.text.slice(1);
-          if (name === '@')
+          if (name === '@' || (projection && split && name === '*'))
             ctx.reason(
               part,
               'positional-spread',
@@ -222,7 +355,7 @@ export function expandWord(
             !/^[A-Za-z_][A-Za-z_0-9]*$/.test(part.parameter)
           ) {
             if (projection) {
-              choices = parameter(part).map((text) => [{ text, split }]);
+              choices = parameter(part, split).map((text) => [{ text, split }]);
               break;
             }
             ctx.reason(
@@ -238,6 +371,8 @@ export function expandWord(
           break;
         }
         case 'CommandExpansion':
+          // ${ …; } runs in this shell, not in a subshell.
+          if (projection && part.text.startsWith('${')) decoded(part);
           if (!part.script || part.script.source !== undefined) decoded(part);
           else inspect(part.script, state, depth + 1);
           // A proved reader's output remains opaque. In particular, it is not
@@ -249,7 +384,7 @@ export function expandWord(
             choices = [[{ text: null, split: false }]];
             if (part.type === 'ProcessSubstitution') {
               // The word names a descriptor, which like /dev/null is no file.
-              choices = [[{ text: '/dev/null', split: false }]];
+              choices = [[{ text: '/dev/null', split: false, descriptor: true }]];
               const nested = part.script;
               if (!nested || nested.source !== undefined) decoded(part);
               else inspect(nested, state, depth + 1);
@@ -257,8 +392,13 @@ export function expandWord(
               if (part.expression) inspectArithmetic(part.expression, state, ctx, inspect, depth);
               else
                 ctx.reason(part, 'word-syntax', 'Arithmetic source could not be read completely.');
-            } else if (part.type === 'LocaleString') parts(part.parts, true);
-            else if (part.type !== 'AnsiCQuoted') {
+            } else if (part.type === 'LocaleString') {
+              // Untranslated in the declared locale, this is a double-quoted string.
+              choices = parts(part.parts, true);
+              if (!part.parts.length) choices = [[{ text: '', split: false }]];
+            } else if (part.type === 'AnsiCQuoted')
+              choices = [[{ text: part.value, split: false }]];
+            else {
               // Pathname and brace expansion change how many arguments exist.
               parts(part.parts ?? [], quoted);
               if (split)
@@ -304,6 +444,9 @@ export function expandWord(
     let current = '';
     let opaque = false;
     let present = false;
+    const descriptor = pieces.some((piece) => piece.descriptor)
+      ? { descriptor: true as const }
+      : {};
     for (const piece of pieces) {
       if (piece.text === null) {
         opaque = true;
@@ -337,7 +480,7 @@ export function expandWord(
       }
       if (!piece.split) present = true;
     }
-    if (present) fields.push({ value: opaque ? null : current });
+    if (present) fields.push({ value: opaque ? null : current, ...descriptor });
     return fields;
   });
 }

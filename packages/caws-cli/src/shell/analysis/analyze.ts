@@ -11,10 +11,13 @@ import type {
 } from './parser-types';
 import { loadParser } from './load-parser';
 import {
+  changesShellState,
   exactOperands,
+  holdsSubscriptSource,
   inside,
   inspectInvocation,
   namesGitMetadata,
+  optionOperands,
   projectionSensitiveBinding,
   resolveDirectory,
   sensitiveBinding,
@@ -68,11 +71,18 @@ function widen(states: readonly State[]): State {
       merged.bindings.set(name, either(merged.bindings.get(name), state.bindings.get(name)));
     if (state.cwd !== merged.cwd || state.cwdUnknown === true) merged.cwdUnknown = true;
     if (state.logical !== merged.logical) delete merged.logical;
+    keepMade(merged, state);
     if (state.filesystemChanged === true) merged.filesystemChanged = true;
     if (state.mappingChanged === true) merged.mappingChanged = true;
   }
   delete merged.outcome;
   return merged;
+}
+/** A directory counts as made only while every alternative still has it. */
+function keepMade(target: State, other: State): void {
+  const made = target.made?.filter((path) => other.made?.includes(path));
+  if (made?.length) target.made = made;
+  else delete target.made;
 }
 /** One widened state per distinct directory. */
 function join(states: readonly State[]): State[] {
@@ -86,19 +96,33 @@ function join(states: readonly State[]): State[] {
 function forget(state: State): State {
   const next = clone(state);
   for (const name of next.bindings.keys()) next.bindings.set(name, null);
+  delete next.made;
   return { ...next, cwdUnknown: true, filesystemChanged: true, mappingChanged: true };
 }
 /** Filesystem effects outlive the subshell, pipeline or substitution that had them. */
 function carryEffects(target: State, sources: readonly State[]): void {
-  if (sources.some((source) => source.filesystemChanged === true)) target.filesystemChanged = true;
-  if (sources.some((source) => source.mappingChanged === true)) target.mappingChanged = true;
+  for (const source of sources) {
+    if (source.filesystemChanged === true) target.filesystemChanged = true;
+    if (source.mappingChanged === true) target.mappingChanged = true;
+    keepMade(target, source);
+  }
 }
-function testOperands(expression: TestExpression): Word[] {
+interface TestOperand {
+  word: Word;
+  /** Bash expands this operand's value again, as a name or an expression. */
+  evaluated: boolean;
+}
+function testOperands(expression: TestExpression): TestOperand[] {
   switch (expression.type) {
     case 'TestUnary':
-      return [expression.operand];
-    case 'TestBinary':
-      return [expression.left, expression.right];
+      return [{ word: expression.operand, evaluated: expression.operator === '-v' }];
+    case 'TestBinary': {
+      const evaluated = /^-(?:eq|ne|lt|le|gt|ge)$/.test(expression.operator);
+      return [
+        { word: expression.left, evaluated },
+        { word: expression.right, evaluated },
+      ];
+    }
     case 'TestLogical':
       return expression.operands.flatMap(testOperands);
     case 'TestNot':
@@ -171,6 +195,7 @@ export async function analyzeCommand(
     ...(dependencies.observers?.gitMetadata
       ? { gitMetadata: dependencies.observers.gitMetadata }
       : {}),
+    ...(dependencies.observers?.gitWrite ? { gitWrite: dependencies.observers.gitWrite } : {}),
     gitContext: (input) => {
       const key = JSON.stringify([input.cwd, Object.entries(input.overrides).sort()]);
       if (gitContexts.has(key)) return gitContexts.get(key)!;
@@ -243,7 +268,9 @@ export async function analyzeCommand(
     }
   }
   const budgetExhausted = Symbol();
-  const activeCalls: string[] = [];
+  const activeCalls: { name: string; defined: number; localized: Set<string> }[] = [];
+  /** Names some declaration may have made read-only; a later assignment can fail. */
+  const frozen = new Set<string>();
   /** Open loops and calls, innermost last; a jump leaves its state with each. */
   const escapes: State[][] = [];
   /** Open subshells, innermost last; an exit ends only its own. */
@@ -319,6 +346,7 @@ export async function analyzeCommand(
         state.logical ?? null,
         state.mappingChanged === true,
         state.outcome ?? null,
+        state.made ?? null,
       ]);
       unique.set(key, state);
       if (unique.size > MAX_STATES) {
@@ -345,6 +373,7 @@ export async function analyzeCommand(
       item.logical ?? null,
       item.filesystemChanged === true,
       item.mappingChanged === true,
+      item.made ?? null,
     ];
     let entry = [state];
     for (let pass = 0; ; pass++) {
@@ -373,21 +402,37 @@ export async function analyzeCommand(
     subshells.pop();
     return [...outputs, ...exited];
   }
-  /** A call runs every body its name may hold, or none of them. */
+  /**
+   * A call runs every body its name may hold, or none of them. A recursive call
+   * runs them once more from an arbitrary state, which stands for every deeper
+   * one until a body defines something new. `temporary` names are bound for the
+   * call alone.
+   */
   function call(
     name: string,
     bodies: readonly PipelineNode[],
     state: State,
+    temporary: ReadonlyMap<string, Value>,
     reader: boolean,
     depth: number
   ): State[] {
-    if (activeCalls.includes(name)) return [forget(state)];
-    activeCalls.push(name);
+    const active = activeCalls.filter((item) => item.name === name);
+    const defined = [...ctx.functions!.values()].flat().length;
+    if (active.length > 1 && active.at(-1)!.defined === defined) return [forget(state)];
+    const entry = active.length > 0 ? forget(state) : clone(state);
+    for (const [variable, value] of temporary)
+      entry.bindings.set(variable, active.length > 0 ? null : value);
+    const localized = new Set(temporary.keys());
+    activeCalls.push({ name, defined, localized });
     const { value: outputs, escaped } = jumping(() =>
-      bodies.flatMap((body) => walk(body, clone(state), reader, depth + 1))
+      bodies.flatMap((body) => walk(body, clone(entry), reader, depth + 1))
     );
     activeCalls.pop();
-    return join([state, ...outputs, ...escaped]);
+    const results = join([entry, ...outputs, ...escaped]);
+    // Returning uncovers whatever the caller held, or the body left beneath.
+    for (const result of results)
+      for (const variable of localized) result.bindings.set(variable, null);
+    return results;
   }
   function script(tree: ParsedScript, states: State[], reader: boolean, depth: number): State[] {
     if (tree.errors?.length) {
@@ -438,10 +483,10 @@ export async function analyzeCommand(
     const next = clone(state);
     if (
       projection
-        ? (projectionSensitiveBinding(node.name) &&
-            (program === undefined || SHELL_STATE_COMMANDS.test(basename(program)))) ||
-          // A bare cd goes to the HOME its own prefix assigns.
-          (node.name === 'HOME' && program === 'cd')
+        ? projectionSensitiveBinding(node.name) &&
+          (program === undefined ||
+            SHELL_STATE_COMMANDS.test(basename(program)) ||
+            ctx.functions!.has(program))
         : sensitiveBinding(node.name) || node.name.startsWith('BASH')
     )
       reason(node, 'environment-change', `Unmodeled shell environment change ${node.name}.`);
@@ -469,6 +514,7 @@ export async function analyzeCommand(
       if (variant.length !== 1 || variant[0]!.value === null) unknown = true;
       else values.push(variant[0]!.value!);
     }
+    if (frozen.has(node.name)) unknown = true;
     next.bindings.set(node.name, unknown ? null : [...new Set(values)]);
     ctx.trace(
       node,
@@ -605,10 +651,20 @@ export async function analyzeCommand(
       vectors = vectors.flatMap((left) => variants.map((right) => [...left, ...right]));
     }
     // An unproved field matters where it can become a write target or select one.
+    // A spread is more: whole options can be among its fields.
     const exact = deferred.length ? vectors.flatMap(exactOperands) : [];
-    for (const entry of deferred)
-      if (exact.some(({ source }) => source!.pos <= entry[0].pos && entry[0].end <= source!.end))
+    const spread = deferred.some((entry) => entry[1] === 'positional-spread')
+      ? vectors.flatMap(optionOperands)
+      : [];
+    for (const entry of deferred) {
+      const covers = ({ source }: Argument): boolean =>
+        source!.pos <= entry[0].pos && entry[0].end <= source!.end;
+      if ([...exact, ...(entry[1] === 'positional-spread' ? spread : [])].some(covers))
         reason(...entry);
+      vectors = vectors.map((vector) =>
+        vector.map((arg) => (covers(arg) ? { ...arg, several: true as const } : arg))
+      );
+    }
     const program = node.name && !node.name.parts?.length ? node.name.value : undefined;
     let assigned = clone(state);
     for (const prefix of node.prefix) {
@@ -620,6 +676,13 @@ export async function analyzeCommand(
         redirect(suffix, state, reader, depth + 1);
     let declaring = clone(state);
     for (const assignment of declared) declaring = assign(assignment, declaring, depth + 1);
+    if (projection && /^(?:declare|local|readonly|typeset)$/.test(program ?? '')) {
+      const plain = words.slice(1).flatMap((item) => (item.parts?.length ? [] : [item.value]));
+      const names = [...declared.map((item) => item.name), ...plain];
+      if (program === 'readonly' || plain.some((value) => /^-[A-Za-z]*r/.test(value)))
+        for (const name of names) frozen.add(name);
+      if (program !== 'readonly') for (const name of names) activeCalls.at(-1)?.localized.add(name);
+    }
     carryEffects(state, [assigned, declaring]);
     assigned.filesystemChanged = state.filesystemChanged === true;
     if (projection) assigned.mappingChanged = state.mappingChanged === true;
@@ -627,7 +690,15 @@ export async function analyzeCommand(
     if (!node.name) return projection && node.redirects.length ? [state, assigned] : [assigned];
     const env = new Map<string, Value>();
     for (const [name, value] of assigned.bindings)
-      if (name.startsWith('GIT_') || name === 'PAGER') env.set(name, value);
+      if (name.startsWith('GIT_') || name === 'PAGER' || (projection && name === 'HOME'))
+        env.set(name, value);
+    const temporary = new Map<string, Value>(
+      node.prefix.flatMap((prefix) =>
+        prefix.type === 'Assignment'
+          ? [[prefix.name, assigned.bindings.get(prefix.name) ?? null] as const]
+          : []
+      )
+    );
     const out = vectors.flatMap((argv) => {
       const before = clone(state);
       dependencies.observers?.invocation?.({
@@ -658,7 +729,7 @@ export async function analyzeCommand(
       if (name === 'break' || name === 'continue' || name === 'return')
         for (const sink of escapes) sink.push(clone(next));
       const bodies = name ? ctx.functions?.get(name) : undefined;
-      if (bodies) return call(name!, bodies, next, reader, depth);
+      if (bodies) return call(name!, bodies, next, temporary, reader, depth);
       if (next.cwd === before.cwd && next.cwdUnknown === before.cwdUnknown) return [next];
       return [
         { ...before, outcome: 'failure' as const },
@@ -679,7 +750,10 @@ export async function analyzeCommand(
           const stops = proceeds === 'success' ? 'failure' : 'success';
           states = bounded(
             [
-              ...states.filter((item) => item.outcome !== proceeds),
+              // What stops here has the status that stopped it, for the rest of the list.
+              ...states
+                .filter((item) => item.outcome !== proceeds)
+                .map((item): State => (projection ? { ...item, outcome: stops } : item)),
               ...states
                 .filter((item) => item.outcome !== stops)
                 .flatMap((item) => {
@@ -814,9 +888,15 @@ export async function analyzeCommand(
         }
         return bounded(outputs, node);
       }
-      case 'Redirected':
+      case 'Redirected': {
         for (const redirection of node.redirects) redirect(redirection, state, reader, depth + 1);
-        return walk(node.command, state, reader, depth + 1);
+        if (!projection) return walk(node.command, state, reader, depth + 1);
+        // A failed redirection skips the body it accompanies, and any exit there.
+        const skipped: State = { ...clone(state), outcome: 'failure' };
+        const outputs = walk(node.command, state, reader, depth + 1);
+        carryEffects(skipped, outputs);
+        return bounded([skipped, ...outputs], node);
+      }
       default:
         return projection ? compound(node, state, reader, depth) : unsupported(node, state);
     }
@@ -868,7 +948,11 @@ export async function analyzeCommand(
         return bounded(branches, node);
       }
       case 'TestCommand':
-        for (const operand of testOperands(node.expression)) visit(operand, state, depth + 1);
+        for (const { word: operand, evaluated } of testOperands(node.expression)) {
+          const variants = word(operand, state, depth + 1, true, []);
+          if (evaluated && variants.some((fields) => fields.some(holdsSubscriptSource)))
+            reason(operand, 'test-source', 'A test evaluates source held in a subscript.');
+        }
         return [state];
       case 'ArithmeticCommand':
         if (!node.expression) return unsupported(node, state);
@@ -878,7 +962,16 @@ export async function analyzeCommand(
         if (node.body.type === 'CompoundList' || node.name.parts?.length)
           return unsupported(node, state);
         const name = node.name.value;
-        ctx.functions!.set(name, [...(ctx.functions!.get(name) ?? []), node.body]);
+        if (changesShellState(name)) {
+          reason(
+            node,
+            'function-shadow',
+            `Function ${name} replaces a builtin whose effect later source depends on.`
+          );
+          return [state];
+        }
+        const bodies = ctx.functions!.get(name) ?? [];
+        if (!bodies.includes(node.body)) ctx.functions!.set(name, [...bodies, node.body]);
         return [state];
       }
       case 'Coproc': {
@@ -925,12 +1018,14 @@ export async function analyzeCommand(
         node
       );
       if (projection)
-        for (const [index, state] of states.entries())
-          if (state.outcome !== undefined) {
+        states = bounded(
+          states.map((state) => {
             const next = { ...state };
             delete next.outcome;
-            states[index] = next;
-          }
+            return next;
+          }),
+          node
+        );
       if (!states.length) break;
     }
     return states;
