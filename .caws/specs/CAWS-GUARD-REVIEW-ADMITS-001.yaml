@@ -67,3 +67,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/shell/write-projection.test.js
     commit_sha: "1d735feeb160e52bf649eb8ad68e2d2524f2a5e4"
     test_verified_at: "2cc621925477708ba3003e216cf9820e455cb1e9"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Clustered, abbreviated and unlisted options resolve to the real target or are held; clone -qb main from a sibling into this project exits 0. Live on the installed build: git clone -qb into a sibling is refused and names it."
+    recorded_at: "2026-11-25T07:49:20.905Z"
+    test_nodeid: packages/caws-cli/tests/shell/write-projection.test.js
+    commit_sha: "1d735feeb160e52bf649eb8ad68e2d2524f2a5e4"
+    test_verified_at: "47fabbbe61166b240784f0e262277396acec08d5"
