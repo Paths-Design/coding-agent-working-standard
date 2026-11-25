@@ -40,7 +40,7 @@ acceptance:
       the agent runs a plain command (literal words, separators and output
       redirections to /dev/null) that kills literal process IDs from 2 to 4194304
       with any literal signal through kill, /bin/kill or /usr/bin/kill, beside
-      programs that only wait, look or print
+      listed programs and read-only caws commands that only wait, look or print
     then: 'the command is refused with the reason and a remedy, no latch or strike is recorded, and the next ordinary command runs, however often it is repeated'
   - id: A2
     given: 'the same session'
