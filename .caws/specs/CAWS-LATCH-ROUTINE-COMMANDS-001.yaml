@@ -48,10 +48,9 @@ acceptance:
     then: 'the latch arms as it did before'
   - id: A3
     given: >-
-      a plain command (literal words, separators, if/then/else/fi and file
-      redirections) in which reboot or shutdown appears only as an operand of
-      inspection programs that write nothing, in file or branch names given to a
-      listed git subcommand, or within a longer data-file name
+      a plain command in which every pipeline carrying reboot or shutdown writes no
+      file and is made of listed inspection programs or listed git subcommands, or
+      is one node or python3 script given a longer data-file name
     when: 'the classifier reads it'
     then: 'it is not denied as a system reboot'
   - id: A4
