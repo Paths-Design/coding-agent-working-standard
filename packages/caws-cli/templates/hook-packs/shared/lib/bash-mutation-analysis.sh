@@ -408,6 +408,7 @@ SAME = set("str os.fspath os.fsdecode os.path.abspath os.path.realpath os.path.n
            "os.path.expanduser os.path.expandvars sorted list tuple set reversed iter next".split())
 KEEP = set("resolve absolute expanduser strip rstrip lstrip as_posix decode encode get pop items "
            "keys values copy setdefault".split())
+WORDS = r"[\s\x27\x22<>|;&()=]+"
 READERS = set("ls cat head tail wc grep rg stat file diff du pwd echo which basename dirname".split())
 GIT_READERS = set("log show diff status rev-parse rev-list ls-files ls-tree grep cat-file blame "
                   "describe merge-base shortlog for-each-ref show-ref".split())
@@ -533,6 +534,19 @@ for node in nodes:
         calls.append(node)
 
 
+named_calls = {}
+handed_calls = {}
+for call in calls:
+    if isinstance(call.func, (ast.Name, ast.Attribute)):
+        called_as = call.func.id if isinstance(call.func, ast.Name) else call.func.attr
+        named_calls.setdefault(called_as, []).append(call)
+    for at, item in [*enumerate(call.args), *[(None, item.value) for item in call.keywords]]:
+        own = isinstance(item, ast.Attribute) and getattr(item.value, "id", "") in ("self", "cls")
+        held = item.id if isinstance(item, ast.Name) else item.attr if own else None
+        if held in functions:
+            handed_calls.setdefault(held, []).append((call, at))
+
+
 def lookup(node):
     for scope in chain(scope_of.get(id(node), tree)):
         key = (id(scope), node.id)
@@ -610,22 +624,33 @@ def parents(values):
         # The working directory has a parent once it is resolved, and none before.
         if bare in ("", "."):
             out.append((".", exact, strong))
-        if bare in ("", ".", "..") or bare.endswith("/.."):
+        if (bare in ("", ".") and exact) or bare == ".." or bare.endswith("/.."):
             out.append((posixpath.normpath(bare + "/.."), exact, strong))
-        else:
+        elif bare not in ("", "."):
             out.append((posixpath.dirname(bare) or ".", exact, strong))
     return limited(out)
 
 
-def supplied_to(name):
-    """What a call that is handed a function can apply it to."""
+def passed(call, position, index, keyword):
+    """What a call that is handed a function gives one of its parameters."""
     out = []
-    for call in calls:
-        given = [*call.args, *[item.value for item in call.keywords]]
-        handed = [item for item in given if isinstance(item, (ast.Name, ast.Attribute))
-                  and (item.id if isinstance(item, ast.Name) else item.attr) == name]
-        if handed:
-            out += [item for item in given if item not in handed]
+    verb = call.func.attr if isinstance(call.func, ast.Attribute) else getattr(call.func, "id", "")
+    rest = call.args[position + 1:] if position is not None else []
+    rows = [rest[0]] if verb in ("apply", "apply_async") and rest else []
+    if verb in ("starmap", "starmap_async") and rest:
+        rows = [row for item in literals(rest[0]) for row in getattr(item, "elts", [])]
+    if rows and all(isinstance(row, (ast.Tuple, ast.List)) for row in rows):
+        out += [row.elts[index] for row in rows if index is not None and index < len(row.elts)]
+    elif index is not None and index < len(rest):
+        out.append(rest[index])
+    for item in call.keywords:
+        if item.arg == "args" and isinstance(item.value, (ast.Tuple, ast.List)):
+            out += item.value.elts[index:index + 1] if index is not None else []
+        elif item.arg == "kwargs" and isinstance(item.value, ast.Dict):
+            out += [cell for key, cell in zip(item.value.keys, item.value.values)
+                    if isinstance(key, ast.Constant) and key.value == keyword]
+        elif item.arg == keyword or item.arg in ("args", "kwargs"):
+            out.append(item.value)
     return out
 
 
@@ -640,11 +665,15 @@ def filled(values, pieces, cells, seen):
 def percent(left, right, seen):
     out = []
     for text, exact, strong in left:
-        if text is None or not exact or re.search(r"%[%(]", text):
-            out.append((None if text is None else text.split("%")[0] or None, False, strong))
+        if text is None or not exact or "%%" in text:
+            out.append((text, False, strong))
             continue
-        pieces = re.split(r"%[-#0 +]*[0-9]*(?:[.][0-9]+)?[a-zA-Z]", text)
+        pieces = re.split(r"%(?:[(][^)]*[)])?[-#0 +]*[0-9]*(?:[.][0-9]+)?[a-zA-Z]", text)
         cells = right.elts if isinstance(right, ast.Tuple) else [right]
+        if "%(" in text:
+            table = {key.value: cell for key, cell in zip(right.keys, right.values)
+                     if isinstance(key, ast.Constant)} if isinstance(right, ast.Dict) else {}
+            cells = [table.get(name) for name in re.findall(r"%[(]([^)]*)[)]", text)]
         cells = [*cells, *[None] * len(pieces)]
         out += filled([(pieces[0], True, strong)], pieces[1:], cells, seen)
     return limited(out)
@@ -658,12 +687,17 @@ def braces(left, call, seen):
             out.append((None if text is None else text.split("{")[0] or None, False, strong))
             continue
         parts = re.split(r"[{]([0-9A-Za-z_]*)(?:![rsa])?(?::[^{}]*)?[}]", text)
+        if any("{" in part or "}" in part for part in parts[::2]):
+            out.append((text.split("{")[0] or None, False, strong))
+            continue
         cells = []
         for index, name in enumerate(parts[1::2]):
             at = index if name == "" else int(name) if name.isdigit() else None
             cells.append(named.get(name) if at is None else call.args[at] if at < len(call.args) else None)
         out += filled([(parts[0], True, strong)], parts[2::2], cells, seen)
-    return limited(out)
+    # Nothing is known about a path that begins with an unknown field.
+    return limited([(text or None, exact, strong) if not exact else (text, exact, strong)
+                    for text, exact, strong in out])
 
 
 def fold(values, rest, seen):
@@ -753,8 +787,7 @@ def evaluate(node, seen=()):
         values = [value for item in bindings.get(key, []) for value in evaluate(item, seen)]
         if key in parameters:
             name, index, keyword = parameters[key]
-            supplied = [call for call in calls if isinstance(call.func, (ast.Name, ast.Attribute))
-                        and (call.func.id if isinstance(call.func, ast.Name) else call.func.attr) == name]
+            supplied = named_calls.get(name, [])
             for call in supplied:
                 given = [item.value for item in call.keywords if item.arg == keyword]
                 if index is not None and 0 <= index < len(call.args):
@@ -764,9 +797,10 @@ def evaluate(node, seen=()):
                     values += evaluate(item, seen)
                 if spread or any(item.arg is None for item in call.keywords):
                     values += UNKNOWN
-            handed = supplied_to(name)
-            for item in handed:
-                values += evaluate(item, seen) or UNKNOWN
+            handed = handed_calls.get(name, [])
+            for call, position in handed:
+                for item in passed(call, position, index, keyword):
+                    values += evaluate(item, seen) or UNKNOWN
             if not supplied and not handed and not values:
                 return UNKNOWN
         return limited(values)
@@ -776,6 +810,8 @@ def evaluate(node, seen=()):
             return [("/dev/null", True, True)]
         if name in ("os.curdir", "os.path.curdir"):
             return [(".", True, True)]
+        if name in ("os.pardir", "os.path.pardir"):
+            return [("..", True, True)]
         if node.attr == "parent":
             return parents(evaluate(node.value, seen))
         if node.attr in ("name", "stem", "suffix", "path"):
@@ -952,8 +988,11 @@ def started(call):
     words = None
     if isinstance(command, (ast.List, ast.Tuple)):
         items = command.elts
-        if all(isinstance(item, ast.Constant) and isinstance(item.value, str) for item in items):
-            words = [item.value for item in items]
+        # Only the program and its options decide whether it reads.
+        if items and isinstance(items[0], ast.Constant) and not any(
+                isinstance(item, ast.Starred) for item in items):
+            words = [item.value if isinstance(item, ast.Constant) and isinstance(item.value, str) else "."
+                     for item in items]
     elif isinstance(command, ast.Constant) and isinstance(command.value, str):
         if not re.search(r"[<>|;&$`\n(]", command.value):
             try:
@@ -966,12 +1005,14 @@ def started(call):
     built = [item.value for item in call.keywords if item.arg == "cwd"]
     built += command.elts if isinstance(command, (ast.List, ast.Tuple)) else [command]
     for item in built:
-        if item is not None and not isinstance(item, ast.Constant):
-            emit([(text, exact, False) for text, exact, strong in evaluate(item)
-                  if text and ("/" in text or text[0] in "~.")], False)
+        if item is None or isinstance(item, ast.Constant):
+            continue
+        for text, exact, strong in evaluate(item):
+            pieces = re.split(WORDS, text or "") if item is command else [text or ""]
+            emit([(piece, exact, False) for piece in pieces if "/" in piece or piece[:1] in ("~", ".")], False)
     for item in ast.walk(call):
         if isinstance(item, ast.Constant) and isinstance(item.value, str):
-            for piece in re.split(r"[\s\x27\x22<>|;&()=]+", item.value):
+            for piece in re.split(WORDS, item.value):
                 if "/" in piece or piece.startswith("~"):
                     emit([(home(piece), True, False)])
         elif isinstance(item, ast.Name):
@@ -1098,9 +1139,18 @@ _caws_node_text() {
 _caws_node_joined() {
   local call
   while IFS= read -r call; do
-    printf "'%s'\\n" "$(grep -oE "['\"\`][^'\"\`]*['\"\`]" <<< "${call#*join(}" |
+    printf "'%s'\\n" "$(grep -oE "['\"\`][^'\"\`]*['\"\`]" <<< "${call##*(}" |
       tr -d "'\"\`" | tr '\n' '/' | sed 's|/$||')"
   done
+}
+
+# _caws_node_directories <source>
+#   Print the directories a literal join gives a program the source starts.
+_caws_node_directories() {
+  local -x LC_ALL=C
+  tr '\n' ' ' <<< "$1" | grep -oE "cwd:[[:space:]]*(path\.)?(join|resolve)\([^()]*\)" |
+    grep -vE '\([^)]*[A-Za-z_$][A-Za-z0-9_$.]*[[:space:]]*[,)]' | _caws_node_joined | tr -d "'"
+  return 0
 }
 
 # _caws_node_named_targets <source>
@@ -1109,12 +1159,14 @@ _caws_node_joined() {
 _caws_node_named_targets() {
   local -x LC_ALL=C
   local text name targets dirs directory operand="[[:space:]]*(path\.)?(join\(|resolve\()?[[:space:]]*"
-  local joined='[[:space:]]*(path\.)?(join|resolve)\([^()]*\)'
+  local literal="('[^']*'|\"[^\"]*\"|\`[^\`\$]*\`)" joined
+  joined="[[:space:]]*(path\.)?(join|resolve)\([[:space:]]*$literal([[:space:]]*,[[:space:]]*$literal)*[[:space:]]*\)"
   local first='(writeFile|appendFile|createWriteStream|unlink|rm|rmdir|mkdir|truncate|rename|outputFile|writeJson)(Sync)?\('
   local second='(copyFile|cp|rename|symlink|link|copy|move)(Sync)?\([^(),]*(\([^()]*\))?[^(),]*,'
-  text="$(tr '\n' ' ' <<< "$1")"
+  text="$(tr '\n' ' ' <<< "$1" | sed "s/process\.cwd()/'.'/g")"
   dirs="$(grep -oE "process\.chdir\([[:space:]]*['\"\`][^'\"\`]+" <<< "$text" |
     sed -E "s/.*['\"\`]//")"
+  dirs+=$'\n'"$(grep -oE "process\.chdir\($joined" <<< "$text" | _caws_node_joined | tr -d "'")"
   targets="$({
     grep -oE "($first|$second)$joined" <<< "$text" | _caws_node_joined
     grep -oE "($first|$second)$operand['\"\`][^'\"\`]+['\"\`]" <<< "$text"
@@ -1219,6 +1271,7 @@ _caws_inline_evidence() {
       found=1; writes="$CAWS_NODE_FILE_WRITES"; named="$CAWS_NODE_NAMED_TARGET"
       literals="$(_caws_interpreter_literals node "$source" "$CAWS_NODE_WRITE_MENTIONS")"
       literals+=$'\n'"$(_caws_node_named_targets "$source")"
+      literals+=$'\n'"$(_caws_node_directories "$source")"
     fi
   fi
   [[ $found == 1 ]] || return 0

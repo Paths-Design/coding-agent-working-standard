@@ -55,6 +55,11 @@ beforeAll(() => {
     path.join(project, 'scripts/lint_docs.py'),
     'from pathlib import Path\nPath("tmp/report.json").write_text("{}")\n'
   );
+  // A join from the script's own directory is not one from where it is run.
+  fs.writeFileSync(
+    path.join(project, 'scripts/gen.cjs'),
+    "require('fs').writeFileSync(require('path').join(__dirname, '..', 'sibling', 'x'), '')\n"
+  );
   // A committed script that hands another repository to a program is the
   // project's own reviewed code, like a Makefile target. One that names a write
   // there is refused whoever committed it.
@@ -258,6 +263,12 @@ const PROGRAMS = [
   'git clone -qb main {{SIBLING}} tmp/vendor',
   'cat > tmp/run.sh <<EOF\necho "\\$HOME at $(date)"\nEOF\nbash tmp/run.sh',
   'ls docs | while read -r f; do wc -l "docs/$f"; done; touch tmp/counted',
+  'node scripts/gen.cjs',
+  'cp docs/guide.md /tmp/ && mkdir -p tmp/w9 && cd tmp/w9 && echo x > y',
+  'tar czf tmp/o.tgz src && mkdir -p tmp/w9 && cd tmp/w9 && echo x > y',
+  'for f in a b c; do [ -e "tmp/$f" ] || ln -s "../src/$f" "tmp/$f"; done; echo x > tmp/log',
+  'ls docs | while read -r f; do cd docs; wc -l "$f"; cd ..; done; touch tmp/o',
+  'f() { local GIT_BRANCH=main; git push origin "$GIT_BRANCH"; }; f; git status',
   'bash -n scripts/*.sh',
   'bash -n scripts/*.sh .githooks/*',
   'export OUT=tmp/out 2>/dev/null; echo x > "$OUT"',
@@ -399,6 +410,11 @@ const INLINE = [
   "python3 -c \"import subprocess; subprocess.run(['make', 'x'], cwd='src')\"",
   "node -e \"const path = require('path'); require('fs').writeFileSync(path.join('tmp', 'x.md'), 'x')\"",
   "node -e \"process.chdir('docs'); require('fs').writeFileSync('x.md', 'x')\"",
+  "python3 -c \"import os, subprocess; sib = os.path.join(os.path.dirname(os.getcwd()), 'sibling'); print(subprocess.check_output(['git', '-C', sib, 'log', '-1']))\"",
+  "python3 - <<'EOF'\ndef convert(src, dst='tmp/a'):\n    open(dst, 'w').write(open(src).read())\nconvert('{{SIBLING}}/a', 'tmp/a')\nex.submit(convert, '{{SIBLING}}/b', 'tmp/b')\nex.submit(convert, '{{SIBLING}}/c')\nEOF",
+  "python3 - <<'EOF'\ndef report(path):\n    open(path, 'w').write('x')\nreport('tmp/r.md')\nprint(args.report, '{{SIBLING}}/README.md')\nEOF",
+  "python3 -c \"row = {'name': 'a'}; open('%(name)s.csv' % row, 'w')\"",
+  "node -e \"const fs = require('fs'), path = require('path'); fs.copyFileSync(path.join('..', 'sibling', 'a.md'), path.join('tmp', 'a.md'))\"",
   'cd "$SOMEWHERE" && python3 -c "print(1)"',
   'cd "$SOMEWHERE" && python3 -c "open(\'/tmp/everyday.txt\', \'w\')"',
   "python3 - <<'EOF'\npaths = [" +
@@ -538,6 +554,19 @@ const FOREIGN_WRITES = [
   'ls | while read -r d; do cd {{SIBLING}}; done; touch out.txt',
   'chdir {{SIBLING}} && touch x',
   'noglob touch {{SIBLING}}/x',
+  'python3 -c "import subprocess; from pathlib import Path; subprocess.run(f\'touch {Path.cwd().parent}/sibling/x\', shell=True)"',
+  "python3 -c \"import os; open(os.path.join(os.getcwd(), os.pardir, 'sibling', 'x.md'), 'w')\"",
+  "python3 -c \"import subprocess, os; d = os.path.dirname(os.getcwd()); subprocess.run(['cp', 'a', os.path.join(d, 'sibling', 'a')])\"",
+  "python3 - <<'EOF'\ndef convert(src, dst):\n    open(dst, 'w').write(open(src).read())\nex.submit(convert, 'tmp/a', '{{SIBLING}}/a')\nEOF",
+  "python3 - <<'EOF'\ndef convert(src, dst):\n    open(dst, 'w').write(open(src).read())\npool.starmap(convert, [('tmp/a', '{{SIBLING}}/a')])\nEOF",
+  "node -e \"const fs = require('fs'), path = require('path'); fs.copyFileSync(path.join('src', 'a.md'), path.join('..', 'sibling', 'a.md'))\"",
+  "node -e \"const fs = require('fs'), path = require('path'); fs.writeFileSync(path.join(process.cwd(), '..', 'sibling', 'x.md'), 'x')\"",
+  "node -e \"const fs = require('fs'), path = require('path'); process.chdir(path.join('..', 'sibling')); fs.writeFileSync('x.md', 'x')\"",
+  "node -e \"const path = require('path'); require('child_process').execSync('touch x', { cwd: path.join('..', 'sibling') })\"",
+  'ln -s {{SIBLING}} tmp/link; touch tmp/link/x',
+  'ln -s {{SIBLING}} tmp/vendor && echo x > tmp/vendor/y.md',
+  'rm -rf docs && ln -s {{SIBLING}} docs && cd docs && touch x',
+  'mkdir -p tmp/a; env rm -r tmp/a; env ln -s {{SIBLING}} tmp/a; cd tmp/a && touch x',
   // A committed script that names the write, and an edit that adds a mention.
   'python3 scripts/publish.py',
   'node scripts/publish.mjs',
@@ -620,16 +649,22 @@ const CLAIMED = [
 
 const UNPROVED = [
   // Options that write a file or run a program, including abbreviations.
+  [
+    "python3 -c \"cfg = {'out': '{{SIBLING}}'}; open('{out}/x.md'.format(**cfg), 'w')\"",
+    'does not name literally',
+  ],
+  [
+    "python3 -c \"import sys; open('{}/x.md'.format(sys.argv[1]), 'w')\"",
+    'does not name literally',
+  ],
+  ["python3 -c \"open('{0[out]}/x.md'.format(cfg), 'w')\"", 'does not name literally'],
+  ['GIT_DIR={{SIBLING}}/.git; source tmp/env.sh; git add -A', 'metadata-coordinate-unresolved'],
   ['git config --fil={{SIBLING}}/.git/config a.b c', 'git-option'],
   ['git config --glob a.b c', 'git-option'],
   ['git push --repo={{SIBLING}} --all', 'git-option'],
   ['git clone -qu evil https://example.invalid/r.git tmp/x', 'git-execution'],
   [
     'ln -s {{SIBLING}} tmp/link; mkdir -p tmp/link/sub; cd tmp/link/sub && touch x',
-    'cwd-unresolved',
-  ],
-  [
-    'mkdir -p tmp/a; env rm -r tmp/a; env ln -s {{SIBLING}} tmp/a; cd tmp/a && touch x',
     'cwd-unresolved',
   ],
   ['echo x >! {{SIBLING}}/y', 'redirect-target'],
