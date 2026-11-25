@@ -156,6 +156,8 @@ status`, message delivery, the peer notice) report the later of that file's
   `GIT_SHA=...; git log`, `env -u GIT_DIR git status`, `set -a; source .env` and
   `unset IFS` run, as does Python that only starts a program kept in another
   repository. Shared pack 144.
+- `bash-write-guard` follows a Node path through names bound to a literal path
+  or join, and reads an inline `mkdir` as a write. Shared pack 145.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

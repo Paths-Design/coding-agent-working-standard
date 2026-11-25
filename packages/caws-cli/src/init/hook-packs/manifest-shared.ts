@@ -741,7 +741,10 @@ import { isAdapterCoveredSurface } from './types';
 // Node path built by a literal join or resolved after process.chdir, inline and
 // in the scripts a command runs. A program a Python source starts, and the
 // script it gives an interpreter, are run rather than written.
-export const SHARED_PACK_VERSION = 144;
+// v145: lib/bash-mutation-analysis.sh follows a Node path through three names
+// bound to a literal path or join, through concatenation and a template, and
+// reads an inline mkdir as a write.
+export const SHARED_PACK_VERSION = 145;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
