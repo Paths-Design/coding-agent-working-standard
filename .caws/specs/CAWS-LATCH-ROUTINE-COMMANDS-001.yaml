@@ -74,3 +74,11 @@ acceptance:
     then: 'all pass with SHARED_PACK_VERSION bumped'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "block-dangerous-routine-commands.bats: after the warning, recorded plain kills (including /bin/kill, two IDs, CONT, beside ps and caws status) are refused with NOT armed and the harness-stop remedy, no latch file exists, git status still runs, and four repeats change nothing. Classifier cases in test_classify_routine_commands.py pin IDs 2 to 4194304 and each signal form. The first kill of a session still warns and runs."
+    recorded_at: "2026-11-25T07:16:27.199Z"
+    test_nodeid: packages/caws-cli/tests/hooks/bats/block-dangerous-routine-commands.bats
+    commit_sha: "95101eca71a0a9016d11b2f804db0c34291e87af"
+    test_verified_at: f7a475cc1025f87835e02c359ddc18b1a57a5533
