@@ -3,7 +3,7 @@ title: 'Danger latch does not lock a session for a kill by process ID or for reb
 mode: fix
 lifecycle_state: draft
 created_at: '2026-11-25T05:21:19.455Z'
-updated_at: '2026-11-25T05:21:19.455Z'
+updated_at: '2026-11-25T05:22:15.934Z'
 created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
 blast_radius:
   modules:
@@ -24,6 +24,8 @@ scope:
     - 'CLAUDE.md'
     - 'AGENTS.md'
   out: []
+  support:
+    - tmp/
 invariants:
   - 'A kill whose targets are not all explicit process IDs, or that shares a command with another risky operation, arms the latch as before'
   - 'A shell that would run reboot or shutdown is denied and arms the latch, in every spelling denied before'
