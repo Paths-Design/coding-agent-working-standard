@@ -1171,26 +1171,59 @@ _caws_node_joined() {
   done
 }
 
+CAWS_NODE_LITERAL="('[^']*'|\"[^\"]*\"|\`[^\`\$]*\`)"
+CAWS_NODE_JOIN="[[:space:]]*(path\.)?(join|resolve)\([[:space:]]*$CAWS_NODE_LITERAL([[:space:]]*,[[:space:]]*$CAWS_NODE_LITERAL)*[[:space:]]*\)"
+
+# _caws_node_resolved <source>
+#   Print Node source on one line, with the working directory and each name bound
+#   to a literal path replaced by that path, through three bindings.
+_caws_node_resolved() {
+  local -x LC_ALL=C
+  local text before pass definition name value
+  text="$(tr '\n' ' ' <<< "$1" | sed -E \
+    -e "s/require\(['\"](node:)?path['\"]\)\./path./g" \
+    -e "s/(path\.)?dirname\(process\.cwd\(\)\)/'..'/g" \
+    -e "s/process\.cwd\(\)/'.'/g")"
+  for pass in 1 2 3; do
+    before="$text"
+    while IFS= read -r definition; do
+      name="${definition%%[!A-Za-z0-9_]*}"
+      case "$definition" in
+        *'('*) value="$(_caws_node_joined <<< "$definition" | tr -d "'")" ;;
+        *) value="${definition#*=}"; value="$(tr -d " '\"\`" <<< "$value")" ;;
+      esac
+      # Only a path is worth following, and these would be read by the filter.
+      case "$value" in *[\#\&\\]*) continue ;; .|..|*/*) ;; *) continue ;; esac
+      text="$(sed -E \
+        -e "s#(join|resolve)\([[:space:]]*$name[[:space:]]*,#\1('$value',#g" \
+        -e "s#(chdir\()[[:space:]]*$name[[:space:]]*\)#\1'$value')#g" \
+        -e "s#(cwd:)[[:space:]]*$name([[:space:]]*[,}])#\1 path.join('$value')\2#g" \
+        -e "s#\\\$\{$name\}#$value#g" \
+        -e "s#([(,=][[:space:]]*)$name[[:space:]]*\+[[:space:]]*(['\"\`])#\1\2$value#g" <<< "$text")"
+    done <<< "$(grep -oE "[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=($CAWS_NODE_JOIN|[[:space:]]*$CAWS_NODE_LITERAL)" <<< "$text" | sort -u | head -n 64)"
+    [[ "$text" != "$before" ]] || break
+  done
+  printf '%s\n' "$text"
+}
+
 # _caws_node_directories <source>
 #   Print the directories a literal join gives a program the source starts.
 _caws_node_directories() {
   local -x LC_ALL=C
-  tr '\n' ' ' <<< "$1" | sed "s/process\.cwd()/'.'/g" | grep -oE "cwd:[[:space:]]*(path\.)?(join|resolve)\([^()]*\)" |
-    grep -vE '\([^)]*[A-Za-z_$][A-Za-z0-9_$.]*[[:space:]]*[,)]' | _caws_node_joined | tr -d "'"
+  _caws_node_resolved "$1" | grep -oE "cwd:$CAWS_NODE_JOIN" | _caws_node_joined | tr -d "'"
   return 0
 }
 
 # _caws_node_named_targets <source>
-#   Print literals that are the operand of a file write, directly or through one
-#   name or path join, from each directory the program changes into.
+#   Print literals that are the operand of a file write, directly or through
+#   names and path joins, from each directory the program changes into.
 _caws_node_named_targets() {
   local -x LC_ALL=C
   local text name targets dirs directory operand="[[:space:]]*(path\.)?(join\(|resolve\()?[[:space:]]*"
-  local literal="('[^']*'|\"[^\"]*\"|\`[^\`\$]*\`)" joined
-  joined="[[:space:]]*(path\.)?(join|resolve)\([[:space:]]*$literal([[:space:]]*,[[:space:]]*$literal)*[[:space:]]*\)"
+  local joined="$CAWS_NODE_JOIN"
   local first='(writeFile|appendFile|createWriteStream|unlink|rm|rmdir|mkdir|truncate|rename|outputFile|writeJson)(Sync)?\('
   local second='(copyFile|cp|rename|symlink|link|copy|move)(Sync)?\([^(),]*(\([^()]*\))?[^(),]*,'
-  text="$(tr '\n' ' ' <<< "$1" | sed "s/process\.cwd()/'.'/g")"
+  text="$(_caws_node_resolved "$1")"
   dirs="$(grep -oE "process\.chdir\([[:space:]]*['\"\`][^'\"\`]+" <<< "$text" |
     sed -E "s/.*['\"\`]//")"
   dirs+=$'\n'"$(grep -oE "process\.chdir\($joined" <<< "$text" | _caws_node_joined | tr -d "'")"
@@ -1299,6 +1332,9 @@ _caws_inline_evidence() {
       literals="$(_caws_interpreter_literals node "$source" "$CAWS_NODE_WRITE_MENTIONS")"
       literals+=$'\n'"$(_caws_node_named_targets "$source")"
       literals+=$'\n'"$(_caws_node_directories "$source")"
+    elif grep -qE '(^|[^A-Za-z0-9_])mkdir(Sync)?\(' <<< "$source"; then
+      # Making a directory is a write, and says nothing about other literals.
+      found=1; writes="$CAWS_NODE_FILE_WRITES"; literals="$(_caws_node_named_targets "$source")"
     fi
   fi
   [[ $found == 1 ]] || return 0

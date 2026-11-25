@@ -327,7 +327,8 @@ leaves.
 
 A write through a link that the same command made with `ln` is also a write
 where the link leads, and one whose source is unknown is held. Links made by
-another program, and Node paths built through more than one name, are not read.
+another program are not read. A Node path is followed through three names bound
+to a literal path or join; one built any other way is not.
 
 Git subcommands that only inspect need no ownership answer. Every other
 subcommand, including one the projection does not know, carries its actual Git
