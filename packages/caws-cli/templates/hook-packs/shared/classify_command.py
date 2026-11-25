@@ -2940,29 +2940,32 @@ _INSPECTS_OPERANDS: set[str] = {
     "whereis", "file", "stat", "jq", "cut", "nl", "diff", "cmp", "echo", "true", "pwd",
     "basename", "dirname",
 }
-# rg is the one of them that can be told to run a program.
-_RUNS_A_PROGRAM_OPTION = re.compile(r"--(?:pre|hostname-bin)(?:=.*)?")
+# rg is the one of them that can be told to run a program (--pre, --hostname-bin).
+_RUNS_A_PROGRAM_OPTION = re.compile(r"--(?:pr|ho).*")
 # Their operands are files, branches and revisions.
 _GIT_NAMES_FILES: set[str] = {
     "add", "commit", "diff", "log", "show", "blame", "status", "checkout", "switch", "branch",
 }
+# None of these writes a file or runs a program; --output and --ext-diff do.
+_GIT_OPTION = re.compile(
+    r"-(?:[ABSGabmnpsuv]|[0-9]+)|--(?:all|cached|follow|grep|name-only|name-status|oneline|patch"
+    r"|short|staged|stat)?"
+)
 _SCRIPT_INTERPRETERS: set[str] = {"node", "python3", "python"}
 _SCRIPT_FILE = re.compile(r"[A-Za-z0-9_.][A-Za-z0-9_./-]*\.(?:js|mjs|cjs|py)|/[A-Za-z0-9_./-]+\.(?:js|mjs|cjs|py)")
 _DATA_FILE = re.compile(
     r"[A-Za-z0-9_./][A-Za-z0-9_./-]*\."
     r"(?:json|jsonl|ndjson|md|txt|log|csv|tsv|diff|patch|html|xml|svg|png|jpg|jpeg|gif|pdf)"
 )
-# Change what a later command word means, or run text.
-_CHANGES_LATER_COMMANDS: set[str] = {
-    "eval", "source", ".", "exec", "command", "builtin", "trap", "alias", "unalias", "hash",
-    "enable", "disable", "autoload", "zmodload", "emulate", "setopt", "unsetopt", "shopt", "set",
-    "export", "declare", "typeset", "local", "readonly", "integer", "float", "read", "mapfile",
-    "readarray", "getopts", "let", "unset", "vared", "printf", "print", "fc", "r",
-}
 # Wait, look or print; none of them starts, stops or changes anything.
 _BESIDE_A_KILL: set[str] = {
     "sleep", "ps", "pgrep", "lsof", "grep", "egrep", "rg", "echo", "cat", "head", "tail", "wc",
-    "ls", "true", "date", "caws", "cd", "pwd",
+    "ls", "true", "cd", "pwd",
+}
+_READ_ONLY_CAWS: set[tuple[str, ...]] = {
+    ("status",), ("doctor",), ("specs", "show"), ("specs", "list"), ("worktree", "list"),
+    ("scope", "show"), ("scope", "check"), ("scope", "contention"), ("agents", "list"),
+    ("agents", "show"), ("evidence", "list"),
 }
 
 
@@ -3023,8 +3026,9 @@ def read_plain_command(raw: str) -> list[list[_PlainCommand]] | None:
         elif separator:
             if separator.group() == "|":
                 pipelines[-1].append(_PlainCommand())
-            else:
+            elif separator.group() != "\n" or current.words or len(pipelines[-1]) == 1:
                 pipelines.append([_PlainCommand()])
+            # A newline after a pipe continues the pipeline.
             i = separator.end()
         else:
             word = _read_plain_word(raw, i)
@@ -3043,9 +3047,18 @@ def read_plain_command(raw: str) -> list[list[_PlainCommand]] | None:
     return pipelines
 
 
-def _only_inspects(command: _PlainCommand) -> bool:
-    return command.words[0].text in _INSPECTS_OPERANDS and not any(
+def _is_one_of(command: _PlainCommand, names: set[str]) -> bool:
+    return command.words[0].text in names and not any(
         _RUNS_A_PROGRAM_OPTION.fullmatch(word.text) for word in command.words
+    )
+
+
+def _only_looks(command: _PlainCommand) -> bool:
+    if _is_one_of(command, _BESIDE_A_KILL):
+        return True
+    words = [word.text for word in command.words]
+    return words[0] == "caws" and (
+        tuple(words[1:2]) in _READ_ONLY_CAWS or tuple(words[1:3]) in _READ_ONLY_CAWS
     )
 
 
@@ -3054,7 +3067,7 @@ def _names_files_to_git(command: _PlainCommand) -> bool:
     return (
         words[0].text == "git" and len(words) > 1
         and not words[1].quoted and words[1].text in _GIT_NAMES_FILES
-        and not any(word.text.startswith("-") and _POWER_MENTION.search(word.text) for word in words)
+        and all(_GIT_OPTION.fullmatch(word.text) for word in words[2:] if word.text.startswith("-"))
     )
 
 
@@ -3078,29 +3091,34 @@ def names_power_as_data(raw_command: str) -> bool:
     Each pipeline that carries the word, quoted or not, must write no file and be
     made of programs that only inspect their operands or of git subcommands that
     take files and branches, or be one script given a longer name of a data file.
-    Nothing in the command may be named for the word or change what a later
-    command word means.
+    Every other pipeline must be listed programs too, so that nothing in the
+    command changes what a later command word means.
     """
     pipelines = read_plain_command(raw_command)
     if pipelines is None:
         return False
     for pipeline in pipelines:
         commands = [command for command in pipeline if command.words]
-        if any(
-            _POWER_MENTION.search(command.words[0].text)
-            or command.words[0].text in _CHANGES_LATER_COMMANDS
-            for command in commands
-        ):
+        if any(_POWER_MENTION.search(command.words[0].text) for command in commands):
             return False
         if not any(
             _POWER_MENTION.search(text)
             for command in commands
             for text in [word.text for word in command.words] + command.files
         ):
+            if not all(
+                _is_one_of(command, _INSPECTS_OPERANDS) or _only_looks(command)
+                or _names_files_to_git(command) or command.words[0].text in _SCRIPT_INTERPRETERS
+                for command in commands
+            ):
+                return False
             continue
         if any(set(command.files) - {"/dev/null"} for command in commands):
             return False
-        if all(_only_inspects(command) or _names_files_to_git(command) for command in commands):
+        if all(
+            _is_one_of(command, _INSPECTS_OPERANDS) or _names_files_to_git(command)
+            for command in commands
+        ):
             continue
         if len(commands) == 1 and _gives_a_script_a_data_file(commands[0]):
             continue
@@ -3146,9 +3164,7 @@ def is_plain_pid_kill(raw_command: str) -> bool:
                 if not _kills_explicit_processes(command):
                     return False
                 kills = True
-            elif command.words[0].text not in _BESIDE_A_KILL or any(
-                _RUNS_A_PROGRAM_OPTION.fullmatch(word.text) for word in command.words
-            ):
+            elif not _only_looks(command):
                 return False
     return kills
 

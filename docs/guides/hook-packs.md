@@ -533,7 +533,8 @@ Rules that hold across guards:
   (`last`, `ls`, `cat`, `grep`, `rg` and the like) or of `git add`, `commit`,
   `diff`, `log`, `show`, `blame`, `status`, `checkout`, `switch` or `branch`; or
   be one `node` or `python3` script given a longer data-file name such as
-  `after-reboot.json`. Quote a search term to keep it out of the check.
+  `after-reboot.json`. The command's other pipelines must be listed programs
+  too. Quote a search term to keep it out of the check.
 - **A bare commit over staged deletions never latches**, however often it is
   repeated. The native runtime answers that refusal for Codex without the shell
   guard, and both must agree.

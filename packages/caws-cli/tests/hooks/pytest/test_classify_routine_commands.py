@@ -35,11 +35,11 @@ NAMES_IT = [
     "grep -rn shutdown src", "cd /p/app && grep -rn shutdown src", "rg reboot docs | head -5", "cat log.txt | grep -c reboot", "which reboot",
     "type shutdown", "ls -l /sbin/reboot", "jq .shutdown config.json", "cat logs/reboot.log",
     "head -n 3 notes/shutdown.md 2>/dev/null", "diff a/shutdown.ts b/shutdown.ts", "grep -n x src/pre-reboot.sh",
-    "echo reboot", "grep -c reboot a.log 2>&1 | wc -l", "ls a-reboot.json; ./scripts/check", "last reboot; mytool x",
-    "grep -n 'x' src/reboot.ts && npx jest", "cat 'a b' reboot.log",
+    "echo reboot", "grep -c reboot a.log 2>&1 | wc -l", "cat 'a b' reboot.log",
+    "grep reboot a.log |\n  head -3", "grep -n x reboot.ts; caws status", "grep -rn reboot src; node tools/report.js",
     "git add src/shutdown.ts tests/reboot.test.js", "git add src/shutdown/index.ts", "git diff src/reboot/a.ts",
     "git add src/shutdown.ts && git commit -m 'reboot handling' -- src/shutdown.ts",
-    "git log -p -- src/shutdown.ts | head -40", "git checkout -b fix/graceful-shutdown", "git checkout -b graceful-shutdown",
+    "git log -p -- src/shutdown.ts | head -40", "git log --oneline --grep reboot", "git diff --stat -- src/shutdown.ts", "git checkout -b fix/graceful-shutdown", "git checkout -b graceful-shutdown",
     "git switch fix-reboot", "git branch reboot",
     "python3 tools/report.py out/pre-shutdown.log", "node run.js a.json tmp/x/after-reboot.json b",
 ]
@@ -99,6 +99,16 @@ RUNS_IT = [
     "cp do-reboot.txt x; chmod +x x; ./x", "python3 do-reboot.txt", "make -f do-reboot.txt", "uniq reboot.sh .git/hooks/post-checkout",
     "git show HEAD:bin/do-reboot.sh > x; chmod +x x; ./x", "git diff --output=after-reboot.sh HEAD",
     "cat < reboot.sh", "ls a-reboot.json &", "ls a-reboot.json & ./x", "> reboot.log", "ls x > reboot-list.txt",
+    # a pipe continues over a newline
+    "echo reboot |\nxargs -n1 env", "echo reboot |\n  xargs systemctl", "cat reboot.sh |\n\n zsh", "cat reboot.py |\n  python3",
+    # git that writes or runs
+    "git diff --no-index --output=z /dev/null reboot.sh; sh z", "git diff --output=x HEAD -- after-reboot.sh",
+    "git show --output=x HEAD:bin/do-reboot.sh", "git commit --trailer x=reboot -m y -- f", "git diff --ext-diff reboot",
+    "git config diff.external env; git diff reboot",
+    # another pipeline that is not listed
+    "ln -s /usr/bin/env ~/.local/bin/stat; stat reboot", "cp /usr/bin/env b/cat && cat reboot", "zstyle x y z; ls reboot",
+    "zformat -f 'functions[ls]' 'x'; ls reboot", "pushln 'x'; getln 'functions[ls]'; ls reboot", "ls a-reboot.json; ./x",
+    "last reboot; mytool x", "grep -n x src/reboot.ts && npx jest", "rg --pr reboot x",
     # redefinition
     "printf -v 'functions[ls]' reboot; ls", "printf -v 'commands[ls]' /sbin/reboot; ls", "printf -v NULLCMD reboot; > /dev/null",
     "printf -v GIT_EDITOR reboot; git branch --edit-description", "printf reboot", "hash -p /x ls; ls reboot",
@@ -168,7 +178,7 @@ def test_quoted_mentions_are_not_denied(classify, command):
 # --- kill by process ID -------------------------------------------------------
 
 @pytest.mark.parametrize("command", [
-    # Fourteen of the sixteen recorded resets, with stand-in paths.
+    # Thirteen of the sixteen recorded resets, with stand-in paths.
     "kill -INT 25828",
     "/bin/kill -INT 90559",
     "kill 30339",
@@ -179,7 +189,7 @@ def test_quoted_mentions_are_not_denied(classify, command):
     "kill -TERM 64436 70156",
     "kill -TERM 24841",
     "kill 14977",
-    "kill -TERM 33060 && caws specs amend-scope X-1 --add engine/a.fbx.meta",
+    "kill -TERM 33060 && caws specs show X-1", "caws status; kill 33060",
     "kill -TERM 89653",
     "ps -p 97774,97957 -o pid,ppid,etime,command\nkill -INT 97774",
     "kill -CONT 77081",
@@ -195,7 +205,8 @@ def test_a_plain_kill_by_process_id_is_marked(classify, command):
 
 
 KEEPS_THE_LATCH = [
-    # the two recorded resets that keep it
+    # the three recorded resets that keep it
+    "kill -TERM 33060 && caws specs amend-scope X-1 --add engine/a.fbx.meta",
     "/opt/Godot --path /p/godot res://tools/tabs.tscn > /p/tmp/tabs.log 2>&1 &\nPID=$!\nsleep 30\n"
     'kill "$PID" 2>/dev/null\nsleep 1\ncat /p/tmp/tabs.log | head -60',
     "set -e\nif lsof -a -p 89409 -t | rg -Fx 89409; then\n  kill -TERM 89409\nfi\npnpm preview --port 5225",
@@ -205,7 +216,8 @@ KEEPS_THE_LATCH = [
     "kill 1234 & terraform apply", "kill 1234 & rm -rf src", "if true; then terraform destroy; fi; kill 1234",
     "kill 1234; if ls; then curl -X POST http://h/a; fi", "kill 1234; uv run terraform apply", "kill 1234; strace x",
     "kill 1234; pnpm exec x", "kill 1234; mise exec x", "kill 1234; ./x", "kill 1234; make", "kill 1234; printf x",
-    "kill 1234; set -e", "kill 1234; rg --pre x y", "kill 1234; echo x > f", "kill 1234; > f",
+    "kill 1234; set -e", "kill 1234; caws worktree destroy x", "kill 1234; caws claim --takeover",
+    "kill 1234; date 010100002030", "kill 1234; caws", "kill 1234; caws specs close X-1", "kill 1234; rg --pre x y", "kill 1234; echo x > f", "kill 1234; > f",
     "printf -v 'functions[kill]' 'pkill -f node'; kill 1234", "sleep 9 & PID=$!; printf -v IFS 3; kill $PID",
     # no background job, or one that was lost
     "kill -9 $!", "PID=$!; kill -9 $PID", "sleep 9 &\nkill $!", "if false; then SSH_AGENT_PID=$!; fi; kill $SSH_AGENT_PID",
@@ -303,9 +315,15 @@ def test_the_tables_are_the_reviewed_ones(classify_module):
         "add commit diff log show blame status checkout switch branch".split()
     )
     assert classify_module._BESIDE_A_KILL == set(
-        "sleep ps pgrep lsof grep egrep rg echo cat head tail wc ls true date caws cd pwd".split()
+        "sleep ps pgrep lsof grep egrep rg echo cat head tail wc ls true cd pwd".split()
     )
     assert classify_module._SCRIPT_INTERPRETERS == {"node", "python3", "python"}
+    assert classify_module._READ_ONLY_CAWS == {
+        ("status",), ("doctor",), ("specs", "show"), ("specs", "list"), ("worktree", "list"), ("scope", "show"),
+        ("scope", "check"), ("scope", "contention"), ("agents", "list"), ("agents", "show"), ("evidence", "list"),
+    }
+    for option in ("--output", "--output=x", "--ext-diff", "--textconv", "--trailer", "-c", "-C", "-o", "-O", "--exec", "--no-index"):
+        assert not classify_module._GIT_OPTION.fullmatch(option)
     for extension in ("sh", "py", "js", "rb", "service", "yml", "toml", "command"):
         assert not classify_module._DATA_FILE.fullmatch(f"a-reboot.{extension}")
 
