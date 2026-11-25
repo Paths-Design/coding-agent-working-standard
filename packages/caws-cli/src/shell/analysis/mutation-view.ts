@@ -6,16 +6,21 @@ import { resolveGitContext } from './git-context';
 import type { GitContext, GitContextResolver } from './git-context';
 import type { Command, Redirection } from './parser-types';
 import {
+  envUnset,
+  exported,
+  isMadeLink,
   isShellBuiltin,
   namesGitMetadata,
   nodeStartupBinding,
   projectBuiltin,
+  throughLinks,
   writesRelativeTarget,
 } from './policies';
 import type {
   Argument,
   GitMetadataObservation,
   GitWriteObservation,
+  Links,
   Location,
   State,
   Value,
@@ -180,6 +185,29 @@ const LITERAL_START = /^["']?(?:\.?\w|\.{1,2}\/|\/(?!dev\/|proc\/)\w[\w.-]*\/)/;
 const PLAIN_GLOB = /^[^$`]*$/;
 /** A glob in a literal directory, which can be listed. */
 const LISTED_GLOB = /^((?:[\w.@%+:,=-]+\/|\/)*)([\w.@%+:,=*?[\]!^-]+)$/;
+/** Options of a writer whose next argument is not a path it writes. */
+const UNWRITTEN: Readonly<Record<string, RegExp>> = {
+  touch: /^(?:-[A-Za-z]*[rdt]|--reference|--date)$/,
+  truncate: /^(?:-[A-Za-z]*[rs]|--reference|--size)$/,
+};
+/** The arguments that name what a recognized writer writes. */
+function writtenOperands(name: string, args: readonly Argument[]): Argument[] {
+  if (name === 'dd')
+    return args.flatMap((arg) =>
+      arg.value?.startsWith('of=') === true ? [{ ...arg, value: arg.value.slice(3) }] : []
+    );
+  const inPlace = args.some(({ value }) => /^(?:-[A-Za-z0-9]*i|--in-place)/.test(value ?? ''));
+  if (!['tee', 'truncate', 'touch', 'rm', 'mv', 'cp'].includes(name))
+    return (name === 'sed' || name === 'perl') && inPlace ? args.slice(1) : [];
+  const operands = args.filter(
+    ({ value }, index) =>
+      index > 0 &&
+      value !== null &&
+      !value.startsWith('-') &&
+      UNWRITTEN[name]?.test(args[index - 1]!.value ?? '') !== true
+  );
+  return name === 'cp' ? operands.slice(-1) : operands;
+}
 /** Names a written file has when a launch of each kind would run it. */
 const RUNNABLE = {
   shell: /(?:\.(?:ba|z|k|da)?sh|\/[^./]+)$/,
@@ -231,6 +259,7 @@ export async function projectMutationView(
   /** Files this command has written so far, and the literal text it gave them. */
   const submittedFiles = new Map<string, SubmittedFile>();
   const redirectWrites = new Map<Redirection, WrittenFile | null>();
+  const links: Links = { leads: new Map(), removed: new Set() };
   // Zsh ignores case and underscores in an option's name.
   const vanishingGlobs = /nullglob/i.test(
     `${request.command} ${process.env.BASHOPTS ?? ''}`.replaceAll('_', '')
@@ -378,10 +407,9 @@ export async function projectMutationView(
           })
           .map((name): [string, Value] => [name, null]),
       ]),
-      // Export attributes are not modeled. Rebinding an inherited exported
-      // variable changes a child process's environment, so its original
-      // launcher value cannot supply proof for nested Git coordinates. Neither
-      // can one this source has unset.
+      // Rebinding an exported variable changes a child process's environment,
+      // so its launcher value cannot supply proof for nested Git coordinates.
+      // Neither can one this source has unset.
       gitEnvironmentUnresolved:
         job.parent?.gitEnvironmentUnresolved === true ||
         Object.keys(process.env).some(
@@ -389,6 +417,7 @@ export async function projectMutationView(
         ) ||
         [...state.bindings].some(([name, values]) => {
           if (name !== 'PAGER' && !name.startsWith('GIT_')) return false;
+          if (exported(state, name) === false) return false;
           if (
             (name === 'PAGER' || name === 'GIT_PAGER') &&
             values &&
@@ -416,7 +445,8 @@ export async function projectMutationView(
       const environment: string[] = [];
       for (let wrappers = 0; wrappers <= 8; wrappers++) {
         const executable = args[0]?.value;
-        if (!executable) {
+        // Zsh replaces a leading equals sign with the path of what follows it.
+        if (!executable || executable.startsWith('=')) {
           issue(
             'mutation-executable-unknown',
             'Executable identity is not a finite value.',
@@ -440,6 +470,14 @@ export async function projectMutationView(
         let offset = 1;
         if (args[offset]?.value === '--') offset++;
         if (name === 'env') {
+          for (
+            let dropped = envUnset(args[offset]?.value, args[offset + 1]?.value);
+            dropped;
+            dropped = envUnset(args[offset]?.value, args[offset + 1]?.value)
+          ) {
+            environment.push(dropped.name);
+            offset += dropped.width;
+          }
           while (/^[A-Za-z_][A-Za-z_0-9]*=/.test(args[offset]?.value ?? '')) {
             environment.push(args[offset]!.value!.split('=', 1)[0]!);
             offset++;
@@ -472,7 +510,15 @@ export async function projectMutationView(
             ['<', '<>', '<&', '<<<', '<<', '<<-'].includes(part.operator)
         )
         .at(-1);
-    /** Why a here-document's body is not exactly the text it supplies. */
+    /** The text a here-document supplies; an unquoted one loses its escapes. */
+    const supplied = ({ delimiter, body }: HereDoc): string =>
+      delimiter?.quoted === false
+        ? body.text.replace(/\\([\\$`\n])/g, (_, kept: string) => (kept === '\n' ? '' : kept))
+        : body.text;
+    /** Where supplied text came from: the whole body, once escapes are gone. */
+    const suppliedMap = (document: HereDoc, map: Mapping): Mapping =>
+      supplied(document) === document.body.text ? map : () => map(document.body);
+    /** Why a here-document's text cannot be read at all. */
     const documentProblem = (document: HereDoc): [string, string, Location] | null => {
       if (!document.delimiter || !document.closing)
         return ['mutation-heredoc-source', 'Here-document source is incomplete.', document];
@@ -498,7 +544,7 @@ export async function projectMutationView(
     };
     const documentText = (document: HereDoc): string | null => {
       const problem = documentProblem(document);
-      if (!problem) return document.body.text;
+      if (!problem) return supplied(document);
       issue(problem[0], problem[1], span(problem[2]));
       return null;
     };
@@ -760,10 +806,11 @@ export async function projectMutationView(
         file = redirectWrites.get(output!);
       const input = stdinRedirect(node);
       if (!file || input?.type !== 'HereDoc' || documentProblem(input)) return;
-      const { body } = input;
-      const documents = (file.before?.documents ?? []).filter((item) => item.text !== body.text);
+      const { pos, end } = input.body;
+      const text = supplied(input);
+      const documents = (file.before?.documents ?? []).filter((item) => item.text !== text);
       submittedFiles.set(file.path, {
-        documents: [...documents, { text: body.text, pos: body.pos, end: body.end, map: job.map }],
+        documents: [...documents, { text, pos, end, map: suppliedMap(input, job.map) }],
         complete: file.before?.complete !== false && output?.operator !== '>>',
       });
     };
@@ -816,6 +863,10 @@ export async function projectMutationView(
     ): void => {
       for (const document of submittedBy(launch, 'shell', state).documents) {
         if (/^#!/.test(document.text) && !/^#!.*\b(?:ba|z|da|k)?sh\b/.test(document.text)) continue;
+        // A script that can launch itself says nothing new the second time.
+        let running: ScriptJob | undefined = job;
+        while (running && running.command !== document.text) running = running.parent?.job;
+        if (running) continue;
         const context = parent(node, state);
         const key = JSON.stringify([
           { ...context, job: jobs.indexOf(job), bindings: [...context.bindings] },
@@ -899,8 +950,11 @@ export async function projectMutationView(
         );
       }
     };
-    const observeInvocation = ({ node, argv, state }: Invocation): void => {
+    const observeInvocation = ({ node, argv: given, state }: Invocation): void => {
       if (exhausted) return;
+      // These zsh modifiers leave the command after them as it is.
+      const modifiers = given.findIndex(({ value }) => !/^no(?:glob|correct)$/.test(value ?? ''));
+      const argv = given.slice(Math.max(modifiers, 0));
       words(argv, node, state.cwd);
       if (exhausted) return;
       const unwrapped = unwrap(argv, node);
@@ -938,6 +992,12 @@ export async function projectMutationView(
           span(node)
         );
       recordDocument(node, name, args, state);
+      for (const arg of links.leads.size > 0 ? writtenOperands(name, args) : []) {
+        const path = located(arg.value, state);
+        // Removing a link leaves what it leads to.
+        if (path !== null && !(name === 'rm' && isMadeLink(path, links)))
+          follow(path, argSpan(arg, node), node, state.cwd);
+      }
       if (name === 'cp' || name === 'mv') {
         const original = span(node);
         const identity: CopyInvocation = {
@@ -1151,8 +1211,13 @@ export async function projectMutationView(
                 body,
                 state.cwd,
                 job.depth + 1,
-                (location) =>
-                  span({ pos: last.body.pos + location.pos, end: last.body.pos + location.end }),
+                supplied(last) === last.body.text
+                  ? (location) =>
+                      span({
+                        pos: last.body.pos + location.pos,
+                        end: last.body.pos + location.end,
+                      })
+                  : () => original,
                 parent(node, state)
               );
             else if (text(body, original))
@@ -1214,6 +1279,22 @@ export async function projectMutationView(
         );
       }
     };
+    /** A write through a link this command made lands where the link leads. */
+    const follow = (path: string, place: Location, node: Location, cwd: string): void => {
+      for (const target of throughLinks(path, links)) {
+        if (target === null) {
+          issue(
+            'cwd-unresolved',
+            'A write passes through a link whose target could not be established.',
+            span(node)
+          );
+          continue;
+        }
+        token('touch', 'word', false, span(node), cwd);
+        token(target, 'word', false, place, cwd);
+        token(';', 'op', false, span({ pos: node.end, end: node.end }), cwd);
+      }
+    };
     const observeRedirect = ({ node, targets, state }: RedirectObservation): void => {
       if (exhausted || node.type === 'HereDoc') return;
       if (node.operator === '>&' || node.operator === '<&') {
@@ -1254,6 +1335,10 @@ export async function projectMutationView(
         for (const arg of fields)
           token(arg.value ?? raw(arg), 'word', arg.value === null, argSpan(arg, node), state.cwd);
         token(';', 'op', false, span({ pos: node.end, end: node.end }), state.cwd);
+        for (const arg of kind === 'redirect' ? fields : []) {
+          const path = located(arg.value, state);
+          if (path !== null) follow(path, argSpan(arg, node), node, state.cwd);
+        }
       }
     };
     /** A path Git writes is a target like any other utility's. */
@@ -1276,6 +1361,8 @@ export async function projectMutationView(
       token('touch', 'word', false, original, job.cwd ?? request.project);
       token(target ?? raw, 'word', target === null, place, job.cwd ?? request.project);
       token(';', 'op', false, span({ pos: node.end, end: node.end }), job.cwd ?? request.project);
+      if (target !== null && isAbsolute(target))
+        follow(target, place, node, job.cwd ?? request.project);
     };
     const observeGitMetadata = ({ node, subcommand, input }: GitMetadataObservation): void => {
       metadataInvocations.add(JSON.stringify([node.pos, node.end]));
@@ -1375,6 +1462,7 @@ export async function projectMutationView(
       {
         context: { canonical: request.project, worktree: request.project },
         gitContext: () => null,
+        links,
         projection: {
           ...(job.cwd === null || job.parent?.cwdUnknown === true ? { cwdUnknown: true } : {}),
           ...(job.parent?.logical === undefined ? {} : { logical: job.parent.logical }),

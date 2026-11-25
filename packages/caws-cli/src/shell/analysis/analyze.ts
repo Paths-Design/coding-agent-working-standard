@@ -13,6 +13,7 @@ import { loadParser } from './load-parser';
 import {
   changesShellState,
   exactOperands,
+  exported,
   holdsSubscriptSource,
   inside,
   inspectInvocation,
@@ -38,6 +39,8 @@ import type {
 } from './types';
 export type { AnalysisRequest, AnalysisResult } from './types';
 
+/** A zsh glob qualifier that names code: e and a delimiter, or a function. */
+const QUALIFIER_CODE = /e[:'"{[<(]|\+[A-Za-z_]/;
 const MAX_BYTES = 65536;
 const MAX_STATES = 32;
 const MAX_DEPTH = 16;
@@ -80,17 +83,48 @@ function widen(states: readonly State[]): State {
     if (state.cwd !== merged.cwd || state.cwdUnknown === true) merged.cwdUnknown = true;
     if (state.logical !== merged.logical) delete merged.logical;
     keepMade(merged, state);
+    for (const name of new Set([
+      ...(merged.exports?.keys() ?? []),
+      ...(state.exports?.keys() ?? []),
+    ]))
+      if (exported(merged, name) !== exported(state, name)) exporting(merged, name, null);
     if (state.filesystemChanged === true) merged.filesystemChanged = true;
     if (state.mappingChanged === true) merged.mappingChanged = true;
   }
   delete merged.outcome;
   return merged;
 }
+const exportFacts = (state: State): unknown =>
+  [...(state.exports ?? [])].sort(([a], [b]) => a.localeCompare(b));
+/** Under `set -a`, a name that has just been bound is exported. */
+function exportBound(state: State, name: string): void {
+  const every = exported(state, '*');
+  if (every !== false && exported(state, name) !== true) exporting(state, name, every);
+}
+function exporting(state: State, name: string, value: boolean | null): void {
+  // Git reads no other variable, and no other consumer needs the fact.
+  if (name !== '*' && name !== 'PAGER' && !name.startsWith('GIT_')) return;
+  state.exports = new Map(state.exports).set(name, value);
+}
 /** A directory counts as made only while every alternative still has it. */
 function keepMade(target: State, other: State): void {
   const made = target.made?.filter((path) => other.made?.includes(path));
   if (made?.length) target.made = made;
   else delete target.made;
+}
+/** A builtin and the names it is given, however quoting or a wrapper spells them. */
+function declaration(
+  argv: readonly Argument[],
+  declared: readonly Assignment[]
+): { builtin: string; options: string; names: string[] } {
+  const values = argv.map(({ value }) => value ?? '');
+  const at = values.findIndex((value) => !/^(?:command|--|no(?:glob|correct))$/.test(value));
+  const [builtin = '', ...rest] = values.slice(at);
+  return {
+    builtin,
+    options: rest.filter((value) => /^-[A-Za-z]/.test(value)).join(''),
+    names: [...declared.map((item) => item.name), ...rest],
+  };
 }
 /** One widened state per distinct directory. */
 function join(states: readonly State[]): State[] {
@@ -103,7 +137,10 @@ function join(states: readonly State[]): State[] {
 }
 function forget(state: State): State {
   const next = clone(state);
-  for (const name of next.bindings.keys()) next.bindings.set(name, null);
+  for (const name of next.bindings.keys()) {
+    next.bindings.set(name, null);
+    exporting(next, name, null);
+  }
   delete next.made;
   return { ...next, cwdUnknown: true, filesystemChanged: true, mappingChanged: true };
 }
@@ -200,6 +237,7 @@ export async function analyzeCommand(
     outside: !inside(cwd, worktree),
     visits: 0,
     gitInvocations: [],
+    links: dependencies.links ?? { leads: new Map(), removed: new Set() },
     ...(dependencies.observers?.gitMetadata
       ? { gitMetadata: dependencies.observers.gitMetadata }
       : {}),
@@ -283,6 +321,13 @@ export async function analyzeCommand(
   const escapes: State[][] = [];
   /** Open subshells, innermost last; an exit ends only its own. */
   const subshells: State[][] = [];
+  // Zsh names this option without regard to case or underscores.
+  if (
+    (/\bsetopt\b/.test(request.command) &&
+      /all_*export|\bsetopt\s+-[A-Za-z]*a/i.test(request.command)) ||
+    process.env.SHELLOPTS?.includes('allexport')
+  )
+    exporting(initial, '*', null);
   // Shell startup/aliases/functions and executable identity are a declared host
   // contract, not a fact the source parser can establish. Refuse known inherited
   // overrides rather than pretending they cannot affect profiled programs.
@@ -355,6 +400,7 @@ export async function analyzeCommand(
         state.mappingChanged === true,
         state.outcome ?? null,
         state.made ?? null,
+        exportFacts(state),
       ]);
       unique.set(key, state);
       if (unique.size > MAX_STATES) {
@@ -382,6 +428,7 @@ export async function analyzeCommand(
       item.filesystemChanged === true,
       item.mappingChanged === true,
       item.made ?? null,
+      exportFacts(item),
     ];
     let entry = [state];
     for (let pass = 0; ; pass++) {
@@ -428,8 +475,10 @@ export async function analyzeCommand(
     const defined = [...ctx.functions!.values()].flat().length;
     if (active.length > 1 && active.at(-1)!.defined === defined) return [forget(state)];
     const entry = active.length > 0 ? forget(state) : clone(state);
-    for (const [variable, value] of temporary)
+    for (const [variable, value] of temporary) {
       entry.bindings.set(variable, active.length > 0 ? null : value);
+      exporting(entry, variable, true);
+    }
     const localized = new Set(temporary.keys());
     activeCalls.push({ name, defined, localized });
     const { value: outputs, escaped } = jumping(() =>
@@ -439,7 +488,10 @@ export async function analyzeCommand(
     const results = join([entry, ...outputs, ...escaped]);
     // Returning uncovers whatever the caller held, or the body left beneath.
     for (const result of results)
-      for (const variable of localized) result.bindings.set(variable, null);
+      for (const variable of localized) {
+        result.bindings.set(variable, null);
+        exporting(result, variable, exported(state, variable));
+      }
     return results;
   }
   function script(tree: ParsedScript, states: State[], reader: boolean, depth: number): State[] {
@@ -510,6 +562,7 @@ export async function analyzeCommand(
           visit(value, next, depth);
       }
       next.bindings.set(node.name, null);
+      exportBound(next, node.name);
       return next;
     }
     // Expansion can itself assign (${x:=y}, $((x=1))); keep those in this state.
@@ -524,6 +577,7 @@ export async function analyzeCommand(
     }
     if (frozen.has(node.name)) unknown = true;
     next.bindings.set(node.name, unknown ? null : [...new Set(values)]);
+    exportBound(next, node.name);
     ctx.trace(
       node,
       'assignment',
@@ -570,6 +624,9 @@ export async function analyzeCommand(
     }
     const values = word(node.target, state, depth);
     dependencies.observers?.redirection?.({ node, targets: values, state: clone(state), reader });
+    // Zsh overwrites the file after the mark, which Bash makes an argument.
+    if (projection && node.target.text.startsWith('!'))
+      reason(node, 'redirect-target', 'Redirection has no proven target.');
     if (['>&', '<&'].includes(node.operator)) {
       if (values.some((args) => args.length !== 1 || !/^(?:[0-9]+|-)$/.test(args[0]?.value ?? '')))
         reason(node, 'redirect-descriptor', 'Only literal descriptor duplication is modeled.');
@@ -623,6 +680,8 @@ export async function analyzeCommand(
       'command',
       'Inspect executable, argument roles, prefix environment, and redirections.'
     );
+    const unchanged =
+      projection && exported(state, '*') !== false ? new Map(state.bindings) : undefined;
     // argv is expanded using the old shell state, before prefix assignments.
     let vectors: Argument[][] = [[]];
     const words: Word[] = node.name ? [node.name] : [];
@@ -673,6 +732,13 @@ export async function analyzeCommand(
         vector.map((arg) => (covers(arg) ? { ...arg, several: true as const } : arg))
       );
     }
+    // An expansion can bind a name too.
+    for (const [variable, value] of unchanged ? state.bindings : [])
+      if (unchanged!.get(variable) !== value) exportBound(state, variable);
+    for (const part of words)
+      for (const piece of projection ? (part.parts ?? []) : [])
+        if (piece.type === 'ExtendedGlob' && QUALIFIER_CODE.test(piece.pattern))
+          reason(piece, 'glob-qualifier', 'Zsh can run code in a glob qualifier.');
     const program = node.name && !node.name.parts?.length ? node.name.value : undefined;
     let assigned = clone(state);
     for (const prefix of node.prefix) {
@@ -684,15 +750,10 @@ export async function analyzeCommand(
         redirect(suffix, state, reader, depth + 1);
     let declaring = clone(state);
     for (const assignment of declared) declaring = assign(assignment, declaring, depth + 1);
-    // Quoting, a wrapper or an expansion can supply the builtin and its names.
     for (const argv of projection ? vectors : []) {
-      const values = argv.map(({ value }) => value ?? '');
-      const at = values.findIndex((value) => !/^(?:command|--)$/.test(value));
-      const [builtin, ...rest] = values.slice(at);
-      if (!/^(?:declare|local|readonly|typeset)$/.test(builtin ?? '')) continue;
-      const names = [...declared.map((item) => item.name), ...rest];
-      if (builtin === 'readonly' || rest.some((value) => /^-[A-Za-z]*r/.test(value)))
-        for (const name of names) frozen.add(name);
+      const { builtin, options, names } = declaration(argv, declared);
+      if (!/^(?:declare|local|readonly|typeset)$/.test(builtin)) continue;
+      if (builtin === 'readonly' || /r/.test(options)) for (const name of names) frozen.add(name);
       if (builtin !== 'readonly') for (const name of names) activeCalls.at(-1)?.localized.add(name);
     }
     carryEffects(state, [assigned, declaring]);
@@ -700,10 +761,6 @@ export async function analyzeCommand(
     if (projection) assigned.mappingChanged = state.mappingChanged === true;
     // A failed redirection skips the assignments it accompanies.
     if (!node.name) return projection && canFail(node.redirects) ? [state, assigned] : [assigned];
-    const env = new Map<string, Value>();
-    for (const [name, value] of assigned.bindings)
-      if (name.startsWith('GIT_') || name === 'PAGER' || (projection && name === 'HOME'))
-        env.set(name, value);
     const temporary = new Map<string, Value>(
       node.prefix.flatMap((prefix) =>
         prefix.type === 'Assignment'
@@ -711,6 +768,13 @@ export async function analyzeCommand(
           : []
       )
     );
+    const env = new Map<string, Value>();
+    for (const [name, value] of assigned.bindings) {
+      if (projection && name === 'HOME') env.set(name, value);
+      if (!name.startsWith('GIT_') && name !== 'PAGER') continue;
+      const visible = !projection || temporary.has(name) || exported(assigned, name);
+      if (visible !== false) env.set(name, visible ? value : null);
+    }
     const out = vectors.flatMap((argv) => {
       const before = clone(state);
       dependencies.observers?.invocation?.({
@@ -736,9 +800,32 @@ export async function analyzeCommand(
       // Unsetting fails for a read-only name, which keeps what it held. Behind a
       // prefix assignment or in a call it can uncover the variable that one hid.
       const layered = skippable || temporary.size > 0 || activeCalls.length > 0;
-      for (const variable of before.bindings.keys())
-        if (!next.bindings.has(variable) && (layered || frozen.has(variable)))
-          next.bindings.set(variable, null);
+      for (const variable of before.bindings.keys()) {
+        if (next.bindings.has(variable)) continue;
+        const uncertain = layered || frozen.has(variable);
+        if (uncertain) next.bindings.set(variable, null);
+        exporting(next, variable, uncertain ? null : false);
+      }
+      const { builtin, options, names } = declaration(argv, declared);
+      if (
+        builtin === 'export' ||
+        (/^(?:declare|local|readonly|typeset)$/.test(builtin) && /x/.test(options))
+      ) {
+        for (const variable of names)
+          if (exported(next, variable) !== true) exporting(next, variable, skippable ? null : true);
+      } else if (activeCalls.length > 0 && /^(?:declare|local|typeset)$/.test(builtin)) {
+        // A local copy of an exported variable keeps that in some shells.
+        for (const variable of names)
+          if (exported(next, variable) !== false) exporting(next, variable, null);
+      }
+      // A sourced file can export what it finds assigned.
+      if (builtin === 'source' || builtin === '.')
+        for (const variable of next.bindings.keys())
+          if (exported(next, variable) === false) exporting(next, variable, null);
+      if (exported(before, '*') !== false)
+        for (const [variable, value] of next.bindings)
+          if (before.bindings.get(variable) !== value && exported(next, variable) === false)
+            exporting(next, variable, null);
       const name = argv[0]?.value;
       // Nothing after this point runs on the path that exits. A redirection
       // can fail and leave the shell running, so it keeps the path alive.
@@ -807,9 +894,10 @@ export async function analyzeCommand(
             : outputs;
         }
         const firstGit = ctx.gitInvocations.length;
-        const outputs = node.commands.flatMap((next) =>
+        const members = node.commands.map((next) =>
           contained(() => walk(next, clone(state), reader, depth + 1))
         );
+        const outputs = members.flat();
         const next: State = { ...state, filesystemChanged: state.filesystemChanged === true };
         carryEffects(next, outputs);
         // Pipeline members run concurrently. A sibling's effects invalidate
@@ -821,8 +909,22 @@ export async function analyzeCommand(
               'git-context-changed',
               'Concurrent pipeline effects invalidate the filesystem context used for Git admission.'
             );
-        // Declared host contract: Bash lastpipe is disabled.
-        return [next];
+        // Declared host contract: Bash lastpipe is disabled. Zsh runs the last
+        // member in the shell itself, so the projection keeps both.
+        if (!projection) return [next];
+        const last = members.at(-1)!.map((item) => {
+          const current = clone(item);
+          carryEffects(current, [next]);
+          // A loop that enters directories and returns ends where it began.
+          if (current.cwdUnknown === true && next.cwdUnknown !== true) {
+            current.cwd = next.cwd;
+            delete current.cwdUnknown;
+            if (next.logical === undefined) delete current.logical;
+            else current.logical = next.logical;
+          }
+          return current;
+        });
+        return join([next, ...last]);
       }
       case 'Subshell': {
         const outputs = contained(() =>
@@ -887,7 +989,10 @@ export async function analyzeCommand(
             ))
         )
           return loop(state, node, (entry) => {
-            for (const item of entry) item.bindings.set(name, null);
+            for (const item of entry) {
+              item.bindings.set(name, null);
+              exportBound(item, name);
+            }
             const next = list(node.body.commands, entry.map(clone), reader, depth + 1);
             return { exits: [...entry, ...next], next };
           });
@@ -902,6 +1007,7 @@ export async function analyzeCommand(
             states = states.map((previous) => {
               const next = clone(previous);
               next.bindings.set(node.name.value, [item.value!]);
+              exportBound(next, node.name.value);
               return next;
             });
             const step = jumping(() => list(node.body.commands, states, reader, depth + 1));

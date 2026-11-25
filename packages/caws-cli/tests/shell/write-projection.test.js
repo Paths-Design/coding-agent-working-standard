@@ -481,6 +481,10 @@ for (const [command, ...targets] of [
 for (const [code, command, ...targets] of [
   ['redirect-target', 'echo x > "$X"', '?'],
   ['redirect-target', 'cat <> "$X"', '?'],
+  // Zsh reads these as overwriting the file that follows.
+  ['redirect-target', 'echo x >! ^/a', '@/!'],
+  ['redirect-target', 'echo x >>! ^/a', '@/!'],
+  ['redirect-target', 'echo x >!a', '@/!a'],
   ['redirect-variable', 'exec {fd}> a'],
   ['redirect-descriptor', 'echo x >&"$X"'],
   ['repository-mapping-write', 'echo x > .git', '@/.git'],
@@ -574,6 +578,10 @@ for (const command of [
   'export; export -p; export A B',
   'declare -x A; declare -ra A; typeset -A B; local -r C; readonly D',
   'unset A; unset -v A B',
+  'ls !(node_modules|dist) *(a|b)',
+  '[[ $x == @(name=*|type=*) ]]',
+  'case "$x" in @(name:*|type:*)) ls;; esac',
+  'ls s1/*(m+7) s1/*(.Lk+10)',
   'type x; wait; jobs; kill -9 1; umask 022; shift 2; times; ulimit -n',
   'mapfile; mapfile -t; readarray -t lines',
   'command -v x; command -V x; env; exec',
@@ -599,9 +607,9 @@ for (const command of [
   'declare -f',
   'declare "$X"',
   'readonly IFS',
-  'unset IFS',
+  'unset BASH_ENV',
   'unset "$X"',
-  'unset -f f',
+  'unset -f "$X"',
   'unset A B-C',
   'mapfile -C cb lines',
   'mapfile "$X"',
@@ -638,6 +646,41 @@ writes('wrappers', 'command cd s1 && touch o', '@/s1/o');
 writes('wrappers', '/usr/bin/env touch a', '@/a');
 metadata('wrappers', 'env A=1 git add a', 'add @');
 metadata('wrappers', 'command git add a', 'add @');
+for (const option of ['-u GIT_DIR', '-uGIT_DIR', '--unset=GIT_DIR', '-u GIT_DIR -u PAGER'])
+  add('wrappers', `env ${option} git add a`, {
+    environment: { GIT_DIR: '/usr' },
+    git: ['add @'],
+  });
+metadata('wrappers', 'env -u GIT_DIR GIT_WORK_TREE=@/s1 git add a', 'add @/s1 in @/.git');
+// These hide who is asking, and every other name is held with them.
+for (const name of ['CLAUDE_CODE_SESSION_ID', 'CAWS_SESSION_ID', 'A', '"$X"'])
+  held('wrappers', ['mutation-wrapper-option', 'wrapper-option'], `env -u ${name} ls -l`);
+writes('wrappers', 'noglob touch a', '@/a');
+writes('wrappers', 'nocorrect cd s1 && touch o', '@/s1/o');
+writes('wrappers', 'noglob command cd s1 && touch o', '@/s1/o');
+writes('wrappers', 'chdir s1 && touch o', '@/s1/o');
+writes('wrappers', 'chdir s1; touch o', '@/o', '@/s1/o');
+writes('builtins', 'set -a; source .env; set +a; npm start');
+writes('builtins', 'unset IFS CDPATH; unset -f f; touch a', '@/a');
+// Bash drops an empty brace member and zsh keeps it.
+for (const command of ["ls *(e:'touch a':)", 'ls *(.e{x}N)', 'ls *(+run)', 'ls *(oe[x])'])
+  held('braces', 'glob-qualifier', command);
+held('wrappers', 'mutation-executable-unknown', '=touch ^/a');
+metadata('braces', 'git {,-C} s1 add a', 'add @/s1');
+writes('braces', "bash {,-c} 'touch a'", '@/a');
+// Zsh runs the last member of a pipeline in the shell itself.
+writes('pipelines', 'ls | while read -r d; do cd @/s1; done; touch o', '@/o', '@/s1/o');
+writes('pipelines', 'D=@/a; echo x | read D; touch "$D/o"', '?');
+writes('pipelines', 'D=@/a; echo x | read E; touch "$D/o"', '@/a/o');
+writes('pipelines', 'D=@/a; read D | cat; touch "$D/o"', '@/a/o');
+writes('pipelines', 'cd s1 | cat; touch o', '@/o');
+writes('pipelines', 'ls | while read -r f; do cd s1; ls; cd ..; done; touch o', '@/o');
+writes('pipelines', 'ls | while read -r d; do cd "$d"; ls; cd -; done; touch o', '@/o');
+writes('pipelines', 'ls | while read -r d; do pushd "$d"; popd; done; touch o', '@/o');
+add('pipelines', 'GIT_DIR=@/meta; ls | export GIT_DIR; git add a', {
+  codes: ['git-environment', 'metadata-coordinate-unresolved'],
+  only: 'codes',
+});
 for (const command of ['env -i ls', 'exec -a x ls', 'env -u A ls', 'env 9A=x ls', 'command -p ls'])
   held('wrappers', ['mutation-wrapper-option', 'wrapper-option'], command);
 held('wrappers', ['mutation-executable-unknown', 'executable-unknown'], 'env A=1');
@@ -781,7 +824,7 @@ add('git routing', 'GIT_PAGER=other git log', {
 // A variable the command unsets is absent, wherever it came from.
 for (const [command, ...git] of [
   ['unset GIT_EDITOR PAGER; git status'],
-  ['GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; git diff'],
+  ['export GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; git diff'],
   ['unset -v GIT_DIR; git add a', 'add @'],
   ['GIT_DIR=^/x/.git; unset GIT_DIR; git add a', 'add @'],
   ['export GIT_DIR=^/x/.git; unset GIT_DIR GIT_WORK_TREE; git add a', 'add @'],
@@ -790,7 +833,7 @@ for (const [command, ...git] of [
   metadata('git environment', command, ...git);
 writes(
   'git environment',
-  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF 2>/dev/null; git diff',
+  'export GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF 2>/dev/null; git diff',
   '/dev/null'
 );
 add('git environment', 'unset GIT_DIR; git add a', {
@@ -808,27 +851,27 @@ add('git environment', '(unset GIT_DIR); git add a', {
 });
 // It may not have been unset, or a nested shell may not have seen it.
 for (const command of [
-  'GIT_EXTERNAL_DIFF=x; if y; then unset GIT_EXTERNAL_DIFF; fi; git diff',
-  'GIT_EXTERNAL_DIFF=x; y && unset GIT_EXTERNAL_DIFF; git diff',
-  'readonly GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; git diff',
-  'GIT_EXTERNAL_DIFF=x; readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
-  'f() { unset GIT_EXTERNAL_DIFF; }; GIT_EXTERNAL_DIFF=x; f; git diff',
-  'f() { local GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; }; GIT_EXTERNAL_DIFF=x; f; git diff',
-  'GIT_EXTERNAL_DIFF=x; while y; do unset GIT_EXTERNAL_DIFF; done; git diff',
-  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF > log; git diff',
-  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF 2>&5; git diff',
+  'export GIT_EXTERNAL_DIFF=x; if y; then unset GIT_EXTERNAL_DIFF; fi; git diff',
+  'export GIT_EXTERNAL_DIFF=x; y && unset GIT_EXTERNAL_DIFF; git diff',
+  'declare -rx GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
+  'f() { unset GIT_EXTERNAL_DIFF; }; export GIT_EXTERNAL_DIFF=x; f; git diff',
+  'f() { local GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; }; export GIT_EXTERNAL_DIFF=x; f; git diff',
+  'export GIT_EXTERNAL_DIFF=x; while y; do unset GIT_EXTERNAL_DIFF; done; git diff',
+  'export GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF > log; git diff',
+  'export GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF 2>&5; git diff',
   // Quoting, a wrapper or an expansion names the same builtin and variable.
-  'GIT_EXTERNAL_DIFF=x; readonly "GIT_EXTERNAL_DIFF"; unset GIT_EXTERNAL_DIFF; git diff',
-  'GIT_EXTERNAL_DIFF=x; command readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
-  'GIT_EXTERNAL_DIFF=x; command -- readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
-  'GIT_EXTERNAL_DIFF=x; N=GIT_EXTERNAL_DIFF; readonly $N; unset GIT_EXTERNAL_DIFF; git diff',
-  'GIT_EXTERNAL_DIFF=x; F=-r; declare $F GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; readonly "GIT_EXTERNAL_DIFF"; unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; command readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; command -- readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; N=GIT_EXTERNAL_DIFF; readonly $N; unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; F=-r; declare $F GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
   // Bash uncovers the variable an inner scope hid.
-  'GIT_EXTERNAL_DIFF=x; f() { unset GIT_EXTERNAL_DIFF; git diff; }; GIT_EXTERNAL_DIFF=y f',
-  'f() { local GIT_EXTERNAL_DIFF=y; g; }; g() { unset GIT_EXTERNAL_DIFF; git diff; }; GIT_EXTERNAL_DIFF=x; f',
-  'f() { (unset GIT_EXTERNAL_DIFF; git diff); }; GIT_EXTERNAL_DIFF=x; GIT_EXTERNAL_DIFF=y f',
-  'GIT_EXTERNAL_DIFF=x; GIT_EXTERNAL_DIFF=y unset GIT_EXTERNAL_DIFF; git diff',
-  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; read -r GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; f() { unset GIT_EXTERNAL_DIFF; git diff; }; GIT_EXTERNAL_DIFF=y f',
+  'f() { local GIT_EXTERNAL_DIFF=y; g; }; g() { unset GIT_EXTERNAL_DIFF; git diff; }; export GIT_EXTERNAL_DIFF=x; f',
+  'f() { (unset GIT_EXTERNAL_DIFF; git diff); }; export GIT_EXTERNAL_DIFF=x; GIT_EXTERNAL_DIFF=y f',
+  'export GIT_EXTERNAL_DIFF=x; GIT_EXTERNAL_DIFF=y unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; read -r GIT_EXTERNAL_DIFF; export GIT_EXTERNAL_DIFF; git diff',
 ])
   add('git environment', command, { codes: ['git-environment'], only: 'codes' });
 add('git environment', "unset GIT_DIR; bash -c 'git add a'", {
@@ -838,6 +881,76 @@ add('git environment', "unset GIT_DIR; bash -c 'git add a'", {
   only: 'codes',
 });
 metadata('git environment', "unset GIT_DIR; bash -c 'git add a'", 'add @');
+
+// Git sees a variable only once it is exported.
+for (const [command, ...git] of [
+  ['GIT_DIR=@/meta; git add a', 'add @'],
+  ['GIT_DIR=@/meta; GIT_WORK_TREE=@; cd s1 && git add a', 'add @/s1'],
+  ['export GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['GIT_DIR=@/meta; export GIT_DIR; git add a', 'add @ in @/meta'],
+  ['export GIT_DIR; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['export "GIT_DIR"; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['command export GIT_DIR; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['declare -x GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['typeset -rx GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['declare GIT_DIR=@/meta; git add a', 'add @'],
+  ['set -a; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['set -o allexport; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['set -a; set +a; GIT_DIR=@/meta; git add a', 'add @'],
+  ['set -a; GIT_DIR=@/meta; set +o allexport; git add a', 'add @ in @/meta'],
+  ['noglob export GIT_DIR; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['f() { local GIT_BRANCH=main; git add "$GIT_BRANCH"; }; f; git add a', 'add @', 'add @'],
+  ['source ./x; GIT_SHA=a; git log "$GIT_SHA"'],
+  ['set -- -a; GIT_DIR=@/meta; git add a', 'add @'],
+  ['export GIT_DIR=^/x; unset GIT_DIR; GIT_DIR=@/meta; git add a', 'add @'],
+  ['(export GIT_DIR=@/meta); GIT_DIR=@/meta; git add a', 'add @'],
+  ['f() { git add a; }; GIT_DIR=@/meta f', 'add @ in @/meta'],
+  ['if y; then export GIT_DIR; fi; GIT_DIR=@/meta; git add a', 'add @', 'add @ in @/meta'],
+  ['y && export GIT_DIR; GIT_DIR=@/meta; git add a', 'add @', 'add @ in @/meta'],
+  ['if y; then set -a; fi; GIT_DIR=@/meta; git add a', 'add @', 'add @ in @/meta'],
+  ['GIT_SHA=$(git rev-parse --short HEAD); git log -1 "$GIT_SHA"'],
+  ['GIT_ROOT=$(git rev-parse --show-toplevel); git -C "$GIT_ROOT" status'],
+  ["GIT_SHA=x; bash -c 'git add a'", 'add @'],
+  ['GIT_LFS_SKIP_SMUDGE=1 git pull', 'pull @'],
+  ['GIT_TRACE=1 GIT_CURL_VERBOSE=1 git fetch', 'fetch @'],
+  ['GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git status'],
+  ['export GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; read -r GIT_EXTERNAL_DIFF; git diff'],
+])
+  metadata('git exports', command, ...git);
+for (const [label, command, git] of [
+  ['an inherited variable stays exported', 'GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['unsetting ends that', 'unset GIT_DIR; GIT_DIR=@/meta; git add a', 'add @'],
+])
+  add('git exports', command, { label, environment: { GIT_DIR: '/usr' }, git: [git] });
+for (const command of [
+  'export GIT_DIR > log; GIT_DIR=@/meta; git log',
+  'set -a; read -r GIT_DIR; git log',
+  'GIT_EXTERNAL_DIFF=x; while :; do git diff; export GIT_EXTERNAL_DIFF; done',
+  'for x in $(ls); do export GIT_DIR; done; GIT_DIR=@/meta; git log',
+  'f() { local GIT_DIR=@/meta; git log; }; export GIT_DIR=@/meta; f',
+  'f() { git log; export GIT_DIR; GIT_DIR=@/meta; f; }; f',
+  'setopt all_export; GIT_DIR=@/meta; git log',
+  'setopt -a; GIT_DIR=@/meta; git log',
+  'GIT_DIR=@/meta; source ./x; git log',
+  'GIT_DIR=@/meta; . ./x; git log',
+  'set -a; GIT_DIR+=@/meta; git log',
+  'set -a; : "${GIT_DIR:=@/meta}"; git log',
+  'set -a; for GIT_DIR in $(ls); do git log; done',
+  'GIT_TRACE=/x git status',
+  'GIT_CONFIG_GLOBAL=x git status',
+])
+  add('git exports', command, { codes: ['git-environment'], only: 'codes' });
+add('git exports', "export GIT_SHA=x; bash -c 'git add a'", {
+  codes: ['mutation-shell-environment', 'metadata-coordinate-unresolved'],
+  only: 'codes',
+});
+
+const REPEATED = Array.from({ length: 10 }, (_, index) => `echo ${index} >> log`).join('\n');
+for (const [label, command] of [
+  ['links in a loop', 'for f in a b c d e; do [ -e "t/$f" ] || ln -s "../s/$f" "t/$f"; done'],
+  ['conditional exports', [1, 2, 3, 4, 5].map((n) => `[ -n "$X${n}" ] && export X${n}`).join('\n')],
+])
+  add('budget', `${command}\n${REPEATED}`, { label, targets: ['@/log'] });
 
 // ── Git configuration ───────────────────────────────────────────────────────
 
@@ -1068,6 +1181,21 @@ for (const [command, git, ...targets] of [
   ['worktree add ^/x', 'worktree @', '^/x'],
   ['worktree add -b n x HEAD', 'worktree @', '@/x'],
   ['worktree add --reason r x', 'worktree @', '@/x'],
+  ['worktree add -fb n x HEAD', 'worktree @', '@/x'],
+  ['worktree add -fbn x HEAD', 'worktree @', '@/x'],
+  ['worktree add --rea r x HEAD', 'worktree @', '@/x'],
+  ['worktree add --unlisted v ^/x HEAD', 'worktree @', '@/v', '^/x', '@/HEAD'],
+  ['push -fo a ^/x', 'push @', '^/x'],
+  ['push --push-opt a ^/x', 'push @', '^/x'],
+  ['send-pack ^/x HEAD', 'send-pack @', '^/x'],
+  ['send-pack --remote o x HEAD', 'send-pack @', '@/x'],
+  ['send-pack host:x HEAD', 'send-pack @'],
+  ['-C s1 restore -qs HEAD f', 'restore @/s1', '@/s1/f'],
+  ['-C s1 clean -fde k x', 'clean @/s1', '@/s1/x'],
+  ['fsck --lost-found', 'fsck @'],
+  ['fsck --lost', 'fsck @'],
+  ['fsck --l', 'fsck @'],
+  ['--git-dir=meta init -q', 'init @ in @/meta', '@/clone'],
   ['worktree remove --force ^/x', 'worktree @', '^/x'],
   ['worktree move a b', 'worktree @', '@/a', '@/b'],
   ['worktree repair a', 'worktree @', '@/a'],
@@ -1095,6 +1223,18 @@ for (const [command, ...targets] of [
   ['clone ^/x y', '@/y'],
   ['clone -b main --depth 1 ^/x ^/y', '^/y'],
   ['clone --no-checkout ^/x', '@/clone'],
+  ['clone -qb main ^/x ^/y', '^/y'],
+  ['clone -qbmain ^/x ^/y', '^/y'],
+  ['clone -qb main ^/x y', '@/y'],
+  ['clone --dep 1 ^/x ^/y', '^/y'],
+  ['clone --no-depth ^/x ^/y', '^/y'],
+  ['clone --ref-format files ^/x ^/y', '^/y'],
+  ['clone --revision r ^/x ^/y', '^/y'],
+  ['clone --unlisted v x ^/y', '@/x', '^/y'],
+  ['init -qb main ^/x', '^/x'],
+  ['init --init main ^/x', '^/x'],
+  ['init --unlisted v ^/x', '@/v', '^/x'],
+  ['merge-file -qL x ^/a b c', '^/a'],
   ['-C s1 clone ^/x y', '@/s1/y'],
   ['init', '@/clone'],
   ['init x', '@/x'],
@@ -1134,6 +1274,8 @@ for (const command of [
 for (const command of [
   'clone -c a=b /x',
   'clone -u x /x',
+  'clone -qu x /x',
+  'clone -qc a=b /x',
   'clone --config a=b /x',
   'clone --template=x /x',
   'clone --separate-git-dir=x /x',
@@ -1180,6 +1322,12 @@ for (const command of [
   'config -f x a.b c',
   'config --file=x a.b c',
   'config --file x --unset a.b',
+  'config --fil=x a.b c',
+  'config --glob a.b c',
+  'config -zf x a.b c',
+  'push --repo=^/x --all',
+  'push --rep ^/x --all',
+  'push --repo "$X" --all',
 ])
   add('git hazards', 'git ' + command, { codes: ['git-option-unmodeled'], only: 'codes' });
 // A commit that skips the repository's hooks is not the commit they admit.
@@ -1808,6 +1956,44 @@ for (const [command, ...targets] of [
   ['mkdir -p d/e && cd d && touch a', '@/d/a'],
   ['mkdir d && cd d && mkdir e && cd e && touch a', '@/d/e/a'],
   ['mkdir d; cd d; touch a', '@/a', '@/d/a'],
+  ['ln -s ^/x l; mkdir d && cd d && touch a', '@/d/a'],
+  // A write through a link this command made lands where it leads.
+  ['ln -s ^/home/h1 d; touch d/a', '@/d/a', '~/h1/a'],
+  ['ln -s ../home/h1 d; echo x > d/a', '@/d/a', '~/h1/a'],
+  ['ln -s ^/home/h1/f d; echo x > d', '@/d', '~/h1/f'],
+  ['ln ^/home/h1/f d; tee d', '@/d', '~/h1/f'],
+  ['ln -s ^/home/h1 .; touch h1/a', '@/h1/a', '~/h1/a'],
+  ['ln -s ^/home/h1/d; touch d', '@/d', '~/h1/d'],
+  ['ln -s ^/home/h1 s1; touch s1/h1/a', '@/s1/h1/a', '~/h1/a'],
+  ['ln -sfn ^/home/h1 s1; touch s1/a', '@/s1/a', '~/h1/a'],
+  ['ln -s ^/home/h1 d && cd d && touch a', '~/h1/a'],
+  ['rm -rf s1 && ln -s ^/home/h1 s1 && cd s1 && touch a', '@/s1', '~/h1/a'],
+  ['env ln -s ^/home/h1 d; touch d/a', '@/d/a', '~/h1/a'],
+  ['(ln -s ^/home/h1 d); touch d/a', '@/d/a', '~/h1/a'],
+  ["ln -s ^/home/h1 d; bash -c 'touch d/a'", '@/d/a', '~/h1/a'],
+  ['ln -s ^/home/h1 d; rm d; touch e', '@/d', '@/e'],
+  ['ln -s s1 d; touch d/a', '@/d/a', '@/s1/a'],
+  ['if y; then ln -s ^/home/h1 d; else ln -s s1 d; fi; touch d/a', '@/d/a', '@/s1/a', '~/h1/a'],
+  ['ln -s ^/home/h1 a; ln -s a b; touch b/x', '@/b/x', '~/h1/x'],
+  ['ln -st s1 ^/home/h1; touch s1/h1/a', '@/s1/h1/a', '~/h1/a'],
+  ['ln -s --target-directory=s1 ^/home/h1; touch s1/h1/a', '@/s1/h1/a', '~/h1/a'],
+  ['ln -sr ../home/h1 s1/d; touch s1/d/a', '@/s1/d/a', '~/h1/a'],
+  ['ln -s ^/home/h1 d; sed -i s/a/b/ d/f', '~/h1/f'],
+  ['ln -s ^/home/h1 d; dd if=a of=d/f', '~/h1/f'],
+  ['ln -s ^/home/h1 d; git clone ^/x d/y', '@/d/y', '~/h1/y'],
+  // What reads through a link, or removes it, writes nothing there.
+  ['ln -s ^/home/h1 d; touch -r d/a b', '@/d/a', '@/b'],
+  ['ln -s ^/home/h1 d; sed s/a/b/ d/f > o', '@/o'],
+  ['ln -s ^/home/h1 link/d; rm link/d', '@/link/d'],
+  ['mkdir r2 && ln -sfn r2 s1 && cd s1 && touch a', '@/r2/a'],
+  ['ln -s "$X" .; mkdir d && cd d && touch a', '@/d/a'],
+  ["mkdir d; bash -c 'rm -f x'; cd d && touch a", '@/x', '@/d/a'],
+  // Copies, archives and links elsewhere leave what mkdir makes a directory.
+  ['tar czf o.tgz s1 && mkdir -p d && cd d && touch a', '@/d/a'],
+  ['tar tzf o.tgz | head; mkdir -p d && cd d && touch a', '@/d/a'],
+  ['ln -s ../no . && mkdir -p d && cd d && touch a', '@/d/a'],
+  ['bash tools/cp-assets.sh --rm && mkdir -p d && cd d && touch a', '@/d/a'],
+  ['bash -c "true"; mkdir d && cd d && touch a', '@/d/a'],
   // What a list skips has the status that skipped it.
   ['x && cd s1 && touch a', '@/s1/a'],
   ['x || cd s1 || touch a', '@/a'],
@@ -1827,10 +2013,19 @@ for (const [code, command, ...targets] of [
   ['function-shadow', 'export() { :; }'],
   ['mutation-shell-builtin', 'f() { declare -g D=@/b; }; f'],
   // It may have become a link, or never have been made.
-  [NOWHERE, 'mkdir d; rm -r d; ln -s ^/x d; cd d; touch a', '@/a', '@/d'],
-  [NOWHERE, 'mkdir d; (rm -r d; ln -s ^/x d); cd d; touch a', '@/a', '@/d'],
+  [NOWHERE, 'mkdir d; rm -r d; ln -s ^/no d; cd d; touch a', '@/a', '@/d'],
+  [NOWHERE, 'mkdir d; (rm -r d; ln -s ^/no d); cd d; touch a', '@/a', '@/d'],
+  [NOWHERE, 'mkdir d; env rm -r d; env ln -s ^/no d; cd d; touch a', '@/a', '@/d'],
+  [NOWHERE, 'ln -s ^/no d; mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'ln -s ^/no/d; mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'if y; then ln -s ^/no d; fi; mkdir -p d/e; cd d/e; touch a', '@/a'],
+  [NOWHERE, 'ln -s "$X" d; touch d/a', '@/d/a'],
+
   [NOWHERE, 'cd d; mkdir d; touch a', '@/a'],
   [NOWHERE, 'mkdir "$X"; cd d; touch a', '@/a'],
+
+  [NOWHERE, 'ln -st . ^/d; mkdir -p d/e; cd d/e; touch a', '@/a'],
+
   [NOWHERE, 'mkdir d/../e; cd e; touch a', '@/a'],
   [NOWHERE, 'mkdir d; cd d/e; touch a', '@/a'],
   [NOWHERE, 'if x; then mkdir d; fi; cd d; touch a', '@/a', '@/d/a'],
@@ -1887,12 +2082,23 @@ for (const [command, ...targets] of [
   [`tee x.sh <<'EOF'\ntouch a\nEOF\nbash x.sh`, '@/x.sh', '@/a'],
   [`tee x.sh <<'EOF' > /dev/null\ntouch a\nEOF\nbash x.sh`, '@/x.sh', '/dev/null', '@/a'],
   [SCRIPT('x.sh', 'touch a', SCRIPT('x.sh', 'touch b', 'bash x.sh')), '@/x.sh', '@/a', '@/b'],
+  // An unquoted here-document loses its escapes before anything reads it.
+  [`cat > x.sh <<EOF\nD=@/a\ntouch "\\$D/o"\nEOF\nbash x.sh`, '@/x.sh', '@/a/o'],
+  [`bash <<EOF\nD=@/a\ntouch "\\$D/o"\nEOF`, '@/a/o'],
+  [`bash <<EOF\ntouch "\\$(echo a)"\nEOF`, '?'],
+  [`bash <<EOF\ntouch "\\\`echo a\\\`"\nEOF`, '?'],
+  [`bash <<EOF\ntouch a\\\nb\nEOF`, '@/ab'],
+  [`bash <<EOF\ntouch 'a\\\\b'\nEOF`, '@/a\\b'],
+  [`bash <<'EOF'\nD=@/a\ntouch "\\$D/o"\nEOF`, '@/$D/o'],
   // A name the projection cannot read can be any script this command wrote.
   [SCRIPT('x.sh', 'touch a', 'bash ./*.sh'), '@/x.sh', '@/a'],
   [SCRIPT('x', 'touch a', 'sh ./*'), '@/x', '@/a'],
   [SCRIPT('x.sh', 'touch a', 'for f in ./*.sh; do bash "$f"; done'), '@/x.sh', '@/a'],
   [SCRIPT('x.md', 'touch "$X"', 'bash ./*.sh'), '@/x.md'],
   [SCRIPT('x.sh', 'touch "$X"', 'bash --version'), '@/x.sh'],
+  // A script that loops over scripts does not run itself forever.
+  [SCRIPT('q.sh', 'for f in s1/*.sh; do bash "$f"; done; touch a', 'bash q.sh'), '@/q.sh', '@/a'],
+  [SCRIPT('q.sh', 'touch a; bash q.sh', 'bash q.sh'), '@/q.sh', '@/a'],
   // A different file, or one in another language, is not shell source.
   [SCRIPT('x.sh', 'touch a', 'bash y.sh'), '@/x.sh'],
   [SCRIPT('x.rb', '#!/usr/bin/env ruby\nputs(', './x.rb'), '@/x.rb'],
@@ -1907,6 +2113,7 @@ for (const [command, payloads, rewritten] of [
   [SCRIPT('x', '#!/usr/bin/env python3\n1', './x'), ['#!/usr/bin/env python3\n1\n'], false],
   [SCRIPT('x', '#!/usr/bin/env node\n1', './x'), ['#!/usr/bin/env node\n1\n'], false],
   [SCRIPT('x.py', '1', SCRIPT('x.py', '2', 'python3 x.py')), ['1\n', '2\n'], false],
+  [`cat > x.py <<EOF\n"\\$a\\n\\\\n"\nEOF\npython3 x.py`, ['"$a\\n\\n"\n'], false],
   [`cat >> x.py <<'EOF'\n1\nEOF\npython3 x.py`, ['1\n'], true],
   [SCRIPT('x.py', '1', 'echo 2 >> x.py; python3 x.py'), ['1\n'], true],
   [`cat > x.py <<EOF\n$X\nEOF\npython3 x.py`, [], true],
@@ -1995,6 +2202,7 @@ describe('write projection', () => {
       fs.writeFileSync(path.join(root, 'project/globs', file), '');
     fs.symlinkSync(path.join(root, 'project/real/deep'), path.join(root, 'project/link'));
     fs.symlinkSync(path.join(root, 'project'), path.join(root, 'links/project'));
+    for (const row of rows) row.expanded = expand(row.command);
     const requests = rows.map(({ command, facts }) => ({
       environment: facts.environment ?? {},
       input: {
@@ -2094,6 +2302,17 @@ describe('write projection', () => {
     copies: view.copyOperations.map((row) => row.knowledge),
   });
 
+  // The guard walks every token, so alternatives that differ in nothing it
+  // checks must not multiply them.
+  test.each([
+    ['links in a loop', 'for f in a b c d e; do [ -e "t/$f" ] || ln -s "../s/$f" "t/$f"; done'],
+    [
+      'conditional exports',
+      [1, 2, 3, 4, 5].map((n) => `[ -n "$X${n}" ] && export X${n}`).join('\n'),
+    ],
+  ])('tokens stay bounded: %s', (label) => {
+    expect(results.get(`budget: ${label}`).tokens.length).toBeLessThan(220);
+  });
   test('every case is distinct', () => {
     const names = rows.map((row) => row.name);
     expect(names.filter((name, index) => names.indexOf(name) !== index)).toEqual([]);
@@ -2107,6 +2326,13 @@ describe('write projection', () => {
       copies: facts.copies ?? [],
     };
     const actual = summarize(results.get(name));
+    // A position outside the command makes the guard reject the whole view.
+    const { length } = rows.find((row) => row.name === name).expanded;
+    for (const { start, end } of [...results.get(name).tokens, ...results.get(name).issues]) {
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(end).toBeGreaterThanOrEqual(start);
+      expect(end).toBeLessThanOrEqual(length);
+    }
     if (facts.submitted) {
       const { interpreters, interpreterInvocations } = results.get(name);
       expect(

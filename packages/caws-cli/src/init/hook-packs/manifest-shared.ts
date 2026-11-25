@@ -735,7 +735,13 @@ import { isAdapterCoveredSurface } from './types';
 // v143: block-dangerous.sh does not arm the latch for a kill of explicit process
 // IDs in a plain command, and classify_command.py does not deny a plain command
 // that only names reboot or shutdown. Every other verdict is unchanged.
-export const SHARED_PACK_VERSION = 143;
+// v144: lib/bash-mutation-analysis.sh reads a Python path built from the working
+// directory's parents, percent or brace formatting, a changed directory, a
+// subprocess directory, io.FileIO and a function handed to another call, and a
+// Node path built by a literal join or resolved after process.chdir, inline and
+// in the scripts a command runs. A program a Python source starts, and the
+// script it gives an interpreter, are run rather than written.
+export const SHARED_PACK_VERSION = 144;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

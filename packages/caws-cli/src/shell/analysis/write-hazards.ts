@@ -96,7 +96,11 @@ export function gitHazard(subcommand: string, args: Arguments): Hazard | 'hooks'
   // A configuration file outside this repository is a file of its own.
   if (
     subcommand === 'config' &&
-    some(args, /^(?:--global|--system|--file(?:=|$)|-f)/) &&
+    args.some(
+      (value) =>
+        value !== null &&
+        (clusterSets(value, 'f', '') || abbreviates(value, ['global', 'system', 'file'], []))
+    ) &&
     !readsConfiguration(args)
   )
     return 'output';
@@ -121,8 +125,17 @@ export function gitHazard(subcommand: string, args: Arguments): Hazard | 'hooks'
       abbreviates(value, ['prefix'], [])
     )
       return 'output';
-    if (subcommand === 'clone' && (/^-[cu]/.test(value) || abbreviates(value, ['config'], [])))
+    if (
+      subcommand === 'clone' &&
+      (['c', 'u'].some((flag) => clusterSets(value, flag, 'bjo')) ||
+        abbreviates(value, ['config'], []))
+    )
       return 'execution';
+    if (subcommand === 'push' && abbreviates(value, ['repo'], [])) {
+      const attached = /^[^=]*=([\s\S]*)$/.exec(value)?.[1];
+      const repository = attached ?? args[index + 1] ?? null;
+      if (repository === null || LOCAL_REPOSITORY.test(repository)) return 'output';
+    }
     if (
       (subcommand === 'clone' || subcommand === 'init') &&
       abbreviates(value, ['template', 'separate-git-dir'], [])
@@ -140,24 +153,36 @@ export function gitHazard(subcommand: string, args: Arguments): Hazard | 'hooks'
   return null;
 }
 
-/** Options that take the next argument, where an operand can follow them. */
-const GIT_OPERAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
+/** Options that take the next argument: short letters, then long names. */
+const GIT_OPERAND_OPTIONS: Readonly<Record<string, readonly [string, string]>> = {
   clone: [
-    ...['-b', '--branch', '--depth', '-o', '--origin', '-j', '--jobs', '--filter'],
-    ...['--reference', '--reference-if-able', '--shallow-since', '--shallow-exclude'],
-    ...['--server-option', '--bundle-uri'],
+    'bcjou',
+    'branch bundle-uri config depth filter jobs origin ref-format reference ' +
+      'reference-if-able revision separate-git-dir server-option shallow-exclude ' +
+      'shallow-since template upload-pack',
   ],
-  init: ['-b', '--initial-branch', '--object-format', '--ref-format'],
-  worktree: ['-b', '-B', '--reason'],
-  push: ['-o', '--push-option', '--repo'],
-  'merge-file': ['-L', '--marker-size'],
-  restore: ['-s', '--source', '--conflict'],
-  config: ['-f', '--file', '--blob', '--default', '--type'],
-  clean: ['-e', '--exclude'],
+  init: ['b', 'initial-branch object-format ref-format separate-git-dir template'],
+  worktree: ['bB', 'reason'],
+  push: ['o', 'exec push-option receive-pack repo'],
+  'send-pack': ['', 'exec push-option receive-pack remote'],
+  'merge-file': ['L', 'diff-algorithm marker-size'],
+  restore: ['sU', 'conflict inter-hunk-context pathspec-from-file source unified'],
+  config: ['f', 'blob comment default file type url value'],
+  clean: ['e', 'exclude'],
+  rm: ['', 'pathspec-from-file'],
+  'symbolic-ref': ['m', ''],
 };
+/** Whether an option's value is the argument after it. */
+function takesNext(value: string, short: string, long: string): boolean {
+  if (value.startsWith('--'))
+    return !value.includes('=') && abbreviates(value, long.split(' '), []);
+  const at = [...value].findIndex((letter, index) => index > 0 && short.includes(letter));
+  return at > 0 && at === value.length - 1;
+}
 /** Positions of the operands, past options and the arguments they take. */
 function operandPositions(subcommand: string, args: Arguments): number[] {
-  const taking = GIT_OPERAND_OPTIONS[subcommand] ?? [];
+  const listed = Object.prototype.hasOwnProperty.call(GIT_OPERAND_OPTIONS, subcommand);
+  const [short, long] = (listed ? GIT_OPERAND_OPTIONS[subcommand] : undefined) ?? ['', ''];
   const found: number[] = [];
   let options = true;
   for (let index = 0; index < args.length; index++) {
@@ -165,7 +190,7 @@ function operandPositions(subcommand: string, args: Arguments): number[] {
     if (options && value === '--') options = false;
     else if (!options || value === null || !value.startsWith('-') || value === '-')
       found.push(index);
-    else if (taking.includes(value)) index++;
+    else if (takesNext(value, short, long)) index++;
   }
   return found;
 }
@@ -185,16 +210,19 @@ export function gitWriteOperands(subcommand: string, args: Arguments, routed: bo
     case 'mv':
       return found;
     case 'clone':
-      return [second ?? -1];
+      // An option this table lacks can have taken an argument as its value.
+      return found.length > 2 ? found.slice(1) : [second ?? -1];
     case 'init':
-      return [first ?? -1];
+      return found.length > 0 ? found : [-1];
+    case 'send-pack':
+      return first === undefined || /^[^/]*:/.test(args[first] ?? '') ? [] : [first];
     case 'merge-file':
       return first === undefined || some(args, /^(?:-p|--stdout)$/) ? [] : [first];
     case 'worktree':
       return first === undefined || !['add', 'remove', 'move', 'repair'].includes(args[first] ?? '')
         ? []
         : args[first] === 'add'
-          ? found.slice(1, 2)
+          ? found.slice(1, found.length > 3 ? undefined : 2)
           : found.slice(1);
     case 'push':
       return first !== undefined && LOCAL_REPOSITORY.test(args[first] ?? '') ? [first] : [];
@@ -226,7 +254,7 @@ const GIT_INSPECTION = new Set(
   (
     'annotate archive blame cat-file check-attr check-ignore check-mailmap check-ref-format ' +
     'cherry column commit-tree count-objects describe diff diff-files diff-index diff-pairs ' +
-    'diff-tree fast-export for-each-ref fsck get-tar-commit-id grep hash-object help log ' +
+    'diff-tree fast-export for-each-ref get-tar-commit-id grep hash-object help log ' +
     'ls-files ls-remote ls-tree merge-base merge-tree mktag mktree name-rev patch-id ' +
     'range-diff rev-list rev-parse shortlog show show-branch show-index show-ref status ' +
     'stripspace var verify-commit verify-pack verify-tag version whatchanged write-tree'
@@ -282,6 +310,7 @@ const GIT_INSPECTION_FORMS: Readonly<Record<string, (args: Arguments) => boolean
       'get-url'
     ),
   config: readsConfiguration,
+  fsck: (args) => !args.some((value) => value === null || abbreviates(value, ['lost-found'], [])),
   stash: (args) => begins(args, 'list', 'show'),
   worktree: (args) => begins(args, 'list'),
   reflog: (args) =>

@@ -401,7 +401,7 @@ FIRST = set("os.remove os.unlink os.rmdir os.removedirs os.mkdir os.makedirs os.
 SECOND = set("shutil.copy shutil.copy2 shutil.copyfile shutil.copytree os.link os.symlink "
              "urllib.request.urlretrieve".split())
 BOTH = set("os.rename os.replace os.renames shutil.move".split())
-OPENERS = set("open builtins.open io.open codecs.open gzip.open bz2.open lzma.open tarfile.open "
+OPENERS = set("open builtins.open io.open io.FileIO codecs.open gzip.open bz2.open lzma.open tarfile.open "
               "zipfile.ZipFile tarfile.TarFile".split())
 METHODS = set("write_text write_bytes unlink rmdir mkdir touch symlink_to hardlink_to chmod".split())
 SAVERS = set("to_csv to_json to_excel to_parquet to_pickle to_markdown to_html savefig tofile".split())
@@ -410,6 +410,9 @@ SAME = set("str os.fspath os.fsdecode os.path.abspath os.path.realpath os.path.n
            "os.path.expanduser os.path.expandvars sorted list tuple set reversed iter next".split())
 KEEP = set("resolve absolute expanduser strip rstrip lstrip as_posix decode encode get pop items "
            "keys values copy setdefault".split())
+APPLIERS = set("map imap imap_unordered starmap map_async starmap_async submit apply apply_async "
+               "run_in_executor to_thread partial Thread Process Timer".split())
+WORDS = r"[\s\x27\x22<>|;&()=]+"
 READERS = set("ls cat head tail wc grep rg stat file diff du pwd echo which basename dirname".split())
 GIT_READERS = set("log show diff status rev-parse rev-list ls-files ls-tree grep cat-file blame "
                   "describe merge-base shortlog for-each-ref show-ref".split())
@@ -535,6 +538,21 @@ for node in nodes:
         calls.append(node)
 
 
+named_calls = {}
+handed_calls = {}
+for call in calls:
+    called_as = ""
+    if isinstance(call.func, (ast.Name, ast.Attribute)):
+        called_as = call.func.id if isinstance(call.func, ast.Name) else call.func.attr
+        named_calls.setdefault(called_as, []).append(call)
+    for at, item in [*enumerate(call.args), *[(None, item.value) for item in call.keywords]]:
+        own = isinstance(item, ast.Attribute) and (
+            called_as in APPLIERS or getattr(item.value, "id", "") in ("self", "cls"))
+        held = item.id if isinstance(item, ast.Name) else item.attr if own else None
+        if held in functions:
+            handed_calls.setdefault(held, []).append((call, at))
+
+
 def lookup(node):
     for scope in chain(scope_of.get(id(node), tree)):
         key = (id(scope), node.id)
@@ -603,8 +621,91 @@ def prefixes(values):
 
 
 def parents(values):
-    return limited([(None if text is None else posixpath.dirname(text.rstrip("/")) or ".", exact, strong)
-                    for text, exact, strong in values])
+    out = []
+    for text, exact, strong in values:
+        if text is None:
+            out.append((None, exact, strong))
+            continue
+        bare = text.rstrip("/") or text
+        # The working directory has a parent once it is resolved, and none before.
+        if bare in ("", "."):
+            out.append((".", exact, strong))
+        if (bare in ("", ".") and exact) or bare == ".." or bare.endswith("/.."):
+            out.append((posixpath.normpath(bare + "/.."), exact, strong))
+        elif bare not in ("", "."):
+            out.append((posixpath.dirname(bare) or ".", exact, strong))
+    return limited(out)
+
+
+def passed(call, position, index, keyword):
+    """What a call that is handed a function gives one of its parameters."""
+    out = []
+    verb = call.func.attr if isinstance(call.func, ast.Attribute) else getattr(call.func, "id", "")
+    rest = call.args[position + 1:] if position is not None else []
+    rows = [rest[0]] if verb in ("apply", "apply_async") and rest else []
+    if verb in ("starmap", "starmap_async") and rest:
+        rows = [row for item in literals(rest[0]) for row in getattr(item, "elts", [])]
+        if not rows and index is not None:
+            return [Field(rest[0], index, -1, True)]
+    if rows and all(isinstance(row, (ast.Tuple, ast.List)) for row in rows):
+        out += [row.elts[index] for row in rows if index is not None and index < len(row.elts)]
+    elif index is not None and index < len(rest):
+        out.append(rest[index])
+    for item in call.keywords:
+        if item.arg == "args" and isinstance(item.value, (ast.Tuple, ast.List)):
+            out += item.value.elts[index:index + 1] if index is not None else []
+        elif item.arg == "kwargs" and isinstance(item.value, ast.Dict):
+            out += [cell for key, cell in zip(item.value.keys, item.value.values)
+                    if isinstance(key, ast.Constant) and key.value == keyword]
+        elif item.arg == keyword or item.arg in ("args", "kwargs"):
+            out.append(item.value)
+    return out
+
+
+def filled(values, pieces, cells, seen):
+    """Text with each gap between pieces filled by what its cell can hold."""
+    for piece, cell in zip(pieces, cells):
+        held = evaluate(cell, seen) if cell is not None else []
+        values = added(added(values, held or UNKNOWN), [(piece, True, True)])
+    return values
+
+
+def percent(left, right, seen):
+    out = []
+    for text, exact, strong in left:
+        if text is None or not exact or "%%" in text:
+            out.append((text, False, strong))
+            continue
+        pieces = re.split(r"%(?:[(][^)]*[)])?[-#0 +]*[0-9]*(?:[.][0-9]+)?[a-zA-Z]", text)
+        cells = right.elts if isinstance(right, ast.Tuple) else [right]
+        if "%(" in text:
+            table = {key.value: cell for item in literals(right) if isinstance(item, ast.Dict)
+                     for key, cell in zip(item.keys, item.values) if isinstance(key, ast.Constant)}
+            cells = [table.get(name) for name in re.findall(r"%[(]([^)]*)[)]", text)]
+        cells = [*cells, *[None] * len(pieces)]
+        out += filled([(pieces[0], True, strong)], pieces[1:], cells, seen)
+    return limited(out)
+
+
+def braces(left, call, seen):
+    out = []
+    named = {item.arg: item.value for item in call.keywords}
+    for text, exact, strong in left:
+        if text is None or not exact or "{{" in text or "}}" in text:
+            out.append((None if text is None else text.split("{")[0] or None, False, strong))
+            continue
+        parts = re.split(r"[{]([0-9A-Za-z_]*)(?:![rsa])?(?::[^{}]*)?[}]", text)
+        if any("{" in part or "}" in part for part in parts[::2]):
+            out.append((text.split("{")[0] or None, False, strong))
+            continue
+        cells = []
+        for index, name in enumerate(parts[1::2]):
+            at = index if name == "" else int(name) if name.isdigit() else None
+            cells.append(named.get(name) if at is None else call.args[at] if at < len(call.args) else None)
+        out += filled([(parts[0], True, strong)], parts[2::2], cells, seen)
+    # Nothing is known about a path that begins with an unknown field.
+    return limited([(text or None, exact, strong) if not exact else (text, exact, strong)
+                    for text, exact, strong in out])
 
 
 def fold(values, rest, seen):
@@ -686,7 +787,7 @@ def evaluate(node, seen=()):
             return joined(left, right or UNKNOWN)
         if isinstance(node.op, ast.Add):
             return added(left, right or UNKNOWN) if left else right
-        return prefixes(left) if isinstance(node.op, ast.Mod) else UNKNOWN
+        return percent(left, node.right, seen) if isinstance(node.op, ast.Mod) else UNKNOWN
     if isinstance(node, ast.Name):
         key = lookup(node)
         if key is None:
@@ -694,8 +795,7 @@ def evaluate(node, seen=()):
         values = [value for item in bindings.get(key, []) for value in evaluate(item, seen)]
         if key in parameters:
             name, index, keyword = parameters[key]
-            supplied = [call for call in calls if isinstance(call.func, (ast.Name, ast.Attribute))
-                        and (call.func.id if isinstance(call.func, ast.Name) else call.func.attr) == name]
+            supplied = named_calls.get(name, [])
             for call in supplied:
                 given = [item.value for item in call.keywords if item.arg == keyword]
                 if index is not None and 0 <= index < len(call.args):
@@ -705,7 +805,11 @@ def evaluate(node, seen=()):
                     values += evaluate(item, seen)
                 if spread or any(item.arg is None for item in call.keywords):
                     values += UNKNOWN
-            if not supplied and not values:
+            handed = handed_calls.get(name, [])
+            for call, position in handed:
+                for item in passed(call, position, index, keyword):
+                    values += evaluate(item, seen) or UNKNOWN
+            if not supplied and not handed and not values:
                 return UNKNOWN
         return limited(values)
     if isinstance(node, ast.Attribute):
@@ -714,6 +818,8 @@ def evaluate(node, seen=()):
             return [("/dev/null", True, True)]
         if name in ("os.curdir", "os.path.curdir"):
             return [(".", True, True)]
+        if name in ("os.pardir", "os.path.pardir"):
+            return [("..", True, True)]
         if node.attr == "parent":
             return parents(evaluate(node.value, seen))
         if node.attr in ("name", "stem", "suffix", "path"):
@@ -729,7 +835,14 @@ def evaluate(node, seen=()):
         if qualified(node.value) == "os.environ":
             return environment(node.slice)
         if isinstance(node.value, ast.Attribute) and node.value.attr == "parents":
-            return prefixes(parents(evaluate(node.value.value, seen)))
+            level = getattr(node.slice, "value", node.slice)
+            level = level.value if isinstance(level, ast.Constant) else level
+            values = parents(evaluate(node.value.value, seen))
+            if not isinstance(level, int) or not 0 <= level < 16:
+                return prefixes(values)
+            for _ in range(level):
+                values = parents(values)
+            return values
         if qualified(node.value) == "sys.argv":
             return UNKNOWN
         return evaluate(node.value, seen) or UNKNOWN
@@ -811,8 +924,7 @@ def called(node, seen):
                     out += [(piece, True, strong) for piece in pieces]
             return limited(out)
         if attribute == "format":
-            return limited([(None if text is None else text.split("{")[0] or None, False, strong)
-                            for text, exact, strong in evaluate(receiver, seen)])
+            return braces(evaluate(receiver, seen), node, seen)
         if attribute == "replace" and len(node.args) == 2:
             return prefixes(evaluate(receiver, seen)) + mentions(node)
     local = functions.get(node.func.id if isinstance(node.func, ast.Name) else
@@ -884,20 +996,50 @@ def started(call):
     words = None
     if isinstance(command, (ast.List, ast.Tuple)):
         items = command.elts
-        if all(isinstance(item, ast.Constant) and isinstance(item.value, str) for item in items):
-            words = [item.value for item in items]
+        # Only the program and its options decide whether it reads.
+        if items and isinstance(items[0], ast.Constant) and not any(
+                isinstance(item, ast.Starred) for item in items):
+            words = [item.value if isinstance(item, ast.Constant) and isinstance(item.value, str) else "."
+                     for item in items]
     elif isinstance(command, ast.Constant) and isinstance(command.value, str):
         if not re.search(r"[<>|;&$`\n(]", command.value):
             try:
                 words = shlex.split(command.value)
             except ValueError:
                 words = None
+    elif command is not None:
+        # A string built from parts reads when everything it can be reads.
+        texts = evaluate(command)
+        if texts and all(text and exact and not re.search(r"[<>|;&$`\n(]", text) and reading(text.split())
+                         for text, exact, strong in texts):
+            return
     if words is not None and reading(words):
         return
     found.add("X")
+    # The program, and the script an interpreter is given, are run rather than written.
+    executed = set()
+    if isinstance(command, (ast.List, ast.Tuple)) and command.elts:
+        program = command.elts[0]
+        ran = [program]
+        name = program.value if isinstance(program, ast.Constant) else ""
+        if qualified(program) == "sys.executable" or re.match(
+                r"(?:python[0-9.]*|node|bash|sh|zsh)$", posixpath.basename(str(name))):
+            ran += [item for item in command.elts[1:]
+                    if not (isinstance(item, ast.Constant) and str(item.value).startswith("-"))][:1]
+        executed = {id(part) for item in ran for part in ast.walk(item)}
+    built = [item.value for item in call.keywords if item.arg == "cwd"]
+    built += command.elts if isinstance(command, (ast.List, ast.Tuple)) else [command]
+    for item in built:
+        if item is None or isinstance(item, ast.Constant) or id(item) in executed:
+            continue
+        for text, exact, strong in evaluate(item):
+            pieces = re.split(WORDS, text or "") if item is command else [text or ""]
+            emit([(piece, exact, False) for piece in pieces if "/" in piece or piece[:1] in ("~", ".")], False)
     for item in ast.walk(call):
+        if id(item) in executed:
+            continue
         if isinstance(item, ast.Constant) and isinstance(item.value, str):
-            for piece in re.split(r"[\s\x27\x22<>|;&()=]+", item.value):
+            for piece in re.split(WORDS, item.value):
                 if "/" in piece or piece.startswith("~"):
                     emit([(home(piece), True, False)])
         elif isinstance(item, ast.Name):
@@ -968,6 +1110,14 @@ for call in calls:
 for call in changed:
     for text, exact, strong in evaluate(argument(call, 0, "path")) or UNKNOWN:
         found.add("C" if text is None or re.search(r"[\x00-\x1f]", text) else "C " + text)
+# A relative write lands in whichever directory the program has changed into.
+bases = [line[2:] for line in sorted(found) if line.startswith("C ")][:32]
+bases += [posixpath.join(first, then) for first in bases for then in bases
+          if first != then and then[:1] not in ("/", "~")]
+for line in sorted(found):
+    if line[:2] in ("T ", "W ") and line[2:3] not in ("/", "~"):
+        for base in bases[:64]:
+            found.add(line[:2] + posixpath.join(base, line[2:]))
 lines = sorted(found)
 if len(lines) > 2048:
     sys.exit(3)
@@ -1011,22 +1161,53 @@ _caws_node_text() {
     -e "s/require\(['\"](node:)?child_process['\"]\)\.run\(/run(/g" <<< "$1"
 }
 
+# _caws_node_joined
+#   Print each path join on standard input as one quoted literal.
+_caws_node_joined() {
+  local call
+  while IFS= read -r call; do
+    printf "'%s'\\n" "$(grep -oE "['\"\`][^'\"\`]*['\"\`]" <<< "${call##*(}" |
+      tr -d "'\"\`" | tr '\n' '/' | sed 's|/$||')"
+  done
+}
+
+# _caws_node_directories <source>
+#   Print the directories a literal join gives a program the source starts.
+_caws_node_directories() {
+  local -x LC_ALL=C
+  tr '\n' ' ' <<< "$1" | sed "s/process\.cwd()/'.'/g" | grep -oE "cwd:[[:space:]]*(path\.)?(join|resolve)\([^()]*\)" |
+    grep -vE '\([^)]*[A-Za-z_$][A-Za-z0-9_$.]*[[:space:]]*[,)]' | _caws_node_joined | tr -d "'"
+  return 0
+}
+
 # _caws_node_named_targets <source>
 #   Print literals that are the operand of a file write, directly or through one
-#   name or path join.
+#   name or path join, from each directory the program changes into.
 _caws_node_named_targets() {
   local -x LC_ALL=C
-  local text name operand="[[:space:]]*(path\.)?(join\(|resolve\()?[[:space:]]*"
+  local text name targets dirs directory operand="[[:space:]]*(path\.)?(join\(|resolve\()?[[:space:]]*"
+  local literal="('[^']*'|\"[^\"]*\"|\`[^\`\$]*\`)" joined
+  joined="[[:space:]]*(path\.)?(join|resolve)\([[:space:]]*$literal([[:space:]]*,[[:space:]]*$literal)*[[:space:]]*\)"
   local first='(writeFile|appendFile|createWriteStream|unlink|rm|rmdir|mkdir|truncate|rename|outputFile|writeJson)(Sync)?\('
   local second='(copyFile|cp|rename|symlink|link|copy|move)(Sync)?\([^(),]*(\([^()]*\))?[^(),]*,'
-  text="$(tr '\n' ' ' <<< "$1")"
-  {
+  text="$(tr '\n' ' ' <<< "$1" | sed "s/process\.cwd()/'.'/g")"
+  dirs="$(grep -oE "process\.chdir\([[:space:]]*['\"\`][^'\"\`]+" <<< "$text" |
+    sed -E "s/.*['\"\`]//")"
+  dirs+=$'\n'"$(grep -oE "process\.chdir\($joined" <<< "$text" | _caws_node_joined | tr -d "'")"
+  targets="$({
+    grep -oE "($first|$second)$joined" <<< "$text" | _caws_node_joined
     grep -oE "($first|$second)$operand['\"\`][^'\"\`]+['\"\`]" <<< "$text"
     grep -oE "($first|$second)$operand[A-Za-z_\$][A-Za-z0-9_\$]*[[:space:]]*[,)+]" <<< "$text" |
       sed -E 's/[[:space:]]*[,)+]$//; s/.*[^A-Za-z0-9_$]//' | sort -u | while IFS= read -r name; do
+        grep -oE "(const|let|var)[[:space:]]+${name//\$/\\\$}[[:space:]]*=$joined" <<< "$text" |
+          _caws_node_joined
         grep -oE "(const|let|var)[[:space:]]+${name//\$/\\\$}[[:space:]]*=$operand['\"\`][^'\"\`]+['\"\`]" <<< "$text"
       done
-  } | sed -E "s/.*['\"\`]([^'\"\`]+)['\"\`]\$/\1/; s/\\\$\{.*//" | grep '[/~]' | sort -u
+  } | sed -E "s/.*['\"\`]([^'\"\`]+)['\"\`]\$/\1/; s/\\\$\{.*//" | sort -u)"
+  grep '[/~]' <<< "$targets"
+  while IFS= read -r directory; do
+    [[ -z "$directory" ]] || grep -vE '^(/|~|$)' <<< "$targets" | sed "s|^|${directory//|/}/|"
+  done <<< "$dirs"
   return 0
 }
 
@@ -1116,6 +1297,8 @@ _caws_inline_evidence() {
     if grep -qE "$CAWS_NODE_WRITE_MENTIONS" <<< "$source"; then
       found=1; writes="$CAWS_NODE_FILE_WRITES"; named="$CAWS_NODE_NAMED_TARGET"
       literals="$(_caws_interpreter_literals node "$source" "$CAWS_NODE_WRITE_MENTIONS")"
+      literals+=$'\n'"$(_caws_node_named_targets "$source")"
+      literals+=$'\n'"$(_caws_node_directories "$source")"
     fi
   fi
   [[ $found == 1 ]] || return 0

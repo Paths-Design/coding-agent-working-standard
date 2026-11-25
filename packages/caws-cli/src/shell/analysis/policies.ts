@@ -20,7 +20,7 @@ import {
 } from './write-hazards';
 import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
-import type { AnalysisContext, Argument, Location, State, Value } from './types';
+import type { AnalysisContext, Argument, Links, Location, State, Value } from './types';
 
 export function inside(path: string, root: string): boolean {
   const rel = relative(root, path);
@@ -51,12 +51,28 @@ export function sensitiveBinding(name: string): boolean {
 export function projectionSensitiveBinding(name: string): boolean {
   return /^(?:IFS|CDPATH|ENV|SHELLOPTS|GLOBIGNORE|POSIXLY_CORRECT|BASH.*)$/.test(name);
 }
+/** Whether a child process sees a variable, when every alternative agrees. */
+export function exported(state: State, name: string): boolean | null {
+  const known = state.exports?.get(name);
+  return known === undefined ? process.env[name] !== undefined : known;
+}
 /** A path with a component Git reads as repository metadata. */
 export function namesGitMetadata(path: string): boolean {
   return /(?:^|\/)\.git(?:\/|$)/i.test(path);
 }
 const TARGET_UTILITIES = ['tee', 'truncate', 'touch', 'rm', 'mv', 'cp', 'dd'];
-const WRAPPERS = ['command', 'builtin', 'env', 'exec'];
+const WRAPPERS = ['command', 'builtin', 'env', 'exec', 'noglob', 'nocorrect'];
+/** Variables `env` may drop: none of them says who is asking. */
+const ENV_UNSET = /^(?:-u|--unset=)(GIT_[A-Z_]+|(?:GIT_)?PAGER)$/;
+/** A variable an `env` option drops, and how many arguments say so. */
+export function envUnset(
+  option: string | null | undefined,
+  next: string | null | undefined
+): { name: string; width: number } | null {
+  const separate = option === '-u';
+  const name = ENV_UNSET.exec(separate ? `-u${next ?? ''}` : (option ?? ''))?.[1];
+  return name === undefined ? null : { name, width: separate ? 2 : 1 };
+}
 /** The executable an argument vector runs, past its wrappers and their options. */
 function invoked(argv: readonly Argument[]): { name: string | null; args: readonly Argument[] } {
   let index = 0;
@@ -413,7 +429,7 @@ const GIT_PROJECTED_FLAGS = [
 ];
 const GIT_QUERIES = /^(?:-v|-h|--version|--help|--html-path|--man-path|--info-path|--exec-path)$/;
 const GIT_DATA_ENVIRONMENT =
-  /^GIT_(?:(?:AUTHOR|COMMITTER)_(?:NAME|EMAIL|DATE)|TERMINAL_PROMPT|OPTIONAL_LOCKS|(?:LITERAL|GLOB|NOGLOB|ICASE)_PATHSPECS|MERGE_AUTOEDIT|ADVICE|NO_LAZY_FETCH|FLUSH)$/;
+  /^GIT_(?:(?:AUTHOR|COMMITTER)_(?:NAME|EMAIL|DATE)|TERMINAL_PROMPT|OPTIONAL_LOCKS|(?:LITERAL|GLOB|NOGLOB|ICASE)_PATHSPECS|MERGE_AUTOEDIT|ADVICE|NO_LAZY_FETCH|FLUSH|CONFIG_NOSYSTEM|LFS_SKIP_(?:SMUDGE|PUSH))$/;
 /** Programs a launcher configures for the whole session, not for one command. */
 const GIT_LAUNCHER_ENVIRONMENT =
   /^(?:GIT_(?:ASKPASS|SSH|SSH_COMMAND|SSH_VARIANT|EDITOR|SEQUENCE_EDITOR|PAGER)|PAGER)$/;
@@ -445,6 +461,9 @@ function projectGitEnvironment(
         values?.length === 1 &&
         values[0] === process.env[name]) ||
       (/^(?:GIT_)?PAGER$/.test(name) && disabled(values, /^(?:cat)?$/)) ||
+      (/^GIT_(?:TRACE(?:_[A-Z0-9_]+)?|CURL_VERBOSE)$/.test(name) &&
+        disabled(values, /^(?:[012]|true|false)?$/i)) ||
+      (/^GIT_CONFIG_(?:GLOBAL|SYSTEM)$/.test(name) && disabled(values, /^\/dev\/null$/)) ||
       (/^GIT_(?:SEQUENCE_)?EDITOR$/.test(name) && disabled(values, /^(?:true|:|cat)$/)) ||
       (name === 'GIT_SSH_COMMAND' && disabled(values, SSH_CONNECTION))
     )
@@ -484,8 +503,8 @@ function projectGit(
       const target = value === '-C' ? (args[++index]?.value ?? null) : value.slice(2);
       if (target === null) cwd = null;
       else if (target !== '') {
-        if (isAbsolute(target)) cwd = resolveDirectory(target, '/');
-        else cwd = cwd === null ? null : resolveDirectory(target, cwd);
+        if (isAbsolute(target)) cwd = enterDirectory(target, '/', state, ctx.links);
+        else cwd = cwd === null ? null : enterDirectory(target, cwd, state, ctx.links);
       }
       continue;
     }
@@ -534,7 +553,9 @@ function projectGit(
       located: cwd !== null,
     });
   }
-  const inspection = isGitInspection(subcommand, rest);
+  // With a named Git directory, this makes or fills that one.
+  const named = (subcommand === 'init' || subcommand === 'clone') && targets.length > 0;
+  const inspection = !named && isGitInspection(subcommand, rest);
   const next: State =
     writes.length > 0 || !(inspection || gitLeavesWorkingTree(subcommand))
       ? { ...state, filesystemChanged: true }
@@ -627,12 +648,96 @@ function opaque(
     );
   };
   const next: State = { ...state, filesystemChanged: true };
-  if (name === 'mkdir') next.made = [...(state.made ?? []), ...directoriesMade(args, state)];
+  if (name === 'mkdir')
+    next.made = [...(state.made ?? []), ...directoriesMade(args, state, ctx.links)];
   // A directory that can have become a link is no longer known to be one.
-  else if (['ln', 'mv', 'rm', 'cp', 'tar', 'unzip'].includes(name)) delete next.made;
+  else if (REPLACING.includes(name)) delete next.made;
+  const kept = recordLinks(name, args, state, ctx.links)
+    ? state.made?.filter((path) => throughLinks(path, ctx.links).length === 0)
+    : undefined;
+  if (kept?.length) next.made = kept;
   if (!args.some(rewritesMapping)) return next;
   ctx.mapping?.(node);
   return { ...next, mappingChanged: true };
+}
+const REPLACING = ['ln', 'mv', 'rm', 'cp', 'tar', 'unzip'];
+const LINK_FLAGS: Readonly<Record<string, string>> = {
+  '--symbolic': 's',
+  '--relative': 'r',
+  '--no-dereference': 'n',
+  '--no-target-directory': 'T',
+};
+/** Record the links `ln` makes and where each can lead; false when it is not known. */
+function recordLinks(name: string, args: readonly Argument[], state: State, links: Links): boolean {
+  if (state.cwdUnknown === true) return false;
+  const values = args.map(({ value }) => value);
+  for (const value of name === 'rm' || name === 'mv' ? values : [])
+    if (value !== null) links.removed.add(resolve(state.cwd, value));
+  if (name !== 'ln') return false;
+  const operands: (string | null)[] = [];
+  let into: string | null | undefined;
+  let flags = '';
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index]!;
+    const attached = /^--target-directory=([\s\S]*)$/.exec(value ?? '')?.[1];
+    if (attached !== undefined) into = attached;
+    else if (/^(?:-[A-Za-z]*t|--target-directory)$/.test(value ?? '')) {
+      into = values[++index] ?? null;
+      flags += value!.startsWith('--') ? '' : value!;
+    } else if (value === null || !value.startsWith('-')) operands.push(value);
+    else flags += value.startsWith('--') ? (LINK_FLAGS[value] ?? '') : value;
+  }
+  const last = operands.at(-1) ?? null;
+  if (into === null || (into === undefined && last === null)) return false;
+  const sources = into !== undefined || operands.length === 1 ? operands : operands.slice(0, -1);
+  const named = into ?? (operands.length === 1 ? '.' : last!);
+  const inside =
+    into !== undefined ||
+    operands.length === 1 ||
+    (!/[nhT]/.test(flags) &&
+      !links.removed.has(resolve(state.cwd, named)) &&
+      resolveDirectory(named, state.cwd) !== null);
+  for (const source of sources) {
+    if (source === null && inside) continue;
+    const link = resolve(state.cwd, inside ? `${named}/${basename(source!)}` : named);
+    const from = flags.includes('s') && !flags.includes('r') ? dirname(link) : state.cwd;
+    const target = source === null ? null : physicalPath(resolve(from, source));
+    const key = linkKey(link);
+    links.leads.set(key, [...new Set([...(links.leads.get(key) ?? []), target])]);
+  }
+  return true;
+}
+/** A link's own path: its directory resolved, and its name as it is. */
+function linkKey(path: string): string {
+  return `${physicalPath(dirname(path)).replace(/\/$/, '')}/${basename(path)}`;
+}
+export function isMadeLink(path: string, links: Links): boolean {
+  return links.leads.size > 0 && (links.leads.has(path) || links.leads.has(linkKey(path)));
+}
+const LINK_DEPTH = 4;
+/** Where a path can lead through links this source made; null is an unknown place. */
+export function throughLinks(path: string, links: Links, depth = 0): (string | null)[] {
+  if (links.leads.size === 0 || depth > LINK_DEPTH) return [];
+  const found = new Set<string | null>();
+  for (const place of new Set([path, linkKey(path)]))
+    for (const [link, targets] of links.leads)
+      for (const target of inside(place, link) ? targets : []) {
+        const led = target === null ? null : resolve(target, relative(link, place));
+        const further = led === null || led === place ? [] : throughLinks(led, links, depth + 1);
+        for (const end of further.length > 0 ? further : [led]) found.add(end);
+      }
+  return [...found];
+}
+/** The directory a path names, through any link this source made. */
+function enterDirectory(path: string, cwd: string, state: State, links: Links): string | null {
+  const led = throughLinks(resolve(cwd, path), links);
+  const place = led.length === 0 ? resolve(cwd, path) : led.length === 1 ? led[0]! : null;
+  if (place === null) return null;
+  const promised = physicalPath(place);
+  return (
+    resolveDirectory(led.length === 0 ? path : place, cwd) ??
+    (state.made?.includes(promised) === true ? promised : null)
+  );
 }
 /** A path with every existing component resolved, whether or not all of it exists. */
 function physicalPath(path: string): string {
@@ -644,7 +749,7 @@ function physicalPath(path: string): string {
   }
 }
 /** Directories mkdir makes, with the parents -p makes on the way. */
-function directoriesMade(args: readonly Argument[], state: State): string[] {
+function directoriesMade(args: readonly Argument[], state: State, links: Links): string[] {
   const made: string[] = [];
   for (const { value } of args) {
     if (value === null || value === '' || value.startsWith('-')) continue;
@@ -655,7 +760,7 @@ function directoriesMade(args: readonly Argument[], state: State): string[] {
       resolveDirectory(path, '/') === null && path !== '/';
       path = dirname(path)
     )
-      made.push(path);
+      if (throughLinks(path, links).length === 0) made.push(path);
   }
   return made;
 }
@@ -700,9 +805,9 @@ const INERT_BUILTINS = [
   'umask',
   'wait',
 ];
-const SHELL_FLAGS = /^[-+][befhmuvxBCEHT]+$/;
+const SHELL_FLAGS = /^[-+][abefhmuvxBCEHT]+$/;
 const SHELL_OPTION_NAMES =
-  /^(?:braceexpand|emacs|errexit|errtrace|functrace|hashall|histexpand|history|ignoreeof|monitor|noclobber|noglob|notify|nounset|onecmd|pipefail|verbose|vi|xtrace)$/;
+  /^(?:allexport|braceexpand|emacs|errexit|errtrace|functrace|hashall|histexpand|history|ignoreeof|monitor|noclobber|noglob|notify|nounset|onecmd|pipefail|verbose|vi|xtrace)$/;
 const identifier = /^[A-Za-z_][A-Za-z_0-9]*$/;
 /** An array reference whose subscript Bash expands again when it reads the name. */
 const SUBSCRIPT_SOURCE = /^[A-Za-z_][A-Za-z_0-9]*\[[^\]]*[$`]/;
@@ -711,6 +816,20 @@ export function holdsSubscriptSource(arg: Argument): boolean {
 }
 
 /** Operands of a flag-style option list, or null when a flag is not modeled. */
+/** Whether these `set` options make every later assignment an export. */
+function exportOption(
+  values: readonly (string | null)[],
+  state: State
+): Pick<State, 'exports'> | null {
+  let every: boolean | undefined;
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index] ?? '';
+    if (!/^[-+][A-Za-z]/.test(value)) break;
+    if (value.includes('a') || (value.endsWith('o') && values[++index] === 'allexport'))
+      every = value.startsWith('-');
+  }
+  return every === undefined ? null : { exports: new Map(state.exports).set('*', every) };
+}
 function shellOptions(args: readonly Argument[]): readonly Argument[] | null {
   let index = 0;
   for (; index < args.length; index++) {
@@ -748,7 +867,7 @@ export function projectBuiltin(
   };
   switch (name) {
     case 'set':
-      return shellOptions(args) ? state : null;
+      return shellOptions(args) ? { ...state, ...exportOption(values, state) } : null;
     case 'shopt':
       return values.every(
         (value) =>
@@ -776,7 +895,13 @@ export function projectBuiltin(
     case 'readonly':
       return unbind(values.filter((value) => value === null || !/^-[xraAp]+$/.test(value)));
     case 'unset': {
-      const names = values.filter((value) => value !== '-v');
+      // A removed function is one a call may or may not find, and the shell
+      // splits and changes directory as usual without these two.
+      if (values[0] === '-f')
+        return values.slice(1).every((value) => value !== null && identifier.test(value))
+          ? state
+          : null;
+      const names = values.filter((value) => !['-v', 'IFS', 'CDPATH'].includes(value ?? ''));
       const next = unbind(names);
       // Git reads these from the environment, where the name is now absent.
       for (const value of next ? names : [])
@@ -826,7 +951,8 @@ export function isShellBuiltin(name: string): boolean {
 function projectDirectory(
   args: readonly Argument[],
   state: State,
-  env: ReadonlyMap<string, Value>
+  env: ReadonlyMap<string, Value>,
+  links: Links
 ): State {
   const unknown = (): State => unknownDirectory(state);
   let physical = false;
@@ -854,10 +980,7 @@ function projectDirectory(
   const base = physical || isAbsolute(target) ? state.cwd : (state.logical ?? null);
   if (base === null && target.split('/').includes('..')) return unknown();
   const nominal = physical ? target : resolve(base ?? state.cwd, target);
-  const promised = physicalPath(resolve(state.cwd, nominal));
-  const resolved =
-    resolveDirectory(nominal, state.cwd) ??
-    (state.made?.includes(promised) === true ? promised : null);
+  const resolved = enterDirectory(nominal, state.cwd, state, links);
   if (!resolved) return unknown();
   const next: State = {
     ...state,
@@ -895,6 +1018,14 @@ function projectInvocation(
     if (name === 'command' && /^-[vV]$/.test(args[0]?.value ?? '')) return state;
     if (name === 'env' && args.length === 0) return state;
     if (args[offset]?.value === '--') offset++;
+    for (
+      let dropped = name === 'env' ? envUnset(args[offset]?.value, args[offset + 1]?.value) : null;
+      dropped;
+      dropped = envUnset(args[offset]?.value, args[offset + 1]?.value)
+    ) {
+      childEnv.delete(dropped.name);
+      offset += dropped.width;
+    }
     if (name === 'env')
       for (; /^[A-Za-z_][A-Za-z_0-9]*=/.test(args[offset]?.value ?? ''); offset++) {
         const value = args[offset]!.value!;
@@ -910,21 +1041,25 @@ function projectInvocation(
     }
     if (offset >= args.length && name === 'exec') return state;
     const next = projectInvocation(args.slice(offset), state, childEnv, ctx, node);
-    if (name === 'command') return next;
+    if (name === 'command' || name === 'noglob' || name === 'nocorrect') return next;
     // env and exec run a program, so a builtin's name changes nothing here.
-    const { filesystemChanged, mappingChanged } = next;
-    return {
+    const { filesystemChanged, mappingChanged, made } = next;
+    const kept: State = {
       ...state,
       ...(filesystemChanged === undefined ? {} : { filesystemChanged }),
       ...(mappingChanged === undefined ? {} : { mappingChanged }),
     };
+    if (made === undefined) delete kept.made;
+    else kept.made = made;
+    return kept;
   }
   if (executable !== name && changesShellState(name)) return opaque(name, args, state, ctx, node);
   switch (name) {
     case 'git':
       return projectGit(args, state, env, ctx, node);
     case 'cd':
-      return projectDirectory(args, state, env);
+    case 'chdir':
+      return projectDirectory(args, state, env, ctx.links);
     case 'sed':
       projectSed(args, ctx, node);
       return state;

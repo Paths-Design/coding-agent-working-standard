@@ -147,6 +147,15 @@ status`, message delivery, the peer notice) report the later of that file's
   `export D=x > log`, keeps the earlier value as a possibility. A quoted or
   wrapped `readonly` counts, and a launch whose file name is unknown is read as
   any script of its kind the command wrote.
+- `bash-write-guard` refuses foreign writes that a second review found it
+  admitted: an unquoted here-document's escapes, clustered, abbreviated and
+  unlisted Git options, `push --repo`, `send-pack`, a write through a link the
+  command made, an empty brace member, zsh's `chdir`, `noglob`, `>!`, `=name`,
+  glob qualifiers that name code and current-shell pipeline member, and Python or
+  Node paths built in pieces. Git is checked against the variables it can see, so
+  `GIT_SHA=...; git log`, `env -u GIT_DIR git status`, `set -a; source .env` and
+  `unset IFS` run, as does Python that only starts a program kept in another
+  repository. Shared pack 144.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

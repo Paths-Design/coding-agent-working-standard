@@ -182,21 +182,26 @@ export function expandWord(
       let combined: Argument[][] = [[]];
       for (const option of options) {
         const offset = part.pos - word.pos;
-        const variants = expandWord(
-          {
-            ...word,
-            text: word.text.slice(0, offset) + option + word.text.slice(offset + part.text.length),
-            parts: word.parts!.map((item, index) =>
-              index === brace
-                ? { type: 'Literal', pos: part.pos, end: part.end, value: option, text: option }
-                : item
-            ),
-          },
-          state,
-          ctx,
-          inspect,
-          depth
-        );
+        // Bash drops a word that is wholly empty here, and zsh keeps it.
+        const empty = option === '' && part.text === word.text;
+        const variants = empty
+          ? [[], [{ value: '' }]]
+          : expandWord(
+              {
+                ...word,
+                text:
+                  word.text.slice(0, offset) + option + word.text.slice(offset + part.text.length),
+                parts: word.parts!.map((item, index) =>
+                  index === brace
+                    ? { type: 'Literal', pos: part.pos, end: part.end, value: option, text: option }
+                    : item
+                ),
+              },
+              state,
+              ctx,
+              inspect,
+              depth
+            );
         if (combined.length * variants.length > LIMIT) {
           ctx.reason(
             word,

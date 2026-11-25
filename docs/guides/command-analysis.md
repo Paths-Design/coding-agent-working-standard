@@ -317,6 +317,18 @@ function or behind a prefix assignment, where Bash can uncover an outer value. A
 nested shell after the unset of an inherited variable has no established Git
 environment.
 
+Git sees a variable only once it is exported: inherited, given to `export` or
+`declare -x`, assigned while `set -a` holds, or assigned as a prefix. Where
+alternatives disagree, the value is unknown. An unquoted here-document is read
+without the escapes the shell removes, and its tokens map to the whole body. Zsh
+runs the last member of a pipeline in the shell itself, so a variable it
+changes, and a directory it changes to when that is known, count beside what it
+leaves.
+
+A write through a link that the same command made with `ln` is also a write
+where the link leads, and one whose source is unknown is held. Links made by
+another program, and Node paths built through more than one name, are not read.
+
 Git subcommands that only inspect need no ownership answer. Every other
 subcommand, including one the projection does not know, carries its actual Git
 directory, common directory and working tree in a distinct metadata channel. A
