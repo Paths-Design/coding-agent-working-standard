@@ -107,3 +107,10 @@ evidence:
     evidence_ref: "Replay of the 31 recorded commands through the base and the landed classifier: 15 change, 2 reboot filenames from deny to allow and 13 kills to pid_kill; 16 are identical, including the variable kill, the if-block kill and the kill beside caws specs amend-scope. The replay reads private transcripts and is not committed; sanitized copies are test cases. Latch behavior for the kills is the A1 bats."
     recorded_at: "2026-11-25T07:27:15.065Z"
     commit_sha: "95101eca71a0a9016d11b2f804db0c34291e87af"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "At 1c5fb8458 before the merge: classifier pytest 868 passed, latch bats 99 of 99, jest tests/init, tests/ci, stock-handlers, containment and guard-table-parity 965 passed, SHARED_PACK_VERSION 143 with fingerprint 4381251b. Full jest is left to the pre-push hook and hosted Release Qualification."
+    recorded_at: "2026-11-25T07:29:14.057Z"
+    test_nodeid: packages/caws-cli/tests/init/pack-fingerprint.test.js
+    commit_sha: "95101eca71a0a9016d11b2f804db0c34291e87af"
+    test_verified_at: e151a704b53d34ab0f5a5f93721ec9ee0a390f75
