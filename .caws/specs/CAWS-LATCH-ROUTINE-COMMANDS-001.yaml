@@ -55,9 +55,12 @@ acceptance:
     when: 'the classifier reads it'
     then: 'it is not denied as a system reboot'
   - id: A4
-    given: 'a command that runs reboot or shutdown, directly, by path, after an assignment or wrapper, in a compound statement, group, function, substitution or nested shell, or through a launcher such as xargs, find -exec, ssh, systemctl, launchctl, docker exec or timeout'
+    given: >-
+      any other command the previous rule denied for naming reboot or shutdown,
+      including in nested shells, substitutions, line continuations, expansions, zsh
+      forms and launchers, and any command it admitted
     when: 'the classifier reads it'
-    then: 'it is denied and the latch arms'
+    then: 'a command denied before is denied and arms the latch, and a command admitted before is not denied'
   - id: A5
     given: 'the 31 commands behind the danger-latch resets recorded between 2026-10-26 and 2026-11-25'
     when: 'each is replayed through the changed classifier and latch'
