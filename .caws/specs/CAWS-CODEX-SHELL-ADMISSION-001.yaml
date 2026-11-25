@@ -27,10 +27,10 @@ scope:
   support:
     - tmp/
 invariants:
-  - 'A Codex session or tool directory never stands in for the command directory: only a validated top-level execution_workdir resolves it, and relative write targets without one are refused'
   - 'An absolute write target owned by another session, claimed by an active worktree or in another repository is refused for Codex exactly as for other surfaces'
   - 'Codex receives no lifecycle rewrite fact, and caws hooks analyze never admits a Codex native envelope'
   - 'Shell, startup, alias and directory fields that conflict with the declared Bash subset stay refused'
+  - 'The Codex command directory is the host''s execution_workdir, or its payload cwd when the session header names a host release that reports the command''s own directory there (0.166.0 or later); otherwise it is unknown and writes that depend on it are refused'
 acceptance:
   - id: A1
     given: 'a codex PreToolUse Bash payload carrying only tool_input.command and cwd'
