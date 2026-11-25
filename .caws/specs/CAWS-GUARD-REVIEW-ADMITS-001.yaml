@@ -59,3 +59,11 @@ acceptance:
     then: 'all pass with SHARED_PACK_VERSION bumped and no declared floor lowered'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Escapes of an unquoted here-document are removed before its text is read, as a script or standard input, and token positions stay inside the command. Real guard: 503 of 503 everyday-command cases on 591fe1524, same code; both forms exit 2 naming the sibling."
+    recorded_at: "2026-11-25T07:49:16.011Z"
+    test_nodeid: packages/caws-cli/tests/shell/write-projection.test.js
+    commit_sha: "1d735feeb160e52bf649eb8ad68e2d2524f2a5e4"
+    test_verified_at: "2cc621925477708ba3003e216cf9820e455cb1e9"
