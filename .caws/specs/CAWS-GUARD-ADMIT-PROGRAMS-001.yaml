@@ -80,3 +80,8 @@ evidence:
     recorded_at: "2026-11-25T04:10:39.204Z"
     test_nodeid: packages/caws-cli/tests/hooks/bash-write-guard-everyday-commands.test.js
     commit_sha: "4fca023d5142f6be84cbdcddfcc8fdcb0d2b1d61"
+  - criterion_id: A5
+    status: unchecked
+    evidence_ref: "Suites and fingerprint pass and the shared pack is 141; the per-file mutation floor has not been run on this version."
+    recorded_at: "2026-11-25T04:10:40.441Z"
+    commit_sha: "4fca023d5142f6be84cbdcddfcc8fdcb0d2b1d61"
