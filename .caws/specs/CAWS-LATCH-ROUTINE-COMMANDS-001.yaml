@@ -88,3 +88,10 @@ evidence:
     recorded_at: "2026-11-25T07:20:14.810Z"
     test_nodeid: packages/caws-cli/tests/hooks/bats/block-dangerous-routine-commands.bats
     commit_sha: "95101eca71a0a9016d11b2f804db0c34291e87af"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "NAMES_IT in test_classify_routine_commands.py: both recorded filenames, last reboot, grep/rg/cat/ls/jq/diff operands, cd then grep, git file and branch names, and node or python3 given a data file are not denied as a reboot."
+    recorded_at: "2026-11-25T07:22:47.906Z"
+    test_nodeid: packages/caws-cli/tests/hooks/pytest/test_classify_routine_commands.py
+    commit_sha: "95101eca71a0a9016d11b2f804db0c34291e87af"
+    test_verified_at: "4a5ca78ddcdac78784e2d2241b2e43c0e243d679"
