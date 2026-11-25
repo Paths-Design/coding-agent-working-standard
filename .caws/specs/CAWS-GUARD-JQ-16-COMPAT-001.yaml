@@ -42,11 +42,11 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "On Debian 12 with jq 1.6 at e0c88d87c, hook-pack-jq-compat.test.js and bash-write-guard-analysis.test.js pass 438 of 438: ls, git status and an owned write are admitted with empty stderr and a foreign-owned write exits 2 with the DIFFERENT session reason. Counterexample: unfixed main df3848ff6 on the same image fails 128 of 193 analysis tests. The compat cases use a pass-through jq wrapper over the real 1.6 binary."
-    recorded_at: "2026-11-25T06:24:38.780Z"
+    evidence_ref: "On Debian 12 with jq 1.6 at e0c88d87c, hook-pack-jq-compat.test.js and bash-write-guard-analysis.test.js pass 438 of 438: ls, git status and an owned write are admitted with empty stderr and a foreign-owned write exits 2 with the DIFFERENT session reason. Counterexample: unfixed main df3848ff6 on the same image fails 128 of 193 analysis tests. Logs are kept in the session's artifacts directory under jq16/logs, outside the repository."
+    recorded_at: "2026-11-25T06:28:06.189Z"
     test_nodeid: packages/caws-cli/tests/hooks/hook-pack-jq-compat.test.js
-    artifact_path: "/Users/darianrosebrook/.claude/artifacts/0c999360-f616-4408-bc93-2a97c4a374fe/jq16/logs/debian12/summary.log"
-    commit_sha: e0c88d87c0e598ab54400c07f0a54202c68fbb85
+    commit_sha: d7e3cc86010a8699dae7b102b330a168acf0ac3f
+    test_verified_at: "8ffc113f26a5ac7afd24a80cc530b6640164ef70"
   - criterion_id: A2
     status: pass
     evidence_ref: "Every jq call the extractor finds in the shared and surface packs (113) compiles on real jq 1.6 (Debian 12) and 1.7. An independent scan found no skipped call; six scope-guard programs pass through its _jq wrapper and are plain paths, compiled only as the wrapper. The static rules do not cover nested-object shorthand, interpolation or a variable needle; no pack program uses them."
