@@ -4,7 +4,7 @@ mode: fix
 lifecycle_state: active
 worktree: codex-shell-admission
 created_at: '2026-11-25T07:07:26.606Z'
-updated_at: '2026-11-25T07:48:21.009Z'
+updated_at: '2026-11-25T07:49:11.922Z'
 created_by_session: 'ebebd82b-c28c-44a4-afb0-26acfbbcdd42'
 blast_radius:
   modules:
@@ -24,10 +24,10 @@ scope:
     - 'docs/architecture/hook-pack-shared-core.md'
     - 'packages/caws-cli/CHANGELOG.md'
     - docs/guides/hook-packs.md
-    - README.md
   out: []
   support:
     - tmp/
+    - README.md
 invariants:
   - 'An absolute write target owned by another session, claimed by an active worktree or in another repository is refused for Codex exactly as for other surfaces'
   - 'Codex receives no lifecycle rewrite fact, and caws hooks analyze never admits a Codex native envelope'
