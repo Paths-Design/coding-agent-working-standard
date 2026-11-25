@@ -76,7 +76,7 @@ evidence:
     commit_sha: a763ed3225f1047b9873ab02a7d3866be2a7d296
   - criterion_id: A4
     status: pass
-    evidence_ref: "FOREIGN_WRITES, CLAIMED and UNPROVED corpora, including every confirmed counterexample from the independent review, exit 2 with the named owner or reason, and no submitted command ran. The fixes after that review were not independently re-reviewed."
-    recorded_at: "2026-11-25T02:37:02.644Z"
+    evidence_ref: "The corpus cases are refused: 404 of 404 on df77c4ccc, same content; self-reported, because a mechanical re-run of this file exceeds the verifier's time limit. Outside the corpus, a second review reproduced foreign writes this guard admits, which breaks the first invariant for those commands; CAWS-GUARD-REVIEW-ADMITS-001 owns them."
+    recorded_at: "2026-11-25T04:10:39.204Z"
     test_nodeid: packages/caws-cli/tests/hooks/bash-write-guard-everyday-commands.test.js
-    commit_sha: a763ed3225f1047b9873ab02a7d3866be2a7d296
+    commit_sha: "4fca023d5142f6be84cbdcddfcc8fdcb0d2b1d61"
