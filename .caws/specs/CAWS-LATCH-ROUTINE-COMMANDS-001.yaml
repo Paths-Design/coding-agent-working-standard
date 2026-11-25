@@ -63,7 +63,10 @@ acceptance:
   - id: A5
     given: 'the 31 commands behind the danger-latch resets recorded between 2026-10-26 and 2026-11-25'
     when: 'each is replayed through the changed classifier and latch'
-    then: 'the two reboot filenames are no longer denied, the sixteen kills by process ID no longer lock the session, and every other verdict is unchanged'
+    then: >-
+      the two reboot filenames are no longer denied, the fourteen kills of literal
+      process IDs no longer lock the session, the kill of a variable and the kill
+      inside an if block lock as before, and every other verdict is unchanged
   - id: A6
     given: 'the changed classifier and guard'
     when: 'the classifier, latch and pack-fingerprint suites run'
