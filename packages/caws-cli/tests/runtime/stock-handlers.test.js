@@ -20,6 +20,13 @@ const reviewedMutationTargets = path.join(
 );
 const reviewedMutationTargetsSha256 =
   '2d6274fb8dcc31fc5d57d4b47a0225676fe10336b7c134466f799eabc672504c';
+// The command classifier as shipped at 049abebac, the last revision the typed
+// classifier was reviewed against.
+const reviewedClassifier = path.join(
+  __dirname,
+  'fixtures/reviewed-stock/classify_command-pre-readonly-signals.py'
+);
+const reviewedClassifierSha256 = '97c50613224a981d73469883bbf8371b036a33ef9777618ff23e82e9f91ff018';
 let directory, runtime, project, selection, request, environment, controller;
 const artifactRoot = process.env.CAWS_TEST_ARTIFACT_DIR;
 if (artifactRoot && !path.isAbsolute(artifactRoot))
@@ -168,6 +175,10 @@ beforeEach(() => {
   // bytes are covered by the case that expects the shell route to keep them.
   expect(digest(reviewedMutationTargets)).toBe(reviewedMutationTargetsSha256);
   fs.copyFileSync(reviewedMutationTargets, path.join(runtime, 'lib/bash-mutation-targets.sh'));
+  // The shipped classifier has since changed how it reads curl and read-only
+  // git commands, which the typed classifier does not implement.
+  expect(digest(reviewedClassifier)).toBe(reviewedClassifierSha256);
+  fs.copyFileSync(reviewedClassifier, path.join(runtime, 'classify_command.py'));
   fs.copyFileSync(
     path.join(templates, 'runtime/handler-env.sh'),
     path.join(runtime, 'handler-env.sh')
@@ -478,6 +489,21 @@ test('the shipped Bash mutation library keeps the shell route until the typed ha
   expect(tryExecuteStockHandler(guard, context())).toBeNull();
   expect(qualifiesForNativeContainment(guard, context())).toBe(false);
   expect(tryExecuteStockHandler(select('hook-utilities.sh'), context())).toBeNull();
+});
+
+test('the shipped command classifier keeps the shell route until the typed classifier is reviewed against it', () => {
+  useCodexLibraries();
+  command('echo safe');
+  const guard = select('block-dangerous.sh');
+  // With the reviewed bytes this handler answers and qualifies, so the refusals
+  // below are caused by the classifier bytes alone.
+  expect(tryExecuteStockHandler(guard, context())).not.toBeNull();
+  expect(qualifiesForNativeContainment(guard, context())).toBe(true);
+  const source = path.join(runtime, 'classify_command.py');
+  fs.copyFileSync(path.join(templates, 'shared/classify_command.py'), source);
+  expect(digest(source)).not.toBe(reviewedClassifierSha256);
+  expect(tryExecuteStockHandler(guard, context())).toBeNull();
+  expect(qualifiesForNativeContainment(guard, context())).toBe(false);
 });
 
 test('reviewed Bash mutation source admits stock routes but changed bytes keep shell ownership', () => {

@@ -46,6 +46,11 @@ blocks release".
 - **File a spec and fix it under governance**; never patch one off-spec.
 - **Releases are tag-driven:** only a `caws-cli-v*` tag push publishes; branch
   pushes never do. Procedure: `docs/release-procedure.md`.
+- **Any agent may push `main` to origin** to keep it current, without asking. It
+  publishes the commits of every session that has landed on `main`. This covers
+  a plain push only: tags, force-push and `--no-verify` are not included, and
+  the pre-push hook must pass. How to push and confirm it landed:
+  `docs/agents/full-guide.md`, "Commit and push traps".
 
 ## Before you start
 

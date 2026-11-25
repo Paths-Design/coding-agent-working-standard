@@ -30,9 +30,25 @@ class MachineHookSelection(unittest.TestCase):
         self.home, self.repo = self.root / 'machine', self.root / 'repo'
         self.surface = 'codex'
         self.repo.mkdir()
+        cli = (PACKAGE / 'dist/index.js').resolve()
+        self.assertTrue(cli.is_file(), f'candidate CLI missing: {cli}; run build')
+        self.assertTrue(os.access(cli, os.X_OK), f'candidate CLI not executable: {cli}')
         self.env = {'PATH': os.environ['PATH'], 'HOME': str(self.root / 'user'),
                     'CAWS_HOME': str(self.home), 'CAWS_PROJECT_DIR': str(self.repo),
+                    'CAWS_BIN': str(cli),
                     'PYTHONDONTWRITEBYTECODE': '1'}
+        argv = ['/bin/bash', '-c', 'command -v jq && command -v "$CAWS_BIN"']
+        dependencies = subprocess.run(argv, cwd=self.repo, env=self.env,
+                                      capture_output=True, timeout=10)
+        (self.root / 'dependencies.stdout').write_bytes(dependencies.stdout)
+        (self.root / 'dependencies.stderr').write_bytes(dependencies.stderr)
+        (self.root / 'dependencies.json').write_text(json.dumps({
+            'argv': argv, 'cwd': str(self.repo), 'exit_code': dependencies.returncode,
+            'candidate_cli': str(cli), 'sha256': hashlib.sha256(cli.read_bytes()).hexdigest(),
+        }, indent=2))
+        self.assertEqual(dependencies.returncode, 0,
+                         dependencies.stdout.decode() + dependencies.stderr.decode())
+        self.assertEqual(dependencies.stdout.decode().splitlines()[-1], str(cli))
         init = subprocess.run(['git', 'init', '-q', '-b', 'main', str(self.repo)],
                               capture_output=True, env=self.env)
         self.assertEqual(init.returncode, 0, init.stderr)
@@ -71,11 +87,11 @@ class MachineHookSelection(unittest.TestCase):
         self.project_file.write_text(json.dumps({'version': 1, 'root': str(self.repo),
                                                 'surfaces': {self.surface: self.config}}))
 
-    def invoke(self, label, *flags, session='selection-session'):
+    def invoke(self, label, *flags, session='selection-session', tool='Read'):
         command = ['python3', str(self.home / 'bin/caws-hook'), self.surface,
                    'pre_tool_use', '--system', *flags]
         result = subprocess.run(command, cwd=self.repo, env=self.env, capture_output=True,
-                                input=json.dumps({'session_id': session, 'tool_name': 'Read'}).encode())
+                                input=json.dumps({'session_id': session, 'tool_name': tool}).encode())
         (self.root / (label + '.stdout')).write_bytes(result.stdout)
         (self.root / (label + '.stderr')).write_bytes(result.stderr)
         (self.root / (label + '.command.json')).write_text(json.dumps(
@@ -325,13 +341,20 @@ class MachineHookSelection(unittest.TestCase):
                 denied = self.invoke(surface + '-deny', session=surface + '-session')
                 self.assertEqual(denied.returncode, 2, denied.stderr)
                 self.marker.write_text('#!/bin/bash\necho "infrastructure failure" >&2\nexit 1\n')
+                # A guard that exits 1 reached no verdict. A read-only tool is
+                # not blocked by that; the fault is reported and the raw exit kept.
                 failed = self.invoke(surface + '-exit1', session=surface + '-session')
-                self.assertEqual(failed.returncode, 2 if surface == 'kimi-code' else 1, failed.stderr)
+                self.assertEqual(failed.returncode, 0, failed.stderr)
+                self.assertIn(b'guard unavailable: marker.sh exited with status 1', failed.stderr)
+                # The same fault on a tool that can write is a refusal.
+                blocked = self.invoke(surface + '-exit1-write', session=surface + '-session', tool='Write')
+                self.assertEqual(blocked.returncode, 2, blocked.stderr)
+                self.assertIn(b'marker.sh', blocked.stdout + blocked.stderr)
                 rows = [json.loads(line) for line in
                         (self.repo / '.caws/sessions' / (surface + '-session') / 'hook-events.jsonl').read_text().splitlines()]
-                self.assertEqual([r['exit_code'] for r in rows], [0, 1])
-                self.assertEqual([r['adapter_exit_code'] for r in rows], [2, failed.returncode])
-                self.assertEqual([r['surface'] for r in rows], [surface, surface])
+                self.assertEqual([r['exit_code'] for r in rows], [0, 1, 1])
+                self.assertEqual([r['adapter_exit_code'] for r in rows], [2, 0, 2])
+                self.assertEqual([r['surface'] for r in rows], [surface] * 3)
 
     def test_codex_legacy_diagnostic_aliases_survive_shared_delegation(self):
         self.marker.write_text('#!/bin/bash\nexit 1\n')

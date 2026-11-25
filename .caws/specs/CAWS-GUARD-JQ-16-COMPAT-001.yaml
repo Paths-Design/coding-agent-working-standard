@@ -1,0 +1,39 @@
+id: CAWS-GUARD-JQ-16-COMPAT-001
+title: 'bash-write-guard runs on jq 1.6'
+mode: fix
+lifecycle_state: draft
+created_at: '2026-11-24T22:04:08.647Z'
+updated_at: '2026-11-24T22:04:08.647Z'
+created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
+blast_radius:
+  modules:
+    - 'Shared hook-pack jq programs, first observed in lib/bash-mutation-analysis.sh'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'A shipped shared template never changes without a pack version bump and recomputed fingerprint'
+  - 'Compatibility work never turns a refused write into an admitted one'
+acceptance:
+  - id: A1
+    given: 'a machine whose jq is 1.6, as on Debian 12'
+    when: 'bash-write-guard analyzes a read-only command'
+    then: 'it passes with no jq compile error, and a foreign-owned write is still refused with the ownership reason'
+  - id: A2
+    given: 'every jq program shipped in the shared and surface hook packs'
+    when: 'each is compiled by jq 1.6'
+    then: 'none reports a compile error, or the minimum jq version is stated in the docs and reported by caws doctor'
+  - id: A3
+    given: 'the bats and pytest hook tiers'
+    when: 'they run on Debian 12 with jq 1.6 and on Ubuntu 24.04 with jq 1.7'
+    then: 'both pass'
+observability:
+  - 'Retain the jq version, commit and per-tier results for both distributions'
+non_functional: {}
+contracts: []

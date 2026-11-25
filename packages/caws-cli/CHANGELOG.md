@@ -86,6 +86,22 @@ status`, message delivery, the peer notice) report the later of that file's
   a short-option cluster (`-sd`), which was previously missed. An explicit
   non-mutating method with data (`-X GET -d ...`) is classified as before.
   Shared pack 139.
+- `worktree-write-guard` asks for approval when a Write targets a registered
+  worktree with no recorded owner. A later ownership check refused it before
+  the approval path was reached. A known foreign owner, a malformed oracle
+  reply, bypass mode and a surface that cannot ask still refuse. Its scope
+  contention check runs the selected CLI (`CAWS_BIN`) rather than whichever
+  `caws` is first on PATH.
+- On Linux, `worktree-write-guard` and `reset-strikes` read file times with the
+  GNU `stat` form first. The BSD-first form printed filesystem text there and
+  the guard reported "File: unbound variable" instead of its risk line.
+- zcode, dsh and unrecognized surfaces resolve a relative Bash target against
+  the project again when the payload carries no working directory and the
+  command does not change directory. A later change had made every surface ask.
+  A relative target in a command that contains `cd`, `pushd` or `popd` is asked
+  about on every surface, and so is a Bash working directory that is sent but
+  does not exist; Codex refuses both. When the command analyzer refuses, the
+  guard states the analyzer's reason after the issue code. Shared pack 140.
 - The `CLAUDE.md` template `caws init` writes tells an agent how to read a
   dangerous-command refusal: refused without a latch (restate and continue; a
   repeat sent afterwards latches), guard or classifier unavailable (stop and
@@ -115,7 +131,7 @@ status`, message delivery, the peer notice) report the later of that file's
   writes in a literal here-document and then runs is read like any other source.
   Output and execution options, `--no-verify` and other hook bypasses, opaque
   shell source, and recognized writes whose target or directory is unknown stay
-  held, and a held command names its remedy. Shared pack 140.
+  held, and a held command names its remedy. Shared pack 141.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

@@ -105,6 +105,12 @@ function createStrykerConfig(surfaceId) {
     jsonReporter: { fileName: `${surface.reportDir}/mutation-report.json` },
     coverageAnalysis: surface.coverageAnalysis,
     concurrency: 2,
+    // A jest runner process slows with every mutant it has run. The kernel
+    // surface fell from about 125 mutants a minute to 4 over three hours when
+    // its processes were never replaced (Stryker's default), so duration grew
+    // with the square of the mutant count. Recycling keeps it linear. It
+    // changes when a process restarts, not which mutants or tests run.
+    maxTestRunnerReuse: 25,
     timeoutMS: surfaceId === 'kernel' ? 60000 : 120000,
     dryRunTimeoutMinutes: 15,
     // Authoritative mutation evidence must be recomputed from the declared

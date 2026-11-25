@@ -22,6 +22,16 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      # The hosted tool cache installs node group- and other-writable. The CLI
+      # identity check refuses such an interpreter, so the job gives the one it
+      # owns the mode a real installation has, instead of relaxing the check.
+      - name: Prepare owned CI interpreter permissions
+        run: |
+          mkdir -p hook-artifacts/interpreter
+          node scripts/prepare-ci-test-interpreter.cjs > hook-artifacts/interpreter/prepared.json
+          cat hook-artifacts/interpreter/prepared.json
+      - name: Verify CI interpreter preparation boundaries
+        run: node --test scripts/prepare-ci-test-interpreter.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

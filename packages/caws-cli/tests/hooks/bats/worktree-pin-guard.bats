@@ -41,7 +41,9 @@ run_pin_guard() {
   local envelope
   envelope="$(jq -nc --arg c "$cwd_value" --arg cmd "$command" --arg t "$tool" \
     '{cwd:$c, tool_name:$t, tool_input:{command:$cmd}}')"
-  run env \
+  # An agent harness exports GIT_EDITOR, which the analyzer reports as an
+  # unmodeled override. These cases are not about the runner's environment.
+  run env -u GIT_EDITOR \
     CAWS_PROJECT_DIR="$session_root" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$cwd_value" \

@@ -140,9 +140,15 @@ describe('shadow-file guard pattern coverage', () => {
 
   test('the registered copy operand helper is exempt without admitting similarly named shadows', () => {
     const helper = 'packages/caws-cli/templates/hook-packs/shared/lib/copy-roles.sh';
-    expect(runShadowGuard([helper])).toMatchObject({ status: 0, stdout: '' });
+    // The project hook pack vendors the same helper under .caws/hooks/lib.
+    const installed = '.caws/hooks/lib/copy-roles.sh';
+    expect(runShadowGuard([helper, installed])).toMatchObject({ status: 0, stdout: '' });
     for (const shadow of [
       'src/copy-roles.sh',
+      '.caws/hooks/copy-roles.sh',
+      'src/.caws/hooks/lib/copy-roles.sh',
+      installed + '.backup',
+      '.caws/hooks/lib/copy-roles-copy.sh',
       helper + '.backup',
       'packages/caws-cli/templates/hook-packs/shared/lib/copy-roles-copy.sh',
     ]) {

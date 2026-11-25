@@ -255,6 +255,7 @@ test('the Codex renderer uses native content provenance to exclude injected user
   const result = spawnSync(
     'python3',
     [
+      '-B',
       '-c',
       'import runpy,json,sys; print(json.dumps(runpy.run_path(sys.argv[1])["parse_transcript_events"](sys.argv[2])))',
       adapter,
@@ -482,7 +483,15 @@ function bash(p, command, extra = {}) {
   const result = spawnSync('python3', args, {
     cwd: p,
     encoding: 'utf8',
-    env: { ...process.env, ...environmentOverrides },
+    // The copy analysis refuses when a loader variable is inherited. A CI
+    // runner sets LD_LIBRARY_PATH, so the ambient ones are removed here and a
+    // case that is about them passes its own.
+    env: {
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => !/^(?:LD_|DYLD_)/.test(key))
+      ),
+      ...environmentOverrides,
+    },
     input,
   });
   invocations.push({
@@ -523,6 +532,20 @@ test('a plain file copy passes the stock guards through the launcher', () => {
   expect(result.stderr).not.toContain('authority unavailable');
   expect(result.stdout + result.stderr).not.toContain('inherited-environment');
   expect(result.status).toBe(0);
+});
+
+test('a copy is refused when the environment sets a loader variable', () => {
+  const p = repo('analyzer-loader-variable');
+  fs.writeFileSync(path.join(p, 'a.txt'), 'a\n');
+  installMachineRuntime({ home });
+  const result = withoutBashEnv(() =>
+    bash(p, 'cp a.txt b.txt', { LD_LIBRARY_PATH: '/opt/hostedtoolcache/lib' })
+  );
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain(
+    'Copy or move executable selection and environment are not proven'
+  );
+  expect(fs.existsSync(path.join(p, 'b.txt'))).toBe(false);
 });
 
 test("the agent's own BASH_ENV is still reported, with the cause named in the copy refusal", () => {

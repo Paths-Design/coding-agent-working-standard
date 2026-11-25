@@ -1,0 +1,55 @@
+id: CAWS-MUTATION-RUNNER-REUSE-001
+title: 'Recycle mutation test runners so each surface finishes inside its job limit'
+mode: fix
+lifecycle_state: active
+created_at: '2026-11-24T22:32:56.447Z'
+updated_at: '2026-11-24T22:33:06.724Z'
+created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
+blast_radius:
+  modules:
+    - 'Stryker runner configuration for the kernel, store, shell and analysis surfaces'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/stryker-config.cjs'
+    - 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+    - 'packages/caws-cli/reports/'
+  out: []
+invariants:
+  - 'No per-file floor, target, test file, mutator or timeout is lowered or removed to make a surface finish'
+  - 'Every declared target still produces a verdict in one report per surface'
+acceptance:
+  - id: A1
+    given: 'the kernel surface that timed out at 180 minutes on 13133fdb7'
+    when: 'the full surface runs with recycled runners'
+    then: 'every mutant is tested, every per-file floor is evaluated, and the throughput late in the run is within a factor of two of its early rate'
+  - id: A2
+    given: 'the generated Stryker configuration for each surface'
+    when: 'the mutation contract tests inspect it'
+    then: 'it sets a positive finite maxTestRunnerReuse and keeps coverage, floor, concurrency and timeout unchanged'
+  - id: A3
+    given: 'the store and analysis surfaces'
+    when: 'they run on the hosted runner'
+    then: 'each job finishes inside its 180 minute limit with a per-file verdict'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Full kernel surface at d2014974d, maxTestRunnerReuse 25, Ubuntu 24.04 arm64 container on the maintainer's machine (not the hosted runner): exit 0, Surface verdict PASS, Done in 11 minutes 18 seconds, 1439 killed + 4 timed out + 153 survived + 19 no coverage = all 1615 mutants, per-file counts equal to hosted run 39422963923. Progress log: 120 tested at ~1m, 230 at ~2m, 1191 at ~8m, 1489 at ~10m (about 110 then 150 per minute). Control in the same image with the default 0: 429 of 1615 after ~14m, stopped. Hosted run 45243992038 with the default was cancelled at 180 minutes at 1351 of 1615."
+    recorded_at: "2026-11-24T23:13:49.342Z"
+    command: "npm run mutation:run:kernel -- --summary /out/summary.md --sha d2014974d"
+    exit_code: 0
+    commit_sha: d2014974dd2ecccb0706c0473b0479924ff06cf4
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "tests/ci/mutation-contract.test.js at d2014974d: 89 of 89 pass; the four 'recycles its test runner processes' cases fail with the Stryker default 0 (Expected > 1, Received 0) and pass with 25. The existing coverage, floor and concurrency cases pass unchanged. The diff of scripts/stryker-config.cjs adds only maxTestRunnerReuse and its comment, so timeoutMS is unchanged by inspection; no test asserts timeoutMS."
+    recorded_at: "2026-11-24T23:13:59.347Z"
+    command: npx jest --rootDir packages/caws-cli packages/caws-cli/tests/ci/mutation-contract.test.js
+    exit_code: 0
+    commit_sha: d2014974dd2ecccb0706c0473b0479924ff06cf4
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Store and analysis have not been run with recycled runners. Needs the hosted Mutation Gate on a revision containing d2014974d; their per-file scores are unknown because neither surface has finished since 2026-10-20."
+    recorded_at: "2026-11-24T23:14:00.709Z"

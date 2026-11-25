@@ -710,14 +710,26 @@ import { isAdapterCoveredSurface } from './types';
 // transfer with curl 8.7.1's option-argument table, so -G/--get queries are
 // not HTTP_MUTATE while any transfer that sends a body, including a clustered
 // -sd, is.
-// v140: bash-write-guard.sh holds an unproved write target or unreadable shell
-// source, not a program, option or construct without a profile. Interpreter
-// source in the command, and an untracked entry script it names, are scanned
-// for literals that write into another repository or foreign worktree. Every
-// Git subcommand that writes metadata reaches the ownership check. A held
-// command names its remedy. lib/bash-mutation-analysis.sh carries the launch
-// kind and entry file, and holds an unresolved row that states neither.
-export const SHARED_PACK_VERSION = 140;
+// v140: worktree-write-guard.sh requests approval for a Write into a registered
+// worktree that has no recorded owner; a known foreign owner, a malformed
+// oracle reply, bypass mode and unavailable approval still refuse. Its scope
+// contention check runs the selected CLI (CAWS_BIN). It and reset-strikes.sh
+// read a file's time with the GNU stat form first; the BSD-first chain printed
+// filesystem text on Linux and failed the arithmetic that followed.
+// lib/bash-mutation-analysis.sh leaves the "payload carries cwd" decision to
+// the surface list, so zcode, dsh and unknown surfaces resolve a relative
+// target against the project, and an analyzer failure states the analyzer's
+// reason after the issue code.
+// v141: bash-write-guard.sh holds an unproved write target or unreadable shell
+// source, not a program, option or construct without a profile. A path that
+// Python or Node source names as a write, inline or in a script the command
+// runs, refuses in another repository, and in a foreign worktree when the
+// command's own text names it. A Git subcommand that is not a known inspection
+// reaches the metadata ownership check, and paths Git is given to write are
+// targets. A held command names its remedy. lib/bash-mutation-analysis.sh
+// carries the launch kind, entry file and submitted source, and holds an
+// unresolved row that states none of them.
+export const SHARED_PACK_VERSION = 141;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

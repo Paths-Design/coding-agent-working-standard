@@ -2,9 +2,8 @@ id: CAWS-MAIN-QUALIFICATION-RED-001
 title: 'Make Release Qualification pass on main'
 mode: fix
 lifecycle_state: active
-worktree: main-qualification-red
 created_at: '2026-11-24T20:39:40.007Z'
-updated_at: '2026-11-24T20:39:47.977Z'
+updated_at: '2026-11-24T23:14:26.445Z'
 created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
 blast_radius:
   modules:
@@ -19,7 +18,16 @@ scope:
     - 'packages/caws-native/tests/fixtures/reviewed-stop-prefix.json'
     - 'packages/caws-cli/'
     - '.github/workflows/release-qualification.yml'
+    - scripts/prepare-ci-test-interpreter.cjs
+    - scripts/prepare-ci-test-interpreter.test.mjs
+    - scripts/observe-test-interpreter.cjs
+    - .github/workflows/pr-checks.yml
   out: []
+  support:
+    - package.json
+    - package-lock.json
+    - CLAUDE.md
+    - docs/agents/full-guide.md
 invariants:
   - 'A test exercises the candidate build and its own declared environment, never an ambient installed caws or runner variable'
   - 'A shipped shared template never changes without a pack version bump and recomputed fingerprint'
@@ -39,3 +47,21 @@ acceptance:
     then: 'the positive control uses authenticated retained source bytes and a changed, missing, duplicate or misbound fixture entry is rejected'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "tests/hooks/worktree-claim-oracle.test.js 104 of 104 and installed pytest test_write_payload_uncertainty_and_canonical_claim_from_owned_lane, at 9c5f42e7c on Ubuntu 26.04 and macOS: default mode emits a typed ask naming ask_uncertain:worktree-payload-no-owner on claude-code, qwen-code, dsh and zcode; bypassPermissions, no-ask and the deny surfaces (codex, kimi-code, opencode) exit 2; malformed and multiline oracle replies exit 2. Mutants: removing the surface check fails 3 cases, removing the malformed-reply check fails 2. A known foreign owner is refused in default mode by test; in bypass mode by inspection, because that arm exits 2 without reading the mode. Not covered: a path another lane claims inside an unowned registered root outside .caws/worktrees now asks instead of refusing."
+    recorded_at: "2026-11-25T00:23:44.740Z"
+    command: npx jest tests/hooks/worktree-claim-oracle.test.js
+    exit_code: 0
+    commit_sha: "9c5f42e7cb2f9454a7a029c2c62aeb18ae8b1815"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "service_image::prefix tests at 9c5f42e7c: 9 of 9 pass on macOS and Ubuntu 26.04, including retained_fixture_rejects_changed_missing_duplicate_and_misbound_inputs. prefix-profile.json is unchanged (sha256 95d7e3f2). Three fixture entries were compared with git at 58ed781a8 and matched. Limit: no test asserts that current templates stay serial; that is by inspection of derive_prefix_concurrency."
+    recorded_at: "2026-11-25T00:23:45.699Z"
+    command: "cargo +1.90.0 test --locked --offline --manifest-path packages/caws-native/Cargo.toml --no-default-features --lib service_image"
+    commit_sha: "9c5f42e7cb2f9454a7a029c2c62aeb18ae8b1815"
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "Ubuntu 26.04 arm64 container at 9c5f42e7c, LD_LIBRARY_PATH set, no caws on PATH, tool-cache node 0777 normalized to 0755, depth-1 clone: audit, build, typecheck, lint, jest 391 of 391 suites (10764 passed, 14 skipped), scripts, docs, bats 817 of 817, scope smoke, pytest 511 passed all exit 0. Native service_image exits 101 there (1 of 43, retained_stage_custody), attributed to a coarse kernel timestamp tick and logged ok on the hosted runner. Needs the hosted Candidate tests and contracts job on a landed revision."
+    recorded_at: "2026-11-25T00:23:46.613Z"
