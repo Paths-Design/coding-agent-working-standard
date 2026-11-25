@@ -68,3 +68,9 @@ evidence:
     recorded_at: "2026-11-25T02:17:33.732Z"
     test_nodeid: packages/caws-cli/tests/hooks/bash-write-guard-everyday-commands.test.js
     commit_sha: a763ed3225f1047b9873ab02a7d3866be2a7d296
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "INLINE corpus exits 0, including reads of a sibling repository; inline Python and Node naming a sibling or a foreign worktree as a write exit 2 and name it. Node inline is scanned as text, so a read beside an unrelated write can still be refused."
+    recorded_at: "2026-11-25T02:23:35.095Z"
+    test_nodeid: packages/caws-cli/tests/hooks/bash-write-guard-everyday-commands.test.js
+    commit_sha: a763ed3225f1047b9873ab02a7d3866be2a7d296
