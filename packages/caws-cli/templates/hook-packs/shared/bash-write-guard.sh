@@ -562,8 +562,7 @@ for _EVIDENCE in ${CAWS_INTERPRETER_EVIDENCE[@]+"${CAWS_INTERPRETER_EVIDENCE[@]}
   _EVIDENCE_PATH="${_EVIDENCE#*$'\t'}"
   # A link names its target's repository, not the directory that holds it.
   if [[ -L "$_EVIDENCE_PATH" ]]; then
-    caws_guard_realpath_into _EVIDENCE_PATH "$_EVIDENCE_PATH" ||
-      _bwg_normalize_refuse 'interpreter evidence' "$_EVIDENCE_PATH"
+    caws_guard_realpath_into _EVIDENCE_PATH "$_EVIDENCE_PATH" || _bwg_normalize_refuse "interpreter evidence" "$_EVIDENCE_PATH"
   fi
   while [[ "$_EVIDENCE_PATH" == */* && ! -d "$_EVIDENCE_PATH" ]]; do
     _EVIDENCE_PATH="${_EVIDENCE_PATH%/*}"
@@ -575,8 +574,8 @@ for _EVIDENCE in ${CAWS_INTERPRETER_EVIDENCE[@]+"${CAWS_INTERPRETER_EVIDENCE[@]}
     escalate ask 'interpreter source names paths in more than 64 directories' ask_unsupported_nesting
     break
   fi
-  abspath_into _EVIDENCE_PATH "${_EVIDENCE_PATH:-/}" ||
-    _bwg_normalize_refuse 'interpreter evidence' "${_EVIDENCE_PATH:-/}"
+  _EVIDENCE_PATH="${_EVIDENCE_PATH:-/}"
+  abspath_into _EVIDENCE_PATH "$_EVIDENCE_PATH" || _bwg_normalize_refuse "interpreter evidence" "$_EVIDENCE_PATH"
   _FOREIGN_REPO="$(foreign_repo_root "$_EVIDENCE_PATH"; printf x)"
   _FOREIGN_REPO="${_FOREIGN_REPO%x}"
   if [[ -n "$_FOREIGN_REPO" ]]; then
