@@ -732,7 +732,10 @@ import { isAdapterCoveredSurface } from './types';
 // v142: lib/bash-mutation-analysis.sh looks for a NUL in an analyzer response by
 // code point. jq 1.6 answers contains with a NUL needle as true of any string,
 // so bash-write-guard refused every command it analyzed on that version.
-export const SHARED_PACK_VERSION = 142;
+// v143: block-dangerous.sh does not arm the latch for a kill of explicit process
+// IDs in a plain command, and classify_command.py does not deny a plain command
+// that only names reboot or shutdown. Every other verdict is unchanged.
+export const SHARED_PACK_VERSION = 143;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

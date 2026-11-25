@@ -982,7 +982,7 @@ case "$DECISION" in
         emit_block_json "$FULL_REASON"
         exit 0
       fi
-      if [[ "$SOURCE" == "capability" ]]; then
+      if [[ "$SOURCE" == "capability" || "$SOURCE" == "pid_kill" ]]; then
         WARN_FILE="$(danger_warn_file "$SESSION_ID")"
         danger_resolve_batch_key
         # The warning is claimed by creating its marker, whole, in one step: a
@@ -1001,7 +1001,11 @@ case "$DECISION" in
               > "$WARN_FILE.new.$$" 2>/dev/null && ln "$WARN_FILE.new.$$" "$WARN_FILE" 2>/dev/null; then
             unlink "$WARN_FILE.new.$$" 2>/dev/null || true
             printf 'caws command-safety (WARN, first capability ask — not blocked): %s\n' "$REASON" >&2
-            printf '  A SECOND capability-risk command this session will ARM the danger latch. Command was: %s\n' "$COMMAND" >&2
+            if [[ "$SOURCE" == "pid_kill" ]]; then
+              printf '  A SECOND capability-risk command this session will ARM the danger latch; another kill by process ID is refused without it. Command was: %s\n' "$COMMAND" >&2
+            else
+              printf '  A SECOND capability-risk command this session will ARM the danger latch. Command was: %s\n' "$COMMAND" >&2
+            fi
             exit 0
           fi
           [[ ! -f "$WARN_FILE.new.$$" ]] || unlink "$WARN_FILE.new.$$" 2>/dev/null || true
@@ -1011,6 +1015,15 @@ case "$DECISION" in
             emit_block_json "CAWS command-safety: $REASON. This capability-risk command would normally draw one warning and run, but the warning could not be recorded under $(dirname "$WARN_FILE") (not writable, or jq is unavailable), so it is refused. The session danger latch was NOT armed. Command was: $COMMAND"
             exit 0
           fi
+        fi
+        # CAWS-LATCH-ROUTINE-COMMANDS-001: stopping a process by its ID is
+        # ordinary cleanup, and this hook cannot tell whose process it is. The
+        # command is refused; the session is not locked over it. The classifier
+        # reports pid_kill only when every risky operation in the command is a
+        # kill of explicit IDs, so a broad or mixed one takes the arm below.
+        if [[ "$SOURCE" == "pid_kill" ]]; then
+          emit_block_json "CAWS command-safety: $REASON. This session already drew its one warning for a capability-risk command, so this kill by process ID is refused; the session danger latch was NOT armed and nothing was counted. To stop a background task you started, use your harness's own stop control. Otherwise ask the USER to stop the process from their own shell. Do not send the kill another way. Command was: $COMMAND"
+          exit 0
         fi
         if danger_same_batch "$(jq -r '.batch_key // ""' "$WARN_FILE" 2>/dev/null || true)" "$(jq -r '.epoch // ""' "$WARN_FILE" 2>/dev/null || true)" "$(jq -r '.tool_use_id // ""' "$WARN_FILE" 2>/dev/null || true)"; then
           emit_block_json "CAWS command-safety: $REASON. This capability-risk command was queued together with another one (\`$(jq -r '.command // ""' "$WARN_FILE" 2>/dev/null | head -n 1)\`) that drew this session's one warning, before that warning could be read. It is refused; the session danger latch was NOT armed. Send it alone if you still intend it: a capability-risk command sent after this WILL arm the latch. Command was: $COMMAND"

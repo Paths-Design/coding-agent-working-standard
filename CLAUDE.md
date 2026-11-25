@@ -232,10 +232,12 @@ Not every refusal is the latch; the message says which it is
 ([full contract](docs/guides/hook-packs.md#guard-verdicts-and-refusals)).
 
 - **Refused, latch not armed** (an opaque `python3 -c` / `node -e` payload, a
-  command the classifier could not analyze, a bare commit over staged
-  deletions): restate it as the message says and continue. A repeat of an opaque
-  or unanalyzable command sent after that refusal arms the latch; calls queued
-  in the same reply count with the first. The bare commit never latches.
+  command the classifier could not analyze, a bare commit over staged deletions,
+  a `kill` by process ID after the session's one warning): restate it as the
+  message says and continue. A repeat of an opaque or unanalyzable command sent
+  after that refusal arms the latch; calls queued in the same reply count with
+  the first. The bare commit and the kill by process ID never latch; stop your
+  own background task with the harness instead.
 - **Guard or classifier unavailable**: your command did not cause it and nothing
   was counted. Retrying cannot help. Stop and report the message.
 

@@ -323,11 +323,13 @@ Read the refusal before acting on it: the message states which of three it is.
 
 - **Refused, latch NOT armed.** An opaque inline payload (`python3 -c` or
   `node -e` carrying `$VAR`, `$(...)` or backticks), a command the classifier
-  could not finish analyzing, or the bare commit above. Restate it the way the
-  message says and continue. Do not send the same shape again: a second opaque
-  or unanalyzable command sent after this refusal arms the latch. Calls you
-  queued in the same reply as the refused one are refused with it and do not
-  count as repeats. The bare commit never arms the latch.
+  could not finish analyzing, the bare commit above, or a `kill` by process ID
+  after the session's one warning. Restate it the way the message says and
+  continue. Do not send the same shape again: a second opaque or unanalyzable
+  command sent after this refusal arms the latch. Calls you queued in the same
+  reply as the refused one are refused with it and do not count as repeats. The
+  bare commit and the kill by process ID never arm the latch; stop your own
+  background task with the harness instead.
 - **Guard or classifier unavailable.** The message says your command did not
   cause this and that no strike or latch was added. Retrying or rephrasing
   cannot help. Stop and report the message to the user, who can run
