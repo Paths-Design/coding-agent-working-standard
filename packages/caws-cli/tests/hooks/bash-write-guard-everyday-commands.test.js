@@ -503,7 +503,6 @@ const FOREIGN_WRITES = [
   "cat > tmp/new.sh <<'EOF'\ntouch {{SIBLING}}/out\nEOF\nbash tmp/new.sh",
   "cat > tmp/new.sh <<'EOF'\ntouch {{SIBLING}}/out\nEOF\nbash tmp/*.sh",
   "cat > tmp/new.py <<'EOF'\nopen('{{SIBLING}}/x', 'w')\nEOF\npython3 tmp/*.py",
-  'D={{SIBLING}}; readonly "D"; export D=tmp; touch "$D/out"',
   "cat > tmp/new.sh <<'EOF'\ntouch {{FOREIGN}}/out\nEOF\nchmod +x tmp/new.sh && ./tmp/new.sh",
   "tee tmp/new <<'EOF'\n#!/usr/bin/env python3\nopen('{{SIBLING}}/x', 'w')\nEOF\ntmp/new",
   // Functions: recursion, redefinition, prefix assignments and local names.
@@ -621,6 +620,7 @@ const UNPROVED = [
   ],
   ['f() { D={{SIBLING}}; local D=tmp; }; D=tmp; f; touch "$D/out"', 'ask_dynamic_unconfined'],
   ['readonly D={{SIBLING}}\nD=tmp\ntouch "$D/out"', 'ask_dynamic_unconfined'],
+  ['D={{SIBLING}}; readonly "D"; export D=tmp; touch "$D/out"', 'ask_dynamic_unconfined'],
   ['f() { touch m; cd "$SOMEWHERE" && f; }; f', 'cwd-unresolved'],
   ['exit() { :; }; exit 0; touch {{SIBLING}}/out', 'function-shadow'],
   ['cd() { :; }; cd {{OWN}} && touch src/claimed.txt', 'function-shadow'],
