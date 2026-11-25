@@ -534,7 +534,9 @@ function projectGit(
       located: cwd !== null,
     });
   }
-  const inspection = isGitInspection(subcommand, rest);
+  // With a named Git directory, this makes or fills that one.
+  const named = (subcommand === 'init' || subcommand === 'clone') && targets.length > 0;
+  const inspection = !named && isGitInspection(subcommand, rest);
   const next: State =
     writes.length > 0 || !(inspection || gitLeavesWorkingTree(subcommand))
       ? { ...state, filesystemChanged: true }

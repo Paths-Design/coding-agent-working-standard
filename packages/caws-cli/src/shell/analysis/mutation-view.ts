@@ -472,7 +472,15 @@ export async function projectMutationView(
             ['<', '<>', '<&', '<<<', '<<', '<<-'].includes(part.operator)
         )
         .at(-1);
-    /** Why a here-document's body is not exactly the text it supplies. */
+    /** The text a here-document supplies; an unquoted one loses its escapes. */
+    const supplied = ({ delimiter, body }: HereDoc): string =>
+      delimiter?.quoted === false
+        ? body.text.replace(/\\([\\$`\n])/g, (_, kept: string) => (kept === '\n' ? '' : kept))
+        : body.text;
+    /** Where supplied text came from: the whole body, once escapes are gone. */
+    const suppliedMap = (document: HereDoc, map: Mapping): Mapping =>
+      supplied(document) === document.body.text ? map : () => map(document.body);
+    /** Why a here-document's text cannot be read at all. */
     const documentProblem = (document: HereDoc): [string, string, Location] | null => {
       if (!document.delimiter || !document.closing)
         return ['mutation-heredoc-source', 'Here-document source is incomplete.', document];
@@ -498,7 +506,7 @@ export async function projectMutationView(
     };
     const documentText = (document: HereDoc): string | null => {
       const problem = documentProblem(document);
-      if (!problem) return document.body.text;
+      if (!problem) return supplied(document);
       issue(problem[0], problem[1], span(problem[2]));
       return null;
     };
@@ -760,10 +768,11 @@ export async function projectMutationView(
         file = redirectWrites.get(output!);
       const input = stdinRedirect(node);
       if (!file || input?.type !== 'HereDoc' || documentProblem(input)) return;
-      const { body } = input;
-      const documents = (file.before?.documents ?? []).filter((item) => item.text !== body.text);
+      const { pos, end } = input.body;
+      const text = supplied(input);
+      const documents = (file.before?.documents ?? []).filter((item) => item.text !== text);
       submittedFiles.set(file.path, {
-        documents: [...documents, { text: body.text, pos: body.pos, end: body.end, map: job.map }],
+        documents: [...documents, { text, pos, end, map: suppliedMap(input, job.map) }],
         complete: file.before?.complete !== false && output?.operator !== '>>',
       });
     };
@@ -1151,8 +1160,9 @@ export async function projectMutationView(
                 body,
                 state.cwd,
                 job.depth + 1,
-                (location) =>
-                  span({ pos: last.body.pos + location.pos, end: last.body.pos + location.end }),
+                suppliedMap(last, (location) =>
+                  span({ pos: last.body.pos + location.pos, end: last.body.pos + location.end })
+                ),
                 parent(node, state)
               );
             else if (text(body, original))
