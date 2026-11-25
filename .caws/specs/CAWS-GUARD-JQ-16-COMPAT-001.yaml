@@ -40,3 +40,11 @@ observability:
   - 'Retain the jq version, commit and per-tier results for both distributions'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "On Debian 12 with jq 1.6 at e0c88d87c, hook-pack-jq-compat.test.js and bash-write-guard-analysis.test.js pass 438 of 438: ls, git status and an owned write are admitted with empty stderr and a foreign-owned write exits 2 with the DIFFERENT session reason. Counterexample: unfixed main df3848ff6 on the same image fails 128 of 193 analysis tests. The compat cases use a pass-through jq wrapper over the real 1.6 binary."
+    recorded_at: "2026-11-25T06:24:38.780Z"
+    test_nodeid: packages/caws-cli/tests/hooks/hook-pack-jq-compat.test.js
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/0c999360-f616-4408-bc93-2a97c4a374fe/jq16/logs/debian12/summary.log"
+    commit_sha: e0c88d87c0e598ab54400c07f0a54202c68fbb85
