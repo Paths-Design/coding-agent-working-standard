@@ -55,3 +55,10 @@ acceptance:
     then: 'all pass with SHARED_PACK_VERSION bumped and no declared floor lowered'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Real guard over the compiled CLI: scripts by path, bash/sh file operands, python and node entries and modules exit 0 with empty output; the same launches naming a sibling write, committed or not (publish.py, publish.mjs, retargeted.py), exit 2 and name the sibling. Not covered: a target computed at run time, a module, or another language."
+    recorded_at: "2026-11-25T02:13:32.650Z"
+    test_nodeid: packages/caws-cli/tests/hooks/bash-write-guard-everyday-commands.test.js
+    commit_sha: a763ed3225f1047b9873ab02a7d3866be2a7d296
