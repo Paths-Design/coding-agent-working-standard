@@ -38,3 +38,11 @@ acceptance:
     then: 'all pass with no declared floor lowered'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Globbed script operands under a literal name or directory are programs; options, inline code, here-documents, tilde, device paths and nullglob stay held. Real guard: bash-write-guard-everyday-commands.test.js 404 of 404 on df77c4ccc, same content; python3 scripts/publ*.py exits 2 naming the sibling. Not covered: an unread entry when the glob is in the directory part."
+    recorded_at: "2026-11-25T04:10:23.608Z"
+    test_nodeid: packages/caws-cli/tests/shell/write-projection.test.js
+    commit_sha: "4fca023d5142f6be84cbdcddfcc8fdcb0d2b1d61"
+    test_verified_at: "1b78f2f54c13becd33a9603469aa4a874a4e222c"
