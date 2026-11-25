@@ -81,3 +81,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/shell/write-projection.test.js
     commit_sha: "1d735feeb160e52bf649eb8ad68e2d2524f2a5e4"
     test_verified_at: ae2a6215bbdc0770a4a2e5d84805cc6bdcc23413
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Each listed form exits 2 in the real guard, naming the owner or the unproved part. Not covered: a link made by another program, and an unknown directory left by a piped loop."
+    recorded_at: "2026-11-25T07:49:36.025Z"
+    test_nodeid: packages/caws-cli/tests/shell/write-projection.test.js
+    commit_sha: "1d735feeb160e52bf649eb8ad68e2d2524f2a5e4"
+    test_verified_at: ceb353e960cdcb7062fbf15c7dcc31d6d1349e7c
