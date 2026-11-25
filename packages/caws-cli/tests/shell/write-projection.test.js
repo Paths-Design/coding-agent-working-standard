@@ -862,7 +862,6 @@ for (const [command, ...git] of [
   ['if y; then export GIT_DIR; fi; GIT_DIR=@/meta; git add a', 'add @', 'add @ in @/meta'],
   ['y && export GIT_DIR; GIT_DIR=@/meta; git add a', 'add @', 'add @ in @/meta'],
   ['if y; then set -a; fi; GIT_DIR=@/meta; git add a', 'add @', 'add @ in @/meta'],
-  ['GIT_DIR=@/meta; while y; do git add a; export GIT_DIR; done', 'add @', 'add @ in @/meta'],
   ['GIT_SHA=$(git rev-parse --short HEAD); git log -1 "$GIT_SHA"'],
   ['GIT_ROOT=$(git rev-parse --show-toplevel); git -C "$GIT_ROOT" status'],
   ["GIT_SHA=x; bash -c 'git add a'", 'add @'],
@@ -880,6 +879,7 @@ for (const [label, command, git] of [
 for (const command of [
   'export GIT_DIR > log; GIT_DIR=@/meta; git log',
   'set -a; read -r GIT_DIR; git log',
+  'GIT_EXTERNAL_DIFF=x; while :; do git diff; export GIT_EXTERNAL_DIFF; done',
   'for x in $(ls); do export GIT_DIR; done; GIT_DIR=@/meta; git log',
   'f() { local GIT_DIR=@/meta; git log; }; export GIT_DIR=@/meta; f',
   'f() { git log; export GIT_DIR; GIT_DIR=@/meta; f; }; f',
