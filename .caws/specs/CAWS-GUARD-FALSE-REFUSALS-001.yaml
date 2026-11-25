@@ -53,3 +53,8 @@ evidence:
     test_nodeid: packages/caws-cli/tests/shell/write-projection.test.js
     commit_sha: "4fca023d5142f6be84cbdcddfcc8fdcb0d2b1d61"
     test_verified_at: "10175376d2a0d8527ecd161c2b57f9e3e6e47b59"
+  - criterion_id: A3
+    status: unchecked
+    evidence_ref: "Suites: full Jest on a372c3098 had 12723 passed, 12 skipped and one misplaced expectation, corrected in df77c4ccc where that file is 404 of 404; bats 817 of 817 on df77c4ccc. The per-file mutation floor has not been run on this version."
+    recorded_at: "2026-11-25T04:10:29.190Z"
+    commit_sha: "4fca023d5142f6be84cbdcddfcc8fdcb0d2b1d61"
