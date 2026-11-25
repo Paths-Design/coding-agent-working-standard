@@ -265,6 +265,22 @@ if [[ -n "$FILE_PATH" ]]; then
       _OWNERSHIP_NAME="${_OWNERSHIP_NAME%%:*}"
       echo "[worktree-write-guard] BLOCKED: this is a write into worktree '$_OWNERSHIP_NAME''s payload, which is owned by a DIFFERENT session." >&2
       exit 2 ;;
+    ask_uncertain:worktree-payload-no-owner:?*)
+      # Only missing ownership of this observed payload can request approval.
+      # Unresolved roots or overlaps cannot hide a canonical claim behind ask.
+      # Failed, empty or multiline responses cannot establish this boundary.
+      if [[ "$_OWNERSHIP_OUT" == *$'\n'* || "$_OWNERSHIP_OUT" == *$'\r'* || "$_OWNERSHIP_OUT" == *$'\t'* ]]; then
+        echo '[worktree-write-guard] invalid ownership oracle response; blocked' >&2
+        exit 2
+      fi
+      _WP_REASON="[worktree-write-guard] This write targets a registered worktree path and ownership could not be confirmed ($_OWNERSHIP_OUT). Approve only if you are the owning session; otherwise route the edit through the owning worktree's session."
+      if [[ "${CAWS_PERMISSION_VOCAB:-deny}" != ask ]] || caws_guard_cannot_ask; then
+        echo "$_WP_REASON" >&2
+        echo "  (approval unavailable or automatically satisfied (mode=${HOOK_PERMISSION_MODE:-default}); blocked)" >&2
+        exit 2
+      fi
+      emit_ask "$_WP_REASON"
+      exit 0 ;;
     *)
       echo "[worktree-write-guard] registered path ownership could not be established ($_OWNERSHIP_OUT); blocked" >&2
       exit 2 ;;
@@ -567,11 +583,11 @@ if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
   # consume (claimed:<wt>:<pattern>,... | clear | unknown:<reason>), so the
   # refusal/advisory behavior below is unchanged.
   SPEC_CONTENTION_CHECK="unknown:caws-unavailable"
-  if command -v caws >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  if command -v "${CAWS_BIN:-caws}" >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
     # A CLI/parser failure is an unknown observation, not an early shell
     # exit or a clear claim set. Continue through the existing allowlist and
     # approval policy even when the command returns a JSON error envelope.
-    if ! _CONTENTION_JSON="$(caws scope contention "$REL_PATH" --json 2>/dev/null)"; then
+    if ! _CONTENTION_JSON="$(caws_run_cli scope contention "$REL_PATH" --json 2>/dev/null)"; then
       SPEC_CONTENTION_CHECK="unknown:caws-failed"
       _CONTENTION_JSON=""
     fi
@@ -642,7 +658,11 @@ _guard_throttled_risk() {
   if [[ "$ttl" != "0" ]] && [[ -f "$cache_file" ]]; then
     local now mtime age
     now=$(date +%s 2>/dev/null || echo 0)
-    mtime=$(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo 0)
+    # GNU form first. Under GNU stat, `-f` means filesystem status: it prints
+    # a block of text and fails, and a BSD-first chain then appended the real
+    # value to that text. BSD stat rejects `-c` without printing anything.
+    mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)
+    [[ "$mtime" =~ ^[0-9]+$ ]] || mtime=0
     age=$(( now - mtime ))
     if [[ "$age" -ge 0 ]] && [[ "$age" -lt "$ttl" ]]; then
       cat "$cache_file" 2>/dev/null

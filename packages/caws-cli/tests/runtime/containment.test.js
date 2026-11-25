@@ -70,13 +70,18 @@ beforeEach(() => {
   const home = path.join(root, 'home');
   put(path.join(repo, '.caws/policy.yaml'), 'version: 1\n');
   fs.mkdirSync(path.join(repo, '.caws/specs'));
-  // Containment is granted only for the mutation-target library the typed
-  // guard was reviewed against, so the runtime is installed with those bytes.
+  // Containment is granted only for the mutation-target library and command
+  // classifier the typed guard was reviewed against, so the runtime is
+  // installed with those bytes.
   const reviewedTemplates = path.join(root, 'templates');
   fs.cpSync(templates, reviewedTemplates, { recursive: true });
   fs.copyFileSync(
     path.join(__dirname, 'fixtures/reviewed-stock/bash-mutation-targets-pre-python-stdin.sh'),
     path.join(reviewedTemplates, 'shared/lib/bash-mutation-targets.sh')
+  );
+  fs.copyFileSync(
+    path.join(__dirname, 'fixtures/reviewed-stock/classify_command-pre-readonly-signals.py'),
+    path.join(reviewedTemplates, 'shared/classify_command.py')
   );
   const installed = installMachineRuntime({ home, templatesRoot: reviewedTemplates });
   put(path.join(home, 'surfaces/codex/settings.json'), { version: 1, enabled: true });

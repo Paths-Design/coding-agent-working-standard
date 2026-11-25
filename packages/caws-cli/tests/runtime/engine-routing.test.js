@@ -123,6 +123,8 @@ test('a selected project override receives complete Codex normalization through 
 // separately by the Rust invocation fixtures.
 function cacheFixture(handlers = ['block-dangerous.sh']) {
   const base = process.env.CAWS_TEST_ARTIFACT_DIR;
+  if (base && !path.isAbsolute(base)) throw new Error('Artifact root must be absolute');
+  if (base) fs.mkdirSync(base, { recursive: true });
   const root = fs.realpathSync(fs.mkdtempSync(path.join(base || os.tmpdir(), 'cache-engine-')));
   const repo = path.join(root, 'project');
   const home = path.join(root, 'machine');
@@ -244,6 +246,8 @@ test.each([
   (scenario) => {
     const refusing = ['early-refusal', 'pointer-failure'].includes(scenario);
     const f = cacheFixture(refusing ? ['block-dangerous.sh'] : []);
+    let nongitOrigin;
+    let nongitAfter;
     try {
       const native =
         process.env.CAWS_TEST_NATIVE_EXECUTABLE ||
@@ -294,8 +298,71 @@ test.each([
         fs.mkdirSync(nested);
         payload.execution_workdir = nested;
         if (scenario === 'host-nongit-origin') {
-          const origin = path.join(f.root, 'nongit-session');
-          fs.mkdirSync(origin);
+          // Retained artifacts may be inside Git. Create only an owned scratch
+          // directory beneath a verified nongit, ungoverned temporary parent.
+          const parents = [
+            ...new Set([os.tmpdir(), '/tmp'].map((value) => fs.realpathSync(value))),
+          ];
+          const observations = [];
+          for (const parent of parents) {
+            let governed = false;
+            for (let cursor = parent; ; cursor = path.dirname(cursor)) {
+              if (fs.existsSync(path.join(cursor, '.caws'))) governed = true;
+              if (path.dirname(cursor) === cursor) break;
+            }
+            const checked = cp.spawnSync(
+              '/usr/bin/git',
+              ['-C', parent, 'rev-parse', '--show-toplevel'],
+              {
+                env: f.environment,
+                encoding: 'utf8',
+              }
+            );
+            observations.push({
+              parent,
+              governed,
+              status: checked.status,
+              signal: checked.signal,
+              error: checked.error?.message || null,
+              stdout: checked.stdout,
+              stderr: checked.stderr,
+            });
+            if (
+              !governed &&
+              !checked.error &&
+              checked.signal === null &&
+              checked.status === 128 &&
+              /not a git repository/i.test(checked.stderr)
+            ) {
+              nongitOrigin = fs.realpathSync(
+                fs.mkdtempSync(path.join(parent, 'caws-nongit-origin-'))
+              );
+              break;
+            }
+          }
+          f.put(path.join(f.root, 'nongit-parent-observations.json'), observations);
+          if (!nongitOrigin) throw new Error('No verified nongit, ungoverned temporary parent');
+          const origin = nongitOrigin;
+          expect(fs.existsSync(path.join(origin, '.git'))).toBe(false);
+          expect(fs.existsSync(path.join(origin, '.caws'))).toBe(false);
+          const args = ['-C', origin, 'rev-parse', '--show-toplevel'];
+          const observed = cp.spawnSync('/usr/bin/git', args, {
+            env: f.environment,
+            encoding: 'utf8',
+          });
+          f.put(path.join(f.root, 'nongit-origin-receipt.json'), {
+            command: '/usr/bin/git',
+            args,
+            status: observed.status,
+            signal: observed.signal,
+            error: observed.error?.message || null,
+            stdout: observed.stdout,
+            stderr: observed.stderr,
+          });
+          expect(observed.error).toBeUndefined();
+          expect(observed.signal).toBeNull();
+          expect(observed.status).toBe(128);
+          expect(observed.stderr).toMatch(/not a git repository/i);
           payload.cwd = origin;
         }
       }
@@ -597,8 +664,28 @@ test.each([
         }
       }
     } finally {
-      f.dispose();
+      try {
+        if (nongitOrigin) {
+          const entries = fs.readdirSync(nongitOrigin).sort();
+          if (entries.length === 0) fs.rmdirSync(nongitOrigin);
+          nongitAfter = {
+            origin: nongitOrigin,
+            entries,
+            removedEmptyOrigin: entries.length === 0,
+          };
+          f.put(path.join(f.root, 'nongit-origin-after.json'), nongitAfter);
+        }
+      } finally {
+        f.dispose();
+      }
     }
+    if (nongitAfter && nongitAfter.entries.length !== 0)
+      throw new Error(
+        'Unexpected writes retained in owned nongit origin: ' +
+          nongitOrigin +
+          ' ' +
+          JSON.stringify(nongitAfter.entries)
+      );
   },
   25000
 );
@@ -1078,13 +1165,43 @@ test.each(shortcutRoutes)(
           inputJson: JSON.stringify(payload),
           payload,
         };
-        const invocation = await prepareRuntimeInvocation(request, new AbortController().signal);
-        expect(invocation.active).toBe(true);
-        const { nativeResult } = await invocation.dispatch();
-        await invocation.acknowledgeHandoff(true);
-        lastStderr = Buffer.from(nativeResult.stderr).toString();
-        expect(nativeResult.exitCode).toBe(expectedExit);
-        return Buffer.from(nativeResult.stdout).toString();
+        const traceEnabled = process.env.CAWS_TEST_TRACE_HOOK_DISPATCH === '1';
+        const traceStart = traceEnabled ? process.hrtime.bigint() : 0n;
+        let lastStage = 'before_prepare';
+        let completionCode;
+        const traceStage = (stage) => {
+          if (!traceEnabled) return;
+          lastStage = stage;
+          process.stderr.write(
+            JSON.stringify({
+              ordinal: counter,
+              tool: ['apply_patch', 'Edit', 'Write'].includes(toolName) ? toolName : 'other',
+              event: event === 'pre_tool_use' ? 'pre_tool_use' : 'post_tool_use',
+              stage,
+              elapsedMs: Number((process.hrtime.bigint() - traceStart) / 1000000n),
+              ...(Number.isInteger(completionCode) ? { exitCode: completionCode } : {}),
+            }) + '\n'
+          );
+        };
+        try {
+          traceStage('before_prepare');
+          const invocation = await prepareRuntimeInvocation(request, new AbortController().signal);
+          traceStage('after_prepare');
+          expect(invocation.active).toBe(true);
+          traceStage('before_dispatch');
+          const { nativeResult } = await invocation.dispatch();
+          completionCode = nativeResult.exitCode;
+          traceStage('after_dispatch');
+          traceStage('before_acknowledge');
+          await invocation.acknowledgeHandoff(true);
+          traceStage('after_acknowledge');
+          lastStderr = Buffer.from(nativeResult.stderr).toString();
+          expect(nativeResult.exitCode).toBe(expectedExit);
+          return Buffer.from(nativeResult.stdout).toString();
+        } finally {
+          // A pending await may outlive Jest's case deadline and never reach finally.
+          traceStage('finally:' + lastStage);
+        }
       }
       const runPatch = (command, expectedExit = 0) =>
         runTool('apply_patch', { command }, expectedExit);

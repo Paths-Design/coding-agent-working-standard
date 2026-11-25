@@ -620,6 +620,11 @@ hash-chained `events.jsonl` is the audit trail; record acceptance evidence with
 
 ### Commit and push traps
 
+**Any agent may push `main` to origin without asking.** A branch push publishes
+no release; only a `caws-cli-v*` tag does. The permission covers a plain push of
+`main`. It does not cover tags, force-push or `--no-verify`, and the pre-push
+hook must pass.
+
 **lint-staged leaves a stale blob staged after a pathspec commit.** The
 pre-commit hook formats staged files. After `git commit -m <msg> -- <file>`, the
 commit and the working tree carry the formatted content while the index can keep
