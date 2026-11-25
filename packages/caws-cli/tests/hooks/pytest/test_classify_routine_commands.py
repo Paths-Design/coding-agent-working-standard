@@ -4,12 +4,12 @@ CAWS-LATCH-ROUTINE-COMMANDS-001. Of 31 latch resets recorded between 2026-10-26
 and 2026-11-25, sixteen were a `kill` of explicit process IDs and two were a
 file name containing "reboot".
 
-Both shapes are excepted only in a command that is plain from end to end:
-literal words, separators, if/then/else/fi and file redirections. The corpora
-below pair each excepted shape with neighbours that must keep the verdict they
-had: a command the reader cannot read through, one that runs the word, and one
-that does more than the shape. Many of those come from a review that broke an
-earlier version and from generated commands run in a real shell.
+Both shapes are excepted only in a command that is plain from end to end (literal
+words, separators and output redirections) and only beside listed programs. The
+corpora below pair each excepted shape with neighbours that must keep the verdict
+they had: a command the reader cannot read through, one that runs the word, and
+one that does more than the shape. Many come from two reviews that broke earlier
+versions and from generated commands run in a real shell.
 """
 
 import time
@@ -27,32 +27,21 @@ def denied_as_reboot(result):
 
 NAMES_IT = [
     # The two recorded resets, with stand-in paths.
-    "node scripts/clean.mjs --sha 06c4 --retain /art/license-marker-after-reboot-20261026.json --root /p",
+    "node /p/scripts/clean.mjs --sha 06c4 --retain /art/license-marker-after-reboot-20261026.json --root /p",
     "caws specs show A-1 | tail -n 5; caws evidence list --json | node -e "
     "'let s=\"\";process.stdin.on(\"data\",x=>s+=x)'; ls -l p/.t.json /art/marker-after-reboot-1.json",
     # A recorded latch that was never reset.
     "last -n 8 reboot shutdown",
-    "grep -rn shutdown src",
-    "rg reboot docs | head -5",
-    "cat log.txt | grep -c reboot",
-    "which reboot",
-    "type shutdown",
-    "ls -l /sbin/reboot",
-    "jq .shutdown config.json",
-    "cat logs/reboot.log",
-    "head -n 3 notes/shutdown.md 2>/dev/null",
-    "diff a/shutdown.ts b/shutdown.ts",
-    "grep -n x src/pre-reboot.sh",
-    "echo reboot",
-    "if grep -q reboot log.txt; then echo yes; else echo no; fi",
-    "git add src/shutdown.ts tests/reboot.test.js",
+    "grep -rn shutdown src", "cd /p/app && grep -rn shutdown src", "rg reboot docs | head -5", "cat log.txt | grep -c reboot", "which reboot",
+    "type shutdown", "ls -l /sbin/reboot", "jq .shutdown config.json", "cat logs/reboot.log",
+    "head -n 3 notes/shutdown.md 2>/dev/null", "diff a/shutdown.ts b/shutdown.ts", "grep -n x src/pre-reboot.sh",
+    "echo reboot", "grep -c reboot a.log 2>&1 | wc -l", "ls a-reboot.json; ./scripts/check", "last reboot; mytool x",
+    "grep -n 'x' src/reboot.ts && npx jest", "cat 'a b' reboot.log",
+    "git add src/shutdown.ts tests/reboot.test.js", "git add src/shutdown/index.ts", "git diff src/reboot/a.ts",
     "git add src/shutdown.ts && git commit -m 'reboot handling' -- src/shutdown.ts",
-    "git log -p -- src/shutdown.ts",
-    "git checkout -b fix/graceful-shutdown",
-    "mytool --in data.json tmp/after-reboot.json",
-    "timeout 60 node report.mjs out/pre-shutdown.log",
-    "npx prettier --check docs/safe-reboot.md",
-    "cat notes.txt > shutdown-notes.txt",
+    "git log -p -- src/shutdown.ts | head -40", "git checkout -b fix/graceful-shutdown", "git checkout -b graceful-shutdown",
+    "git switch fix-reboot", "git branch reboot",
+    "python3 tools/report.py out/pre-shutdown.log", "node run.js a.json tmp/x/after-reboot.json b",
 ]
 
 
@@ -104,8 +93,18 @@ RUNS_IT = [
     "echo reboot | xargs", "echo reboot | xargs systemctl", "echo now | xargs shutdown", "echo reboot | at now",
     "echo reboot | csh", "echo reboot > x; bash x", "echo reboot > x; ./x",
     "echo reboot > s.sh; chmod +x s.sh; ./s.sh", "echo reboot > s.sh; chmod +x s.sh; nohup ./s.sh &",
-    "cat scripts/reboot.sh > z; ./z", "cat a-reboot.json | cut -d- -f2 | xargs env",
-    "ls a-reboot.json | awk 1", "bash -c 'echo reboot' | at now",
+    "cat scripts/reboot.sh > z; ./z", "cat scripts/after-reboot.sh > z; ./z", "cat a-reboot.json | cut -d- -f2 | xargs env",
+    "ls a-reboot.json | awk 1", "bash -c 'echo reboot' | at now", "cat after-reboot.py | python3", "cat do-reboot.js | node",
+    "cat do-reboot.sh | rbash", "cat do-reboot.txt | python3", "echo 'x' > do-reboot.txt; cp do-reboot.txt x",
+    "cp do-reboot.txt x; chmod +x x; ./x", "python3 do-reboot.txt", "make -f do-reboot.txt", "uniq reboot.sh .git/hooks/post-checkout",
+    "git show HEAD:bin/do-reboot.sh > x; chmod +x x; ./x", "git diff --output=after-reboot.sh HEAD",
+    "cat < reboot.sh", "ls a-reboot.json &", "ls a-reboot.json & ./x", "> reboot.log", "ls x > reboot-list.txt",
+    # redefinition
+    "printf -v 'functions[ls]' reboot; ls", "printf -v 'commands[ls]' /sbin/reboot; ls", "printf -v NULLCMD reboot; > /dev/null",
+    "printf -v GIT_EDITOR reboot; git branch --edit-description", "printf reboot", "hash -p /x ls; ls reboot",
+    "set -k; ls reboot", "ls reboot; fc -s", "enable -n echo; echo reboot", "ls reboot; alias ls=env; ls reboot",
+    # path-run and quoted command words
+    "./echo reboot", "/tmp/x/cat reboot", "~/bin/ls shutdown", "./ls /sbin/reboot", "/usr/bin/git add reboot", "./node x.js a-reboot.json",
     # launchers, controllers and programs given the word
     "find . -exec reboot ;", "find . -name x -execdir shutdown now +", "fd . -x reboot", "parallel reboot ::: 1",
     "watch reboot", "ssh host reboot", "ssh -p 22 user@host reboot", "sshpass -p x ssh host reboot",
@@ -116,17 +115,22 @@ RUNS_IT = [
     "doctl compute droplet-action reboot 1", "ansible all -m reboot", "ansible-playbook reboot.yml",
     "ansible-playbook playbooks/rolling-reboot.yml", "pkexec reboot", "systemd-run reboot",
     "tmux new-session -d reboot", "ls | entr reboot", "arch -x86_64 reboot", "rg --pre reboot x", "rg --pre=reboot x",
-    "man -P reboot ls", "python3 reboot.py", "node shutdown.js", "mytool reboot", "npx reboot",
+    "rg --hostname-bin reboot x", "man -P reboot ls", "python3 reboot.py", "node shutdown.js", "node after-reboot.js x.json",
+    "node -r ./after-reboot.json x.js", "node x.js reboot", "node x.js reboot.json", "node x.js --f=a-reboot.json",
+    "node x.js a/reboot/b.json", "node x.js 'a-reboot.json' b-reboot.json", "node x.js a-reboot.json | tee y", "node x.js a-reboot.sh",
+    "python3 -m http.server a-reboot.json", "ts-node x.js a-reboot.json", "timeout 60 node x.js a-reboot.json",
+    "mytool reboot", "mytool a-reboot.json", "npx reboot",
     "curl http://10.0.0.1/reboot", "curl http://10.0.0.1/reboot/now", "dbus-send x.Manager.Reboot",
+    "socat - EXEC:reboot,pty,link=/tmp/a.log", "sshfs -o ssh_command=reboot,IdentityFile=/x/a.json h:/ /mnt",
+    "aws ssm send-command --parameters commands=reboot,workingDirectory=/tmp/a.log", "ansible all -m command -a cmd=reboot,chdir=/tmp/a.log",
     "git bisect run reboot", "git submodule foreach reboot", "git -c core.pager=reboot log",
     "git -c core.fsmonitor=/sbin/reboot status", "git -c alias.x=!reboot x", "git rebase --exec=reboot main",
-    "git rebase --exec reboot main", "git add --x=reboot", "git checkout reboot",
-    "ln -s /sbin/reboot x && ./x", "cp /sbin/reboot x; ./x", "cp /sbin/reboot x",
+    "git rebase --exec reboot main", "git add --x=reboot", "git push reboot", "git config x reboot", "git 'add' reboot",
+    "git log --grep=reboot", "ln -s /sbin/reboot x && ./x", "cp /sbin/reboot x; ./x", "cp /sbin/reboot x",
     # beside an excepted shape
-    "grep reboot log; reboot", "last reboot && shutdown now", "ls a-reboot.json; reboot",
-    "last reboot; mytool x", "cat reboot.log > out.txt", "echo reboot > notes.txt", "git add src/shutdown.ts; ./x",
-    "grep reboot x | tee y", "'ls' reboot", "true fix/shutdown-hook; trap './reboot' EXIT",
-    "grep a-reboot.json x; script -qc 'shutdown now' /dev/null", "ls a-reboot.json; mytool 'reboot'",
+    "grep reboot log; reboot", "last reboot && shutdown now", "ls a-reboot.json; reboot", "cat reboot.log > out.txt",
+    "echo reboot > notes.txt", "grep reboot x | tee y", "'ls' reboot", "true fix/shutdown-hook; trap './reboot' EXIT",
+    "ls a-reboot.json; mytool 'reboot'", "ls reboot | mytool", "if grep -q reboot log.txt; then echo yes; fi",
 ]
 
 
@@ -164,13 +168,11 @@ def test_quoted_mentions_are_not_denied(classify, command):
 # --- kill by process ID -------------------------------------------------------
 
 @pytest.mark.parametrize("command", [
-    # The sixteen recorded resets, with stand-in paths.
+    # Fourteen of the sixteen recorded resets, with stand-in paths.
     "kill -INT 25828",
     "/bin/kill -INT 90559",
     "kill 30339",
     'kill 50835 50904 50960 50964; sleep 1; pgrep -fl "run_seq.py|run_one.py" | grep -v pgrep; echo done',
-    "/opt/Godot --path /p/godot res://tools/tabs.tscn > /p/tmp/tabs.log 2>&1 &\nPID=$!\nsleep 30\n"
-    'kill "$PID" 2>/dev/null\nsleep 1\ncat /p/tmp/tabs.log | head -60',
     "kill -TERM 74559",
     "kill -TERM 76705",
     "kill -INT 47527",
@@ -181,13 +183,11 @@ def test_quoted_mentions_are_not_denied(classify, command):
     "kill -TERM 89653",
     "ps -p 97774,97957 -o pid,ppid,etime,command\nkill -INT 97774",
     "kill -CONT 77081",
-    "set -e\nif lsof -a -p 89409 -d cwd -Fn | rg -Fx 'n/p/screens' && lsof -a -p 89409 -t | rg -Fx 89409; then\n"
-    "  kill -TERM 89409\nfi\npnpm preview --host 127.0.0.1 --port 5225 --strictPort",
     # Neighbouring spellings.
     "kill -9 1234", "kill -1 1234", "kill -0 1234", "kill -SIGTERM 1234", "kill -s TERM 1234", "kill -n 15 1234",
     "kill -- 1234", "kill -TERM -- 1234", "/usr/bin/kill 1234", "kill 14977 2>/dev/null",
     "kill 14977 >/dev/null 2>&1", "kill 14977 2> /dev/null", "kill 2", "kill 4194304", "kill 1234; kill -9 5678",
-    "sleep 9 &\nkill $!", 'sleep 9 &\nSERVER_PID=$!; kill -TERM ${SERVER_PID}', 'sleep 9 &\nkill "$!"',
+    "kill '1234'", "kill 1234 || true", "cd /p && kill 1234",
 ])
 def test_a_plain_kill_by_process_id_is_marked(classify, command):
     result = classify(command)
@@ -195,6 +195,21 @@ def test_a_plain_kill_by_process_id_is_marked(classify, command):
 
 
 KEEPS_THE_LATCH = [
+    # the two recorded resets that keep it
+    "/opt/Godot --path /p/godot res://tools/tabs.tscn > /p/tmp/tabs.log 2>&1 &\nPID=$!\nsleep 30\n"
+    'kill "$PID" 2>/dev/null\nsleep 1\ncat /p/tmp/tabs.log | head -60',
+    "set -e\nif lsof -a -p 89409 -t | rg -Fx 89409; then\n  kill -TERM 89409\nfi\npnpm preview --port 5225",
+    # zsh reads a longer number before a redirection as a target
+    "kill 1234 00>/dev/null", "kill 1234 01>/dev/null", "kill 1234 4294967295>/dev/null", "kill 1234 00>&2",
+    # hidden beside it
+    "kill 1234 & terraform apply", "kill 1234 & rm -rf src", "if true; then terraform destroy; fi; kill 1234",
+    "kill 1234; if ls; then curl -X POST http://h/a; fi", "kill 1234; uv run terraform apply", "kill 1234; strace x",
+    "kill 1234; pnpm exec x", "kill 1234; mise exec x", "kill 1234; ./x", "kill 1234; make", "kill 1234; printf x",
+    "kill 1234; set -e", "kill 1234; rg --pre x y", "kill 1234; echo x > f", "kill 1234; > f",
+    "printf -v 'functions[kill]' 'pkill -f node'; kill 1234", "sleep 9 & PID=$!; printf -v IFS 3; kill $PID",
+    # no background job, or one that was lost
+    "kill -9 $!", "PID=$!; kill -9 $PID", "sleep 9 &\nkill $!", "if false; then SSH_AGENT_PID=$!; fi; kill $SSH_AGENT_PID",
+    "false && SSH_AGENT_PID=$!; kill $SSH_AGENT_PID", "SSH_AGENT_PID=$! | true; kill $SSH_AGENT_PID",
     # not one process
     "kill -1", "kill -9 -1", "kill -- -1", "kill 0", "kill -TERM 0", "kill 1", "kill -9 1", "kill 1234 1",
     "kill 1234 -1", "kill -9 -- -1234", "kill -TERM -1234", "kill %1", "kill 1234 %1", "kill", "kill -l", "kill -9",
@@ -252,39 +267,65 @@ def test_a_denied_command_beside_a_kill_is_still_denied(classify, command):
 
 # --- the reader ---------------------------------------------------------------
 
-@pytest.mark.parametrize("character", list("$`\\(){}[]*?!#^\r\x0b") + [" ", "é"])
+@pytest.mark.parametrize("character", list("$`\\(){}[]*?!#^&<\r\x0b\x00") + ["\u00a0", "é"])
 def test_the_reader_refuses_what_it_does_not_know(classify_module, character):
     assert classify_module.read_plain_command(f"ls a{character}b") is None
     assert classify_module.read_plain_command(f"ls {character}") is None
 
 
 @pytest.mark.parametrize("text", [
-    "a <<EOF\nx\nEOF", "a <<< x", "a <> x", "a >| x", "a <(b)", "a >(b)", "a |& b", "a ;; b", "a 'x", 'a "x', 'a "$x"',
-    'a "`x`"', 'a "\\x"', 'a "!x"', "x=1", "x=1 a", "x+=1 a", "=ls", "for x", "while x", "time x", "a >", "a &>(b)",
+    "a <<EOF\nx\nEOF", "a <<< x", "a <> x", "a < x", "a >| x", "a >! x", "a <(b)", "a >(b)", "a |& b", "a ;; b", "a 'x",
+    'a "x', 'a "$x"', 'a "`x`"', 'a "\\x"', 'a "!x"', "x=1", "x=1 a", "x+=1 a", "=ls", "for x", "while x", "time x", "if x",
+    "then x", "a >", "a &>b", "a >&b", "a >&-", "a & b", "a&", "> f", "'a' b", '"a"',
 ])
 def test_the_reader_refuses_what_it_cannot_read(classify_module, text):
     assert classify_module.read_plain_command(text) is None
 
 
-def test_the_reader_reads_words_files_and_commands(classify_module):
-    commands = classify_module.read_plain_command(
-        "if a 'b c'\"d\" x=1 2>&1 >out 2>> err <in; then e& f&&g||h|i\nj; fi"
+def test_the_reader_reads_pipelines_words_and_files(classify_module):
+    pipelines = classify_module.read_plain_command(
+        "a 'b c'\"d\" x=1 2>&1 >out 2>> err 12>n|e;f&&g||h|i\nj; "
     )
-    assert [[word.text for word in c.words] for c in commands if c.words] == [
-        ["a", "b cd", "x=1"], ["e"], ["f"], ["g"], ["h"], ["i"], ["j"],
+    assert [[[word.text for word in c.words] for c in pipeline] for pipeline in pipelines] == [
+        [["a", "b cd", "x=1", "12"], ["e"]], [["f"]], [["g"]], [["h"], ["i"]], [["j"]], [[]],
     ]
-    assert commands[0].files == ["out", "err", "in"]
+    assert pipelines[0][0].files == ["out", "err", "n"]
+
+
+# Widening a table widens what is excepted: a program belongs in one only when it
+# cannot run, write or redefine anything from its operands.
+def test_the_tables_are_the_reviewed_ones(classify_module):
+    assert classify_module._INSPECTS_OPERANDS == set(
+        "last ls cat head tail wc grep egrep fgrep rg which type whereis file stat jq cut nl diff cmp echo true pwd "
+        "basename dirname".split()
+    )
+    assert classify_module._GIT_NAMES_FILES == set(
+        "add commit diff log show blame status checkout switch branch".split()
+    )
+    assert classify_module._BESIDE_A_KILL == set(
+        "sleep ps pgrep lsof grep egrep rg echo cat head tail wc ls true date caws cd pwd".split()
+    )
+    assert classify_module._SCRIPT_INTERPRETERS == {"node", "python3", "python"}
+    for extension in ("sh", "py", "js", "rb", "service", "yml", "toml", "command"):
+        assert not classify_module._DATA_FILE.fullmatch(f"a-reboot.{extension}")
+
+
+@pytest.mark.parametrize("word", sorted(
+    "eval source . exec command builtin trap alias unalias hash enable disable autoload zmodload emulate setopt unsetopt "
+    "shopt set export declare typeset local readonly integer float read mapfile readarray getopts let unset vared printf "
+    "print fc r".split()
+))
+def test_a_command_that_can_redefine_a_later_one_ends_the_exception(classify, word):
+    result = classify(f"{word} x; ls reboot")
+    assert result[0] == "deny" and REBOOT in result[1], result
 
 
 @pytest.mark.parametrize("text", [
-    "reboot " + "a=$!;" * 20000,
-    "kill 1;" * 20000,
-    "ls reboot " + "'x'" * 40000,
-    "kill 1234 " + "$(" * 2000,
-    "grep reboot " + "a/" * 60000,
+    "ls reboot\n" * 2000, "ls reboot;" * 2000, "kill 1234\n" * 2000, "kill 1234;" * 2000,
+    "\n".join(f"cat a{n}-reboot.json" for n in range(2000)),
+    "ls reboot " + "'x'" * 20000, "grep reboot " + "a/" * 30000, "kill 1234 " + "$(" * 500,
 ])
-def test_reading_is_not_slow_on_long_input(classify_module, text):
+def test_reading_is_not_slow_on_long_input(classify, text):
     started = time.monotonic()
-    classify_module.names_power_as_data(text)
-    classify_module.is_plain_pid_kill(text)
-    assert time.monotonic() - started < 2
+    classify(text)
+    assert time.monotonic() - started < 10

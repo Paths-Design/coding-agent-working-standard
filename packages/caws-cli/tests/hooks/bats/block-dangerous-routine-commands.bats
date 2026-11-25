@@ -68,7 +68,6 @@ assert_usable() {
   use_the_warning
   local command
   for command in '/bin/kill -INT 90559' 'kill -TERM 64436 70156' 'kill -CONT 77081' \
-    $'server > out.log 2>&1 &\nPID=$!\nsleep 30\nkill "$PID" 2>/dev/null' \
     $'ps -p 97774 -o pid,command\nkill -INT 97774' 'kill -TERM 33060 && caws status'; do
     call "$command"
     assert_output --partial '"decision": "block"'
@@ -114,7 +113,8 @@ assert_usable() {
   for command in 'kill -9 -1' 'kill 0' 'kill -- -1234' 'kill %1' 'kill $(pgrep node)' \
     'pkill -f worker' 'killall node' 'kill 1234; pkill -f worker' 'pkill -f worker; kill 1234' \
     'kill 1234 && docker run alpine' 'kill 4294967295' 'kill -s {TERM,-1} 1234' './kill 1234' \
-    'kill 1234; timeout 5 pkill -f worker' "bash -c 'kill 1234'"; do
+    'kill 1234; timeout 5 pkill -f worker' "bash -c 'kill 1234'" 'kill 1234 00>/dev/null' \
+    'kill 1234 & terraform apply' $'server &\nPID=$!\nkill "$PID"' 'kill 1234; ./x'; do
     SID="routine-$$-$BATS_TEST_NUMBER-${command//[^a-z0-9]/_}"
     use_the_warning
     call "$command"

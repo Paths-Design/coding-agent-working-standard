@@ -2914,66 +2914,55 @@ def strip_quoted_regions(raw: str) -> str:
 #
 # Two routine shapes lock sessions: a file name containing "reboot", and a kill
 # of explicit process IDs. Both are excepted only in a command that is plain
-# from end to end, so that what it runs can be read from its words. Anything the
-# reader does not know leaves the verdict as it was.
+# from end to end, so that what it runs can be read from its words, and only
+# beside programs named here. Anything else keeps the verdict it had.
 # ---------------------------------------------------------------------------
 
 SYSTEM_POWER_REASON = "system shutdown/reboot"
 _POWER_MENTION = re.compile(r"(?:shutdown|reboot)", re.IGNORECASE)
-_PLAIN_SEPARATOR = re.compile(r"&&|\|\||;(?!;)|\|(?!&)|&(?![>&])|\n")
-_PLAIN_REDIRECT = re.compile(r"(?:\d*|&)>{1,2}(?![>&(|])|\d*<(?![<>&(])")
-_PLAIN_DUPLICATE = re.compile(r"\d*[<>]&(?:\d|-)(?=[\s;|&]|$)")
+_PLAIN_SEPARATOR = re.compile(r"&&|\|\||;(?!;)|\|(?!&)|\n")
+# One digit at most: zsh reads a longer number before a redirection as a word.
+_PLAIN_REDIRECT = re.compile(r"[0-9]?>{1,2}(?![>&(|!])")
+_PLAIN_DUPLICATE = re.compile(r"[0-9]?>&[0-9](?=[ \t\n;|]|$)")
 _PLAIN_CHARACTERS = re.compile(r"[A-Za-z0-9_@%+=:,./~-]+")
 _PLAIN_DOUBLE_QUOTED = re.compile(r'"[^"$`\\!]*"')
 _PLAIN_SINGLE_QUOTED = re.compile(r"'[^']*'")
 _PLAIN_ASSIGNMENT = re.compile(r"[A-Za-z_]\w*\+?=")
-_PLAIN_END_OF_WORD = re.compile(r"(?=[\s;|&<>]|$)")
-_PID_VARIABLE = re.compile(
-    r"\"?\$(?:\{(!|[A-Za-z_]\w*)\}|(!|[A-Za-z_]\w*))\"?(?=[\s;|&<>]|$)"
-)
-_PID_ASSIGNMENT = re.compile(r"((?:\w*_)?(?:PID|pid))=\$!(?=[\s;|&]|$)")
-_PLAIN_RESERVED: set[str] = {"if", "then", "elif", "else", "fi"}
-_OTHER_RESERVED: set[str] = {
-    "for", "foreach", "while", "until", "do", "done", "case", "esac", "select", "repeat",
-    "function", "time", "coproc", "always", "end", "in", "noglob", "nocorrect",
+_PLAIN_END_OF_WORD = re.compile(r"(?=[ \t\n;|>]|&&|$)")
+_RESERVED_WORDS: set[str] = {
+    "if", "then", "elif", "else", "fi", "for", "foreach", "while", "until", "do", "done",
+    "case", "esac", "select", "repeat", "function", "time", "coproc", "always", "end", "in",
+    "noglob", "nocorrect",
 }
-
-# Run their operands or their input, or change what a later command word means.
-_RUNS_OTHER_COMMANDS: set[str] = {
-    "sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "pwsh", "eval", "source", ".",
-    "exec", "command", "builtin", "env", "nohup", "nice", "ionice", "timeout", "gtimeout",
-    "setsid", "stdbuf", "unbuffer", "caffeinate", "arch", "watch", "entr", "xargs", "parallel",
-    "find", "fd", "sudo", "doas", "su", "runuser", "pkexec", "chroot", "nsenter", "unshare",
-    "flock", "script", "expect", "osascript", "at", "batch", "crontab", "launchctl", "systemctl",
-    "systemd-run", "ssh", "sshpass", "mosh", "docker", "docker-compose", "podman", "kubectl",
-    "tmux", "screen", "busybox", "toybox", "awk", "gawk", "mawk", "sed", "gsed", "make", "just",
-    "npx", "bunx", "uvx", "pipx", "trap", "alias", "unalias", "hash", "enable", "disable",
-    "autoload", "zmodload", "emulate", "setopt", "unsetopt", "shopt", "export", "declare",
-    "typeset", "local", "readonly", "read", "mapfile", "readarray", "getopts", "let", "unset",
-    "vared", "integer", "float",
-}
-_INTERPRETERS = re.compile(r"(?:python[0-9.]*|node|deno|bun|ruby|perl|php|lua)")
-_PROCESS_KILLERS: set[str] = {"kill", "pkill", "killall", "skill", "xkill", "taskkill"}
-# Print or compare what they are given and run none of it.
+# Print or compare what they are given, and neither run nor write any of it.
 _INSPECTS_OPERANDS: set[str] = {
     "last", "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "which", "type",
-    "whereis", "file", "stat", "jq", "cut", "uniq", "nl", "diff", "cmp", "echo", "printf",
-    "true", "pwd", "basename", "dirname",
+    "whereis", "file", "stat", "jq", "cut", "nl", "diff", "cmp", "echo", "true", "pwd",
+    "basename", "dirname",
 }
 # rg is the one of them that can be told to run a program.
 _RUNS_A_PROGRAM_OPTION = re.compile(r"--(?:pre|hostname-bin)(?:=.*)?")
+# Their operands are files, branches and revisions.
 _GIT_NAMES_FILES: set[str] = {
     "add", "commit", "diff", "log", "show", "blame", "status", "checkout", "switch", "branch",
 }
-# Run text they read as a program.
-_RUNS_TEXT: set[str] = {
-    "sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "pwsh", "eval", "source", ".",
-    "xargs", "parallel", "at", "batch", "crontab", "ssh", "mosh", "expect", "osascript",
-    "awk", "gawk", "mawk", "sed", "gsed", "find", "fd",
+_SCRIPT_INTERPRETERS: set[str] = {"node", "python3", "python"}
+_SCRIPT_FILE = re.compile(r"[A-Za-z0-9_.][A-Za-z0-9_./-]*\.(?:js|mjs|cjs|py)|/[A-Za-z0-9_./-]+\.(?:js|mjs|cjs|py)")
+_DATA_FILE = re.compile(
+    r"[A-Za-z0-9_./][A-Za-z0-9_./-]*\."
+    r"(?:json|jsonl|ndjson|md|txt|log|csv|tsv|diff|patch|html|xml|svg|png|jpg|jpeg|gif|pdf)"
+)
+# Change what a later command word means, or run text.
+_CHANGES_LATER_COMMANDS: set[str] = {
+    "eval", "source", ".", "exec", "command", "builtin", "trap", "alias", "unalias", "hash",
+    "enable", "disable", "autoload", "zmodload", "emulate", "setopt", "unsetopt", "shopt", "set",
+    "export", "declare", "typeset", "local", "readonly", "integer", "float", "read", "mapfile",
+    "readarray", "getopts", "let", "unset", "vared", "printf", "print", "fc", "r",
 }
-_DATA_EXTENSIONS: set[str] = {
-    "json", "jsonl", "ndjson", "md", "txt", "log", "out", "err", "csv", "tsv", "diff", "patch",
-    "html", "xml", "svg", "png", "jpg", "jpeg", "gif", "pdf",
+# Wait, look or print; none of them starts, stops or changes anything.
+_BESIDE_A_KILL: set[str] = {
+    "sleep", "ps", "pgrep", "lsof", "grep", "egrep", "rg", "echo", "cat", "head", "tail", "wc",
+    "ls", "true", "date", "caws", "cd", "pwd",
 }
 
 
@@ -2981,14 +2970,12 @@ _DATA_EXTENSIONS: set[str] = {
 class _PlainWord:
     text: str
     quoted: bool = False
-    variable: str | None = None
 
 
 @dataclass
 class _PlainCommand:
     words: list[_PlainWord] = field(default_factory=list)
     files: list[str] = field(default_factory=list)
-    assigned: list[str] = field(default_factory=list)
 
 
 def _read_plain_word(raw: str, at: int) -> tuple[_PlainWord, int] | None:
@@ -3009,26 +2996,22 @@ def _read_plain_word(raw: str, at: int) -> tuple[_PlainWord, int] | None:
     return None if i == at or raw[at] == "=" else (_PlainWord(text, quoted), i)
 
 
-def read_plain_command(raw: str, pid_variables: bool = False) -> list[_PlainCommand] | None:
-    """The simple commands of a command made only of literal words, separators,
-    if/then/else/fi and file redirections. None when it holds anything else.
-
-    `pid_variables` also admits NAME=$! on its own, for a name ending in PID, and
-    a whole word that is $! or such a name.
-    """
-    commands = [_PlainCommand()]
+def read_plain_command(raw: str) -> list[list[_PlainCommand]] | None:
+    """The pipelines of a command made only of literal words, `;`, `&&`, `||`, `|`,
+    newlines and output redirections. None when it holds anything else."""
+    pipelines = [[_PlainCommand()]]
     i = 0
     while i < len(raw):
         if raw[i] in " \t":
             i += 1
             continue
-        current = commands[-1]
+        current = pipelines[-1][-1]
         duplicate = _PLAIN_DUPLICATE.match(raw, i)
+        redirect = None if duplicate else _PLAIN_REDIRECT.match(raw, i)
+        separator = _PLAIN_SEPARATOR.match(raw, i)
         if duplicate:
             i = duplicate.end()
-            continue
-        redirect = _PLAIN_REDIRECT.match(raw, i)
-        if redirect:
+        elif redirect:
             i = redirect.end()
             while i < len(raw) and raw[i] in " \t":
                 i += 1
@@ -3037,113 +3020,91 @@ def read_plain_command(raw: str, pid_variables: bool = False) -> list[_PlainComm
                 return None
             current.files.append(target[0].text)
             i = target[1]
-            continue
-        separator = _PLAIN_SEPARATOR.match(raw, i)
-        if separator:
-            commands.append(_PlainCommand())
+        elif separator:
+            if separator.group() == "|":
+                pipelines[-1].append(_PlainCommand())
+            else:
+                pipelines.append([_PlainCommand()])
             i = separator.end()
-            continue
-        if pid_variables:
-            assignment = None if current.words else _PID_ASSIGNMENT.match(raw, i)
-            if assignment:
-                current.assigned.append(assignment.group(1))
-                i = assignment.end()
-                continue
-            variable = _PID_VARIABLE.match(raw, i) if current.words else None
-            if variable and variable.group().count('"') in (0, 2):
-                current.words.append(
-                    _PlainWord(variable.group(), True, variable.group(1) or variable.group(2)))
-                i = variable.end()
-                continue
-        word = _read_plain_word(raw, i)
-        if word is None:
-            return None
-        if not current.words and not word[0].quoted:
-            if _PLAIN_ASSIGNMENT.match(raw, i) or word[0].text in _OTHER_RESERVED:
+        else:
+            word = _read_plain_word(raw, i)
+            if word is None:
                 return None
-            if word[0].text in _PLAIN_RESERVED:
-                i = word[1]
-                continue
-        current.words.append(word[0])
-        i = word[1]
-    return commands
-
-
-def _plain_program(command: _PlainCommand) -> str:
-    text = command.words[0].text
-    return "." if text == "." else command_basename(text).lower()
-
-
-def _power_mention_kind(text: str) -> str | None:
-    """How an unquoted operand or file name carries the word: None when it does not.
-
-    `bare` is the word itself, an option, a URL, or anything that is not a file
-    name; `named` is a file of exactly that name; `data` and `part` are longer
-    file names, with and without the extension of a data file.
-    """
-    if not _POWER_MENTION.search(text):
+            if not current.words and (
+                word[0].quoted or word[0].text in _RESERVED_WORDS
+                or _PLAIN_ASSIGNMENT.match(word[0].text)
+            ):
+                return None
+            current.words.append(word[0])
+            i = word[1]
+    # A redirection alone runs a program of the shell's choosing in zsh.
+    if any(command.files and not command.words for pipeline in pipelines for command in pipeline):
         return None
-    components = text.rsplit("=", 1)[-1].split("/")
-    stem, dot, extension = components[-1].rpartition(".")
-    if (
-        text.startswith("-") or "://" in text or "::" in text
-        or any(_POWER_MENTION.fullmatch(component) for component in components)
-        or _POWER_MENTION.search(extension if dot else "")
-        or not ("/" in text or (dot and stem and re.fullmatch(r"[A-Za-z0-9]{1,8}", extension)))
-    ):
-        return "bare"
-    if dot and _POWER_MENTION.fullmatch(stem):
-        return "named"
-    return "data" if dot and extension.lower() in _DATA_EXTENSIONS else "part"
+    return pipelines
+
+
+def _only_inspects(command: _PlainCommand) -> bool:
+    return command.words[0].text in _INSPECTS_OPERANDS and not any(
+        _RUNS_A_PROGRAM_OPTION.fullmatch(word.text) for word in command.words
+    )
+
+
+def _names_files_to_git(command: _PlainCommand) -> bool:
+    words = command.words
+    return (
+        words[0].text == "git" and len(words) > 1
+        and not words[1].quoted and words[1].text in _GIT_NAMES_FILES
+        and not any(word.text.startswith("-") and _POWER_MENTION.search(word.text) for word in words)
+    )
+
+
+def _gives_a_script_a_data_file(command: _PlainCommand) -> bool:
+    words = command.words
+    return (
+        words[0].text in _SCRIPT_INTERPRETERS and len(words) > 2
+        and not words[1].quoted and bool(_SCRIPT_FILE.fullmatch(words[1].text))
+        and not _POWER_MENTION.search(words[1].text)
+        and all(
+            not word.quoted and bool(_DATA_FILE.fullmatch(word.text))
+            and not any(_POWER_MENTION.fullmatch(part.split(".")[0]) for part in word.text.split("/"))
+            for word in words[2:] if _POWER_MENTION.search(word.text)
+        )
+    )
 
 
 def names_power_as_data(raw_command: str) -> bool:
     """Whether a plain command only names reboot or shutdown.
 
-    Excepted are: operands of programs that only inspect them, with nothing
-    written; file and branch names given to a few git subcommands; and, for any
-    program, a longer name of a data file. A command that runs text it reads, or
-    whose command word carries the mention, is never excepted.
+    Each pipeline that carries the word, quoted or not, must write no file and be
+    made of programs that only inspect their operands or of git subcommands that
+    take files and branches, or be one script given a longer name of a data file.
+    Nothing in the command may be named for the word or change what a later
+    command word means.
     """
-    commands = read_plain_command(raw_command)
-    if commands is None:
+    pipelines = read_plain_command(raw_command)
+    if pipelines is None:
         return False
-    kinds: set[str] = set()
-    inspected, written = True, False
-    for command in commands:
-        written = written or not set(command.files) <= {"/dev/null"}
-        own = {_power_mention_kind(name) for name in command.files}
-        if any(command_basename(word.text).lower() in _RUNS_TEXT or word.text == "."
-               for word in command.words if word.text):
+    for pipeline in pipelines:
+        commands = [command for command in pipeline if command.words]
+        if any(
+            _POWER_MENTION.search(command.words[0].text)
+            or command.words[0].text in _CHANGES_LATER_COMMANDS
+            for command in commands
+        ):
             return False
-        if command.words:
-            first = command.words[0]
-            if first.quoted or _POWER_MENTION.search(first.text):
-                return False
-            own |= {_power_mention_kind(word.text) for word in command.words[1:] if not word.quoted}
-            program = _plain_program(command)
-            inspects = program in _INSPECTS_OPERANDS and not any(
-                _RUNS_A_PROGRAM_OPTION.fullmatch(word.text) for word in command.words
-            )
-            git = (
-                program == "git" and len(command.words) > 1
-                and command.words[1].text in _GIT_NAMES_FILES
-            )
-            inspected = inspected and (inspects or (git and "bare" not in own))
-            if "part" in own and not (inspects or git):
-                return False
-            # The pattern does not see a quoted mention, so one alone is not denied.
-            # Here the verdict is already a deny: keep it unless the word is inert.
-            if not (inspects or git) and any(
-                word.quoted and _POWER_MENTION.search(word.text) for word in command.words
-            ):
-                return False
-        elif "part" in own:
+        if not any(
+            _POWER_MENTION.search(text)
+            for command in commands
+            for text in [word.text for word in command.words] + command.files
+        ):
+            continue
+        if any(set(command.files) - {"/dev/null"} for command in commands):
             return False
-        kinds |= {kind for kind in own if kind}
-    if kinds & {"bare", "named"}:
-        # The word itself: no part of the command may do more than inspect.
-        return inspected and not written
+        if all(_only_inspects(command) or _names_files_to_git(command) for command in commands):
+            continue
+        if len(commands) == 1 and _gives_a_script_a_data_file(commands[0]):
+            continue
+        return False
     return True
 
 
@@ -3152,72 +3113,43 @@ _PROCESS_ID = re.compile(r"[1-9][0-9]{0,6}")
 _MAX_PROCESS_ID = 4194304
 
 
-def _kills_explicit_processes(command: _PlainCommand, background: set[str]) -> bool:
-    operands = command.words[1:]
-    if not set(command.files) <= {"/dev/null"}:
-        return False
-    if len(operands) > 1 and operands[0].text in {"-s", "-n"}:
-        if operands[1].variable or not _KILL_SIGNAL.fullmatch(operands[1].text):
+def _kills_explicit_processes(command: _PlainCommand) -> bool:
+    operands = [word.text for word in command.words[1:]]
+    if len(operands) > 1 and operands[0] in {"-s", "-n"}:
+        if not _KILL_SIGNAL.fullmatch(operands[1]):
             return False
         operands = operands[2:]
-    elif operands and operands[0].text.startswith("-") and _KILL_SIGNAL.fullmatch(
-        operands[0].text[1:]
-    ):
+    elif operands and operands[0].startswith("-") and _KILL_SIGNAL.fullmatch(operands[0][1:]):
         operands = operands[1:]
-    if operands and operands[0].text == "--":
+    if operands and operands[0] == "--":
         operands = operands[1:]
     return bool(operands) and all(
-        word.variable == "!" or word.variable in background
-        if word.variable
-        else bool(_PROCESS_ID.fullmatch(word.text)) and 1 < int(word.text) <= _MAX_PROCESS_ID
-        for word in operands
+        _PROCESS_ID.fullmatch(text) and 1 < int(text) <= _MAX_PROCESS_ID for text in operands
     )
 
 
 def is_plain_pid_kill(raw_command: str) -> bool:
-    """Whether a plain command kills only explicit processes and launches nothing
-    that could hide another operation.
-
-    A target is an ID above 1 or the last background job of the same command.
-    Process groups, job specs, every process, and targets read from anywhere else
-    are not explicit. Another operation the classifier flags is the caller's check.
-    """
-    commands = read_plain_command(raw_command, pid_variables=True)
-    if commands is None:
+    """Whether a plain command does nothing but kill explicit process IDs, beside
+    programs that only wait, look or print. Process groups, job specs, every
+    process, and targets read from anywhere are not explicit."""
+    pipelines = read_plain_command(raw_command)
+    if pipelines is None:
         return False
-    named = {name for command in commands for name in command.assigned}
-    background: set[str] = set()
     kills = False
-    for command in commands:
-        if command.assigned:
-            if command.words or command.files:
+    for pipeline in pipelines:
+        for command in pipeline:
+            if not command.words:
+                continue
+            if set(command.files) - {"/dev/null"}:
                 return False
-            background.update(command.assigned)
-            continue
-        if not command.words:
-            if command.files:
+            if command.words[0].text in {"kill", "/bin/kill", "/usr/bin/kill"}:
+                if not _kills_explicit_processes(command):
+                    return False
+                kills = True
+            elif command.words[0].text not in _BESIDE_A_KILL or any(
+                _RUNS_A_PROGRAM_OPTION.fullmatch(word.text) for word in command.words
+            ):
                 return False
-            continue
-        first, rest = command.words[0], command.words[1:]
-        if first.quoted:
-            return False
-        if first.text in {"kill", "/bin/kill", "/usr/bin/kill"}:
-            if not _kills_explicit_processes(command, background):
-                return False
-            kills = True
-            continue
-        name = _plain_program(command)
-        if (
-            name in _RUNS_OTHER_COMMANDS
-            or _INTERPRETERS.fullmatch(name)
-            or any(command_basename(word.text).lower() in _PROCESS_KILLERS
-                   for word in [first, *rest] if word.text)
-            or (name == "set" and not all(
-                re.fullmatch(r"[-+][a-z]+|pipefail", word.text) for word in rest))
-            # Nothing else may use or name the variable a kill reads.
-            or any(word.variable or word.text in named for word in rest)
-        ):
-            return False
     return kills
 
 
@@ -3589,6 +3521,8 @@ def classify_command(
     worst_source = "unknown"
     worst_enforcement = "pass"
     flagged_otherwise = False
+    only_names_power: bool | None = None
+    plain_pid_kill: bool | None = None
 
     # Load the user adapter sidecar once and thread it through recursion.
     adapters = _adapters if _adapters is not None else load_command_adapters(repo_root)
@@ -3694,8 +3628,11 @@ def classify_command(
             if re.search(pattern, segment_surface, re.IGNORECASE):
                 # A nested shell's or a substitution's text is never excepted:
                 # what surrounds it can run what it prints.
-                if desc == SYSTEM_POWER_REASON and _depth == 0 and names_power_as_data(raw_command):
-                    continue
+                if desc == SYSTEM_POWER_REASON and _depth == 0:
+                    if only_names_power is None:
+                        only_names_power = names_power_as_data(raw_command)
+                    if only_names_power:
+                        continue
                 escalate("deny", desc, "regex")
 
         # --- Hard-block patterns over RAW argument values (Entry 40) ---
@@ -3810,12 +3747,11 @@ def classify_command(
                 # command human confirmation at the hook boundary (A1). A capability
                 # deny still derives to block. source=capability, or pid_kill when
                 # the ask is a kill and the whole command is a plain one.
-                pid_kill = (
-                    cap_result[0] == "ask" and fact.executable == "kill"
-                    and _depth == 0 and is_plain_pid_kill(raw_command)
-                )
+                kill_ask = cap_result[0] == "ask" and fact.executable == "kill" and _depth == 0
+                if kill_ask and plain_pid_kill is None:
+                    plain_pid_kill = is_plain_pid_kill(raw_command)
                 escalate(cap_result[0], cap_result[1],
-                         "pid_kill" if pid_kill else "capability")
+                         "pid_kill" if kill_ask and plain_pid_kill else "capability")
 
         if allow_result is None and not git_segment_allowed:
             # git_segment_allowed: an authoritative git-semantics allow for this

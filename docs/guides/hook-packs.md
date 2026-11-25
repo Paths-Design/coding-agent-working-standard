@@ -521,18 +521,19 @@ Rules that hold across guards:
   draws a warning; a later one arms the latch. A second one queued with the
   first is refused without a latch.
 - **A plain kill by process ID never latches.** Once the session has drawn its
-  one warning, a `kill` whose targets are all IDs from 2 to 4194304, or the last
-  background job of the same command, is refused and the session continues. The
-  command must be plain (literal words, separators, `if`/`then`/`else`/`fi` and
-  file redirections), start no launcher, shell or interpreter, and hold nothing
-  else the classifier flags. Any other kill, `pkill` and `killall` arm the
+  one warning, a `kill` whose targets are all literal IDs from 2 to 4194304 is
+  refused and the session continues. The command must be plain (literal words,
+  `;`, `&&`, `||`, `|`, newlines and output redirections, which go only to
+  `/dev/null`), and everything beside the kill must be a listed program that
+  only waits, looks or prints. Any other kill, `pkill` and `killall` arm the
   latch.
 - **`reboot` and `shutdown` are denied wherever they appear unquoted**, except
-  in a plain command that only names them: as operands of programs that inspect
-  and write nothing (`last`, `ls`, `cat`, `grep`, `rg` and the like), in file or
-  branch names given to `git add`, `commit`, `diff`, `log`, `show`, `blame`,
-  `status`, `checkout`, `switch` or `branch`, or inside a longer data-file name
-  such as `after-reboot.json`. Quote a search term to keep it out of the check.
+  in a plain command that only names them. Each pipeline that carries the word
+  must write no file and be made of programs that inspect their operands
+  (`last`, `ls`, `cat`, `grep`, `rg` and the like) or of `git add`, `commit`,
+  `diff`, `log`, `show`, `blame`, `status`, `checkout`, `switch` or `branch`; or
+  be one `node` or `python3` script given a longer data-file name such as
+  `after-reboot.json`. Quote a search term to keep it out of the check.
 - **A bare commit over staged deletions never latches**, however often it is
   repeated. The native runtime answers that refusal for Codex without the shell
   guard, and both must agree.
