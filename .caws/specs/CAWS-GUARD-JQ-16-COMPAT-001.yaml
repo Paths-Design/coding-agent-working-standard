@@ -55,3 +55,9 @@ evidence:
     test_nodeid: packages/caws-cli/tests/hooks/hook-pack-jq-compat.test.js
     artifact_path: "/Users/darianrosebrook/.claude/artifacts/0c999360-f616-4408-bc93-2a97c4a374fe/jq16/logs/debian12/logs/jest.log"
     commit_sha: e0c88d87c0e598ab54400c07f0a54202c68fbb85
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "At e0c88d87c from a clean clone as a non-root user: Debian 12, jq 1.6, Python 3.11: bats 817 ok 0 not ok, pytest 511 passed 1 skipped. Ubuntu 24.04, jq 1.7, Python 3.12: bats 817 ok 0 not ok, pytest 511 passed 1 skipped. arm64 containers; not run on the merged tree."
+    recorded_at: "2026-11-25T06:24:50.603Z"
+    artifact_path: "/Users/darianrosebrook/.claude/artifacts/0c999360-f616-4408-bc93-2a97c4a374fe/jq16/logs/ubuntu2404/summary.log"
+    commit_sha: e0c88d87c0e598ab54400c07f0a54202c68fbb85
