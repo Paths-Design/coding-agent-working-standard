@@ -50,10 +50,15 @@ acceptance:
     then: 'every handler runs, the call exits 0 with no decision and no rewrite'
   - id: A2
     given: >-
-      the same payload naming a relative or absolute target owned by another
-      session, claimed by an active worktree, or in another repository
-    when: 'the write guard evaluates it'
-    then: 'it exits 2 naming the owner or repository and the target is unchanged'
+      a governed session and a command directory that is foreign: another session's
+      worktree, a governed or ungoverned sibling repository, or a directory outside
+      any repository
+    when: >-
+      a relative or absolute write or a git commit targets another session's
+      worktree, a claimed path or another repository
+    then: >-
+      it exits 2 naming the owner or repository, the target is unchanged, and reads
+      in those directories still run
   - id: A3
     given: >-
       a host older than 0.166.0, or a session header that is missing, malformed,
