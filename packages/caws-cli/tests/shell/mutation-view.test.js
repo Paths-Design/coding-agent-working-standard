@@ -54,6 +54,9 @@ const RUNNER = String(async function main() {
   }
   process.stdout.write(JSON.stringify(output));
 });
+// A copy role refuses an inherited loader setting. Some runners export one.
+const hostEnvironment = () =>
+  Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(?:LD_|DYLD_)/.test(name)));
 // These Bash builtin names have no admitted projection profile. A name in a
 // data operand must not create an invocation with unmodeled effects.
 const BUILTINS = [
@@ -669,7 +672,7 @@ describe('mutation view uses shared traversal without granting scope', () => {
       ],
       {
         // Carry the setup-isolated Jest environment across the native process boundary.
-        env: { ...process.env },
+        env: hostEnvironment(),
         input: JSON.stringify(requests),
         shell: false,
         encoding: 'utf8',
@@ -1437,7 +1440,7 @@ describe('mutation projection preserves program roles and source custody', () =>
         active,
       ],
       {
-        env: { ...process.env },
+        env: hostEnvironment(),
         input: JSON.stringify(requests),
         shell: false,
         encoding: 'utf8',
@@ -1981,7 +1984,7 @@ describe('copy operand role observations', () => {
         active,
       ],
       {
-        env: { ...process.env },
+        env: hostEnvironment(),
         input: JSON.stringify(requests),
         encoding: 'utf8',
         timeout: 30000,

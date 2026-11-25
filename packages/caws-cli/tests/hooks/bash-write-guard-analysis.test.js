@@ -69,7 +69,10 @@ function guard(command, extra = {}, transport = {}) {
     input: transport.input ?? JSON.stringify(envelope),
     timeout: 15000,
     env: {
-      ...process.env,
+      // A copy role refuses an inherited loader setting. Some runners export one.
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(([name]) => !/^(?:LD_|DYLD_)/.test(name))
+      ),
       HOME: fx.root,
       NODE_PATH: YAML_MODULES,
       HOOK_TOOL_NAME: 'Bash',
@@ -594,9 +597,12 @@ test('missing analyzer and bridge each fail closed', () => {
 
 function protocolBackend(response, exitCode = 0) {
   const cli = path.join(fx.root, 'protocol-caws');
-  fs.writeFileSync(cli, '#!/bin/sh\nprintf %s ' + quote(response) + '\nexit ' + exitCode + '\n', {
-    mode: 0o755,
-  });
+  // Read the request first, as the real CLI does: the guard pipes it in.
+  fs.writeFileSync(
+    cli,
+    '#!/bin/sh\ncat > /dev/null\nprintf %s ' + quote(response) + '\nexit ' + exitCode + '\n',
+    { mode: 0o755 }
+  );
   return { CAWS_BIN: cli };
 }
 function protocolToken(value, kind = 'word') {
