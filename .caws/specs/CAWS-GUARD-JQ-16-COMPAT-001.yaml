@@ -50,10 +50,10 @@ evidence:
   - criterion_id: A2
     status: pass
     evidence_ref: "Every jq call the extractor finds in the shared and surface packs (113) compiles on real jq 1.6 (Debian 12) and 1.7. An independent scan found no skipped call; six scope-guard programs pass through its _jq wrapper and are plain paths, compiled only as the wrapper. The static rules do not cover nested-object shorthand, interpolation or a variable needle; no pack program uses them."
-    recorded_at: "2026-11-25T06:24:49.204Z"
+    recorded_at: "2026-11-25T06:28:25.248Z"
     test_nodeid: packages/caws-cli/tests/hooks/hook-pack-jq-compat.test.js
-    artifact_path: "/Users/darianrosebrook/.claude/artifacts/0c999360-f616-4408-bc93-2a97c4a374fe/jq16/logs/debian12/logs/jest.log"
-    commit_sha: e0c88d87c0e598ab54400c07f0a54202c68fbb85
+    commit_sha: d7e3cc86010a8699dae7b102b330a168acf0ac3f
+    test_verified_at: "16cfda199dc12fae60db7513b730e5911437a8cd"
   - criterion_id: A3
     status: pass
     evidence_ref: "At e0c88d87c from a clean clone as a non-root user: Debian 12, jq 1.6, Python 3.11: bats 817 ok 0 not ok, pytest 511 passed 1 skipped. Ubuntu 24.04, jq 1.7, Python 3.12: bats 817 ok 0 not ok, pytest 511 passed 1 skipped. arm64 containers; not run on the merged tree."
