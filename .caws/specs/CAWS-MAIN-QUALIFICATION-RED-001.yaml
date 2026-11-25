@@ -1,9 +1,11 @@
 id: CAWS-MAIN-QUALIFICATION-RED-001
 title: 'Make Release Qualification pass on main'
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Release Qualification run 45557661378 passed all jobs on pushed main 4aa381ea8, which contains merge 74e24809f'
 created_at: '2026-11-24T20:39:40.007Z'
-updated_at: '2026-11-24T23:14:26.445Z'
+updated_at: '2026-11-25T06:29:05.360Z'
 created_by_session: '0c999360-f616-4408-bc93-2a97c4a374fe'
 blast_radius:
   modules:
