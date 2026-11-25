@@ -720,7 +720,16 @@ import { isAdapterCoveredSurface } from './types';
 // the surface list, so zcode, dsh and unknown surfaces resolve a relative
 // target against the project, and an analyzer failure states the analyzer's
 // reason after the issue code.
-export const SHARED_PACK_VERSION = 140;
+// v141: bash-write-guard.sh holds an unproved write target or unreadable shell
+// source, not a program, option or construct without a profile. A path that
+// Python or Node source names as a write, inline or in a script the command
+// runs, refuses in another repository, and in a foreign worktree when the
+// command's own text names it. A Git subcommand that is not a known inspection
+// reaches the metadata ownership check, and paths Git is given to write are
+// targets. A held command names its remedy. lib/bash-mutation-analysis.sh
+// carries the launch kind, entry file and submitted source, and holds an
+// unresolved row that states none of them.
+export const SHARED_PACK_VERSION = 141;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

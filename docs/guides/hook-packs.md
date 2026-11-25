@@ -25,8 +25,11 @@ guide documents the **advisory quality plane** added by `QG-HOOKS-EXTRACT-001`.
 
 The runtime also carries mandatory authority guards. In shared PreToolUse
 dispatch, `bash-write-guard.sh` requires the bounded mutation backend and fails
-closed without a legacy fallback; `worktree-pin-guard.sh` is opt-in. These are
-separate from the four advisory quality hooks below. See
+closed without a legacy fallback; `worktree-pin-guard.sh` is opt-in. The write
+guard refuses a write owned elsewhere, and holds a recognized write or source
+the shell will run that it cannot establish. It does not refuse a program, a
+reader option or a Git inspection for lacking a profile. These are separate from
+the four advisory quality hooks below. See
 [bounded command analysis](command-analysis.md) for execution context, effect
 coverage and verification.
 

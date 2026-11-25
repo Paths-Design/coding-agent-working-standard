@@ -290,12 +290,23 @@ test('Node arrow/object data does not fabricate a shell target', () => {
   expect(result.stderr).not.toContain('ask_dynamic_unconfined');
   expect(fs.readdirSync(fx.sibling)).toEqual(['.git']);
 });
-test('read-only Git after admitted interpreter code does not require metadata ownership', () => {
-  const result = guard("node <<'JS'\nconst fn = x => x; fn(1);\nJS\ngit status --short");
-  expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
-  const write = guard("node <<'JS'\nconst fn = x => x; fn(1);\nJS\ngit add -- file");
-  expect(write.status).toBe(2);
-  expect(write.stderr).toContain('metadata-coordinate-unresolved');
+test('a program ahead of Git leaves its coordinates proved unless it writes a repository mapping', () => {
+  const inert = "node <<'JS'\nconst fn = x => x; fn(1);\nJS\n";
+  for (const git of ['git status --short', 'git add -- file', 'git commit -m x']) {
+    const result = guard(inert + git);
+    expect({ git, status: result.status, stderr: result.stderr }).toEqual({
+      git,
+      status: 0,
+      stderr: '',
+    });
+  }
+  // A worktree's .git file decides which repository an add writes.
+  for (const effect of [
+    'node -e ' + quote("require('fs').writeFileSync('.git','gitdir: /elsewhere')"),
+    "echo 'gitdir: /elsewhere' > .git",
+    'cat pointer > .git/commondir',
+  ])
+    refused(effect + '; git add -- file', 'metadata-coordinate-unresolved');
 });
 test('source-selected Git pager code remains unresolved while ordinary data is admitted', () => {
   const marker = path.join(fx.sibling, 'pager-marker');
@@ -368,10 +379,29 @@ test('quoted coordination text cannot load a mentioned script as executable sour
 test.each([
   'unknownCall()',
   "const write = require('fs').writeFileSync; write('/tmp/unbound','x')",
-  "require('fs').writeFileSync(process.env.DEST,'x')",
   "require('fs')[process.env.METHOD]('/tmp/unbound','x')",
-])('unmodeled Node effects hold without write-verb inference: %s', (payload) => {
-  refused('node -e ' + quote(payload), 'mutation-interpreter-effects');
+])('inline Node source that names no foreign target runs: %s', (payload) => {
+  const result = guard('node -e ' + quote(payload));
+  expect({ status: result.status, stdout: result.stdout, stderr: result.stderr }).toEqual({
+    status: 0,
+    stdout: '',
+    stderr: '',
+  });
+});
+test.each([
+  (dir) => "const write = require('fs').writeFileSync; write('" + dir + "/x','x')",
+  (dir) => "require('fs')[process.env.METHOD]('" + dir + "/x','x')",
+  (dir) => "const { writeFile: w } = require('fs/promises'); w('" + dir + "/x','x')",
+  (dir) => "require('child_process').execSync('touch " + dir + "/x')",
+])('inline Node source cannot hide a named foreign target behind an alias (%#)', (payload) => {
+  refused('node -e ' + quote(payload(fx.sibling)), 'DIFFERENT repository');
+  refused('node -e ' + quote(payload(fx.foreign)), 'owned by a DIFFERENT session');
+});
+test('inline Node source that writes a target it never names stays unresolved', () => {
+  refused(
+    'node -e ' + quote("require('fs').writeFileSync(process.env.DEST,'x')"),
+    'mutation-interpreter-effects'
+  );
 });
 test.each(['writeFileSync', 'appendFileSync'])(
   'proven %s operands obey same-project worktree and canonical-claim ownership',
@@ -518,13 +548,17 @@ test.each([
 ])('unmodeled interpreter selection cannot be an empty allow: %s', (command, reason) => {
   refused(command, reason);
 });
-test('file-entry bytes cannot authorize execution even when the script exists', () => {
+test('an entry script is found through the directory the command changed into', () => {
   fs.mkdirSync(path.join(fx.project, 'scripts'));
   fs.writeFileSync(
     path.join(fx.project, 'scripts/task.mjs'),
     "import { writeFileSync } from 'node:fs'; writeFileSync('" + fx.sibling + "/x.txt','x');\n"
   );
-  refused('cd scripts; node task.mjs', 'mutation-interpreter-effects');
+  refused('cd scripts; node task.mjs', 'DIFFERENT repository');
+  // A name from elsewhere on the command line does not decide which file runs.
+  fs.writeFileSync(path.join(fx.project, 'task.mjs'), "console.log('harmless')\n");
+  const harmless = guard('node task.mjs scripts/task.mjs');
+  expect({ status: harmless.status, stderr: harmless.stderr }).toEqual({ status: 0, stderr: '' });
 });
 test('an exported startup writer cannot hide behind an inactive inherited value', () => {
   const target = path.join(fx.sibling, 'coverage-never-written');
@@ -579,7 +613,9 @@ test.each(['{}', '{"schema":"caws.shell_mutation_view.v2","tokens":[]}'])(
   'invalid CLI response refuses without lexical fallback: %s',
   (response) => {
     const broken = path.join(fx.root, 'broken-caws');
-    fs.writeFileSync(broken, '#!/bin/sh\nprintf %s ' + quote(response) + '\n', { mode: 0o755 });
+    fs.writeFileSync(broken, '#!/bin/sh\ncat > /dev/null\nprintf %s ' + quote(response) + '\n', {
+      mode: 0o755,
+    });
     const result = guard('echo safe', { CAWS_BIN: broken });
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('invalid or incomplete contract');
@@ -847,9 +883,68 @@ test('an unresolved effect is held even if the backend omits its issue diagnosti
     reason: 'unknown call',
     writes: [],
   });
+  // A backend that does not say how source was launched has not read it.
   const result = guard(command, protocolBackend(JSON.stringify(view)));
   expect(result.status).toBe(2);
   expect(result.stderr).toContain('mutation-interpreter-effects: unknown call');
+});
+test('launch custody: inline source is scanned and a program is launched unread', () => {
+  const unresolved = { kind: 'unresolved', profile: null, reason: 'unknown call', writes: [] };
+  const inline = interpreterProtocol(unresolved);
+  Object.assign(inline.row, { launch: 'inline', entry: null });
+  const scanned = guard(inline.command, protocolBackend(JSON.stringify(inline.view)));
+  expect({ status: scanned.status, stderr: scanned.stderr }).toEqual({ status: 0, stderr: '' });
+  inline.row.payloads[0].text = "writeFileSync('" + fx.sibling + "/x', 'x')";
+  const foreign = guard(inline.command, protocolBackend(JSON.stringify(inline.view)));
+  expect(foreign.status).toBe(2);
+  expect(foreign.stderr).toContain('DIFFERENT repository');
+  // Inline source the backend could not supply has not been read.
+  inline.row.payloads = [];
+  const unread = guard(inline.command, protocolBackend(JSON.stringify(inline.view)));
+  expect(unread.status).toBe(2);
+  expect(unread.stderr).toContain('mutation-interpreter-effects: unknown call');
+
+  const program = interpreterProtocol(unresolved);
+  Object.assign(program.row, { launch: 'program', entry: null, payloads: [] });
+  const launched = guard(program.command, protocolBackend(JSON.stringify(program.view)));
+  expect({ status: launched.status, stderr: launched.stderr }).toEqual({ status: 0, stderr: '' });
+  fs.writeFileSync(
+    path.join(fx.project, 'entry.js'),
+    "writeFileSync('" + fx.sibling + "/x', 'x')\n"
+  );
+  program.row.entry = 'entry.js';
+  const evidence = guard(program.command, protocolBackend(JSON.stringify(program.view)));
+  expect(evidence.status).toBe(2);
+  expect(evidence.stderr).toContain('DIFFERENT repository');
+});
+test.each([
+  ['unknown launch', (row) => Object.assign(row, { launch: 'trusted' })],
+  ['program with source', (row) => Object.assign(row, { launch: 'program' })],
+  ['entry without a program', (row) => Object.assign(row, { launch: 'inline', entry: 'x.js' })],
+  [
+    'entry that is not text',
+    (row) => Object.assign(row, { launch: 'program', payloads: [], entry: 1 }),
+  ],
+  [
+    'program with proven effects',
+    (row) =>
+      Object.assign(row, {
+        launch: 'program',
+        payloads: [],
+        effects: { kind: 'readonly', profile: 'caws.node-source-effects.v1', writes: [] },
+      }),
+  ],
+])('launch custody rejects a contradictory row: %s', (_name, corrupt) => {
+  const { command, row, view } = interpreterProtocol({
+    kind: 'unresolved',
+    profile: null,
+    reason: 'unknown call',
+    writes: [],
+  });
+  corrupt(row);
+  const result = guard(command, protocolBackend(JSON.stringify(view)));
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('invalid or incomplete contract');
 });
 test.each([
   { start: -1 },

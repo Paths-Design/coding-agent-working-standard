@@ -456,7 +456,7 @@ describe('bounded shell analysis contract', () => {
     ['analyze.js', 'if (tree.errors?.length)', 'if (false)', 'malformed-quote', 'allow'],
     [
       'analyze.js',
-      'const outputs = list(node.body.commands, [clone(state)], reader, depth + 1);',
+      'const outputs = contained(() => list(node.body.commands, [clone(state)], reader, depth + 1));',
       'return list(node.body.commands, [clone(state)], reader, depth + 1);',
       'subshell-cannot-sanitize-parent',
       'allow',

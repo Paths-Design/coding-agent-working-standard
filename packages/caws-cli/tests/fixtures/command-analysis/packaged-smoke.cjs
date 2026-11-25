@@ -227,9 +227,25 @@ try {
     `node -e 'const fs = require("node:fs"); const data = fs.readFileSync("${independent}/input.txt", "utf8"); fs.writeFileSync("${own}/owned-never-written", data)'`
   );
   assert.equal(foreignReadOwnedWrite.status, 0, foreignReadOwnedWrite.stderr);
+  // A program without an effect profile runs; what it names as a write does not escape.
   const unknownInterpreter = writeGuard("node -e 'unrecognizedOperation()'");
-  assert.equal(unknownInterpreter.status, 2, JSON.stringify(unknownInterpreter));
-  assert.match(unknownInterpreter.stderr, /mutation-interpreter-effects/);
+  assert.equal(unknownInterpreter.status, 0, JSON.stringify(unknownInterpreter));
+  const unnamedTarget = writeGuard(
+    `node -e 'require("node:fs").writeFileSync(process.env.DEST, "bad")'`
+  );
+  assert.equal(unnamedTarget.status, 2, JSON.stringify(unnamedTarget));
+  assert.match(unnamedTarget.stderr, /mutation-interpreter-effects/);
+  const projectScript = writeGuard('./scripts/run_gates.sh --quick 2>&1 | tail -n 5');
+  assert.equal(projectScript.status, 0, JSON.stringify(projectScript));
+  assert.equal(projectScript.stderr, '');
+  fs.writeFileSync(
+    path.join(own, 'untracked-entry.js'),
+    `require("node:fs").writeFileSync("${independent}/interpreter-never-written", "bad");\n`
+  );
+  const foreignEntry = writeGuard('node untracked-entry.js');
+  fs.rmSync(path.join(own, 'untracked-entry.js'));
+  assert.equal(foreignEntry.status, 2, JSON.stringify(foreignEntry));
+  assert.match(foreignEntry.stderr, /DIFFERENT repository/);
   const reboundCoverage = writeGuard(
     `NODE_V8_COVERAGE='${foreign}/coverage-never-written'; node -e '1'`,
     { NODE_V8_COVERAGE: '' }

@@ -29,6 +29,7 @@
         "src/shell/analysis/mutation-view.ts",
         "src/shell/analysis/policies.ts",
         "src/shell/analysis/words.ts",
+        "src/shell/analysis/write-hazards.ts",
         "src/shell/binding/resolve-binding.ts",
         "src/shell/commands/agents-conjoining.ts",
         "src/shell/gates/disposition.ts",
@@ -261,12 +262,14 @@
         { "source": "src/shell/analysis/interpreter-effects.ts" },
         { "source": "src/shell/analysis/mutation-view.ts" },
         { "source": "src/shell/analysis/policies.ts" },
-        { "source": "src/shell/analysis/words.ts" }
+        { "source": "src/shell/analysis/words.ts" },
+        { "source": "src/shell/analysis/write-hazards.ts" }
       ],
       "tests": [
         "tests/shell/command-analysis.test.js",
         "tests/shell/interpreter-effects.test.js",
-        "tests/shell/mutation-view.test.js"
+        "tests/shell/mutation-view.test.js",
+        "tests/shell/write-projection.test.js"
       ]
     },
     "kernel": {

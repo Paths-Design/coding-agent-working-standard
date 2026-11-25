@@ -28,10 +28,22 @@
 #   remove/move/copy rm FILE   mv SRC DST   cp SRC DST   dd of=FILE
 #   git path-restore git restore FILE   git checkout -- FILE
 #                    git reset -- FILE   git clean
-#   interpreter      Explicit readonly / finite-writes / unresolved effects
-#                    from bounded Node/Python profiles. Proven write operands
-#                    reach both repository and worktree ownership checks.
-#                    File-entry scripts and unmodeled effects remain held.
+#   git operands     git rm/mv FILE, clone/init/worktree DIR, push PATH
+#   interpreter      Proven write operands from a bounded Node profile reach
+#                    both repository and worktree ownership checks. A path that
+#                    other Python or Node source names as a write, inline or in
+#                    a script the command runs, reaches the foreign-repository
+#                    check, and one in the command's own text the foreign
+#                    worktree check. A path a script only mentions beside a
+#                    write counts where its committed version does not hold it.
+#   git              A subcommand that is not a known inspection names the
+#                    repository metadata it writes.
+#
+# A program is not refused for lacking an argument profile. Launching one by
+# name, by path or through an interpreter is the same limited-recognizer
+# residual: nothing extracted is not proof that it writes nothing. This guard
+# refuses a write owned elsewhere, and holds a recognized write, or source the
+# shell will run, that it could not establish.
 
 set -euo pipefail
 
@@ -311,6 +323,7 @@ CAWS_BASH_ANALYSIS_REQUIRED=1
 if [[ ! -r "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" ]] ||
     ! source "$SCRIPT_DIR/lib/bash-mutation-analysis.sh" ||
     ! declare -F caws_bash_prepare_analysis >/dev/null 2>&1 ||
+    ! declare -F caws_bash_interpreter_evidence >/dev/null 2>&1 ||
     ! caws_bash_prepare_analysis "$COMMAND" "$AGENT_CWD" "$PROJECT_DIR"; then
   echo "[bash-write-guard] UNRESOLVED: ${CAWS_BASH_ANALYSIS_ERROR:-command mutation analysis bridge is unavailable}. Failing CLOSED; no legacy fallback." >&2
   exit 2
@@ -535,9 +548,55 @@ while IFS= read -r effect; do
   esac
 done <<< "$_BWG_EFFECTS"
 
-# Git add/commit write Git metadata rather than a payload FILE. Validate both
-# metadata roots at the repository boundary, then query the actual worktree's
-# owner through a distinct, capability-namespaced oracle operation.
+# Interpreter evidence is weaker than a named operand: a literal in a program
+# says it may write there. It can establish that a write crosses a boundary and
+# never that one is owned, so a pass from either check here grants nothing, and
+# a claim on a path the source merely mentions is not consulted.
+if ! caws_bash_interpreter_evidence "$PROJECT_DIR"; then
+  _bwg_normalize_refuse 'interpreter evidence' "$COMMAND"
+fi
+_EVIDENCE_SEEN=$'\n'; _EVIDENCE_COUNT=0
+for _EVIDENCE in ${CAWS_INTERPRETER_EVIDENCE[@]+"${CAWS_INTERPRETER_EVIDENCE[@]}"}; do
+  # Ownership belongs to a directory that exists. Literals that share their
+  # nearest one share its answer, so each directory is asked about once.
+  _EVIDENCE_PATH="${_EVIDENCE#*$'\t'}"
+  # A link names its target's repository, not the directory that holds it.
+  if [[ -L "$_EVIDENCE_PATH" ]]; then
+    caws_guard_realpath_into _EVIDENCE_PATH "$_EVIDENCE_PATH" || _bwg_normalize_refuse "interpreter evidence" "$_EVIDENCE_PATH"
+  fi
+  while [[ "$_EVIDENCE_PATH" == */* && ! -d "$_EVIDENCE_PATH" ]]; do
+    _EVIDENCE_PATH="${_EVIDENCE_PATH%/*}"
+  done
+  _EVIDENCE_KEY="${_EVIDENCE%%$'\t'*}"$'\t'"${_EVIDENCE_PATH:-/}"
+  [[ "$_EVIDENCE_SEEN" != *$'\n'"$_EVIDENCE_KEY"$'\n'* ]] || continue
+  _EVIDENCE_SEEN+="$_EVIDENCE_KEY"$'\n'; _EVIDENCE_COUNT=$((_EVIDENCE_COUNT + 1))
+  if [[ $_EVIDENCE_COUNT -gt 64 ]]; then
+    escalate ask 'interpreter source names paths in more than 64 directories' ask_unsupported_nesting
+    break
+  fi
+  _EVIDENCE_PATH="${_EVIDENCE_PATH:-/}"
+  abspath_into _EVIDENCE_PATH "$_EVIDENCE_PATH" || _bwg_normalize_refuse "interpreter evidence" "$_EVIDENCE_PATH"
+  _FOREIGN_REPO="$(foreign_repo_root "$_EVIDENCE_PATH"; printf x)"
+  _FOREIGN_REPO="${_FOREIGN_REPO%x}"
+  if [[ -n "$_FOREIGN_REPO" ]]; then
+    [[ "$_FOREIGN_REPO" == "${HOME:-}" ]] || escalate block "$_FOREIGN_REPO" block_foreign_repo
+    continue
+  fi
+  [[ "${_EVIDENCE%%$'\t'*}" == inline ]] || continue
+  out="$(CAWS_ORACLE_OPERATION=file CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
+    CAWS_ORACLE_REMOVE_TREE=0 CAWS_ORACLE_CURRENT_BRANCH="" \
+    CAWS_ORACLE_REL_PATH="${_EVIDENCE_PATH%/}/interpreter-evidence" CAWS_ORACLE_CWD_UNRESOLVED="" \
+    CAWS_ORACLE_SESSION_ID="$CAWS_ORACLE_SESSION_ID" \
+    node "$CAWS_CLAIM_ORACLE" 2>&1 || true)"
+  case "${out%%$'\n'*}" in
+    block_foreign_worktree:*) escalate block "${out#block_foreign_worktree:}" block_foreign_worktree ;;
+  esac
+done
+
+# Git subcommands that write refs, the index or a working tree write metadata
+# rather than a payload FILE. Validate both metadata roots at the repository
+# boundary, then query the actual worktree's owner through a distinct,
+# capability-namespaced oracle operation.
 _GM_INDEX=0; _GM_SEEN_CONTEXTS=()
 while [[ $_GM_INDEX -lt ${#CAWS_AST_GIT_WORKTREE[@]} ]]; do
   _GM_WORKTREE="${CAWS_AST_GIT_WORKTREE[$_GM_INDEX]}"
@@ -710,11 +769,10 @@ if declare -F caws_bash_unrepresentable_count >/dev/null 2>&1; then
   fi
 fi
 
-# --- UNSUPPORTED executable nesting ----------------------------------------
-# Process substitution executes mutation-capable nested shell code this slice
-# does not parse. Measured 2026-09-11: `cat <(echo x > CLAIMED)` returned ec=0
-# where the plain form blocked. Silence here is indistinguishable from "no
-# mutation", so presence alone must take a conservative posture.
+# --- UNESTABLISHED source or coordinates -----------------------------------
+# Each record names source the projection could not read, or a recognized write
+# whose target it could not establish. Silence about either is indistinguishable
+# from "no mutation", so presence alone takes a conservative posture.
 if declare -F caws_bash_unsupported_nesting >/dev/null 2>&1; then
   while IFS= read -r _nest; do
     [[ -z "$_nest" ]] && continue
@@ -809,7 +867,7 @@ case "$WORST" in
         # describe a conflict that was never adjudicated.
         _REASON="[$_BG_ID] ask_unrepresentable_target: $WORST_DETAIL. This is a CARRIER limit, not a known ownership conflict — the target was never adjudicated. Approve only if you know the target is yours to mutate." ;;
       ask_unsupported_nesting)
-        _REASON="[$_BG_ID] ask_unsupported_nesting: $WORST_DETAIL. The nested command is outside this recognizer's parser envelope, so any write it performs was never adjudicated. Approve only if you know what the nested command writes." ;;
+        _REASON="[$_BG_ID] ask_unsupported_nesting: $WORST_DETAIL. Any write it performs was never adjudicated. Restate the part it names literally: the write target and directory as literal paths, nested source as a plain command, or the program as a script file run by path. Approve only if you know what it writes." ;;
       ask_dynamic_unconfined|ask_dynamic_unresolved)
         _REASON="[$_BG_ID] $WORST_KIND: $WORST_DETAIL. The target is resolved at EXECUTION time, so ownership cannot be decided from the command text. Approve only if every path it can resolve to is yours to mutate." ;;
       ask_git_metadata)

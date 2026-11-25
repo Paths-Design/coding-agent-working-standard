@@ -212,6 +212,9 @@ _assert_cwd_ask() {
       "cd $WT_ROOT && rm scratch.txt" \
       "cd $WT_ROOT; echo x | tee scratch.txt" \
       "pushd $WT_ROOT && echo x > scratch.txt" \
+      "source ./move.sh && echo x > scratch.txt" \
+      ". ./move.sh && echo x > scratch.txt" \
+      "true; . ./move.sh; touch scratch.txt" \
       "(cd $WT_ROOT && echo x > scratch.txt)" \
       "{ cd $WT_ROOT; echo x > scratch.txt; }" \
       "if cd $WT_ROOT; then echo x > scratch.txt; fi" \

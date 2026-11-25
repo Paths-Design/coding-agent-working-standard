@@ -534,8 +534,8 @@ describe('mutation policy topology contract', () => {
     // Counts are pinned on purpose: adding an inventoried source or a
     // mutation target must reconcile policy AND this pin in the same change.
     // The inventory includes inspection-prefix analysis, shared CAWS reader metadata, and worktree removal.
-    expect(result.stdout).toMatch(/^PASS: 208 source files accounted for exactly once$/m);
-    expect(result.stdout).toMatch(/^PASS: 28 mutation targets across 4 surfaces$/m);
+    expect(result.stdout).toMatch(/^PASS: 209 source files accounted for exactly once$/m);
+    expect(result.stdout).toMatch(/^PASS: 29 mutation targets across 4 surfaces$/m);
   });
 
   test.each([
@@ -730,6 +730,7 @@ describe('mutation policy topology contract', () => {
       'src/shell/analysis/mutation-view.ts',
       'src/shell/analysis/policies.ts',
       'src/shell/analysis/words.ts',
+      'src/shell/analysis/write-hazards.ts',
     ]);
     expect(config.incremental).toBe(false);
     expect(config.coverageAnalysis).toBe('off');
@@ -738,6 +739,7 @@ describe('mutation policy topology contract', () => {
       '<rootDir>/tests/shell/command-analysis.test.js',
       '<rootDir>/tests/shell/interpreter-effects.test.js',
       '<rootDir>/tests/shell/mutation-view.test.js',
+      '<rootDir>/tests/shell/write-projection.test.js',
     ]);
     const names = new RegExp(config.jest.config.testNamePattern);
     expect(names.test('bounded shell analysis contract profile-git-status')).toBe(true);
