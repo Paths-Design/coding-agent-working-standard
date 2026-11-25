@@ -48,3 +48,11 @@ acceptance:
     then: 'the positive control uses authenticated retained source bytes and a changed, missing, duplicate or misbound fixture entry is rejected'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "tests/hooks/worktree-claim-oracle.test.js 104 of 104 and installed pytest test_write_payload_uncertainty_and_canonical_claim_from_owned_lane, at 9c5f42e7c on Ubuntu 26.04 and macOS: default mode emits a typed ask naming ask_uncertain:worktree-payload-no-owner on claude-code, qwen-code, dsh and zcode; bypassPermissions, no-ask and the deny surfaces (codex, kimi-code, opencode) exit 2; malformed and multiline oracle replies exit 2. Mutants: removing the surface check fails 3 cases, removing the malformed-reply check fails 2. A known foreign owner is refused in default mode by test; in bypass mode by inspection, because that arm exits 2 without reading the mode. Not covered: a path another lane claims inside an unowned registered root outside .caws/worktrees now asks instead of refusing."
+    recorded_at: "2026-11-25T00:23:44.740Z"
+    command: npx jest tests/hooks/worktree-claim-oracle.test.js
+    exit_code: 0
+    commit_sha: "9c5f42e7cb2f9454a7a029c2c62aeb18ae8b1815"
