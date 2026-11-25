@@ -74,3 +74,9 @@ evidence:
     recorded_at: "2026-11-25T02:23:35.095Z"
     test_nodeid: packages/caws-cli/tests/hooks/bash-write-guard-everyday-commands.test.js
     commit_sha: a763ed3225f1047b9873ab02a7d3866be2a7d296
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "FOREIGN_WRITES, CLAIMED and UNPROVED corpora, including every confirmed counterexample from the independent review, exit 2 with the named owner or reason, and no submitted command ran. The fixes after that review were not independently re-reviewed."
+    recorded_at: "2026-11-25T02:37:02.644Z"
+    test_nodeid: packages/caws-cli/tests/hooks/bash-write-guard-everyday-commands.test.js
+    commit_sha: a763ed3225f1047b9873ab02a7d3866be2a7d296
