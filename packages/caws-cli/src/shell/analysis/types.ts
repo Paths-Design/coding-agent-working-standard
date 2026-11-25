@@ -102,6 +102,11 @@ export interface State {
   mappingChanged?: boolean;
   /** Projection only: directories this source makes before any link could replace them. */
   made?: readonly string[];
+  /**
+   * Projection only: names whose export state this source set, null where
+   * alternatives disagree; `*` is whether every assignment exports.
+   */
+  exports?: ReadonlyMap<string, boolean | null>;
   /** Projection only: known exit status, selecting the following && or || branch. */
   outcome?: 'success' | 'failure';
 }

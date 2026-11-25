@@ -781,7 +781,7 @@ add('git routing', 'GIT_PAGER=other git log', {
 // A variable the command unsets is absent, wherever it came from.
 for (const [command, ...git] of [
   ['unset GIT_EDITOR PAGER; git status'],
-  ['GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; git diff'],
+  ['export GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; git diff'],
   ['unset -v GIT_DIR; git add a', 'add @'],
   ['GIT_DIR=^/x/.git; unset GIT_DIR; git add a', 'add @'],
   ['export GIT_DIR=^/x/.git; unset GIT_DIR GIT_WORK_TREE; git add a', 'add @'],
@@ -790,7 +790,7 @@ for (const [command, ...git] of [
   metadata('git environment', command, ...git);
 writes(
   'git environment',
-  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF 2>/dev/null; git diff',
+  'export GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF 2>/dev/null; git diff',
   '/dev/null'
 );
 add('git environment', 'unset GIT_DIR; git add a', {
@@ -808,27 +808,27 @@ add('git environment', '(unset GIT_DIR); git add a', {
 });
 // It may not have been unset, or a nested shell may not have seen it.
 for (const command of [
-  'GIT_EXTERNAL_DIFF=x; if y; then unset GIT_EXTERNAL_DIFF; fi; git diff',
-  'GIT_EXTERNAL_DIFF=x; y && unset GIT_EXTERNAL_DIFF; git diff',
-  'readonly GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; git diff',
-  'GIT_EXTERNAL_DIFF=x; readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
-  'f() { unset GIT_EXTERNAL_DIFF; }; GIT_EXTERNAL_DIFF=x; f; git diff',
-  'f() { local GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; }; GIT_EXTERNAL_DIFF=x; f; git diff',
-  'GIT_EXTERNAL_DIFF=x; while y; do unset GIT_EXTERNAL_DIFF; done; git diff',
-  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF > log; git diff',
-  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF 2>&5; git diff',
+  'export GIT_EXTERNAL_DIFF=x; if y; then unset GIT_EXTERNAL_DIFF; fi; git diff',
+  'export GIT_EXTERNAL_DIFF=x; y && unset GIT_EXTERNAL_DIFF; git diff',
+  'declare -rx GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
+  'f() { unset GIT_EXTERNAL_DIFF; }; export GIT_EXTERNAL_DIFF=x; f; git diff',
+  'f() { local GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; }; export GIT_EXTERNAL_DIFF=x; f; git diff',
+  'export GIT_EXTERNAL_DIFF=x; while y; do unset GIT_EXTERNAL_DIFF; done; git diff',
+  'export GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF > log; git diff',
+  'export GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF 2>&5; git diff',
   // Quoting, a wrapper or an expansion names the same builtin and variable.
-  'GIT_EXTERNAL_DIFF=x; readonly "GIT_EXTERNAL_DIFF"; unset GIT_EXTERNAL_DIFF; git diff',
-  'GIT_EXTERNAL_DIFF=x; command readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
-  'GIT_EXTERNAL_DIFF=x; command -- readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
-  'GIT_EXTERNAL_DIFF=x; N=GIT_EXTERNAL_DIFF; readonly $N; unset GIT_EXTERNAL_DIFF; git diff',
-  'GIT_EXTERNAL_DIFF=x; F=-r; declare $F GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; readonly "GIT_EXTERNAL_DIFF"; unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; command readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; command -- readonly GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; N=GIT_EXTERNAL_DIFF; readonly $N; unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; F=-r; declare $F GIT_EXTERNAL_DIFF; unset GIT_EXTERNAL_DIFF; git diff',
   // Bash uncovers the variable an inner scope hid.
-  'GIT_EXTERNAL_DIFF=x; f() { unset GIT_EXTERNAL_DIFF; git diff; }; GIT_EXTERNAL_DIFF=y f',
-  'f() { local GIT_EXTERNAL_DIFF=y; g; }; g() { unset GIT_EXTERNAL_DIFF; git diff; }; GIT_EXTERNAL_DIFF=x; f',
-  'f() { (unset GIT_EXTERNAL_DIFF; git diff); }; GIT_EXTERNAL_DIFF=x; GIT_EXTERNAL_DIFF=y f',
-  'GIT_EXTERNAL_DIFF=x; GIT_EXTERNAL_DIFF=y unset GIT_EXTERNAL_DIFF; git diff',
-  'GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; read -r GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; f() { unset GIT_EXTERNAL_DIFF; git diff; }; GIT_EXTERNAL_DIFF=y f',
+  'f() { local GIT_EXTERNAL_DIFF=y; g; }; g() { unset GIT_EXTERNAL_DIFF; git diff; }; export GIT_EXTERNAL_DIFF=x; f',
+  'f() { (unset GIT_EXTERNAL_DIFF; git diff); }; export GIT_EXTERNAL_DIFF=x; GIT_EXTERNAL_DIFF=y f',
+  'export GIT_EXTERNAL_DIFF=x; GIT_EXTERNAL_DIFF=y unset GIT_EXTERNAL_DIFF; git diff',
+  'export GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; read -r GIT_EXTERNAL_DIFF; export GIT_EXTERNAL_DIFF; git diff',
 ])
   add('git environment', command, { codes: ['git-environment'], only: 'codes' });
 add('git environment', "unset GIT_DIR; bash -c 'git add a'", {
@@ -838,6 +838,60 @@ add('git environment', "unset GIT_DIR; bash -c 'git add a'", {
   only: 'codes',
 });
 metadata('git environment', "unset GIT_DIR; bash -c 'git add a'", 'add @');
+
+// Git sees a variable only once it is exported.
+for (const [command, ...git] of [
+  ['GIT_DIR=@/meta; git add a', 'add @'],
+  ['GIT_DIR=@/meta; GIT_WORK_TREE=@; cd s1 && git add a', 'add @/s1'],
+  ['export GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['GIT_DIR=@/meta; export GIT_DIR; git add a', 'add @ in @/meta'],
+  ['export GIT_DIR; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['export "GIT_DIR"; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['command export GIT_DIR; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['declare -x GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['typeset -rx GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['declare GIT_DIR=@/meta; git add a', 'add @'],
+  ['set -a; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['set -o allexport; GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['set -a; set +a; GIT_DIR=@/meta; git add a', 'add @'],
+  ['set -a; GIT_DIR=@/meta; set +o allexport; git add a', 'add @ in @/meta'],
+  ['set -- -a; GIT_DIR=@/meta; git add a', 'add @'],
+  ['export GIT_DIR=^/x; unset GIT_DIR; GIT_DIR=@/meta; git add a', 'add @'],
+  ['(export GIT_DIR=@/meta); GIT_DIR=@/meta; git add a', 'add @'],
+  ['f() { git add a; }; GIT_DIR=@/meta f', 'add @ in @/meta'],
+  ['if y; then export GIT_DIR; fi; GIT_DIR=@/meta; git add a', 'add @', 'add @ in @/meta'],
+  ['y && export GIT_DIR; GIT_DIR=@/meta; git add a', 'add @', 'add @ in @/meta'],
+  ['if y; then set -a; fi; GIT_DIR=@/meta; git add a', 'add @', 'add @ in @/meta'],
+  ['GIT_DIR=@/meta; while y; do git add a; export GIT_DIR; done', 'add @', 'add @ in @/meta'],
+  ['GIT_SHA=$(git rev-parse --short HEAD); git log -1 "$GIT_SHA"'],
+  ['GIT_ROOT=$(git rev-parse --show-toplevel); git -C "$GIT_ROOT" status'],
+  ["GIT_SHA=x; bash -c 'git add a'", 'add @'],
+  ['GIT_LFS_SKIP_SMUDGE=1 git pull', 'pull @'],
+  ['GIT_TRACE=1 GIT_CURL_VERBOSE=1 git fetch', 'fetch @'],
+  ['GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git status'],
+  ['export GIT_EXTERNAL_DIFF=x; unset GIT_EXTERNAL_DIFF; read -r GIT_EXTERNAL_DIFF; git diff'],
+])
+  metadata('git exports', command, ...git);
+for (const [label, command, git] of [
+  ['an inherited variable stays exported', 'GIT_DIR=@/meta; git add a', 'add @ in @/meta'],
+  ['unsetting ends that', 'unset GIT_DIR; GIT_DIR=@/meta; git add a', 'add @'],
+])
+  add('git exports', command, { label, environment: { GIT_DIR: '/usr' }, git: [git] });
+for (const command of [
+  'export GIT_DIR > log; GIT_DIR=@/meta; git log',
+  'set -a; read -r GIT_DIR; git log',
+  'for x in $(ls); do export GIT_DIR; done; GIT_DIR=@/meta; git log',
+  'f() { local GIT_DIR=@/meta; git log; }; export GIT_DIR=@/meta; f',
+  'f() { git log; export GIT_DIR; GIT_DIR=@/meta; f; }; f',
+  'setopt all_export; GIT_DIR=@/meta; git log',
+  'GIT_TRACE=/x git status',
+  'GIT_CONFIG_GLOBAL=x git status',
+])
+  add('git exports', command, { codes: ['git-environment'], only: 'codes' });
+add('git exports', "export GIT_SHA=x; bash -c 'git add a'", {
+  codes: ['mutation-shell-environment', 'metadata-coordinate-unresolved'],
+  only: 'codes',
+});
 
 // ── Git configuration ───────────────────────────────────────────────────────
 

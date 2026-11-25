@@ -6,6 +6,7 @@ import { resolveGitContext } from './git-context';
 import type { GitContext, GitContextResolver } from './git-context';
 import type { Command, Redirection } from './parser-types';
 import {
+  exported,
   isShellBuiltin,
   namesGitMetadata,
   nodeStartupBinding,
@@ -378,10 +379,9 @@ export async function projectMutationView(
           })
           .map((name): [string, Value] => [name, null]),
       ]),
-      // Export attributes are not modeled. Rebinding an inherited exported
-      // variable changes a child process's environment, so its original
-      // launcher value cannot supply proof for nested Git coordinates. Neither
-      // can one this source has unset.
+      // Rebinding an exported variable changes a child process's environment,
+      // so its launcher value cannot supply proof for nested Git coordinates.
+      // Neither can one this source has unset.
       gitEnvironmentUnresolved:
         job.parent?.gitEnvironmentUnresolved === true ||
         Object.keys(process.env).some(
@@ -389,6 +389,7 @@ export async function projectMutationView(
         ) ||
         [...state.bindings].some(([name, values]) => {
           if (name !== 'PAGER' && !name.startsWith('GIT_')) return false;
+          if (exported(state, name) === false) return false;
           if (
             (name === 'PAGER' || name === 'GIT_PAGER') &&
             values &&

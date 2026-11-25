@@ -51,6 +51,11 @@ export function sensitiveBinding(name: string): boolean {
 export function projectionSensitiveBinding(name: string): boolean {
   return /^(?:IFS|CDPATH|ENV|SHELLOPTS|GLOBIGNORE|POSIXLY_CORRECT|BASH.*)$/.test(name);
 }
+/** Whether a child process sees a variable, when every alternative agrees. */
+export function exported(state: State, name: string): boolean | null {
+  const known = state.exports?.get(name);
+  return known === undefined ? process.env[name] !== undefined : known;
+}
 /** A path with a component Git reads as repository metadata. */
 export function namesGitMetadata(path: string): boolean {
   return /(?:^|\/)\.git(?:\/|$)/i.test(path);
@@ -413,7 +418,7 @@ const GIT_PROJECTED_FLAGS = [
 ];
 const GIT_QUERIES = /^(?:-v|-h|--version|--help|--html-path|--man-path|--info-path|--exec-path)$/;
 const GIT_DATA_ENVIRONMENT =
-  /^GIT_(?:(?:AUTHOR|COMMITTER)_(?:NAME|EMAIL|DATE)|TERMINAL_PROMPT|OPTIONAL_LOCKS|(?:LITERAL|GLOB|NOGLOB|ICASE)_PATHSPECS|MERGE_AUTOEDIT|ADVICE|NO_LAZY_FETCH|FLUSH)$/;
+  /^GIT_(?:(?:AUTHOR|COMMITTER)_(?:NAME|EMAIL|DATE)|TERMINAL_PROMPT|OPTIONAL_LOCKS|(?:LITERAL|GLOB|NOGLOB|ICASE)_PATHSPECS|MERGE_AUTOEDIT|ADVICE|NO_LAZY_FETCH|FLUSH|CONFIG_NOSYSTEM|LFS_SKIP_(?:SMUDGE|PUSH))$/;
 /** Programs a launcher configures for the whole session, not for one command. */
 const GIT_LAUNCHER_ENVIRONMENT =
   /^(?:GIT_(?:ASKPASS|SSH|SSH_COMMAND|SSH_VARIANT|EDITOR|SEQUENCE_EDITOR|PAGER)|PAGER)$/;
@@ -445,6 +450,9 @@ function projectGitEnvironment(
         values?.length === 1 &&
         values[0] === process.env[name]) ||
       (/^(?:GIT_)?PAGER$/.test(name) && disabled(values, /^(?:cat)?$/)) ||
+      (/^GIT_(?:TRACE(?:_[A-Z0-9_]+)?|CURL_VERBOSE)$/.test(name) &&
+        disabled(values, /^(?:[012]|true|false)?$/i)) ||
+      (/^GIT_CONFIG_(?:GLOBAL|SYSTEM)$/.test(name) && disabled(values, /^\/dev\/null$/)) ||
       (/^GIT_(?:SEQUENCE_)?EDITOR$/.test(name) && disabled(values, /^(?:true|:|cat)$/)) ||
       (name === 'GIT_SSH_COMMAND' && disabled(values, SSH_CONNECTION))
     )
@@ -702,9 +710,9 @@ const INERT_BUILTINS = [
   'umask',
   'wait',
 ];
-const SHELL_FLAGS = /^[-+][befhmuvxBCEHT]+$/;
+const SHELL_FLAGS = /^[-+][abefhmuvxBCEHT]+$/;
 const SHELL_OPTION_NAMES =
-  /^(?:braceexpand|emacs|errexit|errtrace|functrace|hashall|histexpand|history|ignoreeof|monitor|noclobber|noglob|notify|nounset|onecmd|pipefail|verbose|vi|xtrace)$/;
+  /^(?:allexport|braceexpand|emacs|errexit|errtrace|functrace|hashall|histexpand|history|ignoreeof|monitor|noclobber|noglob|notify|nounset|onecmd|pipefail|verbose|vi|xtrace)$/;
 const identifier = /^[A-Za-z_][A-Za-z_0-9]*$/;
 /** An array reference whose subscript Bash expands again when it reads the name. */
 const SUBSCRIPT_SOURCE = /^[A-Za-z_][A-Za-z_0-9]*\[[^\]]*[$`]/;
@@ -713,6 +721,20 @@ export function holdsSubscriptSource(arg: Argument): boolean {
 }
 
 /** Operands of a flag-style option list, or null when a flag is not modeled. */
+/** Whether these `set` options make every later assignment an export. */
+function exportOption(
+  values: readonly (string | null)[],
+  state: State
+): Pick<State, 'exports'> | null {
+  let every: boolean | undefined;
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index] ?? '';
+    if (!/^[-+][A-Za-z]/.test(value)) break;
+    if (value.includes('a') || (value.endsWith('o') && values[++index] === 'allexport'))
+      every = value.startsWith('-');
+  }
+  return every === undefined ? null : { exports: new Map(state.exports).set('*', every) };
+}
 function shellOptions(args: readonly Argument[]): readonly Argument[] | null {
   let index = 0;
   for (; index < args.length; index++) {
@@ -750,7 +772,7 @@ export function projectBuiltin(
   };
   switch (name) {
     case 'set':
-      return shellOptions(args) ? state : null;
+      return shellOptions(args) ? { ...state, ...exportOption(values, state) } : null;
     case 'shopt':
       return values.every(
         (value) =>
