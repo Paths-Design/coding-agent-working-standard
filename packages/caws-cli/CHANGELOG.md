@@ -132,6 +132,10 @@ status`, message delivery, the peer notice) report the later of that file's
   Output and execution options, `--no-verify` and other hook bypasses, opaque
   shell source, and recognized writes whose target or directory is unknown stay
   held, and a held command names its remedy. Shared pack 141.
+- `bash-write-guard` admits a globbed script operand under a literal directory,
+  such as `bash -n scripts/*.sh`, and Git after the command unsets a `GIT_`
+  variable. A declaration with a redirection, such as `export D=x > log`, keeps
+  the earlier value as a possibility, because a failed redirection skips it.
 - Repository hook policy supports inspection, compilation, reviewed selective
   machine imports and journaled recovery. `caws hooks` is a current command
   group; it does not restore the retired `hooks install` command.

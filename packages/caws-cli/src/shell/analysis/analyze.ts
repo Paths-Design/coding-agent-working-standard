@@ -712,8 +712,19 @@ export async function analyzeCommand(
       // A directory change can fail. Keeping both states also avoids treating
       // a failed cd as a successful repair of a preceding foreign directory.
       if (!projection) return next.cwd !== before.cwd ? [before, next] : [next];
-      for (const assignment of declared)
-        next.bindings.set(assignment.name, declaring.bindings.get(assignment.name) ?? null);
+      // A failed redirection skips the builtin it accompanies.
+      const skippable = node.redirects.length > 0;
+      for (const assignment of declared) {
+        const value = declaring.bindings.get(assignment.name) ?? null;
+        next.bindings.set(
+          assignment.name,
+          skippable ? either(before.bindings.get(assignment.name), value) : value
+        );
+      }
+      // Unsetting fails for a read-only name, which keeps what it held.
+      for (const variable of before.bindings.keys())
+        if (!next.bindings.has(variable) && (skippable || frozen.has(variable)))
+          next.bindings.set(variable, null);
       const name = argv[0]?.value;
       // Nothing after this point runs on the path that exits. A redirection
       // can fail and leave the shell running, so it keeps the path alive.

@@ -304,7 +304,14 @@ source, opaque executable stdin, a process substitution run as a script, and
 builtins that run or define code the projection cannot read remain unresolved.
 So does literal interpreter source whose preload or import environment the same
 command replaces. One unknown operand, as in `python3 "$f"`, names a program
-when nothing beside it could be code.
+when nothing beside it could be code. So does a glob or split word whose text
+starts literally, as in `bash -n scripts/*.sh`, unless `nullglob` could remove
+it.
+
+A `GIT_` variable or `PAGER` that the command unsets is absent from later Git
+commands in that shell. An unset that may not have run, or that a read-only name
+or a failed redirection stops, leaves the value unknown, and a nested shell
+after the unset of an inherited variable has no established Git environment.
 
 Git subcommands that only inspect need no ownership answer. Every other
 subcommand, including one the projection does not know, carries its actual Git

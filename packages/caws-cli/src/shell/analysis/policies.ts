@@ -775,8 +775,14 @@ export function projectBuiltin(
     case 'local':
     case 'readonly':
       return unbind(values.filter((value) => value === null || !/^-[xraAp]+$/.test(value)));
-    case 'unset':
-      return unbind(values.filter((value) => value !== '-v'));
+    case 'unset': {
+      const names = values.filter((value) => value !== '-v');
+      const next = unbind(names);
+      // Git reads these from the environment, where the name is now absent.
+      for (const value of next ? names : [])
+        if (/^(?:GIT_|PAGER$)/.test(value!)) next!.bindings.delete(value!);
+      return next;
+    }
     case 'mapfile':
     case 'readarray': {
       // A callback option would run code for each line.

@@ -249,6 +249,9 @@ const PROGRAMS = [
   'node scripts/compare.mjs',
   'for f in scripts/*.py; do python3 "$f"; done',
   'for f in scripts/*.sh; do bash "$f" --quick || exit 1; done',
+  'bash -n scripts/*.sh',
+  'python3 -m py_compile scripts/*.py && python3 scripts/lint_*.py',
+  'unset GIT_EDITOR PAGER; git status --short; node scripts/task.mjs',
   'find scripts -name "*.sh" | while read -r f; do bash -n "$f"; done',
   "cat > tmp/report.py <<'EOF'\ntext = open('{{SIBLING}}/README.md').read()\nopen('tmp/copy.md', 'w').write(text)\nEOF\npython3 tmp/report.py",
   "cat > tmp/check.sh <<'EOF'\nset -e\ngrep -c x docs/guide.md > tmp/count\nEOF\nbash tmp/check.sh && ./tmp/check.sh",
@@ -515,6 +518,11 @@ const FOREIGN_WRITES = [
   "sed $'-i' '' s/a/b/ {{SIBLING}}/README.md",
   "dd if=/dev/null $'of={{SIBLING}}/x'",
   'touch {tmp/a,{{SIBLING}}/out}',
+  'bash -n scripts/*.sh; touch {{SIBLING}}/out',
+  // Without the variable, Git finds the repository its directory is in.
+  'GIT_DIR={{PROJECT}}/.git; unset GIT_DIR; cd {{FOREIGN}} && git add -A',
+  'unset GIT_DIR GIT_WORK_TREE; git -C {{SIBLING}} branch new',
+  'D={{SIBLING}}; export D=tmp > /nonexistent/x; touch "$D/out"',
   // Paths Git itself writes.
   'git clone -q . {{SIBLING}}/v',
   'git worktree add {{SIBLING}}/wt',

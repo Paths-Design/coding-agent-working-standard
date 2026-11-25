@@ -170,6 +170,8 @@ const NODE_OPERANDS =
 /** Source a command supplies to itself through an open descriptor. */
 const STDIN_PATH = /^\/(?:dev\/(?:stdin|fd\/0)|proc\/self\/fd\/0)$/;
 const DESCRIPTOR_PATH = /^\/(?:dev\/(?:stdin|fd\/|tty)|proc\/(?:self|[0-9]+)\/fd\/)/;
+/** Text every expansion of a word begins with, which no option can. */
+const LITERAL_START = /^(?:~\/|\.{0,2}\/(?!dev\/|proc\/)|[A-Za-z0-9_])/;
 /** An argument that neither selects code nor is code that could write. */
 const PLAIN_OPERAND = /^(?!-[A-Za-z]*[ceps]|--(?:eval|print))[\w@%+:,./=-]*$/;
 const PYTHON_QUERIES = /^(?:-V+|-h|-\?|--version|--help(?:-[a-z]+)?)$/;
@@ -215,6 +217,7 @@ export async function projectMutationView(
   /** Files this command has written so far, and the literal text it gave them. */
   const submittedFiles = new Map<string, SubmittedFile>();
   const redirectWrites = new Map<Redirection, WrittenFile | null>();
+  const vanishingGlobs = /nullglob/.test(request.command + (process.env.BASHOPTS ?? ''));
   const issueKeys = new Set<string>();
   const jobs: ScriptJob[] = [];
   let exhausted = false,
@@ -360,9 +363,13 @@ export async function projectMutationView(
       ]),
       // Export attributes are not modeled. Rebinding an inherited exported
       // variable changes a child process's environment, so its original
-      // launcher value cannot supply proof for nested Git coordinates.
+      // launcher value cannot supply proof for nested Git coordinates. Neither
+      // can one this source has unset.
       gitEnvironmentUnresolved:
         job.parent?.gitEnvironmentUnresolved === true ||
+        Object.keys(process.env).some(
+          (name) => name.startsWith('GIT_') && !state.bindings.has(name)
+        ) ||
         [...state.bindings].some(([name, values]) => {
           if (name !== 'PAGER' && !name.startsWith('GIT_')) return false;
           if (
@@ -501,14 +508,16 @@ export async function projectMutationView(
     /**
      * An operand that names a program, or source the command supplies through a
      * descriptor. A single unknown field is a program: beside nothing that could
-     * be code, it cannot make this command's own text one.
+     * be code, it cannot make this command's own text one. Several fields are
+     * one too when their text starts literally, which makes the first a path and
+     * the others its arguments; with nullglob there may be no first field.
      */
     const operand = (args: Argument[], index: number, node: Command): Selection | null => {
       const arg = args[index];
       if (!arg || arg.value === '-') return { kind: 'stdin' };
       if (arg.value === null) {
         const rest = args.slice(index + 1);
-        return arg.several !== true &&
+        return (arg.several !== true || (LITERAL_START.test(raw(arg)) && !vanishingGlobs)) &&
           stdinRedirect(node) === undefined &&
           rest.every(({ value }) => value !== null && PLAIN_OPERAND.test(value))
           ? { kind: 'program', entry: null }
@@ -539,7 +548,9 @@ export async function projectMutationView(
         if (value === null) {
           // Past a possible entry file this is that program's own argument.
           if (!selected && candidates.length) continue;
-          if (selected || mode) return opaqueSelection(arg, node);
+          // A mode takes files alone, and an option may take the first field.
+          if (selected || (arg.several === true ? ambiguous : mode))
+            return opaqueSelection(arg, node);
           return settle(operand(args, index, node));
         }
         if (value === '-' || value === '--') {
